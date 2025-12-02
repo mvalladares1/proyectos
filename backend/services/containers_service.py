@@ -168,7 +168,10 @@ class ContainersService:
                 for l in lines_raw:
                     order_id = l.get("order_id")
                     if order_id:
-                        oid = order_id[0] if isinstance(order_id, (list, tuple)) else order_id
+                        if isinstance(order_id, (list, tuple)) and len(order_id) > 0:
+                            oid = order_id[0]
+                        else:
+                            oid = order_id
                         if oid not in lines_map:
                             lines_map[oid] = []
                         lines_map[oid].append(clean_record(l))

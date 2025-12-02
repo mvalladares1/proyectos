@@ -122,7 +122,7 @@ class StockService:
             # Fallback minimal data directly from quant info
             for q in quants:
                 loc = q.get("location_id")
-                if not loc:
+                if not loc or not isinstance(loc, (list, tuple)) or len(loc) < 2:
                     continue
                 loc_id, loc_name = loc
                 chambers.setdefault(loc_id, {
@@ -149,8 +149,12 @@ class StockService:
                     ["categ_id", "name"]
                 )
                 for p in p_data:
+                    categ = p.get("categ_id")
+                    categ_name = "Sin Categoria"
+                    if categ and isinstance(categ, (list, tuple)) and len(categ) > 1:
+                        categ_name = categ[1]
                     products_info[p["id"]] = {
-                        "category": p["categ_id"][1] if p.get("categ_id") else "Sin Categoria",
+                        "category": categ_name,
                         "name": p.get("name", "")
                     }
             except Exception as e:
@@ -160,6 +164,10 @@ class StockService:
             loc = q.get("location_id")
             prod = q.get("product_id")
             if not loc or not prod:
+                continue
+            if not isinstance(loc, (list, tuple)) or len(loc) < 1:
+                continue
+            if not isinstance(prod, (list, tuple)) or len(prod) < 1:
                 continue
             loc_id = loc[0]
             if loc_id not in chambers:
