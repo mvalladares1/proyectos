@@ -4,66 +4,85 @@ Dashboard de Producción - Órdenes de Fabricación detalladas
 from datetime import date, timedelta
 from typing import Dict, List, Optional
 
-import httpx
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
 
-from shared.auth import get_credenciales, proteger_pagina
+# Sección: Detalle de la orden
+st.markdown("<h3 style='margin-top:32px;margin-bottom:0'>Detalle de la orden</h3>", unsafe_allow_html=True)
+detalle_cols = st.columns(2)
+with detalle_cols[0]:
+    st.markdown("<div style='background:#23272f;padding:24px 18px 18px 18px;border-radius:16px;margin-bottom:18px'>"
+                f"<b>Responsable:</b> {clean_name(of.get('user_id'))}<br>"
+                f"<b>Cliente:</b> {clean_name(of.get('x_studio_clientes'))}<br>"
+                f"<b>Producto:</b> {clean_name(of.get('product_id'))}<br>"
+                f"<b>Estado:</b> {get_state_label(of.get('state'))}<br>"
+                f"<b>Hora inicio:</b> {of.get('x_studio_inicio_de_proceso', 'N/A')}<br>"
+                f"<b>Hora término:</b> {of.get('x_studio_termino_de_proceso', 'N/A')}<br>"
+                f"<b>Horas detención:</b> {of.get('x_studio_horas_detencion_totales', 'N/A')}<br>"
+                f"<b>Dotación:</b> {of.get('x_studio_dotacin', 'N/A')}<br>"
+                f"<b>Horas hombre:</b> {of.get('x_studio_hh', 'N/A')}<br>"
+                f"<b>Horas hombre efectiva:</b> {of.get('x_studio_hh_efectiva', 'N/A')}<br>"
+                f"<b>KG/hora efectiva:</b> {of.get('x_studio_kghora_efectiva', 'N/A')}<br>"
+                f"<b>KG/HH efectiva:</b> {of.get('x_studio_kghh_efectiva', 'N/A')}<br>"
+                "</div>", unsafe_allow_html=True)
+with detalle_cols[1]:
+    st.markdown("<div style='background:#23272f;padding:24px 18px 18px 18px;border-radius:16px;margin-bottom:18px'>"
+                f"<b>Para PO:</b> {'Sí' if of.get('x_studio_odf_es_para_una_po_en_particular') else 'No'}<br>"
+                f"<b>PO asociada:</b> {clean_name(of.get('x_studio_po_asociada'))}<br>"
+                f"<b>KG totales PO:</b> {of.get('x_studio_kg_totales_po', 0):,.0f} kg<br>"
+                f"<b>Sala:</b> {clean_name(of.get('x_studio_sala_de_proceso'))}<br>"
+                f"<b>KG consumidos:</b> {of.get('x_studio_kg_consumidos_po', 0):,.0f} kg<br>"
+                f"<b>KG disponibles:</b> {of.get('x_studio_kg_disponibles_po', 0):,.0f} kg<br>"
+                f"<b>Usuario:</b> {clean_name(of.get('user_id'))}<br>"
+                "</div>", unsafe_allow_html=True)
 
-API_URL = st.secrets.get("API_URL", "http://localhost:8000")
-STATE_OPTIONS = {
-    "Todos": None,
-    "Borrador": "draft",
-    "Confirmadas": "confirmed",
-    "Planificadas": "planned",
-    "En Progreso": "progress",
-    "Completadas": "done",
-    "Canceladas": "cancel",
-}
+# Sección: KPIs de producción
+st.markdown("<h3 style='margin-top:32px;margin-bottom:0'>KPIs de producción</h3>", unsafe_allow_html=True)
+kpi_cols = st.columns(4)
+render_metrics_row(kpi_cols, [
+    ("Producción total", f"{kpis_detail.get('produccion_total_kg', 0):,.0f}", " kg"),
+    ("Rendimiento", f"{kpis_detail.get('rendimiento_%', 0):.2f}", "%"),
+    ("KG/HH", f"{kpis_detail.get('kg_por_hh', 0):.2f}", ""),
+    ("Consumo MP", f"{kpis_detail.get('consumo_mp_kg', 0):,.0f}", " kg"),
+])
 
+# Corregir el cálculo de rendimiento: si el valor es > 1000, mostrar "Revisar datos"
+rend_val = float(kpis_detail.get('rendimiento_%', 0))
+if rend_val > 1000:
+    st.warning("⚠️ El rendimiento calculado es anormalmente alto. Revisa los datos de componentes y subproductos.")
 
-st.set_page_config(
-    page_title="Producción - Rio Futuro",
-    page_icon="📦",
-    layout="wide",
-)
-
-if not proteger_pagina():
-    st.stop()
-
-username, password = get_credenciales()
-if not (username and password):
-    st.warning("Inicia sesión para acceder a los datos de producción.")
-    st.stop()
-
-
-def get_state_label(state: Optional[str]) -> str:
-    state_map = {
-        "draft": "Borrador",
-        "confirmed": "Confirmada",
-        "planned": "Planificada",
-        "progress": "En Progreso",
-        "done": "Finalizada",
-        "cancel": "Cancelada",
-        "to_close": "Por Cerrar",
+fig_gauge = go.Figure(go.Indicator(
+    mode="gauge+number",
+    value=rend_val if rend_val < 1000 else 0,
+    number={"suffix": "%", "valueformat": ".2f"},
+    gauge={
+        "axis": {"range": [0, 120]},
+        "bar": {"color": "#00cc66"},
+        "steps": [
+            {"range": [0, 50], "color": "#ff4444"},
+            {"range": [50, 80], "color": "#ffb347"},
+            {"range": [80, 100], "color": "#00cc66"},
+            {"range": [100, 120], "color": "#00ff88"},
+        ],
     }
-    if not state:
-        return "N/A"
-    return state_map.get(state, state.title())
+))
+fig_gauge.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=320)
+st.plotly_chart(fig_gauge, use_container_width=True)
 
-
-def clean_name(value) -> str:
-    if isinstance(value, dict):
-        return value.get("name", "N/A")
-    if isinstance(value, (list, tuple)) and len(value) == 2:
-        return value[1]
-    return "N/A"
-
-
-def build_pie_chart(labels: List[str], values: List[float], title: str) -> go.Figure:
-    fig = go.Figure(go.Pie(
-        labels=labels,
+# Sección: Detenciones
+st.markdown("<h3 style='margin-top:32px;margin-bottom:0'>Detenciones</h3>", unsafe_allow_html=True)
+if detenciones:
+    det_card = "<div style='background:#23272f;padding:18px 18px 12px 18px;border-radius:16px;margin-bottom:18px'>"
+    df_det = pd.DataFrame([{
+        "Responsable": clean_name(det.get("x_studio_responsable")),
+        "Motivo": clean_name(det.get("x_motivodetencion")),
+        "Hora inicio": det.get("x_horainiciodetencion", "N/A"),
+        "Hora fin": det.get("x_horafindetencion", "N/A"),
+        "Horas detención": det.get("x_studio_horas_de_detencin", 0) or 0,
+    } for det in detenciones])
+    det_card += df_det.to_html(index=False, justify="center", border=0)
+    det_card += "</div>"
+    st.markdown(det_card, unsafe_allow_html=True)
+else:
+    st.info("No hay detenciones registradas")
         values=values,
         hole=0.4,
         textinfo="percent",
@@ -121,10 +140,14 @@ def render_component_tab(items: List[Dict], label: str):
         "Producto": clean_name(item.get("product_id")),
         "Lote": clean_name(item.get("lot_id")),
         "Cantidad (kg)": item.get("qty_done", 0) or 0,
+        "Precio unitario": item.get("unit_cost", 0) or 0,
+        "PxQ": round((item.get("unit_cost", 0) or 0) * (item.get("qty_done", 0) or 0), 2),
         "Ubicación origen": clean_name(item.get("location_id")),
         "Pallet": clean_name(item.get("package_id"))
     } for item in filtered])
     st.dataframe(df, use_container_width=True, height=320)
+    total_pxq = df["PxQ"].sum() if not df.empty else 0
+    st.markdown(f"<div style='margin-top:8px;font-size:1.1em'><b>Total PxQ:</b> {total_pxq:,.2f}</div>", unsafe_allow_html=True)
 
     dist_product = {}
     for item in filtered:
@@ -348,11 +371,13 @@ with st.container():
 st.markdown("---")
 st.markdown("#### KPIs de producción")
 kpi_cols = st.columns(4)
+total_pxq_comp = sum([item.get('unit_cost', 0) * item.get('qty_done', 0) for item in componentes])
+total_pxq_sub = sum([item.get('unit_cost', 0) * item.get('qty_done', 0) for item in subproductos])
 render_metrics_row(kpi_cols, [
     ("Producción total", f"{kpis_detail.get('produccion_total_kg', 0):,.0f}", " kg"),
+    ("Total PxQ componentes", f"{total_pxq_comp:,.2f}", ""),
+    ("Total PxQ subproductos", f"{total_pxq_sub:,.2f}", ""),
     ("Rendimiento", f"{kpis_detail.get('rendimiento_%', 0):.2f}", "%"),
-    ("KG/HH", f"{kpis_detail.get('kg_por_hh', 0):.2f}", ""),
-    ("Consumo MP", f"{kpis_detail.get('consumo_mp_kg', 0):,.0f}", " kg"),
 ])
 
 fig_gauge = go.Figure(go.Indicator(
