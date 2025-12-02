@@ -46,12 +46,18 @@ else
     echo "!! nginx -t reportó errores. No recargar nginx" >&2
 fi
 
+echo "-> Verificando endpoint: ${API_URL}/api/v1/example"
 # Verificar endpoint demo
 echo "-> Verificando endpoint: ${API_URL}/api/v1/example"
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/api/v1/example")
 if [ "${HTTP_CODE}" == "200" ]; then
     echo "-> OK: el endpoint /api/v1/example responde 200"
-    curl -s "${API_URL}/api/v1/example" | jq
+    # Si jq está instalado, usa jq para formatear, sino muestra raw
+    if command -v jq >/dev/null 2>&1; then
+        curl -s "${API_URL}/api/v1/example" | jq
+    else
+        curl -s "${API_URL}/api/v1/example" || true
+    fi
 else
     echo "!! ERROR: el endpoint /api/v1/example respondió HTTP ${HTTP_CODE}" >&2
     echo "-> Mostrando logs recientes del servicio ${SERVICE_API}"
