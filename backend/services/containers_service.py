@@ -1,27 +1,22 @@
 """
 Servicio para gestión de Ventas/Containers y su seguimiento de producción
 OPTIMIZADO: Parte desde fabricaciones con PO asociada para evitar consultas lentas
-Migrado del dashboard original de producción
+Código original del dashboard funcional
 """
 from typing import List, Dict, Optional
-
 from shared.odoo_client import OdooClient
 
 
-def clean_record(record: Dict) -> Dict:
-    """Limpia un registro de Odoo convirtiendo tuplas en diccionarios"""
-    if not record:
-        return {}
-    
-    cleaned = {}
-    for key, value in record.items():
-        if isinstance(value, (list, tuple)) and len(value) == 2 and isinstance(value[0], int):
-            cleaned[key] = {"id": value[0], "name": value[1]}
-        elif isinstance(value, list) and value and isinstance(value[0], int):
-            cleaned[key] = value
-        else:
-            cleaned[key] = value
-    return cleaned
+def clean(value):
+    """Limpia valores de Odoo convirtiendo listas [id, name] a diccionarios"""
+    if isinstance(value, list) and len(value) == 2:
+        return {"id": value[0], "name": value[1]}
+    return value
+
+
+def clean_record(rec: dict) -> dict:
+    """Limpia todos los campos de un registro de Odoo"""
+    return {k: clean(v) for k, v in rec.items()}
 
 
 class ContainersService:
@@ -55,6 +50,7 @@ class ContainersService:
         ]
         
         try:
+            print("Buscando fabricaciones con PO asociada...")
             prod_ids = self.odoo.search(
                 "mrp.production",
                 prod_domain,
@@ -63,7 +59,10 @@ class ContainersService:
             )
             
             if not prod_ids:
+                print("No hay fabricaciones con PO asociada")
                 return []
+            
+            print(f"Encontradas {len(prod_ids)} fabricaciones con PO")
             
             prods_raw = self.odoo.read("mrp.production", prod_ids, prod_fields)
         except Exception as e:
@@ -125,7 +124,9 @@ class ContainersService:
         if not sale_ids_to_fetch:
             return []
         
-        # PASO 3: Obtener datos de las ventas (sale.order)
+        # PASO 3: Obtener datos de las ventas (sale.order) en UNA sola llamada
+        print(f"Obteniendo datos de {len(sale_ids_to_fetch)} ventas...")
+        
         sale_fields = [
             "name", "partner_id", "date_order", "commitment_date",
             "state", "amount_total", "currency_id", "origin",
@@ -133,7 +134,6 @@ class ContainersService:
         ]
         
         sale_domain = [("id", "in", list(sale_ids_to_fetch))]
-        
         if partner_id:
             sale_domain.append(("partner_id", "=", partner_id))
         if state:
@@ -150,7 +150,7 @@ class ContainersService:
             print(f"Error fetching sales: {e}")
             return []
         
-        # PASO 4: Obtener líneas de venta
+        # PASO 4: Obtener líneas de venta en UNA sola llamada
         all_line_ids = []
         for s in sales_raw:
             all_line_ids.extend(s.get("order_line", []))
@@ -158,6 +158,7 @@ class ContainersService:
         lines_map = {}  # sale_id -> [lines]
         if all_line_ids:
             try:
+                print(f"Obteniendo {len(all_line_ids)} líneas de venta...")
                 lines_raw = self.odoo.read(
                     "sale.order.line",
                     all_line_ids,
@@ -168,10 +169,7 @@ class ContainersService:
                 for l in lines_raw:
                     order_id = l.get("order_id")
                     if order_id:
-                        if isinstance(order_id, (list, tuple)) and len(order_id) > 0:
-                            oid = order_id[0]
-                        else:
-                            oid = order_id
+                        oid = order_id[0] if isinstance(order_id, (list, tuple)) else order_id
                         if oid not in lines_map:
                             lines_map[oid] = []
                         lines_map[oid].append(clean_record(l))
@@ -183,15 +181,19 @@ class ContainersService:
         
         for sale in sales_raw:
             sale_id = sale["id"]
-            
-            partner = sale.get("partner_id")
-            partner_name = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else "N/A"
-            
             sale_clean = clean_record(sale)
             
+            # Obtener partner name
+            partner = sale.get("partner_id")
+            partner_name = partner[1] if isinstance(partner, (list, tuple)) else "N/A"
+            
+            # Líneas de este pedido
             lines_data = lines_map.get(sale_id, [])
+            
+            # KG totales del pedido (suma de líneas)
             kg_total = sum([l.get("product_uom_qty", 0) or 0 for l in lines_data])
             
+            # Producciones y KG producidos
             sale_info = sales_map.get(sale_id, {"productions": [], "kg_producidos_total": 0})
             productions = sale_info["productions"]
             kg_producidos = sale_info["kg_producidos_total"]
@@ -199,13 +201,12 @@ class ContainersService:
             kg_disponibles = kg_total - kg_producidos
             avance_pct = (kg_producidos / kg_total * 100) if kg_total > 0 else 0
             
+            # Producto principal
             producto_principal = "N/A"
             if lines_data:
                 prod = lines_data[0].get("product_id")
                 if isinstance(prod, dict):
                     producto_principal = prod.get("name", "N/A")
-                elif isinstance(prod, (list, tuple)) and len(prod) > 1:
-                    producto_principal = prod[1]
             
             containers.append({
                 "id": sale_id,
@@ -229,6 +230,7 @@ class ContainersService:
                 "productions": productions
             })
         
+        print(f"Retornando {len(containers)} containers")
         return containers
 
     def _get_state_display(self, state: str) -> str:
@@ -245,9 +247,7 @@ class ContainersService:
         return state_map.get(state, state)
 
     def get_container_detail(self, sale_id: int) -> Dict:
-        """
-        Obtiene el detalle completo de un container/venta específico
-        """
+        """Obtiene el detalle completo de un container/venta específico"""
         # Buscar fabricaciones para este sale_id
         prod_domain = [("x_studio_po_asociada_1", "=", sale_id)]
         
@@ -313,10 +313,10 @@ class ContainersService:
             print(f"Error: {e}")
             return {}
         
-        partner = sale.get("partner_id")
-        partner_name = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else "N/A"
-        
         sale_clean = clean_record(sale)
+        
+        partner = sale.get("partner_id")
+        partner_name = partner[1] if isinstance(partner, (list, tuple)) else "N/A"
         
         # Líneas
         line_ids = sale.get("order_line", [])
@@ -343,8 +343,6 @@ class ContainersService:
             prod = lines_data[0].get("product_id")
             if isinstance(prod, dict):
                 producto_principal = prod.get("name", "N/A")
-            elif isinstance(prod, (list, tuple)) and len(prod) > 1:
-                producto_principal = prod[1]
         
         return {
             "id": sale_id,
@@ -368,7 +366,6 @@ class ContainersService:
     def get_partners_with_orders(self) -> List[Dict]:
         """Obtiene lista de clientes que tienen pedidos con fabricaciones"""
         try:
-            # Obtener sales que tienen fabricaciones asociadas
             prod_domain = [("x_studio_po_asociada_1", "!=", False)]
             prods = self.odoo.search_read(
                 "mrp.production",
@@ -386,7 +383,6 @@ class ContainersService:
             if not sale_ids:
                 return []
             
-            # Obtener partners de esas ventas
             sales = self.odoo.read("sale.order", sale_ids, ["partner_id"])
             
             partner_ids = list(set([
@@ -407,9 +403,7 @@ class ContainersService:
             return []
 
     def get_containers_summary(self) -> Dict:
-        """
-        Obtiene resumen global de containers para KPIs
-        """
+        """Obtiene resumen global de containers para KPIs"""
         containers = self.get_containers()
         
         total_containers = len(containers)
