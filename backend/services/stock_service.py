@@ -61,7 +61,7 @@ class StockService:
         loc_ids = sorted({
             q["location_id"][0]
             for q in quants
-            if q.get("location_id")
+            if q.get("location_id") and isinstance(q["location_id"], (list, tuple))
         })
         if not loc_ids:
             return []
@@ -70,7 +70,7 @@ class StockService:
         for q in quants:
             loc = q.get("location_id")
             pkg = q.get("package_id")
-            if loc and pkg:
+            if loc and pkg and isinstance(loc, (list, tuple)) and isinstance(pkg, (list, tuple)):
                 pallets_per_location.setdefault(loc[0], set()).add(pkg[0])
 
         fields_loc = [
@@ -91,13 +91,13 @@ class StockService:
 
         chambers = {}
         for loc in locations:
-            loc_id = loc["id"]
+            clean_loc = clean_record(loc)
+            loc_id = clean_loc["id"]
             if loc.get("usage") != "internal" or not loc.get("active", True):
                 continue
             parent = loc.get("location_id")
-            parent_name = parent[1] if isinstance(parent, (list, tuple)) and len(parent) > 1 else "Sin Padre"
+            parent_name = parent[1] if parent and isinstance(parent, (list, tuple)) and len(parent) > 1 else "Sin Padre"
             
-            clean_loc = clean_record(loc)
             occupied = len(pallets_per_location.get(loc_id, set()))
 
             capacity_candidates = [
@@ -138,7 +138,7 @@ class StockService:
         product_ids = {
             q["product_id"][0]
             for q in quants
-            if q.get("product_id")
+            if q.get("product_id") and isinstance(q["product_id"], (list, tuple))
         }
         products_info = {}
         if product_ids:
@@ -149,12 +149,8 @@ class StockService:
                     ["categ_id", "name"]
                 )
                 for p in p_data:
-                    categ = p.get("categ_id")
-                    categ_name = "Sin Categoria"
-                    if categ and isinstance(categ, (list, tuple)) and len(categ) > 1:
-                        categ_name = categ[1]
                     products_info[p["id"]] = {
-                        "category": categ_name,
+                        "category": p["categ_id"][1] if p.get("categ_id") and isinstance(p.get("categ_id"), (list, tuple)) else "Sin Categoria",
                         "name": p.get("name", "")
                     }
             except Exception as e:
@@ -219,7 +215,7 @@ class StockService:
         pallets = []
         
         # Necesitamos categorías para filtrar
-        product_ids = set(q["product_id"][0] for q in quants if q["product_id"])
+        product_ids = set(q["product_id"][0] for q in quants if q.get("product_id") and isinstance(q.get("product_id"), (list, tuple)))
         products_map = {}
         if product_ids:
             p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name"])
@@ -227,7 +223,7 @@ class StockService:
                 products_map[p["id"]] = p
         
         for q in quants:
-            prod_id = q["product_id"][0] if q["product_id"] else None
+            prod_id = q["product_id"][0] if q.get("product_id") and isinstance(q.get("product_id"), (list, tuple)) else None
             if not prod_id: 
                 continue
                 
