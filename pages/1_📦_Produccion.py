@@ -1,6 +1,11 @@
 """
 Dashboard de Producción - Órdenes de Fabricación detalladas
 """
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import httpx
 from datetime import date, timedelta
 from typing import Dict, List, Optional
 
