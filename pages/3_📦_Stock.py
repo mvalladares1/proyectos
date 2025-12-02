@@ -10,7 +10,8 @@ from typing import Dict, List
 from shared.auth import proteger_pagina, get_credenciales
 
 # Proteger la página
-proteger_pagina()
+if not proteger_pagina():
+    st.stop()
 
 # Configuración de la página
 st.set_page_config(
@@ -24,7 +25,11 @@ st.title("📦 Stock y Cámaras")
 st.markdown("Gestión de inventario, ubicaciones y trazabilidad de pallets")
 
 # Obtener credenciales
-credenciales = get_credenciales()
+username, password = get_credenciales()
+
+if not (username and password):
+    st.error("No se encontraron credenciales válidas en la sesión.")
+    st.stop()
 API_URL = st.secrets.get("API_URL", "http://localhost:8000")
 
 # Funciones de API
@@ -34,8 +39,8 @@ def fetch_camaras() -> List[Dict]:
         response = httpx.get(
             f"{API_URL}/api/v1/stock/camaras",
             params={
-                "username": credenciales["username"],
-                "password": credenciales["password"]
+                "username": username,
+                "password": password
             },
             timeout=30.0
         )
@@ -50,8 +55,8 @@ def fetch_pallets(location_id: int, category: str = None) -> List[Dict]:
     """Obtiene pallets de una ubicación"""
     try:
         params = {
-            "username": credenciales["username"],
-            "password": credenciales["password"],
+            "username": username,
+            "password": password,
             "location_id": location_id
         }
         if category:
@@ -73,8 +78,8 @@ def fetch_lotes(category: str, location_ids: List[int] = None) -> List[Dict]:
     """Obtiene lotes por categoría"""
     try:
         params = {
-            "username": credenciales["username"],
-            "password": credenciales["password"],
+            "username": username,
+            "password": password,
             "category": category
         }
         if location_ids:
