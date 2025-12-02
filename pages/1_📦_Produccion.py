@@ -145,7 +145,15 @@ def render_component_tab(items: List[Dict], label: str):
 
 def render_metrics_row(columns, metrics):
     for col, (label, value, suffix) in zip(columns, metrics):
-        text = f"{value}{suffix if suffix else ''}"
+        if label.lower().startswith("rendimiento"):
+            # Mostrar como porcentaje con dos decimales
+            try:
+                value = float(value)
+                text = f"{value:.2f}%"
+            except Exception:
+                text = f"{value}{suffix if suffix else ''}"
+        else:
+            text = f"{value}{suffix if suffix else ''}"
         col.metric(label, text)
 
 
@@ -305,34 +313,40 @@ detenciones = data.get("detenciones", [])
 consumo = data.get("consumo", [])
 kpis_detail = data.get("kpis", {})
 
-st.subheader("Detalle de la orden")
-row1 = st.columns(4)
-render_metrics_row(row1, [
-    ("Responsable", clean_name(of.get("user_id")), ""),
-    ("Cliente", clean_name(of.get("x_studio_clientes")), ""),
-    ("Producto", clean_name(of.get("product_id")), ""),
-    ("Estado", get_state_label(of.get("state")), ""),
-])
+with st.container():
+    st.markdown("#### Detalle de la orden")
+    card_cols = st.columns(4)
+    card_cols[0].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Responsable</b><br>{clean_name(of.get('user_id'))}</div>", unsafe_allow_html=True)
+    card_cols[1].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Cliente</b><br>{clean_name(of.get('x_studio_clientes'))}</div>", unsafe_allow_html=True)
+    card_cols[2].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Producto</b><br>{clean_name(of.get('product_id'))}</div>", unsafe_allow_html=True)
+    card_cols[3].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Estado</b><br>{get_state_label(of.get('state'))}</div>", unsafe_allow_html=True)
+
+    card_cols2 = st.columns(4)
+    card_cols2[0].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Hora inicio</b><br>{of.get('x_studio_inicio_de_proceso', 'N/A')}</div>", unsafe_allow_html=True)
+    card_cols2[1].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Hora término</b><br>{of.get('x_studio_termino_de_proceso', 'N/A')}</div>", unsafe_allow_html=True)
+    card_cols2[2].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Horas detención</b><br>{of.get('x_studio_horas_detencion_totales', 'N/A')}</div>", unsafe_allow_html=True)
+    card_cols2[3].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Dotación</b><br>{of.get('x_studio_dotacin', 'N/A')}</div>", unsafe_allow_html=True)
+
+    card_cols3 = st.columns(4)
+    card_cols3[0].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Horas hombre</b><br>{of.get('x_studio_hh', 'N/A')}</div>", unsafe_allow_html=True)
+    card_cols3[1].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Horas hombre efectiva</b><br>{of.get('x_studio_hh_efectiva', 'N/A')}</div>", unsafe_allow_html=True)
+    card_cols3[2].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>KG/hora efectiva</b><br>{of.get('x_studio_kghora_efectiva', 'N/A')}</div>", unsafe_allow_html=True)
+    card_cols3[3].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>KG/HH efectiva</b><br>{of.get('x_studio_kghh_efectiva', 'N/A')}</div>", unsafe_allow_html=True)
+
+    card_cols4 = st.columns(4)
+    card_cols4[0].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Para PO</b><br>{'Sí' if of.get('x_studio_odf_es_para_una_po_en_particular') else 'No'}</div>", unsafe_allow_html=True)
+    card_cols4[1].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>PO asociada</b><br>{clean_name(of.get('x_studio_po_asociada'))}</div>", unsafe_allow_html=True)
+    card_cols4[2].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>KG totales PO</b><br>{of.get('x_studio_kg_totales_po', 0):,.0f} kg</div>", unsafe_allow_html=True)
+    card_cols4[3].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Sala</b><br>{clean_name(of.get('x_studio_sala_de_proceso'))}</div>", unsafe_allow_html=True)
+
+    card_cols5 = st.columns(4)
+    card_cols5[0].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>KG consumidos</b><br>{of.get('x_studio_kg_consumidos_po', 0):,.0f} kg</div>", unsafe_allow_html=True)
+    card_cols5[1].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>KG disponibles</b><br>{of.get('x_studio_kg_disponibles_po', 0):,.0f} kg</div>", unsafe_allow_html=True)
+    card_cols5[2].markdown(f"<div style='background:#222;padding:18px;border-radius:12px'><b>Usuario</b><br>{clean_name(of.get('user_id'))}</div>", unsafe_allow_html=True)
+    card_cols5[3].markdown("")
 
 st.markdown("---")
-row2 = st.columns(4)
-render_metrics_row(row2, [
-    ("Para PO", "Sí" if of.get("x_studio_odf_es_para_una_po_en_particular") else "No", ""),
-    ("PO asociada", clean_name(of.get("x_studio_po_asociada")), ""),
-    ("KG totales PO", f"{of.get('x_studio_kg_totales_po', 0):,.0f}", " kg"),
-    ("Sala", clean_name(of.get("x_studio_sala_de_proceso")), ""),
-])
-
-row3 = st.columns(4)
-render_metrics_row(row3, [
-    ("KG consumidos", f"{of.get('x_studio_kg_consumidos_po', 0):,.0f}", " kg"),
-    ("KG disponibles", f"{of.get('x_studio_kg_disponibles_po', 0):,.0f}", " kg"),
-    ("Dotación", str(of.get("x_studio_dotacin", "N/A")), ""),
-    ("Usuario", clean_name(of.get("user_id")), ""),
-])
-
-st.markdown("---")
-st.subheader("KPIs de producción")
+st.markdown("#### KPIs de producción")
 kpi_cols = st.columns(4)
 render_metrics_row(kpi_cols, [
     ("Producción total", f"{kpis_detail.get('produccion_total_kg', 0):,.0f}", " kg"),
@@ -343,8 +357,8 @@ render_metrics_row(kpi_cols, [
 
 fig_gauge = go.Figure(go.Indicator(
     mode="gauge+number",
-    value=kpis_detail.get("rendimiento_%", 0),
-    number={"suffix": "%"},
+    value=float(kpis_detail.get("rendimiento_%", 0)),
+    number={"suffix": "%", "valueformat": ".2f"},
     gauge={
         "axis": {"range": [0, 120]},
         "bar": {"color": "#00cc66"},
@@ -380,7 +394,7 @@ with tab_det:
             "Motivo": clean_name(det.get("x_motivodetencion")),
             "Hora inicio": det.get("x_horainiciodetencion", "N/A"),
             "Hora fin": det.get("x_horafindetencion", "N/A"),
-            "Horas": det.get("x_studio_horas_de_detencin", 0) or 0,
+            "Horas detención": det.get("x_studio_horas_de_detencin", 0) or 0,
         } for det in detenciones])
         st.dataframe(df_det, use_container_width=True, height=320)
     else:
