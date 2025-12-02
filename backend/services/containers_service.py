@@ -180,10 +180,11 @@ class ContainersService:
         
         for sale in sales_raw:
             sale_id = sale["id"]
-            sale_clean = clean_record(sale)
             
             partner = sale.get("partner_id")
-            partner_name = partner[1] if isinstance(partner, (list, tuple)) else "N/A"
+            partner_name = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else "N/A"
+            
+            sale_clean = clean_record(sale)
             
             lines_data = lines_map.get(sale_id, [])
             kg_total = sum([l.get("product_uom_qty", 0) or 0 for l in lines_data])
@@ -200,6 +201,8 @@ class ContainersService:
                 prod = lines_data[0].get("product_id")
                 if isinstance(prod, dict):
                     producto_principal = prod.get("name", "N/A")
+                elif isinstance(prod, (list, tuple)) and len(prod) > 1:
+                    producto_principal = prod[1]
             
             containers.append({
                 "id": sale_id,
@@ -307,10 +310,10 @@ class ContainersService:
             print(f"Error: {e}")
             return {}
         
-        sale_clean = clean_record(sale)
-        
         partner = sale.get("partner_id")
-        partner_name = partner[1] if isinstance(partner, (list, tuple)) else "N/A"
+        partner_name = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else "N/A"
+        
+        sale_clean = clean_record(sale)
         
         # Líneas
         line_ids = sale.get("order_line", [])
@@ -337,6 +340,8 @@ class ContainersService:
             prod = lines_data[0].get("product_id")
             if isinstance(prod, dict):
                 producto_principal = prod.get("name", "N/A")
+            elif isinstance(prod, (list, tuple)) and len(prod) > 1:
+                producto_principal = prod[1]
         
         return {
             "id": sale_id,

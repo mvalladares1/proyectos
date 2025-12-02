@@ -91,12 +91,13 @@ class StockService:
 
         chambers = {}
         for loc in locations:
-            clean_loc = clean_record(loc)
-            loc_id = clean_loc["id"]
+            loc_id = loc["id"]
             if loc.get("usage") != "internal" or not loc.get("active", True):
                 continue
             parent = loc.get("location_id")
-            parent_name = parent[1] if parent else "Sin Padre"
+            parent_name = parent[1] if isinstance(parent, (list, tuple)) and len(parent) > 1 else "Sin Padre"
+            
+            clean_loc = clean_record(loc)
             occupied = len(pallets_per_location.get(loc_id, set()))
 
             capacity_candidates = [
@@ -223,7 +224,7 @@ class StockService:
                 continue
                 
             p_info = products_map.get(prod_id, {})
-            cat_name = p_info.get("categ_id", ["", "Sin Categoría"])[1]
+            cat_name = p_info.get("categ_id", [0, "Sin Categoría"])[1] if p_info.get("categ_id") else "Sin Categoría"
             prod_name = p_info.get("name", "N/A")
             
             # Heurística de condición
@@ -323,7 +324,7 @@ class StockService:
                 continue
             
             p_info = products_map.get(prod_id, {})
-            p_cat = p_info.get("categ_id", ["", ""])[1] if p_info.get("categ_id") else ""
+            p_cat = p_info.get("categ_id", [0, ""])[1] if p_info.get("categ_id") else ""
             p_name = p_info.get("name", "")
             p_condition = "Orgánico" if "org" in p_name.lower() else "Convencional"
             p_species_condition = f"{p_cat} - {p_condition}"
