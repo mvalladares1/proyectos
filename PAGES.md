@@ -49,6 +49,11 @@ cd /home/debian/rio-futuro-dashboards/app
 git pull origin main
 sudo systemctl restart rio-futuro-web
 ```
+   
+Si quieres hacer un deploy rápido y comprobar el endpoint demo, puedes ejecutar el script `scripts/deploy-and-verify.sh` del repo (ajusta la ruta si es necesario):
+```bash
+sudo bash scripts/deploy-and-verify.sh
+```
 
 Notas adicionales:
 - Para imágenes/activos, colócalos en `pages/assets/` y usa rutas relativas o `st.image`.
