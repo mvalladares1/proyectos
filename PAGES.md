@@ -15,3 +15,44 @@ st.set_page_config(page_title='Producción', page_icon='📦')
 3) Ensure the file is placed under `pages/` and ends with `.py`. The `Home.py` will scan that folder and create a card for each page automatically using these metadata values.
 
 Optional: You can add a YAML or comment block with additional fields in the future; the current auto-discovery uses the docstring and `set_page_config` call.
+
+Prompt template to request a new dashboard (for developers or ChatGPT):
+
+```
+Crear un nuevo dashboard llamado "<NOMBRE>" con icono "<EMOJI>" y la descripción breve: "<Descripción corta>".
+
+Detalle de los requerimientos:
+- API Backend: endpoint(s) principales a usar (por ejemplo `/api/v1/mi_endpoint`)
+- Filtros requeridos: lista (fechas, estado, sucursal, etc.)
+- KPI o métricas principales: enumerar
+- Tablas / Gráficos requeridos: especificar tipos (tabla, pie, bar, line, gauge)
+- Exportación: CSV / XLS / PDF (si aplica)
+
+Ejemplo:
+Crear un nuevo dashboard llamado "Empaques" con icono "📦". Debe mostrar:
+- KPI: total empaques hoy, empaques por operador
+- Filtros: rango de fecha, sala, operador
+- Tabla: registros con columnas [id, producto, kg, operador, fecha]
+- Gráficos: barras por producto, gauge de cumplimiento
+```
+
+Checklist para agregar un nuevo dashboard (resumen):
+1. Crear archivo en `pages/` con nombre `N_EMOJI_Nombre.py` (ej: `5_🧪_Insights.py`).
+2. Añadir docstring (triple-quoted) con la descripción del dashboard.
+3. Add `st.set_page_config(page_title="Nombre", page_icon="EMOJI")` at the top.
+4. Llamadas API: usar cache `@st.cache_data(ttl=300)` para llamadas pesadas.
+5. Protección: `from shared.auth import proteger_pagina` y `if not proteger_pagina(): st.stop()`.
+6. Agregar el archivo al repo, commit y push.
+7. Pull en el servidor y reiniciar `rio-futuro-web` (ya automatizado):
+```
+cd /home/debian/rio-futuro-dashboards/app
+git pull origin main
+sudo systemctl restart rio-futuro-web
+```
+
+Notas adicionales:
+- Para imágenes/activos, colócalos en `pages/assets/` y usa rutas relativas o `st.image`.
+- Si el dashboard requiere endpoints backend nuevos, crea `backend/routers/<nombre>.py` y `backend/services/<nombre>_service.py` y registra la ruta en `backend/main.py`.
+- Para permisos o roles, puedes añadir metadatos en un encabezado comentado y luego extender `shared.auth` para filtrar (opcional).
+
+Ejemplo mínimo (Plantilla) ya se incluyó como `pages/5_🧪_Template.py`.
