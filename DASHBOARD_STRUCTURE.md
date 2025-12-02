@@ -28,7 +28,7 @@ Este documento describe la estructura del repositorio `rio-futuro-dashboards`, l
 │  ├─ 2_📊_Bandejas.py
 │  ├─ 3_📦_Stock.py
 │  ├─ 4_🚢_Containers.py
-│  └─ 5_🧪_Template.py     # (mantiene placeholder para histórico / no mostrar)
+│  └─ 5_🧪_Template.py     # (archivo eliminado; contenido archivado en `pages/archived/5_🧪_Template.py.bak`)
 ├─ scripts/                # Helpers y scripts de deploy/verify
 │  └─ deploy-and-verify.sh
 ├─ shared/                 # Módulos compartidos (auth, odoo client, constants)
