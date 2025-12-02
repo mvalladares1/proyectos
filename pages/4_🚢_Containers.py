@@ -26,7 +26,11 @@ st.title("🚢 Dashboard de Containers")
 st.markdown("Seguimiento de producción por pedido de venta")
 
 # Obtener credenciales
-credenciales = get_credenciales()
+username, password = get_credenciales()
+
+if not (username and password):
+    st.error("No se encontraron credenciales válidas en la sesión.")
+    st.stop()
 API_URL = st.secrets.get("API_URL", "http://localhost:8000")
 
 
@@ -36,8 +40,8 @@ def fetch_containers(start_date: str = None, end_date: str = None,
     """Obtiene containers desde la API"""
     try:
         params = {
-            "username": credenciales["username"],
-            "password": credenciales["password"]
+            "username": username,
+            "password": password
         }
         if start_date:
             params["start_date"] = start_date
@@ -66,8 +70,8 @@ def fetch_container_detail(sale_id: int) -> Dict:
         response = httpx.get(
             f"{API_URL}/api/v1/containers/{sale_id}",
             params={
-                "username": credenciales["username"],
-                "password": credenciales["password"]
+                "username": username,
+                "password": password
             },
             timeout=30.0
         )
@@ -84,8 +88,8 @@ def fetch_summary() -> Dict:
         response = httpx.get(
             f"{API_URL}/api/v1/containers/summary",
             params={
-                "username": credenciales["username"],
-                "password": credenciales["password"]
+                "username": username,
+                "password": password
             },
             timeout=30.0
         )
