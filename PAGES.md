@@ -66,4 +66,6 @@ Notas adicionales:
 - Si el dashboard requiere endpoints backend nuevos, crea `backend/routers/<nombre>.py` y `backend/services/<nombre>_service.py` y registra la ruta en `backend/main.py`.
 - Para permisos o roles, puedes añadir metadatos en un encabezado comentado y luego extender `shared.auth` para filtrar (opcional).
 
-Ejemplo mínimo (Plantilla) ya se incluyó como `pages/5_🧪_Template.py`.
+Ejemplo mínimo (Plantilla) ya fue archivado. Consulta el documento `DASHBOARD_STRUCTURE.md` para la guía completa sobre cómo crear nuevos dashboards y la estructura del proyecto.
+
+Documento de referencia: `DASHBOARD_STRUCTURE.md` (en la raíz del repo)
