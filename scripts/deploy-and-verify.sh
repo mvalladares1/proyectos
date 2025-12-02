@@ -30,6 +30,8 @@ fi
 echo "-> Reiniciando servicio API: ${SERVICE_API}"
 sudo systemctl restart ${SERVICE_API}
 sudo systemctl status ${SERVICE_API} --no-pager -l
+echo "-> Detalle del unit file de ${SERVICE_API}"
+sudo systemctl cat ${SERVICE_API} || true
 
 # Reiniciar web (opcional)
 echo "-> Reiniciando servicio web: ${SERVICE_WEB}"
@@ -54,6 +56,9 @@ else
     echo "!! ERROR: el endpoint /api/v1/example respondió HTTP ${HTTP_CODE}" >&2
     echo "-> Mostrando logs recientes del servicio ${SERVICE_API}"
     sudo journalctl -u ${SERVICE_API} -n 200 --no-pager
+    echo "-> Verificando procesos uvicorn/python que corren en el host (puerto 8000)"
+    ss -ltnp | grep 8000 || netstat -ltnp | grep 8000 || true
+    echo "-> Si no ves el puerto 8000, revisa logs y si hay un proceso antiguo que escucha un puerto distinto."
     exit 1
 fi
 
