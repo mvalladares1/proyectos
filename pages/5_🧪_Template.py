@@ -33,11 +33,24 @@ def fetch_sample_data(username: str, password: str):
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
+        # Mostrar advertencia y devolver lista vacía para que el UI pueda usar un fallback
         st.warning("No fue posible cargar datos de ejemplo: " + str(e))
         return []
 
+SAMPLE_FALLBACK = {
+    "meta": {"source": "fallback", "count": 3},
+    "data": [
+        {"id": "F1", "name": "Fallback A", "value": 111, "status": "ok"},
+        {"id": "F2", "name": "Fallback B", "value": 222, "status": "ok"},
+        {"id": "F3", "name": "Fallback C", "value": 333, "status": "warning"},
+    ],
+}
+
 if username and password:
     data = fetch_sample_data(username, password)
+    if not data:
+        st.info("Usando datos de ejemplo locales porque la API no respondió. Verifique que la URL de la API esté correctamente configurada en `st.secrets['API_URL']` o que el backend esté en ejecución.")
+        data = SAMPLE_FALLBACK
     st.write(data)
 else:
     st.info("Inicia sesión para ver datos de ejemplo.")
