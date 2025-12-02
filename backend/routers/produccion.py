@@ -1,0 +1,62 @@
+"""
+Router de Producción - Órdenes de fabricación y métricas
+"""
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
+from datetime import datetime
+
+from backend.services.produccion_service import ProduccionService
+
+router = APIRouter(prefix="/api/v1/produccion", tags=["produccion"])
+
+
+@router.get("/ordenes")
+async def get_ordenes_fabricacion(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    estado: Optional[str] = Query(None, description="Filtrar por estado"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha hasta (YYYY-MM-DD)")
+):
+    """
+    Obtiene las órdenes de fabricación de Odoo.
+    """
+    try:
+        service = ProduccionService(username=username, password=password)
+        return service.get_ordenes_fabricacion(
+            estado=estado,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/kpis")
+async def get_kpis_produccion(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene los KPIs de producción.
+    """
+    try:
+        service = ProduccionService(username=username, password=password)
+        return service.get_kpis()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/resumen")
+async def get_resumen_produccion(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene un resumen general de producción.
+    """
+    try:
+        service = ProduccionService(username=username, password=password)
+        return service.get_resumen()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
