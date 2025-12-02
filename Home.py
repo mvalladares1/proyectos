@@ -124,6 +124,34 @@ else:
         - Balance por productor
         """)
         st.page_link("pages/2_📊_Bandejas.py", label="Ir a Bandejas", icon="📊")
+
+    # Segunda fila: Stock y Containers
+    st.markdown("---")
+    col3, col4 = st.columns(2)
+
+    with col3:
+        st.markdown("""
+        ### 📦 Stock
+        Visualizaciones del stock en planta: ubicaciones, niveles, movimientos y alertas.
+        
+        **Funcionalidades:**
+        - Stock por ubicación y tipo
+        - Movimientos y entradas/salidas
+        - Reportes y alertas de stock mínimo
+        """)
+        st.page_link("pages/3_📦_Stock.py", label="Ir a Stock", icon="📦")
+
+    with col4:
+        st.markdown("""
+        ### 🚢 Containers
+        Gestión y monitoreo de containers, contenedores y ocupación.
+        
+        **Funcionalidades:**
+        - Seguimiento por fecha y ubicación
+        - KPIs de ocupación y distribucion
+        - Estado y movimientos de containers
+        """)
+        st.page_link("pages/4_🚢_Containers.py", label="Ir a Containers", icon="🚢")
     
     st.markdown("---")
     
