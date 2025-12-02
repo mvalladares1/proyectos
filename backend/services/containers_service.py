@@ -181,11 +181,12 @@ class ContainersService:
         
         for sale in sales_raw:
             sale_id = sale["id"]
-            sale_clean = clean_record(sale)
             
-            # Obtener partner name
+            # Obtener partner name ANTES de clean_record
             partner = sale.get("partner_id")
-            partner_name = partner[1] if isinstance(partner, (list, tuple)) else "N/A"
+            partner_name = partner[1] if partner and isinstance(partner, (list, tuple)) and len(partner) > 1 else "N/A"
+            
+            sale_clean = clean_record(sale)
             
             # Líneas de este pedido
             lines_data = lines_map.get(sale_id, [])
