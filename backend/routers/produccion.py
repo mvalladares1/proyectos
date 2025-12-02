@@ -32,6 +32,23 @@ async def get_ordenes_fabricacion(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/ordenes/{of_id}")
+async def get_orden_detalle(
+    of_id: int,
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene el detalle completo de una orden de fabricación.
+    Incluye componentes, subproductos, detenciones, consumo y KPIs.
+    """
+    try:
+        service = ProduccionService(username=username, password=password)
+        return service.get_of_detail(of_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/kpis")
 async def get_kpis_produccion(
     username: str = Query(..., description="Usuario Odoo"),
