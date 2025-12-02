@@ -161,8 +161,26 @@ with tab1:
             ]
         
         # Mostrar tabla con formato
+        def occupancy_style(value):
+            try:
+                val = float(value)
+            except (TypeError, ValueError):
+                return ""
+
+            if val >= 90:
+                return "background-color:#8b0000;color:white"
+            if val >= 75:
+                return "background-color:#c0392b;color:white"
+            if val >= 50:
+                return "background-color:#e67e22;color:white"
+            if val >= 25:
+                return "background-color:#f1c40f;color:black"
+            return "background-color:#27ae60;color:white"
+
+        styled_df = df_filtered.style.applymap(occupancy_style, subset=["Ocupación %"])
+
         st.dataframe(
-            df_filtered.style.background_gradient(subset=["Ocupación %"], cmap="RdYlGn_r"),
+            styled_df,
             use_container_width=True,
             height=400
         )
