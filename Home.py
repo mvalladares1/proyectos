@@ -98,60 +98,62 @@ else:
     
     st.markdown("---")
     st.subheader("📊 Selecciona un Dashboard")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        ### 📦 Producción
-        Dashboard de órdenes de fabricación, seguimiento de producción y KPIs de manufactura.
-        
-        **Funcionalidades:**
-        - Órdenes de fabricación activas
-        - Métricas de producción
-        - Análisis de eficiencia
-        """)
-        st.page_link("pages/1_📦_Produccion.py", label="Ir a Producción", icon="📦")
-    
-    with col2:
-        st.markdown("""
-        ### 📊 Bandejas
-        Control de recepción y despacho de bandejas a productores.
-        
-        **Funcionalidades:**
-        - Movimientos de entrada/salida
-        - Stock actual por tipo
-        - Balance por productor
-        """)
-        st.page_link("pages/2_📊_Bandejas.py", label="Ir a Bandejas", icon="📊")
 
-    # Segunda fila: Stock y Containers
-    st.markdown("---")
-    col3, col4 = st.columns(2)
+    import os, re
 
-    with col3:
-        st.markdown("""
-        ### 📦 Stock
-        Visualizaciones del stock en planta: ubicaciones, niveles, movimientos y alertas.
-        
-        **Funcionalidades:**
-        - Stock por ubicación y tipo
-        - Movimientos y entradas/salidas
-        - Reportes y alertas de stock mínimo
-        """)
-        st.page_link("pages/3_📦_Stock.py", label="Ir a Stock", icon="📦")
+    def get_page_metadata(path: str) -> dict:
+        meta = {"title": None, "icon": None, "description": None, "path": path}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read(2048)
+        except Exception:
+            return meta
 
-    with col4:
-        st.markdown("""
-        ### 🚢 Containers
-        Gestión y monitoreo de containers, contenedores y ocupación.
-        
-        **Funcionalidades:**
-        - Seguimiento por fecha y ubicación
-        - KPIs de ocupación y distribucion
-        - Estado y movimientos de containers
-        """)
-        st.page_link("pages/4_🚢_Containers.py", label="Ir a Containers", icon="🚢")
+        # docstring (triple quotes)
+        m = re.search(r"^\s*(?:\'\'\'|\"\"\")(.+?)(?:\'\'\'|\"\"\")", text, re.S | re.M)
+        if m:
+            meta["description"] = m.group(1).strip()
+
+        # page_title and page_icon from st.set_page_config
+        m2 = re.search(r"st\.set_page_config\(([^)]*)\)", text)
+        if m2:
+            inside = m2.group(1)
+            title_m = re.search(r"page_title\s*=\s*['\"]([^'\"]+)['\"]", inside)
+            icon_m = re.search(r"page_icon\s*=\s*['\"]([^'\"]+)['\"]", inside)
+            if title_m:
+                meta["title"] = title_m.group(1)
+            if icon_m:
+                meta["icon"] = icon_m.group(1)
+
+        if not meta["title"]:
+            meta["title"] = os.path.splitext(os.path.basename(path))[0]
+        return meta
+
+    pages_dir = os.path.join(os.path.dirname(__file__), "pages")
+    page_files = []
+    try:
+        for p in os.listdir(pages_dir):
+            if p.endswith('.py') and p not in ['__init__.py']:
+                page_files.append(os.path.join(pages_dir, p))
+    except Exception:
+        page_files = []
+
+    page_meta = [get_page_metadata(p) for p in page_files if 'Home.py' not in p]
+
+    # Render cards dynamically (2 per row)
+    for i in range(0, len(page_meta), 2):
+        cols = st.columns(2)
+        for j, meta in enumerate(page_meta[i:i+2]):
+            with cols[j]:
+                icon = meta.get('icon') or ''
+                title = meta.get('title')
+                desc = meta.get('description') or ''
+                st.markdown(f"### {icon} {title}")
+                if desc:
+                    st.markdown(desc)
+                rel = os.path.relpath(meta['path'], os.path.join(os.path.dirname(__file__)))
+                rel = rel.replace('\\\\', '/')
+                st.page_link(rel, label=f"Ir a {title}", icon=icon or None)
     
     st.markdown("---")
     
