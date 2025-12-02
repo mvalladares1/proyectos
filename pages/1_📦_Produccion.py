@@ -1,5 +1,5 @@
 """
-Dashboard de Producción - Órdenes de Fabricación
+Dashboard de Producción - Órdenes de Fabricación detalladas
 """
 from datetime import date, timedelta
 from typing import Dict, List, Optional
@@ -48,7 +48,9 @@ def get_state_label(state: Optional[str]) -> str:
         "cancel": "Cancelada",
         "to_close": "Por Cerrar",
     }
-    return state_map.get(state, state.title() if state else "N/A")
+    if not state:
+        return "N/A"
+    return state_map.get(state, state.title())
 
 
 def clean_name(value) -> str:
@@ -59,43 +61,6 @@ def clean_name(value) -> str:
     return "N/A"
 
 
-@st.cache_data(ttl=300)
-def fetch_ordenes(
-    username: str,
-    password: str,
-    start_date: str,
-    end_date: str,
-    estado: Optional[str]
-) -> List[Dict]:
-    params = {
-        "username": username,
-        "password": password,
-        "fecha_desde": start_date,
-        "fecha_hasta": end_date,
-    }
-    if estado:
-        params["estado"] = estado
-
-    response = httpx.get(
-        f"{API_URL}/api/v1/produccion/ordenes",
-        params=params,
-        timeout=30.0
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-@st.cache_data(ttl=300)
-def fetch_of_detail(of_id: int, username: str, password: str) -> Dict:
-    response = httpx.get(
-        f"{API_URL}/api/v1/produccion/ordenes/{of_id}",
-        params={"username": username, "password": password},
-        timeout=60.0
-    )
-    response.raise_for_status()
-    return response.json()
-
-
 def build_pie_chart(labels: List[str], values: List[float], title: str) -> go.Figure:
     fig = go.Figure(go.Pie(
         labels=labels,
@@ -103,7 +68,7 @@ def build_pie_chart(labels: List[str], values: List[float], title: str) -> go.Fi
         hole=0.4,
         textinfo="percent",
         hovertemplate="<b>%{label}</b><br>%{value:.2f} kg<extra></extra>",
-        marker=dict(line=dict(color="#1e1e1e", width=2))
+        marker=dict(line=dict(color="#1e1e1e", width=1.5))
     ))
     fig.update_layout(
         height=420,
@@ -124,7 +89,7 @@ def build_horizontal_bar(labels: List[str], values: List[float], title: str) -> 
         marker=dict(color="#00cc66", line=dict(color="#00ff88", width=1.5)),
     ))
     fig.update_layout(
-        height=400,
+        height=380,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="white"),
@@ -136,7 +101,7 @@ def build_horizontal_bar(labels: List[str], values: List[float], title: str) -> 
 
 def render_component_tab(items: List[Dict], label: str):
     if not items:
-        st.info("No hay datos registrados")
+        st.info("No hay registros disponibles")
         return
 
     categories = sorted({item.get("product_category_name", "N/A") for item in items})
@@ -180,172 +145,257 @@ def render_component_tab(items: List[Dict], label: str):
 
 def render_metrics_row(columns, metrics):
     for col, (label, value, suffix) in zip(columns, metrics):
-        col.metric(label, f"{value}{suffix if suffix else ''}")
+        text = f"{value}{suffix if suffix else ''}"
+        col.metric(label, text)
 
 
-st.sidebar.header("Buscar órdenes de fabricación")
-st.sidebar.markdown("Selecciona rango de fechas y estado antes de buscar")
-start_date = st.sidebar.date_input("Desde", value=date.today() - timedelta(days=30), key="prod_start")
-end_date = st.sidebar.date_input("Hasta", value=date.today(), key="prod_end")
-state_label = st.sidebar.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_state")
-state_filter = STATE_OPTIONS[state_label]
+@st.cache_data(ttl=300)
+def fetch_ordenes(
+    username: str,
+    password: str,
+    start_date: str,
+    end_date: str,
+    estado: Optional[str]
+) -> List[Dict]:
+    params = {
+        "username": username,
+        "password": password,
+        "fecha_desde": start_date,
+        "fecha_hasta": end_date,
+    }
+    if estado:
+        params["estado"] = estado
+
+    response = httpx.get(
+        f"{API_URL}/api/v1/produccion/ordenes",
+        params=params,
+        timeout=30.0
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+@st.cache_data(ttl=300)
+def fetch_of_detail(of_id: int, username: str, password: str) -> Dict:
+    response = httpx.get(
+        f"{API_URL}/api/v1/produccion/ordenes/{of_id}",
+        params={"username": username, "password": password},
+        timeout=60.0
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+@st.cache_data(ttl=300)
+def fetch_kpis(username: str, password: str) -> Dict:
+    response = httpx.get(
+        f"{API_URL}/api/v1/produccion/kpis",
+        params={"username": username, "password": password},
+        timeout=30.0
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+st.title("📦 Dashboard de Producción")
+st.markdown("---")
+
+with st.spinner("Cargando indicadores..."):
+    try:
+        kpis = fetch_kpis(username, password)
+    except Exception as exc:
+        st.warning(f"No fue posible cargar los KPIs: {exc}")
+        kpis = {}
+
+if kpis:
+    cols = st.columns(5)
+    metrics = [
+        ("Total órdenes", kpis.get("total_ordenes", 0), ""),
+        ("En progreso", kpis.get("ordenes_progress", 0), ""),
+        ("Confirmadas", kpis.get("ordenes_confirmed", 0), ""),
+        ("Completadas", kpis.get("ordenes_done", 0), ""),
+        ("Por cerrar", kpis.get("ordenes_to_close", 0), ""),
+    ]
+    render_metrics_row(cols, metrics)
+
+st.markdown("---")
 
 if "production_ofs" not in st.session_state:
     st.session_state["production_ofs"] = []
-
 if "production_current_of" not in st.session_state:
     st.session_state["production_current_of"] = None
 
-if st.sidebar.button("Buscar OFs", type="primary"):
-    with st.spinner("Consultando órdenes..."):
-        try:
-            results = fetch_ordenes(
-                username,
-                password,
-                start_date.isoformat(),
-                end_date.isoformat(),
-                state_filter
-            )
-            st.session_state["production_ofs"] = results
-            if results:
-                st.success(f"{len(results)} órdenes encontradas")
-            else:
-                st.info("No se encontraron órdenes en el rango seleccionado")
-        except Exception as error:
-            st.error(f"Error al buscar órdenes: {error}")
+with st.expander("🔍 Filtros de búsqueda", expanded=True):
+    col1, col2, col3 = st.columns([1, 1, 1])
+    start_date = col1.date_input("Desde", value=date.today() - timedelta(days=30), key="prod_filter_start")
+    end_date = col2.date_input("Hasta", value=date.today(), key="prod_filter_end")
+    state_label = col3.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_filter_state")
+    state_filter = STATE_OPTIONS[state_label]
 
-if st.sidebar.button("Limpiar selección", type="secondary"):
-    st.session_state["production_ofs"] = []
-    st.session_state["production_current_of"] = None
-    st.cache_data.clear()
-    st.experimental_rerun()
+    btn_col1, btn_col2 = st.columns(2)
+    if btn_col1.button("Buscar órdenes", type="primary"):
+        with st.spinner("Consultando órdenes..."):
+            try:
+                results = fetch_ordenes(
+                    username,
+                    password,
+                    start_date.isoformat(),
+                    end_date.isoformat(),
+                    state_filter
+                )
+                st.session_state["production_ofs"] = results
+                if results:
+                    st.success(f"{len(results)} órdenes encontradas")
+                else:
+                    st.info("No se encontraron órdenes en el rango solicitado")
+            except Exception as error:
+                st.error(f"Error al buscar órdenes: {error}")
+    if btn_col2.button("Limpiar resultados", type="secondary"):
+        st.session_state["production_ofs"] = []
+        st.session_state["production_current_of"] = None
+        st.cache_data.clear()
+        st.experimental_rerun()
 
-st.sidebar.markdown("---")
 if st.session_state["production_ofs"]:
-    of_options = {
+    df = pd.DataFrame(st.session_state["production_ofs"])
+    st.subheader("📋 Tabla de órdenes encontradas")
+    if not df.empty:
+        display_cols = [col for col in [
+            "name", "state", "date_planned_start", "product_id",
+            "product_qty", "qty_produced", "date_start", "date_finished", "user_id"
+        ] if col in df.columns]
+        df_display = df[display_cols].copy()
+        if "product_id" in df_display.columns:
+            df_display["producto"] = df_display["product_id"].apply(clean_name)
+            df_display.drop(columns=["product_id"], inplace=True)
+        if "user_id" in df_display.columns:
+            df_display["responsable"] = df_display["user_id"].apply(clean_name)
+            df_display.drop(columns=["user_id"], inplace=True)
+        st.dataframe(df_display, use_container_width=True, height=350)
+        csv = df_display.to_csv(index=False)
+        st.download_button("📥 Descargar órdenes", csv, "ordenes_produccion.csv", "text/csv")
+
+    st.markdown("---")
+    options = {
         f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))}": of["id"]
         for of in st.session_state["production_ofs"]
     }
-    selected_label = st.sidebar.selectbox("Seleccionar OF", options=list(of_options.keys()), key="of_selector")
-    selected_id = of_options[selected_label]
-    if st.sidebar.button("Cargar OF", type="primary"):
-        with st.spinner("Cargando OF..."):
+    selected_label = st.selectbox("Seleccionar orden para detalle", options=list(options.keys()), key="prod_selector")
+    selected_id = options[selected_label]
+    if st.button("Cargar detalle", type="primary"):
+        with st.spinner("Cargando la orden..."):
             try:
                 detail = fetch_of_detail(selected_id, username, password)
                 st.session_state["production_current_of"] = detail
-                st.success("Orden cargada exitosamente")
+                st.success("Detalle cargado correctamente")
             except Exception as error:
-                st.error(f"No se pudo cargar la OF: {error}")
+                st.error(f"No se pudo cargar la orden: {error}")
 else:
-    st.sidebar.info("Busca y carga una OF para ver el detalle completo")
+    st.info("Busca una orden para comenzar")
 
 if not st.session_state["production_current_of"]:
-    st.info("Selecciona una orden de fabricación en el panel lateral para comenzar")
-else:
-    st.title("Detalle de la orden")
-    data = st.session_state["production_current_of"]
-    of = data.get("of", {})
-    componentes = data.get("componentes", [])
-    subproductos = data.get("subproductos", [])
-    detenciones = data.get("detenciones", [])
-    consumo = data.get("consumo", [])
-    kpis = data.get("kpis", {})
+    st.stop()
 
-    st.subheader("Resumen general")
-    row1 = st.columns(4)
-    resumen_metrics = [
-        ("Responsable", clean_name(of.get("user_id")), ""),
-        ("Cliente", clean_name(of.get("x_studio_clientes")), ""),
-        ("Producto", clean_name(of.get("product_id")), ""),
-        ("Estado", get_state_label(of.get("state")), ""),
-    ]
-    render_metrics_row(row1, resumen_metrics)
+st.markdown("---")
+data = st.session_state["production_current_of"]
+of = data.get("of", {})
+componentes = data.get("componentes", [])
+subproductos = data.get("subproductos", [])
+detenciones = data.get("detenciones", [])
+consumo = data.get("consumo", [])
+kpis_detail = data.get("kpis", {})
 
-    st.markdown("---")
-    row2 = st.columns(4)
-    po_metrics = [
-        ("Para PO", "Sí" if of.get("x_studio_odf_es_para_una_po_en_particular") else "No", ""),
-        ("Número PO", of.get("x_studio_nmero_de_po_1", "N/A"), ""),
-        ("PO asociada", clean_name(of.get("x_studio_po_asociada")), ""),
-        ("KG totales PO", f"{of.get('x_studio_kg_totales_po', 0):,.0f}", " kg"),
-    ]
-    render_metrics_row(row2, po_metrics)
+st.subheader("Detalle de la orden")
+row1 = st.columns(4)
+render_metrics_row(row1, [
+    ("Responsable", clean_name(of.get("user_id")), ""),
+    ("Cliente", clean_name(of.get("x_studio_clientes")), ""),
+    ("Producto", clean_name(of.get("product_id")), ""),
+    ("Estado", get_state_label(of.get("state")), ""),
+])
 
-    row3 = st.columns(4)
-    po_consumo_metrics = [
-        ("KG consumidos", f"{of.get('x_studio_kg_consumidos_po', 0):,.0f}", " kg"),
-        ("KG disponibles", f"{of.get('x_studio_kg_disponibles_po', 0):,.0f}", " kg"),
-        ("Dotación", str(of.get("x_studio_dotacin", "N/A")), ""),
-        ("Sala", clean_name(of.get("x_studio_sala_de_proceso")), ""),
-    ]
-    render_metrics_row(row3, po_consumo_metrics)
+st.markdown("---")
+row2 = st.columns(4)
+render_metrics_row(row2, [
+    ("Para PO", "Sí" if of.get("x_studio_odf_es_para_una_po_en_particular") else "No", ""),
+    ("PO asociada", clean_name(of.get("x_studio_po_asociada")), ""),
+    ("KG totales PO", f"{of.get('x_studio_kg_totales_po', 0):,.0f}", " kg"),
+    ("Sala", clean_name(of.get("x_studio_sala_de_proceso")), ""),
+])
 
-    st.markdown("---")
-    st.subheader("KPIs de producción")
-    kpi_row = st.columns(4)
-    kpi_metrics = [
-        ("Producción total", f"{kpis.get('produccion_total_kg', 0):,.0f}", " kg"),
-        ("Rendimiento", f"{kpis.get('rendimiento_%', 0):.2f}", "%"),
-        ("KG/HH", f"{kpis.get('kg_por_hh', 0):.2f}", ""),
-        ("Consumo MP", f"{kpis.get('consumo_mp_kg', 0):,.0f}", " kg"),
-    ]
-    render_metrics_row(kpi_row, kpi_metrics)
+row3 = st.columns(4)
+render_metrics_row(row3, [
+    ("KG consumidos", f"{of.get('x_studio_kg_consumidos_po', 0):,.0f}", " kg"),
+    ("KG disponibles", f"{of.get('x_studio_kg_disponibles_po', 0):,.0f}", " kg"),
+    ("Dotación", str(of.get("x_studio_dotacin", "N/A")), ""),
+    ("Usuario", clean_name(of.get("user_id")), ""),
+])
 
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=kpis.get("rendimiento_%", 0),
-        number={"suffix": "%"},
-        gauge={
-            "axis": {"range": [0, 120]},
-            "bar": {"color": "#00cc66"},
-            "steps": [
-                {"range": [0, 50], "color": "#ff4444"},
-                {"range": [50, 80], "color": "#ffb347"},
-                {"range": [80, 100], "color": "#00cc66"},
-                {"range": [100, 120], "color": "#00ff88"},
-            ],
-        }
-    ))
-    fig_gauge.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=320)
-    st.plotly_chart(fig_gauge, use_container_width=True)
+st.markdown("---")
+st.subheader("KPIs de producción")
+kpi_cols = st.columns(4)
+render_metrics_row(kpi_cols, [
+    ("Producción total", f"{kpis_detail.get('produccion_total_kg', 0):,.0f}", " kg"),
+    ("Rendimiento", f"{kpis_detail.get('rendimiento_%', 0):.2f}", "%"),
+    ("KG/HH", f"{kpis_detail.get('kg_por_hh', 0):.2f}", ""),
+    ("Consumo MP", f"{kpis_detail.get('consumo_mp_kg', 0):,.0f}", " kg"),
+])
 
-    st.markdown("---")
-    tab_comp, tab_sub, tab_det, tab_consumo = st.tabs([
-        "Componentes",
-        "Subproductos",
-        "Detenciones",
-        "Consumo"
-    ])
+fig_gauge = go.Figure(go.Indicator(
+    mode="gauge+number",
+    value=kpis_detail.get("rendimiento_%", 0),
+    number={"suffix": "%"},
+    gauge={
+        "axis": {"range": [0, 120]},
+        "bar": {"color": "#00cc66"},
+        "steps": [
+            {"range": [0, 50], "color": "#ff4444"},
+            {"range": [50, 80], "color": "#ffb347"},
+            {"range": [80, 100], "color": "#00cc66"},
+            {"range": [100, 120], "color": "#00ff88"},
+        ],
+    }
+))
+fig_gauge.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=320)
+st.plotly_chart(fig_gauge, use_container_width=True)
 
-    with tab_comp:
-        render_component_tab(componentes, "componentes")
+st.markdown("---")
+tab_comp, tab_sub, tab_det, tab_consumo = st.tabs([
+    "Componentes",
+    "Subproductos",
+    "Detenciones",
+    "Consumo"
+])
 
-    with tab_sub:
-        render_component_tab(subproductos, "subproductos")
+with tab_comp:
+    render_component_tab(componentes, "componentes")
 
-    with tab_det:
-        if detenciones:
-            df_det = pd.DataFrame([{
-                "Responsable": clean_name(det.get("x_studio_responsable")),
-                "Motivo": clean_name(det.get("x_motivodetencion")),
-                "Hora inicio": det.get("x_horainiciodetencion", "N/A"),
-                "Hora fin": det.get("x_horafindetencion", "N/A"),
-                "Horas": det.get("x_studio_horas_de_detencin", 0) or 0,
-            } for det in detenciones])
-            st.dataframe(df_det, use_container_width=True, height=320)
-        else:
-            st.info("No hay detenciones registradas")
+with tab_sub:
+    render_component_tab(subproductos, "subproductos")
 
-    with tab_consumo:
-        if consumo:
-            df_consumo = pd.DataFrame([{
-                "Pallet": item.get("x_name", "N/A"),
-                "Producto": item.get("producto", "Desconocido"),
-                "Lote": item.get("lote", ""),
-                "Tipo": item.get("type", "Desconocido"),
-                "Hora inicio": item.get("x_studio_hora_inicio", "N/A"),
-                "Hora fin": item.get("x_studio_hora_fin", "N/A"),
-            } for item in consumo])
-            st.dataframe(df_consumo, use_container_width=True, height=360)
-        else:
-            st.info("No hay registros de consumo")
+with tab_det:
+    if detenciones:
+        df_det = pd.DataFrame([{
+            "Responsable": clean_name(det.get("x_studio_responsable")),
+            "Motivo": clean_name(det.get("x_motivodetencion")),
+            "Hora inicio": det.get("x_horainiciodetencion", "N/A"),
+            "Hora fin": det.get("x_horafindetencion", "N/A"),
+            "Horas": det.get("x_studio_horas_de_detencin", 0) or 0,
+        } for det in detenciones])
+        st.dataframe(df_det, use_container_width=True, height=320)
+    else:
+        st.info("No hay detenciones registradas")
+
+with tab_consumo:
+    if consumo:
+        df_consumo = pd.DataFrame([{
+            "Pallet": item.get("x_name", "N/A"),
+            "Producto": item.get("producto", "Desconocido"),
+            "Lote": item.get("lote", ""),
+            "Tipo": item.get("type", "Desconocido"),
+            "Hora inicio": item.get("x_studio_hora_inicio", "N/A"),
+            "Hora fin": item.get("x_studio_hora_fin", "N/A"),
+        } for item in consumo])
+        st.dataframe(df_consumo, use_container_width=True, height=360)
+    else:
+        st.info("No hay registros de consumo")
