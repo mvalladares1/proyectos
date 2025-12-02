@@ -232,7 +232,11 @@ class StockService:
                 continue
                 
             p_info = products_map.get(prod_id, {})
-            cat_name = p_info.get("categ_id", [0, "Sin Categoría"])[1] if p_info.get("categ_id") else "Sin Categoría"
+            categ = p_info.get("categ_id")
+            if categ and isinstance(categ, (list, tuple)) and len(categ) > 1:
+                cat_name = categ[1]
+            else:
+                cat_name = "Sin Categoría"
             prod_name = p_info.get("name", "N/A")
             
             # Heurística de condición
