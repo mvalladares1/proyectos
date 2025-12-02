@@ -83,6 +83,10 @@ if detenciones:
     st.markdown(det_card, unsafe_allow_html=True)
 else:
     st.info("No hay detenciones registradas")
+
+def build_pie_chart(labels: List[str], values: List[float], title: str) -> go.Figure:
+    fig = go.Figure(go.Pie(
+        labels=labels,
         values=values,
         hole=0.4,
         textinfo="percent",
