@@ -55,6 +55,12 @@ Si quieres hacer un deploy rápido y comprobar el endpoint demo, puedes ejecutar
 sudo bash scripts/deploy-and-verify.sh
 ```
 
+También puedes ejecutar las pruebas unitarias localmente para verificar que el endpoint existe (útil para CI):
+```bash
+cd backend
+pytest -q
+```
+
 Notas adicionales:
 - Para imágenes/activos, colócalos en `pages/assets/` y usa rutas relativas o `st.image`.
 - Si el dashboard requiere endpoints backend nuevos, crea `backend/routers/<nombre>.py` y `backend/services/<nombre>_service.py` y registra la ruta en `backend/main.py`.
