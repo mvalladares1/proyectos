@@ -205,19 +205,37 @@ else:
     page_meta = [get_page_metadata(p) for p in page_files if 'Home.py' not in p]
     page_meta = [meta for meta in page_meta if page_visible(meta)]
 
-    # Render cards dynamically (2 per row)
-    for i in range(0, len(page_meta), 2):
-        cols = st.columns(2)
-        for j, meta in enumerate(page_meta[i:i+2]):
+    # --- Agrupación y orden manual de dashboards ---
+    dashboard_order = [
+        'recepcionesmp',  # Slug de Recepciones MP
+        'bandejas',
+        'stock',
+        'produccion',
+        'containers',
+        'estadoresultado',
+        'permisos'
+    ]
+    # Map slugs to meta
+    meta_by_slug = {meta['slug']: meta for meta in page_meta}
+    # Dashboards ordenados
+    ordered_meta = [meta_by_slug[s] for s in dashboard_order if s in meta_by_slug]
+    # Dashboards no listados explícitamente
+    other_meta = [meta for meta in page_meta if meta['slug'] not in dashboard_order]
+    final_meta = ordered_meta + other_meta
+
+    # Render cards: 2 por fila, mejor separación visual
+    for i in range(0, len(final_meta), 2):
+        cols = st.columns(2, gap="large")
+        for j, meta in enumerate(final_meta[i:i+2]):
             with cols[j]:
                 icon = meta.get('icon') or ''
                 title = meta.get('title')
                 desc = meta.get('description') or ''
-                st.markdown(f"### {icon} {title}")
+                st.markdown(f"#### {icon} {title}")
                 if desc:
-                    st.markdown(desc)
+                    st.markdown(f'<div style="min-height:48px">{desc}</div>', unsafe_allow_html=True)
                 rel = os.path.relpath(meta['path'], os.path.join(os.path.dirname(__file__)))
-                rel = rel.replace('\\\\', '/')
+                rel = rel.replace('\\', '/')
                 st.page_link(rel, label=f"Ir a {title}", icon=icon or None)
     
     st.markdown("---")
