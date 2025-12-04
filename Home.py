@@ -70,17 +70,52 @@ st.markdown("""
         font-weight: bold;
         color: #1f77b4;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem;
+    }
+    .section-header {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #4a4a4a;
+        margin: 1.5rem 0 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e0e0e0;
     }
     .dashboard-card {
-        background-color: #f0f2f6;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 10px;
-        text-align: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        color: white;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .card-operaciones {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    .card-finanzas {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card-admin {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    .card-title {
+        font-size: 1.2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .card-desc {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        min-height: 40px;
     }
     .stButton>button {
         width: 100%;
+    }
+    div[data-testid="stVerticalBlock"] > div:has(> .dashboard-card) {
+        padding: 0.25rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -154,6 +189,25 @@ else:
     st.markdown("---")
     st.subheader("📊 Selecciona un Dashboard")
 
+    # Definición de categorías de dashboards
+    DASHBOARD_CATEGORIES = {
+        "operaciones": {
+            "title": "📦 Operaciones",
+            "slugs": ["recepcionesmp", "bandejas", "stock", "produccion", "containers"],
+            "style": "card-operaciones"
+        },
+        "finanzas": {
+            "title": "💰 Finanzas",
+            "slugs": ["estadoresultado"],
+            "style": "card-finanzas"
+        },
+        "admin": {
+            "title": "⚙️ Administración",
+            "slugs": ["permisos"],
+            "style": "card-admin"
+        }
+    }
+
     def get_page_metadata(path: str) -> dict:
         meta = {"title": None, "icon": None, "description": None, "path": path}
         try:
@@ -205,38 +259,57 @@ else:
     page_meta = [get_page_metadata(p) for p in page_files if 'Home.py' not in p]
     page_meta = [meta for meta in page_meta if page_visible(meta)]
 
-    # --- Agrupación y orden manual de dashboards ---
-    dashboard_order = [
-        'recepcionesmp',  # Slug de Recepciones MP
-        'bandejas',
-        'stock',
-        'produccion',
-        'containers',
-        'estadoresultado',
-        'permisos'
-    ]
     # Map slugs to meta
     meta_by_slug = {meta['slug']: meta for meta in page_meta}
-    # Dashboards ordenados
-    ordered_meta = [meta_by_slug[s] for s in dashboard_order if s in meta_by_slug]
-    # Dashboards no listados explícitamente
-    other_meta = [meta for meta in page_meta if meta['slug'] not in dashboard_order]
-    final_meta = ordered_meta + other_meta
 
-    # Render cards: 2 por fila, mejor separación visual
-    for i in range(0, len(final_meta), 2):
-        cols = st.columns(2, gap="large")
-        for j, meta in enumerate(final_meta[i:i+2]):
-            with cols[j]:
-                icon = meta.get('icon') or ''
-                title = meta.get('title')
-                desc = meta.get('description') or ''
-                st.markdown(f"#### {icon} {title}")
-                if desc:
-                    st.markdown(f'<div style="min-height:48px">{desc}</div>', unsafe_allow_html=True)
-                rel = os.path.relpath(meta['path'], os.path.join(os.path.dirname(__file__)))
-                rel = rel.replace('\\', '/')
-                st.page_link(rel, label=f"Ir a {title}", icon=icon or None)
+    def render_dashboard_card(meta: dict, style_class: str):
+        """Renderiza una tarjeta de dashboard con estilo"""
+        icon = meta.get('icon') or '📄'
+        title = meta.get('title', 'Dashboard')
+        desc = meta.get('description') or 'Dashboard de Rio Futuro'
+        # Limitar descripción
+        if len(desc) > 100:
+            desc = desc[:97] + "..."
+        
+        st.markdown(f"""
+        <div class="dashboard-card {style_class}">
+            <div class="card-title">{icon} {title}</div>
+            <div class="card-desc">{desc}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        rel = os.path.relpath(meta['path'], os.path.join(os.path.dirname(__file__)))
+        rel = rel.replace('\\', '/')
+        st.page_link(rel, label=f"Ir a {title}", icon=icon or None, use_container_width=True)
+
+    # Renderizar cada categoría
+    rendered_slugs = set()
+    
+    for cat_key, cat_info in DASHBOARD_CATEGORIES.items():
+        cat_dashboards = [meta_by_slug[s] for s in cat_info["slugs"] if s in meta_by_slug]
+        if not cat_dashboards:
+            continue
+        
+        st.markdown(f'<div class="section-header">{cat_info["title"]}</div>', unsafe_allow_html=True)
+        
+        # Mostrar en grid de 3 columnas
+        cols = st.columns(3, gap="medium")
+        for idx, meta in enumerate(cat_dashboards):
+            with cols[idx % 3]:
+                render_dashboard_card(meta, cat_info["style"])
+                rendered_slugs.add(meta['slug'])
+        
+        # Añadir espacio entre categorías
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    # Dashboards no categorizados (si los hay)
+    other_dashboards = [meta for meta in page_meta if meta['slug'] not in rendered_slugs]
+    if other_dashboards:
+        st.markdown('<div class="section-header">📋 Otros Dashboards</div>', unsafe_allow_html=True)
+        cols = st.columns(3, gap="medium")
+        for idx, meta in enumerate(other_dashboards):
+            with cols[idx % 3]:
+                render_dashboard_card(meta, "")
     
     st.markdown("---")
     
