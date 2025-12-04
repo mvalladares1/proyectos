@@ -317,18 +317,37 @@ if not df_in.empty or not df_out.empty:
         # Melt para Altair
         df_gestion_chart = df_gestion.melt(id_vars=['Nombre'], value_vars=['Bandejas Sucias', 'Bandejas Limpias', 'Proyectados'], var_name='Tipo', value_name='Cantidad')
         df_gestion_chart['Tipo'] = df_gestion_chart['Tipo'].replace({'Bandejas Sucias': 'Sucia', 'Bandejas Limpias': 'Limpia', 'Proyectados': 'Proyectada'})
-        # Colores
+        
+        # Colores iguales al dashboard original
         domain = ['Sucia', 'Limpia', 'Proyectada']
-        range_ = ['#e74c3c', '#f1c40f', '#2980b9']
-        chart = alt.Chart(df_gestion_chart).mark_bar().encode(
-            x=alt.X('Nombre', axis=alt.Axis(labelAngle=-45)),
-            y='Cantidad',
-            color=alt.Color('Tipo', scale=alt.Scale(domain=domain, range=range_)),
+        range_ = ['#e74c3c', '#2ecc71', '#f39c12']  # Rojo, Verde, Naranja
+        
+        # Gráfico de barras
+        bars = alt.Chart(df_gestion_chart).mark_bar().encode(
+            x=alt.X('Nombre:N', axis=alt.Axis(labelAngle=-45), title=None),
+            y=alt.Y('Cantidad:Q', title='Cantidad'),
+            color=alt.Color('Tipo:N', scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title='Tipo de Bandeja')),
             xOffset='Tipo:N',
             tooltip=['Nombre', 'Tipo', 'Cantidad']
-        ).properties(
+        )
+        
+        # Etiquetas de valores sobre las barras
+        text = alt.Chart(df_gestion_chart).mark_text(
+            align='center',
+            baseline='bottom',
+            dy=-5,
+            fontSize=10
+        ).encode(
+            x=alt.X('Nombre:N', axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y('Cantidad:Q'),
+            xOffset='Tipo:N',
+            text=alt.Text('Cantidad:Q', format=',.0f'),
+            color=alt.value('white')
+        )
+        
+        chart = (bars + text).properties(
             height=400,
-            title="Gestión de Bandejas por Productor"
+            title="Detalle de Stock por Producto"
         )
         st.altair_chart(chart, use_container_width=True)
     else:
