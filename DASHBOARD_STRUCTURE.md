@@ -142,58 +142,166 @@ proteger_pagina()
 | Servicio | URL |
 |----------|-----|
 | GitHub | https://github.com/mvalladares1/proyectos.git |
-| Dashboard | http://167.114.114.51:8501 |
+| Dashboard | http://167.114.114.51/dashboards/ |
 | API | http://167.114.114.51:8000 |
 
 ### Servicios Systemd
 
-- `rio-futuro-api` → Backend FastAPI (puerto 8000)
-- `rio-futuro-web` → Frontend Streamlit (puerto 8501)
+- `rio-futuro-api.service` → Backend FastAPI (puerto 8000)
+- `rio-futuro-web.service` → Frontend Streamlit (puerto 8501)
 
-### Ruta en Servidor
+### Arquitectura del Servidor
 
 ```
-/home/debian/rio-futuro-dashboards/app/
+Servidor: debian@167.114.114.51
+
+/home/debian/
+├── rio-futuro-dashboards/          # Repositorio clonado (referencia)
+│   └── app/                        # ⬅️ APLICACIÓN EN PRODUCCIÓN
+│       ├── .env                    # Variables de entorno (credenciales Odoo)
+│       ├── venv/                   # Entorno virtual Python
+│       ├── backend/                # API FastAPI
+│       ├── pages/                  # Páginas Streamlit
+│       ├── shared/                 # Módulos compartidos
+│       └── Home.py                 # Página principal
+
+Nginx (proxy reverso):
+├── /dashboards/  → http://127.0.0.1:8501 (Streamlit)
+├── /api/v1/      → http://127.0.0.1:8000 (FastAPI)
+└── /_stcore/     → http://127.0.0.1:8501 (WebSocket Streamlit)
+```
+
+### Configuración Systemd
+
+**rio-futuro-api.service:**
+```ini
+[Unit]
+Description=Rio Futuro Dashboards API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=debian
+WorkingDirectory=/home/debian/rio-futuro-dashboards/app
+Environment=PYTHONPATH=/home/debian/rio-futuro-dashboards/app
+ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**rio-futuro-web.service:**
+```ini
+[Unit]
+Description=Rio Futuro Dashboards Web (Streamlit)
+After=network.target
+
+[Service]
+Type=simple
+User=debian
+WorkingDirectory=/home/debian/rio-futuro-dashboards/app
+Environment=PYTHONPATH=/home/debian/rio-futuro-dashboards/app
+Environment=API_URL=http://127.0.0.1:8000
+ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/streamlit run Home.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 ---
 
 ## 7. Comandos de Deploy
 
-### Subir a Git (desde Windows PowerShell)
+### Paso 1: Subir a Git (desde Windows - Git Bash)
 
-```powershell
-cd "c:\new\RIO FUTURO\DASHNBOARDS\rio-futuro-dashboards"
+```bash
+cd ~/Desktop/PEGA/rio-futuro-dashboards
 git add -A
-git commit -m "Descripcion de los cambios"
-git pull origin main --rebase
-git push origin main
+git commit -m "Descripción de los cambios"
+git push -u origin main
 ```
 
-### Subir al Servidor
+**Si hay conflictos:**
+```bash
+git checkout --ours <archivos_conflicto>
+git add -A
+git commit -m "merge: resolver conflictos manteniendo versión local"
+git push -u origin main
+```
 
-```powershell
-# Subir archivos modificados
-scp -r pages backend debian@167.114.114.51:/home/debian/rio-futuro-dashboards/app/
+### Paso 2: Actualizar en el Servidor (SSH)
 
-# Reiniciar servicios
-ssh debian@167.114.114.51 "sudo systemctl restart rio-futuro-api rio-futuro-web"
+```bash
+# 1. Conectar al servidor
+ssh debian@167.114.114.51
+
+# 2. Ir a la carpeta de la aplicación
+cd /home/debian/rio-futuro-dashboards/app
+
+# 3. Hacer backup del .env (IMPORTANTE - tiene credenciales)
+cp .env ../env_backup.env
+
+# 4. Descartar cambios locales y actualizar
+git reset --hard HEAD
+git clean -fd
+git pull
+
+# 5. Restaurar el .env
+cp ../env_backup.env .env
+
+# 6. Reiniciar servicios
+sudo systemctl restart rio-futuro-api
+sudo systemctl restart rio-futuro-web
+
+# 7. Verificar estado
+sudo systemctl status rio-futuro-api
+sudo systemctl status rio-futuro-web
 ```
 
 ### Verificar Estado
 
 ```bash
-ssh debian@167.114.114.51 "sudo systemctl status rio-futuro-api rio-futuro-web"
+# Ver estado de ambos servicios
+sudo systemctl status rio-futuro-api rio-futuro-web
+
+# Ver procesos corriendo
+ps aux | grep -E "uvicorn|streamlit"
 ```
 
 ### Ver Logs
 
 ```bash
-# Logs del backend
-ssh debian@167.114.114.51 "sudo journalctl -u rio-futuro-api -n 100 -f"
+# Logs del backend (FastAPI)
+sudo journalctl -u rio-futuro-api -n 100 -f
 
-# Logs del frontend
-ssh debian@167.114.114.51 "sudo journalctl -u rio-futuro-web -n 100 -f"
+# Logs del frontend (Streamlit)
+sudo journalctl -u rio-futuro-web -n 100 -f
+
+# Ver archivo nohup.out (si existe)
+cat /home/debian/rio-futuro-dashboards/app/nohup.out
+```
+
+### Comandos Útiles
+
+```bash
+# Reiniciar ambos servicios
+sudo systemctl restart rio-futuro-api rio-futuro-web
+
+# Detener servicios
+sudo systemctl stop rio-futuro-api rio-futuro-web
+
+# Iniciar servicios
+sudo systemctl start rio-futuro-api rio-futuro-web
+
+# Ver configuración nginx
+cat /etc/nginx/sites-available/rio-futuro-dashboards
+
+# Reiniciar nginx (si cambias configuración)
+sudo systemctl restart nginx
 ```
 
 ---

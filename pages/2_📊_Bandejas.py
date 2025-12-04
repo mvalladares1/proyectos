@@ -269,11 +269,13 @@ if not df_in.empty or not df_out.empty:
     for col in ['Recepcionadas', 'Despachadas', 'Bandejas en Productor']:
         df_display[col] = df_display[col].apply(lambda x: f"{int(x):,}".replace(",", "."))
 
-    # Mostrar tabla con estilo igual al dashboard original
-    st.markdown("<style>.yellow-total-row {background-color: #ffff00 !important; color: black !important; font-weight: bold !important;}</style>", unsafe_allow_html=True)
-    def yellow_row(row):
-        return ['yellow-total-row' if row['Productor'] == 'TOTAL' else '' for _ in row]
-    styled_df = df_display.style.apply(yellow_row, axis=1)
+    # Mostrar tabla con estilo igual al dashboard original (fila TOTAL en amarillo)
+    def highlight_total(row):
+        if row['Productor'] == 'TOTAL':
+            return ['background-color: #ffff00; color: black; font-weight: bold'] * len(row)
+        return [''] * len(row)
+    
+    styled_df = df_display.style.apply(highlight_total, axis=1)
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
     # Gráfico de barras por productor
