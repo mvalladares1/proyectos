@@ -278,8 +278,9 @@ if not df_in.empty or not df_out.empty:
     styled_df = df_display.style.apply(highlight_total, axis=1)
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
-    # Gráfico de barras por productor
-    st.markdown("##### 📊 Gestión de Bandejas por Productor")
+    # Sección de Stock por Producto con tabla y gráfico
+    st.markdown("---")
+    st.markdown("##### Stock por Producto (Sucia vs Limpia)")
 
     if not df_stock.empty and 'default_code' in df_stock.columns and 'display_name' in df_stock.columns:
         # Clasificar tipo
@@ -314,13 +315,49 @@ if not df_in.empty or not df_out.empty:
         })
         # Proyectados (si existe df_out_projected)
         df_gestion['Proyectados'] = 0
-        # Melt para Altair
-        df_gestion_chart = df_gestion.melt(id_vars=['Nombre'], value_vars=['Bandejas Sucias', 'Bandejas Limpias', 'Proyectados'], var_name='Tipo', value_name='Cantidad')
+        # Calcular Diferencia
+        df_gestion['Diferencia'] = df_gestion['Proyectados'] - df_gestion['Bandejas Limpias']
+        
+        # Guardar copia para el gráfico (antes de agregar totales y formatear)
+        df_gestion_chart = df_gestion.copy()
+        df_gestion_chart = df_gestion_chart.melt(id_vars=['Nombre'], value_vars=['Bandejas Sucias', 'Bandejas Limpias', 'Proyectados'], var_name='Tipo', value_name='Cantidad')
         df_gestion_chart['Tipo'] = df_gestion_chart['Tipo'].replace({'Bandejas Sucias': 'Sucia', 'Bandejas Limpias': 'Limpia', 'Proyectados': 'Proyectada'})
+        
+        # Agregar fila de totales
+        total_sucias = df_gestion['Bandejas Sucias'].sum()
+        total_limpias = df_gestion['Bandejas Limpias'].sum()
+        total_proyectados = df_gestion['Proyectados'].sum()
+        total_diferencia = df_gestion['Diferencia'].sum()
+        
+        total_row_gestion = pd.DataFrame([{
+            'Nombre': 'TOTAL',
+            'Bandejas Sucias': total_sucias,
+            'Bandejas Limpias': total_limpias,
+            'Proyectados': total_proyectados,
+            'Diferencia': total_diferencia
+        }])
+        df_gestion = pd.concat([df_gestion, total_row_gestion], ignore_index=True)
+        
+        # Formatear números
+        for col in ['Bandejas Sucias', 'Bandejas Limpias', 'Proyectados', 'Diferencia']:
+            df_gestion[col] = df_gestion[col].apply(lambda x: f"{x:,.0f}".replace(",", "."))
+        
+        # Estilo para resaltar fila TOTAL en amarillo
+        def highlight_total_gestion(row):
+            if row['Nombre'] == 'TOTAL':
+                return ['background-color: #ffc107; color: black; font-weight: bold'] * len(row)
+            return [''] * len(row)
+        
+        # Mostrar tabla de gestión con totales
+        st.dataframe(
+            df_gestion[['Nombre', 'Bandejas Sucias', 'Bandejas Limpias', 'Proyectados', 'Diferencia']].style.apply(highlight_total_gestion, axis=1),
+            hide_index=True,
+            use_container_width=True
+        )
         
         # Colores iguales al dashboard original
         domain = ['Sucia', 'Limpia', 'Proyectada']
-        range_ = ['#e74c3c', '#2ecc71', '#f39c12']  # Rojo, Verde, Naranja
+        range_ = ['#dc3545', '#28a745', '#ff7f0e']  # Rojo, Verde, Naranja
         
         # Gráfico de barras
         bars = alt.Chart(df_gestion_chart).mark_bar().encode(
