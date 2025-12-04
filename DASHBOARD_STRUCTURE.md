@@ -43,7 +43,6 @@ rio-futuro-dashboards/
 │   │   ├── produccion_service.py # Consultas OFs, componentes, subproductos
 │   │   ├── bandejas_service.py
 │   │   ├── stock_service.py
-│   │   └── containers_service.py
 │   └── tests/
 │       └── test_demo.py
 │
@@ -84,6 +83,7 @@ API_PORT=8000
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
+
 | `/api/v1/produccion/of/{of_name}` | GET | Detalle de una OF |
 | `/api/v1/produccion/of/{of_name}/componentes` | GET | Componentes de la OF |
 | `/api/v1/produccion/of/{of_name}/subproductos` | GET | Subproductos de la OF |

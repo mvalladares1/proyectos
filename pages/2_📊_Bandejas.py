@@ -268,49 +268,69 @@ if not df_in.empty or not df_out.empty:
     # Formatear números
     for col in ['Recepcionadas', 'Despachadas', 'Bandejas en Productor']:
         df_display[col] = df_display[col].apply(lambda x: f"{int(x):,}".replace(",", "."))
-    
-    # Estilo para resaltar total
-    def highlight_total(row):
-        if row['Productor'] == 'TOTAL':
-            return ['background-color: #ffc107; color: black; font-weight: bold'] * len(row)
-        return [''] * len(row)
-    
-    st.dataframe(
-        df_display.style.apply(highlight_total, axis=1),
-        use_container_width=True,
-        hide_index=True
-    )
+
+    # Mostrar tabla con estilo igual al dashboard original
+    st.markdown("<style>.yellow-total-row {background-color: #ffff00 !important; color: black !important; font-weight: bold !important;}</style>", unsafe_allow_html=True)
+    def yellow_row(row):
+        return ['yellow-total-row' if row['Productor'] == 'TOTAL' else '' for _ in row]
+    styled_df = df_display.style.apply(yellow_row, axis=1)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
     # Gráfico de barras por productor
-    st.markdown("##### 📊 Recepción vs Despacho por Productor")
-    
-    df_chart = df_merged[df_merged['Productor'] != 'TOTAL'].melt(
-        id_vars=['Productor'],
-        value_vars=['Recepcionadas', 'Despachadas', 'Bandejas en Productor'],
-        var_name='Tipo',
-        value_name='Cantidad'
-    )
-    
-    if not df_chart.empty:
+    st.markdown("##### 📊 Gestión de Bandejas por Productor")
+
+    if not df_stock.empty and 'default_code' in df_stock.columns and 'display_name' in df_stock.columns:
+        # Clasificar tipo
+        def classify_stock(row):
+            code = str(row.get('default_code', '')).strip().upper()
+            if code.endswith('L'):
+                return 'Limpia'
+            else:
+                return 'Sucia'
+        df_stock['Tipo'] = df_stock.apply(classify_stock, axis=1)
+        df_stock['BaseCode'] = df_stock['default_code'].apply(lambda x: str(x).strip().upper().rstrip('L'))
+        # Agrupar por BaseCode y Tipo
+        df_grouped = df_stock.groupby(['BaseCode', 'Tipo'])['qty_available'].sum().unstack(fill_value=0)
+        if 'Sucia' not in df_grouped.columns:
+            df_grouped['Sucia'] = 0
+        if 'Limpia' not in df_grouped.columns:
+            df_grouped['Limpia'] = 0
+        df_grouped = df_grouped.reset_index()
+        # Obtener nombre
+        name_map = df_stock.sort_values('Tipo', ascending=False).drop_duplicates('BaseCode')[['BaseCode', 'display_name']]
+        df_gestion = pd.merge(df_grouped, name_map, on='BaseCode', how='left')
+        def clean_name(name):
+            name = str(name)
+            name = name.replace("(copia)", "").replace("- Sucia", "").replace("Limpia", "").strip()
+            return name
+        df_gestion['display_name'] = df_gestion['display_name'].apply(clean_name)
+        df_gestion = df_gestion.rename(columns={
+            'BaseCode': 'Código',
+            'display_name': 'Nombre',
+            'Sucia': 'Bandejas Sucias',
+            'Limpia': 'Bandejas Limpias'
+        })
+        # Proyectados (si existe df_out_projected)
+        df_gestion['Proyectados'] = 0
+        # Melt para Altair
+        df_gestion_chart = df_gestion.melt(id_vars=['Nombre'], value_vars=['Bandejas Sucias', 'Bandejas Limpias', 'Proyectados'], var_name='Tipo', value_name='Cantidad')
+        df_gestion_chart['Tipo'] = df_gestion_chart['Tipo'].replace({'Bandejas Sucias': 'Sucia', 'Bandejas Limpias': 'Limpia', 'Proyectados': 'Proyectada'})
         # Colores
-        domain = ['Recepcionadas', 'Despachadas', 'Bandejas en Productor']
-        range_ = [COLORES['verde'], COLORES['rojo'], COLORES['azul']]
-        
-        chart = alt.Chart(df_chart).mark_bar().encode(
-            x=alt.X('Productor', axis=alt.Axis(labelAngle=-45)),
+        domain = ['Sucia', 'Limpia', 'Proyectada']
+        range_ = ['#e74c3c', '#f1c40f', '#2980b9']
+        chart = alt.Chart(df_gestion_chart).mark_bar().encode(
+            x=alt.X('Nombre', axis=alt.Axis(labelAngle=-45)),
             y='Cantidad',
             color=alt.Color('Tipo', scale=alt.Scale(domain=domain, range=range_)),
             xOffset='Tipo:N',
-            tooltip=['Productor', 'Tipo', 'Cantidad']
+            tooltip=['Nombre', 'Tipo', 'Cantidad']
         ).properties(
             height=400,
-            title="Movimientos por Productor"
+            title="Gestión de Bandejas por Productor"
         )
-        
         st.altair_chart(chart, use_container_width=True)
-
-else:
-    st.warning("No se encontraron movimientos de bandejas.")
+    else:
+        st.warning("No se encontraron datos de bandejas para el gráfico.")
 
 # Botón de actualizar
 if st.button("🔄 Actualizar Datos"):
