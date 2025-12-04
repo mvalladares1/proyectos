@@ -10,8 +10,9 @@ from . import stock
 from . import estado_resultado
 from . import presupuesto
 from . import permissions
+from . import recepcion
 
 __all__ = [
 	'auth', 'produccion', 'bandejas', 'demo', 'containers',
-	'stock', 'estado_resultado', 'presupuesto', 'permissions'
+	'stock', 'estado_resultado', 'presupuesto', 'permissions', 'recepcion'
 ]
