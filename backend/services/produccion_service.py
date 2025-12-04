@@ -133,7 +133,8 @@ class ProduccionService:
         
         lines_raw = self.odoo.read('stock.move.line', line_ids, [
             "product_id", "lot_id", "result_package_id", "package_id",
-            "qty_done", "location_id", "location_dest_id", "product_category_name"
+            "qty_done", "location_id", "location_dest_id", "product_category_name",
+            "x_studio_precio_unitario"
         ])
         
         return [clean_record(x) for x in lines_raw]
