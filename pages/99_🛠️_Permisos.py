@@ -103,7 +103,7 @@ with st.expander("Asignar permiso"):
                 try:
                     update_permission("assign", slug_input, correo)
                     st.success(f"{correo} ahora puede ver {slug_input}.")
-                    st.experimental_rerun()
+                    st.rerun()
                 except httpx.HTTPError as exc:
                     st.error(f"Error al asignar permiso: {exc}")
 
@@ -125,6 +125,6 @@ with st.expander("Revocar permiso"):
                 try:
                     update_permission("remove", slug_input, correo)
                     st.success(f"Se revocó {correo} de {slug_input}.")
-                    st.experimental_rerun()
+                    st.rerun()
                 except httpx.HTTPError as exc:
                     st.error(f"Error al revocar permiso: {exc}")
