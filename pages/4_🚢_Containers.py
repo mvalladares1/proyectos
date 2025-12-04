@@ -1,6 +1,5 @@
 """
-Dashboard de Containers/Ventas - Rio Futuro
-Seguimiento de producción por pedido de venta
+Seguimiento de ventas y despachos: pedidos, containers y avance de producción por cliente.
 """
 import streamlit as st
 import pandas as pd

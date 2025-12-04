@@ -1,5 +1,5 @@
 """
-Dashboard Recepciones MP - Integrado a central de dashboards
+Recepciones de Materia Prima: KPIs de Kg, costos, % IQF/Block y análisis de calidad por productor.
 """
 import streamlit as st
 import pandas as pd

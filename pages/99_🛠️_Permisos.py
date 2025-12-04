@@ -1,7 +1,5 @@
 """
-Dashboard Admin - Permisos de Dashboards
-
-Permite asignar y revocar accesos por correo para dashboards específicos.
+Panel de administración: gestiona qué usuarios pueden acceder a cada dashboard del sistema.
 """
 import os
 from typing import Dict, List

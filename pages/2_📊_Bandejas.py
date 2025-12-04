@@ -1,5 +1,5 @@
 """
-Dashboard de Bandejas - Adaptado de dashboard_bandejas
+Recepción de bandejas desde procesos externos. Control de cantidades y trazabilidad por proveedor.
 """
 import streamlit as st
 import pandas as pd

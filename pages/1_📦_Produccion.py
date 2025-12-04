@@ -1,5 +1,5 @@
 """
-Dashboard de Producción - Órdenes de Fabricación detalladas
+Órdenes de fabricación: seguimiento de producción, rendimientos y consumo de materias primas.
 """
 
 import streamlit as st

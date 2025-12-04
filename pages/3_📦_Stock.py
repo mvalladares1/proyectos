@@ -1,5 +1,5 @@
 """
-Dashboard de Stock y Cámaras - Rio Futuro
+Inventario en cámaras de frío: ubicaciones, pallets, lotes y trazabilidad de producto terminado.
 """
 import streamlit as st
 import pandas as pd

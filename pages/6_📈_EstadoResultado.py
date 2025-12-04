@@ -1,9 +1,5 @@
 """
-Dashboard Estado de Resultado
-
-Este dashboard muestra el Estado de Resultado utilizando datos obtenidos desde Odoo vía API.
-Replica la estructura del reporte de Control Presupuestario de Rio Futuro.
-Incluye comparación Real vs Presupuesto.
+Estado de Resultado contable: ingresos, costos, márgenes y comparación Real vs Presupuesto mensual.
 """
 
 import os
