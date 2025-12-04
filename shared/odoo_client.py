@@ -6,10 +6,15 @@ import xmlrpc.client
 from typing import Optional, List, Dict, Any
 import pandas as pd
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Cargar variables de entorno
-load_dotenv()
+# Cargar variables de entorno desde múltiples ubicaciones posibles
+# 1. Directorio actual
+# 2. Directorio del archivo
+# 3. Directorio raíz del proyecto
+load_dotenv()  # Intenta directorio actual
+load_dotenv(Path(__file__).parent.parent / ".env")  # Raíz del proyecto
 
 
 class OdooClient:

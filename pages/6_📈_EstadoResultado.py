@@ -14,7 +14,7 @@ import requests
 import streamlit as st
 from datetime import date, datetime
 
-from shared.auth import proteger_pagina, tiene_acceso_dashboard
+from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciales
 
 st.set_page_config(page_title="Estado de Resultado", page_icon="📈", layout="wide")
 
@@ -28,6 +28,12 @@ if not tiene_acceso_dashboard("estado_resultado"):
 API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 ESTADO_RESULTADO_URL = f"{API_BASE_URL}/api/v1/estado-resultado"
 PRESUPUESTO_URL = f"{API_BASE_URL}/api/v1/presupuesto"
+
+# Obtener credenciales del usuario logueado
+username, password = get_credenciales()
+if not username or not password:
+    st.error("No se encontraron credenciales. Por favor inicia sesión nuevamente.")
+    st.stop()
 
 # === HEADER ===
 col_logo, col_title = st.columns([1, 4])
@@ -72,15 +78,18 @@ else:
 
 # Obtener centros de costo
 @st.cache_data(ttl=300)
-def obtener_centros_costo():
+def obtener_centros_costo(_username, _password):
     try:
-        resp = requests.get(f"{ESTADO_RESULTADO_URL}/centros-costo")
+        resp = requests.get(
+            f"{ESTADO_RESULTADO_URL}/centros-costo",
+            params={"username": _username, "password": _password}
+        )
         resp.raise_for_status()
         return resp.json()
     except:
         return []
 
-centros = obtener_centros_costo()
+centros = obtener_centros_costo(username, password)
 opciones_centros = {"Todas": None}
 if isinstance(centros, list):
     for c in centros:
@@ -119,9 +128,13 @@ if st.sidebar.button("🔄 Actualizar datos"):
 
 # === OBTENER DATOS REALES ===
 @st.cache_data(ttl=60, show_spinner="Cargando datos desde Odoo...")
-def obtener_estado_resultado(fecha_ini, fecha_f, centro):
+def obtener_estado_resultado(fecha_ini, fecha_f, centro, _username, _password):
     try:
-        params = {"fecha_inicio": fecha_ini}
+        params = {
+            "fecha_inicio": fecha_ini,
+            "username": _username,
+            "password": _password
+        }
         if fecha_f:
             params["fecha_fin"] = fecha_f
         if centro:
@@ -148,7 +161,9 @@ def obtener_presupuesto(año, centro=None):
 datos = obtener_estado_resultado(
     fecha_inicio,
     fecha_fin,
-    opciones_centros.get(centro_seleccionado)
+    opciones_centros.get(centro_seleccionado),
+    username,
+    password
 )
 
 ppto = obtener_presupuesto(año_seleccionado, centro_seleccionado if centro_seleccionado != "Todas" else None)

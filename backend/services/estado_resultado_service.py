@@ -12,8 +12,9 @@ from shared.odoo_client import OdooClient
 # helpers
 
 
-def _get_odoo_client() -> OdooClient:
-    return OdooClient()
+def _get_odoo_client(username: Optional[str] = None, password: Optional[str] = None) -> OdooClient:
+    """Crea cliente Odoo con credenciales del usuario o del .env."""
+    return OdooClient(username=username, password=password)
 
 
 def _build_categoria_template() -> Dict[str, Any]:
@@ -28,10 +29,10 @@ def _build_categoria_template() -> Dict[str, Any]:
     }
 
 
-def get_cuentas_contables() -> Any:
+def get_cuentas_contables(username: Optional[str] = None, password: Optional[str] = None) -> Any:
     """Consultar accounts de ingresos/egresos y retornarlas."""
     try:
-        client = _get_odoo_client()
+        client = _get_odoo_client(username, password)
         cuentas = client.search_read(
             "account.account",
             [
@@ -49,10 +50,10 @@ def get_cuentas_contables() -> Any:
         return {"error": str(exc)}
 
 
-def get_centros_costo() -> Any:
+def get_centros_costo(username: Optional[str] = None, password: Optional[str] = None) -> Any:
     """Retorna los centros de costo (account.analytic.account) activos."""
     try:
-        client = _get_odoo_client()
+        client = _get_odoo_client(username, password)
         centros = client.search_read(
             "account.analytic.account",
             [("plan_id", "=", 41)],
@@ -66,10 +67,12 @@ def get_centros_costo() -> Any:
 def get_movimientos_contables(
     fecha_inicio: str = "2025-01-01",
     fecha_fin: Optional[str] = None,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None
 ) -> Any:
     try:
-        client = _get_odoo_client()
+        client = _get_odoo_client(username, password)
 
         cuentas = client.search_read(
             "account.account",
@@ -249,15 +252,17 @@ def calcular_resultados(estructura: Dict[str, Any]) -> Dict[str, float]:
 def get_estado_resultado(
     fecha_inicio: str = "2025-01-01",
     fecha_fin: Optional[str] = None,
-    centro_costo: Optional[int] = None
+    centro_costo: Optional[int] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None
 ) -> Dict[str, Any]:
     try:
-        cuentas = get_cuentas_contables()
+        cuentas = get_cuentas_contables(username, password)
         if isinstance(cuentas, dict) and "error" in cuentas:
             return cuentas
 
-        centros = get_centros_costo()
-        movimientos = get_movimientos_contables(fecha_inicio, fecha_fin)
+        centros = get_centros_costo(username, password)
+        movimientos = get_movimientos_contables(fecha_inicio, fecha_fin, username=username, password=password)
         if isinstance(movimientos, dict) and "error" in movimientos:
             return movimientos
 
