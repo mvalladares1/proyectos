@@ -12,7 +12,7 @@ import os
 # Agregar el directorio raíz al path para imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import require_permission, get_current_user
+from shared.auth import verificar_autenticacion, proteger_pagina, tiene_acceso_dashboard
 
 
 # ==================== FUNCIONES DE DATOS ====================
@@ -148,13 +148,11 @@ def style_table_with_total(df: pd.DataFrame, total_column: str = None) -> str:
 st.set_page_config(page_title="Bandejas", page_icon="📊", layout="wide")
 
 # Verificar autenticación
-user = get_current_user()
-if not user:
-    st.warning("Por favor inicie sesión para acceder a esta página")
+if not proteger_pagina():
     st.stop()
 
-# Verificar permisos
-if not require_permission("bandejas", "read"):
+# Verificar permisos de acceso al dashboard
+if not tiene_acceso_dashboard("bandejas"):
     st.error("No tiene permisos para ver esta página")
     st.stop()
 
