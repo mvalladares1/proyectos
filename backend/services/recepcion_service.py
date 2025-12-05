@@ -40,6 +40,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         picking_id = rec.get("id")
         
         # Obtener los movimientos (stock.move) para sumar los Kg y extraer productos
+        moves = client.search_read(
+            "stock.move",
+            [("picking_id", "=", picking_id)],
+            ["product_id", "quantity_done", "product_uom", "price_unit"]
+        )
         # Obtener categorías de productos
         product_ids = [m.get("product_id", [None, None])[0] for m in moves if m.get("product_id")]
         product_categs = {}
