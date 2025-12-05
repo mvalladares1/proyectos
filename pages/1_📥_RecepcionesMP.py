@@ -76,8 +76,8 @@ if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
 # Mostrar tabla y detalle si hay datos
 df = st.session_state.df_recepcion
 if df is not None:
-    # --- KPIs separados MP vs BANDEJAS ---
-    st.subheader("📊 KPIs de Recepción MP y Bandejas")
+    # --- KPIs Consolidados ---
+    st.subheader("📊 KPIs Consolidados")
     # Calcular Totales separando por categoría de producto (BANDEJAS)
     total_kg_mp = 0.0
     total_costo_mp = 0.0
@@ -89,45 +89,43 @@ if df is not None:
                 kg = p.get('Kg Hechos', 0) or 0
                 costo = p.get('Costo Total', 0) or 0
                 categoria = (p.get('Categoria') or "").strip().upper()
-                # considerar que la categoría 'BANDEJAS' identifica bandejas
-                if categoria == 'BANDEJAS':
-                    # para bandejas, sumar la cantidad (Kg o Unidades según UOM)
+                # detectar variantes que contengan 'BANDEJ' (Bandeja/Bandejas)
+                if 'BANDEJ' in categoria:
                     total_bandejas += kg
                 else:
                     total_kg_mp += kg
                     total_costo_mp += costo
 
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        st.metric("Total Kg Recepcionados MP", f"{total_kg_mp:,.2f}")
-    with col_b:
-        st.metric("Costo Total MP", f"${total_costo_mp:,.0f}")
-    with col_c:
-        st.metric("Bandejas recepcionadas", f"{total_bandejas:,.2f}")
-
-    # --- KPIs de Calidad (anteriores) ---
-    st.subheader("📊 KPIs de Calidad")
-    # Calcular costo total de todas las recepciones (por si se quiere ver global)
-    total_costo = 0
+    # Calcular métricas globales (totales y promedios existentes)
+    total_kg_global = df['kg_recepcionados'].sum()
+    total_costo_global = 0
     for _, row in df.iterrows():
         if 'productos' in row and isinstance(row['productos'], list):
             for p in row['productos']:
-                total_costo += p.get('Costo Total', 0) or 0
-    col_a2, col_b2, col_c2, col_d2, col_e2 = st.columns(5)
-    with col_a2:
-        total_kg = df['kg_recepcionados'].sum()
-        st.metric("Total Kg Recepcionados", f"{total_kg:,.2f}")
-    with col_b2:
-        st.metric("Costo Total", f"${total_costo:,.0f}")
-    with col_c2:
-        prom_iqf = df['total_iqf'].mean()
+                total_costo_global += p.get('Costo Total', 0) or 0
+    prom_iqf = df['total_iqf'].mean()
+    prom_block = df['total_block'].mean()
+    clasif = df['calific_final'].value_counts().idxmax() if not df['calific_final'].isnull().all() and not df['calific_final'].eq('').all() else "-"
+
+    # Mostrar en dos filas compactas
+    top_cols = st.columns([1,1,1])
+    with top_cols[0]:
+        st.metric("Total Kg Recepcionados MP", f"{total_kg_mp:,.2f}")
+    with top_cols[1]:
+        st.metric("Costo Total MP", f"${total_costo_mp:,.0f}")
+    with top_cols[2]:
+        st.metric("Bandejas recepcionadas", f"{total_bandejas:,.2f}")
+
+    bot_cols = st.columns([1,1,1,1])
+    with bot_cols[0]:
+        st.metric("Total Kg Recepcionados (global)", f"{total_kg_global:,.2f}")
+    with bot_cols[1]:
+        st.metric("Costo Total (global)", f"${total_costo_global:,.0f}")
+    with bot_cols[2]:
         st.metric("Promedio % IQF", f"{prom_iqf:.2f}%")
-    with col_d2:
-        prom_block = df['total_block'].mean()
+    with bot_cols[3]:
         st.metric("Promedio % Block", f"{prom_block:.2f}%")
-    with col_e2:
-        clasif = df['calific_final'].value_counts().idxmax() if not df['calific_final'].isnull().all() and not df['calific_final'].eq('').all() else "-"
-        st.metric("Clasificación más frecuente", clasif)
+    st.markdown(f"**Clasificación más frecuente:** {clasif}")
 
     # Filtros adicionales
     col_f1, col_f2 = st.columns(2)
