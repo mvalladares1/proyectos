@@ -112,3 +112,110 @@ def calculate_raw_pmp(df, price_col='price_unit', qty_col='qty_received'):
     total_qty = df_nonzero[qty_col].sum()
     pmp = total_val / total_qty if total_qty > 0 else 0
     return pmp, total_qty
+
+
+def get_stacked_evolution_data(po_data, budget_data, granularity='Semanal'):
+    """
+    Prepares data for the Stacked Evolution Chart (Real by Fruit vs PPTO).
+    Returns a dictionary with:
+    - 'real_stacked': DataFrame [Date, FRUTA, Real]
+    - 'ppto_stacked': DataFrame [Date, FRUTA, v.2] (PPTO 3 stacked by fruit)
+    - 'ppto_total': DataFrame [Date, PPTO Original] (Total PPTO Original)
+    """
+    if po_data.empty:
+        return {'real_stacked': pd.DataFrame(), 'ppto_stacked': pd.DataFrame(), 'ppto_total': pd.DataFrame()}
+        
+    # --- Real Data (Stacked by Fruit) ---
+    df = po_data.copy()
+    df['date_planned'] = pd.to_datetime(df['date_planned'])
+    
+    # Map Product Code to Fruit Name
+    fruta_map = {
+        'AR': 'ARANDANO',
+        'FB': 'FRAMBUESA',
+        'MO': 'MORA',
+        'FR': 'FRUTILLA',
+        'CR': 'CEREZA'
+    }
+    # If 'product' column exists (it should)
+    if 'product' in df.columns:
+        df['FRUTA'] = df['product'].map(fruta_map).fillna('OTRO')
+    else:
+        df['FRUTA'] = 'OTRO'
+    
+    if granularity == 'Diario':
+        df['Date'] = df['date_planned'].dt.date
+    else:
+        # Normalize to start of week (Monday)
+        df['Date'] = df['date_planned'] - pd.to_timedelta(df['date_planned'].dt.weekday, unit='D')
+        df['Date'] = df['Date'].dt.date
+    
+    # Group by Date AND Fruit
+    real_agg = df.groupby(['Date', 'FRUTA'])['qty_received'].sum().reset_index()
+    real_agg = real_agg.rename(columns={'qty_received': 'Real'})
+    
+    # --- Budget Data ---
+    if not budget_data.empty and ('FECHAS MOD' in budget_data.columns or 'MES' in budget_data.columns):
+        b_df = budget_data.copy()
+        date_col = 'FECHAS MOD' if 'FECHAS MOD' in b_df.columns else 'MES'
+        b_df[date_col] = pd.to_datetime(b_df[date_col])
+        
+        if granularity == 'Diario':
+            b_df['Date'] = b_df[date_col].dt.date
+        else:
+            b_df['Date'] = b_df[date_col] - pd.to_timedelta(b_df[date_col].dt.weekday, unit='D')
+            b_df['Date'] = b_df['Date'].dt.date
+            
+        # Normalize FRUTA in Budget
+        if 'PRODUCTO' in b_df.columns:
+            b_df = b_df.rename(columns={'PRODUCTO': 'FRUTA'})
+            
+        if 'FRUTA' in b_df.columns:
+            b_df['FRUTA'] = b_df['FRUTA'].astype(str).str.upper()
+            b_df['FRUTA'] = b_df['FRUTA'].apply(lambda x: 'ARANDANO' if 'AR' in x and 'NDANO' in x else x)
+            b_df['FRUTA'] = b_df['FRUTA'].str.replace('Á', 'A').str.replace('É', 'E').str.replace('Í', 'I').str.replace('Ó', 'O').str.replace('Ú', 'U')
+        else:
+            b_df['FRUTA'] = 'OTRO'
+
+        # Ensure columns exist
+        if 'PPTO' not in b_df.columns: b_df['PPTO'] = 0
+        if 'PPTO 3' not in b_df.columns: b_df['PPTO 3'] = 0
+        
+        # 1. PPTO Original (Total)
+        ppto_total_agg = b_df.groupby('Date')['PPTO'].sum().reset_index()
+        ppto_total_agg = ppto_total_agg.rename(columns={'PPTO': 'PPTO Original'})
+        
+        # 2. PPTO 3 (Stacked by Fruit) -> v.2
+        ppto_stacked_agg = b_df.groupby(['Date', 'FRUTA'])['PPTO 3'].sum().reset_index()
+        ppto_stacked_agg = ppto_stacked_agg.rename(columns={'PPTO 3': 'v.2'})
+        
+    else:
+        ppto_total_agg = pd.DataFrame(columns=['Date', 'PPTO Original'])
+        ppto_stacked_agg = pd.DataFrame(columns=['Date', 'FRUTA', 'v.2'])
+        
+    # --- Filter Significant Dates ---
+    # Calculate Total Real per date
+    real_totals = real_agg.groupby('Date')['Real'].sum()
+    valid_real_dates = real_totals[real_totals > 1].index
+    
+    valid_ppto_dates = pd.Index([])
+    if not ppto_total_agg.empty:
+        valid_ppto_dates = ppto_total_agg[ppto_total_agg['PPTO Original'] > 1]['Date']
+        
+    valid_dates = valid_real_dates.union(valid_ppto_dates).unique()
+    
+    # Filter
+    real_agg = real_agg[real_agg['Date'].isin(valid_dates)]
+    ppto_total_agg = ppto_total_agg[ppto_total_agg['Date'].isin(valid_dates)]
+    ppto_stacked_agg = ppto_stacked_agg[ppto_stacked_agg['Date'].isin(valid_dates)]
+    
+    # Sort
+    real_agg = real_agg.sort_values(['Date', 'FRUTA'])
+    ppto_total_agg = ppto_total_agg.sort_values('Date')
+    ppto_stacked_agg = ppto_stacked_agg.sort_values(['Date', 'FRUTA'])
+    
+    return {
+        'real_stacked': real_agg,
+        'ppto_stacked': ppto_stacked_agg,
+        'ppto_total': ppto_total_agg
+    }
