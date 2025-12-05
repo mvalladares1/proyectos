@@ -40,12 +40,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         picking_id = rec.get("id")
         
         # Obtener los movimientos (stock.move) para sumar los Kg y extraer productos
-        moves = client.search_read(
-            "stock.move",
-            [("picking_id", "=", picking_id)],
-            ["product_id", "quantity_done", "product_uom", "price_unit"]
-        )
-<<<<<<< HEAD
         # Obtener categorías de productos
         product_ids = [m.get("product_id", [None, None])[0] for m in moves if m.get("product_id")]
         product_categs = {}
@@ -60,32 +54,18 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         productos = []
         for m in moves:
             prod_id = m.get("product_id", [None, None])[0] if m.get("product_id") else None
-=======
-        # Sumar los Kg de todos los movimientos
-        kg_total = sum(m.get("quantity_done", 0) or 0 for m in moves)
-        # Extraer productos, kg hechos, costo unitario y total
-        productos = []
-        for m in moves:
->>>>>>> dfe4c3d64f8ea45b79c2c06e2f09a9260572af7d
             nombre_prod = m.get("product_id", [None, ""])[1] if m.get("product_id") else ""
             kg_hechos = m.get("quantity_done", 0) or 0
             costo_unit = m.get("price_unit", 0) or 0
             costo_total = kg_hechos * costo_unit
-<<<<<<< HEAD
             categoria = product_categs.get(prod_id, "")
-=======
->>>>>>> dfe4c3d64f8ea45b79c2c06e2f09a9260572af7d
             productos.append({
                 "Producto": nombre_prod,
                 "Kg Hechos": kg_hechos,
                 "Costo Unitario": costo_unit,
                 "Costo Total": costo_total,
-<<<<<<< HEAD
                 "UOM": m.get("product_uom", [None, ""])[1] if m.get("product_uom") else "",
                 "Categoria": categoria
-=======
-                "UOM": m.get("product_uom", [None, ""])[1] if m.get("product_uom") else ""
->>>>>>> dfe4c3d64f8ea45b79c2c06e2f09a9260572af7d
             })
 
         # Obtener datos de calidad desde quality.check
