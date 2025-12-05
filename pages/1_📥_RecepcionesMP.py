@@ -98,7 +98,7 @@ if df is not None:
         st.metric("Promedio % Block", f"{prom_block:.2f}%")
     with col_e:
         clasif = df['calific_final'].value_counts().idxmax() if not df['calific_final'].isnull().all() and not df['calific_final'].eq('').all() else "-"
-        st.metric("Clasificación más frecuente", clasif)D
+        st.metric("Clasificación más frecuente", clasif)
 
     # Filtros adicionales
     col_f1, col_f2 = st.columns(2)
