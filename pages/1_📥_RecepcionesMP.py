@@ -116,12 +116,10 @@ if df is not None:
     with top_cols[2]:
         st.metric("Bandejas recepcionadas", f"{total_bandejas:,.2f}")
 
-    bot_cols = st.columns([1,1,1])
+    bot_cols = st.columns([1,1])
     with bot_cols[0]:
-        st.metric("Costo Total (global)", f"${total_costo_mp:,.0f}")
-    with bot_cols[1]:
         st.metric("Promedio % IQF", f"{prom_iqf:.2f}%")
-    with bot_cols[2]:
+    with bot_cols[1]:
         st.metric("Promedio % Block", f"{prom_block:.2f}%")
     st.markdown(f"**Clasificación más frecuente:** {clasif}")
 
