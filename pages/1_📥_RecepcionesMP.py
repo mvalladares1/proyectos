@@ -84,6 +84,10 @@ if df is not None:
     total_bandejas = 0.0
     # recorrer todas las recepciones y sus productos
     for _, row in df.iterrows():
+        # Asegurarnos que solo consideramos recepciones que sean fruta
+        tipo_fruta_row = (row.get('tipo_fruta') or "").strip()
+        if not tipo_fruta_row:
+            continue
         if 'productos' in row and isinstance(row['productos'], list):
             for p in row['productos']:
                 kg = p.get('Kg Hechos', 0) or 0
@@ -149,18 +153,35 @@ if df is not None:
     # Tabla de recepciones (filtrar recepciones sin tipo de fruta)
     st.subheader("📋 Detalle de Recepciones")
     df_filtrada = df_filtrada[df_filtrada['tipo_fruta'].notna() & (df_filtrada['tipo_fruta'] != '')]
+    # Calcular bandejas por recepción (sumar Kg Hechos de productos cuya Categoria contenga 'BANDEJ')
+    bandejas_vals = []
+    for _, row in df_filtrada.iterrows():
+        b = 0.0
+        prods = row.get('productos', []) or []
+        if isinstance(prods, list):
+            for p in prods:
+                categoria = (p.get('Categoria') or '').strip().upper()
+                if 'BANDEJ' in categoria:
+                    b += p.get('Kg Hechos', 0) or 0
+        bandejas_vals.append(b)
+    df_filtrada = df_filtrada.copy()
+    df_filtrada['bandejas'] = bandejas_vals
     df_filtrada['sin_calidad'] = df_filtrada['calific_final'].isnull() | (df_filtrada['calific_final'] == '')
     cols_mostrar = [
         "albaran", "fecha", "productor", "tipo_fruta", "guia_despacho",
-        "kg_recepcionados", "calific_final", "total_iqf", "total_block", "sin_calidad"
+        "bandejas", "kg_recepcionados", "calific_final", "total_iqf", "total_block", "sin_calidad"
     ]
     df_mostrar = df_filtrada[cols_mostrar].copy()
     df_mostrar.columns = [
         "Albarán", "Fecha", "Productor", "Tipo Fruta", "Guía Despacho",
-        "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Sin Calidad"
+        "Bandejas", "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Sin Calidad"
     ]
-    # Formatear decimales a 2
+    # Ajustar Kg Recepcionados para excluir las Bandejas (mostramos Kg fruta)
+    # Convertir a numérico, restar bandejas y formatear
+    df_mostrar["Bandejas"] = pd.to_numeric(df_mostrar["Bandejas"], errors='coerce').fillna(0.0)
+    df_mostrar["Kg Recepcionados"] = pd.to_numeric(df_mostrar["Kg Recepcionados"], errors='coerce').fillna(0.0) - df_mostrar["Bandejas"]
     df_mostrar["Kg Recepcionados"] = df_mostrar["Kg Recepcionados"].apply(lambda x: f"{x:.2f}")
+    df_mostrar["Bandejas"] = df_mostrar["Bandejas"].apply(lambda x: f"{x:.2f}")
     df_mostrar["% IQF"] = df_mostrar["% IQF"].apply(lambda x: f"{x:.2f}")
     df_mostrar["% Block"] = df_mostrar["% Block"].apply(lambda x: f"{x:.2f}")
     df_mostrar["Sin Calidad"] = df_mostrar["Sin Calidad"].apply(lambda x: "❌" if x else "✅")
