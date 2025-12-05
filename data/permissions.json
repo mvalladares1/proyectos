@@ -1,0 +1,17 @@
+{
+  "dashboards": {
+    "produccion": [],
+    "bandejas": [],
+    "stock": [],
+    "containers": [],
+    "estado_resultado": [
+      "jvidaurre@riofuturo.cl"
+    ],
+    "permisos": [
+      "mvalladares@riofuturo.cl"
+    ]
+  },
+  "admins": [
+    "mvalladares@riofuturo.cl"
+  ]
+}
