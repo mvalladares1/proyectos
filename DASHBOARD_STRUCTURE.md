@@ -75,6 +75,40 @@ API_HOST=0.0.0.0
 API_PORT=8000
 ```
 
+### 3.1 Variables de entorno requeridas (detallado)
+
+Las siguientes variables deben estar definidas en el fichero `.env` ubicado en la raíz de la aplicación (`/home/debian/rio-futuro-dashboards/app/.env`) o bien exportadas en las unidades systemd (según la política de despliegue):
+
+- `ODOO_URL`: URL base del servidor Odoo (ej. `https://miodoo.example.com`).
+- `ODOO_DB`: Nombre de la base de datos Odoo a consultar.
+- `ODOO_USER`: Usuario API/Odoo (o login) usado para las conexiones XML-RPC.
+- `ODOO_PASSWORD`: Contraseña o clave API para el usuario Odoo.
+- `API_URL`: URL donde el backend está escuchando (usado por Streamlit para llamar la API). Por defecto `http://127.0.0.1:8000`.
+- `API_HOST` / `API_PORT`: Host/puerto para el arranque del backend (opcional si systemd define ExecStart con estos valores).
+
+Opcionales (según deployment/entorno):
+
+- `SENTRY_DSN`: DSN de Sentry para reportes de errores.
+- `LOG_LEVEL`: Nivel de logs (DEBUG, INFO, WARNING, ERROR).
+
+Seguridad y buenas prácticas:
+
+- No subir jamás el fichero `.env` al repositorio. Añadir `.env` a `.gitignore` si aún no está.
+- Hacer una copia de seguridad antes de actualizar el repo: `cp .env ../env_backup.env`.
+- Asegurar permisos restrictivos en producción: `chmod 600 .env` y propietario `debian` (o el usuario que ejecute los servicios).
+- Para systemd, preferible usar `EnvironmentFile=/home/debian/rio-futuro-dashboards/app/.env` o `Environment=` lines en la unidad en lugar de exportar globalmente.
+
+Ejemplo (drop-in systemd que carga `.env`):
+
+```
+[Service]
+EnvironmentFile=/home/debian/rio-futuro-dashboards/app/.env
+ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+Si prefieres no usar `EnvironmentFile`, exporta explícitamente las variables en la unidad con `Environment=VAR=value`.
+
+
 ---
 
 ## 4. Backend (FastAPI)
