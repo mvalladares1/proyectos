@@ -88,3 +88,123 @@ def get_central_bank_data():
     except Exception as e:
         print(f"Error fetching Central Bank data: {e}")
         return pd.DataFrame()
+
+
+def get_purchase_orders(client):
+    """Fetch purchase orders and lines, merge and transform similar to original dashboard logic."""
+    try:
+        # Fetch POs
+        po_fields = [
+            'id', 'name', 'date_planned', 'currency_id', 'x_studio_categora_de_producto',
+            'amount_tax', 'amount_total', 'amount_untaxed', 'invoice_status', 'receipt_status',
+            'state', 'date_order', 'date_approve'
+        ]
+        pos = pd.DataFrame(client.search_read('purchase.order', [('state', 'in', ['purchase', 'done'])], fields=po_fields))
+
+        if pos.empty:
+            return pd.DataFrame()
+
+        # Normalize category field
+        if 'x_studio_categora_de_producto' in pos.columns:
+            pos['x_studio_categora_de_producto'] = pos['x_studio_categora_de_producto'].apply(lambda x: str(x) if x and x is not False else "")
+
+        # Fill date_planned
+        if 'date_planned' in pos.columns and 'date_order' in pos.columns:
+            pos['date_planned'] = pos['date_planned'].replace({False: None}).fillna(pos['date_order'])
+
+        po_ids = pos['id'].tolist()
+        if not po_ids:
+            return pd.DataFrame()
+
+        # Fetch lines
+        line_fields = ['id', 'order_id', 'product_id', 'price_unit', 'price_total', 'price_subtotal', 'product_qty', 'qty_invoiced', 'qty_received', 'name']
+        lines = pd.DataFrame(client.search_read('purchase.order.line', [('order_id', 'in', po_ids)], fields=line_fields))
+        if lines.empty:
+            return pd.DataFrame()
+
+        # Fetch products
+        product_ids = [x[0] if isinstance(x, (list, tuple)) and len(x) > 0 else x for x in lines['product_id'].tolist()]
+        product_ids = [p for p in product_ids if p is not None]
+        product_fields = ['id', 'default_code', 'name', 'x_studio_selection_field_7qfiv', 'categ_id']
+        products = pd.DataFrame(client.search_read('product.product', [('id', 'in', product_ids)], fields=product_fields)) if product_ids else pd.DataFrame()
+
+        # Fetch categories
+        if not products.empty and 'categ_id' in products.columns:
+            products['categ_join_id'] = products['categ_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) and len(x) > 0 else None)
+            cat_ids = products['categ_join_id'].dropna().unique().tolist()
+            if cat_ids:
+                categories = pd.DataFrame(client.search_read('product.category', [('id', 'in', cat_ids)], fields=['id', 'complete_name']))
+                products = pd.merge(products, categories, left_on='categ_join_id', right_on='id', how='left', suffixes=('', '_cat'))
+
+        # Prepare lines for merge
+        lines['order_id_val'] = lines['order_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x)
+        lines['product_id_val'] = lines['product_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x)
+
+        df = pd.merge(lines, pos, left_on='order_id_val', right_on='id', suffixes=('_line', '_po'))
+        if not products.empty:
+            df = pd.merge(df, products, left_on='product_id_val', right_on='id', suffixes=('', '_prod'))
+
+        # Filter received
+        if 'qty_received' in df.columns:
+            df = df[df['qty_received'] != 0]
+
+        # Filter by category containing 'Producto' if available
+        if 'complete_name' in df.columns:
+            df = df[df['complete_name'].str.contains('Producto|PRODUCTO', case=False, na=False)]
+
+        # Map codes to name_code_2 (use a reduced mapping to avoid very long duplication)
+        def get_name_code_2(row):
+            code = str(row.get('default_code', '')).strip()
+            mapping = {
+                "400007": "AR_HB_ORG_IQF_FRESCO",
+                "400011": "AR_HB_CONV_BLOCK_FRESCO",
+                # (partial mapping) - extend as needed
+            }
+            if code in mapping:
+                return mapping[code]
+            # Fallback
+            return "OTRO"
+
+        df['name_code_2'] = df.apply(get_name_code_2, axis=1)
+
+        split_data = df['name_code_2'].str.split('_', expand=True)
+        for i in range(5):
+            if i not in split_data.columns:
+                split_data[i] = None
+        df['product'] = split_data[0]
+        df['variety'] = split_data[1]
+        df['labeling'] = split_data[2]
+        df['quality'] = split_data[3]
+        df['condition'] = split_data[4]
+
+        cols_to_drop = ['order_id', 'product_id', 'order_id_val', 'product_id_val']
+        df = df.drop(columns=cols_to_drop, errors='ignore')
+
+        # Currency name cleanup
+        if 'currency_id' in df.columns:
+            df['currency_name'] = df['currency_id'].apply(lambda x: x[1] if isinstance(x, (list, tuple)) and len(x) > 1 else str(x))
+
+        return df
+    except Exception as e:
+        print(f"Error in get_purchase_orders: {e}")
+        return pd.DataFrame()
+
+
+def get_purchase_report_data(client, date_range=None):
+    domain = [('category_id', 'ilike', 'Producto')]
+    if date_range and len(date_range) == 2:
+        start_date = date_range[0].strftime('%Y-%m-%d')
+        end_date = date_range[1].strftime('%Y-%m-%d')
+        domain.append(('date_order', '>=', start_date))
+        domain.append(('date_order', '<=', end_date))
+    fields = ['qty_received']
+    df = pd.DataFrame(client.search_read('purchase.report', domain, fields=fields))
+    if df.empty:
+        return 0.0
+    return df['qty_received'].sum()
+
+
+def get_currencies(client):
+    domain = [('active', '=', True)]
+    fields = ['name', 'symbol', 'rate', 'active']
+    return pd.DataFrame(client.search_read('res.currency', domain, fields=fields))
