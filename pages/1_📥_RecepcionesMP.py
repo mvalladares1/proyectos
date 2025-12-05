@@ -76,27 +76,29 @@ if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
 # Mostrar tabla y detalle si hay datos
 df = st.session_state.df_recepcion
 if df is not None:
-    # --- KPIs personalizados ---
-    st.subheader("📊 KPIs de Recepción MP y Bandejas")
-    total_kg_mp = 0
-    total_costo_mp = 0
-    total_bandejas = 0
+    # --- General Recepciones (arriba) ---
+    st.subheader("📊 KPIs de Calidad")
+    # Calcular costo total de todas las recepciones
+    total_costo = 0
     for _, row in df.iterrows():
         if 'productos' in row and isinstance(row['productos'], list):
             for p in row['productos']:
-                categoria = p.get('Categoria', '').upper()
-                if categoria == 'BANDEJAS':
-                    total_bandejas += p.get('Kg Hechos', 0) or 0
-                else:
-                    total_kg_mp += p.get('Kg Hechos', 0) or 0
-                    total_costo_mp += p.get('Costo Total', 0) or 0
-    col_a, col_b, col_c = st.columns(3)
+                total_costo += p.get('Costo Total', 0) or 0
+    col_a, col_b, col_c, col_d, col_e = st.columns(5)
     with col_a:
-        st.metric("Total Kg Recepcionados MP", f"{total_kg_mp:,.2f}")
+        total_kg = df['kg_recepcionados'].sum()
+        st.metric("Total Kg Recepcionados", f"{total_kg:,.2f}")
     with col_b:
-        st.metric("Costo Total MP", f"${total_costo_mp:,.0f}")
+        st.metric("Costo Total", f"${total_costo:,.0f}")
     with col_c:
-        st.metric("Bandejas recepcionadas", f"{total_bandejas:,.2f}")
+        prom_iqf = df['total_iqf'].mean()
+        st.metric("Promedio % IQF", f"{prom_iqf:.2f}%")
+    with col_d:
+        prom_block = df['total_block'].mean()
+        st.metric("Promedio % Block", f"{prom_block:.2f}%")
+    with col_e:
+        clasif = df['calific_final'].value_counts().idxmax() if not df['calific_final'].isnull().all() and not df['calific_final'].eq('').all() else "-"
+        st.metric("Clasificación más frecuente", clasif)D
 
     # Filtros adicionales
     col_f1, col_f2 = st.columns(2)
