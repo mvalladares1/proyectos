@@ -6,6 +6,15 @@ from typing import List, Dict, Any, Optional
 from shared.odoo_client import OdooClient
 
 
+def _normalize_categoria(cat: str) -> str:
+    if not cat:
+        return ''
+    c = cat.strip().upper()
+    if 'BANDEJ' in c:
+        return 'BANDEJAS'
+    return c
+
+
 def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None) -> List[Dict[str, Any]]:
     client = OdooClient(username=username, password=password)
     # Buscar recepciones MP en stock.picking
@@ -64,6 +73,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             costo_unit = m.get("price_unit", 0) or 0
             costo_total = kg_hechos * costo_unit
             categoria = product_categs.get(prod_id, "")
+            categoria = _normalize_categoria(categoria)
             productos.append({
                 "Producto": nombre_prod,
                 "Kg Hechos": kg_hechos,

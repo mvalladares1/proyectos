@@ -123,6 +123,52 @@ if df is not None:
         st.metric("Promedio % Block", f"{prom_block:.2f}%")
     st.markdown(f"**Clasificación más frecuente:** {clasif}")
 
+    # --- Botones de descarga de informe PDF ---
+    st.markdown("---")
+    st.subheader("📥 Descargar Informe de Recepciones")
+    informe_cols = st.columns([1,1,1])
+    params = {
+        'username': username,
+        'password': password,
+        'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
+        'fecha_fin': fecha_fin.strftime('%Y-%m-%d')
+    }
+    # Botón 1: semana seleccionada
+    with informe_cols[0]:
+        if st.button("Descargar informe (Semana seleccionada)"):
+            try:
+                with st.spinner("Generando informe PDF..."):
+                    resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report", params={**params, 'include_prev_week': False, 'include_month_accum': False}, timeout=120)
+                if resp.status_code == 200:
+                    pdf_bytes = resp.content
+                    # sanitizar filename
+                    fname = f"informe_{params['fecha_inicio']}_a_{params['fecha_fin']}.pdf".replace('/', '-')
+                    st.download_button("Descargar PDF (Semana)", data=pdf_bytes, file_name=fname, mime='application/pdf')
+                else:
+                    st.error(f"Error al generar informe: {resp.status_code} - {resp.text}")
+            except Exception as e:
+                st.error(f"Error al solicitar informe: {e}")
+
+    # Botón 2: semana + resumen anterior + acumulado parcial mes
+    with informe_cols[1]:
+        if st.button("Descargar informe (Semana + resumen)"):
+            try:
+                with st.spinner("Generando informe PDF con resumen..."):
+                    resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report", params={**params, 'include_prev_week': True, 'include_month_accum': True}, timeout=180)
+                if resp.status_code == 200:
+                    pdf_bytes = resp.content
+                    fname = f"informe_{params['fecha_inicio']}_a_{params['fecha_fin']}_resumen.pdf".replace('/', '-')
+                    st.download_button("Descargar PDF (Semana+Resumen)", data=pdf_bytes, file_name=fname, mime='application/pdf')
+                else:
+                    st.error(f"Error al generar informe: {resp.status_code} - {resp.text}")
+            except Exception as e:
+                st.error(f"Error al solicitar informe: {e}")
+
+    with informe_cols[2]:
+        st.write("Opciones:")
+        st.write("- Informe semana: solo el rango seleccionado.")
+        st.write("- Informe semana+resumen: incluye semana anterior y acumulado parcial del mes.")
+
     # Filtros adicionales
     col_f1, col_f2 = st.columns(2)
     with col_f1:
@@ -184,23 +230,40 @@ if df is not None:
     df_mostrar["% Block"] = df_mostrar["% Block"].apply(lambda x: f"{x:.2f}")
     df_mostrar["Sin Calidad"] = df_mostrar["Sin Calidad"].apply(lambda x: "❌" if x else "✅")
 
-    # Botón para exportar a Excel/CSV
+    # Botones para exportar a CSV y Excel
     col_exp1, col_exp2 = st.columns([1,1])
     with col_exp1:
         csv = df_mostrar.to_csv(index=False).encode('utf-8')
         st.download_button("Descargar CSV", csv, "recepciones.csv", "text/csv", key="download_csv")
     with col_exp2:
+        # Botón 1: Excel rápido (resumen por recepción, local)
         excel_buffer = io.BytesIO()
         if hasattr(df_mostrar, 'to_excel'):
             df_mostrar.to_excel(excel_buffer, index=False, engine='openpyxl')
             excel_buffer.seek(0)
             st.download_button(
-                "Descargar Excel",
+                "Descargar Excel (Resumen)",
                 excel_buffer,
-                "recepciones.xlsx",
+                "recepciones_resumen.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_excel"
+                key="download_excel_resumen"
             )
+
+    # Botón extra: descargar Excel DETALLADO (una fila por producto) desde el backend
+    det_col1, det_col2 = st.columns([1,3])
+    with det_col1:
+        if st.button("Descargar Excel Detallado (Por Producto)"):
+            try:
+                with st.spinner("Generando Excel detallado en el servidor..."):
+                    resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params={**params, 'include_prev_week': False, 'include_month_accum': False}, timeout=180)
+                if resp.status_code == 200:
+                    xlsx_bytes = resp.content
+                    fname = f"recepciones_detalle_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
+                    st.download_button("Descargar Excel (Detallado)", xlsx_bytes, file_name=fname, mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                else:
+                    st.error(f"Error al generar Excel detallado: {resp.status_code} - {resp.text}")
+            except Exception as e:
+                st.error(f"Error al solicitar Excel detallado: {e}")
 
     st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
