@@ -96,13 +96,9 @@ if df is not None:
                     total_kg_mp += kg
                     total_costo_mp += costo
 
-    # Calcular métricas globales (totales y promedios existentes)
-    total_kg_global = df['kg_recepcionados'].sum()
-    total_costo_global = 0
-    for _, row in df.iterrows():
-        if 'productos' in row and isinstance(row['productos'], list):
-            for p in row['productos']:
-                total_costo_global += p.get('Costo Total', 0) or 0
+    # Calcular métricas y promedios existentes
+    # Nota: eliminamos 'Total Kg Recepcionados (global)'.
+    # El "Costo Total (global)" se mostrará en base a Total Kg Recepcionados MP (total_costo_mp).
     prom_iqf = df['total_iqf'].mean()
     prom_block = df['total_block'].mean()
     clasif = df['calific_final'].value_counts().idxmax() if not df['calific_final'].isnull().all() and not df['calific_final'].eq('').all() else "-"
@@ -116,14 +112,12 @@ if df is not None:
     with top_cols[2]:
         st.metric("Bandejas recepcionadas", f"{total_bandejas:,.2f}")
 
-    bot_cols = st.columns([1,1,1,1])
+    bot_cols = st.columns([1,1,1])
     with bot_cols[0]:
-        st.metric("Total Kg Recepcionados (global)", f"{total_kg_global:,.2f}")
+        st.metric("Costo Total (global)", f"${total_costo_mp:,.0f}")
     with bot_cols[1]:
-        st.metric("Costo Total (global)", f"${total_costo_global:,.0f}")
-    with bot_cols[2]:
         st.metric("Promedio % IQF", f"{prom_iqf:.2f}%")
-    with bot_cols[3]:
+    with bot_cols[2]:
         st.metric("Promedio % Block", f"{prom_block:.2f}%")
     st.markdown(f"**Clasificación más frecuente:** {clasif}")
 
