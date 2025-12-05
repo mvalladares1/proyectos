@@ -23,16 +23,23 @@ class OdooClient:
     Puede usar credenciales del .env o credenciales proporcionadas por el usuario.
     """
     
-    def __init__(self, username: Optional[str] = None, password: Optional[str] = None):
+    # Valores por defecto para URL y DB (pueden ser sobreescritos por .env o parámetros)
+    DEFAULT_URL = "https://riofuturo.server98c6e.oerpondemand.net"
+    DEFAULT_DB = "riofuturo-master"
+    
+    def __init__(self, username: Optional[str] = None, password: Optional[str] = None,
+                 url: Optional[str] = None, db: Optional[str] = None):
         """
         Inicializa el cliente Odoo.
         
         Args:
             username: Usuario de Odoo (email). Si no se proporciona, usa .env
             password: API Key de Odoo. Si no se proporciona, usa .env
+            url: URL de Odoo. Si no se proporciona, usa .env o DEFAULT_URL
+            db: Base de datos de Odoo. Si no se proporciona, usa .env o DEFAULT_DB
         """
-        self.url = os.getenv("ODOO_URL")
-        self.db = os.getenv("ODOO_DB")
+        self.url = url or os.getenv("ODOO_URL") or self.DEFAULT_URL
+        self.db = db or os.getenv("ODOO_DB") or self.DEFAULT_DB
         
         # Usar credenciales proporcionadas o del .env
         self.username = username if username else os.getenv("ODOO_USER")
@@ -133,8 +140,9 @@ class OdooClient:
         )
 
 
-def get_odoo_client(username: str = None, password: str = None) -> OdooClient:
+def get_odoo_client(username: str = None, password: str = None, 
+                    url: str = None, db: str = None) -> OdooClient:
     """
     Factory function para obtener un cliente Odoo.
     """
-    return OdooClient(username=username, password=password)
+    return OdooClient(username=username, password=password, url=url, db=db)

@@ -5,24 +5,29 @@ Integrado en la estructura modular del proyecto (usa `shared.odoo_client` y `bac
 import streamlit as st
 import pandas as pd
 from shared.odoo_client import get_odoo_client
+from shared.auth import proteger_pagina, get_credenciales
 from backend.services import abastecimiento_data_service as data_service
 from backend.services import abastecimiento_recepcion_service as recepcion_service
 
 st.set_page_config(page_title="Control de Gestión, Programa de Abastecimiento", layout="wide")
 
+# Proteger la página (requiere login desde Home)
+if not proteger_pagina():
+    st.stop()
+
 st.title("🚛 Control de Gestión, Programa de Abastecimiento")
 
+# Obtener credenciales de la sesión
+username, password = get_credenciales()
+if not username or not password:
+    st.error("No se encontraron credenciales. Por favor inicia sesión en Home.")
+    st.stop()
 
-@st.cache_resource
-def get_connector():
-    return get_odoo_client()
-
-
-client = get_connector()
-
-
-if not client:
-    st.error("No se pudo conectar a Odoo. Verificar variables en .env")
+# Conectar a Odoo con las credenciales de sesión
+try:
+    client = get_odoo_client(username=username, password=password)
+except Exception as e:
+    st.error(f"Error al conectar con Odoo: {e}")
     st.stop()
 
 
@@ -153,7 +158,138 @@ with tab_diario:
     ppto_total = evolution_data.get('ppto_total', pd.DataFrame()) if isinstance(evolution_data, dict) else pd.DataFrame()
     if not real_stacked.empty or not ppto_total.empty:
         import plotly.graph_objects as go
-        st.plotly_chart(go.Figure(), use_container_width=True)
+
+        fig_evo = go.Figure()
+
+        # Define Colors for Fruits
+        fruit_colors = {
+            'ARANDANO': '#1A237E',
+            'FRAMBUESA': '#F48FB1',
+            'MORA': '#8E24AA',
+            'FRUTILLA': '#D32F2F',
+            'CEREZA': '#FBC02D',
+            'OTRO': '#757575'
+        }
+
+        # Get all unique fruits and dates
+        all_fruits = sorted(list(set(real_stacked['FRUTA'].unique()) | set(ppto_stacked['FRUTA'].unique()))) if not real_stacked.empty or not ppto_stacked.empty else []
+        all_dates = sorted(list(set(real_stacked['Date'].unique()) | set(ppto_total['Date'].unique()))) if not real_stacked.empty or not ppto_total.empty else []
+
+        # Pivot Data for easier access
+        real_pivot = real_stacked.pivot(index='Date', columns='FRUTA', values='Real').fillna(0) if not real_stacked.empty else pd.DataFrame()
+        if not real_pivot.empty:
+            real_pivot = real_pivot.reindex(index=all_dates, columns=all_fruits, fill_value=0)
+
+        ppto_stacked_pivot = ppto_stacked.pivot(index='Date', columns='FRUTA', values='v.2').fillna(0) if not ppto_stacked.empty else pd.DataFrame()
+        if not ppto_stacked_pivot.empty:
+            ppto_stacked_pivot = ppto_stacked_pivot.reindex(index=all_dates, columns=all_fruits, fill_value=0)
+
+        ppto_total_pivot = ppto_total.set_index('Date')['PPTO Original'].reindex(all_dates, fill_value=0) if not ppto_total.empty else pd.Series([], dtype=float)
+
+        # Initialize bases for stacking
+        real_stacked_base = pd.Series(0.0, index=all_dates)
+        ppto_stacked_base = pd.Series(0.0, index=all_dates)
+
+        # Iterate through fruits to add stacked traces for both Real and v.2
+        for fruit in all_fruits:
+            color = fruit_colors.get(fruit, '#757575')
+
+            # 1. Real Stacked (Group 0)
+            if not real_pivot.empty and fruit in real_pivot.columns:
+                y_real = real_pivot[fruit]
+                if y_real.sum() > 0:
+                    fig_evo.add_trace(go.Bar(
+                        name=f"{fruit}",
+                        x=all_dates,
+                        y=y_real,
+                        base=real_stacked_base.tolist(),
+                        marker_color=color,
+                        offsetgroup='0',
+                        legendgroup=fruit,
+                        showlegend=True,
+                        text=[f"{val:,.0f}" if val > 0 else '' for val in y_real],
+                        textposition='inside',
+                        hovertemplate=f"<b>{fruit} (Real)</b><br>%{{y:,.0f}}<extra></extra>"
+                    ))
+                    real_stacked_base += y_real
+
+            # 2. v.2 Stacked (Group 2)
+            if not ppto_stacked_pivot.empty and fruit in ppto_stacked_pivot.columns:
+                y_ppto = ppto_stacked_pivot[fruit]
+                if y_ppto.sum() > 0:
+                    fig_evo.add_trace(go.Bar(
+                        name=f"{fruit}",
+                        x=all_dates,
+                        y=y_ppto,
+                        base=ppto_stacked_base.tolist(),
+                        marker_color=color,
+                        offsetgroup='2',
+                        legendgroup=fruit,
+                        showlegend=False,
+                        opacity=0.6,
+                        text=[f"{val:,.0f}" if val > 0 else '' for val in y_ppto],
+                        textposition='inside',
+                        hovertemplate=f"<b>{fruit} (v.2)</b><br>%{{y:,.0f}}<extra></extra>"
+                    ))
+                    ppto_stacked_base += y_ppto
+
+        # 3. PPTO Original (Group 1) - Single Bar (Middle)
+        fig_evo.add_trace(go.Bar(
+            name='PPTO Original',
+            x=all_dates,
+            y=ppto_total_pivot,
+            marker_color='#4CAF50',
+            offsetgroup='1',
+            text=[f"{val:,.0f}" if val > 100 else '' for val in ppto_total_pivot],
+            textposition='outside',
+            hovertemplate="<b>PPTO Original</b><br>%{y:,.0f}<extra></extra>"
+        ))
+
+        # 4. Total Labels
+        fig_evo.add_trace(go.Scatter(
+            name='Total Real',
+            x=all_dates,
+            y=real_stacked_base,
+            mode='text',
+            text=[f"{val:,.0f}" if val > 0 else '' for val in real_stacked_base],
+            textposition='top center',
+            textfont=dict(color='#333', size=12),
+            offsetgroup='0',
+            showlegend=False,
+            hovertemplate="<b>Total Real</b><br>%{y:,.0f}<extra></extra>"
+        ))
+
+        fig_evo.add_trace(go.Scatter(
+            name='v.2',
+            x=all_dates,
+            y=ppto_stacked_base,
+            mode='text',
+            text=[f"{val:,.0f}" if val > 0 else '' for val in ppto_stacked_base],
+            textposition='top center',
+            textfont=dict(color='#FF6D00', size=12),
+            offsetgroup='2',
+            showlegend=False,
+            hovertemplate="<b>Total v.2</b><br>%{y:,.0f}<extra></extra>"
+        ))
+
+        # Dynamic height
+        chart_height = 600
+
+        fig_evo.update_layout(
+            xaxis_title="Día",
+            yaxis_title="Kilos",
+            height=chart_height,
+            margin=dict(l=20, r=20, t=50, b=100),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            barmode='group',
+            bargap=0.15,
+            xaxis=dict(
+                type='category',
+                tickangle=-45,
+            )
+        )
+
+        st.plotly_chart(fig_evo, use_container_width=True)
     else:
         st.info("No hay datos de evolución.")
 
