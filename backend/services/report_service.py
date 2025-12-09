@@ -189,23 +189,22 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     else:
         temp_año_ini = f_fin.year - 1
     temporada_str = f"Temporada {temp_año_ini}-{temp_año_ini + 1}"
+    generated_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     title = f"Informe de Recepciones MP: {fecha_inicio} a {fecha_fin}"
     elements.append(Paragraph(title, styles['Title']))
     elements.append(Spacer(1, 4))
-    # Agregar semana y temporada
+    # Agregar semana y temporada (fecha de generación va al footer)
     elements.append(Paragraph(f"<b>{semana_str}</b> | <b>{temporada_str}</b>", styles['Normal']))
-    elements.append(Spacer(1, 4))
-    meta = f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    elements.append(Paragraph(meta, styles['Normal']))
     elements.append(Spacer(1, 12))
 
     # Header/footer drawing
     PAGE_WIDTH, PAGE_HEIGHT = A4
 
-    def _draw_header_footer(canvas, doc):
+    def _draw_first_page(canvas, doc):
+        """Primera página: solo footer con info, el título ya está en el contenido."""
         canvas.saveState()
-        # Header: optional logo + title + date range
+        # Logo en la esquina superior izquierda (si existe)
         header_y = PAGE_HEIGHT - 40
         if logo_path and os.path.exists(logo_path):
             try:
@@ -217,17 +216,36 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
                 canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
             except Exception:
                 pass
-        # Title at center
-        canvas.setFont('Helvetica-Bold', 10)
-        canvas.drawCentredString(PAGE_WIDTH / 2.0, header_y - 6, title)
-        # Date range at right
+        # Footer: fecha generación a la izquierda, página a la derecha
         canvas.setFont('Helvetica', 8)
-        canvas.drawRightString(PAGE_WIDTH - doc.rightMargin, header_y - 6, f"Rango: {fecha_inicio} - {fecha_fin}")
+        canvas.drawString(doc.leftMargin, 20, f"Generado: {generated_str}")
+        canvas.drawRightString(PAGE_WIDTH - doc.rightMargin, 20, f"Página {doc.page}")
+        canvas.restoreState()
 
-        # Footer: page number
+    def _draw_later_pages(canvas, doc):
+        """Páginas posteriores: header compacto + footer."""
+        canvas.saveState()
+        header_y = PAGE_HEIGHT - 40
+        # Logo (si existe)
+        if logo_path and os.path.exists(logo_path):
+            try:
+                img = ImageReader(logo_path)
+                iw, ih = img.getSize()
+                max_h = 30
+                scale = max_h / float(ih)
+                draw_w = iw * scale
+                canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
+            except Exception:
+                pass
+        # Título compacto al centro
+        canvas.setFont('Helvetica-Bold', 9)
+        canvas.drawCentredString(PAGE_WIDTH / 2.0, header_y - 6, f"Recepciones MP: {fecha_inicio} a {fecha_fin}")
+        # Rango a la derecha
         canvas.setFont('Helvetica', 8)
-        page_text = f"Página {doc.page}"
-        canvas.drawRightString(PAGE_WIDTH - doc.rightMargin, 20, page_text)
+        canvas.drawRightString(PAGE_WIDTH - doc.rightMargin, header_y - 6, f"Página {doc.page}")
+        # Footer
+        canvas.setFont('Helvetica', 8)
+        canvas.drawString(doc.leftMargin, 20, f"{semana_str} | {temporada_str}")
         canvas.restoreState()
 
     # Tabla principal por fruta
@@ -413,7 +431,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         elements.append(KeepTogether([mt]))
 
     # Build document with header/footer callbacks
-    doc.build(elements, onFirstPage=_draw_header_footer, onLaterPages=_draw_header_footer)
+    doc.build(elements, onFirstPage=_draw_first_page, onLaterPages=_draw_later_pages)
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
