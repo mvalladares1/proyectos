@@ -25,6 +25,18 @@ def _normalize_categoria(cat: str) -> str:
     return c
 
 
+def _aggregate_envases(recepciones: List[Dict[str, Any]]) -> Dict[str, float]:
+    """Agrupa envases (bandejas) por nombre de producto para desglose detallado."""
+    envases = {}
+    for r in recepciones:
+        for p in r.get('productos', []) or []:
+            categoria = _normalize_categoria(p.get('Categoria', ''))
+            if categoria == 'BANDEJAS':
+                nombre = p.get('Producto', 'Sin nombre')
+                envases[nombre] = envases.get(nombre, 0) + (p.get('Kg Hechos', 0) or 0)
+    return envases
+
+
 def _aggregate_by_fruta(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Agrupa recepciones por tipo_fruta y calcula métricas por fruta."""
     agrup = {}
@@ -202,9 +214,40 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     elements.append(Paragraph("Resumen por Tipo de Fruta", styles['Heading2']))
     # KPIs generales
     elements.append(Paragraph(f"Total Kg Recepcionados (fruta): {total_kg:,.2f}", styles['Normal']))
-    elements.append(Paragraph(f"Bandejas recepcionadas (Kg): {total_bandejas:,.2f}", styles['Normal']))
+    elements.append(Paragraph(f"Bandejas recepcionadas (unidades): {total_bandejas:,.0f}", styles['Normal']))
     elements.append(Paragraph(f"Costo Total MP: ${total_costo:,.0f}", styles['Normal']))
     elements.append(Spacer(1, 6))
+    
+    # Nota sobre cálculo de costo promedio
+    elements.append(Paragraph(
+        "<i>Nota: Costo Promedio/kg = Costo Total ÷ Kg Recepcionados (excluyendo bandejas)</i>",
+        styles['Normal']
+    ))
+    elements.append(Spacer(1, 8))
+    
+    # Desglose de envases por tipo
+    envases_por_tipo = _aggregate_envases(recepciones_main)
+    if envases_por_tipo:
+        elements.append(Paragraph("Detalle Envases Recepcionados por Tipo", styles['Heading3']))
+        envases_tbl = [["Tipo de Envase", "Cantidad (unidades)"]]
+        total_envases = 0
+        for nombre, cantidad in sorted(envases_por_tipo.items(), key=lambda x: x[1], reverse=True):
+            envases_tbl.append([nombre, f"{cantidad:,.0f}"])
+            total_envases += cantidad
+        # Fila de totales
+        envases_tbl.append(["TOTAL", f"{total_envases:,.0f}"])
+        env_t = Table(envases_tbl, hAlign='LEFT', repeatRows=1)
+        env_t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#666666')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),  # Total row bold
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),  # Total row grey
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+        ]))
+        elements.append(KeepTogether([env_t]))
+        elements.append(Spacer(1, 12))
 
     tbl_data = [["Tipo Fruta", "Kg", "Costo Total", "Costo Promedio/kg", "% IQF", "% Block", "# Recepciones"]]
     for r in main_agg:
@@ -286,12 +329,18 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     for r in main_agg:
         elements.append(Paragraph(r['tipo_fruta'], styles['Heading3']))
         pdata = [["Productor", "Kg"]]
+        total_especie = 0
         for prod, kg in r['top_productores']:
             pdata.append([prod, f"{kg:,.2f}"])
+            total_especie += kg
+        # Fila de total por especie
+        pdata.append(["TOTAL", f"{total_especie:,.2f}"])
         pt = Table(pdata, hAlign='LEFT', repeatRows=1)
         pt.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f2f2f2')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),  # Total row bold
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
         ]))
         elements.append(KeepTogether([pt]))
@@ -302,11 +351,22 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         elements.append(Spacer(1, 12))
         elements.append(Paragraph("Resumen - Semana Anterior", styles['Heading2']))
         p_tbl = [["Tipo Fruta", "Kg", "Costo Total", "Costo Promedio/kg"]]
+        prev_total_kg = 0
+        prev_total_costo = 0
         for r in prev_agg:
             costo_prom = f"${r['costo_prom']:,.2f}" if r['costo_prom'] is not None else "-"
             p_tbl.append([r['tipo_fruta'], f"{r['kg']:,.2f}", f"${r['costo']:,.0f}", costo_prom])
+            prev_total_kg += r['kg']
+            prev_total_costo += r['costo']
+        # Fila de totales
+        p_tbl.append(["TOTAL", f"{prev_total_kg:,.2f}", f"${prev_total_costo:,.0f}", "-"])
         pt2 = Table(p_tbl, hAlign='LEFT', repeatRows=1)
-        pt2.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.grey)]))
+        pt2.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f2f2f2')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0'))
+        ]))
         elements.append(KeepTogether([pt2]))
 
     # Acumulado parcial mes
@@ -314,11 +374,22 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         elements.append(Spacer(1, 12))
         elements.append(Paragraph("Acumulado Parcial del Mes", styles['Heading2']))
         m_tbl = [["Tipo Fruta", "Kg", "Costo Total", "Costo Promedio/kg"]]
+        month_total_kg = 0
+        month_total_costo = 0
         for r in month_agg:
             costo_prom = f"${r['costo_prom']:,.2f}" if r['costo_prom'] is not None else "-"
             m_tbl.append([r['tipo_fruta'], f"{r['kg']:,.2f}", f"${r['costo']:,.0f}", costo_prom])
+            month_total_kg += r['kg']
+            month_total_costo += r['costo']
+        # Fila de totales
+        m_tbl.append(["TOTAL", f"{month_total_kg:,.2f}", f"${month_total_costo:,.0f}", "-"])
         mt = Table(m_tbl, hAlign='LEFT', repeatRows=1)
-        mt.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.grey)]))
+        mt.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f2f2f2')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0'))
+        ]))
         elements.append(KeepTogether([mt]))
 
     # Build document with header/footer callbacks

@@ -38,11 +38,65 @@ if 'idx_recepcion' not in st.session_state:
     st.session_state.idx_recepcion = None
 
 # Filtros
-col1, col2 = st.columns(2)
-with col1:
-    fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion")
-with col2:
-    fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion")
+st.subheader("Filtros de Fecha")
+filtro_tipo = st.radio("Tipo de Filtro", ["Por Fechas", "Por Semana", "Por Temporada"], horizontal=True, key="filtro_tipo_recepcion")
+
+if filtro_tipo == "Por Fechas":
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion")
+    with col2:
+        fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion")
+
+elif filtro_tipo == "Por Semana":
+    # Calcular semana actual ISO
+    hoy = datetime.now().date()
+    año_actual = hoy.year
+    semana_actual = hoy.isocalendar()[1]
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        año_select = st.selectbox("Año", options=[año_actual - 1, año_actual, año_actual + 1], index=1, key="año_semana_recepcion")
+    with col2:
+        semana_select = st.selectbox("Semana ", options=list(range(1, 54)), index=min(semana_actual - 1, 52), key="semana_corrida_recepcion")
+    
+    # Calcular fecha inicio y fin de la semana seleccionada
+    # La semana ISO empieza el lunes
+    from datetime import date
+    # Encontrar el primer día del año
+    primer_dia = date(año_select, 1, 1)
+    # Calcular el primer lunes del año (o el lunes de la semana 1)
+    primer_lunes = primer_dia + timedelta(days=(7 - primer_dia.weekday()) % 7)
+    if primer_dia.weekday() <= 3:  # Si el 1 de enero es Lu-Ju, pertenece a semana 1
+        primer_lunes = primer_dia - timedelta(days=primer_dia.weekday())
+    
+    fecha_inicio = primer_lunes + timedelta(weeks=semana_select - 1)
+    fecha_fin = fecha_inicio + timedelta(days=6)
+    
+    st.info(f"Semana {semana_select} del {año_select}: {fecha_inicio.strftime('%Y-%m-%d')} al {fecha_fin.strftime('%Y-%m-%d')}")
+
+else:  # Por Temporada
+    # Temporada = Oct a Sep del año siguiente
+    hoy = datetime.now().date()
+    # Determinar temporada actual
+    if hoy.month >= 10:
+        temp_inicio = hoy.year
+    else:
+        temp_inicio = hoy.year - 1
+    
+    temporadas = [f"{y}-{y+1}" for y in range(temp_inicio - 2, temp_inicio + 2)]
+    temporada_default = f"{temp_inicio}-{temp_inicio+1}"
+    idx_default = temporadas.index(temporada_default) if temporada_default in temporadas else 0
+    
+    temporada_select = st.selectbox("Temporada", options=temporadas, index=idx_default, key="temporada_recepcion")
+    
+    # Parsear temporada seleccionada
+    año_ini, año_fin = map(int, temporada_select.split("-"))
+    from datetime import date
+    fecha_inicio = date(año_ini, 10, 1)  # 1 de Octubre
+    fecha_fin = date(año_fin, 9, 30)  # 30 de Septiembre
+    
+    st.info(f"Temporada {temporada_select}: {fecha_inicio.strftime('%Y-%m-%d')} al {fecha_fin.strftime('%Y-%m-%d')}")
 
 if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
     params = {

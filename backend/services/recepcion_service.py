@@ -54,25 +54,28 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             [("picking_id", "=", picking_id)],
             ["product_id", "quantity_done", "product_uom", "price_unit"]
         )
-        # Obtener categorías de productos
+        # Obtener categorías y nombres completos de productos
         product_ids = [m.get("product_id", [None, None])[0] for m in moves if m.get("product_id")]
-        product_categs = {}
+        product_info_map = {}  # Maps product_id -> {categ, display_name}
         if product_ids:
-            product_infos = client.read("product.product", product_ids, ["id", "categ_id"])
+            product_infos = client.read("product.product", product_ids, ["id", "categ_id", "display_name"])
             for info in product_infos:
                 pid = info.get("id")
                 categ = info.get("categ_id", [None, ""])[1] if info.get("categ_id") else ""
-                product_categs[pid] = categ
+                display_name = info.get("display_name", "")
+                product_info_map[pid] = {"categ": categ, "display_name": display_name}
 
         kg_total = sum(m.get("quantity_done", 0) or 0 for m in moves)
         productos = []
         for m in moves:
             prod_id = m.get("product_id", [None, None])[0] if m.get("product_id") else None
-            nombre_prod = m.get("product_id", [None, ""])[1] if m.get("product_id") else ""
+            # Use full display_name from product.product instead of short name from stock.move tuple
+            prod_info = product_info_map.get(prod_id, {})
+            nombre_prod = prod_info.get("display_name") or (m.get("product_id", [None, ""])[1] if m.get("product_id") else "")
             kg_hechos = m.get("quantity_done", 0) or 0
             costo_unit = m.get("price_unit", 0) or 0
             costo_total = kg_hechos * costo_unit
-            categoria = product_categs.get(prod_id, "")
+            categoria = prod_info.get("categ", "")
             categoria = _normalize_categoria(categoria)
             productos.append({
                 "Producto": nombre_prod,
