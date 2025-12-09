@@ -173,9 +173,29 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     styles = getSampleStyleSheet()
     elements = []
 
+    # Calcular semana ISO y temporada basada en las fechas
+    semana_inicio = f_inicio.isocalendar()[1]
+    semana_fin = f_fin.isocalendar()[1]
+    if semana_inicio == semana_fin:
+        semana_str = f"Semana {semana_inicio}"
+    else:
+        semana_str = f"Semanas {semana_inicio}-{semana_fin}"
+    
+    # Temporada: Oct año N - Sep año N+1
+    # Si estamos en Oct-Dic, temporada es año_actual-año_siguiente
+    # Si estamos en Ene-Sep, temporada es año_anterior-año_actual
+    if f_fin.month >= 10:
+        temp_año_ini = f_fin.year
+    else:
+        temp_año_ini = f_fin.year - 1
+    temporada_str = f"Temporada {temp_año_ini}-{temp_año_ini + 1}"
+
     title = f"Informe de Recepciones MP: {fecha_inicio} a {fecha_fin}"
     elements.append(Paragraph(title, styles['Title']))
-    elements.append(Spacer(1, 6))
+    elements.append(Spacer(1, 4))
+    # Agregar semana y temporada
+    elements.append(Paragraph(f"<b>{semana_str}</b> | <b>{temporada_str}</b>", styles['Normal']))
+    elements.append(Spacer(1, 4))
     meta = f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     elements.append(Paragraph(meta, styles['Normal']))
     elements.append(Spacer(1, 12))

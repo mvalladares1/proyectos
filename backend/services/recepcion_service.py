@@ -54,24 +54,49 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             [("picking_id", "=", picking_id)],
             ["product_id", "quantity_done", "product_uom", "price_unit"]
         )
-        # Obtener categorías y nombres completos de productos
+        # Obtener información de productos desde product.template (donde está la referencia única)
         product_ids = [m.get("product_id", [None, None])[0] for m in moves if m.get("product_id")]
-        product_info_map = {}  # Maps product_id -> {categ, display_name}
+        product_info_map = {}  # Maps product_id -> {categ, name, default_code}
         if product_ids:
-            product_infos = client.read("product.product", product_ids, ["id", "categ_id", "display_name"])
+            # Primero obtener product.product para saber el product_tmpl_id
+            product_infos = client.read("product.product", product_ids, ["id", "product_tmpl_id", "categ_id"])
+            template_ids = [p.get("product_tmpl_id", [None, None])[0] for p in product_infos if p.get("product_tmpl_id")]
+            
+            # Obtener datos desde product.template (nombre y código de referencia correctos)
+            template_map = {}
+            if template_ids:
+                template_infos = client.read("product.template", template_ids, ["id", "name", "default_code"])
+                for t in template_infos:
+                    template_map[t.get("id")] = {
+                        "name": t.get("name", ""),
+                        "default_code": t.get("default_code", "") or ""
+                    }
+            
+            # Mapear product.product ID -> datos del template
             for info in product_infos:
                 pid = info.get("id")
+                tmpl_id = info.get("product_tmpl_id", [None, None])[0] if info.get("product_tmpl_id") else None
                 categ = info.get("categ_id", [None, ""])[1] if info.get("categ_id") else ""
-                display_name = info.get("display_name", "")
-                product_info_map[pid] = {"categ": categ, "display_name": display_name}
+                tmpl_data = template_map.get(tmpl_id, {})
+                product_info_map[pid] = {
+                    "categ": categ, 
+                    "name": tmpl_data.get("name", ""),
+                    "default_code": tmpl_data.get("default_code", "")
+                }
 
         kg_total = sum(m.get("quantity_done", 0) or 0 for m in moves)
         productos = []
         for m in moves:
             prod_id = m.get("product_id", [None, None])[0] if m.get("product_id") else None
-            # Use full display_name from product.product instead of short name from stock.move tuple
             prod_info = product_info_map.get(prod_id, {})
-            nombre_prod = prod_info.get("display_name") or (m.get("product_id", [None, ""])[1] if m.get("product_id") else "")
+            # Usar nombre y código desde product.template
+            nombre = prod_info.get("name") or (m.get("product_id", [None, ""])[1] if m.get("product_id") else "")
+            default_code = prod_info.get("default_code", "")
+            # Formato: [código] nombre
+            if default_code:
+                nombre_prod = f"[{default_code}] {nombre}"
+            else:
+                nombre_prod = nombre
             kg_hechos = m.get("quantity_done", 0) or 0
             costo_unit = m.get("price_unit", 0) or 0
             costo_total = kg_hechos * costo_unit
@@ -79,6 +104,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             categoria = _normalize_categoria(categoria)
             productos.append({
                 "Producto": nombre_prod,
+                "product_id": prod_id,  # ID interno para debug
                 "Kg Hechos": kg_hechos,
                 "Costo Unitario": costo_unit,
                 "Costo Total": costo_total,
