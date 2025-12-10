@@ -446,6 +446,31 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                             })
             
             calidad_data["lineas_analisis"] = lineas_analisis
+            
+            # Para tipos de fruta diferentes a Frutilla, calcular totales desde líneas de análisis
+            # ya que Odoo no tiene campos de totales para estas frutas
+            if tipo_fruta != "Frutilla" and lineas_analisis:
+                # Sumar valores de todas las líneas
+                sum_dano_mecanico = sum(l.get("dano_mecanico", 0) or 0 for l in lineas_analisis)
+                sum_hongos = sum(l.get("hongos", 0) or 0 for l in lineas_analisis)
+                sum_inmadura = sum(l.get("inmadura", 0) or 0 for l in lineas_analisis)
+                sum_sobremadura = sum(l.get("sobremadura", 0) or 0 for l in lineas_analisis)
+                sum_dano_insecto = sum(l.get("dano_insecto", 0) or 0 for l in lineas_analisis)
+                sum_deshidratado = sum(l.get("deshidratado", 0) or 0 for l in lineas_analisis)
+                sum_crumble = sum(l.get("crumble", 0) or 0 for l in lineas_analisis)
+                sum_fruta_verde = sum(l.get("fruta_verde", 0) or 0 for l in lineas_analisis)
+                sum_herida_partida = sum(l.get("herida_partida", 0) or 0 for l in lineas_analisis)
+                
+                # Actualizar calidad_data con los valores calculados
+                calidad_data["dano_mecanico"] = sum_dano_mecanico
+                calidad_data["hongos"] = sum_hongos
+                calidad_data["inmadura"] = sum_inmadura
+                calidad_data["sobremadura"] = sum_sobremadura
+                calidad_data["dano_insecto"] = sum_dano_insecto
+                calidad_data["deshidratado"] = sum_deshidratado
+                calidad_data["crumble"] = sum_crumble
+                calidad_data["fruta_verde"] = sum_fruta_verde
+                calidad_data["herida_partida"] = sum_herida_partida
         
         resultado.append({
             "id": picking_id,
