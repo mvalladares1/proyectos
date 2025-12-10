@@ -186,14 +186,49 @@ class StockService:
 
             qty = q.get("quantity", 0) or 0
             p_info = products_info.get(prod[0])
+            
             if p_info:
-                species = p_info["category"]
-                condition = "Organico" if "org" in p_info["name"].lower() else "Convencional"
+                # Extraer Tipo Fruta de la categoría o nombre
+                cat_name = p_info["category"].upper()
+                prod_name = p_info["name"].upper()
+                
+                # Detectar Tipo Fruta
+                tipo_fruta = "Otro"
+                if "ARANDANO" in cat_name or "ARÁNDANO" in cat_name or "AR " in prod_name or "AR_" in prod_name or "ARAND" in prod_name:
+                    tipo_fruta = "Arándano"
+                elif "FRAMBUESA" in cat_name or "FB " in prod_name or "FB_" in prod_name or "FRAMB" in prod_name:
+                    tipo_fruta = "Frambuesa"
+                elif "FRUTILLA" in cat_name or "FR " in prod_name or "FR_" in prod_name or "FRUTI" in prod_name:
+                    tipo_fruta = "Frutilla"
+                elif "MORA" in cat_name or "MO " in prod_name or "MO_" in prod_name:
+                    tipo_fruta = "Mora"
+                elif "CEREZA" in cat_name or "CR " in prod_name or "CR_" in prod_name:
+                    tipo_fruta = "Cereza"
+                elif "PRODUCTOS" in cat_name or "PTT" in cat_name:
+                    # Intentar extraer del nombre del producto
+                    if "ARAND" in prod_name or "AR " in prod_name:
+                        tipo_fruta = "Arándano"
+                    elif "FRAMB" in prod_name or "FB " in prod_name:
+                        tipo_fruta = "Frambuesa"
+                    elif "FRUTI" in prod_name or "FR " in prod_name:
+                        tipo_fruta = "Frutilla"
+                    elif "MORA" in prod_name or "MO " in prod_name:
+                        tipo_fruta = "Mora"
+                    elif "CEREZA" in prod_name or "CR " in prod_name:
+                        tipo_fruta = "Cereza"
+                
+                # Detectar Manejo (Orgánico/Convencional)
+                if "ORG" in prod_name:
+                    manejo = "Orgánico"
+                elif "CONV" in prod_name:
+                    manejo = "Convencional"
+                else:
+                    manejo = "Convencional"  # Por defecto
             else:
-                species = "Desconocido"
-                condition = "N/A"
+                tipo_fruta = "Desconocido"
+                manejo = "N/A"
 
-            key = f"{species} - {condition}"
+            key = f"{tipo_fruta} - {manejo}"
             chambers[loc_id]["stock_data"][key] = chambers[loc_id]["stock_data"].get(key, 0) + qty
 
         result = [data for data in chambers.values() if data["stock_data"]]

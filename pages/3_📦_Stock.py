@@ -101,6 +101,43 @@ def fetch_lotes(category: str, location_ids: List[int] = None) -> List[Dict]:
         return []
 
 
+# ==================== CONFIGURACIÓN DE CÁMARAS PRINCIPALES ====================
+# Definir las cámaras a mostrar por defecto con sus capacidades
+CAMARAS_CONFIG = {
+    "Camara 1 de -25°C": {"capacidad": 500, "patron": ["Camara 1", "-25"]},
+    "Camara 2 de -25°C": {"capacidad": 500, "patron": ["Camara 2", "-25"]},
+    "Camara 3 de -25°C": {"capacidad": 500, "patron": ["Camara 3", "-25"]},
+    "Camara 0°C": {"capacidad": 200, "patron": ["Camara 0", "0°C"]},
+}
+
+def filtrar_camaras_principales(camaras_data):
+    """Filtra solo las cámaras principales configuradas y aplica capacidades personalizadas"""
+    camaras_filtradas = []
+    usados = set()
+    
+    for camara in camaras_data:
+        nombre = camara.get("name", "")
+        full_name = camara.get("full_name", "")
+        
+        for config_name, config in CAMARAS_CONFIG.items():
+            if config_name in usados:
+                continue
+            
+            patrones = config["patron"]
+            # Verificar si todos los patrones coinciden
+            coincide = all(p.lower() in nombre.lower() or p.lower() in full_name.lower() for p in patrones)
+            
+            if coincide:
+                camara_copy = camara.copy()
+                camara_copy["capacity_pallets"] = config["capacidad"]
+                camara_copy["config_name"] = config_name
+                camaras_filtradas.append(camara_copy)
+                usados.add(config_name)
+                break
+    
+    return camaras_filtradas
+
+
 # Tabs principales
 tab1, tab2, tab3 = st.tabs(["🏢 Cámaras", "📦 Pallets", "🏷️ Trazabilidad"])
 
@@ -109,10 +146,22 @@ with tab1:
     st.header("Stock por Cámaras")
     
     with st.spinner("Cargando datos de cámaras..."):
-        camaras_data = fetch_camaras()
+        camaras_data_all = fetch_camaras()
     
-    if camaras_data:
-        # Métricas generales
+    if camaras_data_all:
+        # Opción para ver todas o solo las principales
+        mostrar_todas = st.checkbox("Mostrar todas las ubicaciones", value=False, key="mostrar_todas_camaras")
+        
+        if mostrar_todas:
+            camaras_data = camaras_data_all
+        else:
+            # Filtrar solo las 4 cámaras principales con capacidades personalizadas
+            camaras_data = filtrar_camaras_principales(camaras_data_all)
+            if not camaras_data:
+                st.warning("No se encontraron las cámaras configuradas. Mostrando todas.")
+                camaras_data = camaras_data_all
+        
+        # Métricas generales (solo de las cámaras mostradas)
         total_camaras = len(camaras_data)
         total_capacity = sum(c.get("capacity_pallets", 0) for c in camaras_data)
         total_occupied = sum(c.get("occupied_pallets", 0) for c in camaras_data)
@@ -189,8 +238,8 @@ with tab1:
             height=400
         )
         
-        # Detalle de stock por especie
-        st.subheader("Stock por Especie/Condición")
+        # Detalle de stock por Tipo Fruta / Manejo
+        st.subheader("Stock por Tipo Fruta / Manejo")
         
         # Seleccionar cámara
         camara_names = [c["name"] for c in camaras_data]
@@ -200,7 +249,7 @@ with tab1:
             camara_detail = next((c for c in camaras_data if c["name"] == selected_camara), None)
             if camara_detail and camara_detail["stock_data"]:
                 stock_items = [
-                    {"Especie - Condición": k, "Stock (kg)": round(v, 2)}
+                    {"Tipo Fruta - Manejo": k, "Stock (kg)": round(v, 2)}
                     for k, v in camara_detail["stock_data"].items()
                 ]
                 df_stock = pd.DataFrame(stock_items).sort_values("Stock (kg)", ascending=False)
@@ -208,7 +257,7 @@ with tab1:
                 col_chart, col_table = st.columns([2, 1])
                 
                 with col_chart:
-                    st.bar_chart(df_stock.set_index("Especie - Condición"))
+                    st.bar_chart(df_stock.set_index("Tipo Fruta - Manejo"))
                 
                 with col_table:
                     st.dataframe(df_stock, use_container_width=True, height=300)
@@ -239,7 +288,7 @@ with tab2:
             categories = list(selected_camara_data["stock_data"].keys()) if selected_camara_data else []
             
             filter_category = st.selectbox(
-                "Filtrar por especie/condición",
+                "Filtrar por Tipo Fruta / Manejo",
                 ["Todos"] + categories,
                 key="category_filter"
             )
@@ -315,7 +364,7 @@ with tab3:
             all_categories.update(c["stock_data"].keys())
         
         selected_category = st.selectbox(
-            "Seleccionar Especie - Condición",
+            "Seleccionar Tipo Fruta - Manejo",
             sorted(all_categories),
             key="category_traza"
         )
