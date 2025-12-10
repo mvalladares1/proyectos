@@ -210,15 +210,15 @@ if df is not None:
         bandejas_vals.append(b)
     df_filtrada = df_filtrada.copy()
     df_filtrada['bandejas'] = bandejas_vals
-    df_filtrada['sin_calidad'] = df_filtrada['calific_final'].isnull() | (df_filtrada['calific_final'] == '')
+    df_filtrada['tiene_calidad'] = df_filtrada['calific_final'].notna() & (df_filtrada['calific_final'] != '')
     cols_mostrar = [
         "albaran", "fecha", "productor", "tipo_fruta", "guia_despacho",
-        "bandejas", "kg_recepcionados", "calific_final", "total_iqf", "total_block", "sin_calidad"
+        "bandejas", "kg_recepcionados", "calific_final", "total_iqf", "total_block", "tiene_calidad"
     ]
     df_mostrar = df_filtrada[cols_mostrar].copy()
     df_mostrar.columns = [
         "Albarán", "Fecha", "Productor", "Tipo Fruta", "Guía Despacho",
-        "Bandejas", "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Sin Calidad"
+        "Bandejas", "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Calidad"
     ]
     # Ajustar Kg Recepcionados para excluir las Bandejas (mostramos Kg fruta)
     # Convertir a numérico, restar bandejas y formatear
@@ -228,7 +228,7 @@ if df is not None:
     df_mostrar["Bandejas"] = df_mostrar["Bandejas"].apply(lambda x: f"{x:.2f}")
     df_mostrar["% IQF"] = df_mostrar["% IQF"].apply(lambda x: f"{x:.2f}")
     df_mostrar["% Block"] = df_mostrar["% Block"].apply(lambda x: f"{x:.2f}")
-    df_mostrar["Sin Calidad"] = df_mostrar["Sin Calidad"].apply(lambda x: "❌" if x else "✅")
+    df_mostrar["Calidad"] = df_mostrar["Calidad"].apply(lambda x: "✅" if x else "❌")
 
     # Botones para exportar a CSV y Excel
     col_exp1, col_exp2 = st.columns([1,1])
@@ -342,6 +342,9 @@ if df is not None:
             prod_df = pd.DataFrame(rec['productos'])
             prod_df = prod_df[prod_df['Kg Hechos'] > 0]
             if not prod_df.empty:
+                # Quitar product_id de la vista
+                if 'product_id' in prod_df.columns:
+                    prod_df = prod_df.drop(columns=['product_id'])
                 prod_df['Kg Hechos'] = prod_df['Kg Hechos'].apply(lambda x: f"{x:.2f}")
                 prod_df['Costo Total'] = prod_df['Costo Total'].apply(lambda x: f"${x:,.0f}")
                 prod_df['Costo Unitario'] = prod_df['Costo Unitario'].apply(lambda x: f"${x:,.0f}")
