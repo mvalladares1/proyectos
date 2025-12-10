@@ -160,6 +160,19 @@ def filtrar_camaras_principales(camaras_data):
     return camaras_filtradas
 
 
+# ==================== CARGA GLOBAL DE CÁMARAS ====================
+with st.spinner("Cargando datos de cámaras..."):
+    camaras_data_all = fetch_camaras()
+
+# Determinar si mostrar todas o solo principales (se sincroniza con checkbox en tab1)
+if "mostrar_todas_camaras" not in st.session_state:
+    st.session_state.mostrar_todas_camaras = False
+
+if st.session_state.mostrar_todas_camaras:
+    camaras_data = camaras_data_all
+else:
+    camaras_data = camaras_data_all if camaras_data_all else []
+
 # Tabs principales
 tab1, tab2, tab3 = st.tabs(["🏢 Cámaras", "📦 Pallets", "🏷️ Trazabilidad"])
 
@@ -167,26 +180,19 @@ tab1, tab2, tab3 = st.tabs(["🏢 Cámaras", "📦 Pallets", "🏷️ Trazabilid
 with tab1:
     st.header("Stock por Cámaras")
     
-    with st.spinner("Cargando datos de cámaras..."):
-        camaras_data_all = fetch_camaras()
-    
     if camaras_data_all:
         # Opción para ver todas o solo las principales
         mostrar_todas = st.checkbox("Mostrar todas las ubicaciones", value=False, key="mostrar_todas_camaras")
         
         if mostrar_todas:
-            camaras_data = camaras_data_all
+            camaras_data_tab = camaras_data_all
         else:
-            # Filtrar solo las 4 cámaras principales con capacidades personalizadas
-            camaras_data = filtrar_camaras_principales(camaras_data_all)
-            if not camaras_data:
-                st.warning("No se encontraron las cámaras configuradas. Mostrando todas.")
-                camaras_data = camaras_data_all
+            camaras_data_tab = camaras_data_all
         
         # Métricas generales (solo de las cámaras mostradas)
-        total_camaras = len(camaras_data)
-        total_capacity = sum(c.get("capacity_pallets", 0) for c in camaras_data)
-        total_occupied = sum(c.get("occupied_pallets", 0) for c in camaras_data)
+        total_camaras = len(camaras_data_tab)
+        total_capacity = sum(c.get("capacity_pallets", 0) for c in camaras_data_tab)
+        total_occupied = sum(c.get("occupied_pallets", 0) for c in camaras_data_tab)
         ocupacion_pct = (total_occupied / total_capacity * 100) if total_capacity > 0 else 0
         
         col1, col2, col3, col4 = st.columns(4)
@@ -201,7 +207,7 @@ with tab1:
         st.subheader("Detalle por Cámara")
         
         camaras_list = []
-        for camara in camaras_data:
+        for camara in camaras_data_tab:
             # Calcular stock total
             total_kg = sum(camara["stock_data"].values())
             ocupacion = (camara["occupied_pallets"] / camara["capacity_pallets"] * 100) if camara["capacity_pallets"] > 0 else 0
@@ -254,11 +260,11 @@ with tab1:
         st.subheader("Stock por Tipo Fruta / Manejo")
         
         # Seleccionar cámara
-        camara_names = [c["name"] for c in camaras_data]
+        camara_names = [c["name"] for c in camaras_data_tab]
         selected_camara = st.selectbox("Seleccionar cámara", camara_names)
         
         if selected_camara:
-            camara_detail = next((c for c in camaras_data if c["name"] == selected_camara), None)
+            camara_detail = next((c for c in camaras_data_tab if c["name"] == selected_camara), None)
             if camara_detail and camara_detail["stock_data"]:
                 stock_items = [
                     {"Tipo Fruta - Manejo": k, "Stock (kg)": round(v, 2)}
