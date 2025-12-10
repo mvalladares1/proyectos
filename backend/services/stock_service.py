@@ -68,71 +68,80 @@ class StockService:
 
     def get_chambers_stock(self) -> List[Dict]:
         """
-        Obtiene stock agrupado por cámara padre (Camara 1, 2, 3 de -25°C, Camara 0°C).
+        Obtiene stock agrupado por cámara padre (Camara 1, 2, 3 de -25°C, Camara 0°C de RF/Stock).
         Las posiciones individuales se agregan a su cámara padre.
         La capacidad se cuenta por número de posiciones hijas.
         """
-        # PASO 1: Buscar las 4 cámaras principales directamente por nombre
-        CAMARAS_BUSCAR = [
-            "Camara 1 de -25",
-            "Camara 2 de -25",
-            "Camara 3 de -25",
-            "Camara 0",
-        ]
+        # PASO 1: Definir las 4 cámaras específicas que queremos
+        # Las 3 de -25°C tienen padre "Cámaras -25°"
+        # La de 0°C está en "RF/Stock" (display_name contiene RF/Stock/Camara 0°C)
+        CAMARAS_PERMITIDAS = {
+            "Camara 1 de -25°C": "Cámaras -25°",
+            "Camara 2 de -25°C": "Cámaras -25°",
+            "Camara 3 de -25°C": "Cámaras -25°",
+            "Camara 0°C": "RF/Stock",  # Solo la de RF/Stock, no la de Sjose
+        }
         
         try:
             # Buscar ubicaciones que contengan estos nombres
-            # Dominio con OR usando notación polaca inversa de Odoo
             domain = [
                 ("usage", "=", "internal"),
                 ("active", "=", True),
                 "|", "|", "|",
-                ("name", "ilike", "Camara 1 de -25"),
-                ("name", "ilike", "Camara 2 de -25"),
-                ("name", "ilike", "Camara 3 de -25"),
-                ("name", "ilike", "Camara 0"),
+                ("name", "=", "Camara 1 de -25°C"),
+                ("name", "=", "Camara 2 de -25°C"),
+                ("name", "=", "Camara 3 de -25°C"),
+                ("name", "=", "Camara 0°C"),
             ]
-            camaras_principales = self.odoo.search_read(
+            camaras_encontradas = self.odoo.search_read(
                 "stock.location",
                 domain,
                 ["id", "name", "display_name", "location_id"]
             )
-            print(f"DEBUG: Encontradas {len(camaras_principales)} ubicaciones con los filtros")
-            for cam in camaras_principales[:5]:
-                print(f"  - {cam.get('name')}")
+            print(f"DEBUG: Encontradas {len(camaras_encontradas)} ubicaciones con nombre exacto")
+            for cam in camaras_encontradas:
+                print(f"  - {cam.get('name')} | display: {cam.get('display_name')}")
         except Exception as e:
             print(f"Error buscando cámaras principales: {e}")
             import traceback
             traceback.print_exc()
             return []
 
-        # Filtrar solo las cámaras que queremos (no posiciones)
+        # Filtrar solo las cámaras correctas según su ubicación padre
         camaras_map = {}
-        import re
-        # Patrón para detectar posiciones individuales como CAM01A01, CAM02B03, etc.
-        posicion_pattern = re.compile(r'^CAM\d{2}[A-Z]\d{2}$', re.IGNORECASE)
         
-        for cam in camaras_principales:
+        for cam in camaras_encontradas:
             name = cam.get("name", "")
-            # Excluir posiciones individuales (CAM01A01, etc.) - solo queremos las cámaras padre
-            if posicion_pattern.match(name):
+            display_name = cam.get("display_name", "")
+            
+            # Excluir "pos lavado"
+            if "pos lavado" in name.lower():
+                print(f"  Excluida (pos lavado): {name}")
                 continue
             
-            # Verificar que sea una de las cámaras principales
-            for patron in CAMARAS_BUSCAR:
-                if patron.lower() in name.lower():
-                    parent = cam.get("location_id")
-                    camaras_map[cam["id"]] = {
-                        "id": cam["id"],
-                        "name": name,
-                        "full_name": cam.get("display_name", name),
-                        "parent_name": parent[1] if parent and isinstance(parent, (list, tuple)) else "",
-                        "capacity_pallets": 0,
-                        "occupied_pallets": 0,
-                        "stock_data": {},
-                        "child_location_ids": []
-                    }
-                    break
+            # Verificar que esté en la ubicación padre correcta
+            padre_requerido = CAMARAS_PERMITIDAS.get(name)
+            if not padre_requerido:
+                print(f"  Excluida (nombre no permitido): {name}")
+                continue
+            
+            # Verificar que el display_name contenga el padre requerido
+            if padre_requerido not in display_name:
+                print(f"  Excluida (padre incorrecto): {name} - display: {display_name} - esperado: {padre_requerido}")
+                continue
+            
+            parent = cam.get("location_id")
+            camaras_map[cam["id"]] = {
+                "id": cam["id"],
+                "name": name,
+                "full_name": display_name,
+                "parent_name": parent[1] if parent and isinstance(parent, (list, tuple)) else "",
+                "capacity_pallets": 0,
+                "occupied_pallets": 0,
+                "stock_data": {},
+                "child_location_ids": []
+            }
+            print(f"  Incluida: {name}")
 
         if not camaras_map:
             print("No se encontraron cámaras principales")
@@ -151,6 +160,7 @@ class StockService:
                 )
                 camaras_map[cam_id]["child_location_ids"] = child_locs
                 camaras_map[cam_id]["capacity_pallets"] = len(child_locs)  # Capacidad = posiciones
+                print(f"  {camaras_map[cam_id]['name']}: {len(child_locs)} posiciones hijas")
             except Exception as e:
                 print(f"Error obteniendo hijos de cámara {cam_id}: {e}")
                 camaras_map[cam_id]["child_location_ids"] = [cam_id]
