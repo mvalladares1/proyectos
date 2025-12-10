@@ -577,19 +577,22 @@ if not df_in.empty or not df_out.empty:
     if selected_producers:
         df_merged = df_merged[df_merged['Productor'].isin(selected_producers)]
     
-    # Recalcular totales
+    # Calcular totales
     total_in = df_merged['Recepcionadas'].sum()
     total_out = df_merged['Despachadas'].sum()
     total_diff = total_out - total_in
     
-    # Agregar fila TOTAL
-    total_row_prod = pd.DataFrame([{
-        'Productor': 'TOTAL',
-        'Recepcionadas': total_in,
-        'Despachadas': total_out,
-        'Bandejas en Productor': total_diff
-    }])
-    df_display = pd.concat([df_merged, total_row_prod], ignore_index=True)
+    # Mostrar totales como métricas fijas (no se mueven al ordenar)
+    tot_cols = st.columns(3)
+    with tot_cols[0]:
+        st.metric("📥 Total Recepcionadas", fmt_numero(total_in))
+    with tot_cols[1]:
+        st.metric("📤 Total Despachadas", fmt_numero(total_out))
+    with tot_cols[2]:
+        st.metric("🏠 Total en Productores", fmt_numero(total_diff))
+    
+    # Solo datos de productores (sin fila TOTAL)
+    df_display = df_merged.copy()
     
     # Guardar datos para gráfico ANTES de formatear
     df_chart_prod = df_merged.copy()
@@ -601,13 +604,15 @@ if not df_in.empty or not df_out.empty:
     
     df_display = df_display[['Productor', 'Recepcionadas', 'Despachadas', 'Bandejas en Productor']]
     
-    # Estilo para fila TOTAL (amarilla)
-    def highlight_total(row):
-        if row['Productor'] == 'TOTAL':
-            return ['background-color: #ffc107; color: black; font-weight: bold'] * len(row)
-        return [''] * len(row)
+    # Ordenar por Bandejas en Productor descendente (mayor deuda primero)
+    df_merged_sorted = df_merged.sort_values('Bandejas en Productor', ascending=False)
+    df_display = df_merged_sorted.copy()
+    df_display['Recepcionadas'] = df_display['Recepcionadas'].apply(lambda x: fmt_numero(x))
+    df_display['Despachadas'] = df_display['Despachadas'].apply(lambda x: fmt_numero(x))
+    df_display['Bandejas en Productor'] = df_display['Bandejas en Productor'].apply(lambda x: fmt_numero(x))
+    df_display = df_display[['Productor', 'Recepcionadas', 'Despachadas', 'Bandejas en Productor']]
     
-    st.dataframe(df_display.style.apply(highlight_total, axis=1), hide_index=True, use_container_width=True)
+    st.dataframe(df_display, hide_index=True, use_container_width=True)
     
     # ==================== GRÁFICO POR PRODUCTOR ====================
     st.markdown("##### Recepción vs Despacho por Productor")
