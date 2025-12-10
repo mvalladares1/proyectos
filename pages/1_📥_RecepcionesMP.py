@@ -502,12 +502,56 @@ if df is not None:
             st.write(f"**% IQF:** {rec['total_iqf']:.2f}")
             st.write(f"**% Block:** {rec['total_block']:.2f}")
         with detalle_cols[2]:
-            st.write(f"**Daño Mecánico:** {rec['dano_mecanico']:.2f}")
-            st.write(f"**Hongos:** {rec['hongos']:.2f}")
-            st.write(f"**Inmadura:** {rec['inmadura']:.2f}")
-            st.write(f"**Sobremadura:** {rec['sobremadura']:.2f}")
-            st.write(f"**Daño Insecto:** {rec['dano_insecto']:.2f}")
-            st.write(f"**Defecto Frutilla:** {rec['defecto_frutilla']:.2f}")
+            # Defectos dinámicos según tipo de fruta
+            tipo_fruta = rec.get('tipo_fruta', '').strip()
+            
+            # Definir campos de defecto por tipo de fruta
+            if tipo_fruta == 'Frutilla':
+                defectos = [
+                    ("Daño Mecánico", rec.get('dano_mecanico', 0)),
+                    ("Hongos", rec.get('hongos', 0)),
+                    ("Inmadura", rec.get('inmadura', 0)),
+                    ("Sobremadura", rec.get('sobremadura', 0)),
+                    ("Daño Insecto", rec.get('dano_insecto', 0)),
+                    ("Defecto Frutilla", rec.get('defecto_frutilla', 0)),
+                ]
+            elif tipo_fruta == 'Arándano':
+                defectos = [
+                    ("Fruta Verde", rec.get('fruta_verde', 0)),
+                    ("Hongos", rec.get('hongos', 0)),
+                    ("Inmadura/Decoloración", rec.get('inmadura', 0)),
+                    ("Sobremadura/Exudación", rec.get('sobremadura', 0)),
+                    ("Daño Insecto", rec.get('dano_insecto', 0)),
+                    ("Deshidratado", rec.get('deshidratado', 0)),
+                    ("Herida/Partida", rec.get('herida_partida', 0)),
+                ]
+            elif tipo_fruta in ['Frambuesa', 'Mora']:
+                defectos = [
+                    ("Daño Mecánico", rec.get('dano_mecanico', 0)),
+                    ("Hongos", rec.get('hongos', 0)),
+                    ("Inmadura", rec.get('inmadura', 0)),
+                    ("Sobremadura", rec.get('sobremadura', 0)),
+                    ("Daño Insecto", rec.get('dano_insecto', 0)),
+                    ("Deshidratado", rec.get('deshidratado', 0)),
+                    ("Crumble", rec.get('crumble', 0)),
+                ]
+            else:
+                # Defectos genéricos para otros tipos
+                defectos = [
+                    ("Daño Mecánico", rec.get('dano_mecanico', 0)),
+                    ("Hongos", rec.get('hongos', 0)),
+                    ("Inmadura", rec.get('inmadura', 0)),
+                    ("Sobremadura", rec.get('sobremadura', 0)),
+                    ("Daño Insecto", rec.get('dano_insecto', 0)),
+                ]
+            
+            st.markdown(f"**🔍 Defectos de {tipo_fruta or 'Calidad'}:**")
+            for nombre, valor in defectos:
+                val = valor if isinstance(valor, (int, float)) else 0
+                if val > 0:
+                    st.write(f"🔴 **{nombre}:** {val:.2f}")
+                else:
+                    st.write(f"⚪ **{nombre}:** {val:.2f}")
 
         st.markdown("#### 📦 Productos de la Recepción")
         if 'productos' in rec and isinstance(rec['productos'], list) and rec['productos']:
