@@ -72,167 +72,120 @@ class StockService:
         Las posiciones individuales se agregan a su cámara padre.
         La capacidad se cuenta por número de posiciones hijas.
         """
-        # PASO 1: Obtener todos los quants con stock
-        domain = [
-            ("quantity", ">", 0),
-            ("location_id.usage", "=", "internal"),
-            ("location_id.active", "=", True)
+        # PASO 1: Buscar las 4 cámaras principales directamente por nombre
+        CAMARAS_BUSCAR = [
+            "Camara 1 de -25",
+            "Camara 2 de -25",
+            "Camara 3 de -25",
+            "Camara 0",
         ]
-        fields = ["location_id", "product_id", "quantity", "package_id"]
+        
+        try:
+            # Buscar ubicaciones que contengan estos nombres
+            camaras_principales = self.odoo.search_read(
+                "stock.location",
+                [
+                    ("usage", "=", "internal"),
+                    ("active", "=", True),
+                    "|", "|", "|",
+                    ("name", "ilike", "Camara 1 de -25"),
+                    ("name", "ilike", "Camara 2 de -25"),
+                    ("name", "ilike", "Camara 3 de -25"),
+                    ("name", "ilike", "Camara 0"),
+                ],
+                ["id", "name", "display_name", "location_id"]
+            )
+        except Exception as e:
+            print(f"Error buscando cámaras principales: {e}")
+            return []
+
+        # Filtrar solo las cámaras que queremos (no posiciones)
+        camaras_map = {}
+        for cam in camaras_principales:
+            name = cam.get("name", "")
+            # Verificar que sea una de las cámaras principales (no una posición como CAM01A01)
+            for patron in CAMARAS_BUSCAR:
+                if patron.lower() in name.lower() and "CAM" not in name.upper()[:4]:
+                    parent = cam.get("location_id")
+                    camaras_map[cam["id"]] = {
+                        "id": cam["id"],
+                        "name": name,
+                        "full_name": cam.get("display_name", name),
+                        "parent_name": parent[1] if parent and isinstance(parent, (list, tuple)) else "",
+                        "capacity_pallets": 0,
+                        "occupied_pallets": 0,
+                        "stock_data": {},
+                        "child_location_ids": []
+                    }
+                    break
+
+        if not camaras_map:
+            print("No se encontraron cámaras principales")
+            return []
+
+        # PASO 2: Para cada cámara, obtener todas sus ubicaciones hijas
+        for cam_id in camaras_map.keys():
+            try:
+                child_locs = self.odoo.search(
+                    "stock.location",
+                    [
+                        ("location_id", "child_of", cam_id),
+                        ("usage", "=", "internal"),
+                        ("active", "=", True)
+                    ]
+                )
+                camaras_map[cam_id]["child_location_ids"] = child_locs
+                camaras_map[cam_id]["capacity_pallets"] = len(child_locs)  # Capacidad = posiciones
+            except Exception as e:
+                print(f"Error obteniendo hijos de cámara {cam_id}: {e}")
+                camaras_map[cam_id]["child_location_ids"] = [cam_id]
+                camaras_map[cam_id]["capacity_pallets"] = 1
+
+        # Crear mapa inverso: location_id -> chamber_id
+        loc_to_chamber = {}
+        for cam_id, cam_data in camaras_map.items():
+            for loc_id in cam_data["child_location_ids"]:
+                loc_to_chamber[loc_id] = cam_id
+
+        # PASO 3: Obtener todos los quants de las ubicaciones hijas
+        all_child_locs = list(loc_to_chamber.keys())
+        if not all_child_locs:
+            return list(camaras_map.values())
 
         try:
             quants = self.odoo.search_read(
                 "stock.quant",
-                domain,
-                fields,
+                [
+                    ("location_id", "in", all_child_locs),
+                    ("quantity", ">", 0)
+                ],
+                ["location_id", "product_id", "quantity", "package_id"],
                 limit=50000
             )
         except Exception as e:
             print(f"Error fetching quants: {e}")
-            return []
+            return list(camaras_map.values())
 
-        if not quants:
-            return []
-
-        # PASO 2: Obtener todas las ubicaciones relevantes
-        loc_ids = list({
-            q["location_id"][0]
-            for q in quants
-            if q.get("location_id") and isinstance(q["location_id"], (list, tuple))
-        })
-        if not loc_ids:
-            return []
-
-        # Obtener info de ubicaciones (con padre)
-        fields_loc = ["name", "display_name", "location_id", "usage", "active"]
-        try:
-            locations = self.odoo.read("stock.location", loc_ids, fields_loc)
-        except Exception as e:
-            print(f"Error fetching locations: {e}")
-            return []
-
-        # Crear mapa de ubicación -> info y encontrar padres
-        loc_map = {}
-        parent_ids = set()
-        for loc in locations:
-            loc_id = loc["id"]
-            parent = loc.get("location_id")
-            parent_id = parent[0] if parent and isinstance(parent, (list, tuple)) else None
-            parent_name = parent[1] if parent and isinstance(parent, (list, tuple)) and len(parent) > 1 else ""
-            loc_map[loc_id] = {
-                "name": loc.get("name", ""),
-                "display_name": loc.get("display_name", ""),
-                "parent_id": parent_id,
-                "parent_name": parent_name
-            }
-            if parent_id:
-                parent_ids.add(parent_id)
-
-        # PASO 3: Obtener info de padres y abuelos (carga recursiva hasta 3 niveles)
-        all_parent_ids = set(parent_ids)
-        for level in range(3):  # Hasta 3 niveles de padres
-            if not parent_ids:
-                break
-            try:
-                parent_locs = self.odoo.read("stock.location", list(parent_ids), ["name", "display_name", "location_id"])
-                new_parent_ids = set()
-                for ploc in parent_locs:
-                    grandparent = ploc.get("location_id")
-                    gp_id = grandparent[0] if grandparent and isinstance(grandparent, (list, tuple)) else None
-                    gp_name = grandparent[1] if grandparent and isinstance(grandparent, (list, tuple)) and len(grandparent) > 1 else ""
-                    
-                    loc_map[ploc["id"]] = {
-                        "name": ploc.get("name", ""),
-                        "display_name": ploc.get("display_name", ""),
-                        "parent_id": gp_id,
-                        "parent_name": gp_name
-                    }
-                    
-                    if gp_id and gp_id not in all_parent_ids and gp_id not in loc_map:
-                        new_parent_ids.add(gp_id)
-                        all_parent_ids.add(gp_id)
-                
-                parent_ids = new_parent_ids
-            except Exception as e:
-                print(f"Error fetching parent locations level {level}: {e}")
-                break
-
-        # PASO 4: Identificar cámaras principales
-        # Nombres exactos de las cámaras que queremos mostrar
-        CAMARAS_PRINCIPALES_NOMBRES = [
-            "Camara 1 de -25°C",
-            "Camara 2 de -25°C", 
-            "Camara 3 de -25°C",
-            "Camara 0°C",
-        ]
-        
-        # Crear set de IDs de cámaras principales
-        camaras_principales_ids = set()
-        for loc_id, loc_info in loc_map.items():
-            loc_name = loc_info.get("name", "")
-            for cam_nombre in CAMARAS_PRINCIPALES_NOMBRES:
-                # Comparar ignorando acentos y mayúsculas
-                if cam_nombre.lower().replace("°", "").replace("º", "") in loc_name.lower().replace("°", "").replace("º", ""):
-                    camaras_principales_ids.add(loc_id)
-                    break
-        
-        # Función para determinar a qué cámara principal pertenece una ubicación
-        def get_parent_chamber(loc_id):
-            """Busca recursivamente la cámara padre principal"""
-            if loc_id in camaras_principales_ids:
-                return loc_id
-            
-            if loc_id not in loc_map:
-                return None
-            
-            loc_info = loc_map[loc_id]
-            parent_id = loc_info.get("parent_id")
-            
-            if parent_id and parent_id != loc_id:
-                # Verificar si el padre es una cámara principal
-                if parent_id in camaras_principales_ids:
-                    return parent_id
-                # Si no, buscar recursivamente
-                return get_parent_chamber(parent_id)
-            
-            return None
-
-        # PASO 5: Contar posiciones por cámara y calcular pallets
-        chamber_positions = {}  # {chamber_id: set of position_ids}
-        chamber_pallets = {}    # {chamber_id: set of pallet_ids}
-        
-        for loc_id in loc_ids:
-            chamber_id = get_parent_chamber(loc_id)
-            if chamber_id:
-                chamber_positions.setdefault(chamber_id, set()).add(loc_id)
-
+        # Contar pallets por cámara
         for q in quants:
             loc = q.get("location_id")
             pkg = q.get("package_id")
             if loc and isinstance(loc, (list, tuple)):
                 loc_id = loc[0]
-                chamber_id = get_parent_chamber(loc_id)
-                if chamber_id and pkg and isinstance(pkg, (list, tuple)):
-                    chamber_pallets.setdefault(chamber_id, set()).add(pkg[0])
+                cam_id = loc_to_chamber.get(loc_id)
+                if cam_id and pkg and isinstance(pkg, (list, tuple)):
+                    # Usar un set temporal para contar pallets únicos
+                    if "pallet_set" not in camaras_map[cam_id]:
+                        camaras_map[cam_id]["pallet_set"] = set()
+                    camaras_map[cam_id]["pallet_set"].add(pkg[0])
 
-        # PASO 6: Crear estructura de cámaras
-        chambers = {}
-        for chamber_id in chamber_positions.keys():
-            if chamber_id not in loc_map:
-                continue
-            info = loc_map[chamber_id]
-            chambers[chamber_id] = {
-                "id": chamber_id,
-                "name": info["name"],
-                "full_name": info["display_name"],
-                "parent_name": info.get("parent_name", ""),
-                "capacity_pallets": len(chamber_positions.get(chamber_id, set())),  # Capacidad = posiciones
-                "occupied_pallets": len(chamber_pallets.get(chamber_id, set())),
-                "stock_data": {},
-                "child_location_ids": list(chamber_positions.get(chamber_id, set()))
-            }
+        # Actualizar conteo de pallets ocupados
+        for cam_id in camaras_map:
+            if "pallet_set" in camaras_map[cam_id]:
+                camaras_map[cam_id]["occupied_pallets"] = len(camaras_map[cam_id]["pallet_set"])
+                del camaras_map[cam_id]["pallet_set"]
 
-        # PASO 7: Obtener info de productos
+        # PASO 4: Obtener info de productos
         product_ids = {
             q["product_id"][0]
             for q in quants
@@ -248,7 +201,7 @@ class StockService:
                 "name": p.get("name", "")
             }
 
-        # PASO 8: Agregar stock por cámara y tipo fruta/manejo
+        # PASO 5: Agregar stock por cámara y tipo fruta/manejo
         for q in quants:
             loc = q.get("location_id")
             prod = q.get("product_id")
@@ -258,8 +211,8 @@ class StockService:
                 continue
             
             loc_id = loc[0]
-            chamber_id = get_parent_chamber(loc_id)
-            if not chamber_id or chamber_id not in chambers:
+            cam_id = loc_to_chamber.get(loc_id)
+            if not cam_id or cam_id not in camaras_map:
                 continue
 
             qty = q.get("quantity", 0) or 0
@@ -296,10 +249,10 @@ class StockService:
                 manejo = "N/A"
 
             key = f"{tipo_fruta} - {manejo}"
-            chambers[chamber_id]["stock_data"][key] = chambers[chamber_id]["stock_data"].get(key, 0) + qty
+            camaras_map[cam_id]["stock_data"][key] = camaras_map[cam_id]["stock_data"].get(key, 0) + qty
 
-        result = [data for data in chambers.values() if data["stock_data"]]
-        return result
+        # Retornar solo cámaras con stock (o todas si se requiere)
+        return list(camaras_map.values())
 
     def get_pallets(self, location_id: int, category: Optional[str] = None) -> List[Dict]:
         """

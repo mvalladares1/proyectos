@@ -9,6 +9,28 @@ from typing import Dict, List
 
 from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciales
 
+# ==================== FUNCIONES DE FORMATO CHILENO ====================
+def fmt_fecha(fecha):
+    """Formatea fecha a DD/MM/AAAA"""
+    if not fecha:
+        return ""
+    if isinstance(fecha, str):
+        try:
+            fecha = datetime.fromisoformat(fecha.replace('Z', '+00:00'))
+        except:
+            return fecha
+    return fecha.strftime("%d/%m/%Y")
+
+def fmt_numero(valor, decimales=0):
+    """Formatea número con punto de miles y coma decimal (chileno)"""
+    try:
+        v = float(valor)
+        if decimales == 0 and v == int(v):
+            return f"{int(v):,}".replace(",", ".")
+        return f"{v:,.{decimales}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return str(valor)
+
 # Configuración de la página
 st.set_page_config(
     page_title="Stock y Cámaras - Rio Futuro",
@@ -192,8 +214,8 @@ with tab1:
                 "Ocupado": camara["occupied_pallets"],
                 "Disponible": camara["capacity_pallets"] - camara["occupied_pallets"],
                 "Ocupación %": round(ocupacion, 1),
-                "Stock Total (kg)": round(total_kg, 2),
-                "Especies": len(camara["stock_data"])
+                "Stock (kg)": round(total_kg, 0),
+                "Tipos": len(camara["stock_data"])
             })
         
         df_camaras = pd.DataFrame(camaras_list)
@@ -205,37 +227,27 @@ with tab1:
         with col_f2:
             buscar_camara = st.text_input("Buscar cámara", "")
         
-        # Aplicar filtros
-        df_filtered = df_camaras[df_camaras["Ocupación %"] >= min_ocupacion]
+        # Aplicar filtros sobre datos originales
+        mask = df_camaras["Ocupación %"] >= min_ocupacion
         if buscar_camara:
-            df_filtered = df_filtered[
-                df_filtered["Cámara"].str.contains(buscar_camara, case=False, na=False) |
-                df_filtered["Ubicación Completa"].str.contains(buscar_camara, case=False, na=False)
-            ]
+            mask = mask & (
+                df_camaras["Cámara"].str.contains(buscar_camara, case=False, na=False) |
+                df_camaras["Ubicación Completa"].str.contains(buscar_camara, case=False, na=False)
+            )
         
-        # Mostrar tabla con formato
-        def occupancy_style(value):
-            try:
-                val = float(value)
-            except (TypeError, ValueError):
-                return ""
-
-            if val >= 90:
-                return "background-color:#8b0000;color:white"
-            if val >= 75:
-                return "background-color:#c0392b;color:white"
-            if val >= 50:
-                return "background-color:#e67e22;color:white"
-            if val >= 25:
-                return "background-color:#f1c40f;color:black"
-            return "background-color:#27ae60;color:white"
-
-        styled_df = df_filtered.style.applymap(occupancy_style, subset=["Ocupación %"])
+        # Crear df formateado con filtro aplicado
+        df_filtered = df_camaras[mask].copy()
+        df_filtered["Capacidad"] = df_filtered["Capacidad"].apply(lambda x: fmt_numero(x))
+        df_filtered["Ocupado"] = df_filtered["Ocupado"].apply(lambda x: fmt_numero(x))
+        df_filtered["Disponible"] = df_filtered["Disponible"].apply(lambda x: fmt_numero(x))
+        df_filtered["Ocupación %"] = df_filtered["Ocupación %"].apply(lambda x: fmt_numero(x, 1))
+        df_filtered["Stock (kg)"] = df_filtered["Stock (kg)"].apply(lambda x: fmt_numero(x))
 
         st.dataframe(
-            styled_df,
+            df_filtered,
             use_container_width=True,
-            height=400
+            height=300,
+            hide_index=True
         )
         
         # Detalle de stock por Tipo Fruta / Manejo
