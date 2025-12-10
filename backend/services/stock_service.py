@@ -1,29 +1,14 @@
 """
 Servicio para gestión de Stock y Cámaras
 Migrado del dashboard original de producción
+OPTIMIZADO: Incluye caché para ubicaciones y productos
 """
 from typing import List, Dict, Optional
 from datetime import datetime
 
 from shared.odoo_client import OdooClient
-
-
-def clean_record(record: Dict) -> Dict:
-    """Limpia un registro de Odoo convirtiendo tuplas en diccionarios"""
-    if not record:
-        return {}
-    
-    cleaned = {}
-    for key, value in record.items():
-        if isinstance(value, (list, tuple)) and len(value) == 2 and isinstance(value[0], int):
-            # Es una relación many2one: (id, nombre)
-            cleaned[key] = {"id": value[0], "name": value[1]}
-        elif isinstance(value, list) and value and isinstance(value[0], int):
-            # Es una relación many2many o one2many: [id1, id2, ...]
-            cleaned[key] = value
-        else:
-            cleaned[key] = value
-    return cleaned
+from backend.utils import clean_record
+from backend.cache import get_cache, OdooCache
 
 
 class StockService:
@@ -31,6 +16,55 @@ class StockService:
 
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
+        self._cache = get_cache()
+    
+    def _get_products_cached(self, product_ids: List[int]) -> Dict[int, Dict]:
+        """
+        Obtiene información de productos usando caché.
+        TTL: 30 minutos (productos cambian poco).
+        """
+        if not product_ids:
+            return {}
+        
+        cache_key = f"products:{hash(tuple(sorted(product_ids)))}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+        
+        try:
+            p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name"])
+            products_map = {p["id"]: p for p in p_data}
+            self._cache.set(cache_key, products_map, ttl=OdooCache.TTL_PRODUCTOS)
+            return products_map
+        except Exception as e:
+            print(f"Error fetching products: {e}")
+            return {}
+    
+    def _get_locations_cached(self, location_ids: List[int]) -> List[Dict]:
+        """
+        Obtiene información de ubicaciones usando caché.
+        TTL: 1 hora (ubicaciones cambian muy raramente).
+        """
+        if not location_ids:
+            return []
+        
+        cache_key = f"locations:{hash(tuple(sorted(location_ids)))}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+        
+        fields_loc = [
+            "name", "display_name", "location_id", "usage",
+            "active", "x_capacity_pallets", "pallet_capacity"
+        ]
+        
+        try:
+            locations = self.odoo.read("stock.location", list(location_ids), fields_loc)
+            self._cache.set(cache_key, locations, ttl=OdooCache.TTL_UBICACIONES)
+            return locations
+        except Exception as e:
+            print(f"Error fetching locations: {e}")
+            return []
 
     def get_chambers_stock(self) -> List[Dict]:
         """
@@ -73,21 +107,8 @@ class StockService:
             if loc and pkg and isinstance(loc, (list, tuple)) and isinstance(pkg, (list, tuple)):
                 pallets_per_location.setdefault(loc[0], set()).add(pkg[0])
 
-        fields_loc = [
-            "name",
-            "display_name",
-            "location_id",
-            "usage",
-            "active",
-            "x_capacity_pallets",
-            "pallet_capacity",
-        ]
-
-        try:
-            locations = self.odoo.read("stock.location", loc_ids, fields_loc)
-        except Exception as e:
-            print(f"Error fetching locations: {e}")
-            locations = []
+        # OPTIMIZADO: usar caché para ubicaciones (1 hora TTL)
+        locations = self._get_locations_cached(loc_ids)
 
         chambers = {}
         for loc in locations:
@@ -140,21 +161,15 @@ class StockService:
             for q in quants
             if q.get("product_id") and isinstance(q["product_id"], (list, tuple))
         }
+        
+        # OPTIMIZADO: usar caché para productos
+        products_raw = self._get_products_cached(list(product_ids))
         products_info = {}
-        if product_ids:
-            try:
-                p_data = self.odoo.read(
-                    "product.product",
-                    list(product_ids),
-                    ["categ_id", "name"]
-                )
-                for p in p_data:
-                    products_info[p["id"]] = {
-                        "category": p["categ_id"][1] if p.get("categ_id") and isinstance(p.get("categ_id"), (list, tuple)) else "Sin Categoria",
-                        "name": p.get("name", "")
-                    }
-            except Exception as e:
-                print(f"Error fetching products: {e}")
+        for pid, p in products_raw.items():
+            products_info[pid] = {
+                "category": p["categ_id"][1] if p.get("categ_id") and isinstance(p.get("categ_id"), (list, tuple)) else "Sin Categoria",
+                "name": p.get("name", "")
+            }
 
         for q in quants:
             loc = q.get("location_id")
@@ -199,14 +214,15 @@ class StockService:
             "in_date", "location_id"
         ]
         
+        # OPTIMIZADO: usar search_read en lugar de search + read separados
         try:
-            quant_ids = self.odoo.search(
+            quants = self.odoo.search_read(
                 "stock.quant",
                 domain,
+                fields,
                 limit=5000,
                 order="in_date desc"
             )
-            quants = self.odoo.read("stock.quant", quant_ids, fields) if quant_ids else []
         except Exception as e:
             print(f"Error fetching pallets: {e}")
             return []
@@ -298,14 +314,15 @@ class StockService:
             "location_id", "package_id"
         ]
         
+        # OPTIMIZADO: usar search_read en lugar de search + read separados
         try:
-            quant_ids = self.odoo.search(
+            quants = self.odoo.search_read(
                 "stock.quant",
                 domain,
+                fields,
                 limit=20000,
                 order="in_date desc"
             )
-            quants = self.odoo.read("stock.quant", quant_ids, fields) if quant_ids else []
         except Exception as e:
             print(f"Error fetching lots: {e}")
             return []

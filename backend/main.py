@@ -65,6 +65,28 @@ async def health_check():
     return {"status": "healthy"}
 
 
+# ============ Cache Management Endpoints ============
+from backend.cache import get_cache
+
+
+@app.get("/api/v1/cache/stats")
+async def cache_stats():
+    """
+    Obtiene estadísticas del caché.
+    Retorna: hits, misses, hit_rate (%), entries activas
+    """
+    return get_cache().get_stats()
+
+
+@app.post("/api/v1/cache/clear")
+async def cache_clear():
+    """
+    Limpia todo el caché. Usar con precaución.
+    """
+    get_cache().clear()
+    return {"status": "ok", "message": "Cache cleared"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

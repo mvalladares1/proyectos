@@ -1,30 +1,15 @@
 """
 Servicio de Producción - Lógica de negocio para órdenes de fabricación
 Migrado del dashboard original de producción
+OPTIMIZADO: Incluye caché para KPIs
 """
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 from fastapi import HTTPException
 
 from shared.odoo_client import OdooClient
-
-
-def clean_record(record: Dict) -> Dict:
-    """Limpia un registro de Odoo convirtiendo tuplas en diccionarios"""
-    if not record:
-        return {}
-    
-    cleaned = {}
-    for key, value in record.items():
-        if isinstance(value, (list, tuple)) and len(value) == 2 and isinstance(value[0], int):
-            # Es una relación many2one: (id, nombre)
-            cleaned[key] = {"id": value[0], "name": value[1]}
-        elif isinstance(value, list) and value and isinstance(value[0], int):
-            # Es una relación many2many o one2many: [id1, id2, ...]
-            cleaned[key] = value
-        else:
-            cleaned[key] = value
-    return cleaned
+from backend.utils import clean_record
+from backend.cache import get_cache, OdooCache
 
 
 class ProduccionService:
@@ -35,6 +20,7 @@ class ProduccionService:
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
+        self._cache = get_cache()
     
     def get_ordenes_fabricacion(self, estado: Optional[str] = None,
                                 fecha_desde: Optional[str] = None,
@@ -292,20 +278,62 @@ class ProduccionService:
         }
     
     def get_kpis(self) -> Dict[str, int]:
-        """Obtiene KPIs de producción."""
-        total = len(self.odoo.search('mrp.production', []))
-        progress = len(self.odoo.search('mrp.production', [['state', '=', 'progress']]))
-        confirmed = len(self.odoo.search('mrp.production', [['state', '=', 'confirmed']]))
-        done = len(self.odoo.search('mrp.production', [['state', '=', 'done']]))
-        to_close = len(self.odoo.search('mrp.production', [['state', '=', 'to_close']]))
+        """
+        Obtiene KPIs de producción.
+        OPTIMIZADO: Usa read_group + caché de 5 minutos.
+        """
+        # Intentar obtener del caché primero
+        cache_key = "produccion_kpis"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
         
-        return {
-            'total_ordenes': total,
-            'ordenes_progress': progress,
-            'ordenes_confirmed': confirmed,
-            'ordenes_done': done,
-            'ordenes_to_close': to_close
-        }
+        try:
+            # Una sola llamada a read_group para obtener conteos por estado
+            grouped = self.odoo.execute(
+                'mrp.production', 'read_group',
+                [],  # domain vacío = todos
+                ['state'],  # campos a leer
+                ['state']  # agrupar por estado
+            )
+            
+            # Convertir resultado a diccionario
+            state_counts = {g['state']: g['state_count'] for g in grouped}
+            
+            total = sum(state_counts.values())
+            
+            result = {
+                'total_ordenes': total,
+                'ordenes_progress': state_counts.get('progress', 0),
+                'ordenes_confirmed': state_counts.get('confirmed', 0),
+                'ordenes_done': state_counts.get('done', 0),
+                'ordenes_to_close': state_counts.get('to_close', 0)
+            }
+            
+            # Guardar en caché por 5 minutos
+            self._cache.set(cache_key, result, ttl=OdooCache.TTL_KPIS)
+            return result
+            
+        except Exception as e:
+            # Fallback al método anterior si read_group falla
+            print(f"read_group failed, using fallback: {e}")
+            total = len(self.odoo.search('mrp.production', []))
+            progress = len(self.odoo.search('mrp.production', [['state', '=', 'progress']]))
+            confirmed = len(self.odoo.search('mrp.production', [['state', '=', 'confirmed']]))
+            done = len(self.odoo.search('mrp.production', [['state', '=', 'done']]))
+            to_close = len(self.odoo.search('mrp.production', [['state', '=', 'to_close']]))
+            
+            result = {
+                'total_ordenes': total,
+                'ordenes_progress': progress,
+                'ordenes_confirmed': confirmed,
+                'ordenes_done': done,
+                'ordenes_to_close': to_close
+            }
+            
+            # Incluso en fallback, cachear para evitar spam de llamadas
+            self._cache.set(cache_key, result, ttl=OdooCache.TTL_KPIS)
+            return result
     
     def get_resumen(self) -> Dict[str, Any]:
         """Obtiene un resumen general de producción."""

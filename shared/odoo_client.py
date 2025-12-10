@@ -138,6 +138,79 @@ class OdooClient:
             self.db, self.uid, self.password,
             model, method, list(args), kwargs
         )
+    
+    # ============ Métodos de Consulta Paralela ============
+    
+    def parallel_search_read(self, queries: List[Dict], max_workers: int = 5) -> List[List[Dict]]:
+        """
+        Ejecuta múltiples search_read en paralelo usando ThreadPoolExecutor.
+        
+        Args:
+            queries: Lista de diccionarios con parámetros de búsqueda:
+                - model: str (requerido)
+                - domain: List (requerido)
+                - fields: List[str] (opcional)
+                - limit: int (opcional)
+                - order: str (opcional)
+            max_workers: Número máximo de hilos (default: 5)
+            
+        Returns:
+            Lista de resultados en el mismo orden que las queries
+            
+        Ejemplo:
+            results = odoo.parallel_search_read([
+                {"model": "product.product", "domain": [], "fields": ["name"]},
+                {"model": "res.partner", "domain": [], "fields": ["name"]},
+            ])
+            products, partners = results
+        """
+        import concurrent.futures
+        
+        def execute_query(query: Dict) -> List[Dict]:
+            return self.search_read(
+                model=query['model'],
+                domain=query.get('domain', []),
+                fields=query.get('fields'),
+                limit=query.get('limit'),
+                order=query.get('order')
+            )
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(execute_query, q) for q in queries]
+            results = [f.result() for f in futures]
+        
+        return results
+    
+    def parallel_execute(self, calls: List[Dict], max_workers: int = 5) -> List[Any]:
+        """
+        Ejecuta múltiples métodos en paralelo.
+        
+        Args:
+            calls: Lista de diccionarios con:
+                - model: str
+                - method: str
+                - args: List (opcional)
+                - kwargs: Dict (opcional)
+            max_workers: Número máximo de hilos
+            
+        Returns:
+            Lista de resultados en el mismo orden
+        """
+        import concurrent.futures
+        
+        def execute_call(call: Dict) -> Any:
+            return self.execute(
+                call['model'],
+                call['method'],
+                *call.get('args', []),
+                **call.get('kwargs', {})
+            )
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(execute_call, c) for c in calls]
+            results = [f.result() for f in futures]
+        
+        return results
 
 
 def get_odoo_client(username: str = None, password: str = None, 

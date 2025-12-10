@@ -5,18 +5,7 @@ Código original del dashboard funcional
 """
 from typing import List, Dict, Optional
 from shared.odoo_client import OdooClient
-
-
-def clean(value):
-    """Limpia valores de Odoo convirtiendo listas [id, name] a diccionarios"""
-    if isinstance(value, list) and len(value) == 2:
-        return {"id": value[0], "name": value[1]}
-    return value
-
-
-def clean_record(rec: dict) -> dict:
-    """Limpia todos los campos de un registro de Odoo"""
-    return {k: clean(v) for k, v in rec.items()}
+from backend.utils import clean_record, get_name_from_relation, get_state_display
 
 
 class ContainersService:
@@ -248,8 +237,10 @@ class ContainersService:
         return state_map.get(state, state)
 
     def get_container_detail(self, sale_id: int) -> Dict:
-        """Obtiene el detalle completo de un container/venta específico"""
-        # Buscar fabricaciones para este sale_id
+        """
+        Obtiene el detalle completo de un container/venta específico.
+        OPTIMIZADO: Usa consultas paralelas para producciones y venta.
+        """
         prod_domain = [("x_studio_po_asociada_1", "=", sale_id)]
         
         prod_fields = [
@@ -260,12 +251,41 @@ class ContainersService:
             "x_studio_sala_de_proceso"
         ]
         
+        sale_fields = [
+            "name", "partner_id", "date_order", "commitment_date",
+            "state", "amount_total", "currency_id", "origin", "order_line"
+        ]
+        
+        # OPTIMIZADO: Ejecutar búsqueda de producciones y lectura de venta en paralelo
         try:
-            prod_ids = self.odoo.search("mrp.production", prod_domain)
-            prods_raw = self.odoo.read("mrp.production", prod_ids, prod_fields) if prod_ids else []
+            results = self.odoo.parallel_search_read([
+                {
+                    "model": "mrp.production",
+                    "domain": prod_domain,
+                    "fields": prod_fields
+                },
+                {
+                    "model": "sale.order",
+                    "domain": [("id", "=", sale_id)],
+                    "fields": sale_fields
+                }
+            ])
+            prods_raw = results[0]
+            sales_raw = results[1]
         except Exception as e:
-            print(f"Error: {e}")
-            prods_raw = []
+            print(f"Error parallel query: {e}")
+            # Fallback a consultas secuenciales
+            try:
+                prod_ids = self.odoo.search("mrp.production", prod_domain)
+                prods_raw = self.odoo.read("mrp.production", prod_ids, prod_fields) if prod_ids else []
+                sales_raw = self.odoo.read("sale.order", [sale_id], sale_fields)
+            except Exception as e2:
+                print(f"Error fallback: {e2}")
+                return {}
+        
+        if not sales_raw:
+            return {}
+        sale = sales_raw[0]
         
         productions = []
         kg_producidos = 0
@@ -291,28 +311,13 @@ class ContainersService:
                 "qty_produced": qty,
                 "kg_producidos": qty,
                 "state": p.get("state", ""),
-                "state_display": self._get_state_display(p.get("state", "")),
+                "state_display": get_state_display(p.get("state", "")),
                 "date_planned_start": p.get("date_planned_start", ""),
                 "date_start": p.get("date_start", ""),
                 "date_finished": p.get("date_finished", ""),
                 "user_name": user_name,
                 "sala_proceso": sala_name
             })
-        
-        # Obtener datos de la venta
-        sale_fields = [
-            "name", "partner_id", "date_order", "commitment_date",
-            "state", "amount_total", "currency_id", "origin", "order_line"
-        ]
-        
-        try:
-            sales_raw = self.odoo.read("sale.order", [sale_id], sale_fields)
-            if not sales_raw:
-                return {}
-            sale = sales_raw[0]
-        except Exception as e:
-            print(f"Error: {e}")
-            return {}
         
         sale_clean = clean_record(sale)
         
