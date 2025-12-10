@@ -179,146 +179,10 @@ if df is not None:
                 agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
                 agrup[tipo][manejo]['block_vals'].append(block_val)
     
-    # Construir HTML de la tabla estilizada
+    # Construir tabla con columnas de Streamlit para mejor visualización
     if agrup:
-        html_table = """
-        <style>
-        .resumen-tabla {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            font-family: 'Segoe UI', sans-serif;
-            font-size: 14px;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            margin: 10px 0;
-        }
-        .resumen-tabla thead {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        }
-        .resumen-tabla th {
-            padding: 14px 16px;
-            text-align: right;
-            color: #fff;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 12px;
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid #0f3460;
-        }
-        .resumen-tabla th:first-child {
-            text-align: left;
-            width: 28%;
-        }
-        .resumen-tabla td {
-            padding: 12px 16px;
-            text-align: right;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-        }
-        .resumen-tabla td:first-child {
-            text-align: left;
-        }
-        .resumen-tabla .fila-fruta {
-            background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%);
-        }
-        .resumen-tabla .fila-fruta td {
-            font-weight: 700;
-            font-size: 15px;
-            color: #fff;
-            border-bottom: 2px solid rgba(255,255,255,0.15);
-        }
-        .resumen-tabla .fila-fruta td:first-child {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .resumen-tabla .indicador-fruta {
-            width: 14px;
-            height: 14px;
-            border-radius: 4px;
-            display: inline-block;
-            flex-shrink: 0;
-        }
-        .resumen-tabla .fila-manejo {
-            background: rgba(0,0,0,0.2);
-        }
-        .resumen-tabla .fila-manejo td {
-            color: rgba(255,255,255,0.85);
-            font-size: 13px;
-        }
-        .resumen-tabla .fila-manejo td:first-child {
-            padding-left: 40px;
-            color: rgba(255,255,255,0.7);
-        }
-        .resumen-tabla .fila-manejo:hover {
-            background: rgba(255,255,255,0.05);
-        }
-        .resumen-tabla .badge-manejo {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-        .resumen-tabla .badge-organico {
-            background: rgba(46, 204, 113, 0.2);
-            color: #2ecc71;
-            border: 1px solid rgba(46, 204, 113, 0.3);
-        }
-        .resumen-tabla .badge-convencional {
-            background: rgba(52, 152, 219, 0.2);
-            color: #3498db;
-            border: 1px solid rgba(52, 152, 219, 0.3);
-        }
-        .resumen-tabla .badge-default {
-            background: rgba(149, 165, 166, 0.2);
-            color: #95a5a6;
-            border: 1px solid rgba(149, 165, 166, 0.3);
-        }
-        .resumen-tabla .fila-total {
-            background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
-        }
-        .resumen-tabla .fila-total td {
-            font-weight: 700;
-            font-size: 15px;
-            color: #fff;
-            border-top: 2px solid #3498db;
-            border-bottom: none;
-        }
-        .resumen-tabla .valor-kg {
-            color: #3498db;
-            font-weight: 600;
-        }
-        .resumen-tabla .valor-costo {
-            color: #2ecc71;
-        }
-        .resumen-tabla .valor-porcentaje {
-            font-weight: 600;
-        }
-        .resumen-tabla .iqf-valor {
-            color: #9b59b6;
-        }
-        .resumen-tabla .block-valor {
-            color: #e67e22;
-        }
-        </style>
-        <table class="resumen-tabla">
-            <thead>
-                <tr>
-                    <th>🍇 Tipo Fruta / Manejo</th>
-                    <th>📦 Kg</th>
-                    <th>💰 Costo Total</th>
-                    <th>📊 Costo/Kg</th>
-                    <th>❄️ % IQF</th>
-                    <th>🧊 % Block</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
-        
+        # Construir los datos de la tabla
+        tabla_rows = []
         total_kg_tabla = 0
         total_costo_tabla = 0
         
@@ -329,19 +193,21 @@ if df is not None:
             total_kg_tabla += tipo_kg
             total_costo_tabla += tipo_costo
             
-            color = colores_fruta.get(tipo, '#6c757d')
+            # Emoji por tipo de fruta
+            emoji_fruta = {'Arándano': '🫐', 'Frambuesa': '🍒', 'Frutilla': '🍓', 'Mora': '🫐', 'Cereza': '🍒'}.get(tipo, '🍇')
             
-            html_table += f"""
-                <tr class="fila-fruta">
-                    <td><span class="indicador-fruta" style="background-color: {color};"></span> {tipo}</td>
-                    <td class="valor-kg">{tipo_kg:,.0f}</td>
-                    <td class="valor-costo">${tipo_costo:,.0f}</td>
-                    <td>${tipo_costo_prom:,.0f}</td>
-                    <td>—</td>
-                    <td>—</td>
-                </tr>
-            """
+            # Fila de Tipo Fruta (totalizador)
+            tabla_rows.append({
+                'tipo': 'fruta',
+                'Descripción': f"{emoji_fruta} {tipo}",
+                'Kg': tipo_kg,
+                'Costo Total': tipo_costo,
+                'Costo/Kg': tipo_costo_prom,
+                '% IQF': None,
+                '% Block': None
+            })
             
+            # Filas de Manejo
             for manejo in sorted(agrup[tipo].keys(), key=lambda m: agrup[tipo][m]['kg'], reverse=True):
                 v = agrup[tipo][manejo]
                 kg = v['kg']
@@ -351,40 +217,61 @@ if df is not None:
                 prom_block = sum(v['block_vals']) / len(v['block_vals']) if v['block_vals'] else 0
                 
                 if 'orgánico' in manejo.lower() or 'organico' in manejo.lower():
-                    badge_class = 'badge-organico'
                     icono = '🌱'
                 elif 'convencional' in manejo.lower():
-                    badge_class = 'badge-convencional'
                     icono = '🏭'
                 else:
-                    badge_class = 'badge-default'
                     icono = '📋'
                 
-                html_table += f"""
-                    <tr class="fila-manejo">
-                        <td><span class="badge-manejo {badge_class}">{icono} {manejo}</span></td>
-                        <td class="valor-kg">{kg:,.0f}</td>
-                        <td class="valor-costo">${costo:,.0f}</td>
-                        <td>${costo_prom:,.0f}</td>
-                        <td class="valor-porcentaje iqf-valor">{prom_iqf:.1f}%</td>
-                        <td class="valor-porcentaje block-valor">{prom_block:.1f}%</td>
-                    </tr>
-                """
+                tabla_rows.append({
+                    'tipo': 'manejo',
+                    'Descripción': f"    ↳ {icono} {manejo}",
+                    'Kg': kg,
+                    'Costo Total': costo,
+                    'Costo/Kg': costo_prom,
+                    '% IQF': prom_iqf,
+                    '% Block': prom_block
+                })
         
-        html_table += f"""
-                <tr class="fila-total">
-                    <td>📊 TOTAL GENERAL</td>
-                    <td class="valor-kg">{total_kg_tabla:,.0f}</td>
-                    <td class="valor-costo">${total_costo_tabla:,.0f}</td>
-                    <td>—</td>
-                    <td>—</td>
-                    <td>—</td>
-                </tr>
-            </tbody>
-        </table>
-        """
+        # Fila total
+        tabla_rows.append({
+            'tipo': 'total',
+            'Descripción': '📊 TOTAL GENERAL',
+            'Kg': total_kg_tabla,
+            'Costo Total': total_costo_tabla,
+            'Costo/Kg': None,
+            '% IQF': None,
+            '% Block': None
+        })
         
-        st.markdown(html_table, unsafe_allow_html=True)
+        # Crear DataFrame
+        df_resumen = pd.DataFrame(tabla_rows)
+        
+        # Formatear para mostrar
+        df_display = df_resumen.copy()
+        df_display['Kg'] = df_display['Kg'].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
+        df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "—")
+        df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) and x > 0 else "—")
+        df_display['% IQF'] = df_display['% IQF'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) and x > 0 else "—")
+        df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) and x > 0 else "—")
+        
+        # Mostrar usando columnas estilizadas
+        df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', '% IQF', '% Block']]
+        
+        # Usar st.dataframe con column_config para mejor visualización
+        st.dataframe(
+            df_show,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Descripción': st.column_config.TextColumn('🍇 Tipo / Manejo', width='large'),
+                'Kg': st.column_config.TextColumn('📦 Kg', width='small'),
+                'Costo Total': st.column_config.TextColumn('💰 Costo Total', width='medium'),
+                'Costo/Kg': st.column_config.TextColumn('📊 $/Kg', width='small'),
+                '% IQF': st.column_config.TextColumn('❄️ IQF', width='small'),
+                '% Block': st.column_config.TextColumn('🧊 Block', width='small'),
+            }
+        )
 
     # --- Botones de descarga de informe PDF ---
     st.markdown("---")
