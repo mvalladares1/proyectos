@@ -16,6 +16,44 @@ MAX_DAYS_FETCH = 90
 from backend.services.recepcion_service import get_recepciones_mp
 
 
+# --- Funciones de formateo chileno ---
+def fmt_fecha(fecha_str):
+    """Convierte fecha ISO a formato DD/MM/AAAA"""
+    if not fecha_str:
+        return ""
+    try:
+        if isinstance(fecha_str, (date, datetime)):
+            return fecha_str.strftime("%d/%m/%Y")
+        if isinstance(fecha_str, str):
+            if " " in fecha_str:
+                fecha_str = fecha_str.split(" ")[0]
+            elif "T" in fecha_str:
+                fecha_str = fecha_str.split("T")[0]
+            dt = datetime.strptime(fecha_str, "%Y-%m-%d")
+            return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+    return str(fecha_str)
+
+def fmt_numero(valor, decimales=0):
+    """Formatea número con punto como miles y coma como decimal"""
+    if valor is None:
+        return "0"
+    try:
+        if decimales > 0:
+            formatted = f"{valor:,.{decimales}f}"
+        else:
+            formatted = f"{valor:,.0f}"
+        formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+        return formatted
+    except:
+        return str(valor)
+
+def fmt_dinero(valor, decimales=0):
+    """Formatea valor monetario con símbolo $"""
+    return f"${fmt_numero(valor, decimales)}"
+
+
 def _normalize_categoria(cat: str) -> str:
     if not cat:
         return ''
@@ -282,9 +320,9 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     else:
         temp_año_ini = f_fin.year - 1
     temporada_str = f"Temporada {temp_año_ini}-{temp_año_ini + 1}"
-    generated_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    generated_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 
-    title = f"Informe de Recepciones MP: {fecha_inicio} a {fecha_fin}"
+    title = f"Informe de Recepciones MP: {fmt_fecha(fecha_inicio)} a {fmt_fecha(fecha_fin)}"
     elements.append(Paragraph(title, styles['Title']))
     elements.append(Spacer(1, 4))
     # Agregar semana y temporada (fecha de generación va al footer)
@@ -332,7 +370,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
                 pass
         # Título compacto al centro
         canvas.setFont('Helvetica-Bold', 9)
-        canvas.drawCentredString(PAGE_WIDTH / 2.0, header_y - 6, f"Recepciones MP: {fecha_inicio} a {fecha_fin}")
+        canvas.drawCentredString(PAGE_WIDTH / 2.0, header_y - 6, f"Recepciones MP: {fmt_fecha(fecha_inicio)} a {fmt_fecha(fecha_fin)}")
         # Rango a la derecha
         canvas.setFont('Helvetica', 8)
         canvas.drawRightString(PAGE_WIDTH - doc.rightMargin, header_y - 6, f"Página {doc.page}")
@@ -344,9 +382,9 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     # Tabla principal por fruta
     elements.append(Paragraph("Resumen por Tipo de Fruta", styles['Heading2']))
     # KPIs generales
-    elements.append(Paragraph(f"Total Kg Recepcionados (fruta): {total_kg:,.2f}", styles['Normal']))
-    elements.append(Paragraph(f"Bandejas recepcionadas (unidades): {total_bandejas:,.0f}", styles['Normal']))
-    elements.append(Paragraph(f"Costo Total MP: ${total_costo:,.0f}", styles['Normal']))
+    elements.append(Paragraph(f"Total Kg Recepcionados (fruta): {fmt_numero(total_kg, 2)}", styles['Normal']))
+    elements.append(Paragraph(f"Bandejas recepcionadas (unidades): {fmt_numero(total_bandejas, 0)}", styles['Normal']))
+    elements.append(Paragraph(f"Costo Total MP: {fmt_dinero(total_costo)}", styles['Normal']))
     elements.append(Spacer(1, 6))
     
     # Nota sobre cálculo de costo promedio
@@ -363,10 +401,10 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         envases_tbl = [["Tipo de Envase", "Cantidad (unidades)"]]
         total_envases = 0
         for nombre, cantidad in sorted(envases_por_tipo.items(), key=lambda x: x[1], reverse=True):
-            envases_tbl.append([nombre, f"{cantidad:,.0f}"])
+            envases_tbl.append([nombre, fmt_numero(cantidad, 0)])
             total_envases += cantidad
         # Fila de totales
-        envases_tbl.append(["TOTAL", f"{total_envases:,.0f}"])
+        envases_tbl.append(["TOTAL", fmt_numero(total_envases, 0)])
         env_t = Table(envases_tbl, hAlign='LEFT', repeatRows=1)
         env_t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#666666')),
@@ -391,13 +429,13 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         tipo_fruta = tipo_data['tipo_fruta']
         tipo_kg = tipo_data['kg_total']
         tipo_costo = tipo_data['costo_total']
-        tipo_costo_prom = f"${(tipo_costo / tipo_kg):,.2f}" if tipo_kg > 0 else "-"
+        tipo_costo_prom = fmt_dinero(tipo_costo / tipo_kg, 2) if tipo_kg > 0 else "-"
         
         # Fila de Tipo Fruta (totalizador)
         tbl_data.append([
             tipo_fruta,
-            f"{tipo_kg:,.2f}",
-            f"${tipo_costo:,.0f}",
+            fmt_numero(tipo_kg, 2),
+            fmt_dinero(tipo_costo),
             tipo_costo_prom,
             "-",
             "-"
@@ -408,22 +446,22 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         # Filas de Manejo (indentadas)
         for m in tipo_data['manejos']:
             manejo_name = m['manejo']
-            costo_prom = f"${m['costo_prom']:,.2f}" if m['costo_prom'] is not None else "-"
+            costo_prom = fmt_dinero(m['costo_prom'], 2) if m['costo_prom'] is not None else "-"
             tbl_data.append([
                 f"   → {manejo_name}",  # Indentado
-                f"{m['kg']:,.2f}",
-                f"${m['costo']:,.0f}",
+                fmt_numero(m['kg'], 2),
+                fmt_dinero(m['costo']),
                 costo_prom,
-                f"{m['prom_iqf']:.2f}%",
-                f"{m['prom_block']:.2f}%"
+                f"{fmt_numero(m['prom_iqf'], 2)}%",
+                f"{fmt_numero(m['prom_block'], 2)}%"
             ])
             row_idx += 1
     
     # Fila de totales generales
     tbl_data.append([
         'TOTAL GENERAL',
-        f"{total_kg:,.2f}",
-        f"${total_costo:,.0f}",
+        fmt_numero(total_kg, 2),
+        fmt_dinero(total_costo),
         '-',
         '-',
         '-'
@@ -500,10 +538,10 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         pdata = [["Productor", "Kg"]]
         total_especie = 0
         for prod, kg in r['top_productores']:
-            pdata.append([prod, f"{kg:,.2f}"])
+            pdata.append([prod, fmt_numero(kg, 2)])
             total_especie += kg
         # Fila de total por especie
-        pdata.append(["TOTAL", f"{total_especie:,.2f}"])
+        pdata.append(["TOTAL", fmt_numero(total_especie, 2)])
         pt = Table(pdata, hAlign='LEFT', repeatRows=1)
         pt.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -523,12 +561,12 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         prev_total_kg = 0
         prev_total_costo = 0
         for r in prev_agg:
-            costo_prom = f"${r['costo_prom']:,.2f}" if r['costo_prom'] is not None else "-"
-            p_tbl.append([r['tipo_fruta'], f"{r['kg']:,.2f}", f"${r['costo']:,.0f}", costo_prom])
+            costo_prom = fmt_dinero(r['costo_prom'], 2) if r['costo_prom'] is not None else "-"
+            p_tbl.append([r['tipo_fruta'], fmt_numero(r['kg'], 2), fmt_dinero(r['costo']), costo_prom])
             prev_total_kg += r['kg']
             prev_total_costo += r['costo']
         # Fila de totales
-        p_tbl.append(["TOTAL", f"{prev_total_kg:,.2f}", f"${prev_total_costo:,.0f}", "-"])
+        p_tbl.append(["TOTAL", fmt_numero(prev_total_kg, 2), fmt_dinero(prev_total_costo), "-"])
         pt2 = Table(p_tbl, hAlign='LEFT', repeatRows=1)
         pt2.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -546,12 +584,12 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         month_total_kg = 0
         month_total_costo = 0
         for r in month_agg:
-            costo_prom = f"${r['costo_prom']:,.2f}" if r['costo_prom'] is not None else "-"
-            m_tbl.append([r['tipo_fruta'], f"{r['kg']:,.2f}", f"${r['costo']:,.0f}", costo_prom])
+            costo_prom = fmt_dinero(r['costo_prom'], 2) if r['costo_prom'] is not None else "-"
+            m_tbl.append([r['tipo_fruta'], fmt_numero(r['kg'], 2), fmt_dinero(r['costo']), costo_prom])
             month_total_kg += r['kg']
             month_total_costo += r['costo']
         # Fila de totales
-        m_tbl.append(["TOTAL", f"{month_total_kg:,.2f}", f"${month_total_costo:,.0f}", "-"])
+        m_tbl.append(["TOTAL", fmt_numero(month_total_kg, 2), fmt_dinero(month_total_costo), "-"])
         mt = Table(m_tbl, hAlign='LEFT', repeatRows=1)
         mt.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
