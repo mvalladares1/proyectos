@@ -134,6 +134,16 @@ if df is not None:
         cu = c.strip().upper()
         return 'BANDEJAS' if 'BANDEJ' in cu else cu
     
+    # Colores por tipo de fruta
+    colores_fruta = {
+        'Arándano': '#4A90D9',
+        'Frambuesa': '#E74C3C', 
+        'Frutilla': '#E91E63',
+        'Mora': '#9B59B6',
+        'Cereza': '#C0392B',
+        'Grosella': '#8E44AD'
+    }
+    
     agrup = {}
     for _, row in df.iterrows():
         tipo = (row.get('tipo_fruta') or '').strip()
@@ -169,54 +179,212 @@ if df is not None:
                 agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
                 agrup[tipo][manejo]['block_vals'].append(block_val)
     
-    # Construir tabla
-    tabla_rows = []
-    for tipo in sorted(agrup.keys(), key=lambda t: sum(m['kg'] for m in agrup[t].values()), reverse=True):
-        tipo_kg = sum(m['kg'] for m in agrup[tipo].values())
-        tipo_costo = sum(m['costo'] for m in agrup[tipo].values())
-        tipo_costo_prom = tipo_costo / tipo_kg if tipo_kg > 0 else 0
+    # Construir HTML de la tabla estilizada
+    if agrup:
+        html_table = """
+        <style>
+        .resumen-tabla {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin: 10px 0;
+        }
+        .resumen-tabla thead {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        .resumen-tabla th {
+            padding: 14px 16px;
+            text-align: right;
+            color: #fff;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #0f3460;
+        }
+        .resumen-tabla th:first-child {
+            text-align: left;
+            width: 28%;
+        }
+        .resumen-tabla td {
+            padding: 12px 16px;
+            text-align: right;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .resumen-tabla td:first-child {
+            text-align: left;
+        }
+        .resumen-tabla .fila-fruta {
+            background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%);
+        }
+        .resumen-tabla .fila-fruta td {
+            font-weight: 700;
+            font-size: 15px;
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.15);
+        }
+        .resumen-tabla .fila-fruta td:first-child {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .resumen-tabla .indicador-fruta {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .resumen-tabla .fila-manejo {
+            background: rgba(0,0,0,0.2);
+        }
+        .resumen-tabla .fila-manejo td {
+            color: rgba(255,255,255,0.85);
+            font-size: 13px;
+        }
+        .resumen-tabla .fila-manejo td:first-child {
+            padding-left: 40px;
+            color: rgba(255,255,255,0.7);
+        }
+        .resumen-tabla .fila-manejo:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        .resumen-tabla .badge-manejo {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .resumen-tabla .badge-organico {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+            border: 1px solid rgba(46, 204, 113, 0.3);
+        }
+        .resumen-tabla .badge-convencional {
+            background: rgba(52, 152, 219, 0.2);
+            color: #3498db;
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+        .resumen-tabla .badge-default {
+            background: rgba(149, 165, 166, 0.2);
+            color: #95a5a6;
+            border: 1px solid rgba(149, 165, 166, 0.3);
+        }
+        .resumen-tabla .fila-total {
+            background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+        }
+        .resumen-tabla .fila-total td {
+            font-weight: 700;
+            font-size: 15px;
+            color: #fff;
+            border-top: 2px solid #3498db;
+            border-bottom: none;
+        }
+        .resumen-tabla .valor-kg {
+            color: #3498db;
+            font-weight: 600;
+        }
+        .resumen-tabla .valor-costo {
+            color: #2ecc71;
+        }
+        .resumen-tabla .valor-porcentaje {
+            font-weight: 600;
+        }
+        .resumen-tabla .iqf-valor {
+            color: #9b59b6;
+        }
+        .resumen-tabla .block-valor {
+            color: #e67e22;
+        }
+        </style>
+        <table class="resumen-tabla">
+            <thead>
+                <tr>
+                    <th>🍇 Tipo Fruta / Manejo</th>
+                    <th>📦 Kg</th>
+                    <th>💰 Costo Total</th>
+                    <th>📊 Costo/Kg</th>
+                    <th>❄️ % IQF</th>
+                    <th>🧊 % Block</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
         
-        # Fila de Tipo Fruta (totalizador)
-        tabla_rows.append({
-            'Tipo Fruta / Manejo': f"**{tipo}**",
-            'Kg': f"{tipo_kg:,.2f}",
-            'Costo Total': f"${tipo_costo:,.0f}",
-            'Costo Prom/kg': f"${tipo_costo_prom:,.2f}" if tipo_kg > 0 else "-",
-            '% IQF': "-",
-            '% Block': "-"
-        })
+        total_kg_tabla = 0
+        total_costo_tabla = 0
         
-        # Filas de Manejo
-        for manejo in sorted(agrup[tipo].keys(), key=lambda m: agrup[tipo][m]['kg'], reverse=True):
-            v = agrup[tipo][manejo]
-            kg = v['kg']
-            costo = v['costo']
-            costo_prom = costo / kg if kg > 0 else 0
-            prom_iqf = sum(v['iqf_vals']) / len(v['iqf_vals']) if v['iqf_vals'] else 0
-            prom_block = sum(v['block_vals']) / len(v['block_vals']) if v['block_vals'] else 0
+        for tipo in sorted(agrup.keys(), key=lambda t: sum(m['kg'] for m in agrup[t].values()), reverse=True):
+            tipo_kg = sum(m['kg'] for m in agrup[tipo].values())
+            tipo_costo = sum(m['costo'] for m in agrup[tipo].values())
+            tipo_costo_prom = tipo_costo / tipo_kg if tipo_kg > 0 else 0
+            total_kg_tabla += tipo_kg
+            total_costo_tabla += tipo_costo
             
-            tabla_rows.append({
-                'Tipo Fruta / Manejo': f"   → {manejo}",
-                'Kg': f"{kg:,.2f}",
-                'Costo Total': f"${costo:,.0f}",
-                'Costo Prom/kg': f"${costo_prom:,.2f}" if kg > 0 else "-",
-                '% IQF': f"{prom_iqf:.2f}%",
-                '% Block': f"{prom_block:.2f}%"
-            })
-    
-    # Fila total general
-    tabla_rows.append({
-        'Tipo Fruta / Manejo': "**TOTAL GENERAL**",
-        'Kg': f"{total_kg_mp:,.2f}",
-        'Costo Total': f"${total_costo_mp:,.0f}",
-        'Costo Prom/kg': "-",
-        '% IQF': "-",
-        '% Block': "-"
-    })
-    
-    if tabla_rows:
-        df_tabla = pd.DataFrame(tabla_rows)
-        st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+            color = colores_fruta.get(tipo, '#6c757d')
+            
+            html_table += f"""
+                <tr class="fila-fruta">
+                    <td><span class="indicador-fruta" style="background-color: {color};"></span> {tipo}</td>
+                    <td class="valor-kg">{tipo_kg:,.0f}</td>
+                    <td class="valor-costo">${tipo_costo:,.0f}</td>
+                    <td>${tipo_costo_prom:,.0f}</td>
+                    <td>—</td>
+                    <td>—</td>
+                </tr>
+            """
+            
+            for manejo in sorted(agrup[tipo].keys(), key=lambda m: agrup[tipo][m]['kg'], reverse=True):
+                v = agrup[tipo][manejo]
+                kg = v['kg']
+                costo = v['costo']
+                costo_prom = costo / kg if kg > 0 else 0
+                prom_iqf = sum(v['iqf_vals']) / len(v['iqf_vals']) if v['iqf_vals'] else 0
+                prom_block = sum(v['block_vals']) / len(v['block_vals']) if v['block_vals'] else 0
+                
+                if 'orgánico' in manejo.lower() or 'organico' in manejo.lower():
+                    badge_class = 'badge-organico'
+                    icono = '🌱'
+                elif 'convencional' in manejo.lower():
+                    badge_class = 'badge-convencional'
+                    icono = '🏭'
+                else:
+                    badge_class = 'badge-default'
+                    icono = '📋'
+                
+                html_table += f"""
+                    <tr class="fila-manejo">
+                        <td><span class="badge-manejo {badge_class}">{icono} {manejo}</span></td>
+                        <td class="valor-kg">{kg:,.0f}</td>
+                        <td class="valor-costo">${costo:,.0f}</td>
+                        <td>${costo_prom:,.0f}</td>
+                        <td class="valor-porcentaje iqf-valor">{prom_iqf:.1f}%</td>
+                        <td class="valor-porcentaje block-valor">{prom_block:.1f}%</td>
+                    </tr>
+                """
+        
+        html_table += f"""
+                <tr class="fila-total">
+                    <td>📊 TOTAL GENERAL</td>
+                    <td class="valor-kg">{total_kg_tabla:,.0f}</td>
+                    <td class="valor-costo">${total_costo_tabla:,.0f}</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+        
+        st.markdown(html_table, unsafe_allow_html=True)
 
     # --- Botones de descarga de informe PDF ---
     st.markdown("---")
