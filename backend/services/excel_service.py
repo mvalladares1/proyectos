@@ -70,7 +70,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
 
     headers = [
         'Albarán', 'Fecha', 'Productor', 'Tipo Fruta', 'Guía Despacho',
-        'Producto', 'Categoría', 'Bandejas (unidades)', 'Kg Hechos', 'UOM',
+        'Producto', 'Categoría', 'Manejo', 'Bandejas (unidades)', 'Kg Hechos', 'UOM',
         'Costo Unitario', 'Costo Total', 'Clasificación', '% IQF', '% Block'
     ]
     ws.append(headers)
@@ -93,11 +93,12 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
 
         productos = r.get('productos', []) or []
         if not productos:
-            ws.append([albaran, fecha, productor, tipo_fruta, guia, '', '', '', r.get('kg_recepcionados', 0), '', '', '', calific, pct_iqf, pct_block])
+            ws.append([albaran, fecha, productor, tipo_fruta, guia, '', '', '', '', r.get('kg_recepcionados', 0), '', '', '', calific, pct_iqf, pct_block])
         else:
             for p in productos:
                 prod_name = p.get('Producto', '')
                 categoria = p.get('Categoria', '')
+                manejo = p.get('Manejo', '')
                 kg_hechos = p.get('Kg Hechos', 0) or 0
                 uom = p.get('UOM', '')
                 costo_unit = p.get('Costo Unitario', 0) or 0
@@ -105,7 +106,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
                 bandejas_units = kg_hechos if (categoria or '').upper() == 'BANDEJAS' else ''
                 ws.append([
                     albaran, fecha, productor, tipo_fruta, guia,
-                    prod_name, categoria, bandejas_units, kg_hechos, uom,
+                    prod_name, categoria, manejo, bandejas_units, kg_hechos, uom,
                     costo_unit, costo_total, calific, pct_iqf, pct_block
                 ])
 

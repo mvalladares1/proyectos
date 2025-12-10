@@ -97,6 +97,90 @@ def _aggregate_by_fruta(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any
     return out
 
 
+def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Agrupa recepciones por tipo_fruta y luego por manejo (Orgánico/Convencional).
+    Retorna estructura jerárquica para mostrar en tablas.
+    """
+    # Estructura: {tipo_fruta: {manejo: {kg, costo, n_recepciones}}}
+    agrup = {}
+    
+    for r in recepciones:
+        tipo = (r.get('tipo_fruta') or '').strip()
+        if not tipo:
+            continue
+        
+        if tipo not in agrup:
+            agrup[tipo] = {}
+        
+        # Recorrer productos para obtener manejo y sumar kg/costo
+        for p in r.get('productos', []) or []:
+            cat = _normalize_categoria(p.get('Categoria', ''))
+            if cat == 'BANDEJAS':
+                continue  # Excluir bandejas
+            
+            manejo = (p.get('Manejo') or '').strip()
+            if not manejo:
+                manejo = 'Sin Manejo'
+            
+            if manejo not in agrup[tipo]:
+                agrup[tipo][manejo] = {
+                    'kg': 0.0,
+                    'costo': 0.0,
+                    'iqf_vals': [],
+                    'block_vals': []
+                }
+            
+            kg = p.get('Kg Hechos', 0) or 0
+            costo = p.get('Costo Total', 0) or 0
+            agrup[tipo][manejo]['kg'] += kg
+            agrup[tipo][manejo]['costo'] += costo
+        
+        # Agregar valores de calidad al primer manejo encontrado (a nivel recepción)
+        # Los valores IQF/Block son a nivel de recepción, no de producto
+        for manejo_key in agrup[tipo].keys():
+            agrup[tipo][manejo_key]['iqf_vals'].append(r.get('total_iqf', 0) or 0)
+            agrup[tipo][manejo_key]['block_vals'].append(r.get('total_block', 0) or 0)
+            break  # Solo agregar una vez
+    
+    # Convertir a lista jerárquica
+    out = []
+    for tipo, manejos in agrup.items():
+        tipo_kg = sum(m['kg'] for m in manejos.values())
+        tipo_costo = sum(m['costo'] for m in manejos.values())
+        
+        manejo_list = []
+        for manejo, v in sorted(manejos.items()):
+            kg = v['kg']
+            costo = v['costo']
+            costo_prom = (costo / kg) if kg > 0 else None
+            prom_iqf = (sum(v['iqf_vals']) / len(v['iqf_vals'])) if v['iqf_vals'] else 0
+            prom_block = (sum(v['block_vals']) / len(v['block_vals'])) if v['block_vals'] else 0
+            
+            manejo_list.append({
+                'manejo': manejo,
+                'kg': kg,
+                'costo': costo,
+                'costo_prom': costo_prom,
+                'prom_iqf': prom_iqf,
+                'prom_block': prom_block
+            })
+        
+        # Ordenar manejos por kg descendente
+        manejo_list.sort(key=lambda x: x['kg'], reverse=True)
+        
+        out.append({
+            'tipo_fruta': tipo,
+            'kg_total': tipo_kg,
+            'costo_total': tipo_costo,
+            'manejos': manejo_list
+        })
+    
+    # Ordenar tipos por kg descendente
+    out.sort(key=lambda x: x['kg_total'], reverse=True)
+    return out
+
+
 def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: str, fecha_fin: str,
                                   include_prev_week: bool = False, include_month_accum: bool = False,
                                   logo_path: Optional[str] = None,
@@ -287,37 +371,75 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         elements.append(KeepTogether([env_t]))
         elements.append(Spacer(1, 12))
 
-    tbl_data = [["Tipo Fruta", "Kg", "Costo Total", "Costo Promedio/kg", "% IQF", "% Block", "# Recepciones"]]
-    for r in main_agg:
-        costo_prom = f"${r['costo_prom']:,.2f}" if r['costo_prom'] is not None else "-"
+    # Tabla principal con jerarquía Tipo Fruta → Manejo
+    main_agg_manejo = _aggregate_by_fruta_manejo(recepciones_main)
+    
+    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "Costo Promedio/kg", "% IQF", "% Block"]]
+    tipo_fruta_rows = []  # Para trackear filas de tipo fruta (para estilo)
+    
+    row_idx = 1  # Empezamos en 1 (después del header)
+    for tipo_data in main_agg_manejo:
+        tipo_fruta = tipo_data['tipo_fruta']
+        tipo_kg = tipo_data['kg_total']
+        tipo_costo = tipo_data['costo_total']
+        tipo_costo_prom = f"${(tipo_costo / tipo_kg):,.2f}" if tipo_kg > 0 else "-"
+        
+        # Fila de Tipo Fruta (totalizador)
         tbl_data.append([
-            r['tipo_fruta'],
-            f"{r['kg']:,.2f}",
-            f"${r['costo']:,.0f}",
-            costo_prom,
-            f"{r['prom_iqf']:.2f}%",
-            f"{r['prom_block']:.2f}%",
-            str(r['n_recepciones'])
+            tipo_fruta,
+            f"{tipo_kg:,.2f}",
+            f"${tipo_costo:,.0f}",
+            tipo_costo_prom,
+            "-",
+            "-"
         ])
-    # Fila de totales
+        tipo_fruta_rows.append(row_idx)
+        row_idx += 1
+        
+        # Filas de Manejo (indentadas)
+        for m in tipo_data['manejos']:
+            manejo_name = m['manejo']
+            costo_prom = f"${m['costo_prom']:,.2f}" if m['costo_prom'] is not None else "-"
+            tbl_data.append([
+                f"   → {manejo_name}",  # Indentado
+                f"{m['kg']:,.2f}",
+                f"${m['costo']:,.0f}",
+                costo_prom,
+                f"{m['prom_iqf']:.2f}%",
+                f"{m['prom_block']:.2f}%"
+            ])
+            row_idx += 1
+    
+    # Fila de totales generales
     tbl_data.append([
-        'TOTAL',
+        'TOTAL GENERAL',
         f"{total_kg:,.2f}",
         f"${total_costo:,.0f}",
         '-',
         '-',
-        '-',
-        ''
+        '-'
     ])
-    # repeatRows=1 para repetir el encabezado en páginas siguientes; envolver en KeepTogether
+    
     t = Table(tbl_data, hAlign='LEFT', repeatRows=1)
-    t.setStyle(TableStyle([
+    
+    # Estilo base
+    style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
-    ]))
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        # Fila total general
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
+    ]
+    
+    # Estilo para filas de Tipo Fruta (negrita, fondo gris claro)
+    for row_num in tipo_fruta_rows:
+        style_commands.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Bold'))
+        style_commands.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f0f0f0')))
+    
+    t.setStyle(TableStyle(style_commands))
     elements.append(KeepTogether([t]))
     elements.append(Spacer(1, 12))
 

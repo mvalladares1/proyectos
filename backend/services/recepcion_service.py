@@ -33,11 +33,13 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     cache = get_cache()
     
     # ============ PASO 1: Obtener todas las recepciones ============
+    # IMPORTANTE: Solo recepciones en estado "done" (validadas/hechas)
     domain = [
         ("picking_type_id", "=", 1),
         ("x_studio_categora_de_producto", "=", "MP"),
         ("scheduled_date", ">=", fecha_inicio),
-        ("scheduled_date", "<=", fecha_fin)
+        ("scheduled_date", "<=", fecha_fin),
+        ("state", "=", "done")  # Solo recepciones completadas/validadas
     ]
     if productor_id:
         domain.append(("partner_id", "=", productor_id))
@@ -110,18 +112,23 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
                     template_ids.add(tmpl_id)
             
-            # Obtener templates
+            # Obtener templates con campo de manejo
             template_map = {}
             if template_ids:
                 templates = client.read(
                     "product.template", 
                     list(template_ids), 
-                    ["id", "name", "default_code"]
+                    ["id", "name", "default_code", "x_studio_categora_tipo_de_manejo"]
                 )
                 for t in templates:
+                    manejo = t.get("x_studio_categora_tipo_de_manejo", "")
+                    # Si es tupla/lista (selection), tomar el valor legible
+                    if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                        manejo = manejo[1]
                     template_map[t["id"]] = {
                         "name": t.get("name", ""),
-                        "default_code": t.get("default_code", "") or ""
+                        "default_code": t.get("default_code", "") or "",
+                        "manejo": manejo or ""
                     }
             
             # Mapear producto -> info completa
@@ -136,7 +143,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 product_info_map[pid] = {
                     "categ": categ_name, 
                     "name": tmpl_data.get("name", ""),
-                    "default_code": tmpl_data.get("default_code", "")
+                    "default_code": tmpl_data.get("default_code", ""),
+                    "manejo": tmpl_data.get("manejo", "")
                 }
             
             # Cachear productos por 30 minutos
@@ -295,7 +303,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 "Costo Unitario": costo_unit,
                 "Costo Total": costo_total,
                 "UOM": uom_name,
-                "Categoria": categoria
+                "Categoria": categoria,
+                "Manejo": prod_info.get("manejo", "")
             })
         
         # Procesar datos de calidad

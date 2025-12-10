@@ -170,7 +170,7 @@ if df is not None:
         st.write("- Informe semana+resumen: incluye semana anterior y acumulado parcial del mes.")
 
     # Filtros adicionales
-    col_f1, col_f2 = st.columns(2)
+    col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
         tipos_fruta = df['tipo_fruta'].dropna().unique().tolist()
         tipos_fruta = sorted([t for t in tipos_fruta if t])
@@ -179,6 +179,17 @@ if df is not None:
         clasifs = df['calific_final'].dropna().unique().tolist()
         clasifs = sorted([c for c in clasifs if c])
         clasif_filtro = st.multiselect("Filtrar por Clasificación", clasifs, key="clasif_filtro")
+    with col_f3:
+        # Extraer valores únicos de Manejo de todos los productos
+        manejos_set = set()
+        for _, row in df.iterrows():
+            if 'productos' in row and isinstance(row['productos'], list):
+                for p in row['productos']:
+                    manejo = (p.get('Manejo') or '').strip()
+                    if manejo:
+                        manejos_set.add(manejo)
+        manejos = sorted(list(manejos_set))
+        manejo_filtro = st.multiselect("Filtrar por Manejo", manejos, key="manejo_filtro")
 
     productor_filtro = None
     productores = df['productor'].dropna().unique().tolist()
@@ -193,6 +204,17 @@ if df is not None:
         df_filtrada = df_filtrada[df_filtrada['tipo_fruta'].isin(tipo_fruta_filtro)]
     if clasif_filtro:
         df_filtrada = df_filtrada[df_filtrada['calific_final'].isin(clasif_filtro)]
+    
+    # Filtrar por Manejo (si el producto tiene el manejo seleccionado)
+    if manejo_filtro:
+        def tiene_manejo(row):
+            if 'productos' in row and isinstance(row['productos'], list):
+                for p in row['productos']:
+                    manejo = (p.get('Manejo') or '').strip()
+                    if manejo in manejo_filtro:
+                        return True
+            return False
+        df_filtrada = df_filtrada[df_filtrada.apply(tiene_manejo, axis=1)]
 
     # Tabla de recepciones (filtrar recepciones sin tipo de fruta)
     st.subheader("📋 Detalle de Recepciones")
