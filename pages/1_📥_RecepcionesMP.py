@@ -80,9 +80,9 @@ if 'idx_recepcion' not in st.session_state:
 # Filtros
 col1, col2 = st.columns(2)
 with col1:
-    fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion")
+    fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
 with col2:
-    fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion")
+    fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
 
 if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
     params = {
@@ -304,12 +304,12 @@ if df is not None:
             use_container_width=True,
             hide_index=True,
             column_config={
-                'Descripción': st.column_config.TextColumn('🍇 Tipo / Manejo', width='large'),
-                'Kg': st.column_config.TextColumn('📦 Kg', width='small'),
-                'Costo Total': st.column_config.TextColumn('💰 Costo Total', width='medium'),
-                'Costo/Kg': st.column_config.TextColumn('📊 $/Kg', width='small'),
-                '% IQF': st.column_config.TextColumn('❄️ IQF', width='small'),
-                '% Block': st.column_config.TextColumn('🧊 Block', width='small'),
+                'Descripción': st.column_config.TextColumn('Tipo / Manejo', width='large'),
+                'Kg': st.column_config.TextColumn('Kg', width='small'),
+                'Costo Total': st.column_config.TextColumn('Costo Total', width='medium'),
+                'Costo/Kg': st.column_config.TextColumn('$/Kg', width='small'),
+                '% IQF': st.column_config.TextColumn('% IQF', width='small'),
+                '% Block': st.column_config.TextColumn('% Block', width='small'),
             }
         )
 

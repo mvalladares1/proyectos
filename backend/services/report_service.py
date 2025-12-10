@@ -385,13 +385,6 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     elements.append(Paragraph(f"Total Kg Recepcionados (fruta): {fmt_numero(total_kg, 2)}", styles['Normal']))
     elements.append(Paragraph(f"Bandejas recepcionadas (unidades): {fmt_numero(total_bandejas, 0)}", styles['Normal']))
     elements.append(Paragraph(f"Costo Total MP: {fmt_dinero(total_costo)}", styles['Normal']))
-    elements.append(Spacer(1, 6))
-    
-    # Nota sobre cálculo de costo promedio
-    elements.append(Paragraph(
-        "<i>Nota: Costo Promedio/kg = Costo Total ÷ Kg Recepcionados (excluyendo bandejas)</i>",
-        styles['Normal']
-    ))
     elements.append(Spacer(1, 8))
     
     # Desglose de envases por tipo
