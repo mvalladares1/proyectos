@@ -68,9 +68,11 @@ class StockService:
 
     def get_chambers_stock(self) -> List[Dict]:
         """
-        Obtiene stock agrupado por camara (ubicacion) y especie/condicion.
-        Usa search_read limitado para mantener rendimiento y garantizar datos.
+        Obtiene stock agrupado por cámara padre (Camara 1, 2, 3 de -25°C, Camara 0°C).
+        Las posiciones individuales se agregan a su cámara padre.
+        La capacidad se cuenta por número de posiciones hijas.
         """
+        # PASO 1: Obtener todos los quants con stock
         domain = [
             ("quantity", ">", 0),
             ("location_id.usage", "=", "internal"),
@@ -92,7 +94,8 @@ class StockService:
         if not quants:
             return []
 
-        loc_ids = sorted({
+        # PASO 2: Obtener todas las ubicaciones relevantes
+        loc_ids = list({
             q["location_id"][0]
             for q in quants
             if q.get("location_id") and isinstance(q["location_id"], (list, tuple))
@@ -100,146 +103,209 @@ class StockService:
         if not loc_ids:
             return []
 
-        pallets_per_location: Dict[int, set] = {}
+        # Obtener info de ubicaciones (con padre)
+        fields_loc = ["name", "display_name", "location_id", "usage", "active"]
+        try:
+            locations = self.odoo.read("stock.location", loc_ids, fields_loc)
+        except Exception as e:
+            print(f"Error fetching locations: {e}")
+            return []
+
+        # Crear mapa de ubicación -> info y encontrar padres
+        loc_map = {}
+        parent_ids = set()
+        for loc in locations:
+            loc_id = loc["id"]
+            parent = loc.get("location_id")
+            parent_id = parent[0] if parent and isinstance(parent, (list, tuple)) else None
+            parent_name = parent[1] if parent and isinstance(parent, (list, tuple)) and len(parent) > 1 else ""
+            loc_map[loc_id] = {
+                "name": loc.get("name", ""),
+                "display_name": loc.get("display_name", ""),
+                "parent_id": parent_id,
+                "parent_name": parent_name
+            }
+            if parent_id:
+                parent_ids.add(parent_id)
+
+        # PASO 3: Obtener info de padres (para identificar cámaras principales)
+        if parent_ids:
+            try:
+                parent_locs = self.odoo.read("stock.location", list(parent_ids), ["name", "display_name", "location_id"])
+                for ploc in parent_locs:
+                    # Ver si el padre tiene un abuelo (para saber si es Cámara o posición)
+                    grandparent = ploc.get("location_id")
+                    loc_map[ploc["id"]] = {
+                        "name": ploc.get("name", ""),
+                        "display_name": ploc.get("display_name", ""),
+                        "parent_id": grandparent[0] if grandparent and isinstance(grandparent, (list, tuple)) else None,
+                        "parent_name": grandparent[1] if grandparent and isinstance(grandparent, (list, tuple)) and len(grandparent) > 1 else ""
+                    }
+            except Exception as e:
+                print(f"Error fetching parent locations: {e}")
+
+        # PASO 4: Identificar cámaras principales (Camara 1, 2, 3 de -25°C, Camara 0°C)
+        # Una cámara principal es aquella que tiene "Camara" en su nombre y tiene posiciones hijas
+        CAMARAS_PRINCIPALES = [
+            {"patron": "Camara 1", "temp": "-25"},
+            {"patron": "Camara 2", "temp": "-25"},
+            {"patron": "Camara 3", "temp": "-25"},
+            {"patron": "Camara 0", "temp": "0°C"},
+        ]
+        
+        # Función para determinar a qué cámara principal pertenece una ubicación
+        def get_parent_chamber(loc_id):
+            """Busca recursivamente la cámara padre principal"""
+            if loc_id not in loc_map:
+                return None
+            loc_info = loc_map[loc_id]
+            loc_name = loc_info.get("name", "").upper()
+            display_name = loc_info.get("display_name", "").upper()
+            
+            # Verificar si esta ubicación es una cámara principal
+            for cfg in CAMARAS_PRINCIPALES:
+                if cfg["patron"].upper() in loc_name or cfg["patron"].upper() in display_name:
+                    if cfg["temp"].upper() in display_name or cfg["temp"].upper() in loc_name:
+                        return loc_id
+            
+            # Si no, buscar en el padre
+            parent_id = loc_info.get("parent_id")
+            if parent_id and parent_id != loc_id:
+                return get_parent_chamber(parent_id)
+            
+            return None
+
+        # PASO 5: Contar posiciones por cámara y calcular pallets
+        chamber_positions = {}  # {chamber_id: set of position_ids}
+        chamber_pallets = {}    # {chamber_id: set of pallet_ids}
+        
+        for loc_id in loc_ids:
+            chamber_id = get_parent_chamber(loc_id)
+            if chamber_id:
+                chamber_positions.setdefault(chamber_id, set()).add(loc_id)
+
         for q in quants:
             loc = q.get("location_id")
             pkg = q.get("package_id")
-            if loc and pkg and isinstance(loc, (list, tuple)) and isinstance(pkg, (list, tuple)):
-                pallets_per_location.setdefault(loc[0], set()).add(pkg[0])
+            if loc and isinstance(loc, (list, tuple)):
+                loc_id = loc[0]
+                chamber_id = get_parent_chamber(loc_id)
+                if chamber_id and pkg and isinstance(pkg, (list, tuple)):
+                    chamber_pallets.setdefault(chamber_id, set()).add(pkg[0])
 
-        # OPTIMIZADO: usar caché para ubicaciones (1 hora TTL)
-        locations = self._get_locations_cached(loc_ids)
-
+        # PASO 6: Crear estructura de cámaras
         chambers = {}
-        for loc in locations:
-            clean_loc = clean_record(loc)
-            loc_id = clean_loc["id"]
-            if loc.get("usage") != "internal" or not loc.get("active", True):
+        for chamber_id in chamber_positions.keys():
+            if chamber_id not in loc_map:
                 continue
-            parent = loc.get("location_id")
-            parent_name = parent[1] if parent and isinstance(parent, (list, tuple)) and len(parent) > 1 else "Sin Padre"
-            
-            occupied = len(pallets_per_location.get(loc_id, set()))
-
-            capacity_candidates = [
-                loc.get("x_capacity_pallets"),
-                loc.get("pallet_capacity"),
-            ]
-            capacity = next((c for c in capacity_candidates if isinstance(c, (int, float)) and c > 0), None)
-            if capacity is None:
-                capacity = max(occupied, 50)
-
-            chambers[loc_id] = {
-                "id": loc_id,
-                "name": clean_loc["name"],
-                "full_name": clean_loc["display_name"],
-                "parent_name": parent_name,
-                "capacity_pallets": capacity,
-                "occupied_pallets": occupied,
-                "stock_data": {}
+            info = loc_map[chamber_id]
+            chambers[chamber_id] = {
+                "id": chamber_id,
+                "name": info["name"],
+                "full_name": info["display_name"],
+                "parent_name": info.get("parent_name", ""),
+                "capacity_pallets": len(chamber_positions.get(chamber_id, set())),  # Capacidad = posiciones
+                "occupied_pallets": len(chamber_pallets.get(chamber_id, set())),
+                "stock_data": {},
+                "child_location_ids": list(chamber_positions.get(chamber_id, set()))
             }
 
-        if not chambers:
-            # Fallback minimal data directly from quant info
-            for q in quants:
-                loc = q.get("location_id")
-                if not loc or not isinstance(loc, (list, tuple)) or len(loc) < 2:
-                    continue
-                loc_id, loc_name = loc
-                chambers.setdefault(loc_id, {
-                    "id": loc_id,
-                    "name": loc_name,
-                    "full_name": loc_name,
-                    "parent_name": "N/D",
-                    "capacity_pallets": len(pallets_per_location.get(loc_id, set())) or 50,
-                    "occupied_pallets": len(pallets_per_location.get(loc_id, set())),
-                    "stock_data": {}
-                })
-
+        # PASO 7: Obtener info de productos
         product_ids = {
             q["product_id"][0]
             for q in quants
             if q.get("product_id") and isinstance(q["product_id"], (list, tuple))
         }
         
-        # OPTIMIZADO: usar caché para productos
         products_raw = self._get_products_cached(list(product_ids))
         products_info = {}
         for pid, p in products_raw.items():
+            cat = p.get("categ_id")
             products_info[pid] = {
-                "category": p["categ_id"][1] if p.get("categ_id") and isinstance(p.get("categ_id"), (list, tuple)) else "Sin Categoria",
+                "category": cat[1] if cat and isinstance(cat, (list, tuple)) else "Sin Categoria",
                 "name": p.get("name", "")
             }
 
+        # PASO 8: Agregar stock por cámara y tipo fruta/manejo
         for q in quants:
             loc = q.get("location_id")
             prod = q.get("product_id")
             if not loc or not prod:
                 continue
-            if not isinstance(loc, (list, tuple)) or len(loc) < 1:
+            if not isinstance(loc, (list, tuple)) or not isinstance(prod, (list, tuple)):
                 continue
-            if not isinstance(prod, (list, tuple)) or len(prod) < 1:
-                continue
+            
             loc_id = loc[0]
-            if loc_id not in chambers:
+            chamber_id = get_parent_chamber(loc_id)
+            if not chamber_id or chamber_id not in chambers:
                 continue
 
             qty = q.get("quantity", 0) or 0
             p_info = products_info.get(prod[0])
             
             if p_info:
-                # Extraer Tipo Fruta de la categoría o nombre
                 cat_name = p_info["category"].upper()
                 prod_name = p_info["name"].upper()
                 
-                # Detectar Tipo Fruta
+                # Detectar Tipo Fruta (orden importante: más específico primero)
                 tipo_fruta = "Otro"
-                if "ARANDANO" in cat_name or "ARÁNDANO" in cat_name or "AR " in prod_name or "AR_" in prod_name or "ARAND" in prod_name:
-                    tipo_fruta = "Arándano"
-                elif "FRAMBUESA" in cat_name or "FB " in prod_name or "FB_" in prod_name or "FRAMB" in prod_name:
-                    tipo_fruta = "Frambuesa"
-                elif "FRUTILLA" in cat_name or "FR " in prod_name or "FR_" in prod_name or "FRUTI" in prod_name:
-                    tipo_fruta = "Frutilla"
-                elif "MORA" in cat_name or "MO " in prod_name or "MO_" in prod_name:
-                    tipo_fruta = "Mora"
-                elif "CEREZA" in cat_name or "CR " in prod_name or "CR_" in prod_name:
-                    tipo_fruta = "Cereza"
-                elif "PRODUCTOS" in cat_name or "PTT" in cat_name:
-                    # Intentar extraer del nombre del producto
-                    if "ARAND" in prod_name or "AR " in prod_name:
-                        tipo_fruta = "Arándano"
-                    elif "FRAMB" in prod_name or "FB " in prod_name:
-                        tipo_fruta = "Frambuesa"
-                    elif "FRUTI" in prod_name or "FR " in prod_name:
-                        tipo_fruta = "Frutilla"
-                    elif "MORA" in prod_name or "MO " in prod_name:
-                        tipo_fruta = "Mora"
-                    elif "CEREZA" in prod_name or "CR " in prod_name:
-                        tipo_fruta = "Cereza"
                 
-                # Detectar Manejo (Orgánico/Convencional)
-                if "ORG" in prod_name:
+                # Primero buscar por código de producto (AR, FB, FR, MO, CR)
+                if " AR " in f" {prod_name} " or "AR_" in prod_name or prod_name.startswith("AR ") or "ARANDANO" in prod_name or "ARÁNDANO" in prod_name or "ARANDANO" in cat_name:
+                    tipo_fruta = "Arándano"
+                elif " FB " in f" {prod_name} " or "FB_" in prod_name or prod_name.startswith("FB ") or "FRAMBUESA" in prod_name or "FRAMBUESA" in cat_name:
+                    tipo_fruta = "Frambuesa"
+                elif " FR " in f" {prod_name} " or "FR_" in prod_name or prod_name.startswith("FR ") or "FRUTILLA" in prod_name or "FRUTILLA" in cat_name:
+                    tipo_fruta = "Frutilla"
+                elif " MO " in f" {prod_name} " or "MO_" in prod_name or prod_name.startswith("MO ") or "MORA" in prod_name or "MORA" in cat_name:
+                    tipo_fruta = "Mora"
+                elif " CR " in f" {prod_name} " or "CR_" in prod_name or prod_name.startswith("CR ") or "CEREZA" in prod_name or "CEREZA" in cat_name:
+                    tipo_fruta = "Cereza"
+                
+                # Detectar Manejo
+                if " ORG " in f" {prod_name} " or "ORG_" in prod_name or "_ORG" in prod_name or "ORGANICO" in prod_name or "ORGÁNICO" in prod_name:
                     manejo = "Orgánico"
-                elif "CONV" in prod_name:
+                elif " CONV " in f" {prod_name} " or "CONV_" in prod_name or "_CONV" in prod_name or "CONVENCIONAL" in prod_name:
                     manejo = "Convencional"
                 else:
-                    manejo = "Convencional"  # Por defecto
+                    manejo = "Convencional"
             else:
                 tipo_fruta = "Desconocido"
                 manejo = "N/A"
 
             key = f"{tipo_fruta} - {manejo}"
-            chambers[loc_id]["stock_data"][key] = chambers[loc_id]["stock_data"].get(key, 0) + qty
+            chambers[chamber_id]["stock_data"][key] = chambers[chamber_id]["stock_data"].get(key, 0) + qty
 
         result = [data for data in chambers.values() if data["stock_data"]]
         return result
 
     def get_pallets(self, location_id: int, category: Optional[str] = None) -> List[Dict]:
         """
-        Obtiene el detalle de pallets de una ubicación, opcionalmente filtrado por categoría/especie.
+        Obtiene el detalle de pallets de una ubicación (puede ser cámara padre).
+        Si es una cámara padre, busca en todas sus ubicaciones hijas.
+        Opcionalmente filtrado por categoría (Tipo Fruta - Manejo).
         """
+        # Primero, buscar todas las ubicaciones hijas de esta ubicación
+        try:
+            # Buscar ubicaciones que tengan esta ubicación como padre (recursivo)
+            child_locations = self.odoo.search(
+                "stock.location",
+                [
+                    "|",
+                    ("id", "=", location_id),
+                    ("location_id", "child_of", location_id),
+                    ("usage", "=", "internal"),
+                    ("active", "=", True)
+                ]
+            )
+            if not child_locations:
+                child_locations = [location_id]
+        except Exception as e:
+            print(f"Error fetching child locations: {e}")
+            child_locations = [location_id]
+        
         domain = [
-            ("location_id", "=", location_id),
+            ("location_id", "in", child_locations),
             ("quantity", ">", 0),
             ("package_id", "!=", False)  # Solo pallets
         ]
@@ -249,7 +315,6 @@ class StockService:
             "in_date", "location_id"
         ]
         
-        # OPTIMIZADO: usar search_read en lugar de search + read separados
         try:
             quants = self.odoo.search_read(
                 "stock.quant",
@@ -262,10 +327,9 @@ class StockService:
             print(f"Error fetching pallets: {e}")
             return []
             
-        # Filtrar y formatear
         pallets = []
         
-        # Necesitamos categorías para filtrar
+        # Obtener info de productos
         product_ids = set(q["product_id"][0] for q in quants if q.get("product_id") and isinstance(q.get("product_id"), (list, tuple)))
         products_map = {}
         if product_ids:
@@ -280,18 +344,36 @@ class StockService:
                 
             p_info = products_map.get(prod_id, {})
             categ = p_info.get("categ_id")
-            if categ and isinstance(categ, (list, tuple)) and len(categ) > 1:
-                cat_name = categ[1]
-            else:
-                cat_name = "Sin Categoría"
+            cat_name = categ[1] if categ and isinstance(categ, (list, tuple)) and len(categ) > 1 else "Sin Categoría"
             prod_name = p_info.get("name", "N/A")
+            prod_upper = prod_name.upper()
+            cat_upper = cat_name.upper()
             
-            # Heurística de condición
-            condition = "Orgánico" if "org" in prod_name.lower() else "Convencional"
-            species_condition = f"{cat_name} - {condition}"
+            # Detectar Tipo Fruta
+            tipo_fruta = "Otro"
+            if " AR " in f" {prod_upper} " or "AR_" in prod_upper or prod_upper.startswith("AR ") or "ARANDANO" in prod_upper or "ARÁNDANO" in prod_upper or "ARANDANO" in cat_upper:
+                tipo_fruta = "Arándano"
+            elif " FB " in f" {prod_upper} " or "FB_" in prod_upper or prod_upper.startswith("FB ") or "FRAMBUESA" in prod_upper or "FRAMBUESA" in cat_upper:
+                tipo_fruta = "Frambuesa"
+            elif " FR " in f" {prod_upper} " or "FR_" in prod_upper or prod_upper.startswith("FR ") or "FRUTILLA" in prod_upper or "FRUTILLA" in cat_upper:
+                tipo_fruta = "Frutilla"
+            elif " MO " in f" {prod_upper} " or "MO_" in prod_upper or prod_upper.startswith("MO ") or "MORA" in prod_upper or "MORA" in cat_upper:
+                tipo_fruta = "Mora"
+            elif " CR " in f" {prod_upper} " or "CR_" in prod_upper or prod_upper.startswith("CR ") or "CEREZA" in prod_upper or "CEREZA" in cat_upper:
+                tipo_fruta = "Cereza"
             
-            # Filtro
-            if category and category != species_condition:
+            # Detectar Manejo
+            if " ORG " in f" {prod_upper} " or "ORG_" in prod_upper or "_ORG" in prod_upper or "ORGANICO" in prod_upper or "ORGÁNICO" in prod_upper:
+                manejo = "Orgánico"
+            elif " CONV " in f" {prod_upper} " or "CONV_" in prod_upper or "_CONV" in prod_upper or "CONVENCIONAL" in prod_upper:
+                manejo = "Convencional"
+            else:
+                manejo = "Convencional"
+            
+            tipo_fruta_manejo = f"{tipo_fruta} - {manejo}"
+            
+            # Filtro por categoría (Tipo Fruta - Manejo)
+            if category and category != tipo_fruta_manejo:
                 continue
             
             # Procesar fecha de entrada
@@ -315,8 +397,11 @@ class StockService:
                 "lot": q["lot_id"][1] if q["lot_id"] else "N/A",
                 "quantity": q["quantity"],
                 "category": cat_name,
-                "condition": condition,
-                "species_condition": species_condition,
+                "tipo_fruta": tipo_fruta,
+                "manejo": manejo,
+                "tipo_fruta_manejo": tipo_fruta_manejo,
+                "condition": manejo,
+                "species_condition": tipo_fruta_manejo,
                 "location": q["location_id"][1],
                 "in_date": in_date_str,
                 "days_old": days_old
