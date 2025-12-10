@@ -6,11 +6,46 @@ import pandas as pd
 import altair as alt
 import sys
 import os
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.auth import verificar_autenticacion, proteger_pagina, get_credenciales
 from shared.odoo_client import OdooClient
+
+
+# --- Funciones de formateo chileno ---
+def fmt_fecha(fecha_str):
+    """Convierte fecha ISO a formato DD/MM/AAAA"""
+    if not fecha_str:
+        return ""
+    try:
+        if isinstance(fecha_str, (pd.Timestamp, datetime)):
+            return fecha_str.strftime("%d/%m/%Y")
+        if isinstance(fecha_str, str):
+            if " " in fecha_str:
+                fecha_str = fecha_str.split(" ")[0]
+            elif "T" in fecha_str:
+                fecha_str = fecha_str.split("T")[0]
+            dt = datetime.strptime(fecha_str, "%Y-%m-%d")
+            return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+    return str(fecha_str)
+
+def fmt_numero(valor, decimales=0):
+    """Formatea número con punto como miles y coma como decimal"""
+    if valor is None:
+        return "0"
+    try:
+        if decimales > 0:
+            formatted = f"{valor:,.{decimales}f}"
+        else:
+            formatted = f"{valor:,.0f}"
+        formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+        return formatted
+    except:
+        return str(valor)
 
 st.set_page_config(page_title="Recepción Bandejas Río Futuro Procesos", layout="wide")
 
@@ -380,6 +415,35 @@ if not df_in.empty or not df_out.empty:
         
         df_stock['Tipo'] = df_stock.apply(classify_stock, axis=1)
     
+    # ==================== KPIs CONSOLIDADOS ====================
+    st.markdown("---")
+    st.subheader("📊 KPIs Consolidados")
+    
+    # Calcular métricas
+    total_recepcionadas = df_merged['Recepcionadas'].sum() if 'Recepcionadas' in df_merged.columns else 0
+    total_despachadas = df_merged['Despachadas'].sum() if 'Despachadas' in df_merged.columns else 0
+    total_en_productores = df_merged['Bandejas en Productor'].sum() if 'Bandejas en Productor' in df_merged.columns else 0
+    
+    total_stock_sucias = 0
+    total_stock_limpias = 0
+    if not df_stock.empty:
+        total_stock_sucias = df_stock[df_stock['Tipo'] == 'Sucia']['qty_available'].sum()
+        total_stock_limpias = df_stock[df_stock['Tipo'] == 'Limpia']['qty_available'].sum()
+    total_stock = total_stock_sucias + total_stock_limpias
+    
+    # Mostrar KPIs en 5 columnas
+    kpi_cols = st.columns(5)
+    with kpi_cols[0]:
+        st.metric("📤 Despachadas", fmt_numero(total_despachadas))
+    with kpi_cols[1]:
+        st.metric("📥 Recepcionadas", fmt_numero(total_recepcionadas))
+    with kpi_cols[2]:
+        st.metric("🏠 En Productores", fmt_numero(total_en_productores))
+    with kpi_cols[3]:
+        st.metric("📦 Stock Total", fmt_numero(total_stock))
+    with kpi_cols[4]:
+        st.metric("✨ Limpias / 🧹 Sucias", f"{fmt_numero(total_stock_limpias)} / {fmt_numero(total_stock_sucias)}")
+    
     # ==================== TABLA GESTIÓN BANDEJAS ====================
     if not df_stock.empty:
         st.markdown("---")
@@ -459,11 +523,11 @@ if not df_in.empty or not df_out.empty:
         }])
         df_gestion = pd.concat([df_gestion, total_row], ignore_index=True)
         
-        # Formatear números
-        df_gestion['Bandejas Sucias'] = df_gestion['Bandejas Sucias'].apply(lambda x: f"{x:,.0f}".replace(",", "."))
-        df_gestion['Bandejas Limpias'] = df_gestion['Bandejas Limpias'].apply(lambda x: f"{x:,.0f}".replace(",", "."))
-        df_gestion['Proyectados'] = df_gestion['Proyectados'].apply(lambda x: f"{x:,.0f}".replace(",", "."))
-        df_gestion['Diferencia'] = df_gestion['Diferencia'].apply(lambda x: f"{x:,.0f}".replace(",", "."))
+        # Formatear números (formato chileno)
+        df_gestion['Bandejas Sucias'] = df_gestion['Bandejas Sucias'].apply(lambda x: fmt_numero(x))
+        df_gestion['Bandejas Limpias'] = df_gestion['Bandejas Limpias'].apply(lambda x: fmt_numero(x))
+        df_gestion['Proyectados'] = df_gestion['Proyectados'].apply(lambda x: fmt_numero(x))
+        df_gestion['Diferencia'] = df_gestion['Diferencia'].apply(lambda x: fmt_numero(x))
         
         # Estilo para fila TOTAL (amarilla)
         def highlight_total_gestion(row):
@@ -530,15 +594,10 @@ if not df_in.empty or not df_out.empty:
     # Guardar datos para gráfico ANTES de formatear
     df_chart_prod = df_merged.copy()
     
-    # Formatear números
-    def format_number(val):
-        if val == int(val):
-            return f"{int(val):,}".replace(",", ".")
-        return f"{val:,.2f}".replace(",", ".")
-    
-    df_display['Recepcionadas'] = df_display['Recepcionadas'].apply(format_number)
-    df_display['Despachadas'] = df_display['Despachadas'].apply(format_number)
-    df_display['Bandejas en Productor'] = df_display['Bandejas en Productor'].apply(format_number)
+    # Formatear números (formato chileno)
+    df_display['Recepcionadas'] = df_display['Recepcionadas'].apply(lambda x: fmt_numero(x))
+    df_display['Despachadas'] = df_display['Despachadas'].apply(lambda x: fmt_numero(x))
+    df_display['Bandejas en Productor'] = df_display['Bandejas en Productor'].apply(lambda x: fmt_numero(x))
     
     df_display = df_display[['Productor', 'Recepcionadas', 'Despachadas', 'Bandejas en Productor']]
     
