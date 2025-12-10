@@ -82,21 +82,28 @@ class StockService:
         
         try:
             # Buscar ubicaciones que contengan estos nombres
+            # Dominio con OR usando notación polaca inversa de Odoo
+            domain = [
+                ("usage", "=", "internal"),
+                ("active", "=", True),
+                "|", "|", "|",
+                ("name", "ilike", "Camara 1 de -25"),
+                ("name", "ilike", "Camara 2 de -25"),
+                ("name", "ilike", "Camara 3 de -25"),
+                ("name", "ilike", "Camara 0"),
+            ]
             camaras_principales = self.odoo.search_read(
                 "stock.location",
-                [
-                    ("usage", "=", "internal"),
-                    ("active", "=", True),
-                    "|", "|", "|",
-                    ("name", "ilike", "Camara 1 de -25"),
-                    ("name", "ilike", "Camara 2 de -25"),
-                    ("name", "ilike", "Camara 3 de -25"),
-                    ("name", "ilike", "Camara 0"),
-                ],
+                domain,
                 ["id", "name", "display_name", "location_id"]
             )
+            print(f"DEBUG: Encontradas {len(camaras_principales)} ubicaciones con los filtros")
+            for cam in camaras_principales[:5]:
+                print(f"  - {cam.get('name')}")
         except Exception as e:
             print(f"Error buscando cámaras principales: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
         # Filtrar solo las cámaras que queremos (no posiciones)
