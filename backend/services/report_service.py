@@ -548,8 +548,6 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
 
     # Semana anterior
     if prev_agg is not None:
-        elements.append(Spacer(1, 12))
-        elements.append(Paragraph("Resumen - Semana Anterior", styles['Heading2']))
         p_tbl = [["Tipo Fruta", "Kg", "Costo Total", "Costo Promedio/kg"]]
         prev_total_kg = 0
         prev_total_costo = 0
@@ -567,12 +565,16 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0'))
         ]))
-        elements.append(KeepTogether([pt2]))
+        # Mantener título y tabla juntos
+        elements.append(Spacer(1, 12))
+        elements.append(KeepTogether([
+            Paragraph("Resumen - Semana Anterior", styles['Heading2']),
+            Spacer(1, 6),
+            pt2
+        ]))
 
     # Acumulado parcial mes
     if month_agg is not None:
-        elements.append(Spacer(1, 12))
-        elements.append(Paragraph("Acumulado Parcial del Mes", styles['Heading2']))
         m_tbl = [["Tipo Fruta", "Kg", "Costo Total", "Costo Promedio/kg"]]
         month_total_kg = 0
         month_total_costo = 0
@@ -590,7 +592,13 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
             ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0'))
         ]))
-        elements.append(KeepTogether([mt]))
+        # Mantener título y tabla juntos
+        elements.append(Spacer(1, 12))
+        elements.append(KeepTogether([
+            Paragraph("Acumulado Parcial del Mes", styles['Heading2']),
+            Spacer(1, 6),
+            mt
+        ]))
 
     # Build document with header/footer callbacks
     doc.build(elements, onFirstPage=_draw_first_page, onLaterPages=_draw_later_pages)
