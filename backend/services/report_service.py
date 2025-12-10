@@ -102,7 +102,7 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
     Agrupa recepciones por tipo_fruta y luego por manejo (Orgánico/Convencional).
     Retorna estructura jerárquica para mostrar en tablas.
     """
-    # Estructura: {tipo_fruta: {manejo: {kg, costo, n_recepciones}}}
+    # Estructura: {tipo_fruta: {manejo: {kg, costo, iqf_vals, block_vals}}}
     agrup = {}
     
     for r in recepciones:
@@ -113,6 +113,13 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
         if tipo not in agrup:
             agrup[tipo] = {}
         
+        # IQF/Block son a nivel de recepción
+        iqf_val = r.get('total_iqf', 0) or 0
+        block_val = r.get('total_block', 0) or 0
+        
+        # Primero identificar todos los manejos presentes en esta recepción
+        manejos_en_recepcion = set()
+        
         # Recorrer productos para obtener manejo y sumar kg/costo
         for p in r.get('productos', []) or []:
             cat = _normalize_categoria(p.get('Categoria', ''))
@@ -122,6 +129,8 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
             manejo = (p.get('Manejo') or '').strip()
             if not manejo:
                 manejo = 'Sin Manejo'
+            
+            manejos_en_recepcion.add(manejo)
             
             if manejo not in agrup[tipo]:
                 agrup[tipo][manejo] = {
@@ -136,12 +145,12 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
             agrup[tipo][manejo]['kg'] += kg
             agrup[tipo][manejo]['costo'] += costo
         
-        # Agregar valores de calidad al primer manejo encontrado (a nivel recepción)
-        # Los valores IQF/Block son a nivel de recepción, no de producto
-        for manejo_key in agrup[tipo].keys():
-            agrup[tipo][manejo_key]['iqf_vals'].append(r.get('total_iqf', 0) or 0)
-            agrup[tipo][manejo_key]['block_vals'].append(r.get('total_block', 0) or 0)
-            break  # Solo agregar una vez
+        # Agregar valores IQF/Block a TODOS los manejos presentes en esta recepción
+        # (ya que IQF/Block es medición de la recepción, aplica a todos los productos)
+        for manejo in manejos_en_recepcion:
+            if manejo in agrup[tipo]:
+                agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
+                agrup[tipo][manejo]['block_vals'].append(block_val)
     
     # Convertir a lista jerárquica
     out = []
