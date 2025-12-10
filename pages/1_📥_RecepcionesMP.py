@@ -239,7 +239,7 @@ if df is not None:
             # Fila de Tipo Fruta (totalizador)
             tabla_rows.append({
                 'tipo': 'fruta',
-                'Descripción': f"{emoji_fruta} {tipo}",
+                'Descripción': tipo,
                 'Kg': tipo_kg,
                 'Costo Total': tipo_costo,
                 'Costo/Kg': tipo_costo_prom,
@@ -265,7 +265,7 @@ if df is not None:
                 
                 tabla_rows.append({
                     'tipo': 'manejo',
-                    'Descripción': f"    ↳ {icono} {manejo}",
+                    'Descripción': f"    → {manejo}",
                     'Kg': kg,
                     'Costo Total': costo,
                     'Costo/Kg': costo_prom,
@@ -276,7 +276,7 @@ if df is not None:
         # Fila total
         tabla_rows.append({
             'tipo': 'total',
-            'Descripción': '📊 TOTAL GENERAL',
+            'Descripción': 'TOTAL GENERAL',
             'Kg': total_kg_tabla,
             'Costo Total': total_costo_tabla,
             'Costo/Kg': None,
