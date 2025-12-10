@@ -123,6 +123,101 @@ if df is not None:
         st.metric("Promedio % Block", f"{prom_block:.2f}%")
     st.markdown(f"**Clasificación más frecuente:** {clasif}")
 
+    # --- Tabla Resumen por Tipo Fruta / Manejo ---
+    st.markdown("---")
+    st.subheader("📊 Resumen por Tipo de Fruta y Manejo")
+    
+    # Agrupar por Tipo Fruta → Manejo
+    def _normalize_cat(c):
+        if not c:
+            return ''
+        cu = c.strip().upper()
+        return 'BANDEJAS' if 'BANDEJ' in cu else cu
+    
+    agrup = {}
+    for _, row in df.iterrows():
+        tipo = (row.get('tipo_fruta') or '').strip()
+        if not tipo:
+            continue
+        
+        if tipo not in agrup:
+            agrup[tipo] = {}
+        
+        iqf_val = row.get('total_iqf', 0) or 0
+        block_val = row.get('total_block', 0) or 0
+        manejos_en_rec = set()
+        
+        for p in row.get('productos', []) or []:
+            cat = _normalize_cat(p.get('Categoria', ''))
+            if cat == 'BANDEJAS':
+                continue
+            
+            manejo = (p.get('Manejo') or '').strip()
+            if not manejo:
+                manejo = 'Sin Manejo'
+            
+            manejos_en_rec.add(manejo)
+            
+            if manejo not in agrup[tipo]:
+                agrup[tipo][manejo] = {'kg': 0.0, 'costo': 0.0, 'iqf_vals': [], 'block_vals': []}
+            
+            agrup[tipo][manejo]['kg'] += p.get('Kg Hechos', 0) or 0
+            agrup[tipo][manejo]['costo'] += p.get('Costo Total', 0) or 0
+        
+        for manejo in manejos_en_rec:
+            if manejo in agrup[tipo]:
+                agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
+                agrup[tipo][manejo]['block_vals'].append(block_val)
+    
+    # Construir tabla
+    tabla_rows = []
+    for tipo in sorted(agrup.keys(), key=lambda t: sum(m['kg'] for m in agrup[t].values()), reverse=True):
+        tipo_kg = sum(m['kg'] for m in agrup[tipo].values())
+        tipo_costo = sum(m['costo'] for m in agrup[tipo].values())
+        tipo_costo_prom = tipo_costo / tipo_kg if tipo_kg > 0 else 0
+        
+        # Fila de Tipo Fruta (totalizador)
+        tabla_rows.append({
+            'Tipo Fruta / Manejo': f"**{tipo}**",
+            'Kg': f"{tipo_kg:,.2f}",
+            'Costo Total': f"${tipo_costo:,.0f}",
+            'Costo Prom/kg': f"${tipo_costo_prom:,.2f}" if tipo_kg > 0 else "-",
+            '% IQF': "-",
+            '% Block': "-"
+        })
+        
+        # Filas de Manejo
+        for manejo in sorted(agrup[tipo].keys(), key=lambda m: agrup[tipo][m]['kg'], reverse=True):
+            v = agrup[tipo][manejo]
+            kg = v['kg']
+            costo = v['costo']
+            costo_prom = costo / kg if kg > 0 else 0
+            prom_iqf = sum(v['iqf_vals']) / len(v['iqf_vals']) if v['iqf_vals'] else 0
+            prom_block = sum(v['block_vals']) / len(v['block_vals']) if v['block_vals'] else 0
+            
+            tabla_rows.append({
+                'Tipo Fruta / Manejo': f"   → {manejo}",
+                'Kg': f"{kg:,.2f}",
+                'Costo Total': f"${costo:,.0f}",
+                'Costo Prom/kg': f"${costo_prom:,.2f}" if kg > 0 else "-",
+                '% IQF': f"{prom_iqf:.2f}%",
+                '% Block': f"{prom_block:.2f}%"
+            })
+    
+    # Fila total general
+    tabla_rows.append({
+        'Tipo Fruta / Manejo': "**TOTAL GENERAL**",
+        'Kg': f"{total_kg_mp:,.2f}",
+        'Costo Total': f"${total_costo_mp:,.0f}",
+        'Costo Prom/kg': "-",
+        '% IQF': "-",
+        '% Block': "-"
+    })
+    
+    if tabla_rows:
+        df_tabla = pd.DataFrame(tabla_rows)
+        st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+
     # --- Botones de descarga de informe PDF ---
     st.markdown("---")
     st.subheader("📥 Descargar Informe de Recepciones")
