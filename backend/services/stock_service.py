@@ -70,64 +70,77 @@ class StockService:
         """
         Obtiene stock agrupado por cámara padre (Camara 1, 2, 3 de -25°C, Camara 0°C de RF/Stock).
         Las posiciones individuales se agregan a su cámara padre.
-        La capacidad se cuenta por número de posiciones hijas.
+        La capacidad se define manualmente o se cuenta por hijos.
         """
-        # PASO 1: Definir las 4 cámaras específicas que queremos
-        # Las 3 de -25°C tienen padre "Cámaras -25°"
-        # La de 0°C está en "RF/Stock" (display_name contiene RF/Stock/Camara 0°C)
-        CAMARAS_PERMITIDAS = {
-            "Camara 1 de -25°C": "Cámaras -25°",
-            "Camara 2 de -25°C": "Cámaras -25°",
-            "Camara 3 de -25°C": "Cámaras -25°",
-            "Camara 0°C": "RF/Stock",  # Solo la de RF/Stock, no la de Sjose
+        # PASO 1: Configuración de cámaras
+        # Patrón de nombre -> (padre requerido, capacidad manual o None para calcular)
+        CAMARAS_CONFIG = {
+            "Camara 1 de -25": {"padre": "Cámaras -25", "capacidad": 375},
+            "Camara 2 de -25": {"padre": "Cámaras -25", "capacidad": 199},
+            "Camara 3 de -25": {"padre": "Cámaras -25", "capacidad": 1341},
+            "Camara 0": {"padre": "RF/Stock", "capacidad": 800, "excluir": ["pos lavado", "Sjose"]},
         }
         
         try:
-            # Buscar ubicaciones que contengan estos nombres
+            # Buscar con ilike para nombres flexibles
             domain = [
                 ("usage", "=", "internal"),
                 ("active", "=", True),
                 "|", "|", "|",
-                ("name", "=", "Camara 1 de -25°C"),
-                ("name", "=", "Camara 2 de -25°C"),
-                ("name", "=", "Camara 3 de -25°C"),
-                ("name", "=", "Camara 0°C"),
+                ("name", "ilike", "Camara 1 de -25"),
+                ("name", "ilike", "Camara 2 de -25"),
+                ("name", "ilike", "Camara 3 de -25"),
+                ("name", "ilike", "Camara 0"),
             ]
             camaras_encontradas = self.odoo.search_read(
                 "stock.location",
                 domain,
                 ["id", "name", "display_name", "location_id"]
             )
-            print(f"DEBUG: Encontradas {len(camaras_encontradas)} ubicaciones con nombre exacto")
+            print(f"DEBUG: Encontradas {len(camaras_encontradas)} ubicaciones")
             for cam in camaras_encontradas:
-                print(f"  - {cam.get('name')} | display: {cam.get('display_name')}")
+                print(f"  - {cam.get('name')} | {cam.get('display_name')}")
         except Exception as e:
-            print(f"Error buscando cámaras principales: {e}")
+            print(f"Error buscando cámaras: {e}")
             import traceback
             traceback.print_exc()
             return []
 
-        # Filtrar solo las cámaras correctas según su ubicación padre
+        # Filtrar cámaras según configuración
         camaras_map = {}
         
         for cam in camaras_encontradas:
             name = cam.get("name", "")
             display_name = cam.get("display_name", "")
             
-            # Excluir "pos lavado"
-            if "pos lavado" in name.lower():
-                print(f"  Excluida (pos lavado): {name}")
+            # Buscar configuración que aplique
+            config_match = None
+            for patron, config in CAMARAS_CONFIG.items():
+                if patron.lower() in name.lower():
+                    config_match = (patron, config)
+                    break
+            
+            if not config_match:
+                print(f"  Skip (sin config): {name}")
                 continue
             
-            # Verificar que esté en la ubicación padre correcta
-            padre_requerido = CAMARAS_PERMITIDAS.get(name)
-            if not padre_requerido:
-                print(f"  Excluida (nombre no permitido): {name}")
+            patron, config = config_match
+            
+            # Verificar exclusiones
+            excluir = config.get("excluir", [])
+            excluded = False
+            for ex in excluir:
+                if ex.lower() in name.lower() or ex.lower() in display_name.lower():
+                    print(f"  Skip (excluido '{ex}'): {name}")
+                    excluded = True
+                    break
+            if excluded:
                 continue
             
-            # Verificar que el display_name contenga el padre requerido
-            if padre_requerido not in display_name:
-                print(f"  Excluida (padre incorrecto): {name} - display: {display_name} - esperado: {padre_requerido}")
+            # Verificar padre requerido
+            padre_req = config.get("padre", "")
+            if padre_req and padre_req.lower() not in display_name.lower():
+                print(f"  Skip (padre incorrecto): {name} - esperado '{padre_req}'")
                 continue
             
             parent = cam.get("location_id")
@@ -136,12 +149,12 @@ class StockService:
                 "name": name,
                 "full_name": display_name,
                 "parent_name": parent[1] if parent and isinstance(parent, (list, tuple)) else "",
-                "capacity_pallets": 0,
+                "capacity_pallets": config.get("capacidad", 0),  # Capacidad manual
                 "occupied_pallets": 0,
                 "stock_data": {},
                 "child_location_ids": []
             }
-            print(f"  Incluida: {name}")
+            print(f"  OK: {name} (cap={config.get('capacidad', 'auto')})")
 
         if not camaras_map:
             print("No se encontraron cámaras principales")
