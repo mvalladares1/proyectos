@@ -108,11 +108,19 @@ class StockService:
 
         # Filtrar solo las cámaras que queremos (no posiciones)
         camaras_map = {}
+        import re
+        # Patrón para detectar posiciones individuales como CAM01A01, CAM02B03, etc.
+        posicion_pattern = re.compile(r'^CAM\d{2}[A-Z]\d{2}$', re.IGNORECASE)
+        
         for cam in camaras_principales:
             name = cam.get("name", "")
-            # Verificar que sea una de las cámaras principales (no una posición como CAM01A01)
+            # Excluir posiciones individuales (CAM01A01, etc.) - solo queremos las cámaras padre
+            if posicion_pattern.match(name):
+                continue
+            
+            # Verificar que sea una de las cámaras principales
             for patron in CAMARAS_BUSCAR:
-                if patron.lower() in name.lower() and "CAM" not in name.upper()[:4]:
+                if patron.lower() in name.lower():
                     parent = cam.get("location_id")
                     camaras_map[cam["id"]] = {
                         "id": cam["id"],
