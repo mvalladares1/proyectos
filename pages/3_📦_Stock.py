@@ -345,9 +345,9 @@ with tab2:
                 def highlight_age(row):
                     days = row["Días"]
                     if days > 30:
-                        return ['background-color: #ffcccc'] * len(row)
+                        return ['background-color: rgba(255, 153, 102, 0.3)'] * len(row)  # Naranjo suave para > 30 días
                     elif days > 15:
-                        return ['background-color: #fff3cd'] * len(row)
+                        return ['background-color: rgba(255, 243, 205, 0.3)'] * len(row)  # Amarillo para > 15 días
                     return [''] * len(row)
                 
                 st.dataframe(

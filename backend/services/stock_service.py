@@ -385,6 +385,10 @@ class StockService:
             
             tipo_fruta_manejo = f"{tipo_fruta} - {manejo}"
             
+            # Excluir productos que no son fruta (INVENTARIABLES, EPP, etc.)
+            if tipo_fruta == "Otro":
+                continue
+            
             # Filtro por categoría (Tipo Fruta - Manejo)
             if category and category != tipo_fruta_manejo:
                 continue
