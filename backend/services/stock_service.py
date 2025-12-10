@@ -128,49 +128,71 @@ class StockService:
             if parent_id:
                 parent_ids.add(parent_id)
 
-        # PASO 3: Obtener info de padres (para identificar cámaras principales)
-        if parent_ids:
+        # PASO 3: Obtener info de padres y abuelos (carga recursiva hasta 3 niveles)
+        all_parent_ids = set(parent_ids)
+        for level in range(3):  # Hasta 3 niveles de padres
+            if not parent_ids:
+                break
             try:
                 parent_locs = self.odoo.read("stock.location", list(parent_ids), ["name", "display_name", "location_id"])
+                new_parent_ids = set()
                 for ploc in parent_locs:
-                    # Ver si el padre tiene un abuelo (para saber si es Cámara o posición)
                     grandparent = ploc.get("location_id")
+                    gp_id = grandparent[0] if grandparent and isinstance(grandparent, (list, tuple)) else None
+                    gp_name = grandparent[1] if grandparent and isinstance(grandparent, (list, tuple)) and len(grandparent) > 1 else ""
+                    
                     loc_map[ploc["id"]] = {
                         "name": ploc.get("name", ""),
                         "display_name": ploc.get("display_name", ""),
-                        "parent_id": grandparent[0] if grandparent and isinstance(grandparent, (list, tuple)) else None,
-                        "parent_name": grandparent[1] if grandparent and isinstance(grandparent, (list, tuple)) and len(grandparent) > 1 else ""
+                        "parent_id": gp_id,
+                        "parent_name": gp_name
                     }
+                    
+                    if gp_id and gp_id not in all_parent_ids and gp_id not in loc_map:
+                        new_parent_ids.add(gp_id)
+                        all_parent_ids.add(gp_id)
+                
+                parent_ids = new_parent_ids
             except Exception as e:
-                print(f"Error fetching parent locations: {e}")
+                print(f"Error fetching parent locations level {level}: {e}")
+                break
 
-        # PASO 4: Identificar cámaras principales (Camara 1, 2, 3 de -25°C, Camara 0°C)
-        # Una cámara principal es aquella que tiene "Camara" en su nombre y tiene posiciones hijas
-        CAMARAS_PRINCIPALES = [
-            {"patron": "Camara 1", "temp": "-25"},
-            {"patron": "Camara 2", "temp": "-25"},
-            {"patron": "Camara 3", "temp": "-25"},
-            {"patron": "Camara 0", "temp": "0°C"},
+        # PASO 4: Identificar cámaras principales
+        # Nombres exactos de las cámaras que queremos mostrar
+        CAMARAS_PRINCIPALES_NOMBRES = [
+            "Camara 1 de -25°C",
+            "Camara 2 de -25°C", 
+            "Camara 3 de -25°C",
+            "Camara 0°C",
         ]
+        
+        # Crear set de IDs de cámaras principales
+        camaras_principales_ids = set()
+        for loc_id, loc_info in loc_map.items():
+            loc_name = loc_info.get("name", "")
+            for cam_nombre in CAMARAS_PRINCIPALES_NOMBRES:
+                # Comparar ignorando acentos y mayúsculas
+                if cam_nombre.lower().replace("°", "").replace("º", "") in loc_name.lower().replace("°", "").replace("º", ""):
+                    camaras_principales_ids.add(loc_id)
+                    break
         
         # Función para determinar a qué cámara principal pertenece una ubicación
         def get_parent_chamber(loc_id):
             """Busca recursivamente la cámara padre principal"""
+            if loc_id in camaras_principales_ids:
+                return loc_id
+            
             if loc_id not in loc_map:
                 return None
+            
             loc_info = loc_map[loc_id]
-            loc_name = loc_info.get("name", "").upper()
-            display_name = loc_info.get("display_name", "").upper()
-            
-            # Verificar si esta ubicación es una cámara principal
-            for cfg in CAMARAS_PRINCIPALES:
-                if cfg["patron"].upper() in loc_name or cfg["patron"].upper() in display_name:
-                    if cfg["temp"].upper() in display_name or cfg["temp"].upper() in loc_name:
-                        return loc_id
-            
-            # Si no, buscar en el padre
             parent_id = loc_info.get("parent_id")
+            
             if parent_id and parent_id != loc_id:
+                # Verificar si el padre es una cámara principal
+                if parent_id in camaras_principales_ids:
+                    return parent_id
+                # Si no, buscar recursivamente
                 return get_parent_chamber(parent_id)
             
             return None
