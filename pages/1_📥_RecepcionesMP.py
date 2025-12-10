@@ -13,6 +13,46 @@ import io
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.auth import proteger_pagina, get_credenciales
 
+# --- Funciones de formateo chileno ---
+def fmt_fecha(fecha_str):
+    """Convierte fecha ISO a formato DD/MM/AAAA"""
+    if not fecha_str:
+        return ""
+    try:
+        if isinstance(fecha_str, str):
+            # Manejar formato con hora
+            if " " in fecha_str:
+                fecha_str = fecha_str.split(" ")[0]
+            elif "T" in fecha_str:
+                fecha_str = fecha_str.split("T")[0]
+            dt = datetime.strptime(fecha_str, "%Y-%m-%d")
+        else:
+            dt = fecha_str
+        return dt.strftime("%d/%m/%Y")
+    except:
+        return str(fecha_str)
+
+def fmt_numero(valor, decimales=0):
+    """Formatea número con punto como miles y coma como decimal"""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return "0"
+    try:
+        if decimales > 0:
+            # Con decimales: 1.234,56
+            formatted = f"{valor:,.{decimales}f}"
+        else:
+            # Sin decimales: 1.234
+            formatted = f"{valor:,.0f}"
+        # Intercambiar: coma -> temporal, punto -> coma, temporal -> punto
+        formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+        return formatted
+    except:
+        return str(valor)
+
+def fmt_dinero(valor, decimales=0):
+    """Formatea valor monetario con símbolo $"""
+    return f"${fmt_numero(valor, decimales)}"
+
 st.set_page_config(page_title="Recepciones MP", page_icon="📥", layout="wide")
 
 # Autenticación central
@@ -110,17 +150,17 @@ if df is not None:
     # Mostrar en dos filas compactas
     top_cols = st.columns([1,1,1])
     with top_cols[0]:
-        st.metric("Total Kg Recepcionados MP", f"{total_kg_mp:,.2f}")
+        st.metric("Total Kg Recepcionados MP", fmt_numero(total_kg_mp, 2))
     with top_cols[1]:
-        st.metric("Costo Total MP", f"${total_costo_mp:,.0f}")
+        st.metric("Costo Total MP", fmt_dinero(total_costo_mp))
     with top_cols[2]:
-        st.metric("Bandejas recepcionadas", f"{total_bandejas:,.2f}")
+        st.metric("Bandejas recepcionadas", fmt_numero(total_bandejas, 2))
 
     bot_cols = st.columns([1,1])
     with bot_cols[0]:
-        st.metric("Promedio % IQF", f"{prom_iqf:.2f}%")
+        st.metric("Promedio % IQF", f"{fmt_numero(prom_iqf, 2)}%")
     with bot_cols[1]:
-        st.metric("Promedio % Block", f"{prom_block:.2f}%")
+        st.metric("Promedio % Block", f"{fmt_numero(prom_block, 2)}%")
     st.markdown(f"**Clasificación más frecuente:** {clasif}")
 
     # --- Tabla Resumen por Tipo Fruta / Manejo ---
@@ -247,13 +287,13 @@ if df is not None:
         # Crear DataFrame
         df_resumen = pd.DataFrame(tabla_rows)
         
-        # Formatear para mostrar
+        # Formatear para mostrar (formato chileno: punto miles, coma decimal)
         df_display = df_resumen.copy()
-        df_display['Kg'] = df_display['Kg'].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
-        df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "—")
-        df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) and x > 0 else "—")
-        df_display['% IQF'] = df_display['% IQF'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) and x > 0 else "—")
-        df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) and x > 0 else "—")
+        df_display['Kg'] = df_display['Kg'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) else "—")
+        df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: fmt_dinero(x) if pd.notna(x) else "—")
+        df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
+        df_display['% IQF'] = df_display['% IQF'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
+        df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
         
         # Mostrar usando columnas estilizadas
         df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', '% IQF', '% Block']]
@@ -396,10 +436,13 @@ if df is not None:
     # Convertir a numérico, restar bandejas y formatear
     df_mostrar["Bandejas"] = pd.to_numeric(df_mostrar["Bandejas"], errors='coerce').fillna(0.0)
     df_mostrar["Kg Recepcionados"] = pd.to_numeric(df_mostrar["Kg Recepcionados"], errors='coerce').fillna(0.0) - df_mostrar["Bandejas"]
-    df_mostrar["Kg Recepcionados"] = df_mostrar["Kg Recepcionados"].apply(lambda x: f"{x:.2f}")
-    df_mostrar["Bandejas"] = df_mostrar["Bandejas"].apply(lambda x: f"{x:.2f}")
-    df_mostrar["% IQF"] = df_mostrar["% IQF"].apply(lambda x: f"{x:.2f}")
-    df_mostrar["% Block"] = df_mostrar["% Block"].apply(lambda x: f"{x:.2f}")
+    # Formatear fecha a DD/MM/AAAA
+    df_mostrar["Fecha"] = df_mostrar["Fecha"].apply(fmt_fecha)
+    # Formatear números con formato chileno
+    df_mostrar["Kg Recepcionados"] = df_mostrar["Kg Recepcionados"].apply(lambda x: fmt_numero(x, 2))
+    df_mostrar["Bandejas"] = df_mostrar["Bandejas"].apply(lambda x: fmt_numero(x, 2))
+    df_mostrar["% IQF"] = df_mostrar["% IQF"].apply(lambda x: fmt_numero(x, 2))
+    df_mostrar["% Block"] = df_mostrar["% Block"].apply(lambda x: fmt_numero(x, 2))
     df_mostrar["Calidad"] = df_mostrar["Calidad"].apply(lambda x: "✅" if x else "❌")
 
     # Botones para exportar a CSV y Excel
@@ -462,14 +505,14 @@ if df is not None:
     st.subheader("🔬 Detalle de Defectos (promedios)")
     col_d1, col_d2, col_d3 = st.columns(3)
     with col_d1:
-        st.metric("Daño Mecánico", f"{df_filtrada['dano_mecanico'].mean():.2f}")
-        st.metric("Hongos", f"{df_filtrada['hongos'].mean():.2f}")
+        st.metric("Daño Mecánico", fmt_numero(df_filtrada['dano_mecanico'].mean(), 2))
+        st.metric("Hongos", fmt_numero(df_filtrada['hongos'].mean(), 2))
     with col_d2:
-        st.metric("Inmadura", f"{df_filtrada['inmadura'].mean():.2f}")
-        st.metric("Sobremadura", f"{df_filtrada['sobremadura'].mean():.2f}")
+        st.metric("Inmadura", fmt_numero(df_filtrada['inmadura'].mean(), 2))
+        st.metric("Sobremadura", fmt_numero(df_filtrada['sobremadura'].mean(), 2))
     with col_d3:
-        st.metric("Daño Insecto", f"{df_filtrada['dano_insecto'].mean():.2f}")
-        st.metric("Defecto Frutilla", f"{df_filtrada['defecto_frutilla'].mean():.4f}")
+        st.metric("Daño Insecto", fmt_numero(df_filtrada['dano_insecto'].mean(), 2))
+        st.metric("Defecto Frutilla", fmt_numero(df_filtrada['defecto_frutilla'].mean(), 4))
 
     # --- Detalle de recepción específica (abajo) ---
     opciones_idx = df_filtrada.index.tolist()
@@ -482,7 +525,7 @@ if df is not None:
             "Selecciona una recepción para ver el detalle:",
             options=opciones_idx,
             index=default_idx,
-            format_func=lambda i: f"{df_filtrada.loc[i, 'albaran']} - {df_filtrada.loc[i, 'productor']} - {df_filtrada.loc[i, 'fecha']}",
+            format_func=lambda i: f"{df_filtrada.loc[i, 'albaran']} - {df_filtrada.loc[i, 'productor']} - {fmt_fecha(df_filtrada.loc[i, 'fecha'])}",
             key="selectbox_recepcion"
         )
         st.session_state.idx_recepcion = idx
@@ -492,15 +535,15 @@ if df is not None:
         detalle_cols = st.columns(2)
         with detalle_cols[0]:
             st.write(f"**Albarán:** {rec['albaran']}")
-            st.write(f"**Fecha:** {rec['fecha']}")
+            st.write(f"**Fecha:** {fmt_fecha(rec['fecha'])}")
             st.write(f"**Productor:** {rec['productor']}")
             st.write(f"**Tipo Fruta:** {rec['tipo_fruta']}")
             st.write(f"**Guía Despacho:** {rec['guia_despacho']}")
         with detalle_cols[1]:
-            st.write(f"**Kg Recepcionados:** {rec['kg_recepcionados']:,.2f}")
+            st.write(f"**Kg Recepcionados:** {fmt_numero(rec['kg_recepcionados'], 2)}")
             st.write(f"**Clasificación:** {rec['calific_final']}")
-            st.write(f"**% IQF:** {rec['total_iqf']:.2f}")
-            st.write(f"**% Block:** {rec['total_block']:.2f}")
+            st.write(f"**% IQF:** {fmt_numero(rec['total_iqf'], 2)}")
+            st.write(f"**% Block:** {fmt_numero(rec['total_block'], 2)}")
 
         st.markdown("#### 📦 Productos de la Recepción")
         if 'productos' in rec and isinstance(rec['productos'], list) and rec['productos']:
@@ -510,9 +553,9 @@ if df is not None:
                 # Quitar product_id de la vista
                 if 'product_id' in prod_df.columns:
                     prod_df = prod_df.drop(columns=['product_id'])
-                prod_df['Kg Hechos'] = prod_df['Kg Hechos'].apply(lambda x: f"{x:.2f}")
-                prod_df['Costo Total'] = prod_df['Costo Total'].apply(lambda x: f"${x:,.0f}")
-                prod_df['Costo Unitario'] = prod_df['Costo Unitario'].apply(lambda x: f"${x:,.0f}")
+                prod_df['Kg Hechos'] = prod_df['Kg Hechos'].apply(lambda x: fmt_numero(x, 2))
+                prod_df['Costo Total'] = prod_df['Costo Total'].apply(lambda x: fmt_dinero(x))
+                prod_df['Costo Unitario'] = prod_df['Costo Unitario'].apply(lambda x: fmt_dinero(x))
                 st.dataframe(prod_df, use_container_width=True, hide_index=True)
             else:
                 st.info("No hay productos con Kg > 0 para esta recepción.")
