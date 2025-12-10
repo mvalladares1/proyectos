@@ -615,7 +615,7 @@ if df is not None:
             
             for col in lineas_df.columns:
                 if col not in ['Fecha/Hora', 'Palet', 'Calif.']:
-                    lineas_df[col] = lineas_df[col].apply(lambda x: f"{float(x):.2f}" if pd.notna(x) else "0.00")
+                    lineas_df[col] = lineas_df[col].apply(lambda x: fmt_numero(float(x), 2) if pd.notna(x) else "0,00")
             
             st.dataframe(lineas_df, use_container_width=True, hide_index=True)
             
