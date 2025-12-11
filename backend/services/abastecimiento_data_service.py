@@ -276,13 +276,11 @@ def get_purchase_orders(client):
         if not products.empty:
             df = pd.merge(df, products, left_on='product_id_val', right_on='id', suffixes=('', '_prod'))
 
-        # Filter received
-        if 'qty_received' in df.columns:
-            df = df[df['qty_received'] != 0]
-
         # Filter by category containing 'Producto'
         if 'complete_name' in df.columns:
             df = df[df['complete_name'].str.contains('Producto|PRODUCTO|Materia Prima|MATERIA PRIMA', case=False, na=False)]
+        elif 'categ_name' in df.columns:
+            df = df[df['categ_name'].str.contains('Producto|PRODUCTO|Materia Prima|MATERIA PRIMA', case=False, na=False)]
 
         # Parse product codes using TOKEN_LIBRARY
         def parse_product_code(row):
