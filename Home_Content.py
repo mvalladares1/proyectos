@@ -1,0 +1,203 @@
+"""
+Página principal del dashboard - Selección de dashboards disponibles
+"""
+import os
+import httpx
+import streamlit as st
+
+from shared.auth import guardar_permisos_state
+
+
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+
+
+def fetch_permissions(username: str) -> dict | None:
+    try:
+        resp = httpx.get(
+            f"{API_URL}/api/v1/permissions/user",
+            params={"username": username},
+            timeout=10.0
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPError:
+        return None
+
+
+# CSS personalizado
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .section-header {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #4a4a4a;
+        margin: 1.5rem 0 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e0e0e0;
+    }
+    .dashboard-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        color: white;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .card-operaciones {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    .card-finanzas {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card-admin {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    .card-title {
+        font-size: 1.2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .card-desc {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        min-height: 40px;
+    }
+    .stButton>button {
+        width: 100%;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Header principal
+st.markdown('<p class="main-header">🏭 Rio Futuro Dashboards</p>', unsafe_allow_html=True)
+
+# Estado de autenticación
+if 'authenticated' not in st.session_state:
+    st.session_state['authenticated'] = False
+
+if not st.session_state['authenticated']:
+    st.markdown("---")
+    st.subheader("🔐 Iniciar Sesión")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        with st.form("login_form"):
+            email = st.text_input("📧 Correo Electrónico", placeholder="usuario@riofuturo.cl")
+            api_token = st.text_input("🔑 Token API Odoo", type="password", placeholder="Tu API Key de Odoo")
+            submit_button = st.form_submit_button("Ingresar", use_container_width=True)
+            
+            if submit_button:
+                if email and api_token:
+                    try:
+                        response = httpx.post(
+                            f"{API_URL}/api/v1/auth/login",
+                            json={"username": email, "password": api_token},
+                            timeout=10.0
+                        )
+                        
+                        if response.status_code == 200:
+                            st.session_state['authenticated'] = True
+                            st.session_state['username'] = email
+                            st.session_state['password'] = api_token
+                            st.session_state['user_data'] = response.json()
+                            permisos = fetch_permissions(email)
+                            if permisos:
+                                guardar_permisos_state(
+                                    permisos.get('restricted', {}),
+                                    permisos.get('allowed', []),
+                                    permisos.get('is_admin', False)
+                                )
+                            else:
+                                guardar_permisos_state({}, [], False)
+                            st.success("✅ Login exitoso!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error de autenticación: {response.json().get('detail', 'Credenciales inválidas')}")
+                    except httpx.ConnectError:
+                        st.error("❌ No se puede conectar al servidor API.")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+                else:
+                    st.warning("⚠️ Por favor ingresa tu correo y token API")
+    
+    st.markdown("---")
+    st.info("💡 **Nota:** Necesitas un Token API de Odoo para acceder.")
+
+else:
+    # Usuario autenticado
+    st.sidebar.success(f"👤 {st.session_state.get('username', 'Usuario')}")
+    
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    
+    st.markdown("---")
+    st.subheader("📊 Selecciona un Dashboard")
+    st.info("👈 Usa el menú lateral para navegar a los diferentes dashboards.")
+    
+    # Tarjetas informativas
+    st.markdown('<div class="section-header">📦 Operaciones</div>', unsafe_allow_html=True)
+    
+    cols = st.columns(3)
+    dashboards_op = [
+        ("📥", "Recepciones", "KPIs de Kg, costos y calidad por productor"),
+        ("🏭", "Producción", "Órdenes de fabricación y rendimientos"),
+        ("📊", "Bandejas", "Control de bandejas por proveedor"),
+        ("📦", "Stock", "Inventario en cámaras y pallets"),
+        ("🚢", "Containers", "Pedidos y avance de producción"),
+    ]
+    
+    for i, (icon, title, desc) in enumerate(dashboards_op):
+        with cols[i % 3]:
+            st.markdown(f"""
+            <div class="dashboard-card card-operaciones">
+                <div class="card-title">{icon} {title}</div>
+                <div class="card-desc">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="section-header">💰 Finanzas</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("""
+        <div class="dashboard-card card-finanzas">
+            <div class="card-title">💰 Finanzas</div>
+            <div class="card-desc">Estado de Resultado vs Presupuesto</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="section-header">⚙️ Administración</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("""
+        <div class="dashboard-card card-admin">
+            <div class="card-title">⚙️ Permisos</div>
+            <div class="card-desc">Gestión de accesos por usuario</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Información del sistema
+    st.markdown("---")
+    with st.expander("ℹ️ Información del Sistema"):
+        st.markdown("""
+        **Rio Futuro Dashboards v1.0**
+        
+        - **Backend:** FastAPI
+        - **Frontend:** Streamlit
+        - **Base de Datos:** Odoo ERP
+        """)

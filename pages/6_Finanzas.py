@@ -14,10 +14,6 @@ from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciale
 
 st.set_page_config(page_title="Finanzas", page_icon="💰", layout="wide")
 
-# Inyectar iconos CSS en sidebar
-from shared.styles import inject_sidebar_icons
-inject_sidebar_icons()
-
 if not proteger_pagina():
     st.stop()
 
