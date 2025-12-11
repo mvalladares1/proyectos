@@ -325,8 +325,8 @@ class StockService:
         
         domain = [
             ("location_id", "in", child_locations),
-            ("quantity", ">", 0),
-            ("package_id", "!=", False)  # Solo pallets
+            ("quantity", ">", 0)
+            # Ya no filtramos por package_id para mostrar todo el stock
         ]
         
         fields = [
