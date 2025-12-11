@@ -32,7 +32,7 @@ class StockService:
             return cached
         
         try:
-            p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name"])
+            p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name", "x_studio_categoria_tipo_de_manejo"])
             products_map = {p["id"]: p for p in p_data}
             self._cache.set(cache_key, products_map, ttl=OdooCache.TTL_PRODUCTOS)
             return products_map
@@ -234,9 +234,16 @@ class StockService:
         products_info = {}
         for pid, p in products_raw.items():
             cat = p.get("categ_id")
+            manejo_raw = p.get("x_studio_categoria_tipo_de_manejo", "")
+            # El campo puede ser "Convencional", "Orgánico" o False/None
+            if manejo_raw and isinstance(manejo_raw, str):
+                manejo = "Orgánico" if "org" in manejo_raw.lower() else "Convencional"
+            else:
+                manejo = "Convencional"
             products_info[pid] = {
                 "category": cat[1] if cat and isinstance(cat, (list, tuple)) else "Sin Categoria",
-                "name": p.get("name", "")
+                "name": p.get("name", ""),
+                "manejo": manejo
             }
 
         # PASO 5: Agregar stock por cámara y tipo fruta/manejo
@@ -285,13 +292,8 @@ class StockService:
                 elif "MIX" in prod_name or "MIXED" in prod_name or "CREATIVE" in prod_name:
                     tipo_fruta = "Mix"
                 
-                # Detectar Manejo
-                if " ORG " in f" {prod_name} " or "ORG_" in prod_name or "_ORG" in prod_name or "ORGANICO" in prod_name or "ORGÁNICO" in prod_name:
-                    manejo = "Orgánico"
-                elif " CONV " in f" {prod_name} " or "CONV_" in prod_name or "_CONV" in prod_name or "CONVENCIONAL" in prod_name:
-                    manejo = "Convencional"
-                else:
-                    manejo = "Convencional"
+                # Usar el manejo del campo x_studio_categoria_tipo_de_manejo
+                manejo = p_info.get("manejo", "Convencional")
             else:
                 tipo_fruta = "Desconocido"
                 manejo = "N/A"
@@ -356,7 +358,7 @@ class StockService:
         product_ids = set(q["product_id"][0] for q in quants if q.get("product_id") and isinstance(q.get("product_id"), (list, tuple)))
         products_map = {}
         if product_ids:
-            p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name"])
+            p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name", "x_studio_categoria_tipo_de_manejo"])
             for p in p_data:
                 products_map[p["id"]] = p
         
@@ -395,11 +397,10 @@ class StockService:
             elif "MIX" in prod_upper or "MIXED" in prod_upper or "CREATIVE" in prod_upper:
                 tipo_fruta = "Mix"
             
-            # Detectar Manejo
-            if " ORG " in f" {prod_upper} " or "ORG_" in prod_upper or "_ORG" in prod_upper or "ORGANICO" in prod_upper or "ORGÁNICO" in prod_upper:
-                manejo = "Orgánico"
-            elif " CONV " in f" {prod_upper} " or "CONV_" in prod_upper or "_CONV" in prod_upper or "CONVENCIONAL" in prod_upper:
-                manejo = "Convencional"
+            # Obtener Manejo del campo x_studio_categoria_tipo_de_manejo
+            manejo_raw = p_info.get("x_studio_categoria_tipo_de_manejo", "")
+            if manejo_raw and isinstance(manejo_raw, str):
+                manejo = "Orgánico" if "org" in manejo_raw.lower() else "Convencional"
             else:
                 manejo = "Convencional"
             
