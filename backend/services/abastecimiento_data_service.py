@@ -205,22 +205,22 @@ def get_purchase_orders(client):
     # Odoo domain filter
     domain = [('state', 'in', ['purchase', 'done'])]
     
-    pos = client.search_read('purchase.order', domain, po_fields, context={'active_test': False})
+    pos = client.search_read('purchase.order', domain, po_fields)
     if not pos:
         return pd.DataFrame()
         
     po_ids = [po['id'] for po in pos]
     
     # Fetch PO Lines
-    lines = client.search_read('purchase.order.line', [('order_id', 'in', po_ids)], po_line_fields, context={'active_test': False})
+    lines = client.search_read('purchase.order.line', [('order_id', 'in', po_ids)], po_line_fields)
     
     # Fetch Products
     product_ids = list(set([line['product_id'][0] for line in lines if line['product_id']]))
-    products = client.search_read('product.product', [('id', 'in', product_ids)], product_fields, context={'active_test': False})
+    products = client.search_read('product.product', [('id', 'in', product_ids)], product_fields)
     
     # Fetch Categories
     categ_ids = list(set([p['categ_id'][0] for p in products if p['categ_id']]))
-    categories = client.search_read('product.category', [('id', 'in', categ_ids)], category_fields, context={'active_test': False})
+    categories = client.search_read('product.category', [('id', 'in', categ_ids)], category_fields)
     
     # Create DataFrames
     df_po = pd.DataFrame(pos)
