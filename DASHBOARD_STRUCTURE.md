@@ -72,6 +72,7 @@ proyectos/
 | 4 | Stock | `4_Stock.py` | Inventario en cámaras y pallets |
 | 5 | Containers | `5_Containers.py` | Pedidos y avance de producción |
 | 6 | Finanzas | `6_Finanzas.py` | Estado de Resultado vs Presupuesto |
+| 7 | Rendimiento | `7_Rendimiento.py` | Análisis de rendimiento por lote (MP → PT) |
 | 9 | Permisos | `9_Permisos.py` | Panel de administración |
 
 ---
@@ -88,6 +89,10 @@ proyectos/
 | `/api/v1/estado-resultado/` | Estado de resultado |
 | `/api/v1/presupuesto/` | Presupuesto |
 | `/api/v1/permissions/` | Gestión de permisos |
+| `/api/v1/rendimiento/overview` | KPIs de rendimiento consolidados |
+| `/api/v1/rendimiento/lotes` | Rendimiento por lote MP |
+| `/api/v1/rendimiento/proveedores` | Rendimiento por proveedor |
+| `/api/v1/rendimiento/mos` | Rendimiento por MO |
 
 ---
 

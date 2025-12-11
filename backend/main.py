@@ -15,7 +15,8 @@ from backend.routers import (
     estado_resultado,
     presupuesto,
     permissions,
-    recepcion
+    recepcion,
+    rendimiento
 )
 
 # Crear aplicación
@@ -47,6 +48,7 @@ app.include_router(estado_resultado.router)
 app.include_router(presupuesto.router)
 app.include_router(permissions.router)
 app.include_router(recepcion.router)
+app.include_router(rendimiento.router)
 
 
 @app.get("/")
