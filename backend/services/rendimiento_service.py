@@ -84,17 +84,18 @@ class RendimientoService:
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500) -> List[Dict]:
         """
         Obtiene MOs terminadas en el período.
+        Usa date_planned_start (fecha prevista) para filtrar.
         """
         domain = [
             ['state', '=', 'done'],
-            ['date_finished', '!=', False],
-            ['date_finished', '>=', fecha_inicio],
-            ['date_finished', '<=', fecha_fin + ' 23:59:59']
+            ['date_planned_start', '!=', False],
+            ['date_planned_start', '>=', fecha_inicio],
+            ['date_planned_start', '<=', fecha_fin + ' 23:59:59']
         ]
         
         basic_fields = [
             'name', 'product_id', 'product_qty', 'qty_produced',
-            'date_start', 'date_finished', 'state',
+            'date_start', 'date_finished', 'date_planned_start', 'state',
             'move_raw_ids', 'move_finished_ids'
         ]
         
@@ -111,7 +112,7 @@ class RendimientoService:
                 domain,
                 basic_fields + custom_fields,
                 limit=limit,
-                order='date_finished desc'
+                order='date_planned_start desc'
             )
         except Exception:
             mos = self.odoo.search_read(
@@ -119,7 +120,7 @@ class RendimientoService:
                 domain,
                 basic_fields,
                 limit=limit,
-                order='date_finished desc'
+                order='date_planned_start desc'
             )
         
         return [clean_record(mo) for mo in mos]
@@ -491,9 +492,9 @@ class RendimientoService:
                 elif isinstance(prod, dict):
                     product_name = prod.get('name', '')
                 
-                # Fecha
-                fecha_raw = mo.get('date_finished', '') or ''
-                fecha = fecha_raw[:10] if fecha_raw and len(str(fecha_raw)) >= 10 else ''
+                # Fecha (usar date_planned_start)
+                fecha_raw = mo.get('date_planned_start', '') or mo.get('date_finished', '') or ''
+                fecha = str(fecha_raw)[:10] if fecha_raw and len(str(fecha_raw)) >= 10 else ''
                 
                 resultado.append({
                     'mo_id': mo.get('id', 0),
