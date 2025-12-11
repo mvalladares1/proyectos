@@ -57,15 +57,20 @@ class RendimientoService:
         """
         domain = [
             ['state', '=', 'done'],
+            ['date_finished', '!=', False],
             ['date_finished', '>=', fecha_inicio],
             ['date_finished', '<=', fecha_fin + ' 23:59:59']
         ]
         
-        fields = [
+        # Campos básicos que siempre existen
+        basic_fields = [
             'name', 'product_id', 'product_qty', 'qty_produced',
             'date_start', 'date_finished', 'state',
-            'move_raw_ids', 'move_finished_ids',
-            # Campos custom
+            'move_raw_ids', 'move_finished_ids'
+        ]
+        
+        # Campos custom (pueden no existir)
+        custom_fields = [
             'x_studio_dotacin', 'x_studio_hh', 'x_studio_hh_efectiva',
             'x_studio_kghh_efectiva', 'x_studio_kghora_efectiva',
             'x_studio_horas_detencion_totales', 'x_studio_merma_bolsas',
@@ -73,13 +78,24 @@ class RendimientoService:
             'x_studio_sala_de_proceso'
         ]
         
-        mos = self.odoo.search_read(
-            'mrp.production',
-            domain,
-            fields,
-            limit=limit,
-            order='date_finished desc'
-        )
+        # Intentar con todos los campos
+        try:
+            mos = self.odoo.search_read(
+                'mrp.production',
+                domain,
+                basic_fields + custom_fields,
+                limit=limit,
+                order='date_finished desc'
+            )
+        except Exception:
+            # Fallback: solo campos básicos
+            mos = self.odoo.search_read(
+                'mrp.production',
+                domain,
+                basic_fields,
+                limit=limit,
+                order='date_finished desc'
+            )
         
         return [clean_record(mo) for mo in mos]
     
