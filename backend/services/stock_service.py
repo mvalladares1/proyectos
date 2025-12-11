@@ -260,20 +260,26 @@ class StockService:
                 cat_name = p_info["category"].upper()
                 prod_name = p_info["name"].upper()
                 
+                # Excluir INVENTARIABLES (EPP, etc.)
+                if "INVENTARIABLES" in cat_name:
+                    continue
+                
                 # Detectar Tipo Fruta (orden importante: más específico primero)
                 tipo_fruta = "Otro"
                 
-                # Primero buscar por código de producto (AR, FB, FR, MO, CR)
+                # Primero buscar por código de producto (AR, FB, FR, FT, MO, CR, MIX)
                 if " AR " in f" {prod_name} " or "AR_" in prod_name or prod_name.startswith("AR ") or "ARANDANO" in prod_name or "ARÁNDANO" in prod_name or "ARANDANO" in cat_name:
                     tipo_fruta = "Arándano"
                 elif " FB " in f" {prod_name} " or "FB_" in prod_name or prod_name.startswith("FB ") or "FRAMBUESA" in prod_name or "FRAMBUESA" in cat_name:
                     tipo_fruta = "Frambuesa"
-                elif " FR " in f" {prod_name} " or "FR_" in prod_name or prod_name.startswith("FR ") or "FRUTILLA" in prod_name or "FRUTILLA" in cat_name:
+                elif " FR " in f" {prod_name} " or "FR_" in prod_name or prod_name.startswith("FR ") or " FT " in f" {prod_name} " or "FT_" in prod_name or prod_name.startswith("FT ") or "FRUTILLA" in prod_name or "FRUTILLA" in cat_name:
                     tipo_fruta = "Frutilla"
                 elif " MO " in f" {prod_name} " or "MO_" in prod_name or prod_name.startswith("MO ") or "MORA" in prod_name or "MORA" in cat_name:
                     tipo_fruta = "Mora"
                 elif " CR " in f" {prod_name} " or "CR_" in prod_name or prod_name.startswith("CR ") or "CEREZA" in prod_name or "CEREZA" in cat_name:
                     tipo_fruta = "Cereza"
+                elif "MIX" in prod_name or "MIXED" in prod_name or "CREATIVE" in prod_name:
+                    tipo_fruta = "Mix"
                 
                 # Detectar Manejo
                 if " ORG " in f" {prod_name} " or "ORG_" in prod_name or "_ORG" in prod_name or "ORGANICO" in prod_name or "ORGÁNICO" in prod_name:
@@ -362,18 +368,24 @@ class StockService:
             prod_upper = prod_name.upper()
             cat_upper = cat_name.upper()
             
+            # Excluir INVENTARIABLES (EPP, etc.)
+            if "INVENTARIABLES" in cat_upper:
+                continue
+            
             # Detectar Tipo Fruta
             tipo_fruta = "Otro"
             if " AR " in f" {prod_upper} " or "AR_" in prod_upper or prod_upper.startswith("AR ") or "ARANDANO" in prod_upper or "ARÁNDANO" in prod_upper or "ARANDANO" in cat_upper:
                 tipo_fruta = "Arándano"
             elif " FB " in f" {prod_upper} " or "FB_" in prod_upper or prod_upper.startswith("FB ") or "FRAMBUESA" in prod_upper or "FRAMBUESA" in cat_upper:
                 tipo_fruta = "Frambuesa"
-            elif " FR " in f" {prod_upper} " or "FR_" in prod_upper or prod_upper.startswith("FR ") or "FRUTILLA" in prod_upper or "FRUTILLA" in cat_upper:
+            elif " FR " in f" {prod_upper} " or "FR_" in prod_upper or prod_upper.startswith("FR ") or " FT " in f" {prod_upper} " or "FT_" in prod_upper or prod_upper.startswith("FT ") or "FRUTILLA" in prod_upper or "FRUTILLA" in cat_upper:
                 tipo_fruta = "Frutilla"
             elif " MO " in f" {prod_upper} " or "MO_" in prod_upper or prod_upper.startswith("MO ") or "MORA" in prod_upper or "MORA" in cat_upper:
                 tipo_fruta = "Mora"
             elif " CR " in f" {prod_upper} " or "CR_" in prod_upper or prod_upper.startswith("CR ") or "CEREZA" in prod_upper or "CEREZA" in cat_upper:
                 tipo_fruta = "Cereza"
+            elif "MIX" in prod_upper or "MIXED" in prod_upper or "CREATIVE" in prod_upper:
+                tipo_fruta = "Mix"
             
             # Detectar Manejo
             if " ORG " in f" {prod_upper} " or "ORG_" in prod_upper or "_ORG" in prod_upper or "ORGANICO" in prod_upper or "ORGÁNICO" in prod_upper:
