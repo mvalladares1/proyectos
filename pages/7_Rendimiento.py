@@ -167,28 +167,78 @@ if data:
         if lotes:
             df_lotes = pd.DataFrame(lotes)
             
-            # Agregar columnas formateadas para mostrar
-            df_display = df_lotes[['lot_name', 'product_name', 'proveedor', 'kg_consumidos', 'kg_producidos', 'rendimiento', 'merma', 'num_mos']].copy()
-            df_display.columns = ['Lote', 'Producto', 'Proveedor', 'Kg Consumidos', 'Kg Producidos', 'Rendimiento %', 'Merma Kg', 'MOs']
+            # === FILTROS ===
+            st.markdown("**Filtrar por:**")
+            filter_cols = st.columns(3)
             
-            # Formatear
-            df_display['Kg Consumidos'] = df_display['Kg Consumidos'].apply(lambda x: fmt_numero(x, 0))
-            df_display['Kg Producidos'] = df_display['Kg Producidos'].apply(lambda x: fmt_numero(x, 0))
-            df_display['Rendimiento %'] = df_display['Rendimiento %'].apply(lambda x: fmt_porcentaje(x))
-            df_display['Merma Kg'] = df_display['Merma Kg'].apply(lambda x: fmt_numero(x, 0))
+            with filter_cols[0]:
+                # Filtro por proveedor
+                proveedores_unicos = sorted(df_lotes['proveedor'].unique().tolist())
+                prov_filtro = st.multiselect("Proveedor", proveedores_unicos)
             
-            # Filtro por proveedor
-            proveedores_unicos = df_lotes['proveedor'].unique().tolist()
-            prov_filtro = st.multiselect("Filtrar por Proveedor", proveedores_unicos)
+            with filter_cols[1]:
+                # Filtro por tipo de fruta
+                if 'tipo_fruta' in df_lotes.columns:
+                    frutas_unicas = sorted(df_lotes['tipo_fruta'].unique().tolist())
+                    fruta_filtro = st.multiselect("Tipo Fruta", frutas_unicas)
+                else:
+                    fruta_filtro = []
             
+            with filter_cols[2]:
+                # Filtro por manejo
+                if 'manejo' in df_lotes.columns:
+                    manejos_unicos = sorted(df_lotes['manejo'].unique().tolist())
+                    manejo_filtro = st.multiselect("Manejo", manejos_unicos)
+                else:
+                    manejo_filtro = []
+            
+            # Aplicar filtros
+            df_filtered = df_lotes.copy()
             if prov_filtro:
-                mask = df_lotes['proveedor'].isin(prov_filtro)
-                df_display = df_display[mask]
+                df_filtered = df_filtered[df_filtered['proveedor'].isin(prov_filtro)]
+            if fruta_filtro:
+                df_filtered = df_filtered[df_filtered['tipo_fruta'].isin(fruta_filtro)]
+            if manejo_filtro:
+                df_filtered = df_filtered[df_filtered['manejo'].isin(manejo_filtro)]
+            
+            # Mostrar métricas del filtro
+            if prov_filtro or fruta_filtro or manejo_filtro:
+                st.caption(f"Mostrando {len(df_filtered)} de {len(df_lotes)} lotes")
+            
+            # Preparar columnas para mostrar
+            display_cols = ['lot_name', 'product_name', 'tipo_fruta', 'manejo', 'proveedor', 
+                           'orden_compra', 'fecha_recepcion', 'kg_consumidos', 'kg_producidos', 
+                           'rendimiento', 'merma', 'num_mos']
+            
+            # Filtrar solo columnas que existen
+            available_cols = [c for c in display_cols if c in df_filtered.columns]
+            df_display = df_filtered[available_cols].copy()
+            
+            # Renombrar columnas
+            col_names = {
+                'lot_name': 'Lote', 'product_name': 'Producto', 
+                'tipo_fruta': 'Fruta', 'manejo': 'Manejo',
+                'proveedor': 'Proveedor', 'orden_compra': 'OC',
+                'fecha_recepcion': 'Fecha Recep.', 'kg_consumidos': 'Kg MP',
+                'kg_producidos': 'Kg PT', 'rendimiento': 'Rend %',
+                'merma': 'Merma Kg', 'num_mos': 'MOs'
+            }
+            df_display = df_display.rename(columns=col_names)
+            
+            # Formatear números
+            if 'Kg MP' in df_display.columns:
+                df_display['Kg MP'] = df_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
+            if 'Kg PT' in df_display.columns:
+                df_display['Kg PT'] = df_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
+            if 'Rend %' in df_display.columns:
+                df_display['Rend %'] = df_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
+            if 'Merma Kg' in df_display.columns:
+                df_display['Merma Kg'] = df_display['Merma Kg'].apply(lambda x: fmt_numero(x, 0))
             
             st.dataframe(df_display, use_container_width=True, hide_index=True)
             
             # Descargar
-            csv = df_lotes.to_csv(index=False).encode('utf-8')
+            csv = df_filtered.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Descargar CSV", csv, "rendimiento_lotes.csv", "text/csv")
         else:
             st.info("Sin datos de lotes. Haz clic en 'Consultar Rendimiento'.")

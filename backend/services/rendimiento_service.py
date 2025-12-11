@@ -35,6 +35,23 @@ class RendimientoService:
     # Productos a excluir de la producción
     EXCLUDED_PRODUCTION = ["proceso retail", "proceso", "merma"]
     
+    # Códigos de fruta para extraer tipo
+    FRUIT_CODES = {
+        'ar': 'Arándano', 'arandano': 'Arándano', 'blueberry': 'Arándano',
+        'fb': 'Frambuesa', 'frambuesa': 'Frambuesa', 'raspberry': 'Frambuesa',
+        'ft': 'Frutilla', 'frutilla': 'Frutilla', 'strawberry': 'Frutilla',
+        'mr': 'Mora', 'mora': 'Mora', 'blackberry': 'Mora',
+        'cz': 'Cereza', 'cereza': 'Cereza', 'cherry': 'Cereza',
+        'gs': 'Grosella', 'grosella': 'Grosella', 'currant': 'Grosella'
+    }
+    
+    # Códigos de manejo
+    HANDLING_CODES = {
+        'conv': 'Convencional', 'convencional': 'Convencional',
+        'org': 'Orgánico', 'organico': 'Orgánico', 'organic': 'Orgánico',
+        'iqf': 'IQF', 'fresco': 'Fresco', 'fresh': 'Fresco'
+    }
+    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self._cache = get_cache()
@@ -80,6 +97,39 @@ class RendimientoService:
             return True
         
         return False
+    
+    def _extract_fruit_type(self, product_name: str) -> str:
+        """
+        Extrae el tipo de fruta del nombre del producto.
+        Ejemplo: '[101122000] AR HB Conv. IQF en Bandeja' -> 'Arándano'
+        """
+        if not product_name:
+            return 'Desconocido'
+        
+        name_lower = product_name.lower()
+        
+        # Buscar código de fruta
+        for code, fruit in self.FRUIT_CODES.items():
+            if code in name_lower or f'[{code[:2].upper()}' in product_name:
+                return fruit
+        
+        return 'Otro'
+    
+    def _extract_handling(self, product_name: str) -> str:
+        """
+        Extrae el tipo de manejo del nombre del producto.
+        Ejemplo: '[101122000] AR HB Conv. IQF en Bandeja' -> 'Convencional'
+        """
+        if not product_name:
+            return 'Desconocido'
+        
+        name_lower = product_name.lower()
+        
+        for code, handling in self.HANDLING_CODES.items():
+            if code in name_lower:
+                return handling
+        
+        return 'Otro'
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500) -> List[Dict]:
         """
@@ -333,7 +383,8 @@ class RendimientoService:
             except Exception:
                 continue
         
-        rendimiento_promedio = sum(rendimientos) / len(rendimientos) if rendimientos else 0
+        # Usar rendimiento PONDERADO por volumen (más preciso para KPIs)
+        rendimiento_promedio = (total_kg_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0
         merma_total = total_kg_mp - total_kg_pt
         merma_pct = (merma_total / total_kg_mp * 100) if total_kg_mp > 0 else 0
         kg_por_hh = (total_kg_pt / total_hh) if total_hh > 0 else 0
@@ -414,15 +465,31 @@ class RendimientoService:
             data['kg_producidos'] = round(kg_p, 2)
             data['num_mos'] = len(data['mos'])
             
-            # Obtener proveedor (solo para primeros 50 lotes por performance)
-            if len(resultado) < 50:
+            # Obtener proveedor, OC y fecha recepción (solo para primeros 100 lotes)
+            if len(resultado) < 100:
                 try:
-                    proveedor = self.get_proveedor_lote(lot_id)
-                    data['proveedor'] = proveedor['name'] if proveedor else 'Desconocido'
+                    proveedor_info = self.get_proveedor_lote(lot_id)
+                    if proveedor_info:
+                        data['proveedor'] = proveedor_info.get('name', 'Desconocido')
+                        data['orden_compra'] = proveedor_info.get('origin', '')
+                        fecha_rec = proveedor_info.get('fecha_recepcion')
+                        data['fecha_recepcion'] = str(fecha_rec)[:10] if fecha_rec else ''
+                    else:
+                        data['proveedor'] = 'Desconocido'
+                        data['orden_compra'] = ''
+                        data['fecha_recepcion'] = ''
                 except Exception:
                     data['proveedor'] = 'Desconocido'
+                    data['orden_compra'] = ''
+                    data['fecha_recepcion'] = ''
             else:
                 data['proveedor'] = 'Pendiente'
+                data['orden_compra'] = ''
+                data['fecha_recepcion'] = ''
+            
+            # Extraer tipo de fruta y manejo del nombre del producto
+            data['tipo_fruta'] = self._extract_fruit_type(data.get('product_name', ''))
+            data['manejo'] = self._extract_handling(data.get('product_name', ''))
             
             resultado.append(data)
         
