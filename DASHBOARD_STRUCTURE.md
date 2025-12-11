@@ -1,8 +1,8 @@
 # Estructura del Proyecto - Rio Futuro Dashboards
 
-Este documento describe la estructura del repositorio `rio-futuro-dashboards`, la forma en que los dashboards se organizan, los endpoints del backend y el modo recomendado de desplegar y añadir nuevos dashboards.
+Este documento describe la estructura del repositorio `rio-futuro-dashboards`.
 
-**Última actualización:** 4 de Diciembre 2025
+**Última actualización:** 11 de Diciembre 2025
 
 ---
 
@@ -20,380 +20,107 @@ Este documento describe la estructura del repositorio `rio-futuro-dashboards`, l
 ## 2. Estructura de Carpetas
 
 ```
-rio-futuro-dashboards/
-├── .env                          # Variables de entorno (Odoo credentials, API config)
+proyectos/
+├── .env                          # Variables de entorno
 ├── .streamlit/config.toml        # Configuración Streamlit
-├── Home.py                       # Página principal del dashboard
+├── Home.py                       # Página principal
 ├── requirements.txt              # Dependencias Python
 ├── DASHBOARD_STRUCTURE.md        # Este archivo
 ├── PAGES.md                      # Guía para agregar páginas
 │
 ├── backend/                      # API FastAPI
-│   ├── main.py                   # Entry point - registro de routers y CORS
-│   ├── config/
-│   │   └── settings.py           # Configuración desde .env
-│   ├── routers/                  # Endpoints organizados por feature
-│   │   ├── auth.py               # Autenticación
-│   │   ├── produccion.py         # /api/v1/produccion/*
-│   │   ├── bandejas.py           # /api/v1/bandejas/*
-│   │   ├── stock.py              # /api/v1/stock/*
-│   │   ├── containers.py         # /api/v1/containers/*
-│   │   └── demo.py               # /api/v1/example (pruebas)
-│   ├── services/                 # Lógica de negocio + conexión Odoo
-│   │   ├── produccion_service.py # Consultas OFs, componentes, subproductos
-│   │   ├── bandejas_service.py
-│   │   ├── stock_service.py
-│   └── tests/
-│       └── test_demo.py
+│   ├── main.py                   # Entry point
+│   ├── config/settings.py        # Configuración
+│   ├── routers/                  # Endpoints por feature
+│   │   ├── auth.py
+│   │   ├── produccion.py
+│   │   ├── bandejas.py
+│   │   ├── stock.py
+│   │   ├── containers.py
+│   │   ├── estado_resultado.py
+│   │   ├── presupuesto.py
+│   │   ├── permissions.py
+│   │   └── recepciones_mp.py
+│   └── services/                 # Lógica de negocio
 │
-├── pages/                        # Páginas Streamlit (cada archivo = un dashboard)
-│   ├── 1_📦_Produccion.py        # Dashboard de Órdenes de Fabricación
-│   ├── 2_📊_Bandejas.py          # Dashboard de Bandejas
-│   ├── 3_📦_Stock.py             # Dashboard de Stock
-│   └── 4_🚢_Containers.py        # Dashboard de Containers
+├── pages/                        # Páginas Streamlit
+│   ├── 1_Recepciones.py          # 📥 Recepciones MP
+│   ├── 2_Produccion.py           # 🏭 Producción
+│   ├── 3_Bandejas.py             # 📊 Bandejas
+│   ├── 4_Stock.py                # 📦 Stock
+│   ├── 5_Containers.py           # 🚢 Containers
+│   ├── 6_Finanzas.py             # 💰 Finanzas (Estado Resultado)
+│   └── 9_Permisos.py             # ⚙️ Panel Admin
 │
 ├── shared/                       # Módulos compartidos
-│   ├── auth.py                   # proteger_pagina(), get_credentials()
-│   ├── constants.py              # Constantes globales
-│   └── odoo_client.py            # Cliente XML-RPC para Odoo
+│   ├── auth.py
+│   ├── constants.py
+│   └── odoo_client.py
 │
-└── scripts/
-    └── deploy-and-verify.sh      # Script de deploy automatizado
+└── data/                         # Archivos de datos (presupuesto)
 ```
 
 ---
 
-## 3. Configuración (.env)
+## 3. Dashboards Disponibles
 
-```env
-ODOO_URL=https://riofuturo.server98c6e.oerpondemand.net
-ODOO_DB=riofuturo-master
-ODOO_USER=usuario@riofuturo.cl
-ODOO_PASSWORD=api_key_odoo
-API_URL=http://127.0.0.1:8000
-API_HOST=0.0.0.0
-API_PORT=8000
-```
-
-### 3.1 Variables de entorno requeridas (detallado)
-
-Las siguientes variables deben estar definidas en el fichero `.env` ubicado en la raíz de la aplicación (`/home/debian/rio-futuro-dashboards/app/.env`) o bien exportadas en las unidades systemd (según la política de despliegue):
-
-- `ODOO_URL`: URL base del servidor Odoo (ej. `https://miodoo.example.com`).
-- `ODOO_DB`: Nombre de la base de datos Odoo a consultar.
-- `ODOO_USER`: Usuario API/Odoo (o login) usado para las conexiones XML-RPC.
-- `ODOO_PASSWORD`: Contraseña o clave API para el usuario Odoo.
-- `API_URL`: URL donde el backend está escuchando (usado por Streamlit para llamar la API). Por defecto `http://127.0.0.1:8000`.
-- `API_HOST` / `API_PORT`: Host/puerto para el arranque del backend (opcional si systemd define ExecStart con estos valores).
-
-Opcionales (según deployment/entorno):
-
-- `SENTRY_DSN`: DSN de Sentry para reportes de errores.
-- `LOG_LEVEL`: Nivel de logs (DEBUG, INFO, WARNING, ERROR).
-
-Seguridad y buenas prácticas:
-
-- No subir jamás el fichero `.env` al repositorio. Añadir `.env` a `.gitignore` si aún no está.
-- Hacer una copia de seguridad antes de actualizar el repo: `cp .env ../env_backup.env`.
-- Asegurar permisos restrictivos en producción: `chmod 600 .env` y propietario `debian` (o el usuario que ejecute los servicios).
-- Para systemd, preferible usar `EnvironmentFile=/home/debian/rio-futuro-dashboards/app/.env` o `Environment=` lines en la unidad en lugar de exportar globalmente.
-
-Ejemplo (drop-in systemd que carga `.env`):
-
-```
-[Service]
-EnvironmentFile=/home/debian/rio-futuro-dashboards/app/.env
-ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
-
-Si prefieres no usar `EnvironmentFile`, exporta explícitamente las variables en la unidad con `Environment=VAR=value`.
-
+| # | Nombre | Archivo | Descripción |
+|---|--------|---------|-------------|
+| 1 | Recepciones | `1_Recepciones.py` | KPIs de Kg, costos, calidad por productor |
+| 2 | Producción | `2_Produccion.py` | Órdenes de fabricación, rendimientos |
+| 3 | Bandejas | `3_Bandejas.py` | Control de bandejas por proveedor |
+| 4 | Stock | `4_Stock.py` | Inventario en cámaras y pallets |
+| 5 | Containers | `5_Containers.py` | Pedidos y avance de producción |
+| 6 | Finanzas | `6_Finanzas.py` | Estado de Resultado vs Presupuesto |
+| 9 | Permisos | `9_Permisos.py` | Panel de administración |
 
 ---
 
-## 4. Backend (FastAPI)
+## 4. Endpoints API
 
-### Endpoints Principales
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-
-| `/api/v1/produccion/of/{of_name}` | GET | Detalle de una OF |
-| `/api/v1/produccion/of/{of_name}/componentes` | GET | Componentes de la OF |
-| `/api/v1/produccion/of/{of_name}/subproductos` | GET | Subproductos de la OF |
-| `/api/v1/bandejas/...` | GET | Endpoints de bandejas |
-| `/api/v1/stock/...` | GET | Endpoints de stock |
-| `/api/v1/containers/...` | GET | Endpoints de containers |
-
-### Agregar Nuevo Endpoint
-
-1. Crear `backend/routers/<nombre>.py`
-2. Crear `backend/services/<nombre>_service.py`
-3. Registrar en `backend/main.py`:
-   ```python
-   from backend.routers import nuevo_router
-   app.include_router(nuevo_router.router, prefix="/api/v1")
-   ```
+| Endpoint | Descripción |
+|----------|-------------|
+| `/api/v1/auth/login` | Autenticación |
+| `/api/v1/recepciones-mp/` | Recepciones de materia prima |
+| `/api/v1/produccion/ordenes` | Órdenes de fabricación |
+| `/api/v1/stock/camaras` | Stock por cámaras |
+| `/api/v1/containers/` | Containers |
+| `/api/v1/estado-resultado/` | Estado de resultado |
+| `/api/v1/presupuesto/` | Presupuesto |
+| `/api/v1/permissions/` | Gestión de permisos |
 
 ---
 
-## 5. Frontend (Streamlit)
+## 5. Despliegue
 
-### Estructura de una Página
-
-```python
-"""
-Descripción del dashboard (usada por Home.py)
-"""
-import streamlit as st
-
-st.set_page_config(
-    page_title="Nombre Dashboard",
-    page_icon="📊",
-    layout="wide"
-)
-
-# Proteger página (opcional)
-from shared.auth import proteger_pagina
-proteger_pagina()
-
-# Contenido del dashboard...
-```
-
-### Agregar Nueva Página
-
-1. Crear `pages/N_📊_NombreDashboard.py`
-2. Agregar docstring y `st.set_page_config`
-3. Implementar UI con Streamlit
-4. Actualizar `PAGES.md`
-
----
-
-## 6. Despliegue
-
-### URLs de Producción
-
-| Servicio | URL |
-|----------|-----|
-| GitHub | https://github.com/mvalladares1/proyectos.git |
-| Dashboard | http://167.114.114.51/dashboards/ |
-| API | http://167.114.114.51:8000 |
-
-### Servicios Systemd
-
-- `rio-futuro-api.service` → Backend FastAPI (puerto 8000)
-- `rio-futuro-web.service` → Frontend Streamlit (puerto 8501)
-
-### Arquitectura del Servidor
-
-```
-Servidor: debian@167.114.114.51
-
-/home/debian/
-├── rio-futuro-dashboards/          # Repositorio clonado (referencia)
-│   └── app/                        # ⬅️ APLICACIÓN EN PRODUCCIÓN
-│       ├── .env                    # Variables de entorno (credenciales Odoo)
-│       ├── venv/                   # Entorno virtual Python
-│       ├── backend/                # API FastAPI
-│       ├── pages/                  # Páginas Streamlit
-│       ├── shared/                 # Módulos compartidos
-│       └── Home.py                 # Página principal
-
-Nginx (proxy reverso):
-├── /dashboards/  → http://127.0.0.1:8501 (Streamlit)
-├── /api/v1/      → http://127.0.0.1:8000 (FastAPI)
-└── /_stcore/     → http://127.0.0.1:8501 (WebSocket Streamlit)
-```
-
-### Configuración Systemd
-
-**rio-futuro-api.service:**
-```ini
-[Unit]
-Description=Rio Futuro Dashboards API (FastAPI)
-After=network.target
-
-[Service]
-Type=simple
-User=debian
-WorkingDirectory=/home/debian/rio-futuro-dashboards/app
-Environment=PYTHONPATH=/home/debian/rio-futuro-dashboards/app
-ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**rio-futuro-web.service:**
-```ini
-[Unit]
-Description=Rio Futuro Dashboards Web (Streamlit)
-After=network.target
-
-[Service]
-Type=simple
-User=debian
-WorkingDirectory=/home/debian/rio-futuro-dashboards/app
-Environment=PYTHONPATH=/home/debian/rio-futuro-dashboards/app
-Environment=API_URL=http://127.0.0.1:8000
-ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/streamlit run Home.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
----
-
-## 7. Comandos de Deploy
-
-### Paso 1: Subir a Git (desde Windows - Git Bash)
+### Comandos Rápidos
 
 ```bash
-cd ~/Desktop/PEGA/rio-futuro-dashboards
-git add -A
-git commit -m "Descripción de los cambios"
-git push -u origin main
-```
-
-**Si hay conflictos:**
-```bash
-git checkout --ours <archivos_conflicto>
-git add -A
-git commit -m "merge: resolver conflictos manteniendo versión local"
-git push -u origin main
-```
-
-### Paso 2: Actualizar en el Servidor (SSH)
-
-```bash
-# 1. Conectar al servidor
+# Conectar al servidor
 ssh debian@167.114.114.51
 
-# 2. Ir a la carpeta de la aplicación
+# Ir a la app
 cd /home/debian/rio-futuro-dashboards/app
 
-# 3. Hacer backup del .env (IMPORTANTE - tiene credenciales)
+# Backup .env, pull y restaurar
 cp .env ../env_backup.env
-
-# 4. Descartar cambios locales y actualizar
-git reset --hard HEAD
-git clean -fd
-git pull
-
-# 5. Restaurar el .env
+git reset --hard HEAD && git pull
 cp ../env_backup.env .env
 
-# 6. Reiniciar servicios
-sudo systemctl restart rio-futuro-api
-sudo systemctl restart rio-futuro-web
-
-# 7. Verificar estado
-sudo systemctl status rio-futuro-api
-sudo systemctl status rio-futuro-web
-```
-
-### Verificar Estado
-
-```bash
-# Ver estado de ambos servicios
-sudo systemctl status rio-futuro-api rio-futuro-web
-
-# Ver procesos corriendo
-ps aux | grep -E "uvicorn|streamlit"
-```
-
-### Ver Logs
-
-```bash
-# Logs del backend (FastAPI)
-sudo journalctl -u rio-futuro-api -n 100 -f
-
-# Logs del frontend (Streamlit)
-sudo journalctl -u rio-futuro-web -n 100 -f
-
-# Ver archivo nohup.out (si existe)
-cat /home/debian/rio-futuro-dashboards/app/nohup.out
-```
-
-### Comandos Útiles
-
-```bash
-# Reiniciar ambos servicios
+# Reiniciar servicios
 sudo systemctl restart rio-futuro-api rio-futuro-web
 
-# Detener servicios
-sudo systemctl stop rio-futuro-api rio-futuro-web
-
-# Iniciar servicios
-sudo systemctl start rio-futuro-api rio-futuro-web
-
-# Ver configuración nginx
-cat /etc/nginx/sites-available/rio-futuro-dashboards
-
-# Reiniciar nginx (si cambias configuración)
-sudo systemctl restart nginx
+# Ver logs
+sudo journalctl -u rio-futuro-web -n 100 -f
 ```
 
 ---
 
-## 8. Desarrollo Local
+## 6. Servicios Systemd
 
-### Iniciar Backend
-
-```bash
-cd rio-futuro-dashboards
-uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-### Iniciar Frontend
-
-```bash
-cd rio-futuro-dashboards
-streamlit run Home.py --server.port 8501
-```
-
-### Ejecutar Tests
-
-```bash
-cd rio-futuro-dashboards/backend
-pytest -q
-```
+- `rio-futuro-api.service` → Backend (puerto 8000)
+- `rio-futuro-web.service` → Frontend (puerto 8501)
 
 ---
 
-## 9. Troubleshooting
-
-### Error 404 en endpoint
-1. Verificar que el router está registrado en `backend/main.py`
-2. Reiniciar servicio: `sudo systemctl restart rio-futuro-api`
-3. Ver logs: `sudo journalctl -u rio-futuro-api -n 200`
-
-### Uvicorn no arranca
-1. Verificar dependencias: `pip install -r requirements.txt`
-2. Verificar `.env` tiene todas las variables
-3. Ver traceback en logs
-
-### Streamlit no carga
-1. Verificar `API_URL` en `.env`
-2. Verificar que backend está corriendo
-3. Ver logs: `sudo journalctl -u rio-futuro-web -n 200`
-
----
-
-## 10. Notas Importantes
-
-- **Rendimiento en Producción:** Se calcula como `kg_out / kg_in * 100` donde:
-  - `kg_in` = Componentes con categoría "PRODUCTOS" (solo fruta, no insumos)
-  - `kg_out` = Subproductos excluyendo categorías "PROCESOS" y "MERMA"
-
-- **Precio Unitario:** Usa campo `x_studio_precio_unitario` de `stock.move.line`
-
-- **Formato Fechas:** DD/MM/YYYY (día/mes/año)
-
----
-
-*Documento actualizado el 4 de Diciembre 2025*
+*Documento actualizado el 11 de Diciembre 2025*

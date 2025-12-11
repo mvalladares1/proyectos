@@ -117,6 +117,16 @@ st.markdown("""
     div[data-testid="stVerticalBlock"] > div:has(> .dashboard-card) {
         padding: 0.25rem;
     }
+    
+    /* Iconos en la sidebar */
+    [data-testid="stSidebarNav"] li:nth-child(1) span::before { content: "🏠 "; }
+    [data-testid="stSidebarNav"] li:nth-child(2) span::before { content: "📥 "; }
+    [data-testid="stSidebarNav"] li:nth-child(3) span::before { content: "🏭 "; }
+    [data-testid="stSidebarNav"] li:nth-child(4) span::before { content: "📊 "; }
+    [data-testid="stSidebarNav"] li:nth-child(5) span::before { content: "📦 "; }
+    [data-testid="stSidebarNav"] li:nth-child(6) span::before { content: "🚢 "; }
+    [data-testid="stSidebarNav"] li:nth-child(7) span::before { content: "💰 "; }
+    [data-testid="stSidebarNav"] li:nth-child(8) span::before { content: "⚙️ "; }
 </style>
 """, unsafe_allow_html=True)
 
