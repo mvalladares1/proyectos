@@ -192,10 +192,13 @@ with tab_diario:
             fig_gauge.update_layout(height=250, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig_gauge, use_container_width=True)
     with col_pmp:
+        st.subheader("Precio Medio Ponderado")
         if not filtered_po.empty:
-            pmp_val, _ = recepcion_service.calculate_raw_pmp(filtered_po)
+            # Filtrar solo CONVENCIONAL y ORGANICO para PMP
+            pmp_df = filtered_po[filtered_po['labeling'].isin(['CONVENCIONAL', 'ORGANICO'])]
+            pmp_val, _ = recepcion_service.calculate_raw_pmp(pmp_df)
             formatted_pmp = f"{pmp_val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
-            st.markdown(f"<div style='padding:15px;border:1px solid #d0d0d0;border-radius:5px;text-align:center;background:white;'><div style='font-size:16px;'>Precio Medio Ponderado</div><div style='font-size:48px;font-weight:bold'>{formatted_pmp}</div></div>", unsafe_allow_html=True)
+            st.metric("PMP", formatted_pmp)
 
     st.subheader("Control Presupuestario")
     if not control_df.empty:
