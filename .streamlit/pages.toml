@@ -1,0 +1,34 @@
+[[pages]]
+path = "pages/1_Recepciones.py"
+name = "Recepciones"
+icon = "📥"
+
+[[pages]]
+path = "pages/2_Produccion.py"
+name = "Producción"
+icon = "🏭"
+
+[[pages]]
+path = "pages/3_Bandejas.py"
+name = "Bandejas"
+icon = "📊"
+
+[[pages]]
+path = "pages/4_Stock.py"
+name = "Stock"
+icon = "📦"
+
+[[pages]]
+path = "pages/5_Containers.py"
+name = "Containers"
+icon = "🚢"
+
+[[pages]]
+path = "pages/6_Finanzas.py"
+name = "Finanzas"
+icon = "💰"
+
+[[pages]]
+path = "pages/9_Permisos.py"
+name = "Permisos"
+icon = "⚙️"
