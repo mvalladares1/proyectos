@@ -260,8 +260,12 @@ class StockService:
                 cat_name = p_info["category"].upper()
                 prod_name = p_info["name"].upper()
                 
-                # Excluir INVENTARIABLES (EPP, etc.)
-                if "INVENTARIABLES" in cat_name:
+                # Excluir categorías que no son productos de fruta
+                CATEGORIAS_EXCLUIDAS = [
+                    "INVENTARIABLES", "BANDEJAS", "ACTIVO", "SERVICIOS",
+                    "EQUIPOS", "MUEBLES", "EJEMPLODS", "OTROS", "ALL1"
+                ]
+                if any(excl in cat_name for excl in CATEGORIAS_EXCLUIDAS):
                     continue
                 
                 # Detectar Tipo Fruta (orden importante: más específico primero)
@@ -368,8 +372,12 @@ class StockService:
             prod_upper = prod_name.upper()
             cat_upper = cat_name.upper()
             
-            # Excluir INVENTARIABLES (EPP, etc.)
-            if "INVENTARIABLES" in cat_upper:
+            # Excluir categorías que no son productos de fruta
+            CATEGORIAS_EXCLUIDAS = [
+                "INVENTARIABLES", "BANDEJAS", "ACTIVO", "SERVICIOS",
+                "EQUIPOS", "MUEBLES", "EJEMPLODS", "OTROS", "ALL1"
+            ]
+            if any(excl in cat_upper for excl in CATEGORIAS_EXCLUIDAS):
                 continue
             
             # Detectar Tipo Fruta
