@@ -198,7 +198,7 @@ else:
         },
         "finanzas": {
             "title": "💰 Finanzas",
-            "slugs": ["estadoresultado", "abastecimiento"],
+            "slugs": ["estadoresultado"],
             "style": "card-finanzas"
         },
         "admin": {
