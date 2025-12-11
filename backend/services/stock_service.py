@@ -489,7 +489,7 @@ class StockService:
         products_map = {}
         if product_ids:
             try:
-                p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name"])
+                p_data = self.odoo.read("product.product", list(product_ids), ["categ_id", "name", "x_studio_categora_tipo_de_manejo"])
                 for p in p_data:
                     products_map[p["id"]] = p
             except:
@@ -508,8 +508,40 @@ class StockService:
             p_info = products_map.get(prod_id, {})
             p_cat = p_info.get("categ_id", [0, ""])[1] if p_info.get("categ_id") else ""
             p_name = p_info.get("name", "")
-            p_condition = "Orgánico" if "org" in p_name.lower() else "Convencional"
-            p_species_condition = f"{p_cat} - {p_condition}"
+            prod_upper = p_name.upper()
+            cat_upper = p_cat.upper()
+            
+            # Excluir categorías que no son productos de fruta
+            CATEGORIAS_EXCLUIDAS = [
+                "INVENTARIABLES", "BANDEJAS", "ACTIVO", "SERVICIOS",
+                "EQUIPOS", "MUEBLES", "EJEMPLODS", "OTROS", "ALL1"
+            ]
+            if any(excl in cat_upper for excl in CATEGORIAS_EXCLUIDAS):
+                continue
+            
+            # Detectar Tipo Fruta (misma lógica que get_pallets)
+            tipo_fruta = "Otro"
+            if " AR " in f" {prod_upper} " or "AR_" in prod_upper or prod_upper.startswith("AR ") or "ARANDANO" in prod_upper or "ARÁNDANO" in prod_upper or "ARANDANO" in cat_upper:
+                tipo_fruta = "Arándano"
+            elif " FB " in f" {prod_upper} " or "FB_" in prod_upper or prod_upper.startswith("FB ") or "FRAMBUESA" in prod_upper or "FRAMBUESA" in cat_upper:
+                tipo_fruta = "Frambuesa"
+            elif " FR " in f" {prod_upper} " or "FR_" in prod_upper or prod_upper.startswith("FR ") or " FT " in f" {prod_upper} " or "FT_" in prod_upper or prod_upper.startswith("FT ") or "FRUTILLA" in prod_upper or "FRUTILLA" in cat_upper:
+                tipo_fruta = "Frutilla"
+            elif " MO " in f" {prod_upper} " or "MO_" in prod_upper or prod_upper.startswith("MO ") or "MORA" in prod_upper or "MORA" in cat_upper:
+                tipo_fruta = "Mora"
+            elif " CR " in f" {prod_upper} " or "CR_" in prod_upper or prod_upper.startswith("CR ") or "CEREZA" in prod_upper or "CEREZA" in cat_upper:
+                tipo_fruta = "Cereza"
+            elif "MIX" in prod_upper or "MIXED" in prod_upper or "CREATIVE" in prod_upper:
+                tipo_fruta = "Mix"
+            
+            # Obtener Manejo del campo x_studio_categora_tipo_de_manejo
+            manejo_raw = p_info.get("x_studio_categora_tipo_de_manejo", "")
+            if manejo_raw and isinstance(manejo_raw, str):
+                manejo = "Orgánico" if "org" in manejo_raw.lower() else "Convencional"
+            else:
+                manejo = "Convencional"
+            
+            p_species_condition = f"{tipo_fruta} - {manejo}"
             
             # Filtrar por categoría
             if p_species_condition != category:
