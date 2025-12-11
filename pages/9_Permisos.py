@@ -16,6 +16,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Inyectar iconos CSS en sidebar
+from shared.styles import inject_sidebar_icons
+inject_sidebar_icons()
+
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 if not proteger_pagina():

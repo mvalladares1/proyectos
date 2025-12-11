@@ -49,6 +49,10 @@ def fmt_numero(valor, decimales=0):
 
 st.set_page_config(page_title="Bandejas", page_icon="📊", layout="wide")
 
+# Inyectar iconos CSS en sidebar
+from shared.styles import inject_sidebar_icons
+inject_sidebar_icons()
+
 # Verificar autenticación
 if not proteger_pagina():
     st.stop()

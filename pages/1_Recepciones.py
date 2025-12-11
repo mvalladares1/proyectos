@@ -55,6 +55,10 @@ def fmt_dinero(valor, decimales=0):
 
 st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
 
+# Inyectar iconos CSS en sidebar
+from shared.styles import inject_sidebar_icons
+inject_sidebar_icons()
+
 # Autenticación central
 if not proteger_pagina():
     st.stop()

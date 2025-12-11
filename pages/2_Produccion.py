@@ -23,6 +23,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Inyectar iconos CSS en sidebar
+from shared.styles import inject_sidebar_icons
+inject_sidebar_icons()
+
 # Verificar autenticación
 if not proteger_pagina():
     st.stop()
