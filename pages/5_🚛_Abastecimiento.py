@@ -192,13 +192,32 @@ with tab_diario:
             fig_gauge.update_layout(height=250, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig_gauge, use_container_width=True)
     with col_pmp:
-        st.subheader("Precio Medio Ponderado")
         if not filtered_po.empty:
-            # Filtrar solo CONVENCIONAL y ORGANICO para PMP
-            pmp_df = filtered_po[filtered_po['labeling'].isin(['CONVENCIONAL', 'ORGANICO'])]
+            # Filtrar solo CONVENCIONAL y ORGANICO para PMP  
+            pmp_df = filtered_po.copy()
+            pmp_df = pmp_df[pmp_df['labeling'].isin(['CONVENCIONAL', 'ORGANICO'])]
+            
+            # Use Raw PMP (matches DAX formula without currency conversion)
             pmp_val, _ = recepcion_service.calculate_raw_pmp(pmp_df)
-            formatted_pmp = f"{pmp_val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
-            st.metric("PMP", formatted_pmp)
+            
+            # Format with comma as decimal separator
+            formatted_pmp = f"{pmp_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+            st.markdown(f"""
+            <div style="
+                border: 1px solid rgba(128, 128, 128, 0.3); 
+                border-radius: 5px; 
+                padding: 15px; 
+                text-align: center; 
+                background-color: rgba(128, 128, 128, 0.1);
+                margin-top: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            ">
+                <div style="font-size: 16px; font-weight: 500; margin-bottom: 10px;">Precio Medio Ponderado</div>
+                <div style="font-size: 48px; font-weight: bold; line-height: 1.2;">{formatted_pmp}</div>
+                <div style="font-size: 14px; margin-top: 5px;">PMP</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     st.subheader("Control Presupuestario")
     if not control_df.empty:
