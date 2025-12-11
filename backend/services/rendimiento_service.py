@@ -231,31 +231,36 @@ class RendimientoService:
         rendimientos_por_mo = []
         
         for mo in mos:
-            consumos = self.get_consumos_mo(mo)
-            produccion = self.get_produccion_mo(mo)
-            
-            if not consumos:
+            try:
+                consumos = self.get_consumos_mo(mo)
+                produccion = self.get_produccion_mo(mo)
+                
+                if not consumos:
+                    continue
+                
+                kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
+                kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
+                
+                if kg_mp == 0:
+                    continue
+                
+                total_kg_mp += kg_mp
+                total_kg_pt += kg_pt
+                hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
+                if isinstance(hh, (int, float)):
+                    total_hh += hh
+                mos_procesadas += 1
+                
+                rend = (kg_pt / kg_mp * 100) if kg_mp > 0 else 0
+                rendimientos_por_mo.append(rend)
+                
+                # Recolectar lotes únicos
+                for c in consumos:
+                    if c.get('lot_id'):
+                        lotes_set.add(c['lot_id'])
+            except Exception:
+                # Skip MOs with bad data
                 continue
-            
-            kg_mp = sum(c['qty_done'] for c in consumos)
-            kg_pt = sum(p['qty_done'] for p in produccion)
-            
-            if kg_mp == 0:
-                continue
-            
-            total_kg_mp += kg_mp
-            total_kg_pt += kg_pt
-            hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
-            total_hh += hh
-            mos_procesadas += 1
-            
-            rend = (kg_pt / kg_mp * 100) if kg_mp > 0 else 0
-            rendimientos_por_mo.append(rend)
-            
-            # Recolectar lotes únicos
-            for c in consumos:
-                if c['lot_id']:
-                    lotes_set.add(c['lot_id'])
         
         rendimiento_promedio = sum(rendimientos_por_mo) / len(rendimientos_por_mo) if rendimientos_por_mo else 0
         merma_total = total_kg_mp - total_kg_pt
@@ -286,41 +291,46 @@ class RendimientoService:
         lotes_data = {}
         
         for mo in mos:
-            consumos = self.get_consumos_mo(mo)
-            produccion = self.get_produccion_mo(mo)
-            
-            kg_pt_mo = sum(p['qty_done'] for p in produccion)
-            kg_mp_mo = sum(c['qty_done'] for c in consumos)
-            
-            if kg_mp_mo == 0:
-                continue
-            
-            # Distribuir PT proporcionalmente entre lotes consumidos
-            for c in consumos:
-                lot_id = c['lot_id']
-                if not lot_id:
+            try:
+                consumos = self.get_consumos_mo(mo)
+                produccion = self.get_produccion_mo(mo)
+                
+                kg_pt_mo = sum(p.get('qty_done', 0) or 0 for p in produccion)
+                kg_mp_mo = sum(c.get('qty_done', 0) or 0 for c in consumos)
+                
+                if kg_mp_mo == 0:
                     continue
                 
-                lot_key = lot_id
-                if lot_key not in lotes_data:
-                    lotes_data[lot_key] = {
-                        'lot_id': lot_id,
-                        'lot_name': c['lot_name'],
-                        'product_name': c['product_name'],
-                        'kg_consumidos': 0,
-                        'kg_producidos': 0,
-                        'mos': [],
-                        'proveedor': None
-                    }
-                
-                lotes_data[lot_key]['kg_consumidos'] += c['qty_done']
-                
-                # Proporción de PT que corresponde a este lote
-                proporcion = c['qty_done'] / kg_mp_mo if kg_mp_mo > 0 else 0
-                lotes_data[lot_key]['kg_producidos'] += kg_pt_mo * proporcion
-                
-                if mo['name'] not in lotes_data[lot_key]['mos']:
-                    lotes_data[lot_key]['mos'].append(mo['name'])
+                # Distribuir PT proporcionalmente entre lotes consumidos
+                for c in consumos:
+                    lot_id = c.get('lot_id')
+                    if not lot_id:
+                        continue
+                    
+                    lot_key = lot_id
+                    if lot_key not in lotes_data:
+                        lotes_data[lot_key] = {
+                            'lot_id': lot_id,
+                            'lot_name': c.get('lot_name', 'SIN LOTE'),
+                            'product_name': c.get('product_name', ''),
+                            'kg_consumidos': 0,
+                            'kg_producidos': 0,
+                            'mos': [],
+                            'proveedor': None
+                        }
+                    
+                    lotes_data[lot_key]['kg_consumidos'] += c.get('qty_done', 0) or 0
+                    
+                    # Proporción de PT que corresponde a este lote
+                    proporcion = (c.get('qty_done', 0) or 0) / kg_mp_mo if kg_mp_mo > 0 else 0
+                    lotes_data[lot_key]['kg_producidos'] += kg_pt_mo * proporcion
+                    
+                    mo_name = mo.get('name', '')
+                    if mo_name and mo_name not in lotes_data[lot_key]['mos']:
+                        lotes_data[lot_key]['mos'].append(mo_name)
+            except Exception:
+                # Skip MOs with bad data
+                continue
         
         # Calcular rendimiento y obtener proveedor
         resultado = []
@@ -398,55 +408,77 @@ class RendimientoService:
         
         resultado = []
         for mo in mos:
-            consumos = self.get_consumos_mo(mo)
-            produccion = self.get_produccion_mo(mo)
-            
-            kg_mp = sum(c['qty_done'] for c in consumos)
-            kg_pt = sum(p['qty_done'] for p in produccion)
-            
-            if kg_mp == 0:
+            try:
+                consumos = self.get_consumos_mo(mo)
+                produccion = self.get_produccion_mo(mo)
+                
+                kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
+                kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
+                
+                if kg_mp == 0:
+                    continue
+                
+                rendimiento = (kg_pt / kg_mp * 100) if kg_mp > 0 else 0
+                hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
+                if not isinstance(hh, (int, float)):
+                    hh = 0
+                kg_por_hora = mo.get('x_studio_kghora_efectiva') or 0
+                if not isinstance(kg_por_hora, (int, float)):
+                    kg_por_hora = 0
+                dotacion = mo.get('x_studio_dotacin') or 0
+                if not isinstance(dotacion, (int, float)):
+                    dotacion = 0
+                
+                # Calcular duración
+                duracion_horas = 0
+                inicio = mo.get('x_studio_inicio_de_proceso') or mo.get('date_start')
+                fin = mo.get('x_studio_termino_de_proceso') or mo.get('date_finished')
+                if inicio and fin:
+                    try:
+                        if isinstance(inicio, str):
+                            d0 = datetime.strptime(inicio, "%Y-%m-%d %H:%M:%S")
+                        else:
+                            d0 = inicio
+                        if isinstance(fin, str):
+                            d1 = datetime.strptime(fin, "%Y-%m-%d %H:%M:%S")
+                        else:
+                            d1 = fin
+                        duracion_horas = round((d1 - d0).total_seconds() / 3600, 2)
+                    except:
+                        pass
+                
+                # Obtener product_name de forma segura
+                product_name = ''
+                prod = mo.get('product_id')
+                if isinstance(prod, (list, tuple)) and len(prod) > 1:
+                    product_name = prod[1]
+                elif isinstance(prod, dict):
+                    product_name = prod.get('name', '')
+                
+                # Obtener fecha de forma segura
+                fecha_raw = mo.get('date_finished', '') or ''
+                fecha = fecha_raw[:10] if fecha_raw and len(fecha_raw) >= 10 else ''
+                
+                resultado.append({
+                    'mo_id': mo.get('id', 0),
+                    'mo_name': mo.get('name', ''),
+                    'product_name': product_name,
+                    'kg_mp': round(kg_mp, 2),
+                    'kg_pt': round(kg_pt, 2),
+                    'rendimiento': round(rendimiento, 2),
+                    'merma': round(kg_mp - kg_pt, 2),
+                    'duracion_horas': duracion_horas,
+                    'hh': hh,
+                    'kg_por_hora': kg_por_hora,
+                    'dotacion': dotacion,
+                    'sala': mo.get('x_studio_sala_de_proceso', '') or '',
+                    'fecha': fecha,
+                    'num_lotes_mp': len(set(c.get('lot_id') for c in consumos if c.get('lot_id'))),
+                    'num_lotes_pt': len(set(p.get('lot_id') for p in produccion if p.get('lot_id')))
+                })
+            except Exception:
+                # Skip MOs with bad data
                 continue
-            
-            rendimiento = (kg_pt / kg_mp * 100) if kg_mp > 0 else 0
-            hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
-            kg_por_hora = mo.get('x_studio_kghora_efectiva') or 0
-            dotacion = mo.get('x_studio_dotacin') or 0
-            
-            # Calcular duración
-            duracion_horas = 0
-            inicio = mo.get('x_studio_inicio_de_proceso') or mo.get('date_start')
-            fin = mo.get('x_studio_termino_de_proceso') or mo.get('date_finished')
-            if inicio and fin:
-                try:
-                    if isinstance(inicio, str):
-                        d0 = datetime.strptime(inicio, "%Y-%m-%d %H:%M:%S")
-                    else:
-                        d0 = inicio
-                    if isinstance(fin, str):
-                        d1 = datetime.strptime(fin, "%Y-%m-%d %H:%M:%S")
-                    else:
-                        d1 = fin
-                    duracion_horas = round((d1 - d0).total_seconds() / 3600, 2)
-                except:
-                    pass
-            
-            resultado.append({
-                'mo_id': mo['id'],
-                'mo_name': mo['name'],
-                'product_name': mo.get('product_id', {}).get('name', '') if isinstance(mo.get('product_id'), dict) else (mo.get('product_id', [None, ''])[1] if mo.get('product_id') else ''),
-                'kg_mp': round(kg_mp, 2),
-                'kg_pt': round(kg_pt, 2),
-                'rendimiento': round(rendimiento, 2),
-                'merma': round(kg_mp - kg_pt, 2),
-                'duracion_horas': duracion_horas,
-                'hh': hh,
-                'kg_por_hora': kg_por_hora,
-                'dotacion': dotacion,
-                'sala': mo.get('x_studio_sala_de_proceso', ''),
-                'fecha': mo.get('date_finished', '')[:10] if mo.get('date_finished') else '',
-                'num_lotes_mp': len(set(c['lot_id'] for c in consumos if c['lot_id'])),
-                'num_lotes_pt': len(set(p['lot_id'] for p in produccion if p['lot_id']))
-            })
         
         # Ordenar por fecha desc
         resultado.sort(key=lambda x: x['fecha'], reverse=True)
