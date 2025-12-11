@@ -196,10 +196,10 @@ with tab1:
         ocupacion_pct = (total_occupied / total_capacity * 100) if total_capacity > 0 else 0
         
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Cámaras", total_camaras)
-        col2.metric("Capacidad Total", f"{total_capacity:,} pallets")
-        col3.metric("Posiciones Ocupadas", f"{total_occupied:,} pallets")
-        col4.metric("Ocupación", f"{ocupacion_pct:.1f}%")
+        col1.metric("Cámaras", fmt_numero(total_camaras))
+        col2.metric("Capacidad Total", f"{fmt_numero(total_capacity)} pallets")
+        col3.metric("Posiciones Ocupadas", f"{fmt_numero(total_occupied)} pallets")
+        col4.metric("Ocupación", f"{fmt_numero(ocupacion_pct, 1)}%")
         
         st.divider()
         
