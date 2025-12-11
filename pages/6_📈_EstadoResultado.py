@@ -163,22 +163,24 @@ def obtener_presupuesto(año, centro=None):
 # Usar session_state para cachear los datos y evitar recargas en cada widget
 cache_key = f"{año_seleccionado}_{fecha_inicio}_{fecha_fin}_{centro_seleccionado}"
 
-if "eerr_cache_key" not in st.session_state or st.session_state.eerr_cache_key != cache_key:
+# Cargar datos si no existen o si cambió el caché
+if "eerr_cache_key" not in st.session_state or st.session_state.eerr_cache_key != cache_key or "eerr_datos" not in st.session_state:
     st.session_state.eerr_cache_key = cache_key
-    st.session_state.eerr_datos = obtener_estado_resultado(
-        fecha_inicio,
-        fecha_fin,
-        opciones_centros.get(centro_seleccionado),
-        username,
-        password
-    )
-    st.session_state.eerr_ppto = obtener_presupuesto(
-        año_seleccionado, 
-        centro_seleccionado if centro_seleccionado != "Todas" else None
-    )
+    with st.spinner("Cargando datos..."):
+        st.session_state.eerr_datos = obtener_estado_resultado(
+            fecha_inicio,
+            fecha_fin,
+            opciones_centros.get(centro_seleccionado),
+            username,
+            password
+        )
+        st.session_state.eerr_ppto = obtener_presupuesto(
+            año_seleccionado, 
+            centro_seleccionado if centro_seleccionado != "Todas" else None
+        )
 
-datos = st.session_state.get("eerr_datos", {})
-ppto = st.session_state.get("eerr_ppto", {})
+datos = st.session_state.eerr_datos if "eerr_datos" in st.session_state else None
+ppto = st.session_state.eerr_ppto if "eerr_ppto" in st.session_state else {}
 
 # === MOSTRAR DATOS ===
 if datos:
