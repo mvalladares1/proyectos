@@ -158,6 +158,7 @@ else:
         ("📊", "Bandejas", "Control de bandejas por proveedor"),
         ("📦", "Stock", "Inventario en cámaras y pallets"),
         ("🚢", "Containers", "Pedidos y avance de producción"),
+        ("📈", "Rendimiento", "Análisis de eficiencia MP → PT por lote"),
     ]
     
     for i, (icon, title, desc) in enumerate(dashboards_op):
