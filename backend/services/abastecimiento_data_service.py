@@ -205,22 +205,22 @@ def get_purchase_orders(client):
     # Odoo domain filter
     domain = [('state', 'in', ['purchase', 'done'])]
     
-    pos = client.search_read('purchase.order', domain, po_fields)
+    pos = client.search_read('purchase.order', domain, fields=po_fields)
     if not pos:
         return pd.DataFrame()
         
     po_ids = [po['id'] for po in pos]
     
     # Fetch PO Lines
-    lines = client.search_read('purchase.order.line', [('order_id', 'in', po_ids)], po_line_fields)
+    lines = client.search_read('purchase.order.line', [('order_id', 'in', po_ids)], fields=po_line_fields)
     
     # Fetch Products
     product_ids = list(set([line['product_id'][0] for line in lines if line['product_id']]))
-    products = client.search_read('product.product', [('id', 'in', product_ids)], product_fields)
+    products = client.search_read('product.product', [('id', 'in', product_ids)], fields=product_fields)
     
     # Fetch Categories
     categ_ids = list(set([p['categ_id'][0] for p in products if p['categ_id']]))
-    categories = client.search_read('product.category', [('id', 'in', categ_ids)], category_fields)
+    categories = client.search_read('product.category', [('id', 'in', categ_ids)], fields=category_fields)
     
     # Create DataFrames
     df_po = pd.DataFrame(pos)
@@ -278,6 +278,9 @@ def get_purchase_orders(client):
         code = str(row.get('default_code', '')).strip()
         name_prod = str(row.get('name_prod', '')).strip()
         desc = str(row.get('name', '')).strip() # PO Line Description
+        
+        # DEBUG: Log first few rows to see what data we have
+        # print(f"DEBUG parse_product_code: code={code[:30] if code else 'EMPTY'}, name_prod={name_prod[:30] if name_prod else 'EMPTY'}, desc={desc[:30] if desc else 'EMPTY'}")
         
         # Handle -24 suffix (Year 2024)
         if code.endswith('-24'):
