@@ -114,6 +114,201 @@ def calculate_raw_pmp(df, price_col='price_unit', qty_col='qty_received'):
     return pmp, total_qty
 
 
+def get_price_comparison_pivot(po_data, pricing_data, central_bank_data=None):
+    """
+    Compares PMP (Real) vs Budget Price with hierarchy: State > Variety.
+    Calculates PMP in USD (valorausd).
+    """
+    if po_data.empty and pricing_data.empty:
+        return pd.DataFrame()
+        
+    # --- Process Real Data ---
+    if not po_data.empty:
+        df = po_data.copy()
+        
+        df['MANEJO'] = df['labeling'].fillna('OTRO')
+        df['ESTADO'] = df['condition']
+        df['FRUTA'] = df['product'].fillna('OTRO')
+        
+        # Calculate USD Price
+        date_col = 'date_order' if 'date_order' in df.columns else 'date_planned'
+        
+        if date_col in df.columns:
+            df[date_col] = pd.to_datetime(df[date_col])
+            df['date_only'] = df[date_col].dt.normalize()
+        else:
+            df['date_only'] = pd.Timestamp.now().normalize()
+            
+        # Merge Central Bank Data
+        if central_bank_data is not None and not central_bank_data.empty:
+            cb_df = central_bank_data.copy()
+            cb_df['indexDateString'] = pd.to_datetime(cb_df['indexDateString']).dt.normalize()
+            cb_df = cb_df.rename(columns={'indexDateString': 'date_only', 'value': 'usd_rate'})
+            cb_df = cb_df[['date_only', 'usd_rate']]
+            df = pd.merge(df, cb_df, on='date_only', how='left')
+            mean_rate = cb_df['usd_rate'].mean() if not cb_df.empty else 900
+            df['usd_rate'] = df['usd_rate'].fillna(mean_rate)
+        else:
+            df['usd_rate'] = 900
+            
+        # Convert to USD
+        def get_price_usd(row):
+            price = row['price_unit']
+            curr = str(row.get('currency_name', '')).upper()
+            if curr == 'CLP':
+                return price / row['usd_rate'] if row['usd_rate'] > 0 else 0
+            return price
+
+        df['valorausd'] = df.apply(get_price_usd, axis=1)
+        
+        # Group by ESTADO, FRUTA, MANEJO
+        grouped = df.groupby(['ESTADO', 'FRUTA', 'MANEJO']).apply(
+            lambda x: (x['valorausd'] * x['qty_received']).sum() / x['qty_received'].sum() if x['qty_received'].sum() > 0 else 0,
+            include_groups=False
+        ).reset_index()
+        grouped = grouped.rename(columns={0: 'PMP_Real'})
+    else:
+        grouped = pd.DataFrame(columns=['ESTADO', 'FRUTA', 'MANEJO', 'PMP_Real'])
+    
+    # --- Process Budget Data ---
+    if not pricing_data.empty:
+        budget_df = pricing_data.copy()
+        
+        if 'PRODUCTO' in budget_df.columns:
+            budget_df = budget_df.rename(columns={'PRODUCTO': 'FRUTA'})
+        
+        if 'FRUTA' in budget_df.columns:
+            budget_df['FRUTA'] = budget_df['FRUTA'].astype(str).str.upper()
+            budget_df['FRUTA'] = budget_df['FRUTA'].str.replace('Á', 'A').str.replace('É', 'E').str.replace('Í', 'I').str.replace('Ó', 'O').str.replace('Ú', 'U')
+            
+        if 'ESTADO' in budget_df.columns:
+            budget_df['ESTADO'] = budget_df['ESTADO'].astype(str).str.upper()
+            
+        if 'MANEJO' in budget_df.columns:
+            budget_df['MANEJO'] = budget_df['MANEJO'].astype(str).str.upper()
+            budget_df['MANEJO'] = budget_df['MANEJO'].replace({'CONV': 'CONVENCIONAL', 'ORG': 'ORGANICO'})
+        
+        if '$ PPTO' in budget_df.columns:
+            budget_df['$ PPTO'] = pd.to_numeric(budget_df['$ PPTO'], errors='coerce')
+            pricing_agg = budget_df.groupby(['ESTADO', 'FRUTA', 'MANEJO'])['$ PPTO'].mean().reset_index()
+            pricing_agg = pricing_agg.rename(columns={'$ PPTO': 'USD_PPTO'})
+        else:
+            pricing_agg = pd.DataFrame(columns=['ESTADO', 'FRUTA', 'MANEJO', 'USD_PPTO'])
+    else:
+        pricing_agg = pd.DataFrame(columns=['ESTADO', 'FRUTA', 'MANEJO', 'USD_PPTO'])
+
+    # --- Merge ---
+    merged = pd.merge(grouped, pricing_agg, on=['ESTADO', 'FRUTA', 'MANEJO'], how='outer')
+    
+    if merged.empty:
+        return pd.DataFrame()
+    
+    # Pivot
+    pivot = merged.pivot(index=['ESTADO', 'FRUTA'], columns='MANEJO', values=['PMP_Real', 'USD_PPTO'])
+    
+    final_df = pd.DataFrame(index=pivot.index)
+    
+    for manejo in ['CONVENCIONAL', 'ORGANICO']:
+        col_pmp = (manejo, 'PMP Real')
+        if ('PMP_Real', manejo) in pivot.columns:
+            final_df[col_pmp] = pivot[('PMP_Real', manejo)]
+        else:
+            final_df[col_pmp] = np.nan
+            
+        col_ppto = (manejo, 'USD PPTO')
+        if ('USD_PPTO', manejo) in pivot.columns:
+            final_df[col_ppto] = pivot[('USD_PPTO', manejo)]
+        else:
+            final_df[col_ppto] = np.nan
+            
+    ordered_cols = [
+        ('CONVENCIONAL', 'PMP Real'),
+        ('CONVENCIONAL', 'USD PPTO'),
+        ('ORGANICO', 'PMP Real'),
+        ('ORGANICO', 'USD PPTO')
+    ]
+    
+    final_df = final_df[ordered_cols]
+    
+    return final_df
+
+
+def get_evolution_data(po_data, budget_data, granularity='Semanal'):
+    """
+    Prepares data for the Evolution Chart (Real vs PPTO).
+    Returns DataFrame with columns: Date, Real, PPTO Original, v.2
+    granularity: 'Semanal' (default) or 'Diario'
+    """
+    if po_data.empty and budget_data.empty:
+        return pd.DataFrame()
+        
+    # Real Data
+    if not po_data.empty:
+        df = po_data.copy()
+        date_col = 'date_order' if 'date_order' in df.columns else 'date_planned'
+        
+        if date_col in df.columns:
+            df[date_col] = pd.to_datetime(df[date_col])
+            
+            if granularity == 'Diario':
+                df['Date'] = df[date_col].dt.date
+            else:
+                df['Date'] = df[date_col] - pd.to_timedelta(df[date_col].dt.weekday, unit='D')
+                df['Date'] = df['Date'].dt.date
+        else:
+            df['Date'] = pd.Timestamp.now().date()
+            
+        real_agg = df.groupby('Date')['qty_received'].sum().reset_index()
+        real_agg = real_agg.rename(columns={'qty_received': 'Real'})
+    else:
+        real_agg = pd.DataFrame(columns=['Date', 'Real'])
+    
+    # Budget Data
+    if not budget_data.empty and ('FECHAS MOD' in budget_data.columns or 'MES' in budget_data.columns):
+        b_df = budget_data.copy()
+        date_col = 'FECHAS MOD' if 'FECHAS MOD' in b_df.columns else 'MES'
+        b_df[date_col] = pd.to_datetime(b_df[date_col])
+        
+        if granularity == 'Diario':
+            b_df['Date'] = b_df[date_col].dt.date
+        else:
+            b_df['Date'] = b_df[date_col] - pd.to_timedelta(b_df[date_col].dt.weekday, unit='D')
+            b_df['Date'] = b_df['Date'].dt.date
+        
+        # Ensure columns exist
+        if 'PPTO' not in b_df.columns:
+            b_df['PPTO'] = 0
+        if 'PPTO 3' not in b_df.columns:
+            b_df['PPTO 3'] = 0
+            
+        budget_agg = b_df.groupby('Date')[['PPTO', 'PPTO 3']].sum().reset_index()
+        budget_agg = budget_agg.rename(columns={'PPTO': 'PPTO Original', 'PPTO 3': 'v.2'})
+    else:
+        budget_agg = pd.DataFrame(columns=['Date', 'PPTO Original', 'v.2'])
+    
+    # Merge
+    merged = pd.merge(real_agg, budget_agg, on='Date', how='outer').fillna(0)
+    
+    # Filter insignificant data
+    if 'Real' not in merged.columns:
+        merged['Real'] = 0
+    if 'PPTO Original' not in merged.columns:
+        merged['PPTO Original'] = 0
+    if 'v.2' not in merged.columns:
+        merged['v.2'] = 0
+    
+    merged = merged[
+        (merged['Real'] >= 1) | 
+        (merged['PPTO Original'] >= 1) | 
+        (merged['v.2'] >= 1)
+    ]
+    
+    merged = merged.sort_values('Date')
+    merged['Semana'] = pd.to_datetime(merged['Date']).dt.isocalendar().week
+    
+    return merged
+
+
 def get_stacked_evolution_data(po_data, budget_data, granularity='Semanal'):
     """
     Prepares data for the Stacked Evolution Chart (Real by Fruit vs PPTO).
@@ -139,7 +334,7 @@ def get_stacked_evolution_data(po_data, budget_data, granularity='Semanal'):
     }
     # If 'product' column exists (it should)
     if 'product' in df.columns:
-        df['FRUTA'] = df['product'].map(fruta_map).fillna('OTRO')
+        df['FRUTA'] = df['product'].map(fruta_map).fillna(df['product']).fillna('OTRO')
     else:
         df['FRUTA'] = 'OTRO'
     
@@ -219,3 +414,4 @@ def get_stacked_evolution_data(po_data, budget_data, granularity='Semanal'):
         'ppto_stacked': ppto_stacked_agg,
         'ppto_total': ppto_total_agg
     }
+

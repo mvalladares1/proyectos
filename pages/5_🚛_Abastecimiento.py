@@ -4,12 +4,36 @@ Integrado en la estructura modular del proyecto (usa `shared.odoo_client` y `bac
 """
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 from shared.odoo_client import get_odoo_client
 from shared.auth import proteger_pagina, get_credenciales
 from backend.services import abastecimiento_data_service as data_service
 from backend.services import abastecimiento_recepcion_service as recepcion_service
 
 st.set_page_config(page_title="Control de Gestión, Programa de Abastecimiento", layout="wide")
+
+# --- Custom CSS ---
+st.markdown("""
+<style>
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+    }
+    .stDataFrame {
+        font-size: 0.8rem;
+    }
+    [data-testid="stFileUploader"] {
+        padding-top: 0px;
+        padding-bottom: 10px;
+    }
+    [data-testid="stFileUploader"] section {
+        padding: 10px;
+        min-height: 0px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Proteger la página (requiere login desde Home)
 if not proteger_pagina():
@@ -57,15 +81,30 @@ with st.spinner("Cargando datos..."):
     central_bank_data = data_service.get_central_bank_data()
 
 
-# --- Filters (portado del original) ---
+# Cargar datos de precios estáticos
+pricing_data = data_service.get_pricing_data()
+
+# --- Filters (dinámicos desde po_data) ---
 with st.container():
     col1, col2, col3 = st.columns(3)
     with col1:
-        estados = ["Todas"]
-        selected_estado = st.selectbox("🏷️ Estado", estados)
+        # Estado (Condition) - dinámico desde po_data
+        if not po_data.empty and 'condition' in po_data.columns:
+            unique_estados = sorted(po_data['condition'].dropna().unique().tolist())
+        else:
+            unique_estados = []
+        estados = ["Todas"] + unique_estados
+        selected_estado = st.selectbox("🏷️ Estado", estados, key='filter_estado')
+        
     with col2:
-        manejos = ["Todas"]
-        selected_manejo = st.selectbox("🌱 Manejo", manejos)
+        # Manejo (Labeling) - dinámico desde po_data
+        if not po_data.empty and 'labeling' in po_data.columns:
+            unique_manejos = sorted(po_data['labeling'].dropna().unique().tolist())
+        else:
+            unique_manejos = []
+        manejos = ["Todas"] + unique_manejos
+        selected_manejo = st.selectbox("🌱 Manejo", manejos, key='filter_manejo')
+        
     with col3:
         with st.form(key="date_filter_form"):
             today = pd.Timestamp.now().date()
@@ -77,26 +116,54 @@ with st.container():
     if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
         st.rerun()
 
-
-# Apply basic filters to po_data (placeholders until static data mapping is available)
+# Apply filters
 filtered_po = po_data.copy()
 filtered_budget = budget_data.copy()
 filtered_pricing = pricing_data.copy()
 
 if selected_estado != "Todas":
-    filtered_po = filtered_po[filtered_po.get('condition','') == selected_estado]
+    filtered_po = filtered_po[filtered_po['condition'] == selected_estado]
+    if 'ESTADO' in filtered_budget.columns:
+        filtered_budget = filtered_budget[filtered_budget['ESTADO'] == selected_estado]
+    if 'ESTADO' in filtered_pricing.columns:
+        filtered_pricing = filtered_pricing[filtered_pricing['ESTADO'] == selected_estado]
 
 if selected_manejo != "Todas":
-    filtered_po = filtered_po[filtered_po.get('labeling','') == selected_manejo]
+    filtered_po = filtered_po[filtered_po['labeling'] == selected_manejo]
+    if 'MANEJO' in filtered_budget.columns:
+        filtered_budget = filtered_budget[filtered_budget['MANEJO'] == selected_manejo]
+    if 'MANEJO' in filtered_pricing.columns:
+        filtered_pricing = filtered_pricing[filtered_pricing['MANEJO'] == selected_manejo]
 
-# Product filter
+# Product filter - dinámico
 col_prod, col_var = st.columns(2)
 with col_prod:
-    lista_productos = ["Todas"]
-    selected_producto = st.selectbox("🍇 Producto", lista_productos)
+    if not po_data.empty and 'product' in po_data.columns:
+        unique_products = sorted(po_data['product'].dropna().unique().tolist())
+    else:
+        unique_products = []
+    lista_productos = ["Todas"] + unique_products
+    selected_producto = st.selectbox("🍇 Producto", lista_productos, key='filter_producto')
+    
 with col_var:
-    lista_variedades = ["Todas"]
-    selected_variedad = st.selectbox("🧬 Variedad", lista_variedades)
+    if not po_data.empty and 'variety' in po_data.columns:
+        unique_varieties = sorted(po_data['variety'].dropna().unique().tolist())
+    else:
+        unique_varieties = []
+    lista_variedades = ["Todas"] + unique_varieties
+    selected_variedad = st.selectbox("🧬 Variedad", lista_variedades, key='filter_variedad')
+
+if selected_producto != "Todas":
+    filtered_po = filtered_po[filtered_po['product'] == selected_producto]
+    if 'PRODUCTO' in filtered_budget.columns:
+        filtered_budget = filtered_budget[filtered_budget['PRODUCTO'] == selected_producto]
+    if 'FRUTA' in filtered_pricing.columns:
+        filtered_pricing = filtered_pricing[filtered_pricing['FRUTA'] == selected_producto]
+
+if selected_variedad != "Todas":
+    filtered_po = filtered_po[filtered_po['variety'] == selected_variedad]
+    if 'VARIEDAD' in filtered_budget.columns:
+        filtered_budget = filtered_budget[filtered_budget['VARIEDAD'] == selected_variedad]
 
 if len(date_range) == 2:
     start_date, end_date = date_range

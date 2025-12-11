@@ -1,6 +1,12 @@
+"""
+Servicio de datos para el dashboard de Abastecimiento.
+Incluye TOKEN_LIBRARY para parsing inteligente de códigos de producto.
+"""
 import pandas as pd
 import requests
 from io import BytesIO
+
+# --- Excel Data Loading ---
 
 def load_budget_data(file_or_path):
     try:
@@ -64,7 +70,10 @@ def load_budget_2026_data(file_or_path):
         print(f"Error loading budget 2026 data: {e}")
         raise ValueError(f"Error al leer el archivo de Presupuesto Futuro: {e}")
 
+# --- External API ---
+
 def get_central_bank_data():
+    """Obtiene datos del tipo de cambio desde el Banco Central de Chile."""
     url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
     params = {
         "user": "fhorst@riofuturo.cl",
@@ -75,7 +84,7 @@ def get_central_bank_data():
         "function": "GetSeries"
     }
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
         if 'Series' in data and 'Obs' in data['Series']:
@@ -89,9 +98,132 @@ def get_central_bank_data():
         print(f"Error fetching Central Bank data: {e}")
         return pd.DataFrame()
 
+# --- Static Data ---
+
+def get_pricing_data():
+    """Retorna datos estáticos de precios presupuestados."""
+    data = [
+        {"ESTADO": "FRESCO", "FRUTA": "ARANDANO", "MANEJO": "CONVENCIONAL", "$ PPTO": 2.8},
+        {"ESTADO": "FRESCO", "FRUTA": "ARANDANO", "MANEJO": "ORGANICO", "$ PPTO": 2.9},
+        {"ESTADO": "FRESCO", "FRUTA": "FRAMBUESA", "MANEJO": "CONVENCIONAL", "$ PPTO": 4.0},
+        {"ESTADO": "FRESCO", "FRUTA": "FRAMBUESA", "MANEJO": "ORGANICO", "$ PPTO": 3.5},
+        {"ESTADO": "FRESCO", "FRUTA": "MORA", "MANEJO": "CONVENCIONAL", "$ PPTO": 1.5},
+        {"ESTADO": "FRESCO", "FRUTA": "MORA", "MANEJO": "ORGANICO", "$ PPTO": 1.8},
+        {"ESTADO": "FRESCO", "FRUTA": "FRUTILLA", "MANEJO": "CONVENCIONAL", "$ PPTO": 1.2},
+        {"ESTADO": "FRESCO", "FRUTA": "FRUTILLA", "MANEJO": "ORGANICO", "$ PPTO": 1.5},
+        {"ESTADO": "FRESCO", "FRUTA": "CEREZA", "MANEJO": "CONVENCIONAL", "$ PPTO": 3.0},
+        {"ESTADO": "CONGELADO", "FRUTA": "ARANDANO", "MANEJO": "CONVENCIONAL", "$ PPTO": 2.5},
+        {"ESTADO": "CONGELADO", "FRUTA": "ARANDANO", "MANEJO": "ORGANICO", "$ PPTO": 2.7},
+        {"ESTADO": "CONGELADO", "FRUTA": "FRAMBUESA", "MANEJO": "CONVENCIONAL", "$ PPTO": 3.5},
+        {"ESTADO": "CONGELADO", "FRUTA": "FRAMBUESA", "MANEJO": "ORGANICO", "$ PPTO": 3.2},
+        {"ESTADO": "CONGELADO", "FRUTA": "MORA", "MANEJO": "CONVENCIONAL", "$ PPTO": 1.3},
+        {"ESTADO": "CONGELADO", "FRUTA": "FRUTILLA", "MANEJO": "CONVENCIONAL", "$ PPTO": 1.0},
+    ]
+    return pd.DataFrame(data)
+
+# --- Odoo Data Fetching ---
+
+# Token Library: Maps Token -> (Category Index, Standard Value)
+# Categories: 0=Fruit, 1=Variety, 2=Labeling, 3=Quality, 4=Condition
+TOKEN_LIBRARY = {
+    # FRUITS (Index 0)
+    "AR": (0, "ARANDANO"), "ARANDANO": (0, "ARANDANO"),
+    "FB": (0, "FRAMBUESA"), "FRAMBUESA": (0, "FRAMBUESA"),
+    "MO": (0, "MORA"), "MORA": (0, "MORA"),
+    "FR": (0, "FRUTILLA"), "FT": (0, "FRUTILLA"), "FRUTILLA": (0, "FRUTILLA"),
+    "CR": (0, "CEREZA"), "CEREZA": (0, "CEREZA"),
+    "MIX": (0, "MORA"), "MIXED": (0, "MORA"), "BERRIES": (0, "MORA"),
+    
+    # VARIETIES (Index 1)
+    "HB": (1, "HIGHBUSH"), "HIGHBUSH": (1, "HIGHBUSH"),
+    "MK": (1, "MEEKER"), "MEEKER": (1, "MEEKER"),
+    "WF": (1, "WAKEFIELD"), "WILD": (1, "WAKEFIELD"),
+    "DUKE": (1, "DUKE"),
+    "HE": (1, "HERITAGE"), "HERITAGE": (1, "HERITAGE"),
+    "RY": (1, "REGINA"), "REGINA": (1, "REGINA"),
+    "S/V": (1, "SIN VARIEDAD"), "SV": (1, "SIN VARIEDAD"), "SIN": (1, "SIN VARIEDAD"),
+    "AB": (1, "ALBION"), "ALBION": (1, "ALBION"),
+    "SLICE": (1, "SLICE"),
+    
+    # LABELING (Index 2)
+    "CONV": (2, "CONVENCIONAL"), "CONVENCIONAL": (2, "CONVENCIONAL"),
+    "ORG": (2, "ORGANICO"), "ORGANICO": (2, "ORGANICO"),
+    
+    # QUALITY (Index 3)
+    "IQF": (3, "IQF"),
+    "BLOCK": (3, "BLOCK"),
+    "AA": (3, "AA"),
+    "S/C": (3, "SIN CALIBRE"),
+    "<25MM": (3, "<25MM"),
+    
+    # CONDITION (Index 4)
+    "FRESCO": (4, "FRESCO"),
+    "CONGELADO": (4, "CONGELADO"),
+    "BANDEJA": (4, "CONGELADO"),
+    "PSP": (4, "CONGELADO"),
+}
+
+# Legacy Mapping for specific codes that don't follow the rule
+LEGACY_MAPPING = {
+    "100105": "MORA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "400007": "ARANDANO_HIGHBUSH_ORGANICO_IQF_FRESCO",
+    "400011": "ARANDANO_HIGHBUSH_CONVENCIONAL_BLOCK_FRESCO",
+    "400003": "ARANDANO_HIGHBUSH_CONVENCIONAL_IQF_FRESCO",
+    "400001": "FRAMBUESA_MEEKER_CONVENCIONAL_IQF_FRESCO",
+    "400025": "FRAMBUESA_WAKEFIELD_ORGANICO_IQF_FRESCO",
+    "400029": "MORA_SIN VARIEDAD_CONVENCIONAL_IQF_FRESCO",
+    "400058": "ARANDANO_DUKE_ORGANICO_IQF_FRESCO",
+    "400002": "FRAMBUESA_HERITAGE_CONVENCIONAL_IQF_FRESCO",
+    "400005": "FRAMBUESA_MEEKER_ORGANICO_IQF_FRESCO",
+    "400027": "FRAMBUESA_WAKEFIELD_CONVENCIONAL_IQF_FRESCO",
+    "400057": "ARANDANO_DUKE_CONVENCIONAL_IQF_FRESCO",
+    "200050": "MORA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "200071": "MORA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "400004": "ARANDANO_REGINA_CONVENCIONAL_IQF_FRESCO",
+    "400008": "ARANDANO_REGINA_ORGANICO_IQF_FRESCO",
+    "400060": "ARANDANO_DUKE_ORGANICO_BLOCK_FRESCO",
+    "400015": "ARANDANO_HIGHBUSH_ORGANICO_BLOCK_FRESCO",
+    "400006": "FRAMBUESA_HERITAGE_ORGANICO_IQF_FRESCO",
+    "400056": "MORA_SIN VARIEDAD_ORGANICO_IQF_FRESCO",
+    "400061": "FRUTILLA_SIN VARIEDAD_ORGANICO_IQF_FRESCO",
+    "100044": "FRUTILLA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "100074": "MORA_SIN VARIEDAD_ORGANICO_IQF_CONGELADO",
+    "200034": "FRAMBUESA_HERITAGE_ORGANICO_IQF_CONGELADO",
+    "200036": "ARANDANO_REGINA_ORGANICO_IQF_CONGELADO",
+    "100078": "FRAMBUESA_HERITAGE_ORGANICO_IQF_CONGELADO",
+    "100119": "MORA_SIN VARIEDAD_ORGANICO_IQF_CONGELADO",
+    "900000": "CEREZA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "100005": "ARANDANO_HIGHBUSH_ORGANICO_IQF_CONGELADO",
+    "100133": "FRAMBUESA_HERITAGE_CONVENCIONAL_IQF_CONGELADO",
+    "100073": "FRUTILLA_SIN VARIEDAD_ORGANICO_IQF_CONGELADO",
+    "100130": "FRAMBUESA_SIN VARIEDAD_ORGANICO_IQF_CONGELADO",
+    "100001": "ARANDANO_HIGHBUSH_CONVENCIONAL_IQF_CONGELADO",
+    "100137": "FRAMBUESA_SIN VARIEDAD_ORGANICO_IQF_CONGELADO",
+    "100125": "CEREZA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "100118": "MORA_SIN VARIEDAD_ORGANICO_IQF_CONGELADO",
+    "100117": "ARANDANO_REGINA_ORGANICO_IQF_CONGELADO",
+    "100121": "FRUTILLA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "100126": "FRUTILLA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "100127": "FRUTILLA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "100007": "ARANDANO_REGINA_ORGANICO_IQF_CONGELADO", 
+    "100003": "ARANDANO_REGINA_CONVENCIONAL_IQF_CONGELADO",
+    "100072": "FRAMBUESA_HERITAGE_CONVENCIONAL_IQF_CONGELADO",
+    "100032": "FRAMBUESA_HERITAGE_ORGANICO_IQF_CONGELADO",
+    # Códigos de bandeja
+    "102122000": "FRAMBUESA_MEEKER_CONVENCIONAL_IQF_CONGELADO",
+    "102121000": "FRAMBUESA_SIN VARIEDAD_CONVENCIONAL_IQF_CONGELADO",
+    "101122000": "ARANDANO_HIGHBUSH_CONVENCIONAL_IQF_CONGELADO",
+    "101222000": "ARANDANO_HIGHBUSH_ORGANICO_IQF_CONGELADO",
+    "103122000": "FRUTILLA_ALBION_CONVENCIONAL_IQF_CONGELADO",
+    "103222000": "FRUTILLA_ALBION_ORGANICO_IQF_CONGELADO",
+}
+
 
 def get_purchase_orders(client):
-    """Fetch purchase orders and lines, merge and transform similar to original dashboard logic."""
+    """
+    Fetches purchase orders from Odoo and returns a pandas DataFrame.
+    Uses TOKEN_LIBRARY for intelligent product code parsing.
+    """
     try:
         # Fetch POs
         po_fields = [
@@ -148,105 +280,103 @@ def get_purchase_orders(client):
         if 'qty_received' in df.columns:
             df = df[df['qty_received'] != 0]
 
-        # Filter by category containing 'Producto' if available
+        # Filter by category containing 'Producto'
         if 'complete_name' in df.columns:
-            df = df[df['complete_name'].str.contains('Producto|PRODUCTO', case=False, na=False)]
+            df = df[df['complete_name'].str.contains('Producto|PRODUCTO|Materia Prima|MATERIA PRIMA', case=False, na=False)]
 
-        # Map codes to name_code_2 (use a reduced mapping to avoid very long duplication)
-        def get_name_code_2(row):
+        # Parse product codes using TOKEN_LIBRARY
+        def parse_product_code(row):
             code = str(row.get('default_code', '')).strip()
-            mapping = {
-                "400007": "AR_HB_ORG_IQF_FRESCO",
-                "400011": "AR_HB_CONV_BLOCK_FRESCO",
-                "400003": "AR_HB_CONV_IQF_FRESCO",
-                "400001": "FB_MK_CONV_IQF_FRESCO",
-                "400025": "FB_WF_ORG_IQF_FRESCO",
-                "400029": "MO_S/V_CONV_IQF_FRESCO",
-                "400058": "AR_DUKE_ORG_IQF_FRESCO",
-                "400002": "FB_HE_CONV_IQF_FRESCO",
-                "400005": "FB_MK_ORG_IQF_FRESCO",
-                "400027": "FB_WF_CONV_IQF_FRESCO",
-                "400057": "AR_DUKE_CONV_IQF_FRESCO",
-                "200050": "MO_S/V_CONV_IQF_CONGELADO",
-                "200071": "MO_S/V_CONV_IQF_CONGELADO",
-                "400004": "AR_RY_CONV_IQF_FRESCO",
-                "100032": "FB_HE_ORG_IQF_CONGELADO",
-                "400008": "AR_RY_ORG_IQF_FRESCO",
-                "400060": "AR_DUKE_ORG_BLOCK_FRESCO",
-                "400015": "AR_HB_ORG_BLOCK_FRESCO",
-                "100105": "MO_S/V_CONV_IQF_CONGELADO",
-                "400006": "FB_HE_ORG_IQF_FRESCO",
-                "400056": "MO_S/V_ORG_IQF_FRESCO",
-                "400061": "FR_S/V_ORG_IQF_FRESCO",
-                "100044": "FR_S/V_CONV_IQF_CONGELADO",
-                "100074": "MO_S/V_ORG_IQF_CONGELADO",
-                "200034": "FB_HE_ORG_IQF_CONGELADO",
-                "200036": "AR_RY_ORG_IQF_CONGELADO",
-                "100078": "FB_HE_ORG_IQF_CONGELADO",
-                "100119": "MO_S/V_ORG_IQF_CONGELADO",
-                "900000": "CR_S/V_CONV_IQF_CONGELADO",
-                "100005": "AR_HB_ORG_IQF_CONGELADO",
-                "100133": "FB_HE_CONV_IQF_CONGELADO",
-                "100073": "FR_S/V_ORG_IQF_CONGELADO",
-                "100130": "FB_S/V_ORG_IQF_CONGELADO",
-                "100001": "AR_HB_CONV_IQF_CONGELADO",
-                "100137": "FB_S/V_ORG_IQF_CONGELADO",
-                "100125": "CR_S/V_CONV_IQF_CONGELADO",
-                "100118": "MO_S/V_ORG_IQF_CONGELADO",
-                "100117": "AR_RY_ORG_IQF_CONGELADO",
-                "100121": "FR_S/V_CONV_IQF_CONGELADO",
-                "100126": "FR_S/V_CONV_IQF_CONGELADO",
-                "100127": "FR_S/V_CONV_IQF_CONGELADO",
-                "100007": "AR_RY_ORG_IQF_CONGELADO",
-                "100003": "AR_RY_CONV_IQF_CONGELADO",
-                "100072": "FB_HE_CONV_IQF_CONGELADO",
-                # New Mappings (Text-based codes or Names)
-                "FT AB Conv. IQF en Bandeja": "FR_AB_CONV_IQF_CONGELADO",
-                "AR HB Conv. IQF en Bandeja": "AR_HB_CONV_IQF_CONGELADO",
-                "FT AB Conv. IQF en Bandeja (copia)": "FR_AB_CONV_IQF_CONGELADO",
-                "FT AB Org. IQF en Bandeja": "FR_AB_ORG_IQF_CONGELADO",
-                "FB S/V Conv. IQF en Bandeja": "FB_S/V_CONV_IQF_CONGELADO",
-                "AR HB Org. IQF en Bandeja": "AR_HB_ORG_IQF_CONGELADO",
-                "FB MK Conv. IQF en Bandeja": "FB_MK_CONV_IQF_CONGELADO",
-                # Numeric Codes from Odoo Screenshot
-                "102122000": "FB_MK_CONV_IQF_CONGELADO",
-                "102121000": "FB_S/V_CONV_IQF_CONGELADO",
-                "101122000": "AR_HB_CONV_IQF_CONGELADO",
-                "101222000": "AR_HB_ORG_IQF_CONGELADO",
-                "103122000": "FR_AB_CONV_IQF_CONGELADO",
-                "103222000": "FR_AB_ORG_IQF_CONGELADO"
-            }
-            if code in mapping:
-                return mapping[code]
-            # Fallback
-            return "OTRO"
+            name_prod = str(row.get('name_prod', row.get('name', ''))).strip()
+            desc = str(row.get('name_line', row.get('name', ''))).strip()
+            
+            # Handle -24 suffix (Year 2024)
+            if code.endswith('-24'):
+                code = code[:-3]
+                
+            # 1. Legacy Mapping (Highest Priority)
+            if code in LEGACY_MAPPING:
+                return LEGACY_MAPPING[code]
+            
+            # Helper to clean text
+            def clean_text(text):
+                if ']' in text:
+                    text = text.split(']', 1)[1].strip()
+                return text.replace('_', ' ').replace('.', ' ').replace('-', ' ')
 
-        df['name_code_2'] = df.apply(get_name_code_2, axis=1)
+            search_texts = [clean_text(desc), clean_text(name_prod), clean_text(code)]
+            
+            # Initialize result: [Fruit, Variety, Labeling, Quality, Condition]
+            result = ["OTRO", "OTRO", "OTRO", "OTRO", "OTRO"]
+            
+            found_any = False
+            
+            for text in search_texts:
+                if not text:
+                    continue
+                    
+                clean = text.upper().replace('.', ' ').replace('-', ' ').replace(',', ' ')
+                tokens = clean.split()
+                
+                for token in tokens:
+                    if token in TOKEN_LIBRARY:
+                        idx, val = TOKEN_LIBRARY[token]
+                        if result[idx] == "OTRO":
+                            result[idx] = val
+                            found_any = True
+            
+            # Post-Processing / Defaults
+            if result[0] != "OTRO" and result[1] == "OTRO":
+                result[1] = "SIN VARIEDAD"
+            if result[0] != "OTRO" and result[4] == "OTRO":
+                result[4] = "CONGELADO"
+            if result[0] != "OTRO" and result[3] == "OTRO":
+                result[3] = "IQF"
+                
+            if found_any:
+                return "_".join(result)
+                
+            return "OTRO_OTRO_OTRO_OTRO_OTRO"
 
-        split_data = df['name_code_2'].str.split('_', expand=True)
+        df['parsed_code'] = df.apply(parse_product_code, axis=1)
+        
+        split_data = df['parsed_code'].str.split('_', expand=True)
         for i in range(5):
             if i not in split_data.columns:
-                split_data[i] = None
+                split_data[i] = "OTRO"
+                
         df['product'] = split_data[0]
         df['variety'] = split_data[1]
         df['labeling'] = split_data[2]
         df['quality'] = split_data[3]
         df['condition'] = split_data[4]
 
-        cols_to_drop = ['order_id', 'product_id', 'order_id_val', 'product_id_val']
+        cols_to_drop = ['order_id', 'product_id', 'order_id_val', 'product_id_val', 'parsed_code']
         df = df.drop(columns=cols_to_drop, errors='ignore')
 
         # Currency name cleanup
         if 'currency_id' in df.columns:
             df['currency_name'] = df['currency_id'].apply(lambda x: x[1] if isinstance(x, (list, tuple)) and len(x) > 1 else str(x))
 
+        # Timezone conversion
+        for col in ['date_planned', 'date_order', 'date_approve']:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col])
+                try:
+                    df[col] = df[col].dt.tz_localize('UTC').dt.tz_convert('America/Santiago').dt.tz_localize(None)
+                except:
+                    pass
+
         return df
     except Exception as e:
         print(f"Error in get_purchase_orders: {e}")
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame()
 
 
 def get_purchase_report_data(client, date_range=None):
+    """Fetches aggregated data from purchase.report."""
     domain = [('category_id', 'ilike', 'Producto')]
     if date_range and len(date_range) == 2:
         start_date = date_range[0].strftime('%Y-%m-%d')
@@ -261,6 +391,7 @@ def get_purchase_report_data(client, date_range=None):
 
 
 def get_currencies(client):
+    """Fetches active currencies from Odoo."""
     domain = [('active', '=', True)]
     fields = ['name', 'symbol', 'rate', 'active']
     return pd.DataFrame(client.search_read('res.currency', domain, fields=fields))
