@@ -23,10 +23,28 @@ def _leer_excel(path: Path, sheet: Optional[str] = None) -> pd.DataFrame:
 def cargar_presupuesto_2025(filepath: Optional[Path] = None) -> pd.DataFrame | Dict[str, str]:
     path = filepath or PPTO_2025_PATH
     try:
-        try:
-            df = pd.read_excel(path, sheet_name="PPTO En uso", header=0)
-        except ValueError:
-            df = pd.read_excel(path, sheet_name=0, header=0)
+        # Intentar diferentes nombres de hojas
+        hojas_posibles = ["PPTO En uso", "BD_transformada", "BD", "PBI"]
+        
+        excel_file = pd.ExcelFile(path)
+        hojas_disponibles = excel_file.sheet_names
+        print(f"DEBUG: Hojas disponibles en {path}: {hojas_disponibles}")
+        
+        # Buscar la primera hoja que coincida
+        hoja_usar = None
+        for hoja in hojas_posibles:
+            if hoja in hojas_disponibles:
+                hoja_usar = hoja
+                break
+        
+        # Si no encuentra ninguna, usar la primera hoja
+        if hoja_usar is None:
+            hoja_usar = hojas_disponibles[0] if hojas_disponibles else 0
+        
+        print(f"DEBUG: Usando hoja: {hoja_usar}")
+        df = pd.read_excel(path, sheet_name=hoja_usar, header=0)
+        print(f"DEBUG: Columnas encontradas: {list(df.columns)}")
+        print(f"DEBUG: Filas cargadas: {len(df)}")
 
         columnas_rename = {
             "Nuero de fila": "numero_fila",
@@ -48,14 +66,22 @@ def cargar_presupuesto_2025(filepath: Optional[Path] = None) -> pd.DataFrame | D
             "Fecha EERR": "fecha_eerr",
             "Fecha Fujo": "fecha_flujo",
             "Cantidad": "cantidad",
-            "Monto con Signo": "monto"
+            "Monto con Signo": "monto",
+            # Formatos alternativos que pueden venir del Excel
+            "FECHA EERR": "fecha_eerr",
+            "MONTO": "monto",
+            "MONTO CON SIGNO": "monto",
+            "CAT 1 IFRS": "cat_ifrs_1",
+            "CAT IFRS 1": "cat_ifrs_1"
         }
         df = df.rename(columns=columnas_rename)
+        print(f"DEBUG: Columnas después de renombrar: {list(df.columns)}")
         return df
     except FileNotFoundError:
         return {"error": f"Archivo no encontrado: {path}"}
     except Exception as exc:
-        return {"error": str(exc)}
+        import traceback
+        return {"error": f"{str(exc)}\n{traceback.format_exc()}"}
 
 
 def cargar_presupuesto_2026(filepath: Optional[Path] = None) -> pd.DataFrame | Dict[str, str]:

@@ -121,9 +121,15 @@ if uploaded_file:
 # Botón para recargar datos
 if st.sidebar.button("🔄 Actualizar datos"):
     st.cache_data.clear()
+    # Limpiar datos cacheados en session_state
+    if "eerr_datos" in st.session_state:
+        del st.session_state["eerr_datos"]
+    if "eerr_ppto" in st.session_state:
+        del st.session_state["eerr_ppto"]
+    st.rerun()
 
 # === OBTENER DATOS REALES ===
-@st.cache_data(ttl=60, show_spinner="Cargando datos desde Odoo...")
+@st.cache_data(ttl=300, show_spinner="Cargando datos desde Odoo...")
 def obtener_estado_resultado(fecha_ini, fecha_f, centro, _username, _password):
     try:
         params = {
@@ -154,15 +160,25 @@ def obtener_presupuesto(año, centro=None):
     except Exception as e:
         return {"error": str(e)}
 
-datos = obtener_estado_resultado(
-    fecha_inicio,
-    fecha_fin,
-    opciones_centros.get(centro_seleccionado),
-    username,
-    password
-)
+# Usar session_state para cachear los datos y evitar recargas en cada widget
+cache_key = f"{año_seleccionado}_{fecha_inicio}_{fecha_fin}_{centro_seleccionado}"
 
-ppto = obtener_presupuesto(año_seleccionado, centro_seleccionado if centro_seleccionado != "Todas" else None)
+if "eerr_cache_key" not in st.session_state or st.session_state.eerr_cache_key != cache_key:
+    st.session_state.eerr_cache_key = cache_key
+    st.session_state.eerr_datos = obtener_estado_resultado(
+        fecha_inicio,
+        fecha_fin,
+        opciones_centros.get(centro_seleccionado),
+        username,
+        password
+    )
+    st.session_state.eerr_ppto = obtener_presupuesto(
+        año_seleccionado, 
+        centro_seleccionado if centro_seleccionado != "Todas" else None
+    )
+
+datos = st.session_state.get("eerr_datos", {})
+ppto = st.session_state.get("eerr_ppto", {})
 
 # === MOSTRAR DATOS ===
 if datos:
