@@ -272,13 +272,43 @@ with tab1:
                 ]
                 df_stock = pd.DataFrame(stock_items).sort_values("Stock (kg)", ascending=False)
                 
-                col_chart, col_table = st.columns([2, 1])
+                # Gráfico ancho con colores por manejo (azul convencional, verde orgánico)
+                import plotly.express as px
                 
-                with col_chart:
-                    st.bar_chart(df_stock.set_index("Tipo Fruta - Manejo"))
+                # Asignar color según manejo
+                def get_color(tipo_manejo):
+                    if "Orgánico" in tipo_manejo:
+                        return "#28a745"  # Verde para orgánico
+                    else:
+                        return "#007bff"  # Azul para convencional
                 
-                with col_table:
-                    st.dataframe(df_stock, use_container_width=True, height=300)
+                df_stock["Color"] = df_stock["Tipo Fruta - Manejo"].apply(get_color)
+                
+                fig = px.bar(
+                    df_stock,
+                    x="Tipo Fruta - Manejo",
+                    y="Stock (kg)",
+                    color="Tipo Fruta - Manejo",
+                    color_discrete_map={k: get_color(k) for k in df_stock["Tipo Fruta - Manejo"].unique()}
+                )
+                fig.update_layout(
+                    showlegend=False,
+                    height=400,
+                    xaxis_title="",
+                    yaxis_title="Stock (kg)",
+                    xaxis_tickangle=-45
+                )
+                # Formato chileno en tooltip
+                fig.update_traces(
+                    hovertemplate="<b>%{x}</b><br>Stock: %{y:,.2f} kg<extra></extra>"
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Tabla debajo del gráfico con formato chileno
+                df_stock_display = df_stock[["Tipo Fruta - Manejo", "Stock (kg)"]].copy()
+                df_stock_display["Stock (kg)"] = df_stock_display["Stock (kg)"].apply(lambda x: fmt_numero(x, 2))
+                st.dataframe(df_stock_display, use_container_width=True, height=300, hide_index=True)
     else:
         st.info("No hay datos de cámaras disponibles")
 
@@ -318,16 +348,16 @@ with tab2:
                 pallets_data = fetch_pallets(selected_location_id, category_param)
             
             if pallets_data:
-                st.success(f"Se encontraron {len(pallets_data)} pallets")
+                st.success(f"Se encontraron {fmt_numero(len(pallets_data))} registros")
                 
                 # Métricas
                 total_qty = sum(p.get("quantity", 0) for p in pallets_data)
                 avg_age = sum(p.get("days_old", 0) for p in pallets_data) / len(pallets_data) if pallets_data else 0
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("Total Pallets", len(pallets_data))
-                col2.metric("Stock Total (kg)", f"{total_qty:,.2f}")
-                col3.metric("Antigüedad Promedio", f"{avg_age:.0f} días")
+                col1.metric("Total Registros", fmt_numero(len(pallets_data)))
+                col2.metric("Stock Total (kg)", fmt_numero(total_qty, 2))
+                col3.metric("Antigüedad Promedio", f"{fmt_numero(avg_age, 0)} días")
                 
                 st.divider()
                 
@@ -340,6 +370,9 @@ with tab2:
                 
                 # Renombrar columnas
                 df_pallets.columns = ["Pallet", "Producto", "Lote", "Cantidad (kg)", "Categoría", "Condición", "Fecha Ingreso", "Días"]
+                
+                # Formatear números
+                df_pallets["Cantidad (kg)"] = df_pallets["Cantidad (kg)"].apply(lambda x: fmt_numero(x, 2))
                 
                 # Resaltar antigüedad
                 def highlight_age(row):
@@ -401,7 +434,7 @@ with tab3:
                 lotes_data = fetch_lotes(selected_category, location_ids)
             
             if lotes_data:
-                st.success(f"Se encontraron {len(lotes_data)} lotes")
+                st.success(f"Se encontraron {fmt_numero(len(lotes_data))} lotes")
                 
                 # Métricas
                 total_qty = sum(l.get("quantity", 0) for l in lotes_data)
@@ -409,10 +442,10 @@ with tab3:
                 oldest_days = max((l.get("days_old", 0) for l in lotes_data), default=0)
                 
                 col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Lotes", len(lotes_data))
-                col2.metric("Stock Total (kg)", f"{total_qty:,.2f}")
-                col3.metric("Pallets", total_pallets)
-                col4.metric("Lote Más Antiguo", f"{oldest_days} días")
+                col1.metric("Lotes", fmt_numero(len(lotes_data)))
+                col2.metric("Stock Total (kg)", fmt_numero(total_qty, 2))
+                col3.metric("Pallets", fmt_numero(total_pallets))
+                col4.metric("Lote Más Antiguo", f"{fmt_numero(oldest_days)} días")
                 
                 st.divider()
                 
@@ -440,6 +473,10 @@ with tab3:
                     "locations": "Ubicaciones"
                 }
                 df_display = df_display.rename(columns=column_rename)
+                
+                # Formatear números
+                df_display["Cantidad (kg)"] = df_display["Cantidad (kg)"].apply(lambda x: fmt_numero(x, 2))
+                df_display["Pallets"] = df_display["Pallets"].apply(lambda x: fmt_numero(x))
                 
                 # Resaltar según antigüedad
                 def color_age(val):
