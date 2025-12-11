@@ -33,7 +33,7 @@ def fmt_numero(valor, decimales=0):
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Stock y Cámaras - Rio Futuro",
+    page_title="Stock",
     page_icon="📦",
     layout="wide"
 )

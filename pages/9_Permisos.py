@@ -11,8 +11,8 @@ import streamlit as st
 from shared.auth import es_admin, proteger_pagina
 
 st.set_page_config(
-    page_title="Panel de Permisos",
-    page_icon="🛠️",
+    page_title="Permisos",
+    page_icon="⚙️",
     layout="wide"
 )
 

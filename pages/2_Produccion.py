@@ -18,8 +18,8 @@ from shared.auth import proteger_pagina, get_credenciales, tiene_acceso_dashboar
 
 # Configuración de página
 st.set_page_config(
-    page_title="Producción - Rio Futuro",
-    page_icon="📦",
+    page_title="Producción",
+    page_icon="🏭",
     layout="wide"
 )
 

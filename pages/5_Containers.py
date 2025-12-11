@@ -12,7 +12,7 @@ from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciale
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Containers - Rio Futuro",
+    page_title="Containers",
     page_icon="🚢",
     layout="wide"
 )

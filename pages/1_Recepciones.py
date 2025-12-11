@@ -53,7 +53,7 @@ def fmt_dinero(valor, decimales=0):
     """Formatea valor monetario con símbolo $"""
     return f"${fmt_numero(valor, decimales)}"
 
-st.set_page_config(page_title="Recepciones MP", page_icon="📥", layout="wide")
+st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
 
 # Autenticación central
 if not proteger_pagina():

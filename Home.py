@@ -193,12 +193,12 @@ else:
     DASHBOARD_CATEGORIES = {
         "operaciones": {
             "title": "📦 Operaciones",
-            "slugs": ["recepcionesmp", "bandejas", "stock", "produccion", "containers"],
+            "slugs": ["recepciones", "produccion", "bandejas", "stock", "containers"],
             "style": "card-operaciones"
         },
         "finanzas": {
             "title": "💰 Finanzas",
-            "slugs": ["estadoresultado"],
+            "slugs": ["finanzas"],
             "style": "card-finanzas"
         },
         "admin": {

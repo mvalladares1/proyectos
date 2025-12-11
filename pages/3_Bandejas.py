@@ -47,7 +47,7 @@ def fmt_numero(valor, decimales=0):
     except:
         return str(valor)
 
-st.set_page_config(page_title="Recepción Bandejas Río Futuro Procesos", layout="wide")
+st.set_page_config(page_title="Bandejas", page_icon="📊", layout="wide")
 
 # Verificar autenticación
 if not proteger_pagina():

@@ -12,7 +12,7 @@ from datetime import date, datetime
 
 from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciales
 
-st.set_page_config(page_title="Estado de Resultado", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Finanzas", page_icon="💰", layout="wide")
 
 if not proteger_pagina():
     st.stop()
