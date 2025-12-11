@@ -83,11 +83,12 @@ class RendimientoService:
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500) -> List[Dict]:
         """
-        Obtiene MOs terminadas en el período.
+        Obtiene MOs terminadas/por cerrar en el período.
         Usa date_planned_start (fecha prevista) para filtrar.
+        Incluye state 'done' y 'to_close' (producción terminada pendiente de cierre).
         """
         domain = [
-            ['state', '=', 'done'],
+            ['state', 'in', ['done', 'to_close']],  # Incluir ambos estados
             ['date_planned_start', '!=', False],
             ['date_planned_start', '>=', fecha_inicio],
             ['date_planned_start', '<=', fecha_fin + ' 23:59:59']
@@ -220,42 +221,72 @@ class RendimientoService:
     def get_proveedor_lote(self, lot_id: int) -> Optional[Dict]:
         """
         Obtiene el proveedor de un lote buscando su recepción original.
+        Busca específicamente el movimiento desde 'Vendors' o picking de recepción.
         """
         if not lot_id:
             return None
         
         try:
-            # Buscar primer movimiento del lote (recepción)
+            # Obtener TODOS los movimientos del lote para encontrar la recepción
             move_lines = self.odoo.search_read(
                 'stock.move.line',
                 [['lot_id', '=', lot_id]],
-                ['move_id', 'date'],
-                limit=1,
+                ['move_id', 'picking_id', 'location_id', 'location_dest_id', 'date'],
+                limit=20,
                 order='date asc'
             )
             
             if not move_lines:
                 return None
             
-            move_id = move_lines[0].get('move_id')
-            if not move_id:
-                return None
+            # Buscar el movimiento que viene desde 'Vendors'
+            for ml in move_lines:
+                loc_id = ml.get('location_id')
+                if loc_id:
+                    loc_name = loc_id[1] if isinstance(loc_id, (list, tuple)) and len(loc_id) > 1 else str(loc_id)
+                    
+                    # Si viene de Vendors/Proveedores
+                    if 'vendor' in loc_name.lower() or 'proveedor' in loc_name.lower():
+                        picking_info = ml.get('picking_id')
+                        if picking_info:
+                            pickings = self.odoo.read('stock.picking', [picking_info[0]], 
+                                ['partner_id', 'origin', 'scheduled_date'])
+                            if pickings and pickings[0].get('partner_id'):
+                                partner = pickings[0]['partner_id']
+                                return {
+                                    'id': partner[0] if isinstance(partner, (list, tuple)) else partner,
+                                    'name': partner[1] if isinstance(partner, (list, tuple)) else str(partner),
+                                    'fecha_recepcion': pickings[0].get('scheduled_date'),
+                                    'origin': pickings[0].get('origin', '')
+                                }
             
-            # Obtener picking del movimiento
-            moves = self.odoo.read('stock.move', [move_id[0]], ['picking_id'])
-            if not moves or not moves[0].get('picking_id'):
-                return None
+            # Si no encontramos desde Vendors, buscar picking de tipo Recepción MP
+            for ml in move_lines:
+                picking_info = ml.get('picking_id')
+                if picking_info:
+                    pickings = self.odoo.read('stock.picking', [picking_info[0]], 
+                        ['partner_id', 'origin', 'scheduled_date', 'picking_type_id'])
+                    if pickings:
+                        p = pickings[0]
+                        picking_type = p.get('picking_type_id')
+                        # Si es Recepciones MP (ID=1)
+                        if picking_type:
+                            type_id = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
+                            type_name = picking_type[1] if isinstance(picking_type, (list, tuple)) and len(picking_type) > 1 else ''
+                            
+                            if type_id == 1 or 'recep' in type_name.lower():
+                                partner = p.get('partner_id')
+                                if partner:
+                                    return {
+                                        'id': partner[0] if isinstance(partner, (list, tuple)) else partner,
+                                        'name': partner[1] if isinstance(partner, (list, tuple)) else str(partner),
+                                        'fecha_recepcion': p.get('scheduled_date'),
+                                        'origin': p.get('origin', '')
+                                    }
             
-            picking_id = moves[0]['picking_id'][0]
-            pickings = self.odoo.read('stock.picking', [picking_id], ['partner_id', 'scheduled_date'])
+            # Si no encontramos recepción, puede ser un lote producido internamente
+            return {'id': None, 'name': 'Producido internamente', 'fecha_recepcion': None, 'origin': ''}
             
-            if pickings and pickings[0].get('partner_id'):
-                partner = pickings[0]['partner_id']
-                return {
-                    'id': partner[0],
-                    'name': partner[1],
-                    'fecha_recepcion': pickings[0].get('scheduled_date')
-                }
         except Exception:
             pass
         
