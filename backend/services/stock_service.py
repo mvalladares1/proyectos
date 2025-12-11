@@ -569,8 +569,8 @@ class StockService:
                 lots_data[lot_name] = {
                     "lot": lot_name,
                     "product": p_name,
-                    "category": p_cat,
-                    "condition": p_condition,
+                    "category": tipo_fruta,
+                    "condition": manejo,
                     "quantity": 0,
                     "pallets": 0,
                     "in_date": in_date_str,
