@@ -1,6 +1,11 @@
 """
 Servicio de Rendimiento Productivo - Análisis de trazabilidad por lote.
-Calcula rendimiento, merma y eficiencia basándose en lotes de fruta.
+Calcula rendimiento, merma y eficiencia basándose en lotes de materia prima.
+
+LÓGICA BASADA EN produccion_service.py:
+- Consumos MP: Todo excepto insumos/envases
+- Producción PT: Todo excepto "Proceso Retail" y merma
+- Rendimiento = PT / MP * 100
 """
 from typing import Optional, Dict, List, Any
 from datetime import datetime
@@ -17,43 +22,68 @@ class RendimientoService:
     Trazabilidad: Lote MP → MO → Lote PT
     """
     
-    # Tipos de fruta a incluir (solo estos productos)
-    TIPOS_FRUTA = ['arándano', 'arandano', 'frambuesa', 'frutilla', 'mora', 'cereza', 'grosella']
+    # ===== EXCLUSIONES (basado en produccion_service) =====
+    # Categorías a excluir del consumo MP
+    EXCLUDED_CATEGORIES = ["insumo", "envase", "etiqueta", "embalaje", "merma"]
     
-    # Categorías/productos a excluir del rendimiento
-    EXCLUDED_CATEGORIES = ['insumo', 'envase', 'etiqueta', 'embalaje', 'caja', 'bolsa', 'pallet', 'bandeja']
-    EXCLUDED_PRODUCTS = ['proceso', 'provisión', 'provision', 'electricidad', 'servicio']
+    # Palabras en nombre de producto que indican insumo/envase
+    EXCLUDED_PRODUCT_NAMES = [
+        "caja", "bolsa", "insumo", "envase", "pallet", "etiqueta",
+        "doy pe", "cajas de exportación", "caja exportación"
+    ]
+    
+    # Productos a excluir de la producción
+    EXCLUDED_PRODUCTION = ["proceso retail", "proceso", "merma"]
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self._cache = get_cache()
     
-    def _is_fruta(self, product_name: str) -> bool:
-        """Verifica si un producto es de tipo fruta."""
-        if not product_name:
-            return False
-        name_lower = product_name.lower()
-        return any(fruta in name_lower for fruta in self.TIPOS_FRUTA)
-    
-    def _is_excluded(self, product_name: str, category_name: str = '') -> bool:
-        """Verifica si un producto debe excluirse del cálculo."""
+    def _is_excluded_consumo(self, product_name: str, category_name: str = '') -> bool:
+        """
+        Verifica si un producto debe excluirse del consumo MP.
+        Excluye: insumos, envases, cajas, bolsas, etc.
+        """
         if not product_name:
             return True
+        
         name_lower = product_name.lower()
         cat_lower = (category_name or '').lower()
         
         # Excluir por categoría
         if any(exc in cat_lower for exc in self.EXCLUDED_CATEGORIES):
             return True
+        
         # Excluir por nombre
-        if any(exc in name_lower for exc in self.EXCLUDED_PRODUCTS + self.EXCLUDED_CATEGORIES):
+        if any(exc in name_lower for exc in self.EXCLUDED_PRODUCT_NAMES):
             return True
+        
+        return False
+    
+    def _is_excluded_produccion(self, product_name: str, category_name: str = '') -> bool:
+        """
+        Verifica si un producto debe excluirse de la producción.
+        Excluye: "Proceso Retail", merma
+        """
+        if not product_name:
+            return True
+        
+        name_lower = product_name.lower()
+        cat_lower = (category_name or '').lower()
+        
+        # Excluir "Proceso Retail" y merma
+        if any(exc in name_lower for exc in self.EXCLUDED_PRODUCTION):
+            return True
+        
+        # Excluir merma por categoría
+        if "merma" in cat_lower:
+            return True
+        
         return False
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500) -> List[Dict]:
         """
-        Obtiene MOs terminadas en el período con sus datos de rendimiento.
-        Solo incluye MOs con productos de tipo fruta.
+        Obtiene MOs terminadas en el período.
         """
         domain = [
             ['state', '=', 'done'],
@@ -62,23 +92,19 @@ class RendimientoService:
             ['date_finished', '<=', fecha_fin + ' 23:59:59']
         ]
         
-        # Campos básicos que siempre existen
         basic_fields = [
             'name', 'product_id', 'product_qty', 'qty_produced',
             'date_start', 'date_finished', 'state',
             'move_raw_ids', 'move_finished_ids'
         ]
         
-        # Campos custom (pueden no existir)
         custom_fields = [
             'x_studio_dotacin', 'x_studio_hh', 'x_studio_hh_efectiva',
             'x_studio_kghh_efectiva', 'x_studio_kghora_efectiva',
-            'x_studio_horas_detencion_totales', 'x_studio_merma_bolsas',
             'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso',
             'x_studio_sala_de_proceso'
         ]
         
-        # Intentar con todos los campos
         try:
             mos = self.odoo.search_read(
                 'mrp.production',
@@ -88,7 +114,6 @@ class RendimientoService:
                 order='date_finished desc'
             )
         except Exception:
-            # Fallback: solo campos básicos
             mos = self.odoo.search_read(
                 'mrp.production',
                 domain,
@@ -101,46 +126,54 @@ class RendimientoService:
     
     def get_consumos_mo(self, mo: Dict) -> List[Dict]:
         """
-        Obtiene los consumos de MP de una MO con detalle de lotes.
-        Filtra solo productos de fruta.
+        Obtiene los consumos de MP de una MO.
+        Excluye insumos, envases, cajas, bolsas.
         """
         move_raw_ids = mo.get('move_raw_ids', [])
         if not move_raw_ids:
             return []
         
-        # Obtener move.lines con lotes
         move_lines = self.odoo.search_read(
             'stock.move.line',
             [['move_id', 'in', move_raw_ids]],
-            ['product_id', 'lot_id', 'qty_done', 'date'],
-            limit=100
+            ['product_id', 'lot_id', 'qty_done', 'date', 'product_category_name'],
+            limit=200
         )
         
         consumos = []
         for ml in move_lines:
-            prod_info = ml.get('product_id')
-            prod_name = prod_info[1] if prod_info else ''
-            
-            # Solo incluir productos de fruta
-            if not self._is_fruta(prod_name) or self._is_excluded(prod_name):
+            try:
+                prod_info = ml.get('product_id')
+                prod_name = prod_info[1] if prod_info else ''
+                category = ml.get('product_category_name', '') or ''
+                
+                # Excluir insumos/envases
+                if self._is_excluded_consumo(prod_name, category):
+                    continue
+                
+                qty = ml.get('qty_done', 0) or 0
+                if qty <= 0:
+                    continue
+                
+                lot_info = ml.get('lot_id')
+                consumos.append({
+                    'product_id': prod_info[0] if prod_info else None,
+                    'product_name': prod_name,
+                    'lot_id': lot_info[0] if lot_info else None,
+                    'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
+                    'qty_done': qty,
+                    'date': ml.get('date'),
+                    'category': category
+                })
+            except Exception:
                 continue
-            
-            lot_info = ml.get('lot_id')
-            consumos.append({
-                'product_id': prod_info[0] if prod_info else None,
-                'product_name': prod_name,
-                'lot_id': lot_info[0] if lot_info else None,
-                'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
-                'qty_done': ml.get('qty_done', 0),
-                'date': ml.get('date')
-            })
         
         return consumos
     
     def get_produccion_mo(self, mo: Dict) -> List[Dict]:
         """
-        Obtiene la producción de PT de una MO con detalle de lotes.
-        Filtra solo productos de fruta.
+        Obtiene la producción de PT de una MO.
+        Excluye "Proceso Retail" y merma.
         """
         move_finished_ids = mo.get('move_finished_ids', [])
         if not move_finished_ids:
@@ -149,28 +182,37 @@ class RendimientoService:
         move_lines = self.odoo.search_read(
             'stock.move.line',
             [['move_id', 'in', move_finished_ids]],
-            ['product_id', 'lot_id', 'qty_done', 'date'],
-            limit=100
+            ['product_id', 'lot_id', 'qty_done', 'date', 'product_category_name'],
+            limit=200
         )
         
         produccion = []
         for ml in move_lines:
-            prod_info = ml.get('product_id')
-            prod_name = prod_info[1] if prod_info else ''
-            
-            # Solo incluir productos de fruta (PT)
-            if not self._is_fruta(prod_name) or self._is_excluded(prod_name):
+            try:
+                prod_info = ml.get('product_id')
+                prod_name = prod_info[1] if prod_info else ''
+                category = ml.get('product_category_name', '') or ''
+                
+                # Excluir "Proceso Retail" y merma
+                if self._is_excluded_produccion(prod_name, category):
+                    continue
+                
+                qty = ml.get('qty_done', 0) or 0
+                if qty <= 0:
+                    continue
+                
+                lot_info = ml.get('lot_id')
+                produccion.append({
+                    'product_id': prod_info[0] if prod_info else None,
+                    'product_name': prod_name,
+                    'lot_id': lot_info[0] if lot_info else None,
+                    'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
+                    'qty_done': qty,
+                    'date': ml.get('date'),
+                    'category': category
+                })
+            except Exception:
                 continue
-            
-            lot_info = ml.get('lot_id')
-            produccion.append({
-                'product_id': prod_info[0] if prod_info else None,
-                'product_name': prod_name,
-                'lot_id': lot_info[0] if lot_info else None,
-                'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
-                'qty_done': ml.get('qty_done', 0),
-                'date': ml.get('date')
-            })
         
         return produccion
     
@@ -181,37 +223,40 @@ class RendimientoService:
         if not lot_id:
             return None
         
-        # Buscar primer movimiento del lote (recepción)
-        move_lines = self.odoo.search_read(
-            'stock.move.line',
-            [['lot_id', '=', lot_id]],
-            ['move_id', 'date'],
-            limit=1,
-            order='date asc'
-        )
-        
-        if not move_lines:
-            return None
-        
-        move_id = move_lines[0].get('move_id')
-        if not move_id:
-            return None
-        
-        # Obtener picking del movimiento
-        moves = self.odoo.read('stock.move', [move_id[0]], ['picking_id'])
-        if not moves or not moves[0].get('picking_id'):
-            return None
-        
-        picking_id = moves[0]['picking_id'][0]
-        pickings = self.odoo.read('stock.picking', [picking_id], ['partner_id', 'scheduled_date'])
-        
-        if pickings and pickings[0].get('partner_id'):
-            partner = pickings[0]['partner_id']
-            return {
-                'id': partner[0],
-                'name': partner[1],
-                'fecha_recepcion': pickings[0].get('scheduled_date')
-            }
+        try:
+            # Buscar primer movimiento del lote (recepción)
+            move_lines = self.odoo.search_read(
+                'stock.move.line',
+                [['lot_id', '=', lot_id]],
+                ['move_id', 'date'],
+                limit=1,
+                order='date asc'
+            )
+            
+            if not move_lines:
+                return None
+            
+            move_id = move_lines[0].get('move_id')
+            if not move_id:
+                return None
+            
+            # Obtener picking del movimiento
+            moves = self.odoo.read('stock.move', [move_id[0]], ['picking_id'])
+            if not moves or not moves[0].get('picking_id'):
+                return None
+            
+            picking_id = moves[0]['picking_id'][0]
+            pickings = self.odoo.read('stock.picking', [picking_id], ['partner_id', 'scheduled_date'])
+            
+            if pickings and pickings[0].get('partner_id'):
+                partner = pickings[0]['partner_id']
+                return {
+                    'id': partner[0],
+                    'name': partner[1],
+                    'fecha_recepcion': pickings[0].get('scheduled_date')
+                }
+        except Exception:
+            pass
         
         return None
     
@@ -226,43 +271,37 @@ class RendimientoService:
         total_hh = 0.0
         mos_procesadas = 0
         lotes_set = set()
-        proveedores_set = set()
-        
-        rendimientos_por_mo = []
+        rendimientos = []
         
         for mo in mos:
             try:
                 consumos = self.get_consumos_mo(mo)
                 produccion = self.get_produccion_mo(mo)
                 
-                if not consumos:
-                    continue
-                
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
                 
-                if kg_mp == 0:
-                    continue
-                
-                total_kg_mp += kg_mp
-                total_kg_pt += kg_pt
-                hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
-                if isinstance(hh, (int, float)):
-                    total_hh += hh
-                mos_procesadas += 1
-                
-                rend = (kg_pt / kg_mp * 100) if kg_mp > 0 else 0
-                rendimientos_por_mo.append(rend)
-                
-                # Recolectar lotes únicos
-                for c in consumos:
-                    if c.get('lot_id'):
-                        lotes_set.add(c['lot_id'])
+                if kg_mp > 0:
+                    total_kg_mp += kg_mp
+                    total_kg_pt += kg_pt
+                    mos_procesadas += 1
+                    
+                    rend = (kg_pt / kg_mp * 100)
+                    rendimientos.append(rend)
+                    
+                    # HH
+                    hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
+                    if isinstance(hh, (int, float)):
+                        total_hh += hh
+                    
+                    # Lotes únicos
+                    for c in consumos:
+                        if c.get('lot_id'):
+                            lotes_set.add(c['lot_id'])
             except Exception:
-                # Skip MOs with bad data
                 continue
         
-        rendimiento_promedio = sum(rendimientos_por_mo) / len(rendimientos_por_mo) if rendimientos_por_mo else 0
+        rendimiento_promedio = sum(rendimientos) / len(rendimientos) if rendimientos else 0
         merma_total = total_kg_mp - total_kg_pt
         merma_pct = (merma_total / total_kg_mp * 100) if total_kg_mp > 0 else 0
         kg_por_hh = (total_kg_pt / total_hh) if total_hh > 0 else 0
@@ -287,7 +326,6 @@ class RendimientoService:
         """
         mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin)
         
-        # Agrupar por lote
         lotes_data = {}
         
         for mo in mos:
@@ -307,9 +345,8 @@ class RendimientoService:
                     if not lot_id:
                         continue
                     
-                    lot_key = lot_id
-                    if lot_key not in lotes_data:
-                        lotes_data[lot_key] = {
+                    if lot_id not in lotes_data:
+                        lotes_data[lot_id] = {
                             'lot_id': lot_id,
                             'lot_name': c.get('lot_name', 'SIN LOTE'),
                             'product_name': c.get('product_name', ''),
@@ -319,17 +356,17 @@ class RendimientoService:
                             'proveedor': None
                         }
                     
-                    lotes_data[lot_key]['kg_consumidos'] += c.get('qty_done', 0) or 0
+                    qty_consumo = c.get('qty_done', 0) or 0
+                    lotes_data[lot_id]['kg_consumidos'] += qty_consumo
                     
                     # Proporción de PT que corresponde a este lote
-                    proporcion = (c.get('qty_done', 0) or 0) / kg_mp_mo if kg_mp_mo > 0 else 0
-                    lotes_data[lot_key]['kg_producidos'] += kg_pt_mo * proporcion
+                    proporcion = qty_consumo / kg_mp_mo if kg_mp_mo > 0 else 0
+                    lotes_data[lot_id]['kg_producidos'] += kg_pt_mo * proporcion
                     
                     mo_name = mo.get('name', '')
-                    if mo_name and mo_name not in lotes_data[lot_key]['mos']:
-                        lotes_data[lot_key]['mos'].append(mo_name)
+                    if mo_name and mo_name not in lotes_data[lot_id]['mos']:
+                        lotes_data[lot_id]['mos'].append(mo_name)
             except Exception:
-                # Skip MOs with bad data
                 continue
         
         # Calcular rendimiento y obtener proveedor
@@ -345,18 +382,19 @@ class RendimientoService:
             data['kg_producidos'] = round(kg_p, 2)
             data['num_mos'] = len(data['mos'])
             
-            # Obtener proveedor (solo para primeros lotes por performance)
+            # Obtener proveedor (solo para primeros 50 lotes por performance)
             if len(resultado) < 50:
-                proveedor = self.get_proveedor_lote(lot_id)
-                data['proveedor'] = proveedor['name'] if proveedor else 'Desconocido'
+                try:
+                    proveedor = self.get_proveedor_lote(lot_id)
+                    data['proveedor'] = proveedor['name'] if proveedor else 'Desconocido'
+                except Exception:
+                    data['proveedor'] = 'Desconocido'
             else:
                 data['proveedor'] = 'Pendiente'
             
             resultado.append(data)
         
-        # Ordenar por kg consumidos desc
         resultado.sort(key=lambda x: x['kg_consumidos'], reverse=True)
-        
         return resultado
     
     def get_rendimiento_por_proveedor(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
@@ -365,7 +403,6 @@ class RendimientoService:
         """
         lotes = self.get_rendimiento_por_lote(fecha_inicio, fecha_fin)
         
-        # Agrupar por proveedor
         proveedores_data = {}
         
         for lote in lotes:
@@ -382,7 +419,6 @@ class RendimientoService:
             proveedores_data[prov]['kg_producidos'] += lote['kg_producidos']
             proveedores_data[prov]['lotes'] += 1
         
-        # Calcular rendimiento por proveedor
         resultado = []
         for prov, data in proveedores_data.items():
             kg_c = data['kg_consumidos']
@@ -395,9 +431,7 @@ class RendimientoService:
             
             resultado.append(data)
         
-        # Ordenar por kg consumidos desc
         resultado.sort(key=lambda x: x['kg_consumidos'], reverse=True)
-        
         return resultado
     
     def get_rendimiento_mos(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
@@ -418,7 +452,9 @@ class RendimientoService:
                 if kg_mp == 0:
                     continue
                 
-                rendimiento = (kg_pt / kg_mp * 100) if kg_mp > 0 else 0
+                rendimiento = (kg_pt / kg_mp * 100)
+                
+                # Campos personalizados
                 hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
                 if not isinstance(hh, (int, float)):
                     hh = 0
@@ -444,10 +480,10 @@ class RendimientoService:
                         else:
                             d1 = fin
                         duracion_horas = round((d1 - d0).total_seconds() / 3600, 2)
-                    except:
+                    except Exception:
                         pass
                 
-                # Obtener product_name de forma segura
+                # Nombre del producto
                 product_name = ''
                 prod = mo.get('product_id')
                 if isinstance(prod, (list, tuple)) and len(prod) > 1:
@@ -455,9 +491,9 @@ class RendimientoService:
                 elif isinstance(prod, dict):
                     product_name = prod.get('name', '')
                 
-                # Obtener fecha de forma segura
+                # Fecha
                 fecha_raw = mo.get('date_finished', '') or ''
-                fecha = fecha_raw[:10] if fecha_raw and len(fecha_raw) >= 10 else ''
+                fecha = fecha_raw[:10] if fecha_raw and len(str(fecha_raw)) >= 10 else ''
                 
                 resultado.append({
                     'mo_id': mo.get('id', 0),
@@ -477,10 +513,7 @@ class RendimientoService:
                     'num_lotes_pt': len(set(p.get('lot_id') for p in produccion if p.get('lot_id')))
                 })
             except Exception:
-                # Skip MOs with bad data
                 continue
         
-        # Ordenar por fecha desc
         resultado.sort(key=lambda x: x['fecha'], reverse=True)
-        
         return resultado
