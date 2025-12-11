@@ -197,8 +197,7 @@ def get_purchase_orders(client):
     # Define fields to fetch
     po_fields = ['name', 'partner_id', 'date_order', 'date_approve', 'amount_total', 'currency_id', 'state', 'date_planned', 'picking_type_id']
     po_line_fields = ['order_id', 'product_id', 'name', 'product_qty', 'price_unit', 'price_subtotal', 'qty_received', 'date_planned']
-    # IMPORTANTE: Agregar campos x_studio para tipo de fruta y manejo
-    product_fields = ['default_code', 'name', 'categ_id', 'uom_id', 'x_studio_selection_field_7qfiv', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo']
+    product_fields = ['default_code', 'name', 'categ_id', 'uom_id', 'x_studio_selection_field_7qfiv']
     category_fields = ['name', 'complete_name', 'parent_id']
 
     # Fetch Purchase Orders (limit by date to optimize if needed, but user wants all history)
@@ -275,92 +274,91 @@ def get_purchase_orders(client):
         # Fallback to leaf name if complete_name fetch failed
         df = df[df['categ_name'].str.contains("Producto|PRODUCTO|Materia Prima|MATERIA PRIMA", case=False, na=False)]
     
-    # DEBUG: Print DataFrame columns and sample data
-    print(f"DEBUG: DataFrame columns = {list(df.columns)}")
+    # DEBUG: Verificar columnas después del merge y filtro
+    print(f"DEBUG: DataFrame columns after merge = {list(df.columns)}")
+    print(f"DEBUG: 'name_prod' exists = {'name_prod' in df.columns}")
     if not df.empty:
-        sample_cols = ['default_code', 'name_prod']
-        if 'x_studio_sub_categora' in df.columns:
-            sample_cols.append('x_studio_sub_categora')
-        if 'x_studio_categora_tipo_de_manejo' in df.columns:
-            sample_cols.append('x_studio_categora_tipo_de_manejo')
+        sample_cols = ['default_code', 'name', 'name_prod'] if 'name_prod' in df.columns else ['default_code', 'name']
         sample = df.head(3)[[c for c in sample_cols if c in df.columns]].to_dict('records')
-        print(f"DEBUG: Sample data with x_studio fields = {sample}")
-    
-    # ========================================
-    # CLASIFICACIÓN USANDO CAMPOS DE ODOO
-    # ========================================
-    # En lugar de parsear nombres, usamos los campos nativos de Odoo:
-    # - x_studio_sub_categora: Tipo de Fruta (Frutilla, Arándano, Frambuesa, etc.)
-    # - x_studio_categora_tipo_de_manejo: Manejo (Convencional, Orgánico)
-    # - categ_id: Categoría del producto
-    
-    # Mapeo de valores de x_studio_sub_categora a nombres normalizados
-    TIPO_FRUTA_MAP = {
-        'frutilla': 'FRUTILLA',
-        'arandano': 'ARANDANO',
-        'arándano': 'ARANDANO',
-        'frambuesa': 'FRAMBUESA',
-        'mora': 'MORA',
-        'cereza': 'CEREZA',
-        'mix': 'MIX',
-        'creative': 'MIX',
-        'otro': 'OTRO',
-    }
-    
-    # Mapeo de valores de x_studio_categora_tipo_de_manejo a nombres normalizados
-    MANEJO_MAP = {
-        'convencional': 'CONV',
-        'conv': 'CONV',
-        'organico': 'ORG',
-        'orgánico': 'ORG',
-        'org': 'ORG',
-    }
-    
-    def classify_product(row):
-        """Clasifica producto usando campos de Odoo directamente"""
+        print(f"DEBUG: Sample data = {sample}")
+    def parse_product_code(row):
+        code = str(row.get('default_code', '')).strip()
+        name_prod = str(row.get('name_prod', '')).strip()
+        desc = str(row.get('name', '')).strip() # PO Line Description
         
-        # Obtener tipo de fruta de x_studio_sub_categora
-        tipo_fruta_raw = str(row.get('x_studio_sub_categora', '') or '').strip().lower()
-        tipo_fruta = TIPO_FRUTA_MAP.get(tipo_fruta_raw, None)
-        
-        # Obtener manejo de x_studio_categora_tipo_de_manejo
-        manejo_raw = str(row.get('x_studio_categora_tipo_de_manejo', '') or '').strip().lower()
-        manejo = MANEJO_MAP.get(manejo_raw, 'CONV')  # Default a Convencional
-        
-        # Si no hay tipo de fruta en el campo de Odoo, intentar fallback con TOKEN_LIBRARY
-        if not tipo_fruta:
-            # Fallback: intentar parsear desde código/nombre
-            code = str(row.get('default_code', '')).strip().upper()
-            name = str(row.get('name_prod', '')).strip().upper()
-            desc = str(row.get('name', '')).strip().upper()
+        # Handle -24 suffix (Year 2024)
+        if code.endswith('-24'):
+            code = code[:-3]
             
-            # Buscar en TOKEN_LIBRARY solo para el tipo de fruta
-            search_text = f"{code} {name} {desc}"
+        # 1. Legacy Mapping / Overrides (Highest Priority)
+        if code in LEGACY_MAPPING: return LEGACY_MAPPING[code]
             
-            for token in search_text.split():
+        # Helper to clean text
+        def clean_text(text):
+            if ']' in text:
+                text = text.split(']', 1)[1].strip()
+            # Replace common separators with spaces to tokenize easily
+            return text.replace('_', ' ').replace('.', ' ').replace('-', ' ')
+
+        # Prioritize Desc > Name > Code
+        # The PO Line Description is usually the most accurate source of truth for what was actually ordered.
+        search_texts = [clean_text(desc), clean_text(name_prod), clean_text(code)]
+        
+        # Initialize result: [Fruit, Variety, Labeling, Quality, Condition]
+        # Default to "OTRO"
+        result = ["OTRO", "OTRO", "OTRO", "OTRO", "OTRO"]
+        
+        found_any = False
+        
+        for text in search_texts:
+            if not text: continue
+            
+            # Clean text: replace punctuation with space to handle "Conv." or "Bandeja-2024"
+            clean_text = text.upper().replace('.', ' ').replace('-', ' ').replace(',', ' ')
+            tokens = clean_text.split()
+            
+            # Scan tokens
+            for token in tokens:
                 if token in TOKEN_LIBRARY:
                     idx, val = TOKEN_LIBRARY[token]
-                    if idx == 0:  # Solo buscamos tipo de fruta (índice 0)
-                        tipo_fruta = val
-                        break
+                    # Only overwrite if currently OTRO (first match wins? or last? usually first is better)
+                    if result[idx] == "OTRO":
+                        result[idx] = val
+                        found_any = True
+        
+        # Post-Processing / Defaults
+        
+        # 1. Default Variety if Product is known but Variety is OTRO
+        if result[0] != "OTRO" and result[1] == "OTRO":
+            result[1] = "SIN VARIEDAD"
             
-            if not tipo_fruta:
-                tipo_fruta = 'OTRO'
+        # 2. Default Condition if Product is known but Condition is OTRO
+        if result[0] != "OTRO" and result[4] == "OTRO":
+            result[4] = "CONGELADO" # Default to Frozen for this business
+            
+        # 3. Default Quality if Product is known but Quality is OTRO
+        if result[0] != "OTRO" and result[3] == "OTRO":
+             result[3] = "ESTANDAR"
         
-        # Si no hay manejo en el campo de Odoo, intentar detectar desde nombre
-        if not manejo or manejo == 'CONV':
-            name = str(row.get('name_prod', '')).strip().upper()
-            if 'ORG' in name or 'ORGAN' in name:
-                manejo = 'ORG'
+        # If Condition is OTRO (handled above now, but keep fallback logic just in case)
+        if result[4] == "OTRO":
+            if result[3] in ["IQF", "BLOCK"]:
+                result[4] = "CONGELADO"
+            elif result[3] == "FRESCO": 
+                result[4] = "FRESCO"
         
-        # Valores por defecto para campos adicionales
-        variety = 'SIN VARIEDAD'
-        quality = 'ESTANDAR'
-        condition = 'CONGELADO'
-        
-        return f"{tipo_fruta}_{variety}_{manejo}_{quality}_{condition}"
+        if found_any:
+             return "_".join(result)
+
+        # Fallback: Legacy Mapping
+        if code in LEGACY_MAPPING: return LEGACY_MAPPING[code]
+        if name_prod in LEGACY_MAPPING: return LEGACY_MAPPING[name_prod]
+        if desc in LEGACY_MAPPING: return LEGACY_MAPPING[desc]
+        if len(code) >= 6 and code[:6] in LEGACY_MAPPING: return LEGACY_MAPPING[code[:6]]
+            
+        return "OTRO_OTRO_OTRO_OTRO_OTRO"
     
-    df['parsed_code'] = df.apply(classify_product, axis=1)
+    df['parsed_code'] = df.apply(parse_product_code, axis=1)
     
     # Split parsed_code
     split_data = df['parsed_code'].str.split('_', expand=True)
