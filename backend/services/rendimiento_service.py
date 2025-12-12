@@ -860,4 +860,136 @@ class RendimientoService:
             'lotes_mp': lotes_mp,
             'total_kg_mp': round(sum(l['kg'] for l in lotes_mp), 2)
         }
+    
+    def get_consolidado_fruta(self, fecha_inicio: str, fecha_fin: str) -> Dict:
+        """
+        Consolida KPIs agrupados por Tipo de Fruta, Manejo y Producto.
+        Para vista ejecutiva del jefe.
+        """
+        lotes = self.get_rendimiento_por_lote(fecha_inicio, fecha_fin)
+        mos_data = self.get_rendimiento_mos(fecha_inicio, fecha_fin)
+        
+        # Calcular totales de MOs para promedios
+        mos_totals = {
+            'hh_total': sum(m.get('hh', 0) or 0 for m in mos_data),
+            'duracion_total': sum(m.get('duracion_horas', 0) or 0 for m in mos_data),
+            'dotacion_sum': sum(m.get('dotacion', 0) or 0 for m in mos_data),
+            'num_mos': len(mos_data)
+        }
+        
+        # Agrupar por Fruta
+        por_fruta = {}
+        # Agrupar por Fruta + Manejo
+        por_fruta_manejo = {}
+        # Agrupar por Producto
+        por_producto = {}
+        
+        for lote in lotes:
+            tipo_fruta = lote.get('tipo_fruta', 'Otro')
+            manejo = lote.get('manejo', 'Otro')
+            producto = lote.get('product_name', 'Desconocido')
+            
+            kg_mp = lote.get('kg_consumidos', 0)
+            kg_pt = lote.get('kg_producidos', 0)
+            
+            # === Por Fruta ===
+            if tipo_fruta not in por_fruta:
+                por_fruta[tipo_fruta] = {
+                    'tipo_fruta': tipo_fruta,
+                    'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0, 'proveedores': set()
+                }
+            por_fruta[tipo_fruta]['kg_mp'] += kg_mp
+            por_fruta[tipo_fruta]['kg_pt'] += kg_pt
+            por_fruta[tipo_fruta]['num_lotes'] += 1
+            por_fruta[tipo_fruta]['proveedores'].add(lote.get('proveedor', ''))
+            
+            # === Por Fruta + Manejo ===
+            key_fm = f"{tipo_fruta}|{manejo}"
+            if key_fm not in por_fruta_manejo:
+                por_fruta_manejo[key_fm] = {
+                    'tipo_fruta': tipo_fruta,
+                    'manejo': manejo,
+                    'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0, 'proveedores': set()
+                }
+            por_fruta_manejo[key_fm]['kg_mp'] += kg_mp
+            por_fruta_manejo[key_fm]['kg_pt'] += kg_pt
+            por_fruta_manejo[key_fm]['num_lotes'] += 1
+            por_fruta_manejo[key_fm]['proveedores'].add(lote.get('proveedor', ''))
+            
+            # === Por Producto ===
+            if producto not in por_producto:
+                por_producto[producto] = {
+                    'producto': producto,
+                    'tipo_fruta': tipo_fruta,
+                    'manejo': manejo,
+                    'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
+                }
+            por_producto[producto]['kg_mp'] += kg_mp
+            por_producto[producto]['kg_pt'] += kg_pt
+            por_producto[producto]['num_lotes'] += 1
+        
+        # Calcular KPIs para cada agrupación
+        def calcular_kpis(data, mos_totals):
+            kg_mp = data['kg_mp']
+            kg_pt = data['kg_pt']
+            
+            # Proporcionar KPIs de MO basados en proporción de kg
+            total_kg_mp_global = sum(l.get('kg_consumidos', 0) for l in lotes)
+            proporcion = kg_mp / total_kg_mp_global if total_kg_mp_global > 0 else 0
+            
+            hh_proporcional = mos_totals['hh_total'] * proporcion
+            duracion_proporcional = mos_totals['duracion_total'] * proporcion
+            
+            return {
+                **data,
+                'kg_mp': round(kg_mp, 2),
+                'kg_pt': round(kg_pt, 2),
+                'rendimiento': round((kg_pt / kg_mp * 100) if kg_mp > 0 else 0, 2),
+                'merma': round(kg_mp - kg_pt, 2),
+                'merma_pct': round(((kg_mp - kg_pt) / kg_mp * 100) if kg_mp > 0 else 0, 2),
+                'kg_por_hh': round(kg_pt / hh_proporcional if hh_proporcional > 0 else 0, 2),
+                'kg_por_hora': round(kg_pt / duracion_proporcional if duracion_proporcional > 0 else 0, 2),
+                'num_proveedores': len(data.get('proveedores', set()))
+            }
+        
+        # Procesar resultados
+        resultado_fruta = []
+        for key, data in por_fruta.items():
+            d = calcular_kpis(data.copy(), mos_totals)
+            d.pop('proveedores', None)
+            resultado_fruta.append(d)
+        resultado_fruta.sort(key=lambda x: x['kg_pt'], reverse=True)
+        
+        resultado_fruta_manejo = []
+        for key, data in por_fruta_manejo.items():
+            d = calcular_kpis(data.copy(), mos_totals)
+            d.pop('proveedores', None)
+            resultado_fruta_manejo.append(d)
+        resultado_fruta_manejo.sort(key=lambda x: (x['tipo_fruta'], -x['kg_pt']))
+        
+        resultado_producto = []
+        for key, data in por_producto.items():
+            d = calcular_kpis(data.copy(), mos_totals)
+            resultado_producto.append(d)
+        resultado_producto.sort(key=lambda x: x['kg_pt'], reverse=True)
+        
+        # Resumen global
+        total_kg_mp = sum(d['kg_mp'] for d in resultado_fruta)
+        total_kg_pt = sum(d['kg_pt'] for d in resultado_fruta)
+        
+        return {
+            'resumen': {
+                'total_kg_mp': round(total_kg_mp, 2),
+                'total_kg_pt': round(total_kg_pt, 2),
+                'rendimiento_global': round((total_kg_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0, 2),
+                'merma_global': round(total_kg_mp - total_kg_pt, 2),
+                'num_frutas': len(resultado_fruta),
+                'num_lotes': sum(d['num_lotes'] for d in resultado_fruta),
+                'total_hh': round(mos_totals['hh_total'], 2),
+                'total_mos': mos_totals['num_mos']
+            },
+            'por_fruta': resultado_fruta,
+            'por_fruta_manejo': resultado_fruta_manejo,
+            'por_producto': resultado_producto[:50]  # Limitar productos
+        }
 

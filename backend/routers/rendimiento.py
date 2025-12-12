@@ -144,3 +144,20 @@ async def get_trazabilidad_inversa(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/consolidado")
+async def get_consolidado_fruta(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    Vista ejecutiva: KPIs consolidados por Tipo de Fruta, Manejo y Producto.
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_consolidado_fruta(fecha_inicio, fecha_fin)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

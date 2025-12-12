@@ -80,6 +80,8 @@ if 'rend_salas' not in st.session_state:
     st.session_state.rend_salas = None
 if 'rend_pt_detalle' not in st.session_state:
     st.session_state.rend_pt_detalle = None
+if 'rend_consolidado' not in st.session_state:
+    st.session_state.rend_consolidado = None
 
 # --- Filtros ---
 st.sidebar.header("📅 Filtros de Período")
@@ -141,6 +143,11 @@ if st.sidebar.button("🔄 Consultar Rendimiento", type="primary", use_container
             resp_pt = requests.get(f"{API_URL}/api/v1/rendimiento/pt-detalle", params=params, timeout=120)
             if resp_pt.status_code == 200:
                 st.session_state.rend_pt_detalle = resp_pt.json()
+            
+            # Obtener consolidado por fruta
+            resp_cons = requests.get(f"{API_URL}/api/v1/rendimiento/consolidado", params=params, timeout=120)
+            if resp_cons.status_code == 200:
+                st.session_state.rend_consolidado = resp_cons.json()
                 
         except requests.exceptions.ConnectionError:
             st.error("No se puede conectar al servidor API.")
@@ -181,10 +188,137 @@ if data:
     st.markdown("---")
     
     # === TABS para diferentes vistas ===
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🧺 Por Lote", "🏭 Por Proveedor", "⚙️ Por MO", 
+    tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🍓 Consolidado", "🧺 Por Lote", "🏭 Por Proveedor", "⚙️ Por MO", 
         "🏠 Por Sala", "📊 Gráficos", "🔍 Trazabilidad"
     ])
+    
+    # --- TAB 0: CONSOLIDADO POR FRUTA/MANEJO/PRODUCTO ---
+    with tab0:
+        st.subheader("🍓 Vista Ejecutiva: Consolidado por Fruta")
+        consolidado = st.session_state.rend_consolidado
+        
+        if consolidado:
+            resumen = consolidado.get('resumen', {})
+            
+            # KPIs globales
+            kpi_cols = st.columns(4)
+            with kpi_cols[0]:
+                alert = get_alert_color(resumen.get('rendimiento_global', 0))
+                st.metric(f"Rendimiento Global {alert}", fmt_porcentaje(resumen.get('rendimiento_global', 0)))
+            with kpi_cols[1]:
+                st.metric("Total Kg PT", fmt_numero(resumen.get('total_kg_pt', 0)))
+            with kpi_cols[2]:
+                st.metric("Total Kg MP", fmt_numero(resumen.get('total_kg_mp', 0)))
+            with kpi_cols[3]:
+                st.metric("Merma Global", fmt_numero(resumen.get('merma_global', 0)) + " Kg")
+            
+            st.markdown("---")
+            
+            # Sub-tabs para los 3 niveles
+            sub1, sub2, sub3 = st.tabs(["🍎 Por Tipo Fruta", "🏷️ Fruta + Manejo", "📦 Por Producto"])
+            
+            # === Por Tipo Fruta ===
+            with sub1:
+                st.markdown("### Rendimiento por Tipo de Fruta")
+                por_fruta = consolidado.get('por_fruta', [])
+                
+                if por_fruta:
+                    for fruta in por_fruta:
+                        alert = get_alert_color(fruta['rendimiento'])
+                        with st.expander(f"{alert} **{fruta['tipo_fruta']}** | {fmt_numero(fruta['kg_pt'])} Kg PT | Rend: {fmt_porcentaje(fruta['rendimiento'])}"):
+                            cols = st.columns(4)
+                            with cols[0]:
+                                st.metric("Rendimiento", fmt_porcentaje(fruta['rendimiento']))
+                            with cols[1]:
+                                st.metric("Kg/HH", fmt_numero(fruta.get('kg_por_hh', 0), 1))
+                            with cols[2]:
+                                st.metric("Kg/Hora", fmt_numero(fruta.get('kg_por_hora', 0), 1))
+                            with cols[3]:
+                                st.metric("Merma", fmt_numero(fruta['merma']) + " Kg")
+                            
+                            cols2 = st.columns(4)
+                            with cols2[0]:
+                                st.markdown(f"**Kg MP:** {fmt_numero(fruta['kg_mp'])}")
+                            with cols2[1]:
+                                st.markdown(f"**Kg PT:** {fmt_numero(fruta['kg_pt'])}")
+                            with cols2[2]:
+                                st.markdown(f"**Lotes:** {fruta['num_lotes']}")
+                            with cols2[3]:
+                                st.markdown(f"**Proveedores:** {fruta.get('num_proveedores', 'N/A')}")
+                    
+                    # Gráfico resumen
+                    df_fruta = pd.DataFrame(por_fruta)
+                    chart = alt.Chart(df_fruta).mark_bar().encode(
+                        x=alt.X('tipo_fruta:N', sort='-y', title='Tipo Fruta'),
+                        y=alt.Y('rendimiento:Q', title='Rendimiento %'),
+                        color=alt.condition(
+                            alt.datum.rendimiento >= 90,
+                            alt.value('#28a745'),
+                            alt.value('#dc3545')
+                        ),
+                        tooltip=['tipo_fruta', 'kg_pt', 'rendimiento', 'num_lotes']
+                    ).properties(height=300)
+                    st.altair_chart(chart, use_container_width=True)
+            
+            # === Por Fruta + Manejo ===
+            with sub2:
+                st.markdown("### Rendimiento por Fruta + Manejo")
+                por_fm = consolidado.get('por_fruta_manejo', [])
+                
+                if por_fm:
+                    # Filtro por fruta
+                    frutas = sorted(set(d['tipo_fruta'] for d in por_fm))
+                    fruta_sel = st.selectbox("Filtrar por Fruta", ["Todos"] + frutas)
+                    
+                    df_fm = pd.DataFrame(por_fm)
+                    if fruta_sel != "Todos":
+                        df_fm = df_fm[df_fm['tipo_fruta'] == fruta_sel]
+                    
+                    # Tabla
+                    df_fm['estado'] = df_fm['rendimiento'].apply(get_alert_color)
+                    df_display = df_fm[['estado', 'tipo_fruta', 'manejo', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'num_lotes']].copy()
+                    df_display.columns = ['', 'Fruta', 'Manejo', 'Kg MP', 'Kg PT', 'Rend %', 'Merma', 'Lotes']
+                    df_display['Kg MP'] = df_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
+                    df_display['Kg PT'] = df_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
+                    df_display['Rend %'] = df_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
+                    df_display['Merma'] = df_display['Merma'].apply(lambda x: fmt_numero(x, 0))
+                    
+                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+            
+            # === Por Producto ===
+            with sub3:
+                st.markdown("### Rendimiento por Producto MP")
+                por_prod = consolidado.get('por_producto', [])
+                
+                if por_prod:
+                    # Filtros
+                    cols = st.columns(2)
+                    with cols[0]:
+                        frutas = sorted(set(d['tipo_fruta'] for d in por_prod))
+                        fruta_prod = st.selectbox("Filtrar Fruta", ["Todos"] + frutas, key="prod_fruta")
+                    with cols[1]:
+                        manejos = sorted(set(d['manejo'] for d in por_prod))
+                        manejo_prod = st.selectbox("Filtrar Manejo", ["Todos"] + manejos, key="prod_manejo")
+                    
+                    df_prod = pd.DataFrame(por_prod)
+                    if fruta_prod != "Todos":
+                        df_prod = df_prod[df_prod['tipo_fruta'] == fruta_prod]
+                    if manejo_prod != "Todos":
+                        df_prod = df_prod[df_prod['manejo'] == manejo_prod]
+                    
+                    # Tabla
+                    df_prod['estado'] = df_prod['rendimiento'].apply(get_alert_color)
+                    df_display = df_prod[['estado', 'producto', 'tipo_fruta', 'manejo', 'kg_mp', 'kg_pt', 'rendimiento', 'merma']].copy()
+                    df_display.columns = ['', 'Producto', 'Fruta', 'Manejo', 'Kg MP', 'Kg PT', 'Rend %', 'Merma']
+                    df_display['Kg MP'] = df_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
+                    df_display['Kg PT'] = df_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
+                    df_display['Rend %'] = df_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
+                    df_display['Merma'] = df_display['Merma'].apply(lambda x: fmt_numero(x, 0))
+                    
+                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+        else:
+            st.info("Carga los datos para ver el consolidado por fruta.")
     
     # --- TAB 1: Por Lote con Alertas y PT Detalle ---
     with tab1:
