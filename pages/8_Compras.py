@@ -133,17 +133,88 @@ with tab_po:
         st.markdown("---")
         
         if ordenes:
+            st.subheader(f"📋 Órdenes de Compra ({len(ordenes)})")
+            
+            # Opción de vista
+            vista = st.radio("Vista", ["📊 Tabla compacta", "📋 Detalle con expanders"], horizontal=True, label_visibility="collapsed")
+            
             df = pd.DataFrame(ordenes)
-            df['estado_aprob'] = df['approval_status'].apply(get_approval_color) + ' ' + df['approval_status']
-            df['estado_recep'] = df['receive_status'].apply(get_receive_color) + ' ' + df['receive_status']
             
-            df_display = df[['name', 'date_order', 'partner', 'amount_total', 'estado_aprob', 'estado_recep', 'approved_by', 'pending_users']].copy()
-            df_display.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', 'Aprobación', 'Recepción', 'Aprobado por', 'Pendiente de']
-            df_display['Monto'] = df_display['Monto'].apply(fmt_moneda)
+            if vista == "📊 Tabla compacta":
+                # Tabla compacta con columnas esenciales
+                df_display = df[['name', 'date_order', 'partner', 'amount_total', 'approval_status', 'receive_status']].copy()
+                
+                # Columnas de estado con emoji compacto
+                df_display['Aprob'] = df_display['approval_status'].apply(lambda x: {
+                    'Aprobada': '✅', 'Parcialmente aprobada': '🟡', 'En revisión': '⏳', 'Rechazada': '❌'
+                }.get(x, '⚪'))
+                df_display['Recep'] = df_display['receive_status'].apply(lambda x: {
+                    'Recepcionada totalmente': '✅', 'Recepción parcial': '🟡', 'No recepcionada': '🔴', 'No se recepciona': '➖'
+                }.get(x, '⚪'))
+                
+                # Solo columnas esenciales
+                df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprob', 'Recep']].copy()
+                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', '✓', '📦']
+                df_final['Monto'] = df_final['Monto'].apply(fmt_moneda)
+                
+                st.dataframe(
+                    df_final, 
+                    use_container_width=True, 
+                    hide_index=True, 
+                    height=450,
+                    column_config={
+                        "PO": st.column_config.TextColumn(width="small"),
+                        "Fecha": st.column_config.TextColumn(width="small"),
+                        "Proveedor": st.column_config.TextColumn(width="large"),
+                        "Monto": st.column_config.TextColumn(width="medium"),
+                        "✓": st.column_config.TextColumn("Aprob", width="small"),
+                        "📦": st.column_config.TextColumn("Recep", width="small"),
+                    }
+                )
+                
+                # Leyenda
+                st.caption("**Leyenda:** ✅ Completo | 🟡 Parcial | ⏳ En revisión | 🔴 Pendiente | ➖ N/A")
             
-            st.dataframe(df_display, use_container_width=True, hide_index=True, height=400)
+            else:
+                # Vista con expanders - muestra el detalle por PO
+                for _, row in df.iterrows():
+                    aprob_icon = get_approval_color(row['approval_status'])
+                    recep_icon = get_receive_color(row['receive_status'])
+                    
+                    header = f"{aprob_icon} **{row['name']}** | {row['partner'][:40]} | {fmt_moneda(row['amount_total'])}"
+                    
+                    with st.expander(header, expanded=False):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.markdown(f"**Fecha:** {row['date_order']}")
+                            st.markdown(f"**Monto:** {fmt_moneda(row['amount_total'])}")
+                        with col2:
+                            st.markdown(f"**Aprobación:** {aprob_icon} {row['approval_status']}")
+                            st.markdown(f"**Recepción:** {recep_icon} {row['receive_status']}")
+                        with col3:
+                            st.markdown(f"**Estado PO:** {row['po_state']}")
+                        
+                        st.markdown("---")
+                        
+                        # Detalle de aprobaciones
+                        aprobado = row.get('approved_by', '')
+                        pendiente = row.get('pending_users', '')
+                        
+                        if aprobado or pendiente:
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if aprobado:
+                                    st.success(f"✅ **Aprobado por:** {aprobado}")
+                                else:
+                                    st.info("Sin aprobaciones aún")
+                            with c2:
+                                if pendiente:
+                                    st.warning(f"⏳ **Pendiente de:** {pendiente}")
+                                else:
+                                    st.success("Sin pendientes")
             
             # Export
+            st.markdown("---")
             try:
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
