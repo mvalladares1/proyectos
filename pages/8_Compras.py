@@ -372,8 +372,8 @@ with tab_credito:
             pct = prov['pct_uso']
             pct_disp = max(100 - pct, 0)
             
-            # Header simplificado y limpio
-            header = f"{alerta} {prov['partner_name']}  ·  Línea: {fmt_moneda(prov['linea_total'])}  ·  Usado: {fmt_moneda(prov['monto_usado'])} ({pct:.0f}%)  ·  Disponible: {fmt_moneda(max(prov['disponible'], 0))}"
+            # Header con separadores simples para uniformidad de fuente
+            header = f"{alerta} {prov['partner_name']} | Linea: {fmt_moneda(prov['linea_total'])} | Usado: {fmt_moneda(prov['monto_usado'])} ({pct:.0f}%) | Disponible: {fmt_moneda(max(prov['disponible'], 0))}"
             
             with st.expander(header):
                 # Barra de progreso con estado
