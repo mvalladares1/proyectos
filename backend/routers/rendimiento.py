@@ -75,3 +75,72 @@ async def get_rendimiento_mos(
         return service.get_rendimiento_mos(fecha_inicio, fecha_fin)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ranking")
+async def get_ranking_proveedores(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    top_n: int = Query(5, description="Cantidad de top/bottom proveedores")
+):
+    """
+    Obtiene ranking de Top N y Bottom N proveedores por rendimiento.
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_ranking_proveedores(fecha_inicio, fecha_fin, top_n)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/salas")
+async def get_productividad_salas(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    Obtiene KPIs de productividad agrupados por sala de proceso.
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_productividad_por_sala(fecha_inicio, fecha_fin)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pt-detalle")
+async def get_pt_detalle(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    Obtiene detalle de productos PT generados por cada lote MP.
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_detalle_pt_por_lote(fecha_inicio, fecha_fin)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trazabilidad-inversa/{lote_pt_name}")
+async def get_trazabilidad_inversa(
+    lote_pt_name: str,
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Trazabilidad inversa: dado un lote PT, encuentra los lotes MP originales.
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_trazabilidad_inversa(lote_pt_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

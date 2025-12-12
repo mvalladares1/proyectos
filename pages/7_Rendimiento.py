@@ -1,6 +1,7 @@
 """
 Rendimiento Productivo: Dashboard de análisis de eficiencia por lote de fruta.
 Trazabilidad: Lote MP → MO → Lote PT
+Versión 2: Con PT detalle, salas, ranking, alertas y Excel
 """
 import streamlit as st
 import pandas as pd
@@ -31,14 +32,19 @@ def fmt_numero(valor, decimales=0):
         return str(valor)
 
 
-def fmt_dinero(valor, decimales=0):
-    """Formatea valor monetario con símbolo $"""
-    return f"${fmt_numero(valor, decimales)}"
-
-
 def fmt_porcentaje(valor, decimales=1):
     """Formatea porcentaje"""
     return f"{fmt_numero(valor, decimales)}%"
+
+
+def get_alert_color(rendimiento):
+    """Retorna color según rendimiento"""
+    if rendimiento >= 95:
+        return "🟢"
+    elif rendimiento >= 90:
+        return "🟡"
+    else:
+        return "🔴"
 
 
 # Configuración de página
@@ -68,6 +74,12 @@ if 'rend_proveedores' not in st.session_state:
     st.session_state.rend_proveedores = None
 if 'rend_mos' not in st.session_state:
     st.session_state.rend_mos = None
+if 'rend_ranking' not in st.session_state:
+    st.session_state.rend_ranking = None
+if 'rend_salas' not in st.session_state:
+    st.session_state.rend_salas = None
+if 'rend_pt_detalle' not in st.session_state:
+    st.session_state.rend_pt_detalle = None
 
 # --- Filtros ---
 st.sidebar.header("📅 Filtros de Período")
@@ -99,9 +111,6 @@ if st.sidebar.button("🔄 Consultar Rendimiento", type="primary", use_container
             resp_overview = requests.get(f"{API_URL}/api/v1/rendimiento/overview", params=params, timeout=120)
             if resp_overview.status_code == 200:
                 st.session_state.rend_data = resp_overview.json()
-            else:
-                st.error(f"Error overview: {resp_overview.status_code}")
-                st.session_state.rend_data = None
             
             # Obtener lotes
             resp_lotes = requests.get(f"{API_URL}/api/v1/rendimiento/lotes", params=params, timeout=120)
@@ -117,9 +126,24 @@ if st.sidebar.button("🔄 Consultar Rendimiento", type="primary", use_container
             resp_mos = requests.get(f"{API_URL}/api/v1/rendimiento/mos", params=params, timeout=120)
             if resp_mos.status_code == 200:
                 st.session_state.rend_mos = resp_mos.json()
+            
+            # Obtener ranking
+            resp_ranking = requests.get(f"{API_URL}/api/v1/rendimiento/ranking", params=params, timeout=120)
+            if resp_ranking.status_code == 200:
+                st.session_state.rend_ranking = resp_ranking.json()
+            
+            # Obtener salas
+            resp_salas = requests.get(f"{API_URL}/api/v1/rendimiento/salas", params=params, timeout=120)
+            if resp_salas.status_code == 200:
+                st.session_state.rend_salas = resp_salas.json()
+            
+            # Obtener detalle PT
+            resp_pt = requests.get(f"{API_URL}/api/v1/rendimiento/pt-detalle", params=params, timeout=120)
+            if resp_pt.status_code == 200:
+                st.session_state.rend_pt_detalle = resp_pt.json()
                 
         except requests.exceptions.ConnectionError:
-            st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
+            st.error("No se puede conectar al servidor API.")
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
@@ -137,8 +161,8 @@ if data:
         st.metric("Total Kg PT", fmt_numero(data['total_kg_pt'], 0))
     with kpi_cols[2]:
         rend = data['rendimiento_promedio']
-        delta_color = "normal" if rend >= 85 else "inverse"
-        st.metric("Rendimiento Prom.", fmt_porcentaje(rend), delta=f"{rend-85:.1f}% vs 85%")
+        alert = get_alert_color(rend)
+        st.metric(f"Rendimiento {alert}", fmt_porcentaje(rend), delta=f"{rend-85:.1f}% vs 85%")
     with kpi_cols[3]:
         st.metric("Merma Total", fmt_numero(data['merma_total_kg'], 0) + " Kg")
     with kpi_cols[4]:
@@ -157,27 +181,29 @@ if data:
     st.markdown("---")
     
     # === TABS para diferentes vistas ===
-    tab1, tab2, tab3, tab4 = st.tabs(["🧺 Por Lote", "🏭 Por Proveedor", "⚙️ Por MO", "📊 Gráficos"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🧺 Por Lote", "🏭 Por Proveedor", "⚙️ Por MO", 
+        "🏠 Por Sala", "📊 Gráficos", "🔍 Trazabilidad"
+    ])
     
-    # --- TAB 1: Por Lote ---
+    # --- TAB 1: Por Lote con Alertas y PT Detalle ---
     with tab1:
         st.subheader("Rendimiento por Lote de MP")
         lotes = st.session_state.rend_lotes
+        pt_detalle = st.session_state.rend_pt_detalle or {}
         
         if lotes:
             df_lotes = pd.DataFrame(lotes)
             
             # === FILTROS ===
             st.markdown("**Filtrar por:**")
-            filter_cols = st.columns(3)
+            filter_cols = st.columns(4)
             
             with filter_cols[0]:
-                # Filtro por proveedor
                 proveedores_unicos = sorted(df_lotes['proveedor'].unique().tolist())
                 prov_filtro = st.multiselect("Proveedor", proveedores_unicos)
             
             with filter_cols[1]:
-                # Filtro por tipo de fruta
                 if 'tipo_fruta' in df_lotes.columns:
                     frutas_unicas = sorted(df_lotes['tipo_fruta'].unique().tolist())
                     fruta_filtro = st.multiselect("Tipo Fruta", frutas_unicas)
@@ -185,12 +211,15 @@ if data:
                     fruta_filtro = []
             
             with filter_cols[2]:
-                # Filtro por manejo
                 if 'manejo' in df_lotes.columns:
                     manejos_unicos = sorted(df_lotes['manejo'].unique().tolist())
                     manejo_filtro = st.multiselect("Manejo", manejos_unicos)
                 else:
                     manejo_filtro = []
+            
+            with filter_cols[3]:
+                # Filtro de alerta
+                alerta_filtro = st.selectbox("Alertas", ["Todos", "🔴 Crítico (<90%)", "🟡 Atención (<95%)"])
             
             # Aplicar filtros
             df_filtered = df_lotes.copy()
@@ -200,64 +229,99 @@ if data:
                 df_filtered = df_filtered[df_filtered['tipo_fruta'].isin(fruta_filtro)]
             if manejo_filtro:
                 df_filtered = df_filtered[df_filtered['manejo'].isin(manejo_filtro)]
+            if alerta_filtro == "🔴 Crítico (<90%)":
+                df_filtered = df_filtered[df_filtered['rendimiento'] < 90]
+            elif alerta_filtro == "🟡 Atención (<95%)":
+                df_filtered = df_filtered[df_filtered['rendimiento'] < 95]
             
-            # Mostrar métricas del filtro
-            if prov_filtro or fruta_filtro or manejo_filtro:
-                st.caption(f"Mostrando {len(df_filtered)} de {len(df_lotes)} lotes")
+            # Agregar columna de alerta
+            df_filtered['estado'] = df_filtered['rendimiento'].apply(get_alert_color)
             
-            # Preparar columnas para mostrar
-            display_cols = ['lot_name', 'product_name', 'tipo_fruta', 'manejo', 'proveedor', 
-                           'orden_compra', 'fecha_recepcion', 'kg_consumidos', 'kg_producidos', 
-                           'rendimiento', 'merma', 'num_mos']
+            st.caption(f"Mostrando {len(df_filtered)} de {len(df_lotes)} lotes")
             
-            # Filtrar solo columnas que existen
-            available_cols = [c for c in display_cols if c in df_filtered.columns]
-            df_display = df_filtered[available_cols].copy()
+            # Mostrar lotes con expander para PT detalle
+            for _, row in df_filtered.iterrows():
+                lot_id = row.get('lot_id')
+                lot_name = row.get('lot_name', 'N/A')
+                rend = row.get('rendimiento', 0)
+                alert = get_alert_color(rend)
+                
+                with st.expander(f"{alert} **{lot_name}** | {row.get('product_name', '')[:50]} | Rend: {fmt_porcentaje(rend)} | MP: {fmt_numero(row.get('kg_consumidos', 0))} Kg"):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.markdown(f"**Proveedor:** {row.get('proveedor', 'N/A')}")
+                        st.markdown(f"**OC:** {row.get('orden_compra', 'N/A')}")
+                        st.markdown(f"**Fecha Recepción:** {row.get('fecha_recepcion', 'N/A')}")
+                    with col2:
+                        st.markdown(f"**Kg MP:** {fmt_numero(row.get('kg_consumidos', 0))}")
+                        st.markdown(f"**Kg PT:** {fmt_numero(row.get('kg_producidos', 0))}")
+                        st.markdown(f"**Merma:** {fmt_numero(row.get('merma', 0))} Kg ({fmt_porcentaje(row.get('merma_pct', 0))})")
+                    with col3:
+                        st.markdown(f"**Tipo Fruta:** {row.get('tipo_fruta', 'N/A')}")
+                        st.markdown(f"**Manejo:** {row.get('manejo', 'N/A')}")
+                        st.markdown(f"**MOs:** {row.get('num_mos', 0)}")
+                    
+                    # Mostrar detalle PT
+                    if str(lot_id) in pt_detalle:
+                        st.markdown("---")
+                        st.markdown("**📦 Productos de Salida (PT):**")
+                        pt_list = pt_detalle[str(lot_id)]
+                        if pt_list:
+                            df_pt = pd.DataFrame(pt_list)
+                            df_pt['kg'] = df_pt['kg'].apply(lambda x: fmt_numero(x, 2))
+                            st.dataframe(df_pt[['product_name', 'lot_name', 'kg']], use_container_width=True, hide_index=True)
             
-            # Renombrar columnas
-            col_names = {
-                'lot_name': 'Lote', 'product_name': 'Producto', 
-                'tipo_fruta': 'Fruta', 'manejo': 'Manejo',
-                'proveedor': 'Proveedor', 'orden_compra': 'OC',
-                'fecha_recepcion': 'Fecha Recep.', 'kg_consumidos': 'Kg MP',
-                'kg_producidos': 'Kg PT', 'rendimiento': 'Rend %',
-                'merma': 'Merma Kg', 'num_mos': 'MOs'
-            }
-            df_display = df_display.rename(columns=col_names)
-            
-            # Formatear números
-            if 'Kg MP' in df_display.columns:
-                df_display['Kg MP'] = df_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
-            if 'Kg PT' in df_display.columns:
-                df_display['Kg PT'] = df_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
-            if 'Rend %' in df_display.columns:
-                df_display['Rend %'] = df_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
-            if 'Merma Kg' in df_display.columns:
-                df_display['Merma Kg'] = df_display['Merma Kg'].apply(lambda x: fmt_numero(x, 0))
-            
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
-            
-            # Descargar
-            csv = df_filtered.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Descargar CSV", csv, "rendimiento_lotes.csv", "text/csv")
-        else:
-            st.info("Sin datos de lotes. Haz clic en 'Consultar Rendimiento'.")
+            # Excel export
+            st.markdown("---")
+            try:
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    df_lotes.to_excel(writer, sheet_name='Lotes', index=False)
+                st.download_button(
+                    "📥 Descargar Excel",
+                    buffer.getvalue(),
+                    "rendimiento_lotes.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except:
+                csv = df_lotes.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar CSV", csv, "rendimiento_lotes.csv", "text/csv")
     
-    # --- TAB 2: Por Proveedor ---
+    # --- TAB 2: Por Proveedor con Ranking ---
     with tab2:
         st.subheader("Rendimiento por Proveedor")
+        ranking = st.session_state.rend_ranking
         proveedores = st.session_state.rend_proveedores
+        
+        if ranking:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 🏆 Top 5 Mejores")
+                for i, p in enumerate(ranking.get('top', [])[:5]):
+                    alert = get_alert_color(p['rendimiento'])
+                    st.markdown(f"**{i+1}. {alert} {p['proveedor'][:40]}** - {fmt_porcentaje(p['rendimiento'])} ({fmt_numero(p['kg_consumidos'])} Kg)")
+            
+            with col2:
+                st.markdown("### ⚠️ Bottom 5 - Atención")
+                for i, p in enumerate(ranking.get('bottom', [])[:5]):
+                    alert = get_alert_color(p['rendimiento'])
+                    st.markdown(f"**{i+1}. {alert} {p['proveedor'][:40]}** - {fmt_porcentaje(p['rendimiento'])} ({fmt_numero(p['kg_consumidos'])} Kg)")
+            
+            st.markdown("---")
+            st.metric("Rendimiento Promedio Proveedores", fmt_porcentaje(ranking.get('promedio_rendimiento', 0)))
         
         if proveedores:
             df_prov = pd.DataFrame(proveedores)
             
-            # Mostrar tabla
-            df_prov_display = df_prov[['proveedor', 'kg_consumidos', 'kg_producidos', 'rendimiento', 'merma', 'lotes']].copy()
-            df_prov_display.columns = ['Proveedor', 'Kg Consumidos', 'Kg Producidos', 'Rendimiento %', 'Merma Kg', 'Lotes']
+            # Tabla con alertas
+            df_prov['estado'] = df_prov['rendimiento'].apply(get_alert_color)
+            df_prov_display = df_prov[['estado', 'proveedor', 'kg_consumidos', 'kg_producidos', 'rendimiento', 'merma', 'lotes']].copy()
+            df_prov_display.columns = ['', 'Proveedor', 'Kg MP', 'Kg PT', 'Rend %', 'Merma Kg', 'Lotes']
             
-            df_prov_display['Kg Consumidos'] = df_prov_display['Kg Consumidos'].apply(lambda x: fmt_numero(x, 0))
-            df_prov_display['Kg Producidos'] = df_prov_display['Kg Producidos'].apply(lambda x: fmt_numero(x, 0))
-            df_prov_display['Rendimiento %'] = df_prov_display['Rendimiento %'].apply(lambda x: fmt_porcentaje(x))
+            df_prov_display['Kg MP'] = df_prov_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
+            df_prov_display['Kg PT'] = df_prov_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
+            df_prov_display['Rend %'] = df_prov_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
             df_prov_display['Merma Kg'] = df_prov_display['Merma Kg'].apply(lambda x: fmt_numero(x, 0))
             
             st.dataframe(df_prov_display, use_container_width=True, hide_index=True)
@@ -267,18 +331,16 @@ if data:
                 x=alt.X('proveedor:N', sort='-y', title='Proveedor', axis=alt.Axis(labelAngle=-45, labelLimit=200)),
                 y=alt.Y('rendimiento:Q', title='Rendimiento %'),
                 color=alt.condition(
-                    alt.datum.rendimiento >= 85,
+                    alt.datum.rendimiento >= 90,
                     alt.value('#28a745'),
                     alt.value('#dc3545')
                 ),
-                tooltip=['proveedor', 'rendimiento', 'kg_consumidos', 'kg_producidos']
-            ).properties(width=700, height=400, title='Rendimiento por Proveedor')
+                tooltip=['proveedor', 'rendimiento', 'kg_consumidos']
+            ).properties(width=700, height=400)
             
             st.altair_chart(chart_prov, use_container_width=True)
-        else:
-            st.info("Sin datos de proveedores.")
     
-    # --- TAB 3: Por MO ---
+    # --- TAB 3: Por MO con Sala ---
     with tab3:
         st.subheader("Rendimiento por Orden de Fabricación")
         mos = st.session_state.rend_mos
@@ -286,8 +348,18 @@ if data:
         if mos:
             df_mos = pd.DataFrame(mos)
             
-            df_mos_display = df_mos[['mo_name', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha']].copy()
-            df_mos_display.columns = ['MO', 'Kg MP', 'Kg PT', 'Rend %', 'Merma Kg', 'Duración (h)', 'Dotación', 'Fecha']
+            # Filtro por sala
+            if 'sala' in df_mos.columns:
+                salas_unicas = sorted([s for s in df_mos['sala'].unique() if s])
+                sala_filtro = st.multiselect("Filtrar por Sala", salas_unicas)
+                if sala_filtro:
+                    df_mos = df_mos[df_mos['sala'].isin(sala_filtro)]
+            
+            # Agregar alertas
+            df_mos['estado'] = df_mos['rendimiento'].apply(get_alert_color)
+            
+            df_mos_display = df_mos[['estado', 'mo_name', 'sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha']].copy()
+            df_mos_display.columns = ['', 'MO', 'Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma Kg', 'Horas', 'Dotación', 'Fecha']
             
             df_mos_display['Kg MP'] = df_mos_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
             df_mos_display['Kg PT'] = df_mos_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
@@ -299,35 +371,80 @@ if data:
             # Estadísticas
             col_stat1, col_stat2, col_stat3 = st.columns(3)
             with col_stat1:
-                st.metric("Duración Promedio", f"{df_mos['duracion_horas'].mean():.1f} h")
+                df_mos_orig = pd.DataFrame(mos)
+                st.metric("Duración Promedio", f"{df_mos_orig['duracion_horas'].mean():.1f} h")
             with col_stat2:
-                st.metric("Dotación Promedio", f"{df_mos['dotacion'].mean():.1f}")
+                st.metric("Dotación Promedio", f"{df_mos_orig['dotacion'].mean():.1f}")
             with col_stat3:
-                st.metric("Rendimiento Mín/Máx", f"{df_mos['rendimiento'].min():.1f}% / {df_mos['rendimiento'].max():.1f}%")
-        else:
-            st.info("Sin datos de MOs.")
+                st.metric("Rendimiento Mín/Máx", f"{df_mos_orig['rendimiento'].min():.1f}% / {df_mos_orig['rendimiento'].max():.1f}%")
     
-    # --- TAB 4: Gráficos ---
+    # --- TAB 4: Por Sala (Productividad) ---
     with tab4:
+        st.subheader("🏠 Productividad por Sala de Proceso")
+        salas = st.session_state.rend_salas
+        
+        if salas:
+            df_salas = pd.DataFrame(salas)
+            
+            # KPIs por sala
+            for _, sala in df_salas.iterrows():
+                alert = get_alert_color(sala['rendimiento'])
+                with st.expander(f"{alert} **{sala['sala']}** | {fmt_numero(sala['kg_pt'])} Kg PT | {sala['num_mos']} MOs"):
+                    cols = st.columns(4)
+                    with cols[0]:
+                        st.metric("Rendimiento", fmt_porcentaje(sala['rendimiento']))
+                    with cols[1]:
+                        st.metric("Kg/Hora", fmt_numero(sala['kg_por_hora'], 1))
+                    with cols[2]:
+                        st.metric("Kg/HH", fmt_numero(sala['kg_por_hh'], 1))
+                    with cols[3]:
+                        st.metric("Kg/Operario", fmt_numero(sala['kg_por_operario'], 1))
+                    
+                    cols2 = st.columns(4)
+                    with cols2[0]:
+                        st.markdown(f"**Kg MP:** {fmt_numero(sala['kg_mp'])}")
+                    with cols2[1]:
+                        st.markdown(f"**Kg PT:** {fmt_numero(sala['kg_pt'])}")
+                    with cols2[2]:
+                        st.markdown(f"**HH Total:** {fmt_numero(sala['hh_total'], 1)}")
+                    with cols2[3]:
+                        st.markdown(f"**Dotación Prom:** {sala['dotacion_promedio']:.1f}")
+            
+            # Gráfico comparativo
+            st.markdown("---")
+            st.markdown("### Comparativa de Productividad")
+            
+            chart_salas = alt.Chart(df_salas).mark_bar().encode(
+                x=alt.X('sala:N', sort='-y', title='Sala'),
+                y=alt.Y('kg_por_hora:Q', title='Kg/Hora'),
+                color=alt.Color('rendimiento:Q', scale=alt.Scale(scheme='redyellowgreen'), title='Rend %'),
+                tooltip=['sala', 'kg_por_hora', 'kg_por_hh', 'rendimiento', 'num_mos']
+            ).properties(width=700, height=300)
+            
+            st.altair_chart(chart_salas, use_container_width=True)
+    
+    # --- TAB 5: Gráficos ---
+    with tab5:
         st.subheader("Análisis Gráfico")
         
         lotes = st.session_state.rend_lotes
         if lotes:
             df_lotes = pd.DataFrame(lotes)
             
-            # Distribución de rendimiento
+            # Distribución de rendimiento con líneas de alerta
             st.markdown("### Distribución de Rendimiento por Lote")
             hist_rend = alt.Chart(df_lotes).mark_bar().encode(
                 x=alt.X('rendimiento:Q', bin=alt.Bin(maxbins=20), title='Rendimiento %'),
                 y=alt.Y('count()', title='Cantidad de Lotes')
             ).properties(width=700, height=300)
             
-            # Línea de referencia en 85%
-            rule = alt.Chart(pd.DataFrame({'x': [85]})).mark_rule(color='red', strokeDash=[5,5]).encode(x='x:Q')
+            rule_90 = alt.Chart(pd.DataFrame({'x': [90]})).mark_rule(color='red', strokeDash=[5,5]).encode(x='x:Q')
+            rule_95 = alt.Chart(pd.DataFrame({'x': [95]})).mark_rule(color='orange', strokeDash=[5,5]).encode(x='x:Q')
             
-            st.altair_chart(hist_rend + rule, use_container_width=True)
+            st.altair_chart(hist_rend + rule_90 + rule_95, use_container_width=True)
+            st.caption("🔴 Línea roja: 90% | 🟡 Línea naranja: 95%")
             
-            # Rendimiento vs Kg consumidos
+            # Rendimiento vs Volumen
             st.markdown("### Rendimiento vs Volumen")
             scatter = alt.Chart(df_lotes).mark_circle(size=60).encode(
                 x=alt.X('kg_consumidos:Q', title='Kg Consumidos'),
@@ -342,7 +459,6 @@ if data:
         if mos:
             df_mos = pd.DataFrame(mos)
             
-            # Rendimiento por fecha
             st.markdown("### Rendimiento por Fecha")
             line_rend = alt.Chart(df_mos).mark_line(point=True).encode(
                 x=alt.X('fecha:T', title='Fecha'),
@@ -351,11 +467,63 @@ if data:
             ).properties(width=700, height=300)
             
             st.altair_chart(line_rend, use_container_width=True)
+    
+    # --- TAB 6: Trazabilidad Inversa ---
+    with tab6:
+        st.subheader("🔍 Trazabilidad Inversa: PT → MP")
+        st.markdown("Ingresa un lote de Producto Terminado para encontrar los lotes de Materia Prima originales.")
+        
+        lote_pt_input = st.text_input("Número de Lote PT", placeholder="Ej: 0000304776")
+        
+        if st.button("Buscar Origen", type="primary"):
+            if lote_pt_input:
+                with st.spinner("Buscando trazabilidad..."):
+                    try:
+                        params = {"username": username, "password": password}
+                        resp = requests.get(
+                            f"{API_URL}/api/v1/rendimiento/trazabilidad-inversa/{lote_pt_input}",
+                            params=params,
+                            timeout=60
+                        )
+                        if resp.status_code == 200:
+                            traz = resp.json()
+                            
+                            if traz.get('error'):
+                                st.warning(traz['error'])
+                            else:
+                                st.success(f"✅ Lote encontrado: **{traz['lote_pt']}**")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.markdown(f"**Producto PT:** {traz.get('producto_pt', 'N/A')}")
+                                    st.markdown(f"**Fecha Creación:** {traz.get('fecha_creacion', 'N/A')}")
+                                with col2:
+                                    if traz.get('mo'):
+                                        st.markdown(f"**MO:** {traz['mo'].get('name', 'N/A')}")
+                                        st.markdown(f"**Fecha MO:** {traz['mo'].get('fecha', 'N/A')}")
+                                
+                                st.markdown("---")
+                                st.markdown("### 📦 Lotes MP Originales")
+                                
+                                lotes_mp = traz.get('lotes_mp', [])
+                                if lotes_mp:
+                                    df_mp = pd.DataFrame(lotes_mp)
+                                    df_mp['kg'] = df_mp['kg'].apply(lambda x: fmt_numero(x, 2))
+                                    st.dataframe(df_mp[['lot_name', 'product_name', 'kg', 'proveedor', 'fecha_recepcion']], 
+                                               use_container_width=True, hide_index=True)
+                                    st.metric("Total Kg MP", fmt_numero(traz.get('total_kg_mp', 0), 2))
+                                else:
+                                    st.info("No se encontraron lotes MP asociados")
+                        else:
+                            st.error(f"Error: {resp.status_code}")
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+            else:
+                st.warning("Ingresa un número de lote")
 
 else:
     st.info("👈 Selecciona un rango de fechas y haz clic en **Consultar Rendimiento** para ver los datos.")
     
-    # Mostrar información de uso
     with st.expander("ℹ️ ¿Cómo funciona este dashboard?"):
         st.markdown("""
         ### Flujo de Trazabilidad
@@ -368,17 +536,22 @@ else:
         
         | Métrica | Descripción |
         |---------|-------------|
-        | **Rendimiento %** | Kg PT / Kg MP consumidos × 100 |
+        | **Rendimiento %** | Kg PT / Kg MP × 100 (ponderado por volumen) |
         | **Merma** | Kg MP - Kg PT |
         | **Kg/HH** | Productividad: Kg PT / Horas Hombre |
+        | **Kg/Hora** | Velocidad: Kg PT / Horas de proceso |
+        | **Kg/Operario** | Eficiencia: Kg PT / Dotación promedio |
         
-        ### Filtros
+        ### Alertas de Rendimiento
         
-        - **Por Lote**: Análisis granular de cada lote de fruta
-        - **Por Proveedor**: Comparación de rendimiento entre proveedores
-        - **Por MO**: Detalle de cada orden de fabricación
+        - 🟢 **≥ 95%** - Excelente
+        - 🟡 **90-95%** - Atención
+        - 🔴 **< 90%** - Crítico
         
-        ### Productos Incluidos
+        ### Nuevas Funcionalidades
         
-        Solo se analizan productos de **fruta**: Arándano, Frambuesa, Frutilla, Mora, Cereza, Grosella.
+        - 📦 **Detalle PT por Lote**: Ver qué productos salieron de cada lote MP
+        - 🏠 **Productividad por Sala**: Comparar eficiencia entre salas
+        - 🏆 **Ranking Proveedores**: Top 5 y Bottom 5
+        - 🔍 **Trazabilidad Inversa**: De PT a MP original
         """)

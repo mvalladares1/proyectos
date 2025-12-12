@@ -616,3 +616,248 @@ class RendimientoService:
         
         resultado.sort(key=lambda x: x['fecha'], reverse=True)
         return resultado
+    
+    def get_detalle_pt_por_lote(self, fecha_inicio: str, fecha_fin: str) -> Dict[int, List[Dict]]:
+        """
+        Obtiene el detalle de productos PT generados por cada lote MP.
+        Retorna un dict: lot_id -> [lista de productos PT con cantidades]
+        """
+        mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin)
+        
+        lote_pt_detalle = {}  # lot_id -> [productos PT]
+        
+        for mo in mos:
+            try:
+                consumos = self.get_consumos_mo(mo)
+                produccion = self.get_produccion_mo(mo)
+                
+                # Calcular totales para proporción
+                kg_mp_total = sum(c.get('qty_done', 0) or 0 for c in consumos)
+                if kg_mp_total == 0:
+                    continue
+                
+                # Para cada lote consumido, asignar proporcionalmente los PT
+                for c in consumos:
+                    lot_id = c.get('lot_id')
+                    if not lot_id:
+                        continue
+                    
+                    qty_consumo = c.get('qty_done', 0) or 0
+                    proporcion = qty_consumo / kg_mp_total if kg_mp_total > 0 else 0
+                    
+                    if lot_id not in lote_pt_detalle:
+                        lote_pt_detalle[lot_id] = {}
+                    
+                    # Agregar cada producto PT proporcional
+                    for p in produccion:
+                        pt_name = p.get('product_name', '')
+                        pt_lot = p.get('lot_name', 'SIN LOTE')
+                        pt_qty = (p.get('qty_done', 0) or 0) * proporcion
+                        
+                        key = f"{pt_name}|{pt_lot}"
+                        if key not in lote_pt_detalle[lot_id]:
+                            lote_pt_detalle[lot_id][key] = {
+                                'product_name': pt_name,
+                                'lot_name': pt_lot,
+                                'kg': 0,
+                                'tipo_fruta': self._extract_fruit_type(pt_name)
+                            }
+                        lote_pt_detalle[lot_id][key]['kg'] += pt_qty
+            except Exception:
+                continue
+        
+        # Convertir dict a lista y redondear
+        resultado = {}
+        for lot_id, productos in lote_pt_detalle.items():
+            resultado[lot_id] = [
+                {**v, 'kg': round(v['kg'], 2)} 
+                for v in productos.values() 
+                if v['kg'] > 0.01
+            ]
+        
+        return resultado
+    
+    def get_ranking_proveedores(self, fecha_inicio: str, fecha_fin: str, top_n: int = 5) -> Dict:
+        """
+        Obtiene ranking de proveedores: Top N y Bottom N por rendimiento.
+        """
+        proveedores = self.get_rendimiento_por_proveedor(fecha_inicio, fecha_fin)
+        
+        # Filtrar proveedores válidos (con kg > 100)
+        prov_validos = [p for p in proveedores if p['kg_consumidos'] > 100 and p['proveedor'] != 'Desconocido']
+        
+        # Ordenar por rendimiento
+        prov_ordenados = sorted(prov_validos, key=lambda x: x['rendimiento'], reverse=True)
+        
+        top = prov_ordenados[:top_n]
+        bottom = prov_ordenados[-top_n:] if len(prov_ordenados) > top_n else []
+        bottom.reverse()  # Para que el peor esté primero
+        
+        # Calcular promedios
+        rend_promedio = sum(p['rendimiento'] for p in prov_validos) / len(prov_validos) if prov_validos else 0
+        kg_total = sum(p['kg_consumidos'] for p in prov_validos)
+        
+        return {
+            'top': top,
+            'bottom': bottom,
+            'promedio_rendimiento': round(rend_promedio, 2),
+            'total_proveedores': len(prov_validos),
+            'kg_total': round(kg_total, 2)
+        }
+    
+    def get_productividad_por_sala(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
+        """
+        Calcula KPIs de productividad agrupados por sala de proceso.
+        """
+        mos = self.get_rendimiento_mos(fecha_inicio, fecha_fin)
+        
+        salas_data = {}
+        
+        for mo in mos:
+            sala = mo.get('sala', '') or 'Sin Sala'
+            
+            if sala not in salas_data:
+                salas_data[sala] = {
+                    'sala': sala,
+                    'kg_mp': 0,
+                    'kg_pt': 0,
+                    'hh_total': 0,
+                    'dotacion_sum': 0,
+                    'duracion_total': 0,
+                    'num_mos': 0
+                }
+            
+            salas_data[sala]['kg_mp'] += mo.get('kg_mp', 0)
+            salas_data[sala]['kg_pt'] += mo.get('kg_pt', 0)
+            salas_data[sala]['hh_total'] += mo.get('hh', 0) or 0
+            salas_data[sala]['dotacion_sum'] += mo.get('dotacion', 0) or 0
+            salas_data[sala]['duracion_total'] += mo.get('duracion_horas', 0) or 0
+            salas_data[sala]['num_mos'] += 1
+        
+        # Calcular KPIs
+        resultado = []
+        for sala, data in salas_data.items():
+            kg_pt = data['kg_pt']
+            kg_mp = data['kg_mp']
+            hh = data['hh_total']
+            duracion = data['duracion_total']
+            num_mos = data['num_mos']
+            dotacion_prom = data['dotacion_sum'] / num_mos if num_mos > 0 else 0
+            
+            resultado.append({
+                'sala': sala,
+                'kg_mp': round(kg_mp, 2),
+                'kg_pt': round(kg_pt, 2),
+                'rendimiento': round((kg_pt / kg_mp * 100) if kg_mp > 0 else 0, 2),
+                'merma': round(kg_mp - kg_pt, 2),
+                'kg_por_hh': round(kg_pt / hh if hh > 0 else 0, 2),
+                'kg_por_hora': round(kg_pt / duracion if duracion > 0 else 0, 2),
+                'kg_por_operario': round(kg_pt / dotacion_prom if dotacion_prom > 0 else 0, 2),
+                'hh_total': round(hh, 2),
+                'dotacion_promedio': round(dotacion_prom, 1),
+                'duracion_promedio': round(duracion / num_mos if num_mos > 0 else 0, 2),
+                'num_mos': num_mos
+            })
+        
+        resultado.sort(key=lambda x: x['kg_pt'], reverse=True)
+        return resultado
+    
+    def get_trazabilidad_inversa(self, lote_pt_name: str) -> Dict:
+        """
+        Trazabilidad inversa: dado un lote PT, encuentra los lotes MP originales.
+        """
+        # Buscar el lote PT
+        lotes = self.odoo.search_read(
+            'stock.lot',
+            [['name', '=', lote_pt_name]],
+            ['id', 'name', 'product_id', 'create_date'],
+            limit=1
+        )
+        
+        if not lotes:
+            return {'error': 'Lote no encontrado', 'lote_pt': lote_pt_name}
+        
+        lote_pt = lotes[0]
+        lote_pt_id = lote_pt['id']
+        
+        # Buscar el movimiento donde se produjo este lote (debe ser en move_finished_ids)
+        move_lines = self.odoo.search_read(
+            'stock.move.line',
+            [['lot_id', '=', lote_pt_id]],
+            ['move_id', 'date', 'location_id', 'location_dest_id', 'qty_done'],
+            limit=10,
+            order='date asc'
+        )
+        
+        # Buscar el movimiento de producción
+        mo_encontrada = None
+        for ml in move_lines:
+            move_id = ml.get('move_id')
+            if move_id:
+                moves = self.odoo.read('stock.move', [move_id[0]], ['production_id', 'raw_material_production_id'])
+                if moves:
+                    m = moves[0]
+                    if m.get('production_id'):
+                        mo_id = m['production_id'][0]
+                        mo_encontrada = self.odoo.read('mrp.production', [mo_id], 
+                            ['name', 'move_raw_ids', 'date_planned_start', 'product_id'])[0]
+                        break
+        
+        if not mo_encontrada:
+            return {
+                'lote_pt': lote_pt_name,
+                'producto_pt': lote_pt.get('product_id', [0, ''])[1] if lote_pt.get('product_id') else '',
+                'fecha_creacion': str(lote_pt.get('create_date', ''))[:10],
+                'mo': None,
+                'lotes_mp': [],
+                'error': 'No se encontró la MO de producción'
+            }
+        
+        # Obtener los lotes MP consumidos en esa MO
+        move_raw_ids = mo_encontrada.get('move_raw_ids', [])
+        lotes_mp = []
+        
+        if move_raw_ids:
+            consumos = self.odoo.search_read(
+                'stock.move.line',
+                [['move_id', 'in', move_raw_ids]],
+                ['product_id', 'lot_id', 'qty_done'],
+                limit=50
+            )
+            
+            for c in consumos:
+                prod_info = c.get('product_id')
+                prod_name = prod_info[1] if prod_info else ''
+                
+                # Excluir insumos/envases
+                if self._is_excluded_consumo(prod_name):
+                    continue
+                
+                lot_info = c.get('lot_id')
+                if lot_info:
+                    qty = c.get('qty_done', 0) or 0
+                    if qty > 0:
+                        # Obtener proveedor del lote MP
+                        proveedor_info = self.get_proveedor_lote(lot_info[0])
+                        
+                        lotes_mp.append({
+                            'lot_id': lot_info[0],
+                            'lot_name': lot_info[1],
+                            'product_name': prod_name,
+                            'kg': round(qty, 2),
+                            'proveedor': proveedor_info.get('name', 'Desconocido') if proveedor_info else 'Desconocido',
+                            'fecha_recepcion': proveedor_info.get('fecha_recepcion', '') if proveedor_info else ''
+                        })
+        
+        return {
+            'lote_pt': lote_pt_name,
+            'producto_pt': lote_pt.get('product_id', [0, ''])[1] if lote_pt.get('product_id') else '',
+            'fecha_creacion': str(lote_pt.get('create_date', ''))[:10],
+            'mo': {
+                'name': mo_encontrada.get('name', ''),
+                'fecha': str(mo_encontrada.get('date_planned_start', ''))[:10]
+            },
+            'lotes_mp': lotes_mp,
+            'total_kg_mp': round(sum(l['kg'] for l in lotes_mp), 2)
+        }
+
