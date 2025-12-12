@@ -372,11 +372,12 @@ with tab_credito:
             pct = prov['pct_uso']
             pct_disp = max(100 - pct, 0)
             
-            # Header con formato simple sin caracteres especiales
-            usado_val = fmt_moneda(prov['monto_usado'])
+            # Header con formato ASCII puro
+            nombre = prov['partner_name']
             linea_val = fmt_moneda(prov['linea_total'])
+            usado_val = fmt_moneda(prov['monto_usado'])
             disp_val = fmt_moneda(max(prov['disponible'], 0))
-            header = f"{alerta} {prov['partner_name']} - Linea {linea_val} - Usado {usado_val} ({pct:.0f}%) - Disponible {disp_val}"
+            header = alerta + " " + nombre + "  [Linea: " + linea_val + "]  [Usado: " + usado_val + " (" + str(int(pct)) + "%)]  [Disponible: " + disp_val + "]"
             
             with st.expander(header):
                 # Barra de progreso con estado
