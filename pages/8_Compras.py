@@ -370,10 +370,10 @@ with tab_credito:
         for prov in lineas_filtradas:
             alerta = prov['alerta']
             pct = prov['pct_uso']
-            pct_disp = 100 - pct
+            pct_disp = max(100 - pct, 0)
             
-            # Header más limpio sin markdown complicado
-            header = f"{alerta} {prov['partner_name']} — Línea: {fmt_moneda(prov['linea_total'])} — Usado: {fmt_moneda(prov['monto_usado'])} ({pct:.0f}%) — Disp: {fmt_moneda(prov['disponible'])} ({pct_disp:.0f}%)"
+            # Header simplificado y limpio
+            header = f"{alerta} {prov['partner_name']}  ·  Línea: {fmt_moneda(prov['linea_total'])}  ·  Usado: {fmt_moneda(prov['monto_usado'])} ({pct:.0f}%)  ·  Disponible: {fmt_moneda(max(prov['disponible'], 0))}"
             
             with st.expander(header):
                 # Barra de progreso con estado
