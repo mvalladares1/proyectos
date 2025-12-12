@@ -34,6 +34,22 @@ def fmt_moneda(valor):
     return f"${fmt_numero(valor, 0)}"
 
 
+def fmt_fecha(fecha_str):
+    """Convierte YYYY-MM-DD a DD/MM/YYYY"""
+    if not fecha_str:
+        return ""
+    try:
+        if isinstance(fecha_str, str) and len(fecha_str) >= 10:
+            # Tomar solo los primeros 10 caracteres (YYYY-MM-DD)
+            fecha_str = fecha_str[:10]
+            parts = fecha_str.split("-")
+            if len(parts) == 3:
+                return f"{parts[2]}/{parts[1]}/{parts[0]}"
+        return fecha_str
+    except:
+        return str(fecha_str)
+
+
 def get_approval_color(status):
     return {'Aprobada': '🟢', 'Parcialmente aprobada': '🟡', 'En revisión': '⚪', 'Rechazada': '🔴'}.get(status, '⚪')
 
@@ -190,6 +206,7 @@ with tab_po:
                 df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprobación', 'Recepción', 'Pendientes']].copy()
                 df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', 'Aprobación', 'Recepción', 'Pendientes']
                 df_final['Monto'] = df_final['Monto'].apply(fmt_moneda)
+                df_final['Fecha'] = df_final['Fecha'].apply(fmt_fecha)
                 
                 st.dataframe(
                     df_final, 
@@ -240,14 +257,14 @@ with tab_po:
                     recep_icon = get_receive_color(row['receive_status'])
                     pend_icon = "⏳" if row.get('pending_users', '') else "✓"
                     
-                    # Header con fecha incluida
-                    fecha_oc = row.get('date_order', '')[:10] if row.get('date_order') else ''
+                    # Header con fecha formateada DD/MM/YYYY
+                    fecha_oc = fmt_fecha(row.get('date_order', ''))
                     header = f"{aprob_icon}{recep_icon}{pend_icon} **{row['name']}** | {fecha_oc} | {row['partner'][:30]} | {fmt_moneda(row['amount_total'])}"
                     
                     with st.expander(header, expanded=False):
                         col1, col2, col3 = st.columns(3)
                         with col1:
-                            st.markdown(f"**Fecha:** {row['date_order']}")
+                            st.markdown(f"**Fecha:** {fmt_fecha(row['date_order'])}")
                             st.markdown(f"**Monto:** {fmt_moneda(row['amount_total'])}")
                         with col2:
                             st.markdown(f"**Aprobación:** {aprob_icon} {row['approval_status']}")
@@ -273,47 +290,18 @@ with tab_po:
                             else:
                                 st.success("✓ Sin pendientes")
                         
-                        # === DETALLE DE PRODUCTOS ===
-                        st.markdown("---")
-                        st.markdown("**📦 Productos de la OC:**")
-                        
+                        # Detalle de productos (si viene precargado)
                         lineas = row.get('lineas', [])
                         if lineas:
+                            st.markdown("---")
+                            st.markdown("**📦 Productos de la OC:**")
                             df_lineas = pd.DataFrame(lineas)
                             df_lineas['Subtotal'] = df_lineas['subtotal'].apply(fmt_moneda)
                             df_lineas['P. Unit'] = df_lineas['price_unit'].apply(fmt_moneda)
                             df_display = df_lineas[['producto', 'cantidad', 'P. Unit', 'Subtotal']].rename(columns={
                                 'producto': 'Producto', 'cantidad': 'Cant.'
                             })
-                            st.dataframe(df_display, use_container_width=True, hide_index=True, height=200)
-                        else:
-                            # Si no hay lineas precargadas, intentar cargar
-                            po_id = row.get('po_id')
-                            if po_id:
-                                try:
-                                    resp_lineas = requests.get(
-                                        f"{API_URL}/api/v1/compras/orden/{po_id}/lineas",
-                                        params={"username": username, "password": password},
-                                        timeout=10
-                                    )
-                                    if resp_lineas.status_code == 200:
-                                        lineas_data = resp_lineas.json()
-                                        if lineas_data:
-                                            df_lineas = pd.DataFrame(lineas_data)
-                                            df_lineas['Subtotal'] = df_lineas['subtotal'].apply(fmt_moneda)
-                                            df_lineas['P. Unit'] = df_lineas['price_unit'].apply(fmt_moneda)
-                                            df_display = df_lineas[['producto', 'cantidad', 'P. Unit', 'Subtotal']].rename(columns={
-                                                'producto': 'Producto', 'cantidad': 'Cant.'
-                                            })
-                                            st.dataframe(df_display, use_container_width=True, hide_index=True, height=200)
-                                        else:
-                                            st.caption("Sin líneas de producto")
-                                    else:
-                                        st.caption("No se pudo cargar detalle")
-                                except:
-                                    st.caption("Error al cargar productos")
-                            else:
-                                st.caption("Sin detalle disponible")
+                            st.dataframe(df_display, use_container_width=True, hide_index=True, height=150)
             
             # Export
             st.markdown("---")
@@ -339,8 +327,8 @@ with tab_credito:
     col_fecha, col_btn = st.columns([2, 1])
     with col_fecha:
         from datetime import datetime, timedelta
-        # Default: inicio de temporada (1 de diciembre 2025)
-        fecha_default = datetime(2025, 12, 1).date()
+        # Default: inicio de temporada (20 de noviembre 2025)
+        fecha_default = datetime(2025, 11, 20).date()
         fecha_desde_lc = st.date_input(
             "📅 Calcular uso desde", 
             value=fecha_default,
@@ -480,6 +468,7 @@ with tab_credito:
                     df_display = df_det[['tipo', 'numero', 'monto', 'fecha', 'estado']].copy()
                     df_display.columns = ['Tipo', 'Documento', 'Monto', 'Fecha', 'Estado']
                     df_display['Monto'] = df_display['Monto'].apply(fmt_moneda)
+                    df_display['Fecha'] = df_display['Fecha'].apply(fmt_fecha)
                     
                     st.dataframe(df_display, use_container_width=True, hide_index=True,
                                 column_config={
