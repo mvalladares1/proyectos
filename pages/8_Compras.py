@@ -332,6 +332,7 @@ with tab_credito:
         fecha_desde_lc = st.date_input(
             "📅 Calcular uso desde", 
             value=fecha_default,
+            format="DD/MM/YYYY",
             help="Solo considera facturas y OCs desde esta fecha para calcular el uso de línea"
         )
     with col_btn:
@@ -433,12 +434,13 @@ with tab_credito:
                 with col1:
                     st.progress(min(pct / 100, 1.0))
                 with col2:
+                    estado_texto = f"{prov['estado']} ({int(pct)}%)"
                     if prov['estado'] == 'Sin cupo':
-                        st.error(prov['estado'])
+                        st.error(estado_texto)
                     elif prov['estado'] == 'Cupo bajo':
-                        st.warning(prov['estado'])
+                        st.warning(estado_texto)
                     else:
-                        st.success(prov['estado'])
+                        st.success(estado_texto)
                 
                 # KPIs en cards visuales
                 st.markdown("---")
