@@ -1,149 +1,114 @@
 """
 Módulo de manejo de cookies para Streamlit.
-Usa JavaScript injection para leer/escribir cookies del navegador.
+Usa extra-streamlit-components para cookies reales del navegador.
 """
 import streamlit as st
-import streamlit.components.v1 as components
 from typing import Optional
-import time
+
+# Importar CookieManager de extra-streamlit-components
+try:
+    import extra_streamlit_components as stx
+    COOKIES_AVAILABLE = True
+except ImportError:
+    COOKIES_AVAILABLE = False
+    stx = None
+
+COOKIE_NAME = "rf_session"
+COOKIE_EXPIRY_DAYS = 0.33  # 8 horas = 0.33 días
 
 
-def _inject_cookie_script():
-    """Inyecta el script de manejo de cookies en la página."""
-    script = """
-    <script>
-    // Funciones de cookies
-    function setCookie(name, value, hours) {
-        const expires = new Date(Date.now() + hours * 60 * 60 * 1000).toUTCString();
-        document.cookie = name + '=' + encodeURIComponent(value) + ';expires=' + expires + ';path=/;SameSite=Lax';
-    }
+def get_cookie_manager():
+    """Obtiene o crea el CookieManager singleton."""
+    if not COOKIES_AVAILABLE:
+        return None
     
-    function getCookie(name) {
-        const nameEQ = name + '=';
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            let c = cookies[i].trim();
-            if (c.indexOf(nameEQ) === 0) {
-                return decodeURIComponent(c.substring(nameEQ.length));
-            }
-        }
-        return null;
-    }
-    
-    function deleteCookie(name) {
-        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
-    }
-    
-    // Exponer al parent frame si es necesario
-    window.cookieManager = {
-        set: setCookie,
-        get: getCookie,
-        delete: deleteCookie
-    };
-    </script>
-    """
-    components.html(script, height=0, width=0)
+    # Usar un key único para evitar recreación
+    if 'cookie_manager' not in st.session_state:
+        st.session_state['cookie_manager'] = stx.CookieManager(key="rf_cookies")
+    return st.session_state['cookie_manager']
 
 
-def get_cookie_via_js(cookie_name: str) -> Optional[str]:
-    """ 
-    Obtiene una cookie usando query params como bridge.
-    El usuario debe incluir ?token=xxx en la URL al recargar.
-    """
-    # Intentar obtener de query params primero
-    params = st.query_params
-    token = params.get("token")
-    if token:
-        return token
+def get_token_from_cookies() -> Optional[str]:
+    """Obtiene el token de la cookie del navegador."""
+    if not COOKIES_AVAILABLE:
+        # Fallback a query params si no hay librería
+        try:
+            return st.query_params.get("session")
+        except:
+            return None
+    
+    manager = get_cookie_manager()
+    if manager:
+        try:
+            return manager.get(COOKIE_NAME)
+        except:
+            pass
     return None
 
 
-def set_cookie_instruction(cookie_name: str, value: str, hours: int = 8):
-    """
-    Genera instrucciones JavaScript para establecer una cookie.
-    Se muestra como un script que el navegador ejecuta.
-    """
-    script = f"""
-    <script>
-    const expires = new Date(Date.now() + {hours} * 60 * 60 * 1000).toUTCString();
-    document.cookie = '{cookie_name}=' + encodeURIComponent('{value}') + ';expires=' + expires + ';path=/;SameSite=Lax';
+def save_token_to_cookies(token: str):
+    """Guarda el token en una cookie del navegador."""
+    if not COOKIES_AVAILABLE:
+        # Fallback a query params
+        try:
+            st.query_params["session"] = token
+        except:
+            pass
+        return
     
-    // Almacenar también en localStorage como backup
-    localStorage.setItem('{cookie_name}', '{value}');
-    </script>
-    """
-    components.html(script, height=0, width=0)
+    manager = get_cookie_manager()
+    if manager:
+        try:
+            manager.set(COOKIE_NAME, token, expires_at=None, max_age=int(8 * 60 * 60))  # 8 horas
+        except:
+            pass
 
 
-def get_cookie_from_storage(cookie_name: str) -> Optional[str]:
-    """
-    Trata de obtener el token de localStorage vía query params.
-    Requiere que el JavaScript previo haya almacenado el valor.
-    """
-    # Este método usa un enfoque de dos pasos:
-    # 1. JavaScript lee localStorage y redirige con el token en query params
-    # 2. Python lee el query param
+def clear_token_from_cookies():
+    """Elimina el token de las cookies."""
+    if not COOKIES_AVAILABLE:
+        # Fallback a query params
+        try:
+            if "session" in st.query_params:
+                del st.query_params["session"]
+        except:
+            pass
+        return
     
-    params = st.query_params
-    token = params.get("session")
-    if token:
-        return token
-    return None
+    manager = get_cookie_manager()
+    if manager:
+        try:
+            manager.delete(COOKIE_NAME)
+        except:
+            pass
+
+
+# Funciones de compatibilidad con el código existente
+def get_token_from_url() -> Optional[str]:
+    """Alias para compatibilidad."""
+    return get_token_from_cookies()
+
+
+def save_token_to_url(token: str):
+    """Alias para compatibilidad."""
+    save_token_to_cookies(token)
+
+
+def clear_token_from_url():
+    """Alias para compatibilidad."""
+    clear_token_from_cookies()
 
 
 def inject_session_recovery_script(cookie_name: str = "session_token"):
-    """
-    Inyecta un script que intenta recuperar la sesión de localStorage
-    y la pasa a Streamlit vía query params si no está ya presente.
-    """
-    script = f"""
-    <script>
-    (function() {{
-        // Solo ejecutar si no hay sesión en la URL
-        const urlParams = new URLSearchParams(window.location.search);
-        if (!urlParams.get('session')) {{
-            const savedToken = localStorage.getItem('{cookie_name}');
-            if (savedToken && savedToken !== 'null' && savedToken !== 'undefined') {{
-                // Redirigir con el token
-                urlParams.set('session', savedToken);
-                window.location.search = urlParams.toString();
-            }}
-        }}
-    }})();
-    </script>
-    """
-    components.html(script, height=0, width=0)
+    """No-op - las cookies se leen automáticamente."""
+    pass
 
 
 def save_session_to_storage(token: str, cookie_name: str = "session_token"):
-    """
-    Guarda el token en localStorage y cookie del navegador.
-    """
-    script = f"""
-    <script>
-    localStorage.setItem('{cookie_name}', '{token}');
-    
-    // También como cookie (8 horas)
-    const expires = new Date(Date.now() + 8 * 60 * 60 * 1000).toUTCString();
-    document.cookie = '{cookie_name}=' + encodeURIComponent('{token}') + ';expires=' + expires + ';path=/;SameSite=Lax';
-    </script>
-    """
-    components.html(script, height=0, width=0)
+    """Guarda el token en cookie."""
+    save_token_to_cookies(token)
 
 
 def clear_session_from_storage(cookie_name: str = "session_token"):
-    """
-    Limpia el token de localStorage y cookies.
-    """
-    script = f"""
-    <script>
-    localStorage.removeItem('{cookie_name}');
-    document.cookie = '{cookie_name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
-    
-    // Limpiar query params
-    const url = new URL(window.location);
-    url.searchParams.delete('session');
-    window.history.replaceState({{}}, '', url);
-    </script>
-    """
-    components.html(script, height=0, width=0)
+    """Limpia el token de cookies."""
+    clear_token_from_cookies()

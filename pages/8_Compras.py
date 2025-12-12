@@ -431,24 +431,32 @@ with tab_credito:
         
         # Gráfico resumen
         st.markdown("---")
-        st.markdown("### Uso de Líneas de Crédito")
+        st.markdown("### Uso de Líneas de Crédito (%)")
         
         df_lineas = pd.DataFrame([{
-            'Proveedor': l['partner_name'][:30],
+            'Proveedor': l['partner_name'][:25],
+            'Uso (%)': min(l['pct_uso'], 200),  # Limitar a 200% para visualización
+            'Linea': l['linea_total'],
             'Usado': l['monto_usado'],
-            'Disponible': max(l['disponible'], 0),
-            '% Uso': l['pct_uso'],
             'Color': '#dc3545' if l['pct_uso'] >= 80 else ('#ffc107' if l['pct_uso'] >= 60 else '#28a745')
         } for l in lineas])
         
-        chart = alt.Chart(df_lineas).mark_bar().encode(
-            x=alt.X('Proveedor:N', sort='-y'),
-            y=alt.Y('Usado:Q', title='Monto'),
-            color=alt.Color('Color:N', scale=None),
-            tooltip=['Proveedor', 'Usado', 'Disponible', '% Uso']
-        ).properties(height=300)
+        # Ordenar por % uso descendente
+        df_lineas = df_lineas.sort_values('Uso (%)', ascending=False)
         
-        st.altair_chart(chart, use_container_width=True)
+        bars = alt.Chart(df_lineas).mark_bar().encode(
+            x=alt.X('Proveedor:N', sort=None, axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y('Uso (%):Q', title='% Uso', scale=alt.Scale(domain=[0, max(df_lineas['Uso (%)'].max() + 10, 100)])),
+            color=alt.Color('Color:N', scale=None),
+            tooltip=['Proveedor', 'Uso (%)', 'Linea', 'Usado']
+        ).properties(height=350)
+        
+        # Línea de referencia al 100%
+        line_100 = alt.Chart(pd.DataFrame({'y': [100]})).mark_rule(
+            color='white', strokeDash=[5, 5], strokeWidth=2
+        ).encode(y='y:Q')
+        
+        st.altair_chart(bars + line_100, use_container_width=True)
     else:
         if not resumen:
             st.info("Haz clic en **Cargar Líneas de Crédito** para ver los datos.")

@@ -14,11 +14,11 @@ API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 TOKEN_KEY = "session_token"
 
 
-def _get_token_from_query_params() -> Optional[str]:
-    """Obtiene el token de los query params (recuperado de localStorage)."""
+def _get_token_from_cookies() -> Optional[str]:
+    """Obtiene el token de las cookies del navegador."""
     try:
-        params = st.query_params
-        return params.get("session")
+        from shared.cookies import get_token_from_cookies
+        return get_token_from_cookies()
     except:
         return None
 
@@ -26,15 +26,15 @@ def _get_token_from_query_params() -> Optional[str]:
 def _get_stored_token() -> Optional[str]:
     """
     Obtiene el token almacenado.
-    Primero intenta session_state, luego query params (para recuperación de localStorage).
+    Primero intenta session_state, luego cookies del navegador.
     """
-    # 1. Intentar session_state
+    # 1. Intentar session_state (más rápido)
     token = st.session_state.get(TOKEN_KEY)
     if token:
         return token
     
-    # 2. Intentar query params (recuperación de cookie/localStorage)
-    token = _get_token_from_query_params()
+    # 2. Intentar cookies del navegador (para recuperación al recargar)
+    token = _get_token_from_cookies()
     if token:
         # Almacenar en session_state para futuras consultas
         st.session_state[TOKEN_KEY] = token

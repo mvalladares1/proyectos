@@ -84,14 +84,9 @@ st.markdown('<p class="main-header">🏭 Rio Futuro Dashboards</p>', unsafe_allo
 
 # === AUTENTICACIÓN ===
 from shared.auth import verificar_autenticacion, iniciar_sesion, cerrar_sesion, obtener_info_sesion
-from shared.cookies import inject_session_recovery_script, save_session_to_storage, clear_session_from_storage
+from shared.cookies import save_session_to_storage, clear_session_from_storage
 
-# Inyectar script de recuperación de sesión (solo si no hay sesión activa)
-# Esto lee de localStorage y redirige con el token en query params
-if 'session_token' not in st.session_state:
-    inject_session_recovery_script()
-
-# Verificar si hay sesión activa (ahora también revisa query params)
+# Verificar si hay sesión activa (revisa session_state y query params)
 is_authenticated = verificar_autenticacion()
 
 if not is_authenticated:
