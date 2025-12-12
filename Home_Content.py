@@ -116,11 +116,11 @@ if not is_authenticated:
                             uid = data.get("uid")
                             
                             if token:
-                                # Usar el nuevo sistema de sesiones
-                                iniciar_sesion(token, email, uid)
+                                # PRIMERO: Guardar token en query params (ANTES del rerun)
+                                st.query_params["session"] = token
                                 
-                                # Guardar en localStorage/cookies para persistencia
-                                save_session_to_storage(token)
+                                # Iniciar sesión en session_state
+                                iniciar_sesion(token, email, uid)
                                 
                                 # Cargar permisos
                                 permisos = fetch_permissions(email)
@@ -164,7 +164,9 @@ else:
             st.sidebar.caption(f"⏱️ Sesión: {time_remaining}")
     
     if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-        clear_session_from_storage()  # Limpiar localStorage y cookies
+        # Limpiar query params explícitamente
+        if "session" in st.query_params:
+            del st.query_params["session"]
         cerrar_sesion()
         st.rerun()
     
