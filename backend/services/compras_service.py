@@ -190,6 +190,21 @@ class ComprasService:
             limit=3000
         )
         
+        # Crear mapa de monedas por PO
+        currency_by_po = {}
+        for po in pos:
+            pid = po['id']
+            currency_info = po.get('currency_id')
+            currency_name = ''
+            if isinstance(currency_info, (list, tuple)) and len(currency_info) > 1:
+                currency_name = currency_info[1]
+            elif isinstance(currency_info, str):
+                currency_name = currency_info
+            currency_by_po[pid] = 'USD' if (currency_name and 'USD' in currency_name.upper()) else 'CLP'
+        
+        # Obtener tipo de cambio una vez
+        usd_rate = CurrencyService.get_usd_to_clp_rate()
+        
         lines_by_po = {}
         for line in po_lines:
             order_info = line.get('order_id')
@@ -197,11 +212,20 @@ class ComprasService:
             if oid:
                 product_info = line.get('product_id')
                 product_name = product_info[1] if isinstance(product_info, (list, tuple)) else line.get('name', '')
+                
+                price_unit = line.get('price_unit', 0)
+                subtotal = line.get('price_subtotal', 0)
+                
+                # Convertir a CLP si la OC está en USD
+                if currency_by_po.get(oid) == 'USD':
+                    price_unit = price_unit * usd_rate
+                    subtotal = subtotal * usd_rate
+                
                 lines_by_po.setdefault(oid, []).append({
                     'producto': (product_name or '')[:50],
                     'cantidad': line.get('product_qty', 0),
-                    'price_unit': round(line.get('price_unit', 0), 0),
-                    'subtotal': round(line.get('price_subtotal', 0), 0)
+                    'price_unit': round(price_unit, 0),
+                    'subtotal': round(subtotal, 0)
                 })
         
         # === Batch 3: Mensajes y actividades (para aprobaciones) ===
