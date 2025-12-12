@@ -180,6 +180,13 @@ else:
             <div class="card-desc">Estado de Resultado vs Presupuesto</div>
         </div>
         """, unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div class="dashboard-card card-finanzas">
+            <div class="card-title">🛒 Compras</div>
+            <div class="card-desc">OC, Aprobaciones y Líneas de Crédito</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown('<div class="section-header">⚙️ Administración</div>', unsafe_allow_html=True)
     

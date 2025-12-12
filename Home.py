@@ -57,6 +57,7 @@ pages = {
     ],
     "Finanzas": [
         st.Page("pages/6_Finanzas.py", title="Finanzas", icon="💰"),
+        st.Page("pages/8_Compras.py", title="Compras", icon="🛒"),
     ],
     "Administración": [
         st.Page("pages/9_Permisos.py", title="Permisos", icon="⚙️"),
