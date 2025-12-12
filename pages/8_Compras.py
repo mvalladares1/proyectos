@@ -152,6 +152,9 @@ with tab_po:
                 with fc4:
                     pend_filter = st.selectbox("Con Pendientes", ["Todos", "Sí", "No"], key="tbl_pend")
             
+            # Leyenda (debajo de filtros)
+            st.caption("**Leyenda:** ✅ Completo | 🟡 Parcial | ⏳ Pendiente | 🔴 Sin recepción | ➖ N/A | ✓ Sin pendientes")
+            
             # Aplicar filtros
             df_filtered = df.copy()
             if prov_filter:
@@ -175,17 +178,17 @@ with tab_po:
                 df_display = df_filtered[['name', 'date_order', 'partner', 'amount_total', 'approval_status', 'receive_status', 'pending_users']].copy()
                 
                 # Columnas de estado con emoji compacto
-                df_display['Aprob'] = df_display['approval_status'].apply(lambda x: {
+                df_display['Aprobación'] = df_display['approval_status'].apply(lambda x: {
                     'Aprobada': '✅', 'Parcialmente aprobada': '🟡', 'En revisión': '⏳', 'Rechazada': '❌'
                 }.get(x, '⚪'))
-                df_display['Recep'] = df_display['receive_status'].apply(lambda x: {
+                df_display['Recepción'] = df_display['receive_status'].apply(lambda x: {
                     'Recepcionada totalmente': '✅', 'Recepción parcial': '🟡', 'No recepcionada': '🔴', 'No se recepciona': '➖'
                 }.get(x, '⚪'))
-                df_display['Pend'] = df_display['pending_users'].apply(lambda x: '⏳' if x else '✓')
+                df_display['Pendientes'] = df_display['pending_users'].apply(lambda x: '⏳' if x else '✓')
                 
                 # Solo columnas esenciales
-                df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprob', 'Recep', 'Pend']].copy()
-                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', '✓', '📦', '⏳']
+                df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprobación', 'Recepción', 'Pendientes']].copy()
+                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', 'Aprobación', 'Recepción', 'Pendientes']
                 df_final['Monto'] = df_final['Monto'].apply(fmt_moneda)
                 
                 st.dataframe(
@@ -198,14 +201,11 @@ with tab_po:
                         "Fecha": st.column_config.TextColumn(width="small"),
                         "Proveedor": st.column_config.TextColumn(width="large"),
                         "Monto": st.column_config.TextColumn(width="medium"),
-                        "✓": st.column_config.TextColumn("Aprob", width="small"),
-                        "📦": st.column_config.TextColumn("Recep", width="small"),
-                        "⏳": st.column_config.TextColumn("Pend", width="small"),
+                        "Aprobación": st.column_config.TextColumn(width="small"),
+                        "Recepción": st.column_config.TextColumn(width="small"),
+                        "Pendientes": st.column_config.TextColumn(width="small"),
                     }
                 )
-                
-                # Leyenda
-                st.caption("**Leyenda:** ✅ Completo | 🟡 Parcial | ⏳ Pendiente | 🔴 Sin recepción | ➖ N/A | ✓ Sin pendientes")
             
             else:
                 # Vista con expanders - con paginación
