@@ -178,8 +178,30 @@ class ComprasService:
         
         po_ids = [po['id'] for po in pos]
         
-        # === Batch 2: Estado de recepción (en paralelo conceptualmente) ===
+        # === Batch 2: Estado de recepción ===
         receive_status_map = self.compute_receive_status(po_ids)
+        
+        # === Batch 3: Líneas de producto ===
+        po_lines = self.odoo.search_read(
+            'purchase.order.line',
+            [['order_id', 'in', po_ids]],
+            ['order_id', 'product_id', 'name', 'product_qty', 'price_unit', 'price_subtotal'],
+            limit=3000
+        )
+        
+        lines_by_po = {}
+        for line in po_lines:
+            order_info = line.get('order_id')
+            oid = order_info[0] if isinstance(order_info, (list, tuple)) else order_info
+            if oid:
+                product_info = line.get('product_id')
+                product_name = product_info[1] if isinstance(product_info, (list, tuple)) else line.get('name', '')
+                lines_by_po.setdefault(oid, []).append({
+                    'producto': (product_name or '')[:50],
+                    'cantidad': line.get('product_qty', 0),
+                    'price_unit': round(line.get('price_unit', 0), 0),
+                    'subtotal': round(line.get('price_subtotal', 0), 0)
+                })
         
         # === Batch 3: Mensajes y actividades (para aprobaciones) ===
         msg_ids_all = set()
@@ -310,6 +332,7 @@ class ComprasService:
                 'receive_status': receive_status,
                 'approved_by': ', '.join(sorted(approved_set)),
                 'pending_users': ', '.join(sorted(pending_set)),
+                'lineas': lines_by_po.get(po_id, [])
             })
         
         return result
