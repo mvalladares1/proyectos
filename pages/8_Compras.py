@@ -370,15 +370,11 @@ with tab_credito:
         for prov in lineas_filtradas:
             alerta = prov['alerta']
             pct = prov['pct_uso']
+            pct_disp = max(100 - pct, 0)
             
-            # Header ultra simple
+            # Header simple: solo nombre + % usado + % disponible
             nombre = prov['partner_name']
-            linea = fmt_moneda(prov['linea_total'])
-            usado = fmt_moneda(prov['monto_usado'])
-            disp = fmt_moneda(max(prov['disponible'], 0))
-            pct_str = str(int(pct))
-            
-            header = alerta + " " + nombre + " >>> Linea " + linea + " / Usado " + usado + " (" + pct_str + "%) / Disponible " + disp
+            header = alerta + " " + nombre + " - Usado: " + str(int(pct)) + "% - Disponible: " + str(int(pct_disp)) + "%"
             
             with st.expander(header):
                 # Barra de progreso con estado
@@ -397,19 +393,19 @@ with tab_credito:
                 st.markdown("---")
                 kp_cols = st.columns(5)
                 with kp_cols[0]:
-                    st.metric("💰 Línea Total", fmt_moneda(prov['linea_total']))
+                    st.metric("Linea Total", fmt_moneda(prov['linea_total']))
                 with kp_cols[1]:
-                    st.metric("📄 Facturas", fmt_moneda(prov.get('monto_facturas', 0)), 
-                             delta=f"{prov.get('num_facturas', 0)} pend.", delta_color="off")
+                    st.metric("Facturas", fmt_moneda(prov.get('monto_facturas', 0)), 
+                             delta=str(prov.get('num_facturas', 0)) + " pend.", delta_color="off")
                 with kp_cols[2]:
-                    st.metric("📋 OCs Sin Fact.", fmt_moneda(prov.get('monto_ocs', 0)),
-                             delta=f"{prov.get('num_ocs', 0)} OCs", delta_color="off")
+                    st.metric("OCs Sin Fact.", fmt_moneda(prov.get('monto_ocs', 0)),
+                             delta=str(prov.get('num_ocs', 0)) + " OCs", delta_color="off")
                 with kp_cols[3]:
-                    st.metric("🔴 Total Usado", fmt_moneda(prov['monto_usado']),
-                             delta=f"{pct:.1f}%", delta_color="inverse")
+                    st.metric("Total Usado", fmt_moneda(prov['monto_usado']),
+                             delta=str(int(pct)) + "%", delta_color="inverse")
                 with kp_cols[4]:
-                    st.metric("🟢 Disponible", fmt_moneda(prov['disponible']),
-                             delta=f"{pct_disp:.1f}%", delta_color="normal")
+                    st.metric("Disponible", fmt_moneda(max(prov['disponible'], 0)),
+                             delta=str(int(pct_disp)) + "%", delta_color="normal")
                 
                 st.markdown("---")
                 
