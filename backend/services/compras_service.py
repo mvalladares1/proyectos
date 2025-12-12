@@ -374,10 +374,14 @@ class ComprasService:
         """
         Obtiene proveedores con línea de crédito activa y calcula uso.
         
-        Lógica:
+        Lógica de cálculo:
         - Línea Total = x_studio_linea_credito_monto
-        - Usado = Suma de facturas pendientes de pago (account.move con amount_residual > 0)
+        - Usado = Facturas no pagadas + OCs sin factura asociada
         - Disponible = Línea Total - Usado
+        
+        Detalle:
+        1. Facturas de proveedor con amount_residual > 0 (no pagadas)
+        2. OCs en estado 'purchase' que no tienen factura asociada
         """
         # Buscar partners con línea de crédito activa
         partners = self.odoo.search_read(
@@ -392,8 +396,7 @@ class ComprasService:
         
         partner_ids = [p['id'] for p in partners]
         
-        # Buscar facturas pendientes de pago (amount_residual > 0)
-        # Facturas de proveedor: move_type = 'in_invoice'
+        # === 1. FACTURAS NO PAGADAS ===
         facturas = self.odoo.search_read(
             'account.move',
             [
@@ -408,14 +411,50 @@ class ComprasService:
             order='invoice_date_due asc'
         )
         
-        # Agrupar facturas por partner
+        # Agrupar facturas por partner y obtener orígenes (OCs facturadas)
         facturas_by_partner = {}
+        ocs_facturadas = set()
+        
         for f in facturas:
             partner_info = f.get('partner_id')
             pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
             if pid:
                 facturas_by_partner.setdefault(pid, []).append(f)
+            # Guardar OCs que ya tienen factura
+            origen = f.get('invoice_origin') or ''
+            if origen:
+                for oc in origen.split(','):
+                    ocs_facturadas.add(oc.strip())
         
+        # === 2. OCs SIN FACTURA ASOCIADA ===
+        # Buscar OCs en estado 'purchase' para estos partners
+        ocs = self.odoo.search_read(
+            'purchase.order',
+            [
+                ['partner_id', 'in', partner_ids],
+                ['state', '=', 'purchase']
+            ],
+            ['id', 'name', 'partner_id', 'amount_total', 'date_order', 'invoice_ids'],
+            limit=1000,
+            order='date_order desc'
+        )
+        
+        # Filtrar OCs que NO tienen factura asociada
+        ocs_sin_factura_by_partner = {}
+        for oc in ocs:
+            # Si la OC ya está en los orígenes de facturas, ignorar
+            if oc['name'] in ocs_facturadas:
+                continue
+            # Si tiene invoice_ids, verificar si alguna está pendiente
+            if oc.get('invoice_ids') and len(oc['invoice_ids']) > 0:
+                continue  # Ya tiene factura asociada
+            
+            partner_info = oc.get('partner_id')
+            pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+            if pid:
+                ocs_sin_factura_by_partner.setdefault(pid, []).append(oc)
+        
+        # === PROCESAR CADA PARTNER ===
         result = []
         
         for p in partners:
@@ -423,30 +462,52 @@ class ComprasService:
             partner_name = p['name']
             linea_total = float(p.get('x_studio_linea_credito_monto') or 0)
             
-            # Calcular monto usado (facturas pendientes)
+            # Facturas no pagadas
             facturas_partner = facturas_by_partner.get(partner_id, [])
-            monto_usado = sum(float(f.get('amount_residual') or 0) for f in facturas_partner)
+            monto_facturas = sum(float(f.get('amount_residual') or 0) for f in facturas_partner)
+            
+            # OCs sin factura
+            ocs_partner = ocs_sin_factura_by_partner.get(partner_id, [])
+            monto_ocs = sum(float(oc.get('amount_total') or 0) for oc in ocs_partner)
+            
+            # Total usado
+            monto_usado = monto_facturas + monto_ocs
             
             # Calcular disponible
             disponible = linea_total - monto_usado
             pct_uso = (monto_usado / linea_total * 100) if linea_total > 0 else 0
             
             # Preparar detalle de facturas
-            facturas_detalle = []
+            detalle_facturas = []
             for f in facturas_partner:
                 fecha_venc = f.get('invoice_date_due') or ''
                 if fecha_venc:
                     fecha_venc = str(fecha_venc)[:10]
                 
-                facturas_detalle.append({
-                    'factura_id': f['id'],
+                detalle_facturas.append({
+                    'tipo': 'Factura',
                     'numero': f.get('name', ''),
-                    'monto_total': round(float(f.get('amount_total') or 0), 0),
-                    'monto_pendiente': round(float(f.get('amount_residual') or 0), 0),
+                    'monto': round(float(f.get('amount_residual') or 0), 0),
                     'fecha': str(f.get('invoice_date') or '')[:10],
                     'fecha_vencimiento': fecha_venc,
-                    'origen': f.get('invoice_origin') or ''
+                    'origen': f.get('invoice_origin') or '',
+                    'estado': 'Pendiente pago'
                 })
+            
+            # Preparar detalle de OCs sin factura
+            for oc in ocs_partner:
+                detalle_facturas.append({
+                    'tipo': 'OC',
+                    'numero': oc.get('name', ''),
+                    'monto': round(float(oc.get('amount_total') or 0), 0),
+                    'fecha': str(oc.get('date_order') or '')[:10],
+                    'fecha_vencimiento': '',
+                    'origen': '',
+                    'estado': 'Sin facturar'
+                })
+            
+            # Ordenar por monto descendente
+            detalle_facturas.sort(key=lambda x: x['monto'], reverse=True)
             
             # Determinar estado
             if disponible <= 0:
@@ -464,12 +525,15 @@ class ComprasService:
                 'partner_name': partner_name,
                 'linea_total': round(linea_total, 0),
                 'monto_usado': round(monto_usado, 0),
+                'monto_facturas': round(monto_facturas, 0),
+                'monto_ocs': round(monto_ocs, 0),
                 'disponible': round(disponible, 0),
                 'pct_uso': round(pct_uso, 1),
                 'estado': estado,
                 'alerta': alerta,
                 'num_facturas': len(facturas_partner),
-                'facturas': facturas_detalle
+                'num_ocs': len(ocs_partner),
+                'detalle': detalle_facturas
             })
         
         # Ordenar por % uso descendente (más críticos primero)

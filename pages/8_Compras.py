@@ -340,39 +340,93 @@ with tab_credito:
     if lineas:
         st.markdown("### Detalle por Proveedor")
         
-        for prov in lineas:
+        # === FILTROS ===
+        with st.expander("🔍 Filtros", expanded=True):
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                estado_opts = ["Todos", "🔴 Sin cupo", "🟡 Cupo bajo", "🟢 Disponible"]
+                estado_filter = st.selectbox("Estado", estado_opts, key="lc_estado")
+            with fc2:
+                proveedores = sorted([l['partner_name'] for l in lineas])
+                prov_filter = st.multiselect("Proveedor", proveedores, default=[], placeholder="Todos", key="lc_prov")
+            with fc3:
+                buscar = st.text_input("Buscar proveedor", placeholder="Nombre...", key="lc_buscar")
+        
+        # Aplicar filtros
+        lineas_filtradas = lineas.copy()
+        
+        if estado_filter != "Todos":
+            estado_map = {"🔴 Sin cupo": "Sin cupo", "🟡 Cupo bajo": "Cupo bajo", "🟢 Disponible": "Disponible"}
+            lineas_filtradas = [l for l in lineas_filtradas if l['estado'] == estado_map.get(estado_filter)]
+        
+        if prov_filter:
+            lineas_filtradas = [l for l in lineas_filtradas if l['partner_name'] in prov_filter]
+        
+        if buscar:
+            lineas_filtradas = [l for l in lineas_filtradas if buscar.lower() in l['partner_name'].lower()]
+        
+        st.caption(f"Mostrando {len(lineas_filtradas)} de {len(lineas)} proveedores")
+        
+        for prov in lineas_filtradas:
             alerta = prov['alerta']
             pct = prov['pct_uso']
+            pct_disp = 100 - pct
             
-            with st.expander(f"{alerta} **{prov['partner_name']}** | Línea: {fmt_moneda(prov['linea_total'])} | Usado: {fmt_moneda(prov['monto_usado'])} ({pct:.0f}%) | Disponible: {fmt_moneda(prov['disponible'])}"):
-                # Gráfico de barra de progreso visual
-                col1, col2 = st.columns([3, 1])
+            # Header más limpio sin markdown complicado
+            header = f"{alerta} {prov['partner_name']} — Línea: {fmt_moneda(prov['linea_total'])} — Usado: {fmt_moneda(prov['monto_usado'])} ({pct:.0f}%) — Disp: {fmt_moneda(prov['disponible'])} ({pct_disp:.0f}%)"
+            
+            with st.expander(header):
+                # Barra de progreso con estado
+                col1, col2 = st.columns([4, 1])
                 with col1:
                     st.progress(min(pct / 100, 1.0))
                 with col2:
-                    st.markdown(f"**{prov['estado']}**")
+                    if prov['estado'] == 'Sin cupo':
+                        st.error(prov['estado'])
+                    elif prov['estado'] == 'Cupo bajo':
+                        st.warning(prov['estado'])
+                    else:
+                        st.success(prov['estado'])
                 
-                # KPIs del proveedor
-                kp_cols = st.columns(4)
+                # KPIs en cards visuales
+                st.markdown("---")
+                kp_cols = st.columns(5)
                 with kp_cols[0]:
-                    st.metric("Línea Total", fmt_moneda(prov['linea_total']))
+                    st.metric("💰 Línea Total", fmt_moneda(prov['linea_total']))
                 with kp_cols[1]:
-                    st.metric("Monto Usado", fmt_moneda(prov['monto_usado']))
+                    st.metric("📄 Facturas", fmt_moneda(prov.get('monto_facturas', 0)), 
+                             delta=f"{prov.get('num_facturas', 0)} pend.", delta_color="off")
                 with kp_cols[2]:
-                    st.metric("Disponible", fmt_moneda(prov['disponible']))
+                    st.metric("📋 OCs Sin Fact.", fmt_moneda(prov.get('monto_ocs', 0)),
+                             delta=f"{prov.get('num_ocs', 0)} OCs", delta_color="off")
                 with kp_cols[3]:
-                    st.metric("Facturas Pendientes", prov['num_facturas'])
+                    st.metric("🔴 Total Usado", fmt_moneda(prov['monto_usado']),
+                             delta=f"{pct:.1f}%", delta_color="inverse")
+                with kp_cols[4]:
+                    st.metric("🟢 Disponible", fmt_moneda(prov['disponible']),
+                             delta=f"{pct_disp:.1f}%", delta_color="normal")
                 
-                # Detalle de facturas
-                if prov['facturas']:
-                    st.markdown("**📄 Facturas Pendientes de Pago:**")
-                    df_fact = pd.DataFrame(prov['facturas'])
-                    df_display = df_fact[['numero', 'monto_pendiente', 'fecha_vencimiento', 'origen']].copy()
-                    df_display.columns = ['Factura', 'Pendiente', 'Vencimiento', 'Origen OC']
-                    df_display['Pendiente'] = df_display['Pendiente'].apply(fmt_moneda)
-                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.markdown("---")
+                
+                # Detalle unificado (facturas + OCs)
+                detalle = prov.get('detalle', [])
+                if detalle:
+                    st.markdown("##### 📋 Detalle de compromisos")
+                    df_det = pd.DataFrame(detalle)
+                    df_display = df_det[['tipo', 'numero', 'monto', 'fecha', 'estado']].copy()
+                    df_display.columns = ['Tipo', 'Documento', 'Monto', 'Fecha', 'Estado']
+                    df_display['Monto'] = df_display['Monto'].apply(fmt_moneda)
+                    
+                    st.dataframe(df_display, use_container_width=True, hide_index=True,
+                                column_config={
+                                    "Tipo": st.column_config.TextColumn(width="small"),
+                                    "Documento": st.column_config.TextColumn(width="medium"),
+                                    "Monto": st.column_config.TextColumn(width="medium"),
+                                    "Fecha": st.column_config.TextColumn(width="small"),
+                                    "Estado": st.column_config.TextColumn(width="medium"),
+                                })
                 else:
-                    st.info("Sin facturas pendientes")
+                    st.success("✅ Sin compromisos pendientes")
         
         # Gráfico resumen
         st.markdown("---")
