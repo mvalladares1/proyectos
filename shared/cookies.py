@@ -14,7 +14,6 @@ except ImportError:
     stx = None
 
 COOKIE_NAME = "rf_session"
-COOKIE_EXPIRY_DAYS = 0.33  # 8 horas = 0.33 días
 
 
 def get_cookie_manager():
@@ -23,62 +22,67 @@ def get_cookie_manager():
         return None
     
     # Usar un key único para evitar recreación
-    if 'cookie_manager' not in st.session_state:
-        st.session_state['cookie_manager'] = stx.CookieManager(key="rf_cookies")
-    return st.session_state['cookie_manager']
+    return stx.CookieManager(key="rf_cookies")
 
 
 def get_token_from_cookies() -> Optional[str]:
     """Obtiene el token de la cookie del navegador."""
-    if not COOKIES_AVAILABLE:
-        # Fallback a query params si no hay librería
-        try:
-            return st.query_params.get("session")
-        except:
-            return None
+    # Primero intentar query params (es síncrono y confiable)
+    try:
+        token = st.query_params.get("session")
+        if token:
+            return token
+    except:
+        pass
     
-    manager = get_cookie_manager()
-    if manager:
+    # Luego intentar cookies
+    if COOKIES_AVAILABLE:
         try:
-            return manager.get(COOKIE_NAME)
+            manager = get_cookie_manager()
+            if manager:
+                # get_all() es más confiable que get()
+                all_cookies = manager.get_all()
+                if all_cookies and COOKIE_NAME in all_cookies:
+                    return all_cookies[COOKIE_NAME]
         except:
             pass
+    
     return None
 
 
 def save_token_to_cookies(token: str):
-    """Guarda el token en una cookie del navegador."""
-    if not COOKIES_AVAILABLE:
-        # Fallback a query params
-        try:
-            st.query_params["session"] = token
-        except:
-            pass
-        return
+    """Guarda el token en una cookie del navegador Y en query params."""
+    # Guardar en query params (es más confiable para persistencia)
+    try:
+        st.query_params["session"] = token
+    except:
+        pass
     
-    manager = get_cookie_manager()
-    if manager:
+    # También guardar en cookies si está disponible
+    if COOKIES_AVAILABLE:
         try:
-            manager.set(COOKIE_NAME, token, expires_at=None, max_age=int(8 * 60 * 60))  # 8 horas
+            manager = get_cookie_manager()
+            if manager:
+                manager.set(COOKIE_NAME, token, max_age=int(8 * 60 * 60))  # 8 horas
         except:
             pass
 
 
 def clear_token_from_cookies():
-    """Elimina el token de las cookies."""
-    if not COOKIES_AVAILABLE:
-        # Fallback a query params
-        try:
-            if "session" in st.query_params:
-                del st.query_params["session"]
-        except:
-            pass
-        return
+    """Elimina el token de las cookies y query params."""
+    # Limpiar query params
+    try:
+        if "session" in st.query_params:
+            del st.query_params["session"]
+    except:
+        pass
     
-    manager = get_cookie_manager()
-    if manager:
+    # Limpiar cookies
+    if COOKIES_AVAILABLE:
         try:
-            manager.delete(COOKIE_NAME)
+            manager = get_cookie_manager()
+            if manager:
+                manager.delete(COOKIE_NAME)
         except:
             pass
 
@@ -105,10 +109,10 @@ def inject_session_recovery_script(cookie_name: str = "session_token"):
 
 
 def save_session_to_storage(token: str, cookie_name: str = "session_token"):
-    """Guarda el token en cookie."""
+    """Guarda el token en cookie y query params."""
     save_token_to_cookies(token)
 
 
 def clear_session_from_storage(cookie_name: str = "session_token"):
-    """Limpia el token de cookies."""
+    """Limpia el token de cookies y query params."""
     clear_token_from_cookies()
