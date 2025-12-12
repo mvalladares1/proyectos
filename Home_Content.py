@@ -82,11 +82,19 @@ st.markdown("""
 # Header principal
 st.markdown('<p class="main-header">🏭 Rio Futuro Dashboards</p>', unsafe_allow_html=True)
 
-# Estado de autenticación
-if 'authenticated' not in st.session_state:
-    st.session_state['authenticated'] = False
+# === AUTENTICACIÓN ===
+from shared.auth import verificar_autenticacion, iniciar_sesion, cerrar_sesion, obtener_info_sesion
+from shared.cookies import inject_session_recovery_script, save_session_to_storage, clear_session_from_storage
 
-if not st.session_state['authenticated']:
+# Inyectar script de recuperación de sesión (solo si no hay sesión activa)
+# Esto lee de localStorage y redirige con el token en query params
+if 'session_token' not in st.session_state:
+    inject_session_recovery_script()
+
+# Verificar si hay sesión activa (ahora también revisa query params)
+is_authenticated = verificar_autenticacion()
+
+if not is_authenticated:
     st.markdown("---")
     st.subheader("🔐 Iniciar Sesión")
     
@@ -104,25 +112,36 @@ if not st.session_state['authenticated']:
                         response = httpx.post(
                             f"{API_URL}/api/v1/auth/login",
                             json={"username": email, "password": api_token},
-                            timeout=10.0
+                            timeout=15.0
                         )
                         
                         if response.status_code == 200:
-                            st.session_state['authenticated'] = True
-                            st.session_state['username'] = email
-                            st.session_state['password'] = api_token
-                            st.session_state['user_data'] = response.json()
-                            permisos = fetch_permissions(email)
-                            if permisos:
-                                guardar_permisos_state(
-                                    permisos.get('restricted', {}),
-                                    permisos.get('allowed', []),
-                                    permisos.get('is_admin', False)
-                                )
+                            data = response.json()
+                            token = data.get("token")
+                            uid = data.get("uid")
+                            
+                            if token:
+                                # Usar el nuevo sistema de sesiones
+                                iniciar_sesion(token, email, uid)
+                                
+                                # Guardar en localStorage/cookies para persistencia
+                                save_session_to_storage(token)
+                                
+                                # Cargar permisos
+                                permisos = fetch_permissions(email)
+                                if permisos:
+                                    guardar_permisos_state(
+                                        permisos.get('restricted', {}),
+                                        permisos.get('allowed', []),
+                                        permisos.get('is_admin', False)
+                                    )
+                                else:
+                                    guardar_permisos_state({}, [], False)
+                                
+                                st.success("✅ Login exitoso!")
+                                st.rerun()
                             else:
-                                guardar_permisos_state({}, [], False)
-                            st.success("✅ Login exitoso!")
-                            st.rerun()
+                                st.error("❌ Error: No se recibió token de sesión")
                         else:
                             st.error(f"❌ Error de autenticación: {response.json().get('detail', 'Credenciales inválidas')}")
                     except httpx.ConnectError:
@@ -133,15 +152,25 @@ if not st.session_state['authenticated']:
                     st.warning("⚠️ Por favor ingresa tu correo y token API")
     
     st.markdown("---")
-    st.info("💡 **Nota:** Necesitas un Token API de Odoo para acceder.")
+    st.info("💡 **Nota:** Necesitas un Token API de Odoo para acceder. La sesión expira después de 8 horas o 30 minutos de inactividad.")
 
 else:
     # Usuario autenticado
-    st.sidebar.success(f"👤 {st.session_state.get('username', 'Usuario')}")
+    username = st.session_state.get('username', 'Usuario')
+    
+    # Sidebar con info de sesión
+    st.sidebar.success(f"👤 {username}")
+    
+    # Mostrar tiempo restante de sesión
+    session_info = obtener_info_sesion()
+    if session_info:
+        time_remaining = session_info.get('time_remaining_formatted', '')
+        if time_remaining:
+            st.sidebar.caption(f"⏱️ Sesión: {time_remaining}")
     
     if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+        clear_session_from_storage()  # Limpiar localStorage y cookies
+        cerrar_sesion()
         st.rerun()
     
     st.markdown("---")
