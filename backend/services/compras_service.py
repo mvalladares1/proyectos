@@ -9,6 +9,7 @@ from functools import lru_cache
 import time
 
 from shared.odoo_client import OdooClient
+from backend.services.currency_service import CurrencyService
 
 
 def clean_record(rec: Dict) -> Dict:
@@ -168,7 +169,7 @@ class ComprasService:
             'purchase.order',
             domain,
             ['id', 'name', 'partner_id', 'company_id', 'amount_total', 
-             'state', 'date_order', 'message_ids', 'activity_ids'],
+             'state', 'date_order', 'message_ids', 'activity_ids', 'currency_id'],
             limit=500,
             order='date_order desc'
         )
@@ -267,6 +268,18 @@ class ComprasService:
             po_state = po.get('state', '')
             po_amount = float(po.get('amount_total') or 0)
             po_date = po.get('date_order') or ''
+            
+            # Detectar moneda y convertir a CLP si es USD
+            currency_info = po.get('currency_id')
+            currency_name = ''
+            if isinstance(currency_info, (list, tuple)) and len(currency_info) > 1:
+                currency_name = currency_info[1]
+            elif isinstance(currency_info, str):
+                currency_name = currency_info
+            
+            # Si la moneda es USD, convertir a CLP
+            if currency_name and 'USD' in currency_name.upper():
+                po_amount = CurrencyService.convert_usd_to_clp(po_amount)
             
             partner_name = po.get('partner_id', [None, ''])
             if isinstance(partner_name, (list, tuple)):
@@ -437,7 +450,7 @@ class ComprasService:
             'account.move',
             factura_domain,
             ['id', 'name', 'partner_id', 'amount_total', 'amount_residual', 
-             'invoice_date', 'invoice_date_due', 'invoice_origin'],
+             'invoice_date', 'invoice_date_due', 'invoice_origin', 'currency_id'],
             limit=1000,
             order='invoice_date_due asc'
         )
@@ -469,7 +482,7 @@ class ComprasService:
         ocs = self.odoo.search_read(
             'purchase.order',
             oc_domain,
-            ['id', 'name', 'partner_id', 'amount_total', 'date_order', 'invoice_ids'],
+            ['id', 'name', 'partner_id', 'amount_total', 'date_order', 'invoice_ids', 'currency_id'],
             limit=1000,
             order='date_order desc'
         )
@@ -497,13 +510,51 @@ class ComprasService:
             partner_name = p['name']
             linea_total = float(p.get('x_studio_linea_credito_monto') or 0)
             
-            # Facturas no pagadas
-            facturas_partner = facturas_by_partner.get(partner_id, [])
-            monto_facturas = sum(float(f.get('amount_residual') or 0) for f in facturas_partner)
+            # Detectar moneda del partner (para la línea de crédito)
+            partner_currency = p.get('currency_id')
+            partner_currency_name = ''
+            if isinstance(partner_currency, (list, tuple)) and len(partner_currency) > 1:
+                partner_currency_name = partner_currency[1]
+            elif isinstance(partner_currency, str):
+                partner_currency_name = partner_currency
             
-            # OCs sin factura
+            # Convertir línea total a CLP si está en USD
+            if partner_currency_name and 'USD' in partner_currency_name.upper():
+                linea_total = CurrencyService.convert_usd_to_clp(linea_total)
+            
+            # Facturas no pagadas (con conversión de moneda)
+            facturas_partner = facturas_by_partner.get(partner_id, [])
+            monto_facturas = 0.0
+            for f in facturas_partner:
+                f_amount = float(f.get('amount_residual') or 0)
+                # Detectar moneda de la factura
+                f_currency = f.get('currency_id')
+                f_currency_name = ''
+                if isinstance(f_currency, (list, tuple)) and len(f_currency) > 1:
+                    f_currency_name = f_currency[1]
+                elif isinstance(f_currency, str):
+                    f_currency_name = f_currency
+                # Convertir si está en USD
+                if f_currency_name and 'USD' in f_currency_name.upper():
+                    f_amount = CurrencyService.convert_usd_to_clp(f_amount)
+                monto_facturas += f_amount
+            
+            # OCs sin factura (con conversión de moneda)
             ocs_partner = ocs_sin_factura_by_partner.get(partner_id, [])
-            monto_ocs = sum(float(oc.get('amount_total') or 0) for oc in ocs_partner)
+            monto_ocs = 0.0
+            for oc in ocs_partner:
+                oc_amount = float(oc.get('amount_total') or 0)
+                # Detectar moneda de la OC
+                oc_currency = oc.get('currency_id')
+                oc_currency_name = ''
+                if isinstance(oc_currency, (list, tuple)) and len(oc_currency) > 1:
+                    oc_currency_name = oc_currency[1]
+                elif isinstance(oc_currency, str):
+                    oc_currency_name = oc_currency
+                # Convertir si está en USD
+                if oc_currency_name and 'USD' in oc_currency_name.upper():
+                    oc_amount = CurrencyService.convert_usd_to_clp(oc_amount)
+                monto_ocs += oc_amount
             
             # Total usado
             monto_usado = monto_facturas + monto_ocs
@@ -519,10 +570,21 @@ class ComprasService:
                 if fecha_venc:
                     fecha_venc = str(fecha_venc)[:10]
                 
+                # Monto con conversión de moneda
+                f_monto = float(f.get('amount_residual') or 0)
+                f_currency = f.get('currency_id')
+                f_currency_name = ''
+                if isinstance(f_currency, (list, tuple)) and len(f_currency) > 1:
+                    f_currency_name = f_currency[1]
+                elif isinstance(f_currency, str):
+                    f_currency_name = f_currency
+                if f_currency_name and 'USD' in f_currency_name.upper():
+                    f_monto = CurrencyService.convert_usd_to_clp(f_monto)
+                
                 detalle_facturas.append({
                     'tipo': 'Factura',
                     'numero': f.get('name', ''),
-                    'monto': round(float(f.get('amount_residual') or 0), 0),
+                    'monto': round(f_monto, 0),
                     'fecha': str(f.get('invoice_date') or '')[:10],
                     'fecha_vencimiento': fecha_venc,
                     'origen': f.get('invoice_origin') or '',
@@ -531,10 +593,21 @@ class ComprasService:
             
             # Preparar detalle de OCs sin factura
             for oc in ocs_partner:
+                # Monto con conversión de moneda
+                oc_monto = float(oc.get('amount_total') or 0)
+                oc_currency = oc.get('currency_id')
+                oc_currency_name = ''
+                if isinstance(oc_currency, (list, tuple)) and len(oc_currency) > 1:
+                    oc_currency_name = oc_currency[1]
+                elif isinstance(oc_currency, str):
+                    oc_currency_name = oc_currency
+                if oc_currency_name and 'USD' in oc_currency_name.upper():
+                    oc_monto = CurrencyService.convert_usd_to_clp(oc_monto)
+                
                 detalle_facturas.append({
                     'tipo': 'OC',
                     'numero': oc.get('name', ''),
-                    'monto': round(float(oc.get('amount_total') or 0), 0),
+                    'monto': round(oc_monto, 0),
                     'fecha': str(oc.get('date_order') or '')[:10],
                     'fecha_vencimiento': '',
                     'origen': '',
