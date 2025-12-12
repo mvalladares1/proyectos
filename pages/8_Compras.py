@@ -266,6 +266,9 @@ with tab_po:
                         with col1:
                             st.markdown(f"**Fecha:** {fmt_fecha(row['date_order'])}")
                             st.markdown(f"**Monto:** {fmt_moneda(row['amount_total'])}")
+                            # Mostrar conversión si aplica
+                            if row.get('currency_original') == 'USD' and row.get('amount_original'):
+                                st.caption(f"💱 Original: USD$ {fmt_numero(row['amount_original'], 2)} × {fmt_numero(row['exchange_rate'], 2)}")
                         with col2:
                             st.markdown(f"**Aprobación:** {aprob_icon} {row['approval_status']}")
                             st.markdown(f"**Recepción:** {recep_icon} {row['receive_status']}")
@@ -467,16 +470,33 @@ with tab_credito:
                 if detalle:
                     st.markdown("##### 📋 Detalle de compromisos")
                     df_det = pd.DataFrame(detalle)
+                    
+                    # Preparar columna de monto original USD si aplica
+                    def format_monto_con_conversion(row):
+                        monto_str = fmt_moneda(row['monto'])
+                        if row.get('moneda_original') == 'USD' and row.get('monto_original'):
+                            return f"{monto_str} (USD$ {fmt_numero(row['monto_original'], 2)})"
+                        return monto_str
+                    
                     df_display = df_det[['tipo', 'numero', 'monto', 'fecha', 'estado']].copy()
                     df_display.columns = ['Tipo', 'Documento', 'Monto', 'Fecha', 'Estado']
-                    df_display['Monto'] = df_display['Monto'].apply(fmt_moneda)
+                    
+                    # Mostrar monto con info de conversión
+                    df_display['Monto'] = df_det.apply(format_monto_con_conversion, axis=1)
                     df_display['Fecha'] = df_display['Fecha'].apply(fmt_fecha)
+                    
+                    # Mostrar tipo de cambio usado si hay conversiones USD
+                    has_usd = any(d.get('moneda_original') == 'USD' for d in detalle)
+                    if has_usd:
+                        tipo_cambio = next((d.get('tipo_cambio') for d in detalle if d.get('tipo_cambio')), None)
+                        if tipo_cambio:
+                            st.caption(f"💱 Tipo de cambio: 1 USD = ${fmt_numero(tipo_cambio, 2)} CLP")
                     
                     st.dataframe(df_display, use_container_width=True, hide_index=True,
                                 column_config={
                                     "Tipo": st.column_config.TextColumn(width="small"),
                                     "Documento": st.column_config.TextColumn(width="medium"),
-                                    "Monto": st.column_config.TextColumn(width="medium"),
+                                    "Monto": st.column_config.TextColumn(width="large"),
                                     "Fecha": st.column_config.TextColumn(width="small"),
                                     "Estado": st.column_config.TextColumn(width="medium"),
                                 })

@@ -266,7 +266,8 @@ class ComprasService:
             po_id = po['id']
             po_name = po['name']
             po_state = po.get('state', '')
-            po_amount = float(po.get('amount_total') or 0)
+            po_amount_original = float(po.get('amount_total') or 0)
+            po_amount = po_amount_original
             po_date = po.get('date_order') or ''
             
             # Detectar moneda y convertir a CLP si es USD
@@ -278,8 +279,11 @@ class ComprasService:
                 currency_name = currency_info
             
             # Si la moneda es USD, convertir a CLP
-            if currency_name and 'USD' in currency_name.upper():
-                po_amount = CurrencyService.convert_usd_to_clp(po_amount)
+            is_usd = currency_name and 'USD' in currency_name.upper()
+            exchange_rate = None
+            if is_usd:
+                exchange_rate = CurrencyService.get_usd_to_clp_rate()
+                po_amount = CurrencyService.convert_usd_to_clp(po_amount_original)
             
             partner_name = po.get('partner_id', [None, ''])
             if isinstance(partner_name, (list, tuple)):
@@ -340,6 +344,9 @@ class ComprasService:
                 'partner': partner_name,
                 'company': company_name,
                 'amount_total': round(po_amount, 0),
+                'amount_original': round(po_amount_original, 2) if is_usd else None,
+                'currency_original': 'USD' if is_usd else 'CLP',
+                'exchange_rate': round(exchange_rate, 2) if exchange_rate else None,
                 'po_state': po_state,
                 'approval_status': approval_status,
                 'receive_status': receive_status,
@@ -565,26 +572,32 @@ class ComprasService:
             
             # Preparar detalle de facturas
             detalle_facturas = []
+            exchange_rate = CurrencyService.get_usd_to_clp_rate()  # Obtener una vez para todos
             for f in facturas_partner:
                 fecha_venc = f.get('invoice_date_due') or ''
                 if fecha_venc:
                     fecha_venc = str(fecha_venc)[:10]
                 
                 # Monto con conversión de moneda
-                f_monto = float(f.get('amount_residual') or 0)
+                f_monto_original = float(f.get('amount_residual') or 0)
+                f_monto = f_monto_original
                 f_currency = f.get('currency_id')
                 f_currency_name = ''
                 if isinstance(f_currency, (list, tuple)) and len(f_currency) > 1:
                     f_currency_name = f_currency[1]
                 elif isinstance(f_currency, str):
                     f_currency_name = f_currency
-                if f_currency_name and 'USD' in f_currency_name.upper():
-                    f_monto = CurrencyService.convert_usd_to_clp(f_monto)
+                f_is_usd = f_currency_name and 'USD' in f_currency_name.upper()
+                if f_is_usd:
+                    f_monto = CurrencyService.convert_usd_to_clp(f_monto_original)
                 
                 detalle_facturas.append({
                     'tipo': 'Factura',
                     'numero': f.get('name', ''),
                     'monto': round(f_monto, 0),
+                    'monto_original': round(f_monto_original, 2) if f_is_usd else None,
+                    'moneda_original': 'USD' if f_is_usd else 'CLP',
+                    'tipo_cambio': round(exchange_rate, 2) if f_is_usd else None,
                     'fecha': str(f.get('invoice_date') or '')[:10],
                     'fecha_vencimiento': fecha_venc,
                     'origen': f.get('invoice_origin') or '',
@@ -594,20 +607,25 @@ class ComprasService:
             # Preparar detalle de OCs sin factura
             for oc in ocs_partner:
                 # Monto con conversión de moneda
-                oc_monto = float(oc.get('amount_total') or 0)
+                oc_monto_original = float(oc.get('amount_total') or 0)
+                oc_monto = oc_monto_original
                 oc_currency = oc.get('currency_id')
                 oc_currency_name = ''
                 if isinstance(oc_currency, (list, tuple)) and len(oc_currency) > 1:
                     oc_currency_name = oc_currency[1]
                 elif isinstance(oc_currency, str):
                     oc_currency_name = oc_currency
-                if oc_currency_name and 'USD' in oc_currency_name.upper():
-                    oc_monto = CurrencyService.convert_usd_to_clp(oc_monto)
+                oc_is_usd = oc_currency_name and 'USD' in oc_currency_name.upper()
+                if oc_is_usd:
+                    oc_monto = CurrencyService.convert_usd_to_clp(oc_monto_original)
                 
                 detalle_facturas.append({
                     'tipo': 'OC',
                     'numero': oc.get('name', ''),
                     'monto': round(oc_monto, 0),
+                    'monto_original': round(oc_monto_original, 2) if oc_is_usd else None,
+                    'moneda_original': 'USD' if oc_is_usd else 'CLP',
+                    'tipo_cambio': round(exchange_rate, 2) if oc_is_usd else None,
                     'fecha': str(oc.get('date_order') or '')[:10],
                     'fecha_vencimiento': '',
                     'origen': '',
