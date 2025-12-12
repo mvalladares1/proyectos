@@ -382,17 +382,14 @@ with tab_credito:
             'Proveedor': l['partner_name'][:30],
             'Usado': l['monto_usado'],
             'Disponible': max(l['disponible'], 0),
-            '% Uso': l['pct_uso']
+            '% Uso': l['pct_uso'],
+            'Color': '#dc3545' if l['pct_uso'] >= 80 else ('#ffc107' if l['pct_uso'] >= 60 else '#28a745')
         } for l in lineas])
         
         chart = alt.Chart(df_lineas).mark_bar().encode(
             x=alt.X('Proveedor:N', sort='-y'),
             y=alt.Y('Usado:Q', title='Monto'),
-            color=alt.condition(
-                alt.datum['% Uso'] >= 80,
-                alt.value('#dc3545'),
-                alt.condition(alt.datum['% Uso'] >= 60, alt.value('#ffc107'), alt.value('#28a745'))
-            ),
+            color=alt.Color('Color:N', scale=None),
             tooltip=['Proveedor', 'Usado', 'Disponible', '% Uso']
         ).properties(height=300)
         
