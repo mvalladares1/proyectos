@@ -135,14 +135,44 @@ with tab_po:
         if ordenes:
             st.subheader(f"📋 Órdenes de Compra ({len(ordenes)})")
             
+            df = pd.DataFrame(ordenes)
+            
+            # === FILTROS DE COLUMNA ===
+            with st.expander("🔍 Filtros de tabla", expanded=True):
+                fc1, fc2, fc3, fc4 = st.columns(4)
+                with fc1:
+                    proveedores = sorted(df['partner'].unique())
+                    prov_filter = st.multiselect("Proveedor", proveedores, default=[], placeholder="Todos")
+                with fc2:
+                    aprob_opts = ["Todos"] + list(df['approval_status'].unique())
+                    aprob_filter = st.selectbox("Estado Aprobación", aprob_opts, key="tbl_aprob")
+                with fc3:
+                    recep_opts = ["Todos"] + list(df['receive_status'].unique())
+                    recep_filter = st.selectbox("Estado Recepción", recep_opts, key="tbl_recep")
+                with fc4:
+                    pend_filter = st.selectbox("Con Pendientes", ["Todos", "Sí", "No"], key="tbl_pend")
+            
+            # Aplicar filtros
+            df_filtered = df.copy()
+            if prov_filter:
+                df_filtered = df_filtered[df_filtered['partner'].isin(prov_filter)]
+            if aprob_filter != "Todos":
+                df_filtered = df_filtered[df_filtered['approval_status'] == aprob_filter]
+            if recep_filter != "Todos":
+                df_filtered = df_filtered[df_filtered['receive_status'] == recep_filter]
+            if pend_filter == "Sí":
+                df_filtered = df_filtered[df_filtered['pending_users'].str.len() > 0]
+            elif pend_filter == "No":
+                df_filtered = df_filtered[df_filtered['pending_users'].str.len() == 0]
+            
+            st.caption(f"Mostrando {len(df_filtered)} de {len(df)} órdenes")
+            
             # Opción de vista
             vista = st.radio("Vista", ["📊 Tabla compacta", "📋 Detalle con expanders"], horizontal=True, label_visibility="collapsed")
             
-            df = pd.DataFrame(ordenes)
-            
             if vista == "📊 Tabla compacta":
                 # Tabla compacta con columnas esenciales
-                df_display = df[['name', 'date_order', 'partner', 'amount_total', 'approval_status', 'receive_status']].copy()
+                df_display = df_filtered[['name', 'date_order', 'partner', 'amount_total', 'approval_status', 'receive_status', 'pending_users']].copy()
                 
                 # Columnas de estado con emoji compacto
                 df_display['Aprob'] = df_display['approval_status'].apply(lambda x: {
@@ -151,10 +181,11 @@ with tab_po:
                 df_display['Recep'] = df_display['receive_status'].apply(lambda x: {
                     'Recepcionada totalmente': '✅', 'Recepción parcial': '🟡', 'No recepcionada': '🔴', 'No se recepciona': '➖'
                 }.get(x, '⚪'))
+                df_display['Pend'] = df_display['pending_users'].apply(lambda x: '⏳' if x else '✓')
                 
                 # Solo columnas esenciales
-                df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprob', 'Recep']].copy()
-                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', '✓', '📦']
+                df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprob', 'Recep', 'Pend']].copy()
+                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', '✓', '📦', '⏳']
                 df_final['Monto'] = df_final['Monto'].apply(fmt_moneda)
                 
                 st.dataframe(
@@ -169,19 +200,47 @@ with tab_po:
                         "Monto": st.column_config.TextColumn(width="medium"),
                         "✓": st.column_config.TextColumn("Aprob", width="small"),
                         "📦": st.column_config.TextColumn("Recep", width="small"),
+                        "⏳": st.column_config.TextColumn("Pend", width="small"),
                     }
                 )
                 
                 # Leyenda
-                st.caption("**Leyenda:** ✅ Completo | 🟡 Parcial | ⏳ En revisión | 🔴 Pendiente | ➖ N/A")
+                st.caption("**Leyenda:** ✅ Completo | 🟡 Parcial | ⏳ Pendiente | 🔴 Sin recepción | ➖ N/A | ✓ Sin pendientes")
             
             else:
-                # Vista con expanders - muestra el detalle por PO
-                for _, row in df.iterrows():
+                # Vista con expanders - con paginación
+                ITEMS_PER_PAGE = 10
+                total_items = len(df_filtered)
+                total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+                
+                # Control de página en session state
+                if 'po_page' not in st.session_state:
+                    st.session_state.po_page = 1
+                
+                # Navegación de páginas
+                col_prev, col_info, col_next = st.columns([1, 2, 1])
+                with col_prev:
+                    if st.button("⬅️ Anterior", disabled=st.session_state.po_page <= 1):
+                        st.session_state.po_page -= 1
+                        st.rerun()
+                with col_info:
+                    st.markdown(f"**Página {st.session_state.po_page} de {total_pages}** ({total_items} órdenes)")
+                with col_next:
+                    if st.button("Siguiente ➡️", disabled=st.session_state.po_page >= total_pages):
+                        st.session_state.po_page += 1
+                        st.rerun()
+                
+                # Calcular rango de items
+                start_idx = (st.session_state.po_page - 1) * ITEMS_PER_PAGE
+                end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
+                
+                # Mostrar solo los items de la página actual
+                for idx, row in df_filtered.iloc[start_idx:end_idx].iterrows():
                     aprob_icon = get_approval_color(row['approval_status'])
                     recep_icon = get_receive_color(row['receive_status'])
+                    pend_icon = "⏳" if row.get('pending_users', '') else "✓"
                     
-                    header = f"{aprob_icon} **{row['name']}** | {row['partner'][:40]} | {fmt_moneda(row['amount_total'])}"
+                    header = f"{aprob_icon}{recep_icon}{pend_icon} **{row['name']}** | {row['partner'][:35]} | {fmt_moneda(row['amount_total'])}"
                     
                     with st.expander(header, expanded=False):
                         col1, col2, col3 = st.columns(3)
@@ -200,18 +259,17 @@ with tab_po:
                         aprobado = row.get('approved_by', '')
                         pendiente = row.get('pending_users', '')
                         
-                        if aprobado or pendiente:
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                if aprobado:
-                                    st.success(f"✅ **Aprobado por:** {aprobado}")
-                                else:
-                                    st.info("Sin aprobaciones aún")
-                            with c2:
-                                if pendiente:
-                                    st.warning(f"⏳ **Pendiente de:** {pendiente}")
-                                else:
-                                    st.success("Sin pendientes")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if aprobado:
+                                st.success(f"✅ **Aprobado por:** {aprobado}")
+                            else:
+                                st.info("Sin aprobaciones aún")
+                        with c2:
+                            if pendiente:
+                                st.warning(f"⏳ **Pendiente de:** {pendiente}")
+                            else:
+                                st.success("✓ Sin pendientes")
             
             # Export
             st.markdown("---")
