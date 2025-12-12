@@ -240,7 +240,9 @@ with tab_po:
                     recep_icon = get_receive_color(row['receive_status'])
                     pend_icon = "⏳" if row.get('pending_users', '') else "✓"
                     
-                    header = f"{aprob_icon}{recep_icon}{pend_icon} **{row['name']}** | {row['partner'][:35]} | {fmt_moneda(row['amount_total'])}"
+                    # Header con fecha incluida
+                    fecha_oc = row.get('date_order', '')[:10] if row.get('date_order') else ''
+                    header = f"{aprob_icon}{recep_icon}{pend_icon} **{row['name']}** | {fecha_oc} | {row['partner'][:30]} | {fmt_moneda(row['amount_total'])}"
                     
                     with st.expander(header, expanded=False):
                         col1, col2, col3 = st.columns(3)
@@ -270,6 +272,48 @@ with tab_po:
                                 st.warning(f"⏳ **Pendiente de:** {pendiente}")
                             else:
                                 st.success("✓ Sin pendientes")
+                        
+                        # === DETALLE DE PRODUCTOS ===
+                        st.markdown("---")
+                        st.markdown("**📦 Productos de la OC:**")
+                        
+                        lineas = row.get('lineas', [])
+                        if lineas:
+                            df_lineas = pd.DataFrame(lineas)
+                            df_lineas['Subtotal'] = df_lineas['subtotal'].apply(fmt_moneda)
+                            df_lineas['P. Unit'] = df_lineas['price_unit'].apply(fmt_moneda)
+                            df_display = df_lineas[['producto', 'cantidad', 'P. Unit', 'Subtotal']].rename(columns={
+                                'producto': 'Producto', 'cantidad': 'Cant.'
+                            })
+                            st.dataframe(df_display, use_container_width=True, hide_index=True, height=200)
+                        else:
+                            # Si no hay lineas precargadas, intentar cargar
+                            po_id = row.get('po_id')
+                            if po_id:
+                                try:
+                                    resp_lineas = requests.get(
+                                        f"{API_URL}/api/v1/compras/orden/{po_id}/lineas",
+                                        params={"username": username, "password": password},
+                                        timeout=10
+                                    )
+                                    if resp_lineas.status_code == 200:
+                                        lineas_data = resp_lineas.json()
+                                        if lineas_data:
+                                            df_lineas = pd.DataFrame(lineas_data)
+                                            df_lineas['Subtotal'] = df_lineas['subtotal'].apply(fmt_moneda)
+                                            df_lineas['P. Unit'] = df_lineas['price_unit'].apply(fmt_moneda)
+                                            df_display = df_lineas[['producto', 'cantidad', 'P. Unit', 'Subtotal']].rename(columns={
+                                                'producto': 'Producto', 'cantidad': 'Cant.'
+                                            })
+                                            st.dataframe(df_display, use_container_width=True, hide_index=True, height=200)
+                                        else:
+                                            st.caption("Sin líneas de producto")
+                                    else:
+                                        st.caption("No se pudo cargar detalle")
+                                except:
+                                    st.caption("Error al cargar productos")
+                            else:
+                                st.caption("Sin detalle disponible")
             
             # Export
             st.markdown("---")
@@ -291,10 +335,29 @@ with tab_credito:
     st.subheader("💳 Monitoreo de Líneas de Crédito")
     st.caption("Proveedores con línea de crédito activa y uso actual")
     
-    if st.button("🔄 Cargar Líneas de Crédito", type="primary"):
+    # Filtro de fecha para nueva temporada
+    col_fecha, col_btn = st.columns([2, 1])
+    with col_fecha:
+        from datetime import datetime, timedelta
+        # Default: inicio de temporada (1 de diciembre 2025)
+        fecha_default = datetime(2025, 12, 1).date()
+        fecha_desde_lc = st.date_input(
+            "📅 Calcular uso desde", 
+            value=fecha_default,
+            help="Solo considera facturas y OCs desde esta fecha para calcular el uso de línea"
+        )
+    with col_btn:
+        st.write("")  # Spacer
+        cargar_lineas = st.button("🔄 Cargar Líneas de Crédito", type="primary", use_container_width=True)
+    
+    if cargar_lineas:
         with st.spinner("Cargando líneas de crédito..."):
             try:
-                params = {"username": username, "password": password}
+                params = {
+                    "username": username, 
+                    "password": password,
+                    "fecha_desde": fecha_desde_lc.isoformat()
+                }
                 
                 resp = requests.get(f"{API_URL}/api/v1/compras/lineas-credito/resumen", params=params, timeout=120)
                 if resp.status_code == 200:

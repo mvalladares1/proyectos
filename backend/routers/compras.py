@@ -54,14 +54,15 @@ async def get_ordenes_compra(
 @router.get("/lineas-credito")
 async def get_lineas_credito(
     username: str = Query(..., description="Usuario Odoo"),
-    password: str = Query(..., description="API Key Odoo")
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde para calcular uso (YYYY-MM-DD)")
 ):
     """
     Lista de proveedores con línea de crédito activa y detalle de uso.
     """
     try:
         service = ComprasService(username=username, password=password)
-        return service.get_lineas_credito()
+        return service.get_lineas_credito(fecha_desde=fecha_desde)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -69,13 +70,30 @@ async def get_lineas_credito(
 @router.get("/lineas-credito/resumen")
 async def get_lineas_credito_resumen(
     username: str = Query(..., description="Usuario Odoo"),
-    password: str = Query(..., description="API Key Odoo")
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde para calcular uso (YYYY-MM-DD)")
 ):
     """
     KPIs consolidados de líneas de crédito.
     """
     try:
         service = ComprasService(username=username, password=password)
-        return service.get_lineas_credito_resumen()
+        return service.get_lineas_credito_resumen(fecha_desde=fecha_desde)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/orden/{po_id}/lineas")
+async def get_orden_lineas(
+    po_id: int,
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene las líneas de producto de una orden de compra.
+    """
+    try:
+        service = ComprasService(username=username, password=password)
+        return service.get_orden_lineas(po_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

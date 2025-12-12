@@ -23,7 +23,8 @@ Este documento describe la estructura del repositorio `rio-futuro-dashboards`.
 proyectos/
 ├── .env                          # Variables de entorno
 ├── .streamlit/config.toml        # Configuración Streamlit
-├── Home.py                       # Página principal
+├── Home.py                       # Página principal (navegación)
+├── Home_Content.py               # Contenido de Home (login/dashboard)
 ├── requirements.txt              # Dependencias Python
 ├── DASHBOARD_STRUCTURE.md        # Este archivo
 ├── PAGES.md                      # Guía para agregar páginas
@@ -32,7 +33,7 @@ proyectos/
 │   ├── main.py                   # Entry point
 │   ├── config/settings.py        # Configuración
 │   ├── routers/                  # Endpoints por feature
-│   │   ├── auth.py
+│   │   ├── auth.py               # 🔐 Autenticación con tokens
 │   │   ├── produccion.py
 │   │   ├── bandejas.py
 │   │   ├── stock.py
@@ -41,26 +42,31 @@ proyectos/
 │   │   ├── presupuesto.py
 │   │   ├── permissions.py
 │   │   ├── recepciones_mp.py
-│   │   └── rendimiento.py        # 🆕 Rendimiento endpoints
+│   │   ├── rendimiento.py
+│   │   └── compras.py
 │   └── services/
-│       └── rendimiento_service.py # 🆕 Lógica de rendimiento
+│       ├── rendimiento_service.py
+│       └── session_service.py    # 🆕 Gestión de sesiones JWT
 │
 ├── pages/                        # Páginas Streamlit
-│   ├── 1_Recepciones.py          # 📥 Recepciones MP
-│   ├── 2_Produccion.py           # 🏭 Producción
-│   ├── 3_Bandejas.py             # 📊 Bandejas
-│   ├── 4_Stock.py                # 📦 Stock
-│   ├── 5_Containers.py           # 🚢 Containers
-│   ├── 6_Finanzas.py             # 💰 Finanzas
-│   ├── 7_Rendimiento.py          # 🍓 Rendimiento (NUEVO)
-│   └── 9_Permisos.py             # ⚙️ Panel Admin
+│   ├── 1_Recepciones.py
+│   ├── 2_Produccion.py
+│   ├── 3_Bandejas.py
+│   ├── 4_Stock.py
+│   ├── 5_Containers.py
+│   ├── 6_Finanzas.py
+│   ├── 7_Rendimiento.py
+│   ├── 8_Compras.py
+│   └── 9_Permisos.py
 │
 ├── shared/                       # Módulos compartidos
-│   ├── auth.py
+│   ├── auth.py                   # 🔐 Autenticación frontend
+│   ├── cookies.py                # 🆕 Manejo de cookies/persistencia
 │   ├── constants.py
 │   └── odoo_client.py
 │
-└── data/                         # Archivos de datos
+└── data/
+    └── sessions.json             # 🆕 Almacenamiento de sesiones
 ```
 
 ---
@@ -75,13 +81,47 @@ proyectos/
 | 4 | Stock | `4_Stock.py` | Inventario en cámaras y pallets |
 | 5 | Containers | `5_Containers.py` | Pedidos y avance de producción |
 | 6 | Finanzas | `6_Finanzas.py` | Estado de Resultado vs Presupuesto |
-| **7** | **Rendimiento** | `7_Rendimiento.py` | **Análisis de rendimiento por lote (MP → PT)** |
-| **8** | **Compras** | `8_Compras.py` | **Órdenes de compra, aprobación y recepción** |
+| 7 | Rendimiento | `7_Rendimiento.py` | Análisis de rendimiento por lote (MP → PT) |
+| 8 | Compras | `8_Compras.py` | Órdenes de compra, líneas de crédito |
 | 9 | Permisos | `9_Permisos.py` | Panel de administración |
 
 ---
 
-## 4. Dashboard de Rendimiento (Detalle)
+## 4. Sistema de Autenticación
+
+### Módulos Nuevos
+
+| Archivo | Descripción |
+|---------|-------------|
+| `backend/services/session_service.py` | Generación y validación de tokens JWT |
+| `backend/routers/auth.py` | Endpoints de autenticación |
+| `shared/auth.py` | Manejo de sesión en frontend |
+| `shared/cookies.py` | Persistencia de cookies (WIP) |
+
+### Características Implementadas
+
+| Feature | Estado | Descripción |
+|---------|--------|-------------|
+| Token JWT | ✅ | Tokens firmados con HMAC-SHA256 |
+| Expiración 8h | ✅ | Sesión máxima de 8 horas |
+| Inactividad 30min | ✅ | Timeout por inactividad |
+| Password encriptado | ✅ | XOR + session_key en servidor |
+| Persistencia recarga | ⚠️ WIP | Problema con st.query_params |
+
+### Endpoints de Autenticación
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/auth/login` | POST | Login y generación de token |
+| `/api/v1/auth/validate` | POST | Validar token |
+| `/api/v1/auth/refresh` | POST | Refrescar actividad |
+| `/api/v1/auth/logout` | POST | Cerrar sesión |
+| `/api/v1/auth/session-info` | GET | Info de sesión |
+| `/api/v1/auth/credentials` | GET | Obtener credenciales Odoo |
+
+---
+
+## 5. Dashboard de Rendimiento (Detalle)
 
 ### Pestañas Disponibles
 
@@ -105,65 +145,49 @@ proyectos/
 | Kg/Hora | `Kg_PT / Horas_Proceso` |
 | Kg/Operario | `Kg_PT / Dotación` |
 
-### Alertas de Rendimiento
+---
 
-- 🟢 **≥ 95%** - Excelente
-- 🟡 **90-95%** - Atención
-- 🔴 **< 90%** - Crítico
+## 6. Dashboard de Compras
 
-### Funcionalidades Especiales
+### Secciones
 
-- **Detalle PT por Lote**: Expander con productos de salida
-- **Filtros**: Proveedor, Tipo Fruta, Manejo, Sala
-- **OC y Fecha Recepción**: Trazabilidad completa
-- **Ranking Top/Bottom 5**: Mejores y peores proveedores
-- **Exportación Excel**: Con formato
+| Sección | Descripción |
+|---------|-------------|
+| KPIs | Total, pendientes, promedio días |
+| OC por Estado | Tabla y gráfico |
+| Líneas de Crédito | Monitoreo de uso por proveedor |
+
+### Gráfico de Líneas de Crédito
+
+- Eje Y: % de uso
+- Colores: 🔴 ≥80%, 🟡 ≥60%, 🟢 <60%
+- Línea de referencia: 100%
 
 ---
 
-## 5. Endpoints API
+## 7. Endpoints API Completos
 
-### Generales
-
-| Endpoint | Descripción |
-|----------|-------------|
-| `/api/v1/auth/login` | Autenticación |
-| `/api/v1/recepciones-mp/` | Recepciones de materia prima |
-| `/api/v1/produccion/ordenes` | Órdenes de fabricación |
-| `/api/v1/stock/camaras` | Stock por cámaras |
-| `/api/v1/containers/` | Containers |
-| `/api/v1/estado-resultado/` | Estado de resultado |
-| `/api/v1/presupuesto/` | Presupuesto |
-| `/api/v1/permissions/` | Gestión de permisos |
-
-### Rendimiento (Nuevos)
+### Rendimiento
 
 | Endpoint | Descripción |
 |----------|-------------|
-| `/api/v1/rendimiento/overview` | KPIs consolidados del período |
-| `/api/v1/rendimiento/lotes` | Rendimiento por lote MP |
-| `/api/v1/rendimiento/proveedores` | Rendimiento por proveedor |
-| `/api/v1/rendimiento/mos` | Rendimiento por MO |
-| `/api/v1/rendimiento/ranking` | Top/Bottom N proveedores |
-| `/api/v1/rendimiento/salas` | Productividad por sala |
-| `/api/v1/rendimiento/pt-detalle` | Productos PT por lote MP |
-| `/api/v1/rendimiento/consolidado` | Vista ejecutiva por fruta/manejo/producto |
-| `/api/v1/rendimiento/trazabilidad-inversa/{lote}` | PT → MP original |
+| `/api/v1/rendimiento/overview` | KPIs consolidados |
+| `/api/v1/rendimiento/lotes` | Por lote MP |
+| `/api/v1/rendimiento/proveedores` | Por proveedor |
+| `/api/v1/rendimiento/consolidado` | Por fruta/manejo/producto |
 
 ### Compras
 
 | Endpoint | Descripción |
 |----------|-------------|
-| `/api/v1/compras/overview` | KPIs consolidados de compras |
-| `/api/v1/compras/ordenes` | Lista de OC con estados |
-| `/api/v1/compras/lineas-credito` | Proveedores con línea de crédito |
-| `/api/v1/compras/lineas-credito/resumen` | KPIs de líneas de crédito |
+| `/api/v1/compras/overview` | KPIs de compras |
+| `/api/v1/compras/ordenes` | Lista de OC |
+| `/api/v1/compras/lineas-credito` | Proveedores con línea |
+| `/api/v1/compras/lineas-credito/resumen` | KPIs líneas |
 
 ---
 
-## 6. Despliegue
-
-### Comandos Rápidos
+## 8. Despliegue
 
 ```bash
 # Conectar al servidor
@@ -172,26 +196,35 @@ ssh debian@167.114.114.51
 # Ir a la app
 cd /home/debian/rio-futuro-dashboards/app
 
-# Backup .env, pull y restaurar
-cp .env ../env_backup.env
-git reset --hard HEAD && git pull
-cp ../env_backup.env .env
+# Actualizar
+git pull
+
+# Instalar dependencias (si hay nuevas)
+source venv/bin/activate
+pip install -r requirements.txt
 
 # Reiniciar servicios
 sudo systemctl restart rio-futuro-api rio-futuro-web
 
 # Ver logs
-sudo journalctl -u rio-futuro-web -n 100 -f
+sudo journalctl -u rio-futuro-web -n 50 -f
 ```
 
 ---
 
-## 7. Servicios Systemd
+## 9. Dependencias Nuevas
 
-- `rio-futuro-api.service` → Backend (puerto 8000)
-- `rio-futuro-web.service` → Frontend (puerto 8501)
+```txt
+extra-streamlit-components>=0.1.60  # Cookies (opcional)
+```
+
+---
+
+## 10. TODOs / WIP
+
+- [ ] **Persistencia de sesión**: `st.query_params` no persiste en recarga de Streamlit
+- [ ] Investigar alternativas: proxy con nginx para cookies, o iframe approach
 
 ---
 
 *Documento actualizado el 12 de Diciembre 2025*
-

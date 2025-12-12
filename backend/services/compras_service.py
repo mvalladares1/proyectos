@@ -370,9 +370,12 @@ class ComprasService:
     #                    LÍNEAS DE CRÉDITO
     # ============================================================
     
-    def get_lineas_credito(self) -> List[Dict]:
+    def get_lineas_credito(self, fecha_desde: str = None) -> List[Dict]:
         """
         Obtiene proveedores con línea de crédito activa y calcula uso.
+        
+        Args:
+            fecha_desde: Fecha desde la cual calcular uso (YYYY-MM-DD). Si es None, no filtra.
         
         Lógica de cálculo:
         - Línea Total = x_studio_linea_credito_monto
@@ -397,14 +400,19 @@ class ComprasService:
         partner_ids = [p['id'] for p in partners]
         
         # === 1. FACTURAS NO PAGADAS ===
+        factura_domain = [
+            ['partner_id', 'in', partner_ids],
+            ['move_type', '=', 'in_invoice'],
+            ['state', '=', 'posted'],
+            ['amount_residual', '>', 0]
+        ]
+        # Filtrar por fecha si se especifica
+        if fecha_desde:
+            factura_domain.append(['invoice_date', '>=', fecha_desde])
+        
         facturas = self.odoo.search_read(
             'account.move',
-            [
-                ['partner_id', 'in', partner_ids],
-                ['move_type', '=', 'in_invoice'],
-                ['state', '=', 'posted'],
-                ['amount_residual', '>', 0]
-            ],
+            factura_domain,
             ['id', 'name', 'partner_id', 'amount_total', 'amount_residual', 
              'invoice_date', 'invoice_date_due', 'invoice_origin'],
             limit=1000,
@@ -427,13 +435,17 @@ class ComprasService:
                     ocs_facturadas.add(oc.strip())
         
         # === 2. OCs SIN FACTURA ASOCIADA ===
-        # Buscar OCs en estado 'purchase' para estos partners
+        oc_domain = [
+            ['partner_id', 'in', partner_ids],
+            ['state', '=', 'purchase']
+        ]
+        # Filtrar por fecha si se especifica
+        if fecha_desde:
+            oc_domain.append(['date_order', '>=', fecha_desde])
+        
         ocs = self.odoo.search_read(
             'purchase.order',
-            [
-                ['partner_id', 'in', partner_ids],
-                ['state', '=', 'purchase']
-            ],
+            oc_domain,
             ['id', 'name', 'partner_id', 'amount_total', 'date_order', 'invoice_ids'],
             limit=1000,
             order='date_order desc'
@@ -540,11 +552,11 @@ class ComprasService:
         result.sort(key=lambda x: x['pct_uso'], reverse=True)
         return result
     
-    def get_lineas_credito_resumen(self) -> Dict:
+    def get_lineas_credito_resumen(self, fecha_desde: str = None) -> Dict:
         """
         Resumen de líneas de crédito para KPIs.
         """
-        lineas = self.get_lineas_credito()
+        lineas = self.get_lineas_credito(fecha_desde=fecha_desde)
         
         total_linea = sum(l['linea_total'] for l in lineas)
         total_usado = sum(l['monto_usado'] for l in lineas)
@@ -564,4 +576,30 @@ class ComprasService:
             'cupo_bajo': cupo_bajo,
             'disponibles': disponibles
         }
+    
+    def get_orden_lineas(self, po_id: int) -> List[Dict]:
+        """
+        Obtiene las líneas de producto de una orden de compra específica.
+        """
+        lines = self.odoo.search_read(
+            'purchase.order.line',
+            [['order_id', '=', po_id]],
+            ['product_id', 'name', 'product_qty', 'qty_received', 'price_unit', 'price_subtotal'],
+            limit=100
+        )
+        
+        result = []
+        for line in lines:
+            product_info = line.get('product_id')
+            product_name = product_info[1] if isinstance(product_info, (list, tuple)) else line.get('name', '')
+            
+            result.append({
+                'producto': product_name[:50],
+                'cantidad': line.get('product_qty', 0),
+                'recibido': line.get('qty_received', 0),
+                'price_unit': round(line.get('price_unit', 0), 0),
+                'subtotal': round(line.get('price_subtotal', 0), 0)
+            })
+        
+        return result
 
