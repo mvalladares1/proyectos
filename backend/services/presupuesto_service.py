@@ -131,40 +131,82 @@ def procesar_presupuesto_mensual(df_ppto: pd.DataFrame, año: int = 2025) -> Dic
             "11 - GASTOS NO OPERACIONALES"
         ]
 
-        def clasificar_categoria(cat_ifrs_1: Optional[str]) -> Optional[str]:
-            if not cat_ifrs_1:
+        # Mapeo de Áreas del Excel a Categorías EERR
+        AREA_TO_CATEGORIA = {
+            # 1 - INGRESOS
+            "INGRESOS": "1 - INGRESOS",
+            
+            # 2 - COSTOS (Producción directa)
+            "COSTO VENTA": "2 - COSTOS",
+            "COSTO DE VENTA": "2 - COSTOS",
+            "ABASTECIMIENTO": "2 - COSTOS",
+            
+            # 4 - GASTOS DIRECTOS (Operación de planta)
+            "PRODUCCION": "4 - GASTOS DIRECTOS",
+            "FRIGORIFICO": "4 - GASTOS DIRECTOS",
+            "RECEPCION": "4 - GASTOS DIRECTOS",
+            "ENERGÍA ELÉCTRICA": "4 - GASTOS DIRECTOS",
+            "BOD. INSUMOS": "4 - GASTOS DIRECTOS",
+            "BODEGA DE INSUMOS": "4 - GASTOS DIRECTOS",
+            "MANTENCIÓN PREV. OPERACIONES": "4 - GASTOS DIRECTOS",
+            "MANTENCIÓN PREV. SADEMA": "4 - GASTOS DIRECTOS",
+            "HIGIENIZACIÓN": "4 - GASTOS DIRECTOS",
+            "CONTROL DE CALIDAD": "4 - GASTOS DIRECTOS",
+            "ASEGURAMIENTO DE CALIDAD": "4 - GASTOS DIRECTOS",
+            
+            # 6 - GAV (Gastos Admin. y Ventas)
+            "ADM. Y FIN.": "6 - GAV",
+            "RRHH": "6 - GAV",
+            "GERENCIA GENERAL": "6 - GAV",
+            "MARKETING": "6 - GAV",
+            "COMERCIALIZACIÓN": "6 - GAV",
+            "COMEX": "6 - GAV",
+            "SSOMA": "6 - GAV",
+        }
+
+        def clasificar_por_area(area: Optional[str]) -> Optional[str]:
+            """Clasifica el área del Excel a una categoría EERR."""
+            if not area:
                 return None
-            valor = str(cat_ifrs_1).upper().strip()
-            for cat in categorias_principales:
-                if cat in valor or valor.startswith(cat.split(" ")[0]):
-                    return cat
-            if valor.startswith("1"):
-                return "1 - INGRESOS"
-            if valor.startswith("2"):
-                return "2 - COSTOS"
-            if valor.startswith("4"):
-                return "4 - GASTOS DIRECTOS"
-            if valor.startswith("6"):
-                return "6 - GAV"
-            if valor.startswith("8"):
-                return "8 - INTERESES"
-            if valor.startswith("10"):
-                return "10 - INGRESOS NO OPERACIONALES"
-            if valor.startswith("11"):
-                return "11 - GASTOS NO OPERACIONALES"
-            return None
+            area_upper = str(area).upper().strip()
+            return AREA_TO_CATEGORIA.get(area_upper)
 
-        col_cat1 = "cat_ifrs_1" if "cat_ifrs_1" in df.columns else "Cat 1 IFRS"
+        # Usar columna 'area' para clasificar
+        col_area = "area" if "area" in df.columns else "Area"
+        
+        if col_area not in df.columns:
+            # Fallback a cat_ifrs_1 si no hay columna area
+            col_cat1 = "cat_ifrs_1" if "cat_ifrs_1" in df.columns else "Cat 1 IFRS"
+            def clasificar_categoria(cat_ifrs_1: Optional[str]) -> Optional[str]:
+                if not cat_ifrs_1:
+                    return None
+                valor = str(cat_ifrs_1).upper().strip()
+                for cat in categorias_principales:
+                    if cat in valor or valor.startswith(cat.split(" ")[0]):
+                        return cat
+                if valor.startswith("1"):
+                    return "1 - INGRESOS"
+                if valor.startswith("2"):
+                    return "2 - COSTOS"
+                if valor.startswith("4"):
+                    return "4 - GASTOS DIRECTOS"
+                if valor.startswith("6"):
+                    return "6 - GAV"
+                if valor.startswith("8"):
+                    return "8 - INTERESES"
+                if valor.startswith("10"):
+                    return "10 - INGRESOS NO OPERACIONALES"
+                if valor.startswith("11"):
+                    return "11 - GASTOS NO OPERACIONALES"
+                return None
+            df["categoria_principal"] = df[col_cat1].apply(clasificar_categoria)
+        else:
+            # Usar mapeo por área
+            df["categoria_principal"] = df[col_area].apply(clasificar_por_area)
 
-        def monto_ok(row: pd.Series) -> float:
-            monto = row.get("monto", 0) or 0
-            cat1 = str(row.get(col_cat1, "")).upper()
-            if "1 - INGRESOS" in cat1 or cat1.startswith("1"):
-                return monto
-            return monto * -1
-
-        df["categoria_principal"] = df[col_cat1].apply(clasificar_categoria)
-        df["monto_ok"] = df.apply(monto_ok, axis=1)
+        # Los montos del Excel ya tienen signo correcto (positivo=ingreso, negativo=gasto)
+        # Solo necesitamos tomarlos tal cual
+        df["monto_ok"] = df["monto"].fillna(0)
 
         datos_mensuales: Dict[str, Dict[str, float]] = {}
         for mes, grupo in df.groupby("mes"):
