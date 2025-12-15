@@ -276,6 +276,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     for rec in recepciones:
         picking_id = rec.get("id")
         productor = rec.get("partner_id", [None, ""])[1] if rec.get("partner_id") else ""
+        
+        # Excluir productor ADMINISTRADOR
+        if productor.upper().strip() == 'ADMINISTRADOR':
+            continue
+        
         fecha = rec.get("scheduled_date", "")
         albaran = rec.get("name", "")
         
