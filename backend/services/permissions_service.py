@@ -11,11 +11,21 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PERMISSIONS_FILE = DATA_DIR / "permissions.json"
 
+# Lista completa de dashboards disponibles en el sistema
+ALL_DASHBOARDS = [
+    "recepciones",
+    "produccion",
+    "bandejas",
+    "stock",
+    "containers",
+    "rendimiento",
+    "estado_resultado",  # Finanzas
+    "compras",
+    "permisos",
+]
+
 DEFAULT_PERMISSIONS: Dict[str, Any] = {
-    "dashboards": {
-        "estado_resultado": ["jvidaurre@riofuturo.cl"],
-        "permisos": ["mvalladares@riofuturo.cl"]
-    },
+    "dashboards": {slug: [] for slug in ALL_DASHBOARDS},  # Todos públicos por defecto
     "admins": ["mvalladares@riofuturo.cl"]
 }
 
