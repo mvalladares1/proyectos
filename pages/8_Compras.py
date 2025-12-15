@@ -233,7 +233,7 @@ with tab_po:
             
             else:
                 # Vista con expanders - con paginación
-                ITEMS_PER_PAGE = 10
+                ITEMS_PER_PAGE = 15
                 total_items = len(df_filtered)
                 total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
                 
@@ -245,15 +245,20 @@ with tab_po:
                 if st.session_state.po_page > total_pages:
                     st.session_state.po_page = 1
                 
-                # Navegación de páginas con number_input (sin st.rerun)
+                # Navegación de páginas con selectbox (más estable)
                 col_nav1, col_nav2 = st.columns([3, 1])
                 with col_nav1:
-                    st.markdown(f"**Página {st.session_state.po_page} de {total_pages}** ({total_items} órdenes)")
+                    st.markdown(f"**{total_items} órdenes** en {total_pages} páginas")
                 with col_nav2:
-                    new_page = st.number_input("Ir a página", min_value=1, max_value=total_pages, 
-                                               value=st.session_state.po_page, key="po_page_input", label_visibility="collapsed")
-                    if new_page != st.session_state.po_page:
-                        st.session_state.po_page = new_page
+                    page_options = list(range(1, total_pages + 1))
+                    current_idx = st.session_state.po_page - 1
+                    selected_page = st.selectbox(
+                        "Página", page_options,
+                        index=min(current_idx, len(page_options) - 1),
+                        key="po_page_select",
+                        label_visibility="collapsed"
+                    )
+                    st.session_state.po_page = selected_page
                 
                 # Calcular rango de items
                 start_idx = (st.session_state.po_page - 1) * ITEMS_PER_PAGE
@@ -301,6 +306,12 @@ with tab_po:
                                 st.warning(f"⏳ **Pendiente de:** {pendiente}")
                             else:
                                 st.success("✓ Sin pendientes")
+                        
+                        # Link a Odoo
+                        po_id = row.get('po_id', '')
+                        if po_id:
+                            odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={po_id}&menu_id=411&cids=1&action=627&model=purchase.order&view_type=form"
+                            st.markdown(f"🔗 [Abrir en Odoo]({odoo_url})")
                         
                         # Detalle de productos (si viene precargado)
                         lineas = row.get('lineas', [])

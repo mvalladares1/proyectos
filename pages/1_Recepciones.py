@@ -103,6 +103,45 @@ def get_qc_icon(status):
         'Sin QC': '⚪'
     }.get(status, '⚪')
 
+# --- Funciones con caché para llamadas API ---
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_gestion_data(_username, _password, fecha_inicio, fecha_fin, status_filter=None, qc_filter=None, search_text=None):
+    """Obtiene datos de gestión con caché de 2 minutos."""
+    params = {
+        "username": _username, "password": _password,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin
+    }
+    if status_filter and status_filter != "Todos":
+        params["status_filter"] = status_filter
+    if qc_filter and qc_filter != "Todos":
+        params["qc_filter"] = qc_filter
+    if search_text:
+        params["search_text"] = search_text
+    
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion", params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return None
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
+    """Obtiene overview con caché de 2 minutos."""
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion/overview", params={
+            "username": _username, "password": _password,
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin
+        }, timeout=60)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return None
+
 # === TABS PRINCIPALES ===
 tab_kpis, tab_gestion = st.tabs(["📊 KPIs y Calidad", "📋 Gestión de Recepciones"])
 
@@ -735,49 +774,44 @@ with tab_gestion:
     st.subheader("📋 Gestión de Recepciones MP")
     st.caption("Monitoreo de estados de validación y control de calidad")
     
-    # Filtros
+    # Filtros en una sola fila
     col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
     with col1:
         fecha_inicio_g = st.date_input("Desde", datetime.now() - timedelta(days=7), format="DD/MM/YYYY", key="gestion_desde")
     with col2:
         fecha_fin_g = st.date_input("Hasta", datetime.now(), format="DD/MM/YYYY", key="gestion_hasta")
     with col3:
-        status_filter = st.selectbox("Estado", ["Todos", "Validada", "Lista para validar", "Confirmada", "En espera", "Borrador"])
+        status_filter = st.selectbox("Estado", ["Todos", "Validada", "Lista para validar", "Confirmada", "En espera", "Borrador"], key="gestion_status")
     with col4:
-        qc_filter = st.selectbox("Control Calidad", ["Todos", "Con QC Aprobado", "Con QC Pendiente", "Sin QC", "QC Fallido"])
+        qc_filter = st.selectbox("Control Calidad", ["Todos", "Con QC Aprobado", "Con QC Pendiente", "Sin QC", "QC Fallido"], key="gestion_qc")
     with col5:
-        search_text = st.text_input("Buscar Albarán", placeholder="Ej: WH/IN/00123")
+        search_text = st.text_input("Buscar Albarán", placeholder="Ej: WH/IN/00123", key="gestion_search")
     
-    if st.button("🔄 Consultar Gestión", type="primary", key="btn_gestion"):
-        params = {
-            "username": username, "password": password,
-            "fecha_inicio": fecha_inicio_g.strftime("%Y-%m-%d"),
-            "fecha_fin": fecha_fin_g.strftime("%Y-%m-%d")
-        }
-        if status_filter != "Todos":
-            params["status_filter"] = status_filter
-        if qc_filter != "Todos":
-            params["qc_filter"] = qc_filter
-        if search_text:
-            params["search_text"] = search_text
+    # Botón de consulta con limpiar caché
+    col_btn1, col_btn2 = st.columns([1, 4])
+    with col_btn1:
+        consultar = st.button("🔄 Consultar", type="primary", key="btn_gestion")
+    with col_btn2:
+        if st.button("🗑️ Limpiar caché", key="btn_clear_cache"):
+            fetch_gestion_data.clear()
+            fetch_gestion_overview.clear()
+            st.success("Caché limpiado")
+    
+    # Cargar datos usando caché
+    fecha_inicio_str = fecha_inicio_g.strftime("%Y-%m-%d")
+    fecha_fin_str = fecha_fin_g.strftime("%Y-%m-%d")
+    
+    if consultar or st.session_state.get('gestion_loaded'):
+        st.session_state.gestion_loaded = True
         
-        with st.spinner("Cargando datos de gestión..."):
-            try:
-                # Cargar overview
-                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion/overview", params={
-                    "username": username, "password": password,
-                    "fecha_inicio": fecha_inicio_g.strftime("%Y-%m-%d"),
-                    "fecha_fin": fecha_fin_g.strftime("%Y-%m-%d")
-                }, timeout=120)
-                if resp.status_code == 200:
-                    st.session_state.gestion_overview = resp.json()
-                
-                # Cargar recepciones
-                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion", params=params, timeout=120)
-                if resp.status_code == 200:
-                    st.session_state.gestion_data = resp.json()
-            except Exception as e:
-                st.error(f"Error: {e}")
+        with st.spinner("Cargando datos..."):
+            # Usar funciones con caché (automáticamente devuelve caché si existe)
+            overview = fetch_gestion_overview(username, password, fecha_inicio_str, fecha_fin_str)
+            data_gestion = fetch_gestion_data(username, password, fecha_inicio_str, fecha_fin_str, 
+                                              status_filter, qc_filter, search_text if search_text else None)
+            
+            st.session_state.gestion_overview = overview
+            st.session_state.gestion_data = data_gestion
     
     overview = st.session_state.gestion_overview
     data_gestion = st.session_state.gestion_data
@@ -875,23 +909,32 @@ with tab_gestion:
             )
         else:
             # Vista con expanders y paginación
-            ITEMS_PER_PAGE = 10
+            ITEMS_PER_PAGE = 15
             total_items = len(df_filtered)
             total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+            
+            # Inicializar estado de página
+            if 'gestion_page' not in st.session_state:
+                st.session_state.gestion_page = 1
             
             # Asegurar que la página esté en rango válido
             if st.session_state.gestion_page > total_pages:
                 st.session_state.gestion_page = 1
             
-            # Navegación de páginas con number_input en lugar de botones con rerun
+            # Navegación de páginas con selectbox (más estable que number_input)
             col_nav1, col_nav2 = st.columns([3, 1])
             with col_nav1:
-                st.markdown(f"**Página {st.session_state.gestion_page} de {total_pages}** ({total_items} recepciones)")
+                st.markdown(f"**{total_items} recepciones** en {total_pages} páginas")
             with col_nav2:
-                new_page = st.number_input("Ir a página", min_value=1, max_value=total_pages, 
-                                           value=st.session_state.gestion_page, key="gestion_page_input", label_visibility="collapsed")
-                if new_page != st.session_state.gestion_page:
-                    st.session_state.gestion_page = new_page
+                page_options = list(range(1, total_pages + 1))
+                current_idx = st.session_state.gestion_page - 1
+                selected_page = st.selectbox(
+                    "Página", page_options, 
+                    index=min(current_idx, len(page_options) - 1),
+                    key="gestion_page_select",
+                    label_visibility="collapsed"
+                )
+                st.session_state.gestion_page = selected_page
             
             start_idx = (st.session_state.gestion_page - 1) * ITEMS_PER_PAGE
             end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
@@ -939,6 +982,12 @@ with tab_gestion:
                             st.warning(f"⏳ **Pendiente de:** {pending}")
                         else:
                             st.success("✓ Sin pendientes de aprobación")
+                    
+                    # Link a Odoo
+                    picking_id = row.get('picking_id', '')
+                    if picking_id:
+                        odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={picking_id}&menu_id=350&cids=1&action=540&active_id=164&model=stock.picking&view_type=form"
+                        st.markdown(f"🔗 [Abrir en Odoo]({odoo_url})")
         
         # Export
         st.markdown("---")
