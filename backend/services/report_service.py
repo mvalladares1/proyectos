@@ -638,12 +638,18 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         pass
 
     # Detalle por Tipo Fruta → Productor → Manejo
-    elements.append(Paragraph("Detalle por Tipo de Fruta", styles['Heading2']))
+    titulo_detalle = Paragraph("Detalle por Tipo de Fruta", styles['Heading2'])
     
     fruta_agg = _aggregate_by_fruta_productor_manejo(recepciones_main)
     
-    # Crear tabla jerárquica
-    detail_tbl = [["Tipo Fruta / Productor / Manejo", "Kg", "Costo Total", "Costo Prom/Kg"]]
+    # Crear estilo para celdas con texto largo que necesita wrap
+    from reportlab.lib.styles import ParagraphStyle
+    cell_style = ParagraphStyle('CellStyle', fontName='Helvetica', fontSize=8, leading=10)
+    cell_style_bold = ParagraphStyle('CellStyleBold', fontName='Helvetica-Bold', fontSize=8, leading=10)
+    cell_style_italic = ParagraphStyle('CellStyleItalic', fontName='Helvetica-Oblique', fontSize=8, leading=10)
+    
+    # Crear tabla jerárquica - usar Paragraph para la primera columna
+    detail_tbl = [[Paragraph("<b>Tipo Fruta / Productor / Manejo</b>", cell_style), "Kg", "Costo Total", "Costo Prom/Kg"]]
     fruta_rows = []  # Filas de tipo fruta para estilo
     productor_rows = []  # Filas de productores para estilo
     row_idx = 1
@@ -652,7 +658,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         # Fila de Tipo Fruta (totalizador principal)
         costo_prom_str = fmt_dinero(fruta_data['costo_prom'], 2) if fruta_data['costo_prom'] is not None else "-"
         detail_tbl.append([
-            fruta_data['tipo_fruta'],
+            Paragraph(f"<b>{fruta_data['tipo_fruta']}</b>", cell_style_bold),
             fmt_numero(fruta_data['kg'], 2),
             fmt_dinero(fruta_data['costo']),
             costo_prom_str
@@ -664,7 +670,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         for prod_data in fruta_data['productores']:
             costo_prom_prod = fmt_dinero(prod_data['costo_prom'], 2) if prod_data['costo_prom'] is not None else "-"
             detail_tbl.append([
-                f"   → {prod_data['productor']}",
+                Paragraph(f"<i>→ {prod_data['productor']}</i>", cell_style_italic),
                 fmt_numero(prod_data['kg'], 2),
                 fmt_dinero(prod_data['costo']),
                 costo_prom_prod
@@ -676,7 +682,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
             for manejo_data in prod_data['manejos']:
                 costo_prom_manejo = fmt_dinero(manejo_data['costo_prom'], 2) if manejo_data['costo_prom'] is not None else "-"
                 detail_tbl.append([
-                    f"      ↳ {manejo_data['manejo']}",
+                    Paragraph(f"&nbsp;&nbsp;&nbsp;↳ {manejo_data['manejo']}", cell_style),
                     fmt_numero(manejo_data['kg'], 2),
                     fmt_dinero(manejo_data['costo']),
                     costo_prom_manejo
@@ -687,10 +693,10 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     total_kg_detail = sum(f['kg'] for f in fruta_agg)
     total_costo_detail = sum(f['costo'] for f in fruta_agg)
     total_costo_prom_detail = fmt_dinero(total_costo_detail / total_kg_detail, 2) if total_kg_detail > 0 else "-"
-    detail_tbl.append(["TOTAL GENERAL", fmt_numero(total_kg_detail, 2), fmt_dinero(total_costo_detail), total_costo_prom_detail])
+    detail_tbl.append([Paragraph("<b>TOTAL GENERAL</b>", cell_style_bold), fmt_numero(total_kg_detail, 2), fmt_dinero(total_costo_detail), total_costo_prom_detail])
     
-    # Anchos de columna: Nombre amplio (para productores largos), Kg, Costo Total, Costo Prom
-    col_widths = [320, 60, 85, 75]
+    # Anchos de columna: Nombre amplio (para productores largos con wrap), Kg, Costo Total, Costo Prom
+    col_widths = [280, 60, 90, 80]
     detail_table = Table(detail_tbl, hAlign='LEFT', repeatRows=1, colWidths=col_widths)
     
     # Estilo base
@@ -698,25 +704,25 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         # Fila total general
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#d0d0d0')),
     ]
     
-    # Estilo para filas de Tipo Fruta (negrita, fondo gris)
+    # Estilo para filas de Tipo Fruta (fondo gris)
     for row_num in fruta_rows:
-        detail_style.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Bold'))
         detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#e8e8e8')))
     
-    # Estilo para filas de Productor (itálica, fondo más claro)
+    # Estilo para filas de Productor (fondo más claro)
     for row_num in productor_rows:
-        detail_style.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Oblique'))
         detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f5f5f5')))
     
     detail_table.setStyle(TableStyle(detail_style))
-    elements.append(KeepTogether([detail_table]))
+    
+    # Agregar título y tabla juntos
+    elements.append(titulo_detalle)
+    elements.append(Spacer(1, 6))
+    elements.append(detail_table)
     elements.append(Spacer(1, 12))
 
     # Semana anterior
