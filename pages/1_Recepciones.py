@@ -839,7 +839,11 @@ with tab_gestion:
         
         st.caption(f"Mostrando {len(df_filtered)} de {len(df_g)} recepciones")
         
-        # Vista
+        # Inicializar estado de página si no existe
+        if 'gestion_page' not in st.session_state:
+            st.session_state.gestion_page = 1
+        
+        # Vista (sin causar rerun)
         vista = st.radio("Vista", ["📊 Tabla compacta", "📋 Detalle con expanders"], horizontal=True, label_visibility="collapsed", key="vista_gestion")
         
         if vista == "📊 Tabla compacta":
@@ -875,20 +879,19 @@ with tab_gestion:
             total_items = len(df_filtered)
             total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
             
-            if 'gestion_page' not in st.session_state:
+            # Asegurar que la página esté en rango válido
+            if st.session_state.gestion_page > total_pages:
                 st.session_state.gestion_page = 1
             
-            col_prev, col_info, col_next = st.columns([1, 2, 1])
-            with col_prev:
-                if st.button("⬅️ Anterior", disabled=st.session_state.gestion_page <= 1, key="prev_g"):
-                    st.session_state.gestion_page -= 1
-                    st.rerun()
-            with col_info:
+            # Navegación de páginas con number_input en lugar de botones con rerun
+            col_nav1, col_nav2 = st.columns([3, 1])
+            with col_nav1:
                 st.markdown(f"**Página {st.session_state.gestion_page} de {total_pages}** ({total_items} recepciones)")
-            with col_next:
-                if st.button("Siguiente ➡️", disabled=st.session_state.gestion_page >= total_pages, key="next_g"):
-                    st.session_state.gestion_page += 1
-                    st.rerun()
+            with col_nav2:
+                new_page = st.number_input("Ir a página", min_value=1, max_value=total_pages, 
+                                           value=st.session_state.gestion_page, key="gestion_page_input", label_visibility="collapsed")
+                if new_page != st.session_state.gestion_page:
+                    st.session_state.gestion_page = new_page
             
             start_idx = (st.session_state.gestion_page - 1) * ITEMS_PER_PAGE
             end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
