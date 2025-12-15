@@ -360,10 +360,23 @@ if df is not None:
             except Exception as e:
                 st.error(f"Error al solicitar informe: {e}")
 
+    # Botón 3: Resumen del período completo seleccionado
     with informe_cols[2]:
-        st.write("Opciones:")
-        st.write("- Informe semana: solo el rango seleccionado.")
-        st.write("- Informe semana+resumen: incluye semana anterior y acumulado parcial del mes.")
+        if st.button("Descargar informe (Período completo)"):
+            try:
+                with st.spinner("Generando informe PDF del período..."):
+                    resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report", params={**params, 'include_prev_week': False, 'include_month_accum': False}, timeout=120)
+                if resp.status_code == 200:
+                    pdf_bytes = resp.content
+                    fname = f"informe_periodo_{params['fecha_inicio']}_a_{params['fecha_fin']}.pdf".replace('/', '-')
+                    st.download_button("Descargar PDF (Período)", data=pdf_bytes, file_name=fname, mime='application/pdf')
+                else:
+                    st.error(f"Error al generar informe: {resp.status_code} - {resp.text}")
+            except Exception as e:
+                st.error(f"Error al solicitar informe: {e}")
+
+    # Descripción de opciones
+    st.caption("**Opciones:** Semana = rango seleccionado | Semana+Resumen = incluye semana anterior y acumulado mensual | Período = resumen del rango sin comparativos")
 
     # Filtros adicionales
     col_f1, col_f2, col_f3 = st.columns(3)
