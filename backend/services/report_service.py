@@ -79,6 +79,11 @@ def _aggregate_by_fruta(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any
     """Agrupa recepciones por tipo_fruta y calcula métricas por fruta."""
     agrup = {}
     for r in recepciones:
+        # Excluir productor ADMINISTRADOR
+        productor = (r.get('productor') or '').strip()
+        if productor.upper() == 'ADMINISTRADOR':
+            continue
+        
         tipo = (r.get('tipo_fruta') or '').strip()
         if not tipo:
             continue
@@ -144,6 +149,11 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
     agrup = {}
     
     for r in recepciones:
+        # Excluir productor ADMINISTRADOR
+        productor = (r.get('productor') or '').strip()
+        if productor.upper() == 'ADMINISTRADOR':
+            continue
+        
         tipo = (r.get('tipo_fruta') or '').strip()
         if not tipo:
             continue
