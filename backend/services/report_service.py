@@ -228,28 +228,28 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
     return out
 
 
-def _aggregate_by_productor_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Agrupa recepciones por Productor → Tipo de Fruta → Manejo.
+    Agrupa recepciones por Tipo de Fruta → Productor → Manejo.
     Para cada nivel calcula: Kg, Costo Total, Costo Promedio/Kg.
     """
-    # Estructura: {productor: {tipo_fruta: {manejo: {kg, costo}}}}
+    # Estructura: {tipo_fruta: {productor: {manejo: {kg, costo}}}}
     agrup = {}
     
     for r in recepciones:
-        productor = (r.get('productor') or '').strip()
-        if not productor:
-            productor = 'Sin Productor'
-        
         tipo = (r.get('tipo_fruta') or '').strip()
         if not tipo:
             continue  # Skip recepciones sin tipo de fruta
         
-        if productor not in agrup:
-            agrup[productor] = {}
+        productor = (r.get('productor') or '').strip()
+        if not productor:
+            productor = 'Sin Productor'
         
-        if tipo not in agrup[productor]:
-            agrup[productor][tipo] = {}
+        if tipo not in agrup:
+            agrup[tipo] = {}
+        
+        if productor not in agrup[tipo]:
+            agrup[tipo][productor] = {}
         
         # Recorrer productos para obtener manejo y sumar kg/costo
         for p in r.get('productos', []) or []:
@@ -261,28 +261,28 @@ def _aggregate_by_productor_fruta_manejo(recepciones: List[Dict[str, Any]]) -> L
             if not manejo:
                 manejo = 'Sin Manejo'
             
-            if manejo not in agrup[productor][tipo]:
-                agrup[productor][tipo][manejo] = {'kg': 0.0, 'costo': 0.0}
+            if manejo not in agrup[tipo][productor]:
+                agrup[tipo][productor][manejo] = {'kg': 0.0, 'costo': 0.0}
             
             kg = p.get('Kg Hechos', 0) or 0
             costo = p.get('Costo Total', 0) or 0
-            agrup[productor][tipo][manejo]['kg'] += kg
-            agrup[productor][tipo][manejo]['costo'] += costo
+            agrup[tipo][productor][manejo]['kg'] += kg
+            agrup[tipo][productor][manejo]['costo'] += costo
     
     # Convertir a lista jerárquica
     out = []
-    for productor, frutas in agrup.items():
-        productor_kg = 0.0
-        productor_costo = 0.0
+    for tipo, productores in agrup.items():
+        tipo_kg = 0.0
+        tipo_costo = 0.0
         
-        frutas_list = []
-        for tipo, manejos in frutas.items():
-            tipo_kg = sum(m['kg'] for m in manejos.values())
-            tipo_costo = sum(m['costo'] for m in manejos.values())
-            tipo_costo_prom = (tipo_costo / tipo_kg) if tipo_kg > 0 else None
+        productores_list = []
+        for productor, manejos in productores.items():
+            prod_kg = sum(m['kg'] for m in manejos.values())
+            prod_costo = sum(m['costo'] for m in manejos.values())
+            prod_costo_prom = (prod_costo / prod_kg) if prod_kg > 0 else None
             
-            productor_kg += tipo_kg
-            productor_costo += tipo_costo
+            tipo_kg += prod_kg
+            tipo_costo += prod_costo
             
             manejos_list = []
             for manejo, v in sorted(manejos.items()):
@@ -299,30 +299,31 @@ def _aggregate_by_productor_fruta_manejo(recepciones: List[Dict[str, Any]]) -> L
             # Ordenar manejos por kg descendente
             manejos_list.sort(key=lambda x: x['kg'], reverse=True)
             
-            frutas_list.append({
-                'tipo_fruta': tipo,
-                'kg': tipo_kg,
-                'costo': tipo_costo,
-                'costo_prom': tipo_costo_prom,
+            productores_list.append({
+                'productor': productor,
+                'kg': prod_kg,
+                'costo': prod_costo,
+                'costo_prom': prod_costo_prom,
                 'manejos': manejos_list
             })
         
-        # Ordenar frutas por kg descendente
-        frutas_list.sort(key=lambda x: x['kg'], reverse=True)
+        # Ordenar productores por kg descendente
+        productores_list.sort(key=lambda x: x['kg'], reverse=True)
         
-        productor_costo_prom = (productor_costo / productor_kg) if productor_kg > 0 else None
+        tipo_costo_prom = (tipo_costo / tipo_kg) if tipo_kg > 0 else None
         
         out.append({
-            'productor': productor,
-            'kg': productor_kg,
-            'costo': productor_costo,
-            'costo_prom': productor_costo_prom,
-            'frutas': frutas_list
+            'tipo_fruta': tipo,
+            'kg': tipo_kg,
+            'costo': tipo_costo,
+            'costo_prom': tipo_costo_prom,
+            'productores': productores_list
         })
     
-    # Ordenar productores por kg descendente
+    # Ordenar tipos de fruta por kg descendente
     out.sort(key=lambda x: x['kg'], reverse=True)
     return out
+
 
 
 
@@ -622,45 +623,45 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         # si falla el gráfico, continuar sin él
         pass
 
-    # Detalle por Productor → Tipo Fruta → Manejo
-    elements.append(Paragraph("Detalle por Productor", styles['Heading2']))
+    # Detalle por Tipo Fruta → Productor → Manejo
+    elements.append(Paragraph("Detalle por Tipo de Fruta", styles['Heading2']))
     
-    productor_agg = _aggregate_by_productor_fruta_manejo(recepciones_main)
+    fruta_agg = _aggregate_by_fruta_productor_manejo(recepciones_main)
     
     # Crear tabla jerárquica
-    prod_tbl = [["Productor / Fruta / Manejo", "Kg", "Costo Total", "Costo Prom/Kg"]]
-    productor_rows = []  # Filas de productores para estilo
+    detail_tbl = [["Tipo Fruta / Productor / Manejo", "Kg", "Costo Total", "Costo Prom/Kg"]]
     fruta_rows = []  # Filas de tipo fruta para estilo
+    productor_rows = []  # Filas de productores para estilo
     row_idx = 1
     
-    for prod_data in productor_agg:
-        # Fila de Productor (totalizador)
-        costo_prom_str = fmt_dinero(prod_data['costo_prom'], 2) if prod_data['costo_prom'] is not None else "-"
-        prod_tbl.append([
-            prod_data['productor'],
-            fmt_numero(prod_data['kg'], 2),
-            fmt_dinero(prod_data['costo']),
+    for fruta_data in fruta_agg:
+        # Fila de Tipo Fruta (totalizador principal)
+        costo_prom_str = fmt_dinero(fruta_data['costo_prom'], 2) if fruta_data['costo_prom'] is not None else "-"
+        detail_tbl.append([
+            fruta_data['tipo_fruta'],
+            fmt_numero(fruta_data['kg'], 2),
+            fmt_dinero(fruta_data['costo']),
             costo_prom_str
         ])
-        productor_rows.append(row_idx)
+        fruta_rows.append(row_idx)
         row_idx += 1
         
-        # Filas de Tipo Fruta (indentadas)
-        for fruta_data in prod_data['frutas']:
-            costo_prom_fruta = fmt_dinero(fruta_data['costo_prom'], 2) if fruta_data['costo_prom'] is not None else "-"
-            prod_tbl.append([
-                f"   → {fruta_data['tipo_fruta']}",
-                fmt_numero(fruta_data['kg'], 2),
-                fmt_dinero(fruta_data['costo']),
-                costo_prom_fruta
+        # Filas de Productor (indentadas)
+        for prod_data in fruta_data['productores']:
+            costo_prom_prod = fmt_dinero(prod_data['costo_prom'], 2) if prod_data['costo_prom'] is not None else "-"
+            detail_tbl.append([
+                f"   → {prod_data['productor']}",
+                fmt_numero(prod_data['kg'], 2),
+                fmt_dinero(prod_data['costo']),
+                costo_prom_prod
             ])
-            fruta_rows.append(row_idx)
+            productor_rows.append(row_idx)
             row_idx += 1
             
             # Filas de Manejo (doble indentación)
-            for manejo_data in fruta_data['manejos']:
+            for manejo_data in prod_data['manejos']:
                 costo_prom_manejo = fmt_dinero(manejo_data['costo_prom'], 2) if manejo_data['costo_prom'] is not None else "-"
-                prod_tbl.append([
+                detail_tbl.append([
                     f"      ↳ {manejo_data['manejo']}",
                     fmt_numero(manejo_data['kg'], 2),
                     fmt_dinero(manejo_data['costo']),
@@ -669,15 +670,15 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
                 row_idx += 1
     
     # Fila de TOTAL GENERAL
-    total_prod_kg = sum(p['kg'] for p in productor_agg)
-    total_prod_costo = sum(p['costo'] for p in productor_agg)
-    total_prod_costo_prom = fmt_dinero(total_prod_costo / total_prod_kg, 2) if total_prod_kg > 0 else "-"
-    prod_tbl.append(["TOTAL GENERAL", fmt_numero(total_prod_kg, 2), fmt_dinero(total_prod_costo), total_prod_costo_prom])
+    total_kg_detail = sum(f['kg'] for f in fruta_agg)
+    total_costo_detail = sum(f['costo'] for f in fruta_agg)
+    total_costo_prom_detail = fmt_dinero(total_costo_detail / total_kg_detail, 2) if total_kg_detail > 0 else "-"
+    detail_tbl.append(["TOTAL GENERAL", fmt_numero(total_kg_detail, 2), fmt_dinero(total_costo_detail), total_costo_prom_detail])
     
-    prod_table = Table(prod_tbl, hAlign='LEFT', repeatRows=1)
+    detail_table = Table(detail_tbl, hAlign='LEFT', repeatRows=1)
     
     # Estilo base
-    prod_style = [
+    detail_style = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -688,18 +689,18 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#d0d0d0')),
     ]
     
-    # Estilo para filas de Productor (negrita, fondo gris)
-    for row_num in productor_rows:
-        prod_style.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Bold'))
-        prod_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#e8e8e8')))
-    
-    # Estilo para filas de Tipo Fruta (semi-negrita, fondo más claro)
+    # Estilo para filas de Tipo Fruta (negrita, fondo gris)
     for row_num in fruta_rows:
-        prod_style.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Oblique'))
-        prod_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f5f5f5')))
+        detail_style.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Bold'))
+        detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#e8e8e8')))
     
-    prod_table.setStyle(TableStyle(prod_style))
-    elements.append(KeepTogether([prod_table]))
+    # Estilo para filas de Productor (itálica, fondo más claro)
+    for row_num in productor_rows:
+        detail_style.append(('FONTNAME', (0, row_num), (-1, row_num), 'Helvetica-Oblique'))
+        detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f5f5f5')))
+    
+    detail_table.setStyle(TableStyle(detail_style))
+    elements.append(KeepTogether([detail_table]))
     elements.append(Spacer(1, 12))
 
     # Semana anterior
