@@ -61,7 +61,13 @@ def _write_permissions(data: Dict[str, Any]) -> None:
 
 
 def get_permissions_map() -> Dict[str, List[str]]:
-    return _read_permissions()["dashboards"].copy()
+    """Retorna el mapa de permisos, asegurando que todos los dashboards estén incluidos."""
+    data = _read_permissions()["dashboards"].copy()
+    # Asegurar que todos los dashboards de ALL_DASHBOARDS estén presentes
+    for slug in ALL_DASHBOARDS:
+        if slug not in data:
+            data[slug] = []
+    return data
 
 
 def get_admins() -> List[str]:
