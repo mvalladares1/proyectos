@@ -40,10 +40,11 @@ async def get_recepciones_report(
     fecha_fin: str,
     include_prev_week: bool = False,
     include_month_accum: bool = False,
+    solo_hechas: bool = True,
 ):
     """Genera y entrega un PDF con el informe de recepciones para el rango solicitado."""
     try:
-        pdf_bytes = generate_recepcion_report_pdf(username, password, fecha_inicio, fecha_fin, include_prev_week, include_month_accum)
+        pdf_bytes = generate_recepcion_report_pdf(username, password, fecha_inicio, fecha_fin, include_prev_week, include_month_accum, solo_hechas=solo_hechas)
         buf = BytesIO(pdf_bytes)
         filename = f"informe_recepciones_{fecha_inicio}_a_{fecha_fin}.pdf"
         return StreamingResponse(buf, media_type='application/pdf', headers={

@@ -326,7 +326,8 @@ if df is not None:
         'username': username,
         'password': password,
         'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
-        'fecha_fin': fecha_fin.strftime('%Y-%m-%d')
+        'fecha_fin': fecha_fin.strftime('%Y-%m-%d'),
+        'solo_hechas': solo_hechas
     }
     # Botón 1: semana seleccionada
     with informe_cols[0]:

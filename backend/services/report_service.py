@@ -344,9 +344,12 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
 def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: str, fecha_fin: str,
                                   include_prev_week: bool = False, include_month_accum: bool = False,
                                   logo_path: Optional[str] = None,
-                                  include_pie: bool = True) -> bytes:
+                                  include_pie: bool = True,
+                                  solo_hechas: bool = True) -> bytes:
     """Genera un PDF con el resumen por fruta para el rango dado.
     Opciones para incluir la semana previa y acumulado parcial del mes.
+    Args:
+        solo_hechas: Si True, solo incluye recepciones en estado 'done'. Si False, incluye todas.
     """
     # Parse dates
     f_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
@@ -368,7 +371,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     if total_days > MAX_DAYS_FETCH:
         raise Exception(f"Rango demasiado grande: {total_days} días. Límite permitido = {MAX_DAYS_FETCH} días. Por favor reduzca el rango o use un reporte asíncrono.")
 
-    recepciones_all = get_recepciones_mp(username, password, fetch_start.isoformat(), f_fin.isoformat())
+    recepciones_all = get_recepciones_mp(username, password, fetch_start.isoformat(), f_fin.isoformat(), solo_hechas=solo_hechas)
 
     # normalizar categorias
     for r in recepciones_all:
