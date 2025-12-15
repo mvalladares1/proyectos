@@ -647,9 +647,11 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     cell_style = ParagraphStyle('CellStyle', fontName='Helvetica', fontSize=8, leading=10)
     cell_style_bold = ParagraphStyle('CellStyleBold', fontName='Helvetica-Bold', fontSize=8, leading=10)
     cell_style_italic = ParagraphStyle('CellStyleItalic', fontName='Helvetica-Oblique', fontSize=8, leading=10)
+    # Estilo para header con texto blanco
+    header_style = ParagraphStyle('HeaderStyle', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=colors.whitesmoke)
     
     # Crear tabla jerárquica - usar Paragraph para la primera columna
-    detail_tbl = [[Paragraph("<b>Tipo Fruta / Productor / Manejo</b>", cell_style), "Kg", "Costo Total", "Costo Prom/Kg"]]
+    detail_tbl = [[Paragraph("Tipo Fruta / Productor / Manejo", header_style), "Kg", "Costo Total", "Costo Prom/Kg"]]
     fruta_rows = []  # Filas de tipo fruta para estilo
     productor_rows = []  # Filas de productores para estilo
     row_idx = 1
