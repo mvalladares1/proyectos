@@ -84,12 +84,17 @@ with col1:
 with col2:
     fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
 
+# Checkbox para filtrar solo recepciones en estado "hecho"
+solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
+                          help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
+
 if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
     params = {
         "username": username,
         "password": password,
         "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
-        "fecha_fin": fecha_fin.strftime("%Y-%m-%d")
+        "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+        "solo_hechas": solo_hechas
     }
     api_url = f"{API_URL}/api/v1/recepciones-mp/"
     try:

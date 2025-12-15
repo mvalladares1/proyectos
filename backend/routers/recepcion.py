@@ -19,13 +19,14 @@ async def get_recepciones(
     password: str = Query(..., description="API Key Odoo"),
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
-    productor_id: Optional[int] = Query(None, description="ID del productor")
+    productor_id: Optional[int] = Query(None, description="ID del productor"),
+    solo_hechas: bool = Query(True, description="Si es True, solo muestra recepciones en estado 'hecho'. Si es False, muestra todas.")
 ):
     """
     Obtiene las recepciones de materia prima con datos de calidad.
     """
     try:
-        data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id)
+        data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
