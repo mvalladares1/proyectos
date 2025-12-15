@@ -675,7 +675,9 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     total_costo_prom_detail = fmt_dinero(total_costo_detail / total_kg_detail, 2) if total_kg_detail > 0 else "-"
     detail_tbl.append(["TOTAL GENERAL", fmt_numero(total_kg_detail, 2), fmt_dinero(total_costo_detail), total_costo_prom_detail])
     
-    detail_table = Table(detail_tbl, hAlign='LEFT', repeatRows=1)
+    # Anchos de columna: Nombre amplio, Kg, Costo Total, Costo Prom
+    col_widths = [240, 70, 90, 80]
+    detail_table = Table(detail_tbl, hAlign='LEFT', repeatRows=1, colWidths=col_widths)
     
     # Estilo base
     detail_style = [
