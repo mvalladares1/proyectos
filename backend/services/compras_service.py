@@ -169,7 +169,7 @@ class ComprasService:
             'purchase.order',
             domain,
             ['id', 'name', 'partner_id', 'company_id', 'amount_total', 
-             'state', 'date_order', 'message_ids', 'activity_ids', 'currency_id'],
+             'state', 'date_order', 'message_ids', 'activity_ids', 'currency_id', 'create_uid'],
             limit=500,
             order='date_order desc'
         )
@@ -274,6 +274,14 @@ class ComprasService:
             except Exception:
                 pass
         
+        # Agregar los creadores de PO a la lista de usuarios
+        for po in pos:
+            creator = po.get('create_uid')
+            if creator:
+                creator_id = creator[0] if isinstance(creator, (list, tuple)) else creator
+                if creator_id:
+                    user_ids.add(creator_id)
+        
         # Leer usuarios para nombres
         users = {}
         if user_ids:
@@ -361,6 +369,11 @@ class ComprasService:
             # Formatear fecha
             fecha_str = str(po_date)[:10] if po_date else ''
             
+            # Obtener nombre del creador
+            creator = po.get('create_uid')
+            creator_id = creator[0] if isinstance(creator, (list, tuple)) else creator if creator else None
+            created_by = users.get(creator_id, '') if creator_id else ''
+            
             result.append({
                 'po_id': po_id,
                 'name': po_name,
@@ -376,6 +389,7 @@ class ComprasService:
                 'receive_status': receive_status,
                 'approved_by': ', '.join(sorted(approved_set)),
                 'pending_users': ', '.join(sorted(pending_set)),
+                'created_by': created_by,
                 'lineas': lines_by_po.get(po_id, [])
             })
         

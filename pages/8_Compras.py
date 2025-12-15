@@ -155,17 +155,21 @@ with tab_po:
             
             # === FILTROS DE COLUMNA ===
             with st.expander("🔍 Filtros de tabla", expanded=True):
-                fc1, fc2, fc3, fc4 = st.columns(4)
+                fc1, fc2, fc3, fc4, fc5 = st.columns(5)
                 with fc1:
                     proveedores = sorted(df['partner'].unique())
                     prov_filter = st.multiselect("Proveedor", proveedores, default=[], placeholder="Todos")
                 with fc2:
+                    # Filtro por creador de la OC
+                    creadores = sorted([c for c in df['created_by'].unique() if c])
+                    creador_filter = st.multiselect("Creado por", creadores, default=[], placeholder="Todos", key="creador_filter")
+                with fc3:
                     aprob_opts = ["Todos"] + list(df['approval_status'].unique())
                     aprob_filter = st.selectbox("Estado Aprobación", aprob_opts, key="tbl_aprob")
-                with fc3:
+                with fc4:
                     recep_opts = ["Todos"] + list(df['receive_status'].unique())
                     recep_filter = st.selectbox("Estado Recepción", recep_opts, key="tbl_recep")
-                with fc4:
+                with fc5:
                     pend_filter = st.selectbox("Con Pendientes", ["Todos", "Sí", "No"], key="tbl_pend")
             
             # Leyenda (debajo de filtros)
@@ -175,6 +179,8 @@ with tab_po:
             df_filtered = df.copy()
             if prov_filter:
                 df_filtered = df_filtered[df_filtered['partner'].isin(prov_filter)]
+            if creador_filter:
+                df_filtered = df_filtered[df_filtered['created_by'].isin(creador_filter)]
             if aprob_filter != "Todos":
                 df_filtered = df_filtered[df_filtered['approval_status'] == aprob_filter]
             if recep_filter != "Todos":
@@ -191,7 +197,7 @@ with tab_po:
             
             if vista == "📊 Tabla compacta":
                 # Tabla compacta con columnas esenciales
-                df_display = df_filtered[['name', 'date_order', 'partner', 'amount_total', 'approval_status', 'receive_status', 'pending_users']].copy()
+                df_display = df_filtered[['name', 'date_order', 'partner', 'created_by', 'amount_total', 'approval_status', 'receive_status', 'pending_users']].copy()
                 
                 # Columnas de estado con emoji compacto
                 df_display['Aprobación'] = df_display['approval_status'].apply(lambda x: {
@@ -203,8 +209,8 @@ with tab_po:
                 df_display['Pendientes'] = df_display['pending_users'].apply(lambda x: '⏳' if x else '✓')
                 
                 # Solo columnas esenciales
-                df_final = df_display[['name', 'date_order', 'partner', 'amount_total', 'Aprobación', 'Recepción', 'Pendientes']].copy()
-                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Monto', 'Aprobación', 'Recepción', 'Pendientes']
+                df_final = df_display[['name', 'date_order', 'partner', 'created_by', 'amount_total', 'Aprobación', 'Recepción', 'Pendientes']].copy()
+                df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Creado por', 'Monto', 'Aprobación', 'Recepción', 'Pend.']
                 df_final['Monto'] = df_final['Monto'].apply(fmt_moneda)
                 df_final['Fecha'] = df_final['Fecha'].apply(fmt_fecha)
                 
@@ -216,11 +222,12 @@ with tab_po:
                     column_config={
                         "PO": st.column_config.TextColumn(width="small"),
                         "Fecha": st.column_config.TextColumn(width="small"),
-                        "Proveedor": st.column_config.TextColumn(width="large"),
-                        "Monto": st.column_config.TextColumn(width="medium"),
+                        "Proveedor": st.column_config.TextColumn(width="medium"),
+                        "Creado por": st.column_config.TextColumn(width="medium"),
+                        "Monto": st.column_config.TextColumn(width="small"),
                         "Aprobación": st.column_config.TextColumn(width="small"),
                         "Recepción": st.column_config.TextColumn(width="small"),
-                        "Pendientes": st.column_config.TextColumn(width="small"),
+                        "Pend.": st.column_config.TextColumn(width="small"),
                     }
                 )
             
@@ -234,18 +241,19 @@ with tab_po:
                 if 'po_page' not in st.session_state:
                     st.session_state.po_page = 1
                 
-                # Navegación de páginas
-                col_prev, col_info, col_next = st.columns([1, 2, 1])
-                with col_prev:
-                    if st.button("⬅️ Anterior", disabled=st.session_state.po_page <= 1):
-                        st.session_state.po_page -= 1
-                        st.rerun()
-                with col_info:
+                # Asegurar que la página esté en rango válido
+                if st.session_state.po_page > total_pages:
+                    st.session_state.po_page = 1
+                
+                # Navegación de páginas con number_input (sin st.rerun)
+                col_nav1, col_nav2 = st.columns([3, 1])
+                with col_nav1:
                     st.markdown(f"**Página {st.session_state.po_page} de {total_pages}** ({total_items} órdenes)")
-                with col_next:
-                    if st.button("Siguiente ➡️", disabled=st.session_state.po_page >= total_pages):
-                        st.session_state.po_page += 1
-                        st.rerun()
+                with col_nav2:
+                    new_page = st.number_input("Ir a página", min_value=1, max_value=total_pages, 
+                                               value=st.session_state.po_page, key="po_page_input", label_visibility="collapsed")
+                    if new_page != st.session_state.po_page:
+                        st.session_state.po_page = new_page
                 
                 # Calcular rango de items
                 start_idx = (st.session_state.po_page - 1) * ITEMS_PER_PAGE
@@ -273,6 +281,7 @@ with tab_po:
                             st.markdown(f"**Aprobación:** {aprob_icon} {row['approval_status']}")
                             st.markdown(f"**Recepción:** {recep_icon} {row['receive_status']}")
                         with col3:
+                            st.markdown(f"**Creado por:** {row.get('created_by', '-')}")
                             st.markdown(f"**Estado PO:** {row['po_state']}")
                         
                         st.markdown("---")
