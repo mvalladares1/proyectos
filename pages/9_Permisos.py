@@ -8,7 +8,7 @@ import httpx
 import pandas as pd
 import streamlit as st
 
-from shared.auth import es_admin, proteger_pagina
+from shared.auth import es_admin, proteger_pagina, get_credenciales
 
 st.set_page_config(
     page_title="Permisos",
@@ -25,12 +25,13 @@ if not es_admin():
     st.error("Solo administradores pueden acceder a este panel.")
     st.stop()
 
-username = st.session_state.get("username")
-password = st.session_state.get("password")
+# Obtener credenciales del backend (el password no se guarda en session_state por seguridad)
+username, password = get_credenciales()
 
 if not username or not password:
     st.warning("Inicia sesión con credenciales válidas para administrar los permisos.")
     st.stop()
+
 
 
 def fetch_permissions() -> Dict[str, List[str]]:

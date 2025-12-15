@@ -207,42 +207,105 @@ if datos:
             # Filtrar datos mensuales por meses seleccionados
             meses_filtro = [f"{año_seleccionado}-{meses_opciones[m]}" for m in meses_seleccionados]
 
-            # Crear DataFrame comparativo mensual
+            # Función helper para sumar valores de meses
+            def sumar_meses(cat_nombre):
+                real = sum(datos_mensuales.get(m, {}).get(cat_nombre, 0) for m in meses_filtro if m in datos_mensuales)
+                ppto = sum(ppto_mensual.get(m, {}).get(cat_nombre, 0) for m in meses_filtro if m in ppto_mensual)
+                return real, ppto
+
+            # Crear DataFrame con estructura jerárquica
             eerr_mensual = []
-            categorias = [
-                ("1 - INGRESOS", "ingresos"),
-                ("2 - COSTOS", "costos"),
-                ("4 - GASTOS DIRECTOS", "gastos_directos"),
-                ("6 - GAV", "gav"),
-                ("8 - INTERESES", "intereses"),
-                ("10 - INGRESOS NO OPERACIONALES", "ingresos_no_operacionales"),
-                ("11 - GASTOS NO OPERACIONALES", "gastos_no_operacionales"),
-            ]
 
-            for cat_nombre, cat_key in categorias:
-                real_mes = sum(datos_mensuales.get(m, {}).get(cat_nombre, 0) for m in meses_filtro if m in datos_mensuales)
-                ppto_mes = sum(ppto_mensual.get(m, {}).get(cat_nombre, 0) for m in meses_filtro if m in ppto_mensual)
-                dif_mes = real_mes - ppto_mes
-                dif_pct = (dif_mes / ppto_mes * 100) if ppto_mes != 0 else 0
-
+            def agregar_fila_agrupado(concepto, real, ppto, es_calculado=False):
+                dif = real - ppto
+                dif_pct = (dif / ppto * 100) if ppto != 0 else 0
                 eerr_mensual.append({
-                    "Concepto": cat_nombre,
-                    "Real Mes": real_mes,
-                    "PPTO Mes": ppto_mes,
-                    "Dif Mes": dif_mes,
-                    "Dif %": dif_pct
+                    "Concepto": concepto,
+                    "Real Mes": real,
+                    "PPTO Mes": ppto,
+                    "Dif Mes": dif,
+                    "Dif %": dif_pct,
+                    "es_calculado": es_calculado
                 })
 
+            # 1 - INGRESOS
+            ing_real, ing_ppto = sumar_meses("1 - INGRESOS")
+            agregar_fila_agrupado("1 - INGRESOS", ing_real, ing_ppto)
+
+            # 2 - COSTOS
+            cost_real, cost_ppto = sumar_meses("2 - COSTOS")
+            agregar_fila_agrupado("2 - COSTOS", cost_real, cost_ppto)
+
+            # 3 - UTILIDAD BRUTA = 1 - 2
+            ub_real = ing_real - cost_real
+            ub_ppto = ing_ppto - cost_ppto
+            agregar_fila_agrupado("3 - UTILIDAD BRUTA", ub_real, ub_ppto, es_calculado=True)
+
+            # 4 - GASTOS DIRECTOS
+            gd_real, gd_ppto = sumar_meses("4 - GASTOS DIRECTOS")
+            agregar_fila_agrupado("4 - GASTOS DIRECTOS", gd_real, gd_ppto)
+
+            # 5 - MARGEN DE CONTRIBUCIÓN = 3 - 4
+            mc_real = ub_real - gd_real
+            mc_ppto = ub_ppto - gd_ppto
+            agregar_fila_agrupado("5 - MARGEN DE CONTRIBUCIÓN", mc_real, mc_ppto, es_calculado=True)
+
+            # 6 - GAV
+            gav_real, gav_ppto = sumar_meses("6 - GAV")
+            agregar_fila_agrupado("6 - GAV", gav_real, gav_ppto)
+
+            # 7 - UTILIDAD OPERACIONAL (EBIT) = 5 - 6
+            ebit_real = mc_real - gav_real
+            ebit_ppto = mc_ppto - gav_ppto
+            agregar_fila_agrupado("7 - UTILIDAD OPERACIONAL (EBIT)", ebit_real, ebit_ppto, es_calculado=True)
+
+            # 8 - INTERESES
+            int_real, int_ppto = sumar_meses("8 - INTERESES")
+            agregar_fila_agrupado("8 - INTERESES", int_real, int_ppto)
+
+            # 9 - UTILIDAD ANTES DE NO OP = 7 - 8
+            uano_real = ebit_real - int_real
+            uano_ppto = ebit_ppto - int_ppto
+            agregar_fila_agrupado("9 - UTILIDAD ANTES DE NO OP.", uano_real, uano_ppto, es_calculado=True)
+
+            # 10 - INGRESOS NO OPERACIONALES
+            ino_real, ino_ppto = sumar_meses("10 - INGRESOS NO OPERACIONALES")
+            agregar_fila_agrupado("10 - INGRESOS NO OPERACIONALES", ino_real, ino_ppto)
+
+            # 11 - GASTOS NO OPERACIONALES
+            gno_real, gno_ppto = sumar_meses("11 - GASTOS NO OPERACIONALES")
+            agregar_fila_agrupado("11 - GASTOS NO OPERACIONALES", gno_real, gno_ppto)
+
+            # 12 - RESULTADO NO OPERACIONAL = 10 - 11
+            rno_real = ino_real - gno_real
+            rno_ppto = ino_ppto - gno_ppto
+            agregar_fila_agrupado("12 - RESULTADO NO OPERACIONAL", rno_real, rno_ppto, es_calculado=True)
+
+            # 13 - UTILIDAD ANTES DE IMPUESTOS = 9 + 12
+            uai_real = uano_real + rno_real
+            uai_ppto = uano_ppto + rno_ppto
+            agregar_fila_agrupado("13 - UTILIDAD ANTES DE IMPUESTOS", uai_real, uai_ppto, es_calculado=True)
+
             df_mensual = pd.DataFrame(eerr_mensual)
+            cols_mostrar_agr = ["Concepto", "Real Mes", "PPTO Mes", "Dif Mes", "Dif %"]
+            df_display_agr = df_mensual[cols_mostrar_agr].copy()
+
+            def resaltar_calculados_agr(row):
+                idx = row.name
+                if df_mensual.iloc[idx].get("es_calculado", False):
+                    return ["background-color: #2d3748; font-weight: bold"] * len(cols_mostrar_agr)
+                return [""] * len(cols_mostrar_agr)
 
             # Formatear y mostrar
             st.dataframe(
-                df_mensual.style.format({
+                df_display_agr.style
+                .format({
                     "Real Mes": "${:,.0f}",
                     "PPTO Mes": "${:,.0f}",
                     "Dif Mes": "${:,.0f}",
                     "Dif %": "{:.1f}%"
-                }),
+                })
+                .apply(resaltar_calculados_agr, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
@@ -266,56 +329,119 @@ if datos:
                     if mes_num in meses_nombres:
                         meses_data[mes_num] = datos_mes
 
-            # Definir categorías principales del EERR
-            categorias_eerr = [
-                ("1 - INGRESOS", "Ingresos de operación"),
-                ("2 - COSTOS", "Costos de venta y operación"),
-                ("4 - GASTOS DIRECTOS", "Gastos directos"),
-                ("6 - GAV", "Gastos de administración y venta"),
-                ("8 - INTERESES", "Gastos financieros"),
-                ("10 - INGRESOS NO OPERACIONALES", "Ingresos no operacionales"),
-                ("11 - GASTOS NO OPERACIONALES", "Gastos no operacionales"),
-            ]
-
             # Convertir meses seleccionados a números
             meses_nums_sel = [meses_opciones[m] for m in meses_seleccionados]
-            meses_nombres_sel = [meses_nombres[m] for m in meses_nums_sel]
+
+            # Definir estructura completa EERR con indicador de calculado
+            estructura_eerr = [
+                ("1 - INGRESOS", False),
+                ("2 - COSTOS", False),
+                ("3 - UTILIDAD BRUTA", True),          # 1 - 2
+                ("4 - GASTOS DIRECTOS", False),
+                ("5 - MARGEN DE CONTRIBUCIÓN", True),  # 3 - 4
+                ("6 - GAV", False),
+                ("7 - UTILIDAD OPERACIONAL (EBIT)", True),  # 5 - 6
+                ("8 - INTERESES", False),
+                ("9 - UTILIDAD ANTES DE NO OP.", True),  # 7 - 8
+                ("10 - INGRESOS NO OPERACIONALES", False),
+                ("11 - GASTOS NO OPERACIONALES", False),
+                ("12 - RESULTADO NO OPERACIONAL", True),  # 10 - 11
+                ("13 - UTILIDAD ANTES DE IMPUESTOS", True),  # 9 + 12
+            ]
+
+            # Función para obtener valor de mes (datos reales o ppto)
+            def obtener_valor_mensual(mes_num, concepto, datos_mes_dict, ppto_dict=None, año=None):
+                if concepto.startswith("3 - "):  # Utilidad Bruta
+                    ing = datos_mes_dict.get(mes_num, {}).get("1 - INGRESOS", 0)
+                    cost = datos_mes_dict.get(mes_num, {}).get("2 - COSTOS", 0)
+                    return ing - cost
+                elif concepto.startswith("5 - "):  # Margen de Contribución
+                    ub = obtener_valor_mensual(mes_num, "3 - UTILIDAD BRUTA", datos_mes_dict)
+                    gd = datos_mes_dict.get(mes_num, {}).get("4 - GASTOS DIRECTOS", 0)
+                    return ub - gd
+                elif concepto.startswith("7 - "):  # EBIT
+                    mc = obtener_valor_mensual(mes_num, "5 - MARGEN", datos_mes_dict)
+                    gav = datos_mes_dict.get(mes_num, {}).get("6 - GAV", 0)
+                    return mc - gav
+                elif concepto.startswith("9 - "):  # Utilidad antes No Op
+                    ebit = obtener_valor_mensual(mes_num, "7 - EBIT", datos_mes_dict)
+                    inter = datos_mes_dict.get(mes_num, {}).get("8 - INTERESES", 0)
+                    return ebit - inter
+                elif concepto.startswith("12 - "):  # Resultado No Op
+                    ino = datos_mes_dict.get(mes_num, {}).get("10 - INGRESOS NO OPERACIONALES", 0)
+                    gno = datos_mes_dict.get(mes_num, {}).get("11 - GASTOS NO OPERACIONALES", 0)
+                    return ino - gno
+                elif concepto.startswith("13 - "):  # Utilidad antes Impuestos
+                    uano = obtener_valor_mensual(mes_num, "9 - UTIL", datos_mes_dict)
+                    rno = obtener_valor_mensual(mes_num, "12 - RESULTADO", datos_mes_dict)
+                    return uano + rno
+                else:
+                    return datos_mes_dict.get(mes_num, {}).get(concepto, 0)
 
             # === VISTA DE REALES MENSUALES ===
             st.write("**📊 Montos Reales (CLP)**")
-            tabla_real = {"Concepto": []}
-            for cat_name, cat_desc in categorias_eerr:
-                tabla_real["Concepto"].append(cat_name)
+            tabla_real = {"Concepto": [], "es_calculado": []}
+            for concepto, es_calc in estructura_eerr:
+                tabla_real["Concepto"].append(concepto)
+                tabla_real["es_calculado"].append(es_calc)
             
             for mes_num in meses_nums_sel:
                 tabla_real[meses_nombres[mes_num]] = []
-                for cat_name, cat_desc in categorias_eerr:
-                    real_mes = meses_data.get(mes_num, {}).get(cat_name, 0)
-                    tabla_real[meses_nombres[mes_num]].append(real_mes)
+                for concepto, es_calc in estructura_eerr:
+                    val = obtener_valor_mensual(mes_num, concepto, meses_data)
+                    tabla_real[meses_nombres[mes_num]].append(val)
 
             df_real_mes = pd.DataFrame(tabla_real)
+            cols_meses = [meses_nombres[m] for m in meses_nums_sel]
+            
+            def resaltar_calculados_mens(row):
+                idx = row.name
+                if df_real_mes.iloc[idx].get("es_calculado", False):
+                    return ["background-color: #2d3748; font-weight: bold"] * len(row)
+                return [""] * len(row)
+
+            df_display_real = df_real_mes[["Concepto"] + cols_meses].copy()
             st.dataframe(
-                df_real_mes.style.format("{:,.0f}", subset=[col for col in df_real_mes.columns if col != "Concepto"]),
+                df_display_real.style
+                .format("{:,.0f}", subset=cols_meses)
+                .apply(lambda x: resaltar_calculados_mens(x), axis=1),
                 use_container_width=True,
                 hide_index=True
             )
 
             # === VISTA DE PRESUPUESTO MENSUAL ===
             st.write("**💰 Presupuesto (CLP)**")
-            tabla_ppto = {"Concepto": []}
-            for cat_name, cat_desc in categorias_eerr:
-                tabla_ppto["Concepto"].append(cat_name)
+            
+            # Crear meses_ppto_data con la misma estructura
+            meses_ppto_data = {}
+            for mes_num in meses_nums_sel:
+                mes_key = f"{año_seleccionado}-{mes_num}"
+                meses_ppto_data[mes_num] = ppto_mensual.get(mes_key, {})
+
+            tabla_ppto = {"Concepto": [], "es_calculado": []}
+            for concepto, es_calc in estructura_eerr:
+                tabla_ppto["Concepto"].append(concepto)
+                tabla_ppto["es_calculado"].append(es_calc)
             
             for mes_num in meses_nums_sel:
                 tabla_ppto[meses_nombres[mes_num]] = []
-                mes_key = f"{año_seleccionado}-{mes_num}"
-                for cat_name, cat_desc in categorias_eerr:
-                    ppto_mes = ppto_mensual.get(mes_key, {}).get(cat_name, 0)
-                    tabla_ppto[meses_nombres[mes_num]].append(ppto_mes)
+                for concepto, es_calc in estructura_eerr:
+                    val = obtener_valor_mensual(mes_num, concepto, meses_ppto_data)
+                    tabla_ppto[meses_nombres[mes_num]].append(val)
 
             df_ppto_mes = pd.DataFrame(tabla_ppto)
+            df_display_ppto = df_ppto_mes[["Concepto"] + cols_meses].copy()
+            
+            def resaltar_calculados_ppto(row):
+                idx = row.name
+                if df_ppto_mes.iloc[idx].get("es_calculado", False):
+                    return ["background-color: #2d3748; font-weight: bold"] * len(row)
+                return [""] * len(row)
+
             st.dataframe(
-                df_ppto_mes.style.format("{:,.0f}", subset=[col for col in df_ppto_mes.columns if col != "Concepto"]),
+                df_display_ppto.style
+                .format("{:,.0f}", subset=cols_meses)
+                .apply(resaltar_calculados_ppto, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
@@ -323,25 +449,34 @@ if datos:
             # === VARIACIONES ===
             st.divider()
             st.write("**📈 Variaciones (Real - PPTO)**")
-            tabla_var = {"Concepto": []}
-            for cat_name, cat_desc in categorias_eerr:
-                tabla_var["Concepto"].append(cat_name)
+            tabla_var = {"Concepto": [], "es_calculado": []}
+            for concepto, es_calc in estructura_eerr:
+                tabla_var["Concepto"].append(concepto)
+                tabla_var["es_calculado"].append(es_calc)
             
             for mes_num in meses_nums_sel:
                 tabla_var[meses_nombres[mes_num]] = []
-                mes_key = f"{año_seleccionado}-{mes_num}"
-                for cat_name, cat_desc in categorias_eerr:
-                    real_mes = meses_data.get(mes_num, {}).get(cat_name, 0)
-                    ppto_mes = ppto_mensual.get(mes_key, {}).get(cat_name, 0)
-                    tabla_var[meses_nombres[mes_num]].append(real_mes - ppto_mes)
+                for concepto, es_calc in estructura_eerr:
+                    real_val = obtener_valor_mensual(mes_num, concepto, meses_data)
+                    ppto_val = obtener_valor_mensual(mes_num, concepto, meses_ppto_data)
+                    tabla_var[meses_nombres[mes_num]].append(real_val - ppto_val)
 
             df_var_mes = pd.DataFrame(tabla_var)
+            df_display_var = df_var_mes[["Concepto"] + cols_meses].copy()
+            
+            def resaltar_calculados_var(row):
+                idx = row.name
+                if df_var_mes.iloc[idx].get("es_calculado", False):
+                    return ["background-color: #2d3748; font-weight: bold"] * len(row)
+                return [""] * len(row)
+
             st.dataframe(
-                df_var_mes.style.format("{:,.0f}", subset=[col for col in df_var_mes.columns if col != "Concepto"]),
+                df_display_var.style
+                .format("{:,.0f}", subset=cols_meses)
+                .apply(resaltar_calculados_var, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
-
 
 
         with tab_ytd:
