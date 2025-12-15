@@ -76,53 +76,87 @@ if 'df_recepcion' not in st.session_state:
     st.session_state.df_recepcion = None
 if 'idx_recepcion' not in st.session_state:
     st.session_state.idx_recepcion = None
+# Estados para pestaña de gestión
+if 'gestion_data' not in st.session_state:
+    st.session_state.gestion_data = None
+if 'gestion_overview' not in st.session_state:
+    st.session_state.gestion_overview = None
 
-# Filtros
-col1, col2 = st.columns(2)
-with col1:
-    fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
-with col2:
-    fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
+# --- Funciones auxiliares para gestión ---
+def get_validation_icon(status):
+    """Retorna icono según estado de validación."""
+    return {
+        'Validada': '✅',
+        'Lista para validar': '🟡',
+        'Confirmada': '🔵',
+        'En espera': '⏳',
+        'Borrador': '⚪',
+        'Cancelada': '❌'
+    }.get(status, '⚪')
 
-# Checkbox para filtrar solo recepciones en estado "hecho"
-solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
-                          help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
+def get_qc_icon(status):
+    """Retorna icono según estado de QC."""
+    return {
+        'Con QC Aprobado': '✅',
+        'Con QC Pendiente': '🟡',
+        'QC Fallido': '🔴',
+        'Sin QC': '⚪'
+    }.get(status, '⚪')
 
-if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
-    params = {
-        "username": username,
-        "password": password,
-        "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
-        "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
-        "solo_hechas": solo_hechas
-    }
-    api_url = f"{API_URL}/api/v1/recepciones-mp/"
-    try:
-        resp = requests.get(api_url, params=params, timeout=60)
-        if resp.status_code == 200:
-            data = resp.json()
-            df = pd.DataFrame(data)
-            if not df.empty:
-                st.session_state.df_recepcion = df
-                st.session_state.idx_recepcion = None
+# === TABS PRINCIPALES ===
+tab_kpis, tab_gestion = st.tabs(["📊 KPIs y Calidad", "📋 Gestión de Recepciones"])
+
+# =====================================================
+#           TAB 1: KPIs Y CALIDAD (Código existente)
+# =====================================================
+with tab_kpis:
+    # Filtros
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
+    with col2:
+        fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
+
+    # Checkbox para filtrar solo recepciones en estado "hecho"
+    solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
+                              help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
+
+    if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
+        params = {
+            "username": username,
+            "password": password,
+            "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+            "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+            "solo_hechas": solo_hechas
+        }
+        api_url = f"{API_URL}/api/v1/recepciones-mp/"
+        try:
+            resp = requests.get(api_url, params=params, timeout=60)
+            if resp.status_code == 200:
+                data = resp.json()
+                df = pd.DataFrame(data)
+                if not df.empty:
+                    st.session_state.df_recepcion = df
+                    st.session_state.idx_recepcion = None
+                else:
+                    st.session_state.df_recepcion = None
+                    st.session_state.idx_recepcion = None
+                    st.warning("No se encontraron recepciones en el rango de fechas seleccionado.")
             else:
+                st.error(f"Error: {resp.status_code} - {resp.text}")
                 st.session_state.df_recepcion = None
                 st.session_state.idx_recepcion = None
-                st.warning("No se encontraron recepciones en el rango de fechas seleccionado.")
-        else:
-            st.error(f"Error: {resp.status_code} - {resp.text}")
-            st.session_state.df_recepcion = None
-            st.session_state.idx_recepcion = None
-    except requests.exceptions.ConnectionError:
-        st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
+        except requests.exceptions.ConnectionError:
+            st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
 
-# Mostrar tabla y detalle si hay datos
-df = st.session_state.df_recepcion
-if df is not None:
-    # --- KPIs Consolidados ---
-    st.subheader("📊 KPIs Consolidados")
+
+    # Mostrar tabla y detalle si hay datos
+    df = st.session_state.df_recepcion
+    if df is not None:
+        # --- KPIs Consolidados ---
+        st.subheader("📊 KPIs Consolidados")
     # Calcular Totales separando por categoría de producto (BANDEJAS)
     total_kg_mp = 0.0
     total_costo_mp = 0.0
@@ -693,3 +727,250 @@ if df is not None:
             st.info("No hay líneas de análisis de calidad para esta recepción.")
     else:
         st.info("No hay recepciones disponibles con los filtros seleccionados.")
+
+# =====================================================
+#           TAB 2: GESTIÓN DE RECEPCIONES
+# =====================================================
+with tab_gestion:
+    st.subheader("📋 Gestión de Recepciones MP")
+    st.caption("Monitoreo de estados de validación y control de calidad")
+    
+    # Filtros
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
+    with col1:
+        fecha_inicio_g = st.date_input("Desde", datetime.now() - timedelta(days=7), format="DD/MM/YYYY", key="gestion_desde")
+    with col2:
+        fecha_fin_g = st.date_input("Hasta", datetime.now(), format="DD/MM/YYYY", key="gestion_hasta")
+    with col3:
+        status_filter = st.selectbox("Estado", ["Todos", "Validada", "Lista para validar", "Confirmada", "En espera", "Borrador"])
+    with col4:
+        qc_filter = st.selectbox("Control Calidad", ["Todos", "Con QC Aprobado", "Con QC Pendiente", "Sin QC", "QC Fallido"])
+    with col5:
+        search_text = st.text_input("Buscar Albarán", placeholder="Ej: WH/IN/00123")
+    
+    if st.button("🔄 Consultar Gestión", type="primary", key="btn_gestion"):
+        params = {
+            "username": username, "password": password,
+            "fecha_inicio": fecha_inicio_g.strftime("%Y-%m-%d"),
+            "fecha_fin": fecha_fin_g.strftime("%Y-%m-%d")
+        }
+        if status_filter != "Todos":
+            params["status_filter"] = status_filter
+        if qc_filter != "Todos":
+            params["qc_filter"] = qc_filter
+        if search_text:
+            params["search_text"] = search_text
+        
+        with st.spinner("Cargando datos de gestión..."):
+            try:
+                # Cargar overview
+                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion/overview", params={
+                    "username": username, "password": password,
+                    "fecha_inicio": fecha_inicio_g.strftime("%Y-%m-%d"),
+                    "fecha_fin": fecha_fin_g.strftime("%Y-%m-%d")
+                }, timeout=120)
+                if resp.status_code == 200:
+                    st.session_state.gestion_overview = resp.json()
+                
+                # Cargar recepciones
+                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion", params=params, timeout=120)
+                if resp.status_code == 200:
+                    st.session_state.gestion_data = resp.json()
+            except Exception as e:
+                st.error(f"Error: {e}")
+    
+    overview = st.session_state.gestion_overview
+    data_gestion = st.session_state.gestion_data
+    
+    if overview:
+        # KPIs
+        st.markdown("### 📊 Resumen")
+        kpi_cols = st.columns(6)
+        with kpi_cols[0]:
+            st.metric("Total Recepciones", overview['total_recepciones'])
+        with kpi_cols[1]:
+            st.metric("Validadas ✅", overview['validadas'])
+        with kpi_cols[2]:
+            st.metric("Listas para validar 🟡", overview['listas_validar'])
+        with kpi_cols[3]:
+            st.metric("Con QC Aprobado ✅", overview['con_qc_aprobado'])
+        with kpi_cols[4]:
+            st.metric("Con QC Pendiente 🟡", overview['con_qc_pendiente'])
+        with kpi_cols[5]:
+            st.metric("Sin QC ⚪", overview['sin_qc'])
+        
+        st.markdown("---")
+    
+    if data_gestion:
+        st.subheader(f"📋 Recepciones ({len(data_gestion)})")
+        
+        df_g = pd.DataFrame(data_gestion)
+        
+        # Filtros de tabla
+        with st.expander("🔍 Filtros de tabla", expanded=True):
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            with fc1:
+                productores = sorted(df_g['partner'].dropna().unique())
+                prod_filter = st.multiselect("Productor", productores, default=[], placeholder="Todos", key="gestion_prod")
+            with fc2:
+                valid_opts = ["Todos"] + list(df_g['validation_status'].unique())
+                valid_filter = st.selectbox("Estado Validación", valid_opts, key="tbl_valid")
+            with fc3:
+                qc_opts = ["Todos"] + list(df_g['qc_status'].unique())
+                qc_tbl_filter = st.selectbox("Estado QC", qc_opts, key="tbl_qc")
+            with fc4:
+                pend_filter = st.selectbox("Con Pendientes", ["Todos", "Sí", "No"], key="tbl_pend_g")
+        
+        # Leyenda
+        st.caption("**Leyenda:** ✅ Completo | 🟡 Pendiente | 🔵 Confirmada | ⏳ En espera | ⚪ Sin datos | ❌ Cancelada/Fallido")
+        
+        # Aplicar filtros
+        df_filtered = df_g.copy()
+        if prod_filter:
+            df_filtered = df_filtered[df_filtered['partner'].isin(prod_filter)]
+        if valid_filter != "Todos":
+            df_filtered = df_filtered[df_filtered['validation_status'] == valid_filter]
+        if qc_tbl_filter != "Todos":
+            df_filtered = df_filtered[df_filtered['qc_status'] == qc_tbl_filter]
+        if pend_filter == "Sí":
+            df_filtered = df_filtered[df_filtered['pending_users'].str.len() > 0]
+        elif pend_filter == "No":
+            df_filtered = df_filtered[df_filtered['pending_users'].str.len() == 0]
+        
+        st.caption(f"Mostrando {len(df_filtered)} de {len(df_g)} recepciones")
+        
+        # Vista
+        vista = st.radio("Vista", ["📊 Tabla compacta", "📋 Detalle con expanders"], horizontal=True, label_visibility="collapsed", key="vista_gestion")
+        
+        if vista == "📊 Tabla compacta":
+            # Tabla compacta
+            df_display = df_filtered[['name', 'date', 'partner', 'tipo_fruta', 'validation_status', 'qc_status', 'pending_users']].copy()
+            
+            df_display['Validación'] = df_display['validation_status'].apply(get_validation_icon)
+            df_display['QC'] = df_display['qc_status'].apply(get_qc_icon)
+            df_display['Pendientes'] = df_display['pending_users'].apply(lambda x: '⏳' if x else '✓')
+            df_display['Fecha'] = df_display['date'].apply(fmt_fecha)
+            
+            df_final = df_display[['name', 'Fecha', 'partner', 'tipo_fruta', 'Validación', 'QC', 'Pendientes']].copy()
+            df_final.columns = ['Albarán', 'Fecha', 'Productor', 'Tipo Fruta', 'Validación', 'QC', 'Pend.']
+            
+            st.dataframe(
+                df_final, 
+                use_container_width=True, 
+                hide_index=True, 
+                height=450,
+                column_config={
+                    "Albarán": st.column_config.TextColumn(width="medium"),
+                    "Fecha": st.column_config.TextColumn(width="small"),
+                    "Productor": st.column_config.TextColumn(width="large"),
+                    "Tipo Fruta": st.column_config.TextColumn(width="small"),
+                    "Validación": st.column_config.TextColumn(width="small"),
+                    "QC": st.column_config.TextColumn(width="small"),
+                    "Pend.": st.column_config.TextColumn(width="small"),
+                }
+            )
+        else:
+            # Vista con expanders y paginación
+            ITEMS_PER_PAGE = 10
+            total_items = len(df_filtered)
+            total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+            
+            if 'gestion_page' not in st.session_state:
+                st.session_state.gestion_page = 1
+            
+            col_prev, col_info, col_next = st.columns([1, 2, 1])
+            with col_prev:
+                if st.button("⬅️ Anterior", disabled=st.session_state.gestion_page <= 1, key="prev_g"):
+                    st.session_state.gestion_page -= 1
+                    st.rerun()
+            with col_info:
+                st.markdown(f"**Página {st.session_state.gestion_page} de {total_pages}** ({total_items} recepciones)")
+            with col_next:
+                if st.button("Siguiente ➡️", disabled=st.session_state.gestion_page >= total_pages, key="next_g"):
+                    st.session_state.gestion_page += 1
+                    st.rerun()
+            
+            start_idx = (st.session_state.gestion_page - 1) * ITEMS_PER_PAGE
+            end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
+            
+            for idx, row in df_filtered.iloc[start_idx:end_idx].iterrows():
+                valid_icon = get_validation_icon(row['validation_status'])
+                qc_icon = get_qc_icon(row['qc_status'])
+                pend_icon = "⏳" if row.get('pending_users', '') else "✓"
+                
+                fecha_rec = fmt_fecha(row.get('date', ''))
+                header = f"{valid_icon}{qc_icon}{pend_icon} **{row['name']}** | {fecha_rec} | {row['partner'][:30]} | {row.get('tipo_fruta', '-')}"
+                
+                with st.expander(header, expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.markdown(f"**Fecha:** {fmt_fecha(row['date'])}")
+                        st.markdown(f"**Productor:** {row['partner']}")
+                        st.markdown(f"**Guía Despacho:** {row.get('guia_despacho', '-')}")
+                    with col2:
+                        st.markdown(f"**Estado:** {valid_icon} {row['validation_status']}")
+                        st.markdown(f"**Tipo Fruta:** {row.get('tipo_fruta', '-')}")
+                    with col3:
+                        st.markdown(f"**Control Calidad:** {qc_icon} {row['qc_status']}")
+                        if row.get('calific_final'):
+                            st.markdown(f"**Calificación:** {row['calific_final']}")
+                        if row.get('jefe_calidad'):
+                            st.markdown(f"**Jefe Calidad:** {row['jefe_calidad']}")
+                    
+                    st.markdown("---")
+                    
+                    # Detalle de pendientes/validaciones
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        validated = row.get('validated_by', '')
+                        if validated:
+                            st.success(f"✅ **Validado por:** {validated}")
+                        else:
+                            if row['validation_status'] == 'Validada':
+                                st.success("✅ Recepción validada")
+                            else:
+                                st.info("Pendiente de validación")
+                    with c2:
+                        pending = row.get('pending_users', '')
+                        if pending:
+                            st.warning(f"⏳ **Pendiente de:** {pending}")
+                        else:
+                            st.success("✓ Sin pendientes de aprobación")
+        
+        # Export
+        st.markdown("---")
+        try:
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                df_g.to_excel(writer, sheet_name='Gestión Recepciones', index=False)
+            st.download_button("📥 Descargar Excel", buffer.getvalue(), "gestion_recepciones.xlsx", 
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except:
+            st.download_button("📥 Descargar CSV", df_g.to_csv(index=False).encode('utf-8'), "gestion_recepciones.csv", "text/csv")
+    else:
+        st.info("Haz clic en **Consultar Gestión** para cargar los datos.")
+        
+        with st.expander("ℹ️ ¿Cómo funciona?"):
+            st.markdown("""
+            ### Gestión de Recepciones MP
+            
+            Este módulo te permite monitorear el estado de las recepciones de materia prima:
+            
+            | Estado | Descripción |
+            |--------|-------------|
+            | ✅ **Validada** | Recepción completada y validada en Odoo |
+            | 🟡 **Lista para validar** | Productos asignados, lista para validar |
+            | 🔵 **Confirmada** | Confirmada, esperando disponibilidad |
+            | ⏳ **En espera** | Esperando otra operación |
+            | ⚪ **Borrador** | En estado borrador |
+            
+            ### Control de Calidad
+            
+            | Estado | Descripción |
+            |--------|-------------|
+            | ✅ **Con QC Aprobado** | Tiene control de calidad completado |
+            | 🟡 **Con QC Pendiente** | Tiene QC pero está pendiente |
+            | 🔴 **QC Fallido** | El control de calidad falló |
+            | ⚪ **Sin QC** | No tiene control de calidad asociado |
+            """)
+

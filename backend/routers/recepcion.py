@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
 from backend.services.recepcion_service import get_recepciones_mp
+from backend.services.recepciones_gestion_service import RecepcionesGestionService
 from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
 from fastapi.responses import StreamingResponse
@@ -75,3 +76,51 @@ async def get_recepciones_report_xlsx(
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+#              ENDPOINTS DE GESTIÓN DE RECEPCIONES
+# ============================================================
+
+@router.get('/gestion')
+async def get_recepciones_gestion(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    status_filter: Optional[str] = Query(None, description="Filtro estado validación"),
+    qc_filter: Optional[str] = Query(None, description="Filtro estado QC"),
+    search_text: Optional[str] = Query(None, description="Buscar por número de albarán")
+):
+    """
+    Lista de recepciones con estados de validación y control de calidad.
+    Similar al endpoint /compras/ordenes pero para recepciones de MP.
+    """
+    try:
+        service = RecepcionesGestionService(username=username, password=password)
+        return service.get_recepciones_gestion(
+            fecha_inicio, fecha_fin,
+            status_filter=status_filter,
+            qc_filter=qc_filter,
+            search_text=search_text
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/gestion/overview')
+async def get_recepciones_gestion_overview(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    KPIs consolidados de gestión de recepciones.
+    """
+    try:
+        service = RecepcionesGestionService(username=username, password=password)
+        return service.get_overview(fecha_inicio, fecha_fin)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
