@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, Optional
 
 from backend.config import settings
 from backend.services.permissions_service import (
@@ -9,7 +9,9 @@ from backend.services.permissions_service import (
     get_full_permissions,
     get_permissions_map,
     is_admin as is_admin_email,
-    remove_dashboard
+    remove_dashboard,
+    get_maintenance_config,
+    set_maintenance_mode
 )
 from shared.odoo_client import OdooClient
 
@@ -19,6 +21,13 @@ router = APIRouter(prefix="/api/v1/permissions", tags=["Permissions"])
 class PermissionUpdateRequest(BaseModel):
     dashboard: str
     email: str
+    admin_username: str
+    admin_password: str
+
+
+class MaintenanceRequest(BaseModel):
+    enabled: bool
+    message: Optional[str] = None
     admin_username: str
     admin_password: str
 
@@ -69,3 +78,20 @@ def remove_permission(payload: PermissionUpdateRequest) -> Dict:
     _validate_admin(payload.admin_username, payload.admin_password)
     dashboards = remove_dashboard(payload.dashboard, payload.email)
     return {"dashboards": dashboards}
+
+
+# ============ ENDPOINTS DE MANTENIMIENTO ============
+
+@router.get("/maintenance/status")
+def maintenance_status() -> Dict:
+    """Obtiene el estado del banner de mantenimiento (público)."""
+    return get_maintenance_config()
+
+
+@router.post("/maintenance")
+def update_maintenance(payload: MaintenanceRequest) -> Dict:
+    """Actualiza el estado del modo de mantenimiento (solo admins)."""
+    _validate_admin(payload.admin_username, payload.admin_password)
+    result = set_maintenance_mode(payload.enabled, payload.message)
+    return {"maintenance": result}
+

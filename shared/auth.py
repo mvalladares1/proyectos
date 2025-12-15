@@ -205,10 +205,14 @@ def proteger_pagina():
     """
     Decorador/función para proteger una página.
     Si no hay autenticación, muestra mensaje y detiene.
+    También muestra el banner de mantenimiento si está activo.
     """
     if not verificar_autenticacion():
         mostrar_login_requerido()
         return False
+    
+    # Mostrar banner de mantenimiento si está activo
+    mostrar_banner_mantenimiento()
     return True
 
 
@@ -255,3 +259,42 @@ def obtener_info_sesion() -> Optional[Dict[str, Any]]:
     except:
         pass
     return None
+
+
+# ============ BANNER DE MANTENIMIENTO ============
+
+def obtener_estado_mantenimiento() -> Dict[str, Any]:
+    """Obtiene el estado del banner de mantenimiento desde el backend."""
+    try:
+        response = httpx.get(
+            f"{API_URL}/api/v1/permissions/maintenance/status",
+            timeout=5.0
+        )
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return {"enabled": False, "message": ""}
+
+
+def mostrar_banner_mantenimiento():
+    """Muestra el banner de mantenimiento si está activo."""
+    # Cachear el estado brevemente para evitar muchas llamadas
+    cache_key = "_maintenance_cache"
+    cache_time_key = "_maintenance_cache_time"
+    
+    now = datetime.now().timestamp()
+    last_check = st.session_state.get(cache_time_key, 0)
+    
+    # Revalidar cada 30 segundos
+    if now - last_check > 30:
+        config = obtener_estado_mantenimiento()
+        st.session_state[cache_key] = config
+        st.session_state[cache_time_key] = now
+    else:
+        config = st.session_state.get(cache_key, {"enabled": False, "message": ""})
+    
+    if config.get("enabled", False):
+        message = config.get("message", "El sistema está siendo ajustado en este momento.")
+        st.warning(f"⚠️ **AVISO:** {message}")
+

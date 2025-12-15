@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.config import settings
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -40,7 +40,11 @@ DASHBOARD_NAMES = {
 
 DEFAULT_PERMISSIONS: Dict[str, Any] = {
     "dashboards": {slug: [] for slug in ALL_DASHBOARDS},  # Todos públicos por defecto
-    "admins": ["mvalladares@riofuturo.cl"]
+    "admins": ["mvalladares@riofuturo.cl"],
+    "maintenance": {
+        "enabled": False,
+        "message": "El sistema está siendo ajustado en este momento."
+    }
 }
 
 
@@ -166,3 +170,37 @@ def get_all_dashboards() -> List[str]:
     """Retorna la lista de todos los dashboards disponibles."""
     return ALL_DASHBOARDS.copy()
 
+
+# ============ BANNER DE MANTENIMIENTO ============
+
+def get_maintenance_config() -> Dict[str, Any]:
+    """Obtiene la configuración del banner de mantenimiento."""
+    data = _read_permissions()
+    default_maintenance = {
+        "enabled": False,
+        "message": "El sistema está siendo ajustado en este momento."
+    }
+    return data.get("maintenance", default_maintenance)
+
+
+def set_maintenance_mode(enabled: bool, message: Optional[str] = None) -> Dict[str, Any]:
+    """Activa o desactiva el modo de mantenimiento."""
+    data = _read_permissions()
+    if "maintenance" not in data:
+        data["maintenance"] = {
+            "enabled": False,
+            "message": "El sistema está siendo ajustado en este momento."
+        }
+    
+    data["maintenance"]["enabled"] = enabled
+    if message is not None:
+        data["maintenance"]["message"] = message
+    
+    _write_permissions(data)
+    return data["maintenance"]
+
+
+def is_maintenance_mode() -> bool:
+    """Verifica si el modo de mantenimiento está activo."""
+    config = get_maintenance_config()
+    return config.get("enabled", False)
