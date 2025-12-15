@@ -11,7 +11,7 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PERMISSIONS_FILE = DATA_DIR / "permissions.json"
 
-# Lista completa de dashboards disponibles en el sistema
+# Lista completa de dashboards disponibles en el sistema (slugs técnicos)
 ALL_DASHBOARDS = [
     "recepciones",
     "produccion",
@@ -19,10 +19,24 @@ ALL_DASHBOARDS = [
     "stock",
     "containers",
     "rendimiento",
-    "estado_resultado",  # Finanzas
+    "finanzas",
     "compras",
     "permisos",
 ]
+
+# Mapeo de slugs a nombres amigables para mostrar en el panel
+DASHBOARD_NAMES = {
+    "recepciones": "Recepciones",
+    "produccion": "Producción",
+    "bandejas": "Bandejas",
+    "stock": "Stock",
+    "containers": "Containers",
+    "rendimiento": "Rendimiento",
+    "finanzas": "Finanzas",
+    "estado_resultado": "Finanzas",  # Alias para compatibilidad
+    "compras": "Compras",
+    "permisos": "Permisos",
+}
 
 DEFAULT_PERMISSIONS: Dict[str, Any] = {
     "dashboards": {slug: [] for slug in ALL_DASHBOARDS},  # Todos públicos por defecto
@@ -131,3 +145,14 @@ def remove_dashboard(slug: str, email: str) -> Dict[str, List[str]]:
 
 def get_full_permissions() -> Dict[str, Any]:
     return _read_permissions()
+
+
+def get_dashboard_name(slug: str) -> str:
+    """Obtiene el nombre amigable de un dashboard."""
+    return DASHBOARD_NAMES.get(_normalize_dashboard(slug), slug)
+
+
+def get_all_dashboards() -> List[str]:
+    """Retorna la lista de todos los dashboards disponibles."""
+    return ALL_DASHBOARDS.copy()
+

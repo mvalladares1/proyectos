@@ -17,7 +17,7 @@ st.set_page_config(page_title="Finanzas", page_icon="💰", layout="wide")
 if not proteger_pagina():
     st.stop()
 
-if not tiene_acceso_dashboard("estado_resultado"):
+if not tiene_acceso_dashboard("finanzas"):
     st.error("No tienes permisos para ver este dashboard.")
     st.stop()
 
