@@ -245,6 +245,10 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
         if not productor:
             productor = 'Sin Productor'
         
+        # Excluir productor ADMINISTRADOR
+        if productor.upper() == 'ADMINISTRADOR':
+            continue
+        
         if tipo not in agrup:
             agrup[tipo] = {}
         
