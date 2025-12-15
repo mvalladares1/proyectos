@@ -601,6 +601,90 @@ if data:
             ).properties(width=700, height=300)
             
             st.altair_chart(line_rend, use_container_width=True)
+        
+        # === NUEVO: Gráfico de evolución de rendimiento por tipo de fruta ===
+        lotes = st.session_state.rend_lotes
+        if lotes:
+            df_lotes = pd.DataFrame(lotes)
+            
+            if 'tipo_fruta' in df_lotes.columns and 'fecha_recepcion' in df_lotes.columns:
+                st.markdown("---")
+                st.markdown("### 📈 Evolución del Rendimiento por Tipo de Fruta")
+                st.caption("Rendimiento promedio ponderado por volumen, agrupado por día y tipo de fruta")
+                
+                # Preparar datos: agrupar por fecha y tipo de fruta
+                df_tiempo = df_lotes.copy()
+                df_tiempo['fecha'] = pd.to_datetime(df_tiempo['fecha_recepcion']).dt.date
+                
+                # Calcular rendimiento ponderado por día y fruta
+                rendimiento_diario = df_tiempo.groupby(['fecha', 'tipo_fruta']).apply(
+                    lambda x: pd.Series({
+                        'rendimiento': (x['rendimiento'] * x['kg_consumidos']).sum() / x['kg_consumidos'].sum() if x['kg_consumidos'].sum() > 0 else 0,
+                        'kg_total': x['kg_consumidos'].sum(),
+                        'num_lotes': len(x)
+                    })
+                ).reset_index()
+                
+                # Colores personalizados para cada fruta
+                colores_fruta = {
+                    'Arándano': '#4C78A8',
+                    'Frambuesa': '#F58518', 
+                    'Frutilla': '#E45756',
+                    'Mora': '#72B7B2',
+                    'Cereza': '#54A24B',
+                    'Kiwi': '#EECA3B',
+                    'Uva': '#B279A2',
+                    'Manzana': '#FF9DA6',
+                    'Pera': '#9D755D'
+                }
+                
+                # Crear lista de frutas y colores
+                frutas_disponibles = rendimiento_diario['tipo_fruta'].unique().tolist()
+                color_domain = frutas_disponibles
+                color_range = [colores_fruta.get(f, '#999999') for f in frutas_disponibles]
+                
+                # Gráfico de líneas
+                line_fruta = alt.Chart(rendimiento_diario).mark_line(point=True, strokeWidth=2).encode(
+                    x=alt.X('fecha:T', title='Fecha'),
+                    y=alt.Y('rendimiento:Q', title='Rendimiento %', scale=alt.Scale(domain=[50, 110])),
+                    color=alt.Color('tipo_fruta:N', 
+                                   scale=alt.Scale(domain=color_domain, range=color_range),
+                                   legend=alt.Legend(title='Tipo de Fruta')),
+                    strokeDash=alt.StrokeDash('tipo_fruta:N'),
+                    tooltip=[
+                        alt.Tooltip('fecha:T', title='Fecha'),
+                        alt.Tooltip('tipo_fruta:N', title='Fruta'),
+                        alt.Tooltip('rendimiento:Q', title='Rendimiento %', format='.1f'),
+                        alt.Tooltip('kg_total:Q', title='Kg Total', format=',.0f'),
+                        alt.Tooltip('num_lotes:Q', title='Lotes')
+                    ]
+                ).properties(height=400)
+                
+                # Líneas de referencia
+                rule_90 = alt.Chart(pd.DataFrame({'y': [90]})).mark_rule(color='red', strokeDash=[5,5], strokeWidth=1).encode(y='y:Q')
+                rule_95 = alt.Chart(pd.DataFrame({'y': [95]})).mark_rule(color='orange', strokeDash=[5,5], strokeWidth=1).encode(y='y:Q')
+                
+                st.altair_chart(line_fruta + rule_90 + rule_95, use_container_width=True)
+                st.caption("🔴 Línea roja: 90% (Crítico) | 🟡 Línea naranja: 95% (Atención)")
+                
+                # Tabla resumen por fruta
+                st.markdown("#### Resumen por Tipo de Fruta (Período seleccionado)")
+                resumen_fruta = df_lotes.groupby('tipo_fruta').agg({
+                    'kg_consumidos': 'sum',
+                    'kg_producidos': 'sum',
+                    'rendimiento': 'mean'
+                }).reset_index()
+                resumen_fruta['rendimiento_ponderado'] = (
+                    df_lotes.groupby('tipo_fruta').apply(
+                        lambda x: (x['rendimiento'] * x['kg_consumidos']).sum() / x['kg_consumidos'].sum() if x['kg_consumidos'].sum() > 0 else 0
+                    ).values
+                )
+                resumen_fruta.columns = ['Tipo Fruta', 'Kg MP', 'Kg PT', 'Rend. Simple %', 'Rend. Ponderado %']
+                resumen_fruta['Kg MP'] = resumen_fruta['Kg MP'].apply(lambda x: fmt_numero(x, 0))
+                resumen_fruta['Kg PT'] = resumen_fruta['Kg PT'].apply(lambda x: fmt_numero(x, 0))
+                resumen_fruta['Rend. Simple %'] = resumen_fruta['Rend. Simple %'].apply(lambda x: fmt_porcentaje(x))
+                resumen_fruta['Rend. Ponderado %'] = resumen_fruta['Rend. Ponderado %'].apply(lambda x: fmt_porcentaje(x))
+                st.dataframe(resumen_fruta, use_container_width=True, hide_index=True)
     
     # --- TAB 6: Trazabilidad Inversa ---
     with tab6:
