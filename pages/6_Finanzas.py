@@ -775,32 +775,193 @@ if datos:
                         st.write("Estructura vacía")
 
         with tab_detalle:
-            st.subheader("Detalle por Categoría")
-
-            # Selector de categoría
-            categoria_sel = st.selectbox(
-                "Seleccionar categoría",
-                list(estructura.keys())
-            )
-
-            if categoria_sel and categoria_sel in estructura:
-                cat_data = estructura[categoria_sel]
-                st.metric(f"Total {categoria_sel}", f"${cat_data.get('total', 0):,.0f}")
-
-                # Mostrar subcategorías
-                for subcat, subdata in cat_data.get("subcategorias", {}).items():
-                    with st.expander(f"{subcat}: ${subdata.get('total', 0):,.0f}"):
-                        # Mostrar cuentas individuales
-                        cuentas_df = pd.DataFrame([
-                            {"Cuenta": k, "Monto": v}
-                            for k, v in subdata.get("cuentas", {}).items()
-                        ])
-                        if not cuentas_df.empty:
-                            st.dataframe(
-                                cuentas_df.style.format({"Monto": "${:,.0f}"}),
-                                use_container_width=True,
-                                hide_index=True
-                            )
+            st.subheader("📋 Estado de Resultados - Vista Desplegable")
+            st.caption("Haz clic en cada categoría para ver el detalle de subcategorías y cuentas")
+            
+            # Orden de categorías para el EERR
+            orden_categorias = [
+                "1 - INGRESOS",
+                "2 - COSTOS", 
+                "4 - GASTOS DIRECTOS",
+                "6 - GAV",
+                "8 - INTERESES",
+                "10 - INGRESOS NO OPERACIONALES",
+                "11 - GASTOS NO OPERACIONALES"
+            ]
+            
+            # Función para formatear montos
+            def fmt_monto(valor):
+                if valor >= 0:
+                    return f"${valor:,.0f}"
+                else:
+                    return f"-${abs(valor):,.0f}"
+            
+            def fmt_pct(valor):
+                if valor is None or str(valor) == "inf" or pd.isna(valor):
+                    return "-"
+                return f"{valor:.1f}%"
+            
+            # Calcular resultados intermedios
+            ingresos = estructura.get("1 - INGRESOS", {}).get("total", 0)
+            costos = estructura.get("2 - COSTOS", {}).get("total", 0)
+            gastos_directos = estructura.get("4 - GASTOS DIRECTOS", {}).get("total", 0)
+            gav = estructura.get("6 - GAV", {}).get("total", 0)
+            intereses = estructura.get("8 - INTERESES", {}).get("total", 0)
+            ing_no_op = estructura.get("10 - INGRESOS NO OPERACIONALES", {}).get("total", 0)
+            gast_no_op = estructura.get("11 - GASTOS NO OPERACIONALES", {}).get("total", 0)
+            
+            utilidad_bruta = ingresos - costos
+            margen_contribucion = utilidad_bruta - gastos_directos
+            ebit = margen_contribucion - gav
+            util_antes_no_op = ebit - intereses
+            resultado_no_op = ing_no_op - gast_no_op
+            util_antes_impuestos = util_antes_no_op + resultado_no_op
+            
+            # Resultados calculados
+            filas_calculadas = {
+                "3 - UTILIDAD BRUTA": utilidad_bruta,
+                "5 - MARGEN DE CONTRIBUCIÓN": margen_contribucion,
+                "7 - UTILIDAD OPERACIONAL (EBIT)": ebit,
+                "9 - UTILIDAD ANTES DE NO OP.": util_antes_no_op,
+                "12 - RESULTADO NO OPERACIONAL": resultado_no_op,
+                "13 - UTILIDAD ANTES DE IMPUESTOS": util_antes_impuestos
+            }
+            
+            # Mapeo de categorías a PPTO
+            mapeo_ppto = {
+                "1 - INGRESOS": "1 - INGRESOS",
+                "2 - COSTOS": "2 - COSTOS",
+                "4 - GASTOS DIRECTOS": "4 - GASTOS DIRECTOS",
+                "6 - GAV": "6 - GAV",
+                "8 - INTERESES": "8 - INTERESES",
+                "10 - INGRESOS NO OPERACIONALES": "10 - INGRESOS NO OPERACIONALES",
+                "11 - GASTOS NO OPERACIONALES": "11 - GASTOS NO OPERACIONALES"
+            }
+            
+            # === MOSTRAR CADA CATEGORÍA ===
+            for cat in orden_categorias:
+                cat_data = estructura.get(cat, {"total": 0, "subcategorias": {}})
+                real_total = cat_data.get("total", 0)
+                ppto_total = ppto_ytd.get(mapeo_ppto.get(cat, cat), 0)
+                dif = real_total - ppto_total
+                dif_pct = (dif / ppto_total * 100) if ppto_total != 0 else 0
+                
+                # Header de categoría con métricas
+                col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                with col1:
+                    st.markdown(f"### {cat}")
+                with col2:
+                    st.metric("Real YTD", fmt_monto(real_total))
+                with col3:
+                    st.metric("PPTO YTD", fmt_monto(ppto_total))
+                with col4:
+                    delta_color = "normal" if dif >= 0 else "inverse"
+                    # Para costos/gastos, invertir el color (menos es mejor)
+                    if cat.startswith(("2 -", "4 -", "6 -", "8 -", "11 -")):
+                        delta_color = "inverse" if dif >= 0 else "normal"
+                    st.metric("Dif", fmt_monto(dif), delta=fmt_pct(dif_pct))
+                
+                # Subcategorías desplegables
+                subcats = cat_data.get("subcategorias", {})
+                if subcats:
+                    for subcat_nombre, subcat_data in sorted(subcats.items()):
+                        subcat_total = subcat_data.get("total", 0)
+                        with st.expander(f"↳ {subcat_nombre}: {fmt_monto(subcat_total)}"):
+                            # Nivel 3: Subcategorías internas
+                            nivel3 = subcat_data.get("subcategorias", {})
+                            if nivel3:
+                                for n3_nombre, n3_data in sorted(nivel3.items()):
+                                    n3_total = n3_data.get("total", 0)
+                                    st.markdown(f"**{n3_nombre}**: {fmt_monto(n3_total)}")
+                                    
+                                    # Cuentas individuales
+                                    cuentas = n3_data.get("cuentas", {})
+                                    if cuentas:
+                                        df_cuentas = pd.DataFrame([
+                                            {"Cuenta": k, "Monto": v}
+                                            for k, v in sorted(cuentas.items(), key=lambda x: abs(x[1]), reverse=True)
+                                        ])
+                                        st.dataframe(
+                                            df_cuentas.style.format({"Monto": "${:,.0f}"}),
+                                            use_container_width=True,
+                                            hide_index=True,
+                                            height=min(len(df_cuentas) * 35 + 38, 300)
+                                        )
+                            else:
+                                # Si no hay nivel 3, mostrar cuentas directamente
+                                cuentas = subcat_data.get("cuentas", {})
+                                if cuentas:
+                                    df_cuentas = pd.DataFrame([
+                                        {"Cuenta": k, "Monto": v}
+                                        for k, v in sorted(cuentas.items(), key=lambda x: abs(x[1]), reverse=True)
+                                    ])
+                                    st.dataframe(
+                                        df_cuentas.style.format({"Monto": "${:,.0f}"}),
+                                        use_container_width=True,
+                                        hide_index=True,
+                                        height=min(len(df_cuentas) * 35 + 38, 300)
+                                    )
+                
+                st.markdown("---")
+                
+                # Insertar filas calculadas después de ciertas categorías
+                if cat == "2 - COSTOS":
+                    st.markdown("### 🟦 3 - UTILIDAD BRUTA")
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col2:
+                        st.metric("Real YTD", fmt_monto(utilidad_bruta))
+                    ppto_ub = ppto_ytd.get("1 - INGRESOS", 0) - ppto_ytd.get("2 - COSTOS", 0)
+                    with col3:
+                        st.metric("PPTO YTD", fmt_monto(ppto_ub))
+                    with col4:
+                        dif_ub = utilidad_bruta - ppto_ub
+                        st.metric("Dif", fmt_monto(dif_ub))
+                    st.markdown("---")
+                    
+                elif cat == "4 - GASTOS DIRECTOS":
+                    st.markdown("### 🟦 5 - MARGEN DE CONTRIBUCIÓN")
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col2:
+                        st.metric("Real YTD", fmt_monto(margen_contribucion))
+                    ppto_mc = ppto_ytd.get("1 - INGRESOS", 0) - ppto_ytd.get("2 - COSTOS", 0) - ppto_ytd.get("4 - GASTOS DIRECTOS", 0)
+                    with col3:
+                        st.metric("PPTO YTD", fmt_monto(ppto_mc))
+                    with col4:
+                        dif_mc = margen_contribucion - ppto_mc
+                        st.metric("Dif", fmt_monto(dif_mc))
+                    st.markdown("---")
+                    
+                elif cat == "6 - GAV":
+                    st.markdown("### 🟦 7 - UTILIDAD OPERACIONAL (EBIT)")
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col2:
+                        st.metric("Real YTD", fmt_monto(ebit))
+                    ppto_ebit = ppto_ytd.get("1 - INGRESOS", 0) - ppto_ytd.get("2 - COSTOS", 0) - ppto_ytd.get("4 - GASTOS DIRECTOS", 0) - ppto_ytd.get("6 - GAV", 0)
+                    with col3:
+                        st.metric("PPTO YTD", fmt_monto(ppto_ebit))
+                    with col4:
+                        dif_ebit = ebit - ppto_ebit
+                        st.metric("Dif", fmt_monto(dif_ebit))
+                    st.markdown("---")
+                    
+                elif cat == "8 - INTERESES":
+                    st.markdown("### 🟦 9 - UTILIDAD ANTES DE NO OP.")
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col2:
+                        st.metric("Real YTD", fmt_monto(util_antes_no_op))
+                    st.markdown("---")
+                    
+                elif cat == "11 - GASTOS NO OPERACIONALES":
+                    st.markdown("### 🟦 12 - RESULTADO NO OPERACIONAL")
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col2:
+                        st.metric("Real YTD", fmt_monto(resultado_no_op))
+                    st.markdown("---")
+                    
+                    st.markdown("### 🟩 13 - UTILIDAD ANTES DE IMPUESTOS")
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col2:
+                        st.metric("Real YTD", fmt_monto(util_antes_impuestos))
 
         st.divider()
 
