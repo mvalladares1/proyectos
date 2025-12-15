@@ -466,23 +466,28 @@ if datos:
             agregar_fila("13 - UTILIDAD ANTES DE IMPUESTOS", uai_real, uai_ppto, es_calculado=True)
 
             df_eerr = pd.DataFrame(eerr_data)
-
+            
+            # Columnas a mostrar
+            cols_mostrar = ["Concepto", "Real YTD", "PPTO YTD", "Dif YTD", "Dif %"]
+            df_display = df_eerr[cols_mostrar].copy()
+            
             # Función para resaltar filas calculadas
             def resaltar_calculados(row):
-                if row.get("es_calculado", False):
-                    return ["background-color: #2d3748; font-weight: bold"] * len(row)
-                return [""] * len(row)
+                idx = row.name
+                if df_eerr.iloc[idx].get("es_calculado", False):
+                    return ["background-color: #2d3748; font-weight: bold"] * len(cols_mostrar)
+                return [""] * len(cols_mostrar)
 
             # Mostrar tabla con formato
             st.dataframe(
-                df_eerr[["Concepto", "Real YTD", "PPTO YTD", "Dif YTD", "Dif %"]].style
+                df_display.style
                 .format({
                     "Real YTD": "${:,.0f}",
                     "PPTO YTD": "${:,.0f}",
                     "Dif YTD": "${:,.0f}",
                     "Dif %": "{:.1f}%"
                 })
-                .apply(lambda x: resaltar_calculados(df_eerr.iloc[x.name]), axis=1),
+                .apply(resaltar_calculados, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
