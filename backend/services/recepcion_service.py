@@ -44,6 +44,9 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         "VILKUN": 217
     }
     
+    # DEBUG: Log the origen parameter received
+    print(f"[DEBUG recepcion_service] origen recibido: {origen}, tipo: {type(origen)}")
+    
     # Determinar picking_type_ids a consultar
     if origen and len(origen) > 0:
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
@@ -52,6 +55,9 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     
     if not picking_type_ids:
         picking_type_ids = [1, 217]
+    
+    # DEBUG: Log the picking_type_ids being used
+    print(f"[DEBUG recepcion_service] picking_type_ids a usar: {picking_type_ids}")
     
     # ============ PASO 1: Obtener todas las recepciones ============
     domain = [

@@ -536,6 +536,11 @@ with tab_kpis:
         df_filtrada = df_filtrada.copy()
         df_filtrada['bandejas'] = bandejas_vals
         df_filtrada['tiene_calidad'] = df_filtrada['calific_final'].notna() & (df_filtrada['calific_final'] != '')
+        
+        # Verificar si existe columna 'origen' (datos antiguos pueden no tenerla)
+        if 'origen' not in df_filtrada.columns:
+            df_filtrada['origen'] = 'RFP'  # Default para datos antiguos
+        
         cols_mostrar = [
             "albaran", "fecha", "productor", "tipo_fruta", "origen", "guia_despacho",
             "bandejas", "kg_recepcionados", "calific_final", "total_iqf", "total_block", "tiene_calidad"

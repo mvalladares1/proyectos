@@ -28,6 +28,9 @@ async def get_recepciones(
         origen: Lista de orígenes. Valores válidos: "RFP" (ID 1), "VILKUN" (ID 217).
                 Si no se especifica, muestra recepciones de ambos orígenes.
     """
+    # DEBUG: Log incoming origen parameter
+    print(f"[DEBUG router] origen recibido en endpoint: {origen}, tipo: {type(origen)}")
+    
     try:
         data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen)
         return data
