@@ -53,9 +53,30 @@ def _get_week_start_date(week_num: int) -> datetime:
     return base_date + timedelta(weeks=weeks_offset)
 
 
-def load_proyecciones_consolidado() -> pd.DataFrame:
+# Cache para evitar recargar el Excel en cada petición
+from functools import lru_cache
+import time
+
+_cache_timestamp = 0
+_cache_ttl = 300  # 5 minutos en segundos
+_cached_df = None
+
+def _get_cached_proyecciones():
+    """Obtiene proyecciones con cache de 5 minutos."""
+    global _cache_timestamp, _cached_df
+    current_time = time.time()
+    
+    if _cached_df is None or (current_time - _cache_timestamp) > _cache_ttl:
+        _cached_df = _load_proyecciones_from_excel()
+        _cache_timestamp = current_time
+        print(f"[DEBUG abastecimiento] Cache renovado a las {datetime.now()}")
+    
+    return _cached_df
+
+
+def _load_proyecciones_from_excel() -> pd.DataFrame:
     """
-    Carga los datos de proyección consolidados del Excel.
+    Carga los datos de proyección consolidados del Excel (función interna).
     
     Returns:
         DataFrame con columnas: productor, planta, especie, semana, kg_proyectados
@@ -156,6 +177,13 @@ def load_proyecciones_consolidado() -> pd.DataFrame:
     
     return df_long
 
+
+def load_proyecciones_consolidado() -> pd.DataFrame:
+    """
+    Carga los datos de proyección consolidados del Excel (con cache).
+    El cache se renueva cada 5 minutos.
+    """
+    return _get_cached_proyecciones().copy()
 
 def get_proyecciones_por_semana(
     planta: Optional[List[str]] = None,

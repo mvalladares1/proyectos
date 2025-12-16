@@ -1214,7 +1214,6 @@ with tab_curva:
         df_chart['sort_key'] = df_chart['semana'].apply(lambda x: x if x >= 47 else x + 100)
         df_chart = df_chart.sort_values('sort_key')
         
-        # Crear gráfico con Altair
         # Melt para formato largo
         df_melt = df_chart.melt(
             id_vars=['semana', 'semana_label', 'sort_key'],
@@ -1223,82 +1222,167 @@ with tab_curva:
             value_name='Kg'
         )
         df_melt['Tipo'] = df_melt['Tipo'].replace({
-            'kg_proyectados': '📋 Proyectado (Excel)',
-            'kg_sistema': '✅ Recepcionado (Sistema)'
+            'kg_proyectados': 'Proyectado',
+            'kg_sistema': 'Recepcionado'
         })
         
-        chart = alt.Chart(df_melt).mark_bar(opacity=0.8).encode(
+        chart = alt.Chart(df_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
             x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
-            y=alt.Y('Kg:Q', title='Kilogramos'),
-            color=alt.Color('Tipo:N', scale=alt.Scale(
-                domain=['📋 Proyectado (Excel)', '✅ Recepcionado (Sistema)'],
-                range=['#3498db', '#2ecc71']
-            )),
+            y=alt.Y('Kg:Q', title='Kilogramos', axis=alt.Axis(format=',.0f')),
+            color=alt.Color('Tipo:N', 
+                scale=alt.Scale(
+                    domain=['Proyectado', 'Recepcionado'],
+                    range=['#3498db', '#2ecc71']
+                ),
+                legend=alt.Legend(title="Tipo", orient="top")
+            ),
             xOffset='Tipo:N',
-            tooltip=['semana_label', 'Tipo', alt.Tooltip('Kg:Q', format=',.0f')]
+            tooltip=[
+                alt.Tooltip('semana_label:N', title='Semana'),
+                alt.Tooltip('Tipo:N', title='Tipo'),
+                alt.Tooltip('Kg:Q', title='Kilogramos', format=',.0f')
+            ]
         ).properties(
-            width=800,
-            height=400,
-            title='Kg Proyectados vs Recepcionados por Semana'
+            height=350,
+            title=alt.TitleParams(
+                text='Kg Proyectados vs Recepcionados por Semana',
+                fontSize=16,
+                anchor='start'
+            )
+        ).configure_axis(
+            labelFontSize=11,
+            titleFontSize=12
+        ).configure_legend(
+            labelFontSize=12,
+            titleFontSize=12
         )
         
         st.altair_chart(chart, use_container_width=True)
         
-        # Tabla resumen
-        st.markdown("### 📋 Resumen por Semana")
-        df_tabla = df_chart[['semana', 'semana_label', 'kg_proyectados', 'kg_sistema']].copy()
-        df_tabla['% Cumplimiento'] = (df_tabla['kg_sistema'] / df_tabla['kg_proyectados'] * 100).fillna(0)
-        df_tabla['Diferencia'] = df_tabla['kg_sistema'] - df_tabla['kg_proyectados']
-        
-        # Formatear
-        df_tabla['Kg Proyectados'] = df_tabla['kg_proyectados'].apply(lambda x: fmt_numero(x, 0))
-        df_tabla['Kg Sistema'] = df_tabla['kg_sistema'].apply(lambda x: fmt_numero(x, 0))
-        df_tabla['% Cumplimiento'] = df_tabla['% Cumplimiento'].apply(lambda x: f"{fmt_numero(x, 1)}%")
-        df_tabla['Diferencia'] = df_tabla['Diferencia'].apply(lambda x: fmt_numero(x, 0))
-        
-        st.dataframe(
-            df_tabla[['semana_label', 'Kg Proyectados', 'Kg Sistema', '% Cumplimiento', 'Diferencia']].rename(
-                columns={'semana_label': 'Semana'}
-            ),
-            use_container_width=True,
-            hide_index=True
-        )
-        
-        # KPIs totales
-        st.markdown("### 📊 Totales del Período")
+        # ============ TOTALES DEL PERÍODO (movido arriba para mayor visibilidad) ============
+        st.markdown("---")
         total_proy = df_chart['kg_proyectados'].sum()
         total_sist = df_chart['kg_sistema'].sum()
         cumpl_total = (total_sist / total_proy * 100) if total_proy > 0 else 0
+        diff = total_sist - total_proy
+        
+        # KPIs con mejor diseño usando contenedores coloreados
+        st.markdown("### 🎯 Resumen de Cumplimiento")
         
         kpi_cols = st.columns(4)
         with kpi_cols[0]:
-            st.metric("Total Proyectado", fmt_numero(total_proy, 0) + " Kg")
-        with kpi_cols[1]:
-            st.metric("Total Recepcionado", fmt_numero(total_sist, 0) + " Kg")
-        with kpi_cols[2]:
-            st.metric("Cumplimiento", f"{fmt_numero(cumpl_total, 1)}%")
-        with kpi_cols[3]:
-            diff = total_sist - total_proy
-            st.metric("Diferencia", fmt_numero(diff, 0) + " Kg", delta=fmt_numero(diff, 0))
-    else:
-        st.info("👆 Selecciona los filtros y presiona **Cargar Curva de Abastecimiento** para ver la comparativa.")
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">📋 PROYECTADO</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(total_proy, 0)} Kg</p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        with st.expander("ℹ️ ¿Cómo funciona?"):
-            st.markdown("""
-            ### Curva de Abastecimiento
-            
-            Esta herramienta te permite comparar las **proyecciones de abastecimiento** (planificadas en Excel) 
-            con las **recepciones reales** registradas en el sistema.
-            
-            **Datos Proyectados:** Provienen del archivo Excel de planificación de abastecimiento, 
-            organizados por semana, especie y planta.
-            
-            **Datos del Sistema:** Son las recepciones de materia prima registradas en Odoo,
-            agrupadas por semana para la comparación.
-            
-            **Uso:**
-            1. Selecciona las plantas a comparar (RFP, VILKÚN o ambas)
-            2. Opcionalmente filtra por especie
-            3. Define el período de fechas para los datos del sistema
-            4. Presiona "Cargar Curva de Abastecimiento"
-            """)
+        with kpi_cols[1]:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">✅ RECEPCIONADO</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(total_sist, 0)} Kg</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_cols[2]:
+            # Color según cumplimiento
+            if cumpl_total >= 80:
+                color_cumpl = "#2ecc71"
+            elif cumpl_total >= 50:
+                color_cumpl = "#f39c12"
+            else:
+                color_cumpl = "#e74c3c"
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, {color_cumpl} 0%, {color_cumpl}99 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">📊 CUMPLIMIENTO</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(cumpl_total, 1)}%</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_cols[3]:
+            color_diff = "#e74c3c" if diff < 0 else "#2ecc71"
+            icon_diff = "📉" if diff < 0 else "📈"
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">{icon_diff} DIFERENCIA</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(diff, 0)} Kg</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Barra de progreso visual
+        st.markdown("<br>", unsafe_allow_html=True)
+        progress_val = min(cumpl_total / 100, 1.0)
+        st.progress(progress_val, text=f"Avance de abastecimiento: {fmt_numero(cumpl_total, 1)}%")
+        
+        # ============ TABLA RESUMEN ============
+        st.markdown("---")
+        st.markdown("### 📋 Detalle por Semana")
+        
+        df_tabla = df_chart[['semana', 'semana_label', 'kg_proyectados', 'kg_sistema']].copy()
+        df_tabla['pct_cumplimiento'] = (df_tabla['kg_sistema'] / df_tabla['kg_proyectados'] * 100).fillna(0)
+        df_tabla['diferencia'] = df_tabla['kg_sistema'] - df_tabla['kg_proyectados']
+        
+        # Usar column_config para mejor formato
+        st.dataframe(
+            df_tabla[['semana_label', 'kg_proyectados', 'kg_sistema', 'pct_cumplimiento', 'diferencia']],
+            column_config={
+                "semana_label": st.column_config.TextColumn("Semana", width="small"),
+                "kg_proyectados": st.column_config.NumberColumn(
+                    "Kg Proyectados",
+                    format="%.0f",
+                    help="Kilogramos proyectados según planificación"
+                ),
+                "kg_sistema": st.column_config.NumberColumn(
+                    "Kg Recepcionados",
+                    format="%.0f",
+                    help="Kilogramos recepcionados en el sistema"
+                ),
+                "pct_cumplimiento": st.column_config.ProgressColumn(
+                    "Cumplimiento",
+                    format="%.1f%%",
+                    min_value=0,
+                    max_value=100,
+                    help="Porcentaje de cumplimiento"
+                ),
+                "diferencia": st.column_config.NumberColumn(
+                    "Diferencia",
+                    format="%.0f",
+                    help="Diferencia entre recepcionado y proyectado"
+                ),
+            },
+            use_container_width=True,
+            hide_index=True,
+            height=400
+        )
+        
+    else:
+        # Estado inicial con mejor diseño
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px; border-radius: 15px; text-align: center; border: 1px solid #3498db33;">
+            <p style="font-size: 48px; margin: 0;">📈</p>
+            <h3 style="color: #fff; margin: 15px 0 10px 0;">Curva de Abastecimiento</h3>
+            <p style="color: #aaa; margin: 0;">Selecciona los filtros arriba y presiona <b>Cargar Curva de Abastecimiento</b> para ver la comparativa entre lo proyectado y lo recepcionado.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        with st.expander("ℹ️ ¿Cómo funciona?", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("""
+                **📋 Datos Proyectados**
+                - Provienen del Excel de planificación
+                - Organizados por semana, especie y planta
+                - Representan la meta de abastecimiento
+                """)
+            with col2:
+                st.markdown("""
+                **✅ Datos del Sistema**
+                - Recepciones registradas en Odoo
+                - Agrupadas por semana
+                - Actualizados en tiempo real
+                """)
+
