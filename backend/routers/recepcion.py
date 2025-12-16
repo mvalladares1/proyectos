@@ -70,10 +70,11 @@ async def get_recepciones_report_xlsx(
     fecha_fin: str,
     include_prev_week: bool = False,
     include_month_accum: bool = False,
+    solo_hechas: bool = True,
 ):
     """Genera y entrega un Excel (.xlsx) con detalle de recepciones y productos desglosados."""
     try:
-        xlsx_bytes = generate_recepciones_excel(username, password, fecha_inicio, fecha_fin, include_prev_week, include_month_accum)
+        xlsx_bytes = generate_recepciones_excel(username, password, fecha_inicio, fecha_fin, include_prev_week, include_month_accum, solo_hechas=solo_hechas)
         buf = BytesIO(xlsx_bytes)
         filename = f"informe_recepciones_{fecha_inicio}_a_{fecha_fin}.xlsx"
         return StreamingResponse(buf, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={
