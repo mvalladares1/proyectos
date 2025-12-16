@@ -1092,7 +1092,7 @@ with tab_curva:
     
     with col_row1_3:
         st.markdown("**Período:**")
-        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 12, 24), format="DD/MM/YYYY", key="curva_desde")
+        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 11, 24), format="DD/MM/YYYY", key="curva_desde")
         curva_fecha_fin = datetime.now()
         st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (hoy)")
     
@@ -1318,15 +1318,6 @@ with tab_curva:
                     df_sistema_semana['sort_key'] = df_sistema_semana.apply(
                         lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
                     )
-                    
-                    # Debug info
-                    with st.expander("🔍 Debug: Datos del sistema (igual que KPIs)", expanded=False):
-                        st.write(f"Total recepciones cargadas: {len(recepciones)}")
-                        st.write(f"Semanas con datos: {len(df_sistema_semana)}")
-                        if especies_filtro:
-                            st.write(f"Filtro activo: {especies_filtro}")
-                        st.write("Kg por semana (usando Kg Hechos de productos):")
-                        st.dataframe(df_sistema_semana[['semana', 'kg_sistema']].sort_values('semana'))
             
             # Mostrar info de filtro activo
             if especies_filtro:
@@ -1509,21 +1500,22 @@ with tab_curva:
                 """, unsafe_allow_html=True)
             
             with kpi_cols2[3]:
-                # Semanas en df_chart que NO están en df_periodo
-                semanas_restantes = len(df_chart[df_chart['sort_key'] > sort_key_actual])
+                # Semanas en df_chart que aún no han pasado
+                semanas_futuras = df_chart[df_chart['sort_key'] > sort_key_actual]
+                semanas_restantes = len(semanas_futuras)
+                
+                # Si no hay semanas restantes, la temporada finalizó
+                if semanas_restantes == 0:
+                    texto_semanas = "Finalizada"
+                else:
+                    texto_semanas = str(semanas_restantes)
+                
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%); padding: 15px; border-radius: 10px; text-align: center;">
                     <p style="margin: 0; color: #fff; font-size: 10px; opacity: 0.8;">📅 SEMANAS RESTANTES</p>
-                    <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{semanas_restantes}</p>
+                    <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{texto_semanas}</p>
                 </div>
                 """, unsafe_allow_html=True)
-            
-            # Debug: mostrar semanas disponibles
-            with st.expander("🔍 Debug: Semanas en proyección", expanded=False):
-                st.write(f"Semana actual calculada: S{semana_actual} (año {año_actual}, sort_key={sort_key_actual})")
-                st.write(f"Semanas en proyección (total): {sorted(df_chart['semana'].tolist())}")
-                st.write(f"Semanas en período (hasta hoy): {sorted(df_periodo['semana'].tolist()) if not df_periodo.empty else []}")
-                st.write(f"Semanas restantes: {sorted(df_chart[df_chart['sort_key'] > sort_key_actual]['semana'].tolist())}")
             
             # ============ TABLA RESUMEN ============
             st.markdown("---")
