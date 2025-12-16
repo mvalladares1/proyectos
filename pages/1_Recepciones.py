@@ -1092,7 +1092,7 @@ with tab_curva:
     
     with col_row1_3:
         st.markdown("**Período:**")
-        curva_fecha_inicio = st.date_input("Desde", datetime(2024, 11, 24), format="DD/MM/YYYY", key="curva_desde")
+        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 12, 24), format="DD/MM/YYYY", key="curva_desde")
         curva_fecha_fin = datetime.now()
         st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (hoy)")
     
@@ -1234,32 +1234,99 @@ with tab_curva:
             df_sistema_semana = None
             if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
                 recepciones = st.session_state.curva_sistema_raw
-                df_sist = pd.DataFrame(recepciones)
                 
-                if not df_sist.empty and 'fecha' in df_sist.columns:
-                    # Aplicar normalización de especie
-                    df_sist['especie_normalizada'] = df_sist['tipo_fruta'].apply(normalizar_tipo_fruta)
+                # Procesar recepciones igual que KPIs:
+                # - Iterar sobre productos
+                # - Sumar Kg Hechos por semana
+                # - Filtrar por especie+manejo (normalizado)
+                kg_por_semana = {}
+                
+                for rec in recepciones:
+                    tipo_fruta = (rec.get('tipo_fruta') or '').strip()
+                    if not tipo_fruta:
+                        continue
                     
-                    # Filtrar por especie DINÁMICAMENTE si hay filtro activo
-                    if especies_filtro:
-                        df_sist = df_sist[df_sist['especie_normalizada'].isin(especies_filtro)]
+                    # Obtener semana de la fecha
+                    fecha_str = rec.get('fecha')
+                    if not fecha_str:
+                        continue
+                    try:
+                        fecha_dt = pd.to_datetime(fecha_str)
+                        semana = fecha_dt.isocalendar().week
+                        año = fecha_dt.year
+                    except:
+                        continue
                     
-                    if not df_sist.empty:
-                        df_sist['fecha_dt'] = pd.to_datetime(df_sist['fecha'])
-                        df_sist['semana'] = df_sist['fecha_dt'].dt.isocalendar().week.astype(int)
-                        df_sist['año'] = df_sist['fecha_dt'].dt.year
+                    # Procesar productos igual que KPIs
+                    productos = rec.get('productos', []) or []
+                    for p in productos:
+                        categoria = (p.get('Categoria') or '').strip().upper()
+                        # Excluir BANDEJAS igual que KPIs
+                        if 'BANDEJ' in categoria:
+                            continue
                         
-                        # Ajustar semana para ordenamiento
-                        df_sist['sort_key'] = df_sist.apply(
-                            lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
-                        )
+                        kg_hechos = p.get('Kg Hechos', 0) or 0
+                        if kg_hechos <= 0:
+                            continue
                         
-                        # Agrupar por semana
-                        df_sistema_semana = df_sist.groupby('semana').agg({
-                            'kg_recepcionados': 'sum'
-                        }).reset_index()
-                        df_sistema_semana['semana_label'] = 'S' + df_sistema_semana['semana'].astype(str)
-                        df_sistema_semana = df_sistema_semana.rename(columns={'kg_recepcionados': 'kg_sistema'})
+                        # Obtener manejo del producto
+                        manejo = (p.get('Manejo') or '').strip()
+                        if not manejo:
+                            manejo = 'Sin Manejo'
+                        
+                        # Normalizar especie base
+                        tf = tipo_fruta.upper()
+                        if 'ARANDANO' in tf or 'ARÁNDANO' in tf or 'BLUEBERRY' in tf:
+                            especie_base = 'Arándano'
+                        elif 'FRAM' in tf or 'FRAMBUESA' in tf or 'MEEKER' in tf or 'HERITAGE' in tf or 'WAKEFIELD' in tf or 'RASPBERRY' in tf:
+                            especie_base = 'Frambuesa'
+                        elif 'FRUTILLA' in tf or 'FRESA' in tf or 'STRAWBERRY' in tf:
+                            especie_base = 'Frutilla'
+                        elif 'MORA' in tf or 'BLACKBERRY' in tf:
+                            especie_base = 'Mora'
+                        elif 'CEREZA' in tf or 'CHERRY' in tf:
+                            especie_base = 'Cereza'
+                        else:
+                            especie_base = 'Otro'
+                        
+                        # Determinar manejo normalizado (Convencional / Orgánico)
+                        manejo_upper = manejo.upper()
+                        if 'ORGAN' in manejo_upper:
+                            manejo_norm = 'Orgánico'
+                        elif 'CONVENCIONAL' in manejo_upper:
+                            manejo_norm = 'Convencional'
+                        else:
+                            manejo_norm = 'Convencional'  # Por defecto
+                        
+                        especie_manejo = f"{especie_base} {manejo_norm}"
+                        
+                        # Filtrar por especie si hay filtro activo
+                        if especies_filtro and especie_manejo not in especies_filtro:
+                            continue
+                        
+                        # Acumular kg por semana
+                        if semana not in kg_por_semana:
+                            kg_por_semana[semana] = {'kg': 0, 'año': año}
+                        kg_por_semana[semana]['kg'] += kg_hechos
+                
+                # Convertir a DataFrame
+                if kg_por_semana:
+                    data_semanas = [{'semana': s, 'kg_sistema': v['kg'], 'año': v['año']} 
+                                    for s, v in kg_por_semana.items()]
+                    df_sistema_semana = pd.DataFrame(data_semanas)
+                    df_sistema_semana['semana_label'] = 'S' + df_sistema_semana['semana'].astype(str)
+                    df_sistema_semana['sort_key'] = df_sistema_semana.apply(
+                        lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
+                    )
+                    
+                    # Debug info
+                    with st.expander("🔍 Debug: Datos del sistema (igual que KPIs)", expanded=False):
+                        st.write(f"Total recepciones cargadas: {len(recepciones)}")
+                        st.write(f"Semanas con datos: {len(df_sistema_semana)}")
+                        if especies_filtro:
+                            st.write(f"Filtro activo: {especies_filtro}")
+                        st.write("Kg por semana (usando Kg Hechos de productos):")
+                        st.dataframe(df_sistema_semana[['semana', 'kg_sistema']].sort_values('semana'))
             
             # Mostrar info de filtro activo
             if especies_filtro:
@@ -1354,7 +1421,7 @@ with tab_curva:
             
             # Cumplimiento del período (hasta hoy)
             cumpl_periodo = (total_sist_periodo / total_proy_periodo * 100) if total_proy_periodo > 0 else 0
-            diff_periodo = total_sist_periodo - total_proy_periodo
+            diff_periodo = abs(total_proy_periodo - total_sist_periodo)  # Siempre positivo
             
             # KPIs con mejor diseño
             st.markdown("### 🎯 Resumen de Cumplimiento")
@@ -1396,11 +1463,10 @@ with tab_curva:
                 """, unsafe_allow_html=True)
             
             with kpi_cols1[3]:
-                color_diff = "#e74c3c" if diff_periodo < 0 else "#2ecc71"
-                icon_diff = "📉" if diff_periodo < 0 else "📈"
+                # Siempre rojo porque es lo que falta
                 st.markdown(f"""
-                <div style="background: linear-gradient(135deg, {color_diff} 0%, {color_diff}cc 100%); padding: 20px; border-radius: 10px; text-align: center;">
-                    <p style="margin: 0; color: #fff; font-size: 11px; opacity: 0.9;">{icon_diff} DIFERENCIA PERÍODO</p>
+                <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                    <p style="margin: 0; color: #fff; font-size: 11px; opacity: 0.9;">📉 DIFERENCIA PERÍODO</p>
                     <p style="margin: 5px 0 0 0; color: #fff; font-size: 22px; font-weight: bold;">{fmt_numero(diff_periodo, 0)} Kg</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1443,13 +1509,21 @@ with tab_curva:
                 """, unsafe_allow_html=True)
             
             with kpi_cols2[3]:
-                semanas_restantes = len(df_chart) - len(df_periodo)
+                # Semanas en df_chart que NO están en df_periodo
+                semanas_restantes = len(df_chart[df_chart['sort_key'] > sort_key_actual])
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%); padding: 15px; border-radius: 10px; text-align: center;">
                     <p style="margin: 0; color: #fff; font-size: 10px; opacity: 0.8;">📅 SEMANAS RESTANTES</p>
                     <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{semanas_restantes}</p>
                 </div>
                 """, unsafe_allow_html=True)
+            
+            # Debug: mostrar semanas disponibles
+            with st.expander("🔍 Debug: Semanas en proyección", expanded=False):
+                st.write(f"Semana actual calculada: S{semana_actual} (año {año_actual}, sort_key={sort_key_actual})")
+                st.write(f"Semanas en proyección (total): {sorted(df_chart['semana'].tolist())}")
+                st.write(f"Semanas en período (hasta hoy): {sorted(df_periodo['semana'].tolist()) if not df_periodo.empty else []}")
+                st.write(f"Semanas restantes: {sorted(df_chart[df_chart['sort_key'] > sort_key_actual]['semana'].tolist())}")
             
             # ============ TABLA RESUMEN ============
             st.markdown("---")
