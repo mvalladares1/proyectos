@@ -1067,16 +1067,36 @@ with tab_curva:
     st.subheader("📈 Curva de Abastecimiento")
     st.caption("Comparación entre kilogramos proyectados (Excel) vs recepcionados (Sistema)")
     
-    # --- Filtros ---
+    # --- Filtros organizados ---
     st.markdown("### 🔍 Filtros")
-    col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
     
-    # Filtro de plantas
-    with col_f1:
+    # Fila 1: Plantas y Solo hechas
+    col_row1_1, col_row1_2, col_row1_3 = st.columns([1, 1, 1])
+    
+    with col_row1_1:
         st.markdown("**Origen/Planta:**")
-        curva_rfp = st.checkbox("🏭 RFP", value=True, key="curva_rfp")
-        curva_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="curva_vilkun")
+        col_pl1, col_pl2 = st.columns(2)
+        with col_pl1:
+            curva_rfp = st.checkbox("🏭 RFP", value=True, key="curva_rfp")
+        with col_pl2:
+            curva_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="curva_vilkun")
     
+    with col_row1_2:
+        st.markdown("**Estado recepciones:**")
+        curva_solo_hechas = st.checkbox(
+            "Solo recepciones hechas", 
+            value=True, 
+            key="curva_solo_hechas",
+            help="Activa para ver solo recepciones completadas/validadas"
+        )
+    
+    with col_row1_3:
+        st.markdown("**Período:**")
+        curva_fecha_inicio = st.date_input("Desde", datetime(2024, 11, 24), format="DD/MM/YYYY", key="curva_desde")
+        curva_fecha_fin = datetime.now()
+        st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (hoy)")
+    
+    # Fila 2: Especies
     # Obtener especies disponibles desde el backend
     especies_disponibles = []
     try:
@@ -1086,21 +1106,17 @@ with tab_curva:
     except:
         pass
     
-    with col_f2:
-        especies_filtro = st.multiselect(
-            "Especie", 
-            especies_disponibles, 
-            default=[],
-            placeholder="Todas las especies",
-            key="curva_especie"
-        )
+    st.markdown("**Filtrar por especie:**")
+    especies_filtro = st.multiselect(
+        "Especies", 
+        especies_disponibles, 
+        default=[],
+        placeholder="Seleccionar especies (dejar vacío = todas)",
+        key="curva_especie",
+        label_visibility="collapsed"
+    )
     
-    with col_f3:
-        # Fecha desde para datos del sistema (Hasta siempre es fecha actual)
-        st.markdown("**Período para datos del sistema:**")
-        curva_fecha_inicio = st.date_input("Desde", datetime(2024, 11, 18), format="DD/MM/YYYY", key="curva_desde")
-        curva_fecha_fin = datetime.now()  # Siempre fecha actual
-        st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (fecha actual)")
+    st.markdown("---")
     
     # Botón para cargar curva
     if st.button("📊 Cargar Curva de Abastecimiento", key="btn_curva", type="primary"):
@@ -1114,6 +1130,9 @@ with tab_curva:
         if not plantas_list:
             st.warning("Debes seleccionar al menos una planta (RFP o VILKÚN)")
         else:
+            # Guardar especies filtradas en session_state para usarlas después
+            st.session_state.curva_especies_filtro = especies_filtro.copy() if especies_filtro else []
+            
             with st.spinner("Cargando datos proyectados y del sistema..."):
                 # 1. Obtener proyecciones del Excel
                 params_proy = {"planta": plantas_list}
@@ -1133,13 +1152,13 @@ with tab_curva:
                     st.error(f"Error de conexión: {e}")
                     st.session_state.curva_proyecciones = None
                 
-                # 2. Obtener recepciones del sistema
+                # 2. Obtener recepciones del sistema (todas, filtramos después por especie)
                 params_sist = {
                     "username": username,
                     "password": password,
                     "fecha_inicio": curva_fecha_inicio.strftime("%Y-%m-%d"),
                     "fecha_fin": curva_fecha_fin.strftime("%Y-%m-%d"),
-                    "solo_hechas": True,
+                    "solo_hechas": curva_solo_hechas,  # Usar el checkbox
                     "origen": plantas_list
                 }
                 try:
@@ -1174,26 +1193,60 @@ with tab_curva:
             df_sist = pd.DataFrame(recepciones)
             
             if not df_sist.empty and 'fecha' in df_sist.columns:
+                # Obtener especies filtradas desde session_state
+                especies_filtradas = st.session_state.get('curva_especies_filtro', [])
+                
                 # Filtrar por especie si hay filtro
-                if especies_filtro:
-                    # Mapear tipo_fruta a especie (pueden tener nombres similares)
-                    df_sist = df_sist[df_sist['tipo_fruta'].isin(especies_filtro)]
+                if especies_filtradas:
+                    # Función para normalizar tipo_fruta del sistema al mismo formato que proyecciones
+                    def normalizar_tipo_fruta(tipo_fruta):
+                        if not tipo_fruta or pd.isna(tipo_fruta):
+                            return 'Otro Convencional'
+                        
+                        tf = str(tipo_fruta).upper().strip()
+                        
+                        # Detectar manejo
+                        if 'ORGAN' in tf:
+                            manejo = 'Orgánico'
+                        else:
+                            manejo = 'Convencional'
+                        
+                        # Detectar especie base
+                        if 'ARANDANO' in tf or 'ARÁNDANO' in tf or 'BLUEBERRY' in tf:
+                            especie_base = 'Arándano'
+                        elif 'FRAM' in tf or 'FRAMBUESA' in tf or 'MEEKER' in tf or 'HERITAGE' in tf or 'WAKEFIELD' in tf or 'RASPBERRY' in tf:
+                            especie_base = 'Frambuesa'
+                        elif 'FRUTILLA' in tf or 'FRESA' in tf or 'STRAWBERRY' in tf:
+                            especie_base = 'Frutilla'
+                        elif 'MORA' in tf or 'BLACKBERRY' in tf:
+                            especie_base = 'Mora'
+                        elif 'CEREZA' in tf or 'CHERRY' in tf:
+                            especie_base = 'Cereza'
+                        else:
+                            especie_base = 'Otro'
+                        
+                        return f"{especie_base} {manejo}"
+                    
+                    # Aplicar normalización y filtrar
+                    df_sist['especie_normalizada'] = df_sist['tipo_fruta'].apply(normalizar_tipo_fruta)
+                    df_sist = df_sist[df_sist['especie_normalizada'].isin(especies_filtradas)]
                 
-                df_sist['fecha_dt'] = pd.to_datetime(df_sist['fecha'])
-                df_sist['semana'] = df_sist['fecha_dt'].dt.isocalendar().week.astype(int)
-                df_sist['año'] = df_sist['fecha_dt'].dt.year
-                
-                # Ajustar semana para ordenamiento
-                df_sist['sort_key'] = df_sist.apply(
-                    lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
-                )
-                
-                # Agrupar por semana
-                df_sistema_semana = df_sist.groupby('semana').agg({
-                    'kg_recepcionados': 'sum'
-                }).reset_index()
-                df_sistema_semana['semana_label'] = 'S' + df_sistema_semana['semana'].astype(str)
-                df_sistema_semana = df_sistema_semana.rename(columns={'kg_recepcionados': 'kg_sistema'})
+                if not df_sist.empty:
+                    df_sist['fecha_dt'] = pd.to_datetime(df_sist['fecha'])
+                    df_sist['semana'] = df_sist['fecha_dt'].dt.isocalendar().week.astype(int)
+                    df_sist['año'] = df_sist['fecha_dt'].dt.year
+                    
+                    # Ajustar semana para ordenamiento
+                    df_sist['sort_key'] = df_sist.apply(
+                        lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
+                    )
+                    
+                    # Agrupar por semana
+                    df_sistema_semana = df_sist.groupby('semana').agg({
+                        'kg_recepcionados': 'sum'
+                    }).reset_index()
+                    df_sistema_semana['semana_label'] = 'S' + df_sistema_semana['semana'].astype(str)
+                    df_sistema_semana = df_sistema_semana.rename(columns={'kg_recepcionados': 'kg_sistema'})
         
         st.markdown("---")
         st.markdown("### 📊 Comparativa Semanal")
@@ -1259,62 +1312,132 @@ with tab_curva:
         
         st.altair_chart(chart, use_container_width=True)
         
-        # ============ TOTALES DEL PERÍODO (movido arriba para mayor visibilidad) ============
+        # ============ TOTALES DEL PERÍODO ============
         st.markdown("---")
-        total_proy = df_chart['kg_proyectados'].sum()
-        total_sist = df_chart['kg_sistema'].sum()
-        cumpl_total = (total_sist / total_proy * 100) if total_proy > 0 else 0
-        diff = total_sist - total_proy
         
-        # KPIs con mejor diseño usando contenedores coloreados
+        # Calcular totales
+        total_proy_temporada = df_chart['kg_proyectados'].sum()  # Total proyectado toda la temporada
+        total_sist = df_chart['kg_sistema'].sum()  # Total recepcionado
+        
+        # Calcular proyectado hasta el día de hoy (solo semanas pasadas)
+        from datetime import datetime as dt
+        semana_actual = dt.now().isocalendar()[1]
+        año_actual = dt.now().year
+        
+        # Filtrar semanas hasta hoy
+        def es_semana_pasada(semana):
+            if año_actual == 2024:
+                # Estamos en 2024, solo semanas 47-52 que ya pasaron
+                return semana >= 47 and semana <= semana_actual
+            else:
+                # Estamos en 2025
+                if semana >= 47:
+                    return True  # Todas las semanas de 2024 ya pasaron
+                else:
+                    return semana <= semana_actual  # Semanas de 2025 hasta hoy
+        
+        df_periodo = df_chart[df_chart['semana'].apply(es_semana_pasada)]
+        total_proy_periodo = df_periodo['kg_proyectados'].sum() if not df_periodo.empty else 0
+        total_sist_periodo = df_periodo['kg_sistema'].sum() if not df_periodo.empty else 0
+        
+        # Cumplimiento del período (hasta hoy)
+        cumpl_periodo = (total_sist_periodo / total_proy_periodo * 100) if total_proy_periodo > 0 else 0
+        diff_periodo = total_sist_periodo - total_proy_periodo
+        
+        # KPIs con mejor diseño
         st.markdown("### 🎯 Resumen de Cumplimiento")
+        st.caption(f"Semana actual: S{semana_actual}")
         
-        kpi_cols = st.columns(4)
-        with kpi_cols[0]:
+        # Primera fila: Período actual (lo más importante)
+        st.markdown("**📅 Período hasta hoy:**")
+        kpi_cols1 = st.columns(4)
+        
+        with kpi_cols1[0]:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); padding: 20px; border-radius: 10px; text-align: center;">
-                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">📋 PROYECTADO</p>
-                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(total_proy, 0)} Kg</p>
+            <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 11px; opacity: 0.9;">📅 PROYECTADO AL DÍA</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 22px; font-weight: bold;">{fmt_numero(total_proy_periodo, 0)} Kg</p>
             </div>
             """, unsafe_allow_html=True)
         
-        with kpi_cols[1]:
+        with kpi_cols1[1]:
             st.markdown(f"""
             <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); padding: 20px; border-radius: 10px; text-align: center;">
-                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">✅ RECEPCIONADO</p>
-                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(total_sist, 0)} Kg</p>
+                <p style="margin: 0; color: #fff; font-size: 11px; opacity: 0.9;">✅ RECEPCIONADO</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 22px; font-weight: bold;">{fmt_numero(total_sist_periodo, 0)} Kg</p>
             </div>
             """, unsafe_allow_html=True)
         
-        with kpi_cols[2]:
+        with kpi_cols1[2]:
             # Color según cumplimiento
-            if cumpl_total >= 80:
+            if cumpl_periodo >= 80:
                 color_cumpl = "#2ecc71"
-            elif cumpl_total >= 50:
+            elif cumpl_periodo >= 50:
                 color_cumpl = "#f39c12"
             else:
                 color_cumpl = "#e74c3c"
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, {color_cumpl} 0%, {color_cumpl}99 100%); padding: 20px; border-radius: 10px; text-align: center;">
-                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">📊 CUMPLIMIENTO</p>
-                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(cumpl_total, 1)}%</p>
+            <div style="background: linear-gradient(135deg, {color_cumpl} 0%, {color_cumpl}cc 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 11px; opacity: 0.9;">📊 CUMPLIMIENTO</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 22px; font-weight: bold;">{fmt_numero(cumpl_periodo, 1)}%</p>
             </div>
             """, unsafe_allow_html=True)
         
-        with kpi_cols[3]:
-            color_diff = "#e74c3c" if diff < 0 else "#2ecc71"
-            icon_diff = "📉" if diff < 0 else "📈"
+        with kpi_cols1[3]:
+            color_diff = "#e74c3c" if diff_periodo < 0 else "#2ecc71"
+            icon_diff = "📉" if diff_periodo < 0 else "📈"
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); padding: 20px; border-radius: 10px; text-align: center;">
-                <p style="margin: 0; color: #fff; font-size: 12px; opacity: 0.9;">{icon_diff} DIFERENCIA</p>
-                <p style="margin: 5px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{fmt_numero(diff, 0)} Kg</p>
+            <div style="background: linear-gradient(135deg, {color_diff} 0%, {color_diff}cc 100%); padding: 20px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 11px; opacity: 0.9;">{icon_diff} DIFERENCIA PERÍODO</p>
+                <p style="margin: 5px 0 0 0; color: #fff; font-size: 22px; font-weight: bold;">{fmt_numero(diff_periodo, 0)} Kg</p>
             </div>
             """, unsafe_allow_html=True)
         
         # Barra de progreso visual
         st.markdown("<br>", unsafe_allow_html=True)
-        progress_val = min(cumpl_total / 100, 1.0)
-        st.progress(progress_val, text=f"Avance de abastecimiento: {fmt_numero(cumpl_total, 1)}%")
+        progress_val = min(cumpl_periodo / 100, 1.0)
+        st.progress(progress_val, text=f"Avance de abastecimiento (hasta S{semana_actual}): {fmt_numero(cumpl_periodo, 1)}%")
+        
+        # Segunda fila: Total temporada (referencia)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**📆 Total Temporada (proyección completa):**")
+        kpi_cols2 = st.columns(4)
+        
+        cumpl_temporada = (total_sist / total_proy_temporada * 100) if total_proy_temporada > 0 else 0
+        diff_temporada = total_sist - total_proy_temporada
+        
+        with kpi_cols2[0]:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); padding: 15px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 10px; opacity: 0.8;">📋 TOTAL TEMPORADA</p>
+                <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{fmt_numero(total_proy_temporada, 0)} Kg</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_cols2[1]:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); padding: 15px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 10px; opacity: 0.8;">🎯 RECEP. VS TEMPORADA</p>
+                <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{fmt_numero(cumpl_temporada, 1)}%</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_cols2[2]:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%); padding: 15px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 10px; opacity: 0.8;">📊 PENDIENTE TEMPORADA</p>
+                <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{fmt_numero(abs(diff_temporada), 0)} Kg</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_cols2[3]:
+            semanas_restantes = len(df_chart) - len(df_periodo)
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%); padding: 15px; border-radius: 10px; text-align: center;">
+                <p style="margin: 0; color: #fff; font-size: 10px; opacity: 0.8;">📅 SEMANAS RESTANTES</p>
+                <p style="margin: 3px 0 0 0; color: #fff; font-size: 18px; font-weight: bold;">{semanas_restantes}</p>
+            </div>
+            """, unsafe_allow_html=True)
         
         # ============ TABLA RESUMEN ============
         st.markdown("---")
@@ -1324,19 +1447,23 @@ with tab_curva:
         df_tabla['pct_cumplimiento'] = (df_tabla['kg_sistema'] / df_tabla['kg_proyectados'] * 100).fillna(0)
         df_tabla['diferencia'] = df_tabla['kg_sistema'] - df_tabla['kg_proyectados']
         
-        # Usar column_config para mejor formato
+        # Aplicar formato chileno (punto como separador de miles)
+        df_tabla['kg_proy_fmt'] = df_tabla['kg_proyectados'].apply(lambda x: fmt_numero(x, 0))
+        df_tabla['kg_sist_fmt'] = df_tabla['kg_sistema'].apply(lambda x: fmt_numero(x, 0))
+        df_tabla['diff_fmt'] = df_tabla['diferencia'].apply(lambda x: fmt_numero(x, 0))
+        df_tabla['pct_fmt'] = df_tabla['pct_cumplimiento'].apply(lambda x: f"{fmt_numero(x, 1)}%")
+        
+        # Mostrar tabla con formato chileno
         st.dataframe(
-            df_tabla[['semana_label', 'kg_proyectados', 'kg_sistema', 'pct_cumplimiento', 'diferencia']],
+            df_tabla[['semana_label', 'kg_proy_fmt', 'kg_sist_fmt', 'pct_cumplimiento', 'diff_fmt']],
             column_config={
                 "semana_label": st.column_config.TextColumn("Semana", width="small"),
-                "kg_proyectados": st.column_config.NumberColumn(
+                "kg_proy_fmt": st.column_config.TextColumn(
                     "Kg Proyectados",
-                    format="%.0f",
                     help="Kilogramos proyectados según planificación"
                 ),
-                "kg_sistema": st.column_config.NumberColumn(
+                "kg_sist_fmt": st.column_config.TextColumn(
                     "Kg Recepcionados",
-                    format="%.0f",
                     help="Kilogramos recepcionados en el sistema"
                 ),
                 "pct_cumplimiento": st.column_config.ProgressColumn(
@@ -1346,9 +1473,8 @@ with tab_curva:
                     max_value=100,
                     help="Porcentaje de cumplimiento"
                 ),
-                "diferencia": st.column_config.NumberColumn(
+                "diff_fmt": st.column_config.TextColumn(
                     "Diferencia",
-                    format="%.0f",
                     help="Diferencia entre recepcionado y proyectado"
                 ),
             },
