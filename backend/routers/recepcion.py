@@ -1,8 +1,5 @@
-"""
-Router de Recepciones MP - Materia Prima
-"""
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 
 from backend.services.recepcion_service import get_recepciones_mp
 from backend.services.recepciones_gestion_service import RecepcionesGestionService
@@ -21,13 +18,18 @@ async def get_recepciones(
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     productor_id: Optional[int] = Query(None, description="ID del productor"),
-    solo_hechas: bool = Query(True, description="Si es True, solo muestra recepciones en estado 'hecho'. Si es False, muestra todas.")
+    solo_hechas: bool = Query(True, description="Si es True, solo muestra recepciones en estado 'hecho'. Si es False, muestra todas."),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, o ambos. Si no se especifica, muestra ambos.")
 ):
     """
     Obtiene las recepciones de materia prima con datos de calidad.
+    
+    Parámetros:
+        origen: Lista de orígenes. Valores válidos: "RFP" (ID 1), "VILKUN" (ID 217).
+                Si no se especifica, muestra recepciones de ambos orígenes.
     """
     try:
-        data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas)
+        data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -124,3 +126,52 @@ async def get_recepciones_gestion_overview(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============================================================
+#              ENDPOINTS DE CURVA DE ABASTECIMIENTO
+# ============================================================
+
+from backend.services.abastecimiento_service import (
+    get_proyecciones_por_semana,
+    get_proyecciones_por_especie,
+    get_especies_disponibles,
+    get_semanas_disponibles
+)
+
+
+@router.get('/abastecimiento/proyectado')
+async def get_proyecciones_abastecimiento(
+    planta: Optional[List[str]] = Query(None, description="Plantas a filtrar: RFP, VILKUN"),
+    especie: Optional[List[str]] = Query(None, description="Especies a filtrar")
+):
+    """
+    Obtiene las proyecciones de abastecimiento por semana desde el Excel.
+    """
+    try:
+        return get_proyecciones_por_semana(planta=planta, especie=especie)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/abastecimiento/especies')
+async def get_especies_abastecimiento():
+    """
+    Obtiene las especies disponibles en el Excel de abastecimiento.
+    """
+    try:
+        return get_especies_disponibles()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/abastecimiento/semanas')
+async def get_semanas_abastecimiento():
+    """
+    Obtiene las semanas disponibles en el Excel de abastecimiento.
+    """
+    try:
+        return get_semanas_disponibles()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

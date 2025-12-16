@@ -17,7 +17,7 @@ def _normalize_categoria(cat: str) -> str:
     return c
 
 
-def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None, solo_hechas: bool = True) -> List[Dict[str, Any]]:
+def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None, solo_hechas: bool = True, origen: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Obtiene recepciones de materia prima con datos de calidad.
     
@@ -32,13 +32,30 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     Args:
         solo_hechas: Si es True, solo muestra recepciones en estado "done".
                      Si es False, muestra recepciones en todos los estados.
+        origen: Lista de orígenes a filtrar. Valores válidos: "RFP", "VILKUN".
+                Si es None o vacío, se incluyen ambos.
     """
     client = OdooClient(username=username, password=password)
     cache = get_cache()
     
+    # Mapeo de origen a picking_type_id
+    ORIGEN_PICKING_MAP = {
+        "RFP": 1,
+        "VILKUN": 217
+    }
+    
+    # Determinar picking_type_ids a consultar
+    if origen and len(origen) > 0:
+        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
+    else:
+        picking_type_ids = [1, 217]  # Ambos por defecto
+    
+    if not picking_type_ids:
+        picking_type_ids = [1, 217]
+    
     # ============ PASO 1: Obtener todas las recepciones ============
     domain = [
-        ("picking_type_id", "=", 1),
+        ("picking_type_id", "in", picking_type_ids),
         ("x_studio_categora_de_producto", "=", "MP"),
         ("scheduled_date", ">=", fecha_inicio),
         ("scheduled_date", "<=", fecha_fin),
@@ -57,7 +74,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "x_studio_categora_de_producto",
             "x_studio_gua_de_despacho",
             "check_ids",
-            "state"
+            "state",
+            "picking_type_id"
         ]
     )
     
@@ -281,6 +299,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         if productor.upper().strip() == 'ADMINISTRADOR':
             continue
         
+        # Determinar origen basado en picking_type_id
+        picking_type = rec.get("picking_type_id")
+        picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
+        origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "OTRO"
+        
         fecha = rec.get("scheduled_date", "")
         albaran = rec.get("name", "")
         
@@ -487,6 +510,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "guia_despacho": rec.get("x_studio_gua_de_despacho", ""),
             "kg_recepcionados": kg_total if kg_total > 0 else calidad_data["kg_recepcionados_calidad"],
             "state": rec.get("state", ""),
+            "origen": origen_rec,
             "calific_final": calidad_data["calific_final"],
             "tipo_fruta": calidad_data["tipo_fruta"],
             "total_iqf": calidad_data["total_iqf"],

@@ -143,7 +143,7 @@ def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
     return None
 
 # === TABS PRINCIPALES ===
-tab_kpis, tab_gestion = st.tabs(["📊 KPIs y Calidad", "📋 Gestión de Recepciones"])
+tab_kpis, tab_gestion, tab_curva = st.tabs(["📊 KPIs y Calidad", "📋 Gestión de Recepciones", "📈 Curva de Abastecimiento"])
 
 # =====================================================
 #           TAB 1: KPIs Y CALIDAD (Código existente)
@@ -160,35 +160,56 @@ with tab_kpis:
     solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
                               help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
 
+    # Checkboxes para filtrar por origen (RFP / VILKÚN)
+    st.markdown("**Origen de recepciones:**")
+    col_orig1, col_orig2 = st.columns(2)
+    with col_orig1:
+        check_rfp = st.checkbox("🏭 RFP (Rio Futuro Procesos)", value=True, key="check_rfp",
+                                help="Recepciones de la planta Rio Futuro Procesos")
+    with col_orig2:
+        check_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="check_vilkun",
+                                   help="Recepciones de la planta Vilkún")
+
     if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
-        params = {
-            "username": username,
-            "password": password,
-            "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
-            "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
-            "solo_hechas": solo_hechas
-        }
-        api_url = f"{API_URL}/api/v1/recepciones-mp/"
-        try:
-            resp = requests.get(api_url, params=params, timeout=60)
-            if resp.status_code == 200:
-                data = resp.json()
-                df = pd.DataFrame(data)
-                if not df.empty:
-                    st.session_state.df_recepcion = df
-                    st.session_state.idx_recepcion = None
+        # Construir lista de orígenes según checkboxes
+        origen_list = []
+        if check_rfp:
+            origen_list.append("RFP")
+        if check_vilkun:
+            origen_list.append("VILKUN")
+        
+        if not origen_list:
+            st.warning("Debes seleccionar al menos un origen (RFP o VILKÚN)")
+        else:
+            params = {
+                "username": username,
+                "password": password,
+                "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+                "solo_hechas": solo_hechas,
+                "origen": origen_list
+            }
+            api_url = f"{API_URL}/api/v1/recepciones-mp/"
+            try:
+                resp = requests.get(api_url, params=params, timeout=60)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    df = pd.DataFrame(data)
+                    if not df.empty:
+                        st.session_state.df_recepcion = df
+                        st.session_state.idx_recepcion = None
+                    else:
+                        st.session_state.df_recepcion = None
+                        st.session_state.idx_recepcion = None
+                        st.warning("No se encontraron recepciones en el rango de fechas seleccionado.")
                 else:
+                    st.error(f"Error: {resp.status_code} - {resp.text}")
                     st.session_state.df_recepcion = None
                     st.session_state.idx_recepcion = None
-                    st.warning("No se encontraron recepciones en el rango de fechas seleccionado.")
-            else:
-                st.error(f"Error: {resp.status_code} - {resp.text}")
-                st.session_state.df_recepcion = None
-                st.session_state.idx_recepcion = None
-        except requests.exceptions.ConnectionError:
-            st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+            except requests.exceptions.ConnectionError:
+                st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
 
 
     # Mostrar tabla y detalle si hay datos
@@ -516,12 +537,12 @@ with tab_kpis:
         df_filtrada['bandejas'] = bandejas_vals
         df_filtrada['tiene_calidad'] = df_filtrada['calific_final'].notna() & (df_filtrada['calific_final'] != '')
         cols_mostrar = [
-            "albaran", "fecha", "productor", "tipo_fruta", "guia_despacho",
+            "albaran", "fecha", "productor", "tipo_fruta", "origen", "guia_despacho",
             "bandejas", "kg_recepcionados", "calific_final", "total_iqf", "total_block", "tiene_calidad"
         ]
         df_mostrar = df_filtrada[cols_mostrar].copy()
         df_mostrar.columns = [
-            "Albarán", "Fecha", "Productor", "Tipo Fruta", "Guía Despacho",
+            "Albarán", "Fecha", "Productor", "Tipo Fruta", "Origen", "Guía Despacho",
             "Bandejas", "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Calidad"
         ]
         # Ajustar Kg Recepcionados para excluir las Bandejas (mostramos Kg fruta)
@@ -1026,3 +1047,247 @@ with tab_gestion:
             | ⚪ **Sin QC** | No tiene control de calidad asociado |
             """)
 
+# =====================================================
+#           TAB 3: CURVA DE ABASTECIMIENTO
+# =====================================================
+with tab_curva:
+    st.subheader("📈 Curva de Abastecimiento")
+    st.caption("Comparación entre kilogramos proyectados (Excel) vs recepcionados (Sistema)")
+    
+    # --- Filtros ---
+    st.markdown("### 🔍 Filtros")
+    col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
+    
+    # Filtro de plantas
+    with col_f1:
+        st.markdown("**Origen/Planta:**")
+        curva_rfp = st.checkbox("🏭 RFP", value=True, key="curva_rfp")
+        curva_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="curva_vilkun")
+    
+    # Obtener especies disponibles desde el backend
+    especies_disponibles = []
+    try:
+        resp_esp = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/especies", timeout=30)
+        if resp_esp.status_code == 200:
+            especies_disponibles = resp_esp.json()
+    except:
+        pass
+    
+    with col_f2:
+        especies_filtro = st.multiselect(
+            "Especie", 
+            especies_disponibles, 
+            default=[],
+            placeholder="Todas las especies",
+            key="curva_especie"
+        )
+    
+    with col_f3:
+        # Rango de fechas para datos del sistema
+        st.markdown("**Período para datos del sistema:**")
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            curva_fecha_inicio = st.date_input("Desde", datetime(2024, 11, 18), format="DD/MM/YYYY", key="curva_desde")
+        with col_d2:
+            curva_fecha_fin = st.date_input("Hasta", datetime.now(), format="DD/MM/YYYY", key="curva_hasta")
+    
+    # Botón para cargar curva
+    if st.button("📊 Cargar Curva de Abastecimiento", key="btn_curva", type="primary"):
+        # Construir lista de plantas
+        plantas_list = []
+        if curva_rfp:
+            plantas_list.append("RFP")
+        if curva_vilkun:
+            plantas_list.append("VILKUN")
+        
+        if not plantas_list:
+            st.warning("Debes seleccionar al menos una planta (RFP o VILKÚN)")
+        else:
+            with st.spinner("Cargando datos proyectados y del sistema..."):
+                # 1. Obtener proyecciones del Excel
+                params_proy = {"planta": plantas_list}
+                if especies_filtro:
+                    params_proy["especie"] = especies_filtro
+                
+                try:
+                    resp_proy = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado", 
+                                            params=params_proy, timeout=60)
+                    if resp_proy.status_code == 200:
+                        proyecciones = resp_proy.json()
+                        st.session_state.curva_proyecciones = proyecciones
+                    else:
+                        st.error(f"Error al cargar proyecciones: {resp_proy.status_code}")
+                        st.session_state.curva_proyecciones = None
+                except Exception as e:
+                    st.error(f"Error de conexión: {e}")
+                    st.session_state.curva_proyecciones = None
+                
+                # 2. Obtener recepciones del sistema
+                params_sist = {
+                    "username": username,
+                    "password": password,
+                    "fecha_inicio": curva_fecha_inicio.strftime("%Y-%m-%d"),
+                    "fecha_fin": curva_fecha_fin.strftime("%Y-%m-%d"),
+                    "solo_hechas": True,
+                    "origen": plantas_list
+                }
+                try:
+                    resp_sist = requests.get(f"{API_URL}/api/v1/recepciones-mp/", 
+                                            params=params_sist, timeout=120)
+                    if resp_sist.status_code == 200:
+                        recepciones_sist = resp_sist.json()
+                        st.session_state.curva_sistema = recepciones_sist
+                    else:
+                        st.error(f"Error al cargar recepciones del sistema: {resp_sist.status_code}")
+                        st.session_state.curva_sistema = None
+                except Exception as e:
+                    st.error(f"Error de conexión al sistema: {e}")
+                    st.session_state.curva_sistema = None
+    
+    # Mostrar curva si hay datos
+    if 'curva_proyecciones' in st.session_state and st.session_state.curva_proyecciones:
+        proyecciones = st.session_state.curva_proyecciones
+        df_proy = pd.DataFrame(proyecciones)
+        
+        # Agregar columna de semana label
+        df_proy['semana_label'] = 'S' + df_proy['semana'].astype(str)
+        
+        # Ordenar por semana (47-52 primero, luego 1-17)
+        df_proy['sort_key'] = df_proy['semana'].apply(lambda x: x if x >= 47 else x + 100)
+        df_proy = df_proy.sort_values('sort_key')
+        
+        # Si hay datos del sistema, procesarlos por semana
+        df_sistema_semana = None
+        if 'curva_sistema' in st.session_state and st.session_state.curva_sistema:
+            recepciones = st.session_state.curva_sistema
+            df_sist = pd.DataFrame(recepciones)
+            
+            if not df_sist.empty and 'fecha' in df_sist.columns:
+                # Filtrar por especie si hay filtro
+                if especies_filtro:
+                    # Mapear tipo_fruta a especie (pueden tener nombres similares)
+                    df_sist = df_sist[df_sist['tipo_fruta'].isin(especies_filtro)]
+                
+                df_sist['fecha_dt'] = pd.to_datetime(df_sist['fecha'])
+                df_sist['semana'] = df_sist['fecha_dt'].dt.isocalendar().week.astype(int)
+                df_sist['año'] = df_sist['fecha_dt'].dt.year
+                
+                # Ajustar semana para ordenamiento
+                df_sist['sort_key'] = df_sist.apply(
+                    lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
+                )
+                
+                # Agrupar por semana
+                df_sistema_semana = df_sist.groupby('semana').agg({
+                    'kg_recepcionados': 'sum'
+                }).reset_index()
+                df_sistema_semana['semana_label'] = 'S' + df_sistema_semana['semana'].astype(str)
+                df_sistema_semana = df_sistema_semana.rename(columns={'kg_recepcionados': 'kg_sistema'})
+        
+        st.markdown("---")
+        st.markdown("### 📊 Comparativa Semanal")
+        
+        # Combinar datos de proyección y sistema
+        df_chart = df_proy[['semana', 'semana_label', 'kg_proyectados']].copy()
+        if df_sistema_semana is not None and not df_sistema_semana.empty:
+            df_chart = df_chart.merge(
+                df_sistema_semana[['semana', 'kg_sistema']], 
+                on='semana', 
+                how='left'
+            )
+            df_chart['kg_sistema'] = df_chart['kg_sistema'].fillna(0)
+        else:
+            df_chart['kg_sistema'] = 0
+        
+        # Ordenar por semana
+        df_chart['sort_key'] = df_chart['semana'].apply(lambda x: x if x >= 47 else x + 100)
+        df_chart = df_chart.sort_values('sort_key')
+        
+        # Crear gráfico con Altair
+        # Melt para formato largo
+        df_melt = df_chart.melt(
+            id_vars=['semana', 'semana_label', 'sort_key'],
+            value_vars=['kg_proyectados', 'kg_sistema'],
+            var_name='Tipo',
+            value_name='Kg'
+        )
+        df_melt['Tipo'] = df_melt['Tipo'].replace({
+            'kg_proyectados': '📋 Proyectado (Excel)',
+            'kg_sistema': '✅ Recepcionado (Sistema)'
+        })
+        
+        chart = alt.Chart(df_melt).mark_bar(opacity=0.8).encode(
+            x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
+            y=alt.Y('Kg:Q', title='Kilogramos'),
+            color=alt.Color('Tipo:N', scale=alt.Scale(
+                domain=['📋 Proyectado (Excel)', '✅ Recepcionado (Sistema)'],
+                range=['#3498db', '#2ecc71']
+            )),
+            xOffset='Tipo:N',
+            tooltip=['semana_label', 'Tipo', alt.Tooltip('Kg:Q', format=',.0f')]
+        ).properties(
+            width=800,
+            height=400,
+            title='Kg Proyectados vs Recepcionados por Semana'
+        )
+        
+        st.altair_chart(chart, use_container_width=True)
+        
+        # Tabla resumen
+        st.markdown("### 📋 Resumen por Semana")
+        df_tabla = df_chart[['semana', 'semana_label', 'kg_proyectados', 'kg_sistema']].copy()
+        df_tabla['% Cumplimiento'] = (df_tabla['kg_sistema'] / df_tabla['kg_proyectados'] * 100).fillna(0)
+        df_tabla['Diferencia'] = df_tabla['kg_sistema'] - df_tabla['kg_proyectados']
+        
+        # Formatear
+        df_tabla['Kg Proyectados'] = df_tabla['kg_proyectados'].apply(lambda x: fmt_numero(x, 0))
+        df_tabla['Kg Sistema'] = df_tabla['kg_sistema'].apply(lambda x: fmt_numero(x, 0))
+        df_tabla['% Cumplimiento'] = df_tabla['% Cumplimiento'].apply(lambda x: f"{fmt_numero(x, 1)}%")
+        df_tabla['Diferencia'] = df_tabla['Diferencia'].apply(lambda x: fmt_numero(x, 0))
+        
+        st.dataframe(
+            df_tabla[['semana_label', 'Kg Proyectados', 'Kg Sistema', '% Cumplimiento', 'Diferencia']].rename(
+                columns={'semana_label': 'Semana'}
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # KPIs totales
+        st.markdown("### 📊 Totales del Período")
+        total_proy = df_chart['kg_proyectados'].sum()
+        total_sist = df_chart['kg_sistema'].sum()
+        cumpl_total = (total_sist / total_proy * 100) if total_proy > 0 else 0
+        
+        kpi_cols = st.columns(4)
+        with kpi_cols[0]:
+            st.metric("Total Proyectado", fmt_numero(total_proy, 0) + " Kg")
+        with kpi_cols[1]:
+            st.metric("Total Recepcionado", fmt_numero(total_sist, 0) + " Kg")
+        with kpi_cols[2]:
+            st.metric("Cumplimiento", f"{fmt_numero(cumpl_total, 1)}%")
+        with kpi_cols[3]:
+            diff = total_sist - total_proy
+            st.metric("Diferencia", fmt_numero(diff, 0) + " Kg", delta=fmt_numero(diff, 0))
+    else:
+        st.info("👆 Selecciona los filtros y presiona **Cargar Curva de Abastecimiento** para ver la comparativa.")
+        
+        with st.expander("ℹ️ ¿Cómo funciona?"):
+            st.markdown("""
+            ### Curva de Abastecimiento
+            
+            Esta herramienta te permite comparar las **proyecciones de abastecimiento** (planificadas en Excel) 
+            con las **recepciones reales** registradas en el sistema.
+            
+            **Datos Proyectados:** Provienen del archivo Excel de planificación de abastecimiento, 
+            organizados por semana, especie y planta.
+            
+            **Datos del Sistema:** Son las recepciones de materia prima registradas en Odoo,
+            agrupadas por semana para la comparación.
+            
+            **Uso:**
+            1. Selecciona las plantas a comparar (RFP, VILKÚN o ambas)
+            2. Opcionalmente filtra por especie
+            3. Define el período de fechas para los datos del sistema
+            4. Presiona "Cargar Curva de Abastecimiento"
+            """)
