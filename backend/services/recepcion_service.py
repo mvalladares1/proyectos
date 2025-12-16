@@ -81,7 +81,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "x_studio_gua_de_despacho",
             "check_ids",
             "state",
-            "picking_type_id"
+            "picking_type_id",
+            "origin"  # Orden de compra asociada
         ]
     )
     
@@ -514,6 +515,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "fecha": fecha,
             "productor": productor,
             "guia_despacho": rec.get("x_studio_gua_de_despacho", ""),
+            "oc_asociada": rec.get("origin", ""),  # Orden de compra asociada
             "kg_recepcionados": kg_total if kg_total > 0 else calidad_data["kg_recepcionados_calidad"],
             "state": rec.get("state", ""),
             "origen": origen_rec,
