@@ -1398,11 +1398,16 @@ with tab_curva:
             semana_actual = dt.now().isocalendar()[1]
             año_actual = dt.now().year
             
-            # Calcular sort_key de la semana actual para comparar
-            if año_actual == 2024:
-                sort_key_actual = semana_actual  # semanas 47-52 tienen sort_key 47-52
+            # Calcular sort_key de la semana actual
+            # Temporada va de S47 de un año a S17 del siguiente
+            # El sort_key debe ser consistente con cómo se calcula en df_chart
+            # S47-52 → sort_key 47-52 (año base de temporada)
+            # S1-17 → sort_key 101-117 (año siguiente)
+            if semana_actual >= 47:
+                # Estamos en S47-52, es el año base de la temporada
+                sort_key_actual = semana_actual
             else:
-                # En 2025, las semanas tienen sort_key = semana + 100
+                # Estamos en S1-17 del año siguiente
                 sort_key_actual = semana_actual + 100
             
             # Filtrar solo semanas que ya pasaron (sort_key <= sort_key_actual)
