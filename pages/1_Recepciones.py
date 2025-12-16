@@ -1096,13 +1096,11 @@ with tab_curva:
         )
     
     with col_f3:
-        # Rango de fechas para datos del sistema
+        # Fecha desde para datos del sistema (Hasta siempre es fecha actual)
         st.markdown("**Período para datos del sistema:**")
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            curva_fecha_inicio = st.date_input("Desde", datetime(2024, 11, 18), format="DD/MM/YYYY", key="curva_desde")
-        with col_d2:
-            curva_fecha_fin = st.date_input("Hasta", datetime.now(), format="DD/MM/YYYY", key="curva_hasta")
+        curva_fecha_inicio = st.date_input("Desde", datetime(2024, 11, 18), format="DD/MM/YYYY", key="curva_desde")
+        curva_fecha_fin = datetime.now()  # Siempre fecha actual
+        st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (fecha actual)")
     
     # Botón para cargar curva
     if st.button("📊 Cargar Curva de Abastecimiento", key="btn_curva", type="primary"):

@@ -116,6 +116,44 @@ def load_proyecciones_consolidado() -> pd.DataFrame:
     # Normalizar planta a mayúsculas
     df_long['planta'] = df_long['planta'].str.upper().str.strip()
     
+    # Normalizar especie: extraer especie_base y manejo
+    def normalizar_especie(especie_raw):
+        """Extrae especie base y manejo del nombre de especie."""
+        if not especie_raw or pd.isna(especie_raw):
+            return 'Otro', 'Convencional'
+        
+        esp = str(especie_raw).upper().strip()
+        
+        # Detectar manejo
+        if 'ORGAN' in esp:
+            manejo = 'Orgánico'
+        else:
+            manejo = 'Convencional'
+        
+        # Detectar especie base
+        if 'ARANDANO' in esp or 'ARÁNDANO' in esp:
+            especie_base = 'Arándano'
+        elif 'FRAM' in esp or 'FRAMBUESA' in esp or 'MEEKER' in esp or 'HERITAGE' in esp or 'WAKEFIELD' in esp:
+            especie_base = 'Frambuesa'
+        elif 'FRUTILLA' in esp:
+            especie_base = 'Frutilla'
+        elif 'MORA' in esp:
+            especie_base = 'Mora'
+        elif 'CEREZA' in esp:
+            especie_base = 'Cereza'
+        else:
+            especie_base = 'Otro'
+        
+        return especie_base, manejo
+    
+    # Aplicar normalización
+    df_long[['especie_base', 'manejo']] = df_long['especie'].apply(
+        lambda x: pd.Series(normalizar_especie(x))
+    )
+    
+    # Crear campo combinado especie_manejo
+    df_long['especie_manejo'] = df_long['especie_base'] + ' ' + df_long['manejo']
+    
     return df_long
 
 
@@ -141,7 +179,8 @@ def get_proyecciones_por_semana(
         df = df[df['planta'].isin(planta_upper)]
     
     if especie:
-        df = df[df['especie'].isin(especie)]
+        # Filtrar por especie_manejo (formato normalizado)
+        df = df[df['especie_manejo'].isin(especie)]
     
     # Agrupar por semana
     grouped = df.groupby(['semana', 'fecha_semana']).agg({
@@ -193,9 +232,9 @@ def get_proyecciones_por_especie(
 
 
 def get_especies_disponibles() -> List[str]:
-    """Retorna lista de especies únicas disponibles en el Excel."""
+    """Retorna lista de especies normalizadas (especie + manejo) disponibles en el Excel."""
     df = load_proyecciones_consolidado()
-    return sorted(df['especie'].dropna().unique().tolist())
+    return sorted(df['especie_manejo'].dropna().unique().tolist())
 
 
 def get_semanas_disponibles() -> List[int]:
