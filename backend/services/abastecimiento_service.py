@@ -7,12 +7,28 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import os
 
-# Ruta del archivo Excel de abastecimiento
-ABASTECIMIENTO_EXCEL_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    'data',
-    'recepcion abastecimiento tentativa V3.xlsx'
-)
+# Ruta del archivo Excel de abastecimiento - buscar en múltiples ubicaciones
+def _get_excel_path():
+    """Busca el Excel en múltiples ubicaciones posibles."""
+    possible_paths = [
+        # Ruta relativa desde el servicio
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'recepcion abastecimiento tentativa V3.xlsx'),
+        # Ruta desde variable de entorno si existe
+        os.path.join(os.getenv('APP_ROOT', '/home/debian/rio-futuro-dashboards/app'), 'data', 'recepcion abastecimiento tentativa V3.xlsx'),
+        # Ruta absoluta común en Linux
+        '/home/debian/rio-futuro-dashboards/app/data/recepcion abastecimiento tentativa V3.xlsx',
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"[DEBUG abastecimiento] Excel encontrado en: {path}")
+            return path
+    
+    # Si no se encuentra, retornar la primera opción y dejar que falle con mensaje claro
+    print(f"[DEBUG abastecimiento] Excel NO encontrado. Rutas probadas: {possible_paths}")
+    return possible_paths[0]
+
+ABASTECIMIENTO_EXCEL_PATH = _get_excel_path()
 
 # Mapeo de semanas a fechas de inicio (temporada 2024-2025)
 # Semana 47 de 2024 = 18 de noviembre 2024, etc.

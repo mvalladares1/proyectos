@@ -181,6 +181,9 @@ with tab_kpis:
         if not origen_list:
             st.warning("Debes seleccionar al menos un origen (RFP o VILKÚN)")
         else:
+            # Guardar filtros usados en session_state
+            st.session_state.origen_filtro_usado = origen_list.copy()
+            
             params = {
                 "username": username,
                 "password": password,
@@ -190,6 +193,10 @@ with tab_kpis:
                 "origen": origen_list
             }
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
+            
+            # DEBUG: Mostrar qué se está enviando
+            st.info(f"🔍 Consultando origen: {origen_list}")
+            
             try:
                 resp = requests.get(api_url, params=params, timeout=60)
                 if resp.status_code == 200:
@@ -198,10 +205,11 @@ with tab_kpis:
                     if not df.empty:
                         st.session_state.df_recepcion = df
                         st.session_state.idx_recepcion = None
+                        st.success(f"✅ Se encontraron {len(df)} recepciones para origen: {origen_list}")
                     else:
                         st.session_state.df_recepcion = None
                         st.session_state.idx_recepcion = None
-                        st.warning("No se encontraron recepciones en el rango de fechas seleccionado.")
+                        st.warning(f"No se encontraron recepciones para origen: {origen_list} en el rango de fechas seleccionado.")
                 else:
                     st.error(f"Error: {resp.status_code} - {resp.text}")
                     st.session_state.df_recepcion = None
