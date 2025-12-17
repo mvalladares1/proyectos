@@ -516,20 +516,18 @@ class ComprasService:
                 for oc in origen.split(','):
                     ocs_facturadas.add(oc.strip())
         
-        # === 2. RECEPCIONES SIN FACTURAR (Líneas de OC) ===
-        # Primero obtenemos las OCs en estado 'purchase' de estos proveedores
+        # === 2. OCs SIN FACTURA (USO TENTATIVO/COMPROMETIDO) ===
         oc_domain = [
             ['partner_id', 'in', partner_ids],
             ['state', '=', 'purchase']
         ]
-        # Filtrar por fecha si se especifica
         if fecha_desde:
             oc_domain.append(['date_order', '>=', fecha_desde])
         
         ocs = self.odoo.search_read(
             'purchase.order',
             oc_domain,
-            ['id', 'name', 'partner_id', 'date_order', 'currency_id'],
+            ['id', 'name', 'partner_id', 'amount_total', 'date_order', 'invoice_ids', 'currency_id'],
             limit=1000,
             order='date_order desc'
         )
@@ -538,56 +536,124 @@ class ComprasService:
             ocs = []
         
         oc_ids = [oc['id'] for oc in ocs]
-        oc_info_map = {oc['id']: oc for oc in ocs}  # Mapa para acceso rápido
+        oc_info_map = {oc['id']: oc for oc in ocs}
         
-        # Obtener las líneas de OC con recepciones sin facturar
+        # Filtrar OCs que NO tienen factura asociada (uso tentativo)
+        ocs_sin_factura_by_partner = {}
+        for oc in ocs:
+            # Si la OC ya está en los orígenes de facturas, ignorar
+            if oc['name'] in ocs_facturadas:
+                continue
+            # Si tiene invoice_ids, verificar si alguna está pendiente
+            if oc.get('invoice_ids') and len(oc['invoice_ids']) > 0:
+                continue  # Ya tiene factura asociada
+            
+            partner_info = oc.get('partner_id')
+            pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+            if pid:
+                ocs_sin_factura_by_partner.setdefault(pid, []).append(oc)
+        
+        # === 3. RECEPCIONES REALES SIN FACTURAR (via stock.move) ===
+        # Buscar pickings de recepción asociados a las OCs
         recepciones_sin_facturar_by_partner = {}
         
         if oc_ids:
-            # Leer líneas de PO con qty_received > qty_invoiced
-            po_lines = self.odoo.search_read(
-                'purchase.order.line',
+            # Buscar los nombres de las OCs para buscar pickings por origin
+            oc_names = [oc['name'] for oc in ocs]
+            
+            # Buscar pickings de recepción (picking_type_code = 'incoming') en estado done
+            pickings = self.odoo.search_read(
+                'stock.picking',
                 [
-                    ['order_id', 'in', oc_ids],
-                    ['qty_received', '>', 0]  # Solo líneas con recepciones
+                    ['origin', 'in', oc_names],
+                    ['state', '=', 'done'],
+                    ['picking_type_code', '=', 'incoming']
                 ],
-                ['order_id', 'product_id', 'name', 'qty_received', 'qty_invoiced', 'price_unit'],
-                limit=5000
+                ['id', 'name', 'origin', 'partner_id', 'date_done'],
+                limit=2000
             )
             
-            # Procesar cada línea y calcular el valor pendiente
-            for line in po_lines:
-                qty_received = float(line.get('qty_received') or 0)
-                qty_invoiced = float(line.get('qty_invoiced') or 0)
-                price_unit = float(line.get('price_unit') or 0)
+            if pickings:
+                picking_ids = [p['id'] for p in pickings]
+                picking_origin_map = {p['id']: p.get('origin', '') for p in pickings}
+                picking_date_map = {p['id']: p.get('date_done', '') for p in pickings}
                 
-                # Solo considerar si hay recepción sin facturar
-                qty_pendiente = qty_received - qty_invoiced
-                if qty_pendiente <= 0:
-                    continue
+                # Obtener movimientos de estos pickings
+                moves = self.odoo.search_read(
+                    'stock.move',
+                    [
+                        ['picking_id', 'in', picking_ids],
+                        ['state', '=', 'done']
+                    ],
+                    ['picking_id', 'product_id', 'quantity_done', 'price_unit', 'purchase_line_id'],
+                    limit=5000
+                )
                 
-                # Calcular monto pendiente de esta línea
-                monto_pendiente = qty_pendiente * price_unit
+                # Para cada movimiento, verificar si la línea de compra está facturada
+                purchase_line_ids = [m['purchase_line_id'][0] for m in moves 
+                                    if m.get('purchase_line_id') and isinstance(m['purchase_line_id'], (list, tuple))]
                 
-                # Obtener info de la OC
-                order_info = line.get('order_id')
-                oc_id = order_info[0] if isinstance(order_info, (list, tuple)) else order_info
-                oc_data = oc_info_map.get(oc_id, {})
+                # Obtener info de facturación de las líneas de compra
+                line_invoiced_map = {}
+                if purchase_line_ids:
+                    po_lines = self.odoo.search_read(
+                        'purchase.order.line',
+                        [['id', 'in', purchase_line_ids]],
+                        ['id', 'order_id', 'qty_received', 'qty_invoiced', 'price_unit'],
+                        limit=5000
+                    )
+                    for pl in po_lines:
+                        qty_received = float(pl.get('qty_received') or 0)
+                        qty_invoiced = float(pl.get('qty_invoiced') or 0)
+                        line_invoiced_map[pl['id']] = {
+                            'order_id': pl.get('order_id'),
+                            'qty_pendiente': max(qty_received - qty_invoiced, 0),
+                            'price_unit': float(pl.get('price_unit') or 0)
+                        }
                 
-                # Obtener partner_id de la OC
-                partner_info = oc_data.get('partner_id')
-                pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
-                
-                if pid:
-                    # Agregar información de esta recepción pendiente
+                # Procesar movimientos
+                for move in moves:
+                    picking_id = move['picking_id'][0] if isinstance(move.get('picking_id'), (list, tuple)) else move.get('picking_id')
+                    oc_name = picking_origin_map.get(picking_id, '')
+                    
+                    if not oc_name:
+                        continue
+                    
+                    # Encontrar la OC correspondiente
+                    oc_data = next((oc for oc in ocs if oc['name'] == oc_name), None)
+                    if not oc_data:
+                        continue
+                    
+                    partner_info = oc_data.get('partner_id')
+                    pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+                    
+                    if not pid:
+                        continue
+                    
+                    # Calcular monto pendiente de facturar
+                    purchase_line_id = move['purchase_line_id'][0] if isinstance(move.get('purchase_line_id'), (list, tuple)) else None
+                    
+                    if purchase_line_id and purchase_line_id in line_invoiced_map:
+                        line_info = line_invoiced_map[purchase_line_id]
+                        qty_pendiente = line_info['qty_pendiente']
+                        price_unit = line_info['price_unit']
+                    else:
+                        # Fallback: usar datos del movimiento
+                        qty_pendiente = float(move.get('quantity_done') or 0)
+                        price_unit = float(move.get('price_unit') or 0)
+                    
+                    if qty_pendiente <= 0:
+                        continue
+                    
+                    monto_pendiente = qty_pendiente * price_unit
+                    
+                    # Agregar a recepciones por partner
                     if pid not in recepciones_sin_facturar_by_partner:
                         recepciones_sin_facturar_by_partner[pid] = {}
                     
-                    # Agrupar por OC para el detalle
-                    oc_name = oc_data.get('name', '')
                     if oc_name not in recepciones_sin_facturar_by_partner[pid]:
                         recepciones_sin_facturar_by_partner[pid][oc_name] = {
-                            'oc_id': oc_id,
+                            'oc_id': oc_data.get('id'),
                             'name': oc_name,
                             'date_order': oc_data.get('date_order'),
                             'currency_id': oc_data.get('currency_id'),
@@ -597,6 +663,7 @@ class ComprasService:
                     
                     recepciones_sin_facturar_by_partner[pid][oc_name]['monto_pendiente'] += monto_pendiente
                     recepciones_sin_facturar_by_partner[pid][oc_name]['lineas_count'] += 1
+
         
         # === PROCESAR CADA PARTNER ===
         result = []
@@ -635,10 +702,27 @@ class ComprasService:
                     f_amount = CurrencyService.convert_usd_to_clp(f_amount)
                 monto_facturas += f_amount
             
-            # Recepciones sin facturar (con conversión de moneda)
+            # OCs sin factura - USO TENTATIVO/COMPROMETIDO (con conversión de moneda)
+            ocs_partner = ocs_sin_factura_by_partner.get(partner_id, [])
+            monto_ocs_tentativo = 0.0
+            num_ocs_tentativas = 0
+            for oc in ocs_partner:
+                oc_amount = float(oc.get('amount_total') or 0)
+                oc_currency = oc.get('currency_id')
+                oc_currency_name = ''
+                if isinstance(oc_currency, (list, tuple)) and len(oc_currency) > 1:
+                    oc_currency_name = oc_currency[1]
+                elif isinstance(oc_currency, str):
+                    oc_currency_name = oc_currency
+                if oc_currency_name and 'USD' in oc_currency_name.upper():
+                    oc_amount = CurrencyService.convert_usd_to_clp(oc_amount)
+                monto_ocs_tentativo += oc_amount
+                num_ocs_tentativas += 1
+            
+            # Recepciones sin facturar - USO REAL (con conversión de moneda)
             recepciones_partner = recepciones_sin_facturar_by_partner.get(partner_id, {})
-            monto_ocs = 0.0
-            num_ocs_pendientes = 0
+            monto_recepciones = 0.0
+            num_recepciones = 0
             for oc_name, oc_data in recepciones_partner.items():
                 oc_amount = float(oc_data.get('monto_pendiente') or 0)
                 # Detectar moneda de la OC
@@ -651,13 +735,13 @@ class ComprasService:
                 # Convertir si está en USD
                 if oc_currency_name and 'USD' in oc_currency_name.upper():
                     oc_amount = CurrencyService.convert_usd_to_clp(oc_amount)
-                monto_ocs += oc_amount
-                num_ocs_pendientes += 1
+                monto_recepciones += oc_amount
+                num_recepciones += 1
             
-            # Total usado
-            monto_usado = monto_facturas + monto_ocs
+            # Total usado = Facturas + Recepciones reales (NO incluye OCs tentativas)
+            monto_usado = monto_facturas + monto_recepciones
             
-            # Calcular disponible
+            # Calcular disponible basado en uso real
             disponible = linea_total - monto_usado
             pct_uso = (monto_usado / linea_total * 100) if linea_total > 0 else 0
             
@@ -695,7 +779,7 @@ class ComprasService:
                     'estado': 'Pendiente pago'
                 })
             
-            # Preparar detalle de recepciones sin facturar
+            # Preparar detalle de recepciones sin facturar (REALES)
             for oc_name, oc_data in recepciones_partner.items():
                 # Monto con conversión de moneda
                 oc_monto_original = float(oc_data.get('monto_pendiente') or 0)
@@ -723,6 +807,33 @@ class ComprasService:
                     'estado': 'Recepcionado sin facturar'
                 })
             
+            # Preparar detalle de OCs sin factura (TENTATIVAS) - solo informativo
+            for oc in ocs_partner:
+                oc_monto_original = float(oc.get('amount_total') or 0)
+                oc_monto = oc_monto_original
+                oc_currency = oc.get('currency_id')
+                oc_currency_name = ''
+                if isinstance(oc_currency, (list, tuple)) and len(oc_currency) > 1:
+                    oc_currency_name = oc_currency[1]
+                elif isinstance(oc_currency, str):
+                    oc_currency_name = oc_currency
+                oc_is_usd = oc_currency_name and 'USD' in oc_currency_name.upper()
+                if oc_is_usd:
+                    oc_monto = CurrencyService.convert_usd_to_clp(oc_monto_original)
+                
+                detalle_facturas.append({
+                    'tipo': 'OC Tentativa',
+                    'numero': oc.get('name', ''),
+                    'monto': round(oc_monto, 0),
+                    'monto_original': round(oc_monto_original, 2) if oc_is_usd else None,
+                    'moneda_original': 'USD' if oc_is_usd else 'CLP',
+                    'tipo_cambio': round(exchange_rate, 2) if oc_is_usd else None,
+                    'fecha': str(oc.get('date_order') or '')[:10],
+                    'fecha_vencimiento': '',
+                    'origen': '',
+                    'estado': 'Sin facturar (tentativo)'
+                })
+            
             # Ordenar por monto descendente
             detalle_facturas.sort(key=lambda x: x['monto'], reverse=True)
             
@@ -743,13 +854,15 @@ class ComprasService:
                 'linea_total': round(linea_total, 0),
                 'monto_usado': round(monto_usado, 0),
                 'monto_facturas': round(monto_facturas, 0),
-                'monto_ocs': round(monto_ocs, 0),
+                'monto_ocs': round(monto_ocs_tentativo, 0),  # OCs sin factura (tentativo)
+                'monto_recepciones': round(monto_recepciones, 0),  # Recepciones reales
                 'disponible': round(disponible, 0),
                 'pct_uso': round(pct_uso, 1),
                 'estado': estado,
                 'alerta': alerta,
                 'num_facturas': len(facturas_partner),
-                'num_ocs': num_ocs_pendientes,
+                'num_ocs': num_ocs_tentativas,
+                'num_recepciones': num_recepciones,
                 'detalle': detalle_facturas
             })
         
