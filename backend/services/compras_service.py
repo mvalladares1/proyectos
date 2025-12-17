@@ -556,22 +556,22 @@ class ComprasService:
                 ocs_sin_factura_by_partner.setdefault(pid, []).append(oc)
         
         # === 3. RECEPCIONES REALES SIN FACTURAR (via stock.move) ===
-        # Buscar pickings de recepción asociados a las OCs
+        # Buscar pickings de recepción asociados a las OCs (cualquier estado)
         recepciones_sin_facturar_by_partner = {}
         
         if oc_ids:
             # Buscar los nombres de las OCs para buscar pickings por origin
             oc_names = [oc['name'] for oc in ocs]
             
-            # Buscar pickings de recepción (picking_type_code = 'incoming') en estado done
+            # Buscar pickings de recepción (picking_type_code = 'incoming') en cualquier estado
+            # No filtramos por state para capturar recepciones parciales
             pickings = self.odoo.search_read(
                 'stock.picking',
                 [
                     ['origin', 'in', oc_names],
-                    ['state', '=', 'done'],
                     ['picking_type_code', '=', 'incoming']
                 ],
-                ['id', 'name', 'origin', 'partner_id', 'date_done'],
+                ['id', 'name', 'origin', 'partner_id', 'date_done', 'state'],
                 limit=2000
             )
             
@@ -580,12 +580,12 @@ class ComprasService:
                 picking_origin_map = {p['id']: p.get('origin', '') for p in pickings}
                 picking_date_map = {p['id']: p.get('date_done', '') for p in pickings}
                 
-                # Obtener movimientos de estos pickings
+                # Obtener movimientos con quantity_done > 0 (recepciones reales)
                 moves = self.odoo.search_read(
                     'stock.move',
                     [
                         ['picking_id', 'in', picking_ids],
-                        ['state', '=', 'done']
+                        ['quantity_done', '>', 0]  # Solo movimientos con cantidades hechas
                     ],
                     ['picking_id', 'product_id', 'quantity_done', 'price_unit', 'purchase_line_id'],
                     limit=5000
