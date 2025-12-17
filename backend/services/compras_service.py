@@ -460,13 +460,15 @@ class ComprasService:
         
         Lógica de cálculo:
         - Línea Total = x_studio_linea_credito_monto
-        - Usado = Facturas no pagadas + Recepciones sin facturar
+        - Usado = Facturas no pagadas + Recepciones reales sin facturar
         - Disponible = Línea Total - Usado
         
         Detalle:
         1. Facturas de proveedor con amount_residual > 0 (no pagadas)
-        2. Líneas de OC donde qty_received > qty_invoiced (recepcionado pero no facturado)
-           Monto = (qty_received - qty_invoiced) * price_unit
+        2. Recepciones reales sin facturar: stock.move en estado 'done' con
+           purchase_line_id donde qty_received > qty_invoiced
+        3. OCs tentativas (informativo): OCs confirmadas sin factura asociada
+           (no afecta disponibilidad, solo referencia)
         """
         # Buscar partners con línea de crédito activa
         partners = self.odoo.search_read(

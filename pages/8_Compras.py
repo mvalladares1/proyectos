@@ -467,19 +467,24 @@ with tab_credito:
                 
                 # KPIs en cards visuales
                 st.markdown("---")
-                kp_cols = st.columns(5)
+                kp_cols = st.columns(6)
                 with kp_cols[0]:
                     st.metric("Linea Total", fmt_moneda(prov['linea_total']))
                 with kp_cols[1]:
                     st.metric("Facturas", fmt_moneda(prov.get('monto_facturas', 0)), 
                              delta=str(prov.get('num_facturas', 0)) + " pend.", delta_color="off")
                 with kp_cols[2]:
-                    st.metric("OCs Sin Fact.", fmt_moneda(prov.get('monto_ocs', 0)),
-                             delta=str(prov.get('num_ocs', 0)) + " OCs", delta_color="off")
+                    # Recepciones reales sin facturar (afecta disponibilidad)
+                    st.metric("Recep. Sin Fact.", fmt_moneda(prov.get('monto_recepciones', 0)),
+                             delta=str(prov.get('num_recepciones', 0)) + " recep.", delta_color="off")
                 with kp_cols[3]:
+                    # OCs tentativas (solo informativo, no afecta disponibilidad)
+                    st.metric("OCs Tentativas", fmt_moneda(prov.get('monto_ocs', 0)),
+                             delta=str(prov.get('num_ocs', 0)) + " OCs", delta_color="off")
+                with kp_cols[4]:
                     st.metric("Total Usado", fmt_moneda(prov['monto_usado']),
                              delta=str(int(pct)) + "%", delta_color="inverse")
-                with kp_cols[4]:
+                with kp_cols[5]:
                     st.metric("Disponible", fmt_moneda(max(prov['disponible'], 0)),
                              delta=str(int(pct_disp)) + "%", delta_color="normal")
                 
