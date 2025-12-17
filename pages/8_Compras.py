@@ -570,8 +570,9 @@ with tab_credito:
                 |----------|-------------|
                 | **Línea Total** | Campo `x_studio_linea_credito_monto` del proveedor |
                 | **Facturas** | Facturas con `amount_residual > 0` (pendientes pago) |
-                | **Recepciones** | Líneas de OC recepcionadas sin facturar (`qty_received > qty_invoiced`) |
-                | **Usado** | Facturas pendientes + Recepciones sin facturar |
+                | **Recep. Sin Fact.** | Recepciones reales (stock.move done) sin facturar |
+                | **OCs Tentativas** | OCs confirmadas sin factura (solo informativo) |
+                | **Usado** | Facturas + Recepciones reales (**no incluye OCs tentativas**) |
                 | **Disponible** | Línea Total - Usado |
                 
                 ### Alertas
