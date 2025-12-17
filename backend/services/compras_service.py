@@ -555,107 +555,64 @@ class ComprasService:
             if pid:
                 ocs_sin_factura_by_partner.setdefault(pid, []).append(oc)
         
-        # === 3. RECEPCIONES REALES SIN FACTURAR (via stock.move) ===
-        # Buscar pickings de recepción asociados a las OCs (cualquier estado)
+        # === 3. RECEPCIONES REALES SIN FACTURAR (via purchase.order.line) ===
+        # Buscar líneas de OC donde qty_received > 0 (algo se recibió)
+        # y calcular la diferencia con qty_invoiced (lo no facturado)
         recepciones_sin_facturar_by_partner = {}
         
         if oc_ids:
-            # Buscar los nombres de las OCs para buscar pickings por origin
-            oc_names = [oc['name'] for oc in ocs]
-            
-            # Buscar pickings de recepción (picking_type_code = 'incoming') en cualquier estado
-            # No filtramos por state para capturar recepciones parciales
-            pickings = self.odoo.search_read(
-                'stock.picking',
-                [
-                    ['origin', 'in', oc_names],
-                    ['picking_type_code', '=', 'incoming']
-                ],
-                ['id', 'name', 'origin', 'partner_id', 'date_done', 'state'],
-                limit=2000
+            # Leer todas las líneas de PO de estas OCs
+            po_lines = self.odoo.search_read(
+                'purchase.order.line',
+                [['order_id', 'in', oc_ids]],
+                ['id', 'order_id', 'product_id', 'name', 'product_qty', 'qty_received', 'qty_invoiced', 'price_unit'],
+                limit=5000
             )
             
-            if pickings:
-                picking_ids = [p['id'] for p in pickings]
-                picking_origin_map = {p['id']: p.get('origin', '') for p in pickings}
-                picking_date_map = {p['id']: p.get('date_done', '') for p in pickings}
+            # DEBUG: Log para ver qué datos vienen
+            print(f"[DEBUG LINEAS CREDITO] Encontradas {len(po_lines)} líneas de OC")
+            
+            # Procesar cada línea y calcular el valor pendiente
+            for line in po_lines:
+                qty_received = float(line.get('qty_received') or 0)
+                qty_invoiced = float(line.get('qty_invoiced') or 0)
+                price_unit = float(line.get('price_unit') or 0)
                 
-                # Obtener movimientos con quantity_done > 0 (recepciones reales)
-                moves = self.odoo.search_read(
-                    'stock.move',
-                    [
-                        ['picking_id', 'in', picking_ids],
-                        ['quantity_done', '>', 0]  # Solo movimientos con cantidades hechas
-                    ],
-                    ['picking_id', 'product_id', 'quantity_done', 'price_unit', 'purchase_line_id'],
-                    limit=5000
-                )
+                # DEBUG para ver los valores
+                if qty_received > 0:
+                    order_info = line.get('order_id')
+                    oc_id = order_info[0] if isinstance(order_info, (list, tuple)) else order_info
+                    oc_data = oc_info_map.get(oc_id, {})
+                    oc_name = oc_data.get('name', 'N/A')
+                    print(f"[DEBUG] Línea OC {oc_name}: qty_recv={qty_received}, qty_inv={qty_invoiced}, pendiente={qty_received - qty_invoiced}")
                 
-                # Para cada movimiento, verificar si la línea de compra está facturada
-                purchase_line_ids = [m['purchase_line_id'][0] for m in moves 
-                                    if m.get('purchase_line_id') and isinstance(m['purchase_line_id'], (list, tuple))]
+                # Solo considerar si hay recepción sin facturar
+                qty_pendiente = qty_received - qty_invoiced
+                if qty_pendiente <= 0:
+                    continue
                 
-                # Obtener info de facturación de las líneas de compra
-                line_invoiced_map = {}
-                if purchase_line_ids:
-                    po_lines = self.odoo.search_read(
-                        'purchase.order.line',
-                        [['id', 'in', purchase_line_ids]],
-                        ['id', 'order_id', 'qty_received', 'qty_invoiced', 'price_unit'],
-                        limit=5000
-                    )
-                    for pl in po_lines:
-                        qty_received = float(pl.get('qty_received') or 0)
-                        qty_invoiced = float(pl.get('qty_invoiced') or 0)
-                        line_invoiced_map[pl['id']] = {
-                            'order_id': pl.get('order_id'),
-                            'qty_pendiente': max(qty_received - qty_invoiced, 0),
-                            'price_unit': float(pl.get('price_unit') or 0)
-                        }
+                # Calcular monto pendiente de esta línea
+                monto_pendiente = qty_pendiente * price_unit
                 
-                # Procesar movimientos
-                for move in moves:
-                    picking_id = move['picking_id'][0] if isinstance(move.get('picking_id'), (list, tuple)) else move.get('picking_id')
-                    oc_name = picking_origin_map.get(picking_id, '')
-                    
-                    if not oc_name:
-                        continue
-                    
-                    # Encontrar la OC correspondiente
-                    oc_data = next((oc for oc in ocs if oc['name'] == oc_name), None)
-                    if not oc_data:
-                        continue
-                    
-                    partner_info = oc_data.get('partner_id')
-                    pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
-                    
-                    if not pid:
-                        continue
-                    
-                    # Calcular monto pendiente de facturar
-                    purchase_line_id = move['purchase_line_id'][0] if isinstance(move.get('purchase_line_id'), (list, tuple)) else None
-                    
-                    if purchase_line_id and purchase_line_id in line_invoiced_map:
-                        line_info = line_invoiced_map[purchase_line_id]
-                        qty_pendiente = line_info['qty_pendiente']
-                        price_unit = line_info['price_unit']
-                    else:
-                        # Fallback: usar datos del movimiento
-                        qty_pendiente = float(move.get('quantity_done') or 0)
-                        price_unit = float(move.get('price_unit') or 0)
-                    
-                    if qty_pendiente <= 0:
-                        continue
-                    
-                    monto_pendiente = qty_pendiente * price_unit
-                    
-                    # Agregar a recepciones por partner
+                # Obtener info de la OC
+                order_info = line.get('order_id')
+                oc_id = order_info[0] if isinstance(order_info, (list, tuple)) else order_info
+                oc_data = oc_info_map.get(oc_id, {})
+                
+                # Obtener partner_id de la OC
+                partner_info = oc_data.get('partner_id')
+                pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+                
+                if pid:
+                    # Agregar información de esta recepción pendiente
                     if pid not in recepciones_sin_facturar_by_partner:
                         recepciones_sin_facturar_by_partner[pid] = {}
                     
+                    # Agrupar por OC para el detalle
+                    oc_name = oc_data.get('name', '')
                     if oc_name not in recepciones_sin_facturar_by_partner[pid]:
                         recepciones_sin_facturar_by_partner[pid][oc_name] = {
-                            'oc_id': oc_data.get('id'),
+                            'oc_id': oc_id,
                             'name': oc_name,
                             'date_order': oc_data.get('date_order'),
                             'currency_id': oc_data.get('currency_id'),
@@ -665,6 +622,11 @@ class ComprasService:
                     
                     recepciones_sin_facturar_by_partner[pid][oc_name]['monto_pendiente'] += monto_pendiente
                     recepciones_sin_facturar_by_partner[pid][oc_name]['lineas_count'] += 1
+            
+            # DEBUG: Mostrar resultados
+            for pid, ocs in recepciones_sin_facturar_by_partner.items():
+                for oc_name, data in ocs.items():
+                    print(f"[DEBUG RESULTADO] Partner {pid}: {oc_name} = ${data['monto_pendiente']:,.0f}")
 
         
         # === PROCESAR CADA PARTNER ===
