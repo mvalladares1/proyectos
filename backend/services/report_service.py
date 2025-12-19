@@ -789,3 +789,162 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
+
+
+def generate_bandejas_report_pdf(
+    kpis: Dict[str, Any],
+    df_gestion: List[Dict[str, Any]],
+    df_productores: List[Dict[str, Any]],
+    filtros: Optional[Dict[str, str]] = None,
+    logo_path: Optional[str] = None
+) -> bytes:
+    """
+    Genera un PDF con el informe de Bandejas.
+    
+    Args:
+        kpis: Diccionario con KPIs consolidados (despachadas, recepcionadas, en_productores, stock_total, limpias, sucias)
+        df_gestion: Lista de dicts con datos de gestión de bandejas
+        df_productores: Lista de dicts con datos por productor
+        filtros: Diccionario opcional con los filtros aplicados (año, mes, temporada)
+        logo_path: Ruta opcional al logo
+    
+    Returns:
+        bytes: Contenido del PDF
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=30, rightMargin=30, topMargin=60, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    generated_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    PAGE_WIDTH, PAGE_HEIGHT = A4
+    
+    # Título
+    filtro_str = ""
+    if filtros:
+        if filtros.get('temporada'):
+            filtro_str = f" - {filtros['temporada']}"
+        elif filtros.get('año') and filtros.get('mes'):
+            filtro_str = f" - {filtros['mes']}/{filtros['año']}"
+        elif filtros.get('año'):
+            filtro_str = f" - Año {filtros['año']}"
+    
+    title = f"Informe de Bandejas{filtro_str}"
+    elements.append(Paragraph(title, styles['Title']))
+    elements.append(Spacer(1, 12))
+    
+    # --- KPIs Consolidados ---
+    elements.append(Paragraph("KPIs Consolidados", styles['Heading2']))
+    elements.append(Spacer(1, 6))
+    
+    kpi_data = [
+        ["📤 Despachadas", "📥 Recepcionadas", "🏠 En Productores"],
+        [fmt_numero(kpis.get('despachadas', 0)), fmt_numero(kpis.get('recepcionadas', 0)), fmt_numero(kpis.get('en_productores', 0))],
+        ["📦 Stock Total", "✨ Limpias", "🧹 Sucias"],
+        [fmt_numero(kpis.get('stock_total', 0)), fmt_numero(kpis.get('limpias', 0)), fmt_numero(kpis.get('sucias', 0))]
+    ]
+    
+    kpi_table = Table(kpi_data, hAlign='LEFT', colWidths=[170, 170, 170])
+    kpi_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#333333')),
+        ('TEXTCOLOR', (0, 2), (-1, 2), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(kpi_table)
+    elements.append(Spacer(1, 20))
+    
+    # --- Tabla Gestión Bandejas ---
+    if df_gestion:
+        elements.append(Paragraph("Gestión de Bandejas", styles['Heading2']))
+        elements.append(Spacer(1, 6))
+        
+        gestion_header = ["Nombre", "Sucias", "Limpias", "Proyectados", "Diferencia"]
+        gestion_data = [gestion_header]
+        
+        for row in df_gestion:
+            gestion_data.append([
+                row.get('Nombre', ''),
+                fmt_numero(row.get('Bandejas Sucias', 0)),
+                fmt_numero(row.get('Bandejas Limpias', 0)),
+                fmt_numero(row.get('Proyectados', 0)),
+                fmt_numero(row.get('Diferencia', 0))
+            ])
+        
+        gestion_table = Table(gestion_data, hAlign='LEFT', repeatRows=1, colWidths=[180, 80, 80, 80, 80])
+        gestion_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+        ]
+        
+        # Highlight TOTAL row if present
+        for i, row in enumerate(df_gestion):
+            if row.get('Nombre') == 'TOTAL':
+                gestion_style.append(('BACKGROUND', (0, i+1), (-1, i+1), colors.HexColor('#ffc107')))
+                gestion_style.append(('FONTNAME', (0, i+1), (-1, i+1), 'Helvetica-Bold'))
+        
+        gestion_table.setStyle(TableStyle(gestion_style))
+        elements.append(gestion_table)
+        elements.append(Spacer(1, 20))
+    
+    # --- Tabla Por Productor ---
+    if df_productores:
+        elements.append(Paragraph("Detalle por Productor", styles['Heading2']))
+        elements.append(Spacer(1, 6))
+        
+        prod_header = ["Productor", "Recepcionadas", "Despachadas", "En Productor"]
+        prod_data = [prod_header]
+        
+        for row in df_productores:
+            prod_data.append([
+                row.get('Productor', ''),
+                fmt_numero(row.get('Recepcionadas', 0)),
+                fmt_numero(row.get('Despachadas', 0)),
+                fmt_numero(row.get('Bandejas en Productor', 0))
+            ])
+        
+        prod_table = Table(prod_data, hAlign='LEFT', repeatRows=1, colWidths=[200, 100, 100, 100])
+        prod_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+        ]))
+        elements.append(prod_table)
+    
+    # Header/footer
+    def _draw_page(canvas, doc):
+        canvas.saveState()
+        header_y = PAGE_HEIGHT - 40
+        if logo_path and os.path.exists(logo_path):
+            try:
+                img = ImageReader(logo_path)
+                iw, ih = img.getSize()
+                max_h = 30
+                scale = max_h / float(ih)
+                draw_w = iw * scale
+                canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
+            except Exception:
+                pass
+        canvas.setFont('Helvetica', 8)
+        canvas.drawString(doc.leftMargin, 20, f"Generado: {generated_str}")
+        canvas.drawRightString(PAGE_WIDTH - doc.rightMargin, 20, f"Página {doc.page}")
+        canvas.restoreState()
+    
+    doc.build(elements, onFirstPage=_draw_page, onLaterPages=_draw_page)
+    pdf = buffer.getvalue()
+    buffer.close()
+    return pdf

@@ -6,12 +6,14 @@ import pandas as pd
 import altair as alt
 import sys
 import os
+import io
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.auth import verificar_autenticacion, proteger_pagina, get_credenciales
 from shared.odoo_client import OdooClient
+from backend.services.report_service import generate_bandejas_report_pdf
 
 
 # --- Funciones de formateo chileno ---
@@ -431,18 +433,22 @@ if not df_in.empty or not df_out.empty:
         total_stock_limpias = df_stock[df_stock['Tipo'] == 'Limpia']['qty_available'].sum()
     total_stock = total_stock_sucias + total_stock_limpias
     
-    # Mostrar KPIs en 5 columnas
-    kpi_cols = st.columns(5)
-    with kpi_cols[0]:
+    # Mostrar KPIs en 2 filas para mejor visualización
+    kpi_row1 = st.columns(3)
+    with kpi_row1[0]:
         st.metric("📤 Despachadas", fmt_numero(total_despachadas))
-    with kpi_cols[1]:
+    with kpi_row1[1]:
         st.metric("📥 Recepcionadas", fmt_numero(total_recepcionadas))
-    with kpi_cols[2]:
+    with kpi_row1[2]:
         st.metric("🏠 En Productores", fmt_numero(total_en_productores))
-    with kpi_cols[3]:
+    
+    kpi_row2 = st.columns(3)
+    with kpi_row2[0]:
         st.metric("📦 Stock Total", fmt_numero(total_stock))
-    with kpi_cols[4]:
-        st.metric("✨ Limpias / 🧹 Sucias", f"{fmt_numero(total_stock_limpias)} / {fmt_numero(total_stock_sucias)}")
+    with kpi_row2[1]:
+        st.metric("✨ Limpias", fmt_numero(total_stock_limpias))
+    with kpi_row2[2]:
+        st.metric("🧹 Sucias", fmt_numero(total_stock_sucias))
     
     # ==================== TABLA GESTIÓN BANDEJAS ====================
     if not df_stock.empty:
@@ -490,7 +496,7 @@ if not df_in.empty or not df_out.empty:
         if 'Proyectados' not in df_gestion.columns:
             df_gestion['Proyectados'] = 0
         
-        df_gestion['Diferencia'] = df_gestion['Proyectados'] - df_gestion['Bandejas Limpias']
+        df_gestion['Diferencia'] = df_gestion['Bandejas Limpias'] - df_gestion['Bandejas Sucias']
         
         # Guardar datos para gráfico ANTES de agregar total y formatear
         df_gestion_chart = df_gestion.copy()
@@ -563,6 +569,81 @@ if not df_in.empty or not df_out.empty:
         ).configure_axis(labelFontSize=12, titleFontSize=14, grid=False).configure_legend(titleFontSize=12, labelFontSize=11)
         
         st.altair_chart(final_stock_chart, use_container_width=True)
+        
+        # ==================== EXPORTAR GESTIÓN ====================
+        st.markdown("##### 📥 Exportar Datos de Gestión")
+        export_gestion_cols = st.columns(2)
+        
+        # Preparar datos para exportar (sin formato, valores numéricos)
+        df_gestion_export = df_gestion_chart.pivot(index='Nombre', columns='Tipo', values='Cantidad').reset_index()
+        df_gestion_export.columns.name = None
+        if 'Sucia' not in df_gestion_export.columns:
+            df_gestion_export['Sucia'] = 0
+        if 'Limpia' not in df_gestion_export.columns:
+            df_gestion_export['Limpia'] = 0
+        if 'Proyectada' not in df_gestion_export.columns:
+            df_gestion_export['Proyectada'] = 0
+        df_gestion_export['Diferencia'] = df_gestion_export['Limpia'] - df_gestion_export['Sucia']
+        df_gestion_export = df_gestion_export.rename(columns={'Sucia': 'Bandejas Sucias', 'Limpia': 'Bandejas Limpias', 'Proyectada': 'Proyectados'})
+        
+        with export_gestion_cols[0]:
+            try:
+                buffer_gestion = io.BytesIO()
+                with pd.ExcelWriter(buffer_gestion, engine='xlsxwriter') as writer:
+                    df_gestion_export.to_excel(writer, sheet_name='Gestión Bandejas', index=False)
+                st.download_button(
+                    "📥 Descargar Excel (Gestión)",
+                    buffer_gestion.getvalue(),
+                    "bandejas_gestion.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_gestion_excel"
+                )
+            except Exception:
+                csv_gestion = df_gestion_export.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar CSV (Gestión)", csv_gestion, "bandejas_gestion.csv", "text/csv", key="download_gestion_csv")
+        
+        with export_gestion_cols[1]:
+            # Generar PDF
+            if st.button("📄 Generar PDF Informe", key="generate_pdf_btn"):
+                try:
+                    # Preparar datos para PDF
+                    kpis_pdf = {
+                        'despachadas': total_despachadas,
+                        'recepcionadas': total_recepcionadas,
+                        'en_productores': total_en_productores,
+                        'stock_total': total_stock,
+                        'limpias': total_stock_limpias,
+                        'sucias': total_stock_sucias
+                    }
+                    
+                    # Convertir df_gestion_export a lista de dicts
+                    gestion_records = df_gestion_export.to_dict(orient='records')
+                    
+                    # Preparar filtros
+                    filtros_pdf = {}
+                    if filter_type == "Por Temporada" and selected_season:
+                        filtros_pdf['temporada'] = selected_season
+                    elif filter_type == "Por Mes/Año":
+                        if selected_year != 'Todos':
+                            filtros_pdf['año'] = str(selected_year)
+                        if selected_month_name != 'Todos':
+                            filtros_pdf['mes'] = selected_month_name
+                    
+                    pdf_bytes = generate_bandejas_report_pdf(
+                        kpis=kpis_pdf,
+                        df_gestion=gestion_records,
+                        df_productores=[],  # Se llenará después
+                        filtros=filtros_pdf
+                    )
+                    st.download_button(
+                        "⬇️ Descargar PDF",
+                        pdf_bytes,
+                        "informe_bandejas.pdf",
+                        "application/pdf",
+                        key="download_pdf"
+                    )
+                except Exception as e:
+                    st.error(f"Error al generar PDF: {e}")
     
     st.markdown("---")
     
@@ -649,6 +730,33 @@ if not df_in.empty or not df_out.empty:
     ).configure_axis(labelFontSize=12, titleFontSize=14, grid=False).configure_legend(titleFontSize=12, labelFontSize=11)
     
     st.altair_chart(chart, use_container_width=True)
+    
+    # ==================== EXPORTAR POR PRODUCTOR ====================
+    st.markdown("##### 📥 Exportar Datos por Productor")
+    export_prod_cols = st.columns(2)
+    
+    # Preparar datos para exportar (sin formato, valores numéricos)
+    df_prod_export = df_merged_sorted[['Productor', 'Recepcionadas', 'Despachadas', 'Bandejas en Productor']].copy()
+    
+    with export_prod_cols[0]:
+        try:
+            buffer_prod = io.BytesIO()
+            with pd.ExcelWriter(buffer_prod, engine='xlsxwriter') as writer:
+                df_prod_export.to_excel(writer, sheet_name='Por Productor', index=False)
+            st.download_button(
+                "📥 Descargar Excel (Por Productor)",
+                buffer_prod.getvalue(),
+                "bandejas_productores.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_prod_excel"
+            )
+        except Exception:
+            csv_prod = df_prod_export.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Descargar CSV (Por Productor)", csv_prod, "bandejas_productores.csv", "text/csv", key="download_prod_csv")
+    
+    with export_prod_cols[1]:
+        csv_prod = df_prod_export.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Descargar CSV (Por Productor)", csv_prod, "bandejas_productores.csv", "text/csv", key="download_prod_csv_alt")
 
 else:
     st.warning("No se encontraron movimientos para 'Bandeja'.")
