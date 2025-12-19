@@ -496,7 +496,13 @@ if not df_in.empty or not df_out.empty:
         if 'Proyectados' not in df_gestion.columns:
             df_gestion['Proyectados'] = 0
         
-        df_gestion['Diferencia'] = df_gestion['Bandejas Limpias'] - df_gestion['Bandejas Sucias']
+        # Aplicar valor absoluto para evitar negativos
+        df_gestion['Bandejas Sucias'] = df_gestion['Bandejas Sucias'].abs()
+        df_gestion['Bandejas Limpias'] = df_gestion['Bandejas Limpias'].abs()
+        df_gestion['Proyectados'] = df_gestion['Proyectados'].abs()
+        
+        # Stock Total = Sucias + Limpias (consolidado)
+        df_gestion['Stock Total'] = df_gestion['Bandejas Sucias'] + df_gestion['Bandejas Limpias']
         
         # Guardar datos para gráfico ANTES de agregar total y formatear
         df_gestion_chart = df_gestion.copy()
@@ -516,7 +522,7 @@ if not df_in.empty or not df_out.empty:
         total_sucias = df_gestion['Bandejas Sucias'].sum()
         total_limpias = df_gestion['Bandejas Limpias'].sum()
         total_proyectados = df_gestion['Proyectados'].sum()
-        total_diferencia = df_gestion['Diferencia'].sum()
+        total_stock_gestion = df_gestion['Stock Total'].sum()
         
         # Agregar fila TOTAL
         total_row = pd.DataFrame([{
@@ -525,7 +531,7 @@ if not df_in.empty or not df_out.empty:
             'Bandejas Sucias': total_sucias,
             'Bandejas Limpias': total_limpias,
             'Proyectados': total_proyectados,
-            'Diferencia': total_diferencia
+            'Stock Total': total_stock_gestion
         }])
         df_gestion = pd.concat([df_gestion, total_row], ignore_index=True)
         
@@ -533,7 +539,7 @@ if not df_in.empty or not df_out.empty:
         df_gestion['Bandejas Sucias'] = df_gestion['Bandejas Sucias'].apply(lambda x: fmt_numero(x))
         df_gestion['Bandejas Limpias'] = df_gestion['Bandejas Limpias'].apply(lambda x: fmt_numero(x))
         df_gestion['Proyectados'] = df_gestion['Proyectados'].apply(lambda x: fmt_numero(x))
-        df_gestion['Diferencia'] = df_gestion['Diferencia'].apply(lambda x: fmt_numero(x))
+        df_gestion['Stock Total'] = df_gestion['Stock Total'].apply(lambda x: fmt_numero(x))
         
         # Estilo para fila TOTAL (amarilla)
         def highlight_total_gestion(row):
@@ -542,7 +548,7 @@ if not df_in.empty or not df_out.empty:
             return [''] * len(row)
         
         st.dataframe(
-            df_gestion[['Nombre', 'Bandejas Sucias', 'Bandejas Limpias', 'Proyectados', 'Diferencia']].style.apply(highlight_total_gestion, axis=1),
+            df_gestion[['Nombre', 'Bandejas Sucias', 'Bandejas Limpias', 'Proyectados', 'Stock Total']].style.apply(highlight_total_gestion, axis=1),
             hide_index=True,
             use_container_width=True
         )
@@ -583,7 +589,11 @@ if not df_in.empty or not df_out.empty:
             df_gestion_export['Limpia'] = 0
         if 'Proyectada' not in df_gestion_export.columns:
             df_gestion_export['Proyectada'] = 0
-        df_gestion_export['Diferencia'] = df_gestion_export['Limpia'] - df_gestion_export['Sucia']
+        # Aplicar abs para evitar negativos
+        df_gestion_export['Sucia'] = df_gestion_export['Sucia'].abs()
+        df_gestion_export['Limpia'] = df_gestion_export['Limpia'].abs()
+        df_gestion_export['Proyectada'] = df_gestion_export['Proyectada'].abs()
+        df_gestion_export['Stock Total'] = df_gestion_export['Sucia'] + df_gestion_export['Limpia']
         df_gestion_export = df_gestion_export.rename(columns={'Sucia': 'Bandejas Sucias', 'Limpia': 'Bandejas Limpias', 'Proyectada': 'Proyectados'})
         
         with export_gestion_cols[0]:
@@ -755,8 +765,48 @@ if not df_in.empty or not df_out.empty:
             st.download_button("📥 Descargar CSV (Por Productor)", csv_prod, "bandejas_productores.csv", "text/csv", key="download_prod_csv")
     
     with export_prod_cols[1]:
-        csv_prod = df_prod_export.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar CSV (Por Productor)", csv_prod, "bandejas_productores.csv", "text/csv", key="download_prod_csv_alt")
+        # Generar PDF con detalle por productor
+        if st.button("📄 Generar PDF (Por Productor)", key="generate_pdf_prod_btn"):
+            try:
+                # Preparar KPIs
+                kpis_pdf = {
+                    'despachadas': total_despachadas,
+                    'recepcionadas': total_recepcionadas,
+                    'en_productores': total_en_productores,
+                    'stock_total': total_stock,
+                    'limpias': total_stock_limpias,
+                    'sucias': total_stock_sucias
+                }
+                
+                # Preparar datos de productores (valores numéricos)
+                prod_records = df_prod_export.to_dict(orient='records')
+                
+                # Preparar filtros
+                filtros_pdf = {}
+                if filter_type == "Por Temporada" and selected_season:
+                    filtros_pdf['temporada'] = selected_season
+                elif filter_type == "Por Mes/Año":
+                    if selected_year != 'Todos':
+                        filtros_pdf['año'] = str(selected_year)
+                    if selected_month_name != 'Todos':
+                        filtros_pdf['mes'] = selected_month_name
+                
+                # Generar PDF completo con productores
+                pdf_bytes = generate_bandejas_report_pdf(
+                    kpis=kpis_pdf,
+                    df_gestion=[],  # Sin gestión, solo productores
+                    df_productores=prod_records,
+                    filtros=filtros_pdf
+                )
+                st.download_button(
+                    "⬇️ Descargar PDF",
+                    pdf_bytes,
+                    "bandejas_por_productor.pdf",
+                    "application/pdf",
+                    key="download_pdf_prod"
+                )
+            except Exception as e:
+                st.error(f"Error al generar PDF: {e}")
 
 else:
     st.warning("No se encontraron movimientos para 'Bandeja'.")
