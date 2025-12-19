@@ -544,18 +544,23 @@ with tab_general:
                 )
                 df_display['Merma'] = df_display['Merma'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) else "—")
                 
-                # Mostrar tabla
+                # Calcular altura dinámica basada en filas
+                num_filas = len(df_display)
+                table_height = min(600, max(200, num_filas * 40 + 60))
+                
+                # Mostrar tabla con ancho completo
                 df_show = df_display[['Descripción', 'Kg MP', 'Kg PT', 'Rendimiento', 'Merma']]
                 st.dataframe(
                     df_show,
                     use_container_width=True,
                     hide_index=True,
+                    height=table_height,
                     column_config={
-                        'Descripción': st.column_config.TextColumn('Tipo / Manejo', width='large'),
-                        'Kg MP': st.column_config.TextColumn('Kg MP', width='small'),
-                        'Kg PT': st.column_config.TextColumn('Kg PT', width='small'),
-                        'Rendimiento': st.column_config.TextColumn('Rendimiento', width='medium'),
-                        'Merma': st.column_config.TextColumn('Merma (Kg)', width='small'),
+                        'Descripción': st.column_config.TextColumn('Tipo / Manejo', width=250),
+                        'Kg MP': st.column_config.TextColumn('Kg MP', width=120),
+                        'Kg PT': st.column_config.TextColumn('Kg PT', width=120),
+                        'Rendimiento': st.column_config.TextColumn('Rendimiento', width=150),
+                        'Merma': st.column_config.TextColumn('Merma (Kg)', width=120),
                     }
                 )
             
@@ -566,23 +571,71 @@ with tab_general:
                 st.subheader("📈 Rendimiento por Tipo de Fruta")
                 
                 df_fruta = pd.DataFrame(por_fruta)
-                chart = alt.Chart(df_fruta).mark_bar().encode(
-                    x=alt.X('tipo_fruta:N', sort='-y', title='Tipo Fruta'),
-                    y=alt.Y('rendimiento:Q', title='Rendimiento %'),
+                
+                # Calcular altura dinámica basada en cantidad de frutas
+                num_frutas = len(df_fruta)
+                chart_height = max(300, min(500, num_frutas * 80))
+                bar_size = max(30, min(60, 400 // num_frutas)) if num_frutas > 0 else 50
+                
+                # Gráfico de barras horizontales para mejor lectura de etiquetas
+                bars = alt.Chart(df_fruta).mark_bar(size=bar_size).encode(
+                    y=alt.Y('tipo_fruta:N', sort='-x', title='Tipo de Fruta', 
+                           axis=alt.Axis(labelFontSize=14, labelLimit=200)),
+                    x=alt.X('rendimiento:Q', title='Rendimiento %', 
+                           scale=alt.Scale(domain=[0, 105]),
+                           axis=alt.Axis(labelFontSize=12)),
                     color=alt.condition(
                         alt.datum.rendimiento >= 90,
-                        alt.value('#28a745'),
-                        alt.value('#dc3545')
+                        alt.value('#22c55e'),  # Verde más vibrante
+                        alt.condition(
+                            alt.datum.rendimiento >= 80,
+                            alt.value('#f59e0b'),  # Amarillo/Naranja
+                            alt.value('#ef4444')   # Rojo
+                        )
                     ),
-                    tooltip=['tipo_fruta', 'kg_pt', 'rendimiento', 'num_lotes']
-                ).properties(height=350)
+                    tooltip=[
+                        alt.Tooltip('tipo_fruta:N', title='Fruta'),
+                        alt.Tooltip('rendimiento:Q', title='Rendimiento %', format='.1f'),
+                        alt.Tooltip('kg_mp:Q', title='Kg MP', format=',.0f'),
+                        alt.Tooltip('kg_pt:Q', title='Kg PT', format=',.0f'),
+                        alt.Tooltip('num_lotes:Q', title='Lotes')
+                    ]
+                )
+                
+                # Etiquetas de valor en las barras
+                text = alt.Chart(df_fruta).mark_text(
+                    align='left', 
+                    baseline='middle', 
+                    dx=5,
+                    fontSize=14,
+                    fontWeight='bold',
+                    color='white'
+                ).encode(
+                    y=alt.Y('tipo_fruta:N', sort='-x'),
+                    x=alt.X('rendimiento:Q'),
+                    text=alt.Text('rendimiento:Q', format='.1f')
+                )
                 
                 # Líneas de referencia
-                rule_90 = alt.Chart(pd.DataFrame({'y': [90]})).mark_rule(color='red', strokeDash=[5,5]).encode(y='y:Q')
-                rule_95 = alt.Chart(pd.DataFrame({'y': [95]})).mark_rule(color='orange', strokeDash=[5,5]).encode(y='y:Q')
+                rule_90 = alt.Chart(pd.DataFrame({'x': [90]})).mark_rule(
+                    color='#ef4444', strokeDash=[6,4], strokeWidth=2
+                ).encode(x='x:Q')
+                rule_85 = alt.Chart(pd.DataFrame({'x': [85]})).mark_rule(
+                    color='#f59e0b', strokeDash=[6,4], strokeWidth=2
+                ).encode(x='x:Q')
                 
-                st.altair_chart(chart + rule_90 + rule_95, use_container_width=True)
-                st.caption("🔴 Línea roja: 90% (Crítico) | 🟡 Línea naranja: 95% (Atención)")
+                chart = (bars + text + rule_90 + rule_85).properties(
+                    height=chart_height
+                ).configure_view(
+                    strokeWidth=0
+                ).configure_axis(
+                    grid=True,
+                    gridColor='#333'
+                )
+                
+                st.altair_chart(chart, use_container_width=True)
+                st.caption("📊 **Línea roja**: 90% (Meta) | **Línea naranja**: 85% (Mínimo)")
+        
         
         # === Productividad por Sala ===
         if salas:
