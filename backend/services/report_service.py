@@ -903,25 +903,43 @@ def generate_bandejas_report_pdf(
         elements.append(Paragraph("Detalle por Productor", styles['Heading2']))
         elements.append(Spacer(1, 6))
         
-        prod_header = ["Productor", "Recepcionadas", "Despachadas", "En Productor"]
+        # Estilo para celdas con texto largo que necesita wrap
+        from reportlab.lib.styles import ParagraphStyle
+        cell_style = ParagraphStyle('CellStyle', fontName='Helvetica', fontSize=7, leading=9)
+        header_style = ParagraphStyle('HeaderStyle', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=colors.whitesmoke)
+        
+        prod_header = [
+            Paragraph("Productor", header_style), 
+            Paragraph("Recepcionadas", header_style), 
+            Paragraph("Despachadas", header_style), 
+            Paragraph("En Productor", header_style)
+        ]
         prod_data = [prod_header]
         
         for row in df_productores:
+            # Usar Paragraph para el nombre del productor (permite wrap)
+            nombre = row.get('Productor', '')
             prod_data.append([
-                row.get('Productor', ''),
+                Paragraph(nombre, cell_style),
                 fmt_numero(row.get('Recepcionadas', 0)),
                 fmt_numero(row.get('Despachadas', 0)),
                 fmt_numero(row.get('Bandejas en Productor', 0))
             ])
         
-        prod_table = Table(prod_data, hAlign='LEFT', repeatRows=1, colWidths=[200, 100, 100, 100])
+        # Anchos: Productor más ancho (280), números más compactos (75 cada uno)
+        prod_table = Table(prod_data, hAlign='LEFT', repeatRows=1, colWidths=[280, 75, 75, 75])
         prod_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ]))
         elements.append(prod_table)
     

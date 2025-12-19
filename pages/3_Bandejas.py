@@ -430,8 +430,8 @@ if not df_in.empty or not df_out.empty:
     total_stock_sucias = 0
     total_stock_limpias = 0
     if not df_stock.empty:
-        total_stock_sucias = df_stock[df_stock['Tipo'] == 'Sucia']['qty_available'].sum()
-        total_stock_limpias = df_stock[df_stock['Tipo'] == 'Limpia']['qty_available'].sum()
+        total_stock_sucias = abs(df_stock[df_stock['Tipo'] == 'Sucia']['qty_available'].sum())
+        total_stock_limpias = abs(df_stock[df_stock['Tipo'] == 'Limpia']['qty_available'].sum())
     total_stock = total_stock_sucias + total_stock_limpias
     
     # Mostrar KPIs en 2 filas para mejor visualización
