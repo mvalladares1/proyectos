@@ -161,3 +161,45 @@ async def get_consolidado_fruta(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/report.pdf")
+async def get_report_pdf(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    Genera un informe PDF de rendimiento de producción.
+    """
+    from fastapi.responses import Response
+    from backend.services.produccion_report_service import generate_produccion_report_pdf
+    
+    try:
+        service = RendimientoService(username=username, password=password)
+        
+        # Obtener datos
+        overview = service.get_overview(fecha_inicio, fecha_fin)
+        consolidado = service.get_consolidado_fruta(fecha_inicio, fecha_fin)
+        mos = service.get_rendimiento_mos(fecha_inicio, fecha_fin)
+        salas = service.get_productividad_por_sala(fecha_inicio, fecha_fin)
+        
+        # Generar PDF
+        pdf_bytes = generate_produccion_report_pdf(
+            overview=overview,
+            consolidado=consolidado,
+            mos=mos,
+            salas=salas,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin
+        )
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=produccion_{fecha_inicio}_a_{fecha_fin}.pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -11,6 +11,7 @@ import httpx
 import requests
 import os
 import sys
+import io
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -251,6 +252,20 @@ def fetch_rendimiento_salas(username: str, password: str, fecha_inicio: str, fec
         pass
     return None
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_rendimiento_mos(username: str, password: str, fecha_inicio: str, fecha_fin: str):
+    """Obtiene lista de MOs con rendimiento por cada una"""
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/rendimiento/mos", params={
+            "username": username, "password": password,
+            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
+        }, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return None
+
 # ============================================
 # FUNCIONES DE RENDER PARA DETALLE OF
 # ============================================
@@ -383,9 +398,11 @@ with tab_general:
         st.session_state.prod_rend_consolidado = None
     if 'prod_rend_salas' not in st.session_state:
         st.session_state.prod_rend_salas = None
+    if 'prod_rend_mos' not in st.session_state:
+        st.session_state.prod_rend_mos = None
     
     # --- Filtros de fecha ---
-    col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
+    col_f1, col_f2 = st.columns([1, 1])
     with col_f1:
         fecha_inicio_rep = st.date_input(
             "Desde", 
@@ -400,25 +417,35 @@ with tab_general:
             format="DD/MM/YYYY",
             key="prod_rep_fecha_fin"
         )
-    with col_f3:
-        if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria"):
-            with st.spinner("Cargando datos de rendimiento..."):
-                fi = fecha_inicio_rep.strftime("%Y-%m-%d")
-                ff = fecha_fin_rep.strftime("%Y-%m-%d")
-                
-                st.session_state.prod_rend_data = fetch_rendimiento_overview(username, password, fi, ff)
-                st.session_state.prod_rend_consolidado = fetch_rendimiento_consolidado(username, password, fi, ff)
-                st.session_state.prod_rend_salas = fetch_rendimiento_salas(username, password, fi, ff)
-                
-                if st.session_state.prod_rend_data:
-                    st.success("✅ Datos cargados correctamente")
-                else:
-                    st.warning("No se pudieron cargar los datos. Verifica la conexión al servidor.")
+    
+    # Checkbox para filtrar solo OFs terminadas (similar a Recepciones)
+    solo_terminadas = st.checkbox(
+        "Solo fabricaciones terminadas (done/to_close)", 
+        value=True, 
+        key="solo_terminadas_prod",
+        help="Activa para ver solo OFs completadas o por cerrar. Desactiva para incluir todas."
+    )
+    
+    if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria"):
+        with st.spinner("Cargando datos de rendimiento..."):
+            fi = fecha_inicio_rep.strftime("%Y-%m-%d")
+            ff = fecha_fin_rep.strftime("%Y-%m-%d")
+            
+            st.session_state.prod_rend_data = fetch_rendimiento_overview(username, password, fi, ff)
+            st.session_state.prod_rend_consolidado = fetch_rendimiento_consolidado(username, password, fi, ff)
+            st.session_state.prod_rend_salas = fetch_rendimiento_salas(username, password, fi, ff)
+            st.session_state.prod_rend_mos = fetch_rendimiento_mos(username, password, fi, ff)
+            
+            if st.session_state.prod_rend_data:
+                st.success("✅ Datos cargados correctamente")
+            else:
+                st.warning("No se pudieron cargar los datos. Verifica la conexión al servidor.")
     
     # --- Mostrar datos ---
     data = st.session_state.prod_rend_data
     consolidado = st.session_state.prod_rend_consolidado
     salas = st.session_state.prod_rend_salas
+    mos = st.session_state.prod_rend_mos
     
     if data:
         st.markdown("---")
@@ -595,6 +622,97 @@ with tab_general:
                         st.markdown(f"**HH Total:** {fmt_numero(sala['hh_total'], 1)}")
                     with cols2[3]:
                         st.markdown(f"**Dotación Prom:** {sala['dotacion_promedio']:.1f}")
+        
+        # === Detalle de Fabricaciones (Tabla de MOs) ===
+        if mos:
+            st.markdown("---")
+            st.subheader("📋 Detalle de Fabricaciones")
+            
+            df_mos = pd.DataFrame(mos)
+            
+            # Agregar columna de estado/alerta
+            df_mos['estado'] = df_mos['rendimiento'].apply(get_alert_color)
+            
+            # Formatear para mostrar
+            df_mos_display = df_mos[['estado', 'mo_name', 'product_name', 'sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha']].copy()
+            df_mos_display.columns = ['', 'OF', 'Producto', 'Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma', 'Horas', 'Dotación', 'Fecha']
+            
+            # Aplicar formato chileno
+            df_mos_display['Kg MP'] = df_mos_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
+            df_mos_display['Kg PT'] = df_mos_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
+            df_mos_display['Rend %'] = df_mos_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
+            df_mos_display['Merma'] = df_mos_display['Merma'].apply(lambda x: fmt_numero(x, 0))
+            
+            st.caption(f"Mostrando {len(df_mos)} órdenes de fabricación")
+            st.dataframe(df_mos_display, use_container_width=True, hide_index=True, height=400)
+            
+            # === Botones de exportación ===
+            st.markdown("---")
+            st.subheader("📥 Descargar Datos de Producción")
+            
+            col_exp1, col_exp2, col_exp3 = st.columns([1, 1, 1])
+            
+            # Preparar DataFrame para exportación (valores numéricos sin formato)
+            df_export = df_mos[['mo_name', 'product_name', 'sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha']].copy()
+            df_export.columns = ['OF', 'Producto', 'Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg', 'Horas', 'Dotación', 'Fecha']
+            
+            with col_exp1:
+                csv = df_export.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "📄 Descargar CSV", 
+                    csv, 
+                    "produccion_fabricaciones.csv", 
+                    "text/csv", 
+                    key="download_csv_prod"
+                )
+            
+            with col_exp2:
+                # Excel export
+                try:
+                    excel_buffer = io.BytesIO()
+                    df_export.to_excel(excel_buffer, index=False, engine='openpyxl')
+                    excel_buffer.seek(0)
+                    st.download_button(
+                        "📊 Descargar Excel",
+                        excel_buffer,
+                        "produccion_fabricaciones.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_excel_prod"
+                    )
+                except Exception as e:
+                    st.warning(f"No se pudo generar Excel: {e}")
+            
+            with col_exp3:
+                # PDF export - usa el endpoint del backend
+                if st.button("📕 Generar Informe PDF", key="btn_pdf_prod"):
+                    fi = fecha_inicio_rep.strftime("%Y-%m-%d")
+                    ff = fecha_fin_rep.strftime("%Y-%m-%d")
+                    try:
+                        with st.spinner("Generando informe PDF..."):
+                            resp = requests.get(
+                                f"{API_URL}/api/v1/rendimiento/report.pdf",
+                                params={
+                                    "username": username,
+                                    "password": password,
+                                    "fecha_inicio": fi,
+                                    "fecha_fin": ff
+                                },
+                                timeout=180
+                            )
+                        if resp.status_code == 200:
+                            pdf_bytes = resp.content
+                            fname = f"produccion_{fi}_a_{ff}.pdf".replace('/', '-')
+                            st.download_button(
+                                "Descargar PDF",
+                                data=pdf_bytes,
+                                file_name=fname,
+                                mime='application/pdf',
+                                key="download_pdf_prod"
+                            )
+                        else:
+                            st.warning("El informe PDF aún no está disponible. Usa Excel o CSV por ahora.")
+                    except Exception as e:
+                        st.warning(f"No se pudo generar PDF. Usa Excel o CSV. Error: {e}")
     
     else:
         st.info("👆 Selecciona un rango de fechas y haz clic en **Consultar Reportería** para ver los datos consolidados de producción.")
