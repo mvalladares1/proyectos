@@ -222,24 +222,45 @@ class RendimientoService:
             if ml.get('product_id')
         ))
         
-        # Consultar productos con campos Studio
+        # Consultar productos para obtener product_tmpl_id
         products_data = {}
+        template_data = {}
+        
         if product_ids:
             try:
+                # Paso 1: Obtener product.product con product_tmpl_id
                 products = self.odoo.read(
                     'product.product',
                     product_ids,
-                    ['name', 'categ_id', 'x_studio_categora_tipo_manejo', 'x_studio_sub_categora']
+                    ['name', 'categ_id', 'product_tmpl_id']
                 )
+                
+                # Recolectar template IDs
+                template_ids = set()
                 for p in products:
                     products_data[p['id']] = p
-            except Exception:
+                    tmpl = p.get('product_tmpl_id')
+                    if tmpl:
+                        tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
+                        template_ids.add(tmpl_id)
+                
+                # Paso 2: Obtener product.template con campos Studio
+                if template_ids:
+                    templates = self.odoo.read(
+                        'product.template',
+                        list(template_ids),
+                        ['id', 'name', 'x_studio_categora_tipo_de_manejo', 'x_studio_sub_categora']
+                    )
+                    for t in templates:
+                        template_data[t['id']] = t
+                        
+            except Exception as e:
                 # Si falla, intentar sin campos Studio
                 try:
                     products = self.odoo.read(
                         'product.product',
                         product_ids,
-                        ['name', 'categ_id']
+                        ['name', 'categ_id', 'product_tmpl_id']
                     )
                     for p in products:
                         products_data[p['id']] = p
@@ -274,22 +295,33 @@ class RendimientoService:
                 
                 lot_info = ml.get('lot_id')
                 
-                # Obtener manejo y especie de campos Studio
-                manejo_raw = prod_data.get('x_studio_categora_tipo_manejo', '') or ''
-                especie_raw = prod_data.get('x_studio_sub_categora', '') or ''
+                # Obtener template_id para acceder a campos Studio
+                tmpl = prod_data.get('product_tmpl_id')
+                tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl if tmpl else None
+                tmpl_data = template_data.get(tmpl_id, {}) if tmpl_id else {}
+                
+                # Obtener manejo y especie de campos Studio del TEMPLATE
+                manejo_raw = tmpl_data.get('x_studio_categora_tipo_de_manejo', '') or ''
+                especie_raw = tmpl_data.get('x_studio_sub_categora', '') or ''
+                
+                # Si manejo_raw es tupla/lista (selection field), tomar el valor legible
+                if isinstance(manejo_raw, (list, tuple)) and len(manejo_raw) > 1:
+                    manejo_raw = manejo_raw[1]
                 
                 # Normalizar manejo (puede venir como "Org." u "Orgánico", "Conv." o "Convencional")
                 manejo = 'Otro'
                 if manejo_raw:
-                    manejo_lower = str(manejo_raw).lower()
-                    if 'org' in manejo_lower:
+                    manejo_str = str(manejo_raw).lower()
+                    if 'org' in manejo_str:
                         manejo = 'Orgánico'
-                    elif 'conv' in manejo_lower:
+                    elif 'conv' in manejo_str:
                         manejo = 'Convencional'
                     else:
                         manejo = str(manejo_raw)
                 
-                # Normalizar especie
+                # Normalizar especie (también puede ser selection field)
+                if isinstance(especie_raw, (list, tuple)) and len(especie_raw) > 1:
+                    especie_raw = especie_raw[1]
                 especie = str(especie_raw) if especie_raw else self._extract_fruit_type(prod_name)
                 
                 consumos.append({
