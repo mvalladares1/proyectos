@@ -372,22 +372,62 @@ with tab_general:
     if 'prod_dashboard_data' not in st.session_state:
         st.session_state.prod_dashboard_data = None
     
-    # --- Filtros de fecha ---
-    col_f1, col_f2 = st.columns([1, 1])
-    with col_f1:
-        fecha_inicio_rep = st.date_input(
-            "Desde", 
-            datetime.now() - timedelta(days=30), 
-            format="DD/MM/YYYY",
-            key="prod_rep_fecha_inicio"
-        )
-    with col_f2:
-        fecha_fin_rep = st.date_input(
-            "Hasta", 
-            datetime.now(), 
-            format="DD/MM/YYYY",
-            key="prod_rep_fecha_fin"
-        )
+    # --- Selector de Período ---
+    st.markdown("#### 📅 Seleccionar Período")
+    
+    # Radio para selección rápida
+    periodo_tipo = st.radio(
+        "Tipo de informe",
+        ["📆 Última Semana", "📊 Acumulado Temporada", "📅 Período Personalizado"],
+        horizontal=True,
+        key="periodo_tipo_prod",
+        label_visibility="collapsed"
+    )
+    
+    # Calcular fechas según selección
+    hoy = datetime.now().date()
+    
+    # Inicio de temporada (aproximado - diciembre del año anterior o actual)
+    if hoy.month >= 11:  # Nov-Dic = temporada actual
+        inicio_temporada = datetime(hoy.year, 11, 1).date()
+    else:  # Ene-Oct = temporada empezó año anterior
+        inicio_temporada = datetime(hoy.year - 1, 11, 1).date()
+    
+    if "Última Semana" in periodo_tipo:
+        fecha_inicio_default = hoy - timedelta(days=7)
+        fecha_fin_default = hoy
+        mostrar_inputs = False
+    elif "Acumulado" in periodo_tipo:
+        fecha_inicio_default = inicio_temporada
+        fecha_fin_default = hoy
+        mostrar_inputs = False
+    else:  # Personalizado
+        fecha_inicio_default = hoy - timedelta(days=7)
+        fecha_fin_default = hoy
+        mostrar_inputs = True
+    
+    # Mostrar inputs de fecha si es personalizado
+    if mostrar_inputs:
+        col_f1, col_f2 = st.columns([1, 1])
+        with col_f1:
+            fecha_inicio_rep = st.date_input(
+                "Desde", 
+                fecha_inicio_default, 
+                format="DD/MM/YYYY",
+                key="prod_rep_fecha_inicio"
+            )
+        with col_f2:
+            fecha_fin_rep = st.date_input(
+                "Hasta", 
+                fecha_fin_default, 
+                format="DD/MM/YYYY",
+                key="prod_rep_fecha_fin"
+            )
+    else:
+        fecha_inicio_rep = fecha_inicio_default
+        fecha_fin_rep = fecha_fin_default
+        # Mostrar fechas seleccionadas
+        st.info(f"📅 **Período:** {fecha_inicio_rep.strftime('%d/%m/%Y')} → {fecha_fin_rep.strftime('%d/%m/%Y')} ({(fecha_fin_rep - fecha_inicio_rep).days + 1} días)")
     
     # Checkbox para filtrar solo OFs terminadas (similar a Recepciones)
     solo_terminadas = st.checkbox(
@@ -577,6 +617,17 @@ with tab_general:
                 chart_height = max(300, min(500, num_frutas * 80))
                 bar_size = max(30, min(60, 400 // num_frutas)) if num_frutas > 0 else 50
                 
+                # Agregar columna de color basada en rendimiento
+                def get_bar_color(rend):
+                    if rend >= 90:
+                        return '#22c55e'  # Verde
+                    elif rend >= 80:
+                        return '#f59e0b'  # Amarillo
+                    else:
+                        return '#ef4444'  # Rojo
+                
+                df_fruta['color'] = df_fruta['rendimiento'].apply(get_bar_color)
+                
                 # Gráfico de barras horizontales para mejor lectura de etiquetas
                 bars = alt.Chart(df_fruta).mark_bar(size=bar_size).encode(
                     y=alt.Y('tipo_fruta:N', sort='-x', title='Tipo de Fruta', 
@@ -584,15 +635,7 @@ with tab_general:
                     x=alt.X('rendimiento:Q', title='Rendimiento %', 
                            scale=alt.Scale(domain=[0, 105]),
                            axis=alt.Axis(labelFontSize=12)),
-                    color=alt.condition(
-                        alt.datum.rendimiento >= 90,
-                        alt.value('#22c55e'),  # Verde más vibrante
-                        alt.condition(
-                            alt.datum.rendimiento >= 80,
-                            alt.value('#f59e0b'),  # Amarillo/Naranja
-                            alt.value('#ef4444')   # Rojo
-                        )
-                    ),
+                    color=alt.Color('color:N', scale=None, legend=None),
                     tooltip=[
                         alt.Tooltip('tipo_fruta:N', title='Fruta'),
                         alt.Tooltip('rendimiento:Q', title='Rendimiento %', format='.1f'),
