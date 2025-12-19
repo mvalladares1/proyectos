@@ -467,7 +467,7 @@ with tab_credito:
                 
                 # KPIs en cards visuales
                 st.markdown("---")
-                kp_cols = st.columns(6)
+                kp_cols = st.columns(7)
                 with kp_cols[0]:
                     st.metric("Linea Total", fmt_moneda(prov['linea_total']))
                 with kp_cols[1]:
@@ -478,13 +478,17 @@ with tab_credito:
                     st.metric("Recep. Sin Fact.", fmt_moneda(prov.get('monto_recepciones', 0)),
                              delta=str(prov.get('num_recepciones', 0)) + " recep.", delta_color="off")
                 with kp_cols[3]:
+                    # Recepciones en estado PREPARADO (afecta disponibilidad)
+                    st.metric("Recep. Preparadas", fmt_moneda(prov.get('monto_preparadas', 0)),
+                             delta=str(prov.get('num_preparadas', 0)) + " prep.", delta_color="off")
+                with kp_cols[4]:
                     # OCs tentativas (solo informativo, no afecta disponibilidad)
                     st.metric("OCs Tentativas", fmt_moneda(prov.get('monto_ocs', 0)),
                              delta=str(prov.get('num_ocs', 0)) + " OCs", delta_color="off")
-                with kp_cols[4]:
+                with kp_cols[5]:
                     st.metric("Total Usado", fmt_moneda(prov['monto_usado']),
                              delta=str(int(pct)) + "%", delta_color="inverse")
-                with kp_cols[5]:
+                with kp_cols[6]:
                     st.metric("Disponible", fmt_moneda(max(prov['disponible'], 0)),
                              delta=str(int(pct_disp)) + "%", delta_color="normal")
                 
@@ -503,12 +507,24 @@ with tab_credito:
                             return f"{monto_str} (USD$ {fmt_numero(row['monto_original'], 2)})"
                         return monto_str
                     
-                    df_display = df_det[['tipo', 'numero', 'monto', 'fecha', 'estado']].copy()
-                    df_display.columns = ['Tipo', 'Documento', 'Monto', 'Fecha', 'Estado']
+                    # Generar enlaces de Odoo
+                    ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
+                    def get_odoo_link(row):
+                        if row.get('picking_id'):
+                            return f"{ODOO_BASE}id={row['picking_id']}&menu_id=350&cids=1&action=540&model=stock.picking&view_type=form"
+                        elif row.get('oc_id'):
+                            return f"{ODOO_BASE}id={row['oc_id']}&menu_id=411&cids=1&action=627&model=purchase.order&view_type=form"
+                        return None
+                    
+                    df_det['odoo_link'] = df_det.apply(get_odoo_link, axis=1)
+                    
+                    df_display = df_det[['tipo', 'numero', 'monto', 'fecha', 'estado', 'odoo_link']].copy()
+                    df_display.columns = ['Tipo', 'Documento', 'Monto', 'Fecha', 'Estado', 'Odoo']
                     
                     # Mostrar monto con info de conversión
                     df_display['Monto'] = df_det.apply(format_monto_con_conversion, axis=1)
                     df_display['Fecha'] = df_display['Fecha'].apply(fmt_fecha)
+                    df_display['Odoo'] = df_display['Odoo'].apply(lambda x: f"[🔗 Abrir]({x})" if x else "")
                     
                     # Mostrar tipo de cambio usado si hay conversiones USD
                     has_usd = any(d.get('moneda_original') == 'USD' for d in detalle)
@@ -524,6 +540,7 @@ with tab_credito:
                                     "Monto": st.column_config.TextColumn(width="large"),
                                     "Fecha": st.column_config.TextColumn(width="small"),
                                     "Estado": st.column_config.TextColumn(width="medium"),
+                                    "Odoo": st.column_config.LinkColumn(width="small", display_text="🔗 Abrir"),
                                 })
                 else:
                     st.success("✅ Sin compromisos pendientes")

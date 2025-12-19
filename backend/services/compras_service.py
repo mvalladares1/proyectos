@@ -627,6 +627,97 @@ class ComprasService:
             for pid, ocs in recepciones_sin_facturar_by_partner.items():
                 for oc_name, data in ocs.items():
                     print(f"[DEBUG RESULTADO] Partner {pid}: {oc_name} = ${data['monto_pendiente']:,.0f}")
+        
+        # === 4. STOCK.PICKING EN ESTADO 'ASSIGNED' (PREPARADO) ===
+        # Recepciones que están listas pero aún no se han ejecutado
+        recepciones_preparadas_by_partner = {}
+        
+        if oc_ids:
+            # Buscar pickings de compra en estado 'assigned' (preparado)
+            pickings = self.odoo.search_read(
+                'stock.picking',
+                [
+                    ['purchase_id', 'in', oc_ids],
+                    ['state', '=', 'assigned'],  # Preparado
+                    ['picking_type_code', '=', 'incoming']  # Solo recepciones
+                ],
+                ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids'],
+                limit=1000
+            )
+            
+            print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings en estado 'assigned'")
+            
+            if pickings:
+                picking_ids = [p['id'] for p in pickings]
+                picking_info_map = {p['id']: p for p in pickings}
+                
+                # Obtener move lines de estos pickings para calcular valores
+                moves = self.odoo.search_read(
+                    'stock.move',
+                    [['picking_id', 'in', picking_ids]],
+                    ['id', 'picking_id', 'product_id', 'product_uom_qty', 'quantity', 'price_unit', 'purchase_line_id'],
+                    limit=5000
+                )
+                
+                # Procesar cada move y calcular el valor pendiente
+                for move in moves:
+                    qty_demand = float(move.get('product_uom_qty') or 0)
+                    qty_done = float(move.get('quantity') or 0)
+                    price_unit = float(move.get('price_unit') or 0)
+                    
+                    # Solo considerar si hay demanda sin completar
+                    qty_pendiente = qty_demand - qty_done
+                    if qty_pendiente <= 0:
+                        continue
+                    
+                    # Calcular monto pendiente
+                    monto_pendiente = qty_pendiente * price_unit
+                    
+                    # Obtener info del picking
+                    picking_info = move.get('picking_id')
+                    picking_id = picking_info[0] if isinstance(picking_info, (list, tuple)) else picking_info
+                    picking_data = picking_info_map.get(picking_id, {})
+                    
+                    # Obtener partner_id del picking o de la OC
+                    partner_info = picking_data.get('partner_id')
+                    pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+                    
+                    # Si no tiene partner, buscar en la OC
+                    if not pid:
+                        purchase_info = picking_data.get('purchase_id')
+                        oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
+                        oc_data = oc_info_map.get(oc_id, {})
+                        partner_info = oc_data.get('partner_id')
+                        pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+                    
+                    if pid:
+                        picking_name = picking_data.get('name', '')
+                        if pid not in recepciones_preparadas_by_partner:
+                            recepciones_preparadas_by_partner[pid] = {}
+                        
+                        if picking_name not in recepciones_preparadas_by_partner[pid]:
+                            purchase_info = picking_data.get('purchase_id')
+                            oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
+                            oc_data = oc_info_map.get(oc_id, {})
+                            
+                            recepciones_preparadas_by_partner[pid][picking_name] = {
+                                'picking_id': picking_id,
+                                'name': picking_name,
+                                'oc_id': oc_id,
+                                'oc_name': oc_data.get('name', ''),
+                                'date': picking_data.get('scheduled_date'),
+                                'currency_id': oc_data.get('currency_id'),
+                                'monto_pendiente': 0,
+                                'lineas_count': 0
+                            }
+                        
+                        recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_pendiente
+                        recepciones_preparadas_by_partner[pid][picking_name]['lineas_count'] += 1
+                
+                # DEBUG
+                for pid, pickings_dict in recepciones_preparadas_by_partner.items():
+                    for pick_name, data in pickings_dict.items():
+                        print(f"[DEBUG PREPARADO] Partner {pid}: {pick_name} = ${data['monto_pendiente']:,.0f}")
 
         
         # === PROCESAR CADA PARTNER ===
@@ -702,8 +793,27 @@ class ComprasService:
                 monto_recepciones += oc_amount
                 num_recepciones += 1
             
-            # Total usado = Facturas + Recepciones reales (NO incluye OCs tentativas)
-            monto_usado = monto_facturas + monto_recepciones
+            # Recepciones PREPARADAS - también afectan la línea (con conversión de moneda)
+            preparadas_partner = recepciones_preparadas_by_partner.get(partner_id, {})
+            monto_preparadas = 0.0
+            num_preparadas = 0
+            for pick_name, pick_data in preparadas_partner.items():
+                pick_amount = float(pick_data.get('monto_pendiente') or 0)
+                # Detectar moneda de la OC
+                pick_currency = pick_data.get('currency_id')
+                pick_currency_name = ''
+                if isinstance(pick_currency, (list, tuple)) and len(pick_currency) > 1:
+                    pick_currency_name = pick_currency[1]
+                elif isinstance(pick_currency, str):
+                    pick_currency_name = pick_currency
+                # Convertir si está en USD
+                if pick_currency_name and 'USD' in pick_currency_name.upper():
+                    pick_amount = CurrencyService.convert_usd_to_clp(pick_amount)
+                monto_preparadas += pick_amount
+                num_preparadas += 1
+            
+            # Total usado = Facturas + Recepciones reales + Recepciones preparadas
+            monto_usado = monto_facturas + monto_recepciones + monto_preparadas
             
             # Calcular disponible basado en uso real
             disponible = linea_total - monto_usado
@@ -761,6 +871,7 @@ class ComprasService:
                 detalle_facturas.append({
                     'tipo': 'Recepción',
                     'numero': oc_data.get('name', ''),
+                    'oc_id': oc_data.get('oc_id'),  # Para enlace Odoo
                     'monto': round(oc_monto, 0),
                     'monto_original': round(oc_monto_original, 2) if oc_is_usd else None,
                     'moneda_original': 'USD' if oc_is_usd else 'CLP',
@@ -769,6 +880,36 @@ class ComprasService:
                     'fecha_vencimiento': '',
                     'origen': '',
                     'estado': 'Recepcionado sin facturar'
+                })
+            
+            # Preparar detalle de recepciones PREPARADAS (afectan línea)
+            for pick_name, pick_data in preparadas_partner.items():
+                pick_monto_original = float(pick_data.get('monto_pendiente') or 0)
+                pick_monto = pick_monto_original
+                pick_currency = pick_data.get('currency_id')
+                pick_currency_name = ''
+                if isinstance(pick_currency, (list, tuple)) and len(pick_currency) > 1:
+                    pick_currency_name = pick_currency[1]
+                elif isinstance(pick_currency, str):
+                    pick_currency_name = pick_currency
+                pick_is_usd = pick_currency_name and 'USD' in pick_currency_name.upper()
+                if pick_is_usd:
+                    pick_monto = CurrencyService.convert_usd_to_clp(pick_monto_original)
+                
+                detalle_facturas.append({
+                    'tipo': 'Recep. Preparada',
+                    'numero': pick_data.get('name', ''),
+                    'picking_id': pick_data.get('picking_id'),  # Para enlace Odoo
+                    'oc_id': pick_data.get('oc_id'),  # Para enlace Odoo  
+                    'oc_name': pick_data.get('oc_name', ''),
+                    'monto': round(pick_monto, 0),
+                    'monto_original': round(pick_monto_original, 2) if pick_is_usd else None,
+                    'moneda_original': 'USD' if pick_is_usd else 'CLP',
+                    'tipo_cambio': round(exchange_rate, 2) if pick_is_usd else None,
+                    'fecha': str(pick_data.get('date') or '')[:10],
+                    'fecha_vencimiento': '',
+                    'origen': pick_data.get('oc_name', ''),
+                    'estado': 'Preparado (pendiente recepción)'
                 })
             
             # Preparar detalle de OCs sin factura (TENTATIVAS) - solo informativo
@@ -819,7 +960,8 @@ class ComprasService:
                 'monto_usado': round(monto_usado, 0),
                 'monto_facturas': round(monto_facturas, 0),
                 'monto_ocs': round(monto_ocs_tentativo, 0),  # OCs sin factura (tentativo)
-                'monto_recepciones': round(monto_recepciones, 0),  # Recepciones reales
+                'monto_recepciones': round(monto_recepciones, 0),  # Recepciones completadas sin facturar
+                'monto_preparadas': round(monto_preparadas, 0),  # Recepciones en estado PREPARADO
                 'disponible': round(disponible, 0),
                 'pct_uso': round(pct_uso, 1),
                 'estado': estado,
@@ -827,6 +969,7 @@ class ComprasService:
                 'num_facturas': len(facturas_partner),
                 'num_ocs': num_ocs_tentativas,
                 'num_recepciones': num_recepciones,
+                'num_preparadas': num_preparadas,
                 'detalle': detalle_facturas
             })
         
