@@ -1330,27 +1330,30 @@ class RendimientoService:
                     else:
                         manejo = list(manejos_en_mo)[0] if manejos_en_mo else 'Otro'
                     
-                    # Por Fruta
-                    if tipo_fruta not in por_fruta:
-                        por_fruta[tipo_fruta] = {
-                            'tipo_fruta': tipo_fruta,
-                            'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
-                        }
-                    por_fruta[tipo_fruta]['kg_mp'] += kg_mp
-                    por_fruta[tipo_fruta]['kg_pt'] += kg_pt
-                    por_fruta[tipo_fruta]['num_lotes'] += len(set(c.get('lot_id') for c in consumos if c.get('lot_id')))
-                    
-                    # Por Fruta + Manejo
-                    key_fm = f"{tipo_fruta}|{manejo}"
-                    if key_fm not in por_fruta_manejo:
-                        por_fruta_manejo[key_fm] = {
-                            'tipo_fruta': tipo_fruta,
-                            'manejo': manejo,
-                            'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
-                        }
-                    por_fruta_manejo[key_fm]['kg_mp'] += kg_mp
-                    por_fruta_manejo[key_fm]['kg_pt'] += kg_pt
-                    por_fruta_manejo[key_fm]['num_lotes'] += 1
+                    # SOLO acumular para consolidado si es PROCESO (NO congelado)
+                    # El congelado infla los números porque tiene rendimiento ~100%
+                    if sala_tipo == 'PROCESO':
+                        # Por Fruta
+                        if tipo_fruta not in por_fruta:
+                            por_fruta[tipo_fruta] = {
+                                'tipo_fruta': tipo_fruta,
+                                'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
+                            }
+                        por_fruta[tipo_fruta]['kg_mp'] += kg_mp
+                        por_fruta[tipo_fruta]['kg_pt'] += kg_pt
+                        por_fruta[tipo_fruta]['num_lotes'] += len(set(c.get('lot_id') for c in consumos if c.get('lot_id')))
+                        
+                        # Por Fruta + Manejo
+                        key_fm = f"{tipo_fruta}|{manejo}"
+                        if key_fm not in por_fruta_manejo:
+                            por_fruta_manejo[key_fm] = {
+                                'tipo_fruta': tipo_fruta,
+                                'manejo': manejo,
+                                'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
+                            }
+                        por_fruta_manejo[key_fm]['kg_mp'] += kg_mp
+                        por_fruta_manejo[key_fm]['kg_pt'] += kg_pt
+                        por_fruta_manejo[key_fm]['num_lotes'] += 1
                 
                 # === Acumular para Salas ===
                 # sala ya está definido arriba

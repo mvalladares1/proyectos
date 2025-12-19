@@ -438,7 +438,7 @@ with tab_general:
         with proc_cols[4]:
             st.metric("Kg/HH", fmt_numero(data.get('proceso_kg_por_hh', 0), 1))
         
-        proc_cols2 = st.columns(5)
+        proc_cols2 = st.columns(4)
         with proc_cols2[0]:
             st.metric("MOs Proceso", data.get('proceso_mos', 0))
         with proc_cols2[1]:
@@ -447,9 +447,6 @@ with tab_general:
             st.metric("Merma %", fmt_porcentaje(data.get('proceso_merma_pct', 0)))
         with proc_cols2[3]:
             st.metric("Lotes Únicos", data.get('lotes_unicos', 0))
-        with proc_cols2[4]:
-            costo_elec = data.get('total_costo_electricidad', 0)
-            st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}")
         
         st.markdown("---")
         
@@ -457,7 +454,7 @@ with tab_general:
         with st.expander("❄️ KPIs de Congelado (Túneles Estáticos)", expanded=False):
             st.caption("Túneles de congelación - solo congelan, rendimiento ~100%")
             
-            cong_cols = st.columns(4)
+            cong_cols = st.columns(5)
             with cong_cols[0]:
                 st.metric("Kg Entrada", fmt_numero(data.get('congelado_kg_mp', 0), 0))
             with cong_cols[1]:
@@ -467,6 +464,9 @@ with tab_general:
                 st.metric("Rendimiento", fmt_porcentaje(cong_rend))
             with cong_cols[3]:
                 st.metric("MOs Congelado", data.get('congelado_mos', 0))
+            with cong_cols[4]:
+                costo_elec = data.get('total_costo_electricidad', 0)
+                st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}")
         
         st.markdown("---")
         
