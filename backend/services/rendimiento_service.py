@@ -71,9 +71,13 @@ class RendimientoService:
         name_lower = product_name.lower()
         cat_lower = (category_name or '').lower()
         
-        # Si tiene código de producto [3xxxxx], NO excluir (es producto de proceso)
+        # Si tiene código de producto [3xxxxx] o [1xxxxx], NO excluir (es producto de proceso)
         if product_name.startswith('[3') or product_name.startswith('[1'):
             return False
+        
+        # Excluir costos operacionales (se capturan por separado)
+        if self._is_operational_cost(product_name):
+            return True
         
         # Excluir por categoría
         if any(exc in cat_lower for exc in self.EXCLUDED_CATEGORIES):
@@ -94,6 +98,28 @@ class RendimientoService:
             return True
         
         return False
+    
+    def _is_operational_cost(self, product_name: str) -> bool:
+        """
+        Identifica si un producto es un costo operacional (electricidad, servicios, etc.)
+        Estos se excluyen de MP pero se capturan como KPI separado.
+        """
+        if not product_name:
+            return False
+        
+        name_lower = product_name.lower()
+        operational_indicators = [
+            "provisión electricidad",
+            "provisión electr",
+            "túnel estático",
+            "tunel estatico",
+            "electricidad túnel",
+            "costo hora",
+            "($/hr)",
+            "($/h)"
+        ]
+        
+        return any(ind in name_lower for ind in operational_indicators)
     
     def _is_excluded_produccion(self, product_name: str, category_name: str = '') -> bool:
         """
@@ -339,6 +365,52 @@ class RendimientoService:
                 continue
         
         return consumos
+    
+    def get_costos_operacionales_mo(self, mo: Dict) -> Dict:
+        """
+        Obtiene costos operacionales de una MO (electricidad, servicios, etc.)
+        Estos NO son MP pero son KPIs importantes.
+        
+        Retorna dict con:
+        - costo_electricidad: Provisión Electricidad Túnel Estático
+        - otros_costos: Otros costos operacionales
+        """
+        move_raw_ids = mo.get('move_raw_ids', [])
+        if not move_raw_ids:
+            return {'costo_electricidad': 0.0, 'otros_costos': 0.0}
+        
+        # Obtener movimientos (stock.move) para ver costos
+        moves = self.odoo.search_read(
+            'stock.move',
+            [['id', 'in', move_raw_ids]],
+            ['product_id', 'product_uom_qty', 'quantity_done', 'price_unit'],
+            limit=100
+        )
+        
+        costo_electricidad = 0.0
+        otros_costos = 0.0
+        
+        for move in moves:
+            try:
+                prod = move.get('product_id')
+                prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
+                
+                if self._is_operational_cost(prod_name):
+                    qty = move.get('quantity_done', 0) or 0
+                    price = move.get('price_unit', 0) or 0
+                    costo = qty * price
+                    
+                    if 'electricidad' in prod_name.lower() or 'túnel' in prod_name.lower():
+                        costo_electricidad += costo
+                    else:
+                        otros_costos += costo
+            except Exception:
+                continue
+        
+        return {
+            'costo_electricidad': round(costo_electricidad, 2),
+            'otros_costos': round(otros_costos, 2)
+        }
     
     def get_produccion_mo(self, mo: Dict) -> List[Dict]:
         """
@@ -1131,6 +1203,7 @@ class RendimientoService:
         total_kg_mp = 0.0
         total_kg_pt = 0.0
         total_hh = 0.0
+        total_costo_electricidad = 0.0  # Nuevo: costo de electricidad
         mos_procesadas = 0
         lotes_set = set()
         
@@ -1150,9 +1223,11 @@ class RendimientoService:
                 # Obtener consumos y producción (estas son las llamadas que no se pueden evitar)
                 consumos = self.get_consumos_mo(mo)
                 produccion = self.get_produccion_mo(mo)
+                costos_op = self.get_costos_operacionales_mo(mo)  # Nuevo: costos operacionales
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
+                costo_elec = costos_op.get('costo_electricidad', 0)  # Costo electricidad de esta MO
                 
                 if kg_mp == 0:
                     continue
@@ -1162,6 +1237,7 @@ class RendimientoService:
                 # === Acumular para Overview ===
                 total_kg_mp += kg_mp
                 total_kg_pt += kg_pt
+                total_costo_electricidad += costo_elec  # Acumular electricidad
                 mos_procesadas += 1
                 
                 hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
@@ -1279,12 +1355,13 @@ class RendimientoService:
                     'mo_id': mo.get('id', 0),
                     'mo_name': mo.get('name', ''),
                     'product_name': product_name,
-                    'especie': tipo_fruta,  # Agregado
-                    'manejo': manejo,       # Agregado
+                    'especie': tipo_fruta,
+                    'manejo': manejo,
                     'kg_mp': round(kg_mp, 2),
                     'kg_pt': round(kg_pt, 2),
                     'rendimiento': round(rendimiento, 2),
                     'merma': round(kg_mp - kg_pt, 2),
+                    'costo_electricidad': costo_elec,  # Nuevo: costo electricidad
                     'duracion_horas': duracion_horas,
                     'hh': hh if isinstance(hh, (int, float)) else 0,
                     'kg_por_hora': kg_por_hora if isinstance(kg_por_hora, (int, float)) else 0,
@@ -1315,7 +1392,8 @@ class RendimientoService:
             'total_hh': round(total_hh, 2),
             'kg_por_hh': round(kg_por_hh, 2),
             'mos_procesadas': mos_procesadas,
-            'lotes_unicos': len(lotes_set)
+            'lotes_unicos': len(lotes_set),
+            'total_costo_electricidad': round(total_costo_electricidad, 0)  # Nuevo
         }
         
         # Consolidado por fruta

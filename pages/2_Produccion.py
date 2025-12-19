@@ -437,7 +437,7 @@ with tab_general:
         with kpi_cols[4]:
             st.metric("Kg/HH", fmt_numero(data.get('kg_por_hh', 0), 1))
         
-        kpi_cols2 = st.columns(4)
+        kpi_cols2 = st.columns(5)
         with kpi_cols2[0]:
             st.metric("MOs Procesadas", data.get('mos_procesadas', 0))
         with kpi_cols2[1]:
@@ -446,6 +446,9 @@ with tab_general:
             st.metric("Total HH", fmt_numero(data.get('total_hh', 0), 1))
         with kpi_cols2[3]:
             st.metric("Merma %", fmt_porcentaje(data.get('merma_pct', 0)))
+        with kpi_cols2[4]:
+            costo_elec = data.get('total_costo_electricidad', 0)
+            st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}")
         
         st.markdown("---")
         
@@ -598,7 +601,59 @@ with tab_general:
             st.markdown("---")
             st.subheader("📋 Detalle de Fabricaciones")
             
-            df_mos = pd.DataFrame(mos)
+            df_mos_original = pd.DataFrame(mos)
+            
+            # === FILTROS INTERACTIVOS ===
+            with st.expander("🔍 Filtros de Fabricaciones", expanded=True):
+                filter_cols = st.columns(5)
+                
+                # Filtro por OF (búsqueda de texto)
+                with filter_cols[0]:
+                    of_buscar = st.text_input("🔎 Buscar OF", "", key="filtro_of_detalle", placeholder="Ej: WH/MO/00123")
+                
+                # Filtro por Producto
+                with filter_cols[1]:
+                    productos_unicos = sorted(df_mos_original['product_name'].dropna().unique().tolist())
+                    productos_sel = st.multiselect("📦 Producto", productos_unicos, key="filtro_producto_detalle")
+                
+                # Filtro por Especie
+                with filter_cols[2]:
+                    if 'especie' in df_mos_original.columns:
+                        especies_unicas = sorted(df_mos_original['especie'].dropna().unique().tolist())
+                        especies_sel = st.multiselect("🍓 Especie", especies_unicas, key="filtro_especie_detalle")
+                    else:
+                        especies_sel = []
+                
+                # Filtro por Manejo
+                with filter_cols[3]:
+                    if 'manejo' in df_mos_original.columns:
+                        manejos_unicos = sorted(df_mos_original['manejo'].dropna().unique().tolist())
+                        manejos_sel = st.multiselect("🏷️ Manejo", manejos_unicos, key="filtro_manejo_detalle")
+                    else:
+                        manejos_sel = []
+                
+                # Filtro por Sala
+                with filter_cols[4]:
+                    salas_unicas = sorted(df_mos_original['sala'].dropna().unique().tolist())
+                    salas_sel = st.multiselect("🏭 Sala", salas_unicas, key="filtro_sala_detalle")
+            
+            # Aplicar filtros
+            df_mos = df_mos_original.copy()
+            
+            if of_buscar:
+                df_mos = df_mos[df_mos['mo_name'].str.contains(of_buscar, case=False, na=False)]
+            
+            if productos_sel:
+                df_mos = df_mos[df_mos['product_name'].isin(productos_sel)]
+            
+            if especies_sel and 'especie' in df_mos.columns:
+                df_mos = df_mos[df_mos['especie'].isin(especies_sel)]
+            
+            if manejos_sel and 'manejo' in df_mos.columns:
+                df_mos = df_mos[df_mos['manejo'].isin(manejos_sel)]
+            
+            if salas_sel:
+                df_mos = df_mos[df_mos['sala'].isin(salas_sel)]
             
             # Agregar columna de estado/alerta
             df_mos['estado'] = df_mos['rendimiento'].apply(get_alert_color)
@@ -614,8 +669,16 @@ with tab_general:
                 cols_to_show.append('manejo')
                 col_names.append('Manejo')
             
-            cols_to_show.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'fecha'])
-            col_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma', 'Fecha'])
+            cols_to_show.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma'])
+            col_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma'])
+            
+            # Agregar costo electricidad si existe
+            if 'costo_electricidad' in df_mos.columns:
+                cols_to_show.append('costo_electricidad')
+                col_names.append('⚡ Elec $')
+            
+            cols_to_show.append('fecha')
+            col_names.append('Fecha')
             
             # Formatear para mostrar
             df_mos_display = df_mos[cols_to_show].copy()
@@ -626,9 +689,21 @@ with tab_general:
             df_mos_display['Kg PT'] = df_mos_display['Kg PT'].apply(lambda x: fmt_numero(x, 0))
             df_mos_display['Rend %'] = df_mos_display['Rend %'].apply(lambda x: fmt_porcentaje(x))
             df_mos_display['Merma'] = df_mos_display['Merma'].apply(lambda x: fmt_numero(x, 0))
+            if '⚡ Elec $' in df_mos_display.columns:
+                df_mos_display['⚡ Elec $'] = df_mos_display['⚡ Elec $'].apply(lambda x: f"${fmt_numero(x, 0)}" if x > 0 else "-")
             
-            st.caption(f"Mostrando {len(df_mos)} órdenes de fabricación")
-            st.dataframe(df_mos_display, use_container_width=True, hide_index=True, height=400)
+            # Mostrar resumen de datos filtrados
+            total_registros = len(df_mos_original)
+            filtrados = len(df_mos)
+            if filtrados < total_registros:
+                st.caption(f"📊 Mostrando **{filtrados}** de {total_registros} órdenes de fabricación (filtrado)")
+            else:
+                st.caption(f"📊 Mostrando {filtrados} órdenes de fabricación")
+            
+            if filtrados > 0:
+                st.dataframe(df_mos_display, use_container_width=True, hide_index=True, height=400)
+            else:
+                st.warning("No hay fabricaciones que coincidan con los filtros seleccionados.")
             
             # === Botones de exportación ===
             st.markdown("---")
@@ -645,8 +720,13 @@ with tab_general:
             if 'manejo' in df_mos.columns:
                 export_cols.append('manejo')
                 export_names.append('Manejo')
-            export_cols.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha'])
-            export_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg', 'Horas', 'Dotación', 'Fecha'])
+            export_cols.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma'])
+            export_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg'])
+            if 'costo_electricidad' in df_mos.columns:
+                export_cols.append('costo_electricidad')
+                export_names.append('Costo Electricidad $')
+            export_cols.extend(['duracion_horas', 'dotacion', 'fecha'])
+            export_names.extend(['Horas', 'Dotación', 'Fecha'])
             
             df_export = df_mos[export_cols].copy()
             df_export.columns = export_names
@@ -678,36 +758,9 @@ with tab_general:
                     st.warning(f"No se pudo generar Excel: {e}")
             
             with col_exp3:
-                # PDF export - usa el endpoint del backend
-                if st.button("📕 Generar Informe PDF", key="btn_pdf_prod"):
-                    fi = fecha_inicio_rep.strftime("%Y-%m-%d")
-                    ff = fecha_fin_rep.strftime("%Y-%m-%d")
-                    try:
-                        with st.spinner("Generando informe PDF..."):
-                            resp = requests.get(
-                                f"{API_URL}/api/v1/rendimiento/report.pdf",
-                                params={
-                                    "username": username,
-                                    "password": password,
-                                    "fecha_inicio": fi,
-                                    "fecha_fin": ff
-                                },
-                                timeout=180
-                            )
-                        if resp.status_code == 200:
-                            pdf_bytes = resp.content
-                            fname = f"produccion_{fi}_a_{ff}.pdf".replace('/', '-')
-                            st.download_button(
-                                "Descargar PDF",
-                                data=pdf_bytes,
-                                file_name=fname,
-                                mime='application/pdf',
-                                key="download_pdf_prod"
-                            )
-                        else:
-                            st.warning("El informe PDF aún no está disponible. Usa Excel o CSV por ahora.")
-                    except Exception as e:
-                        st.warning(f"No se pudo generar PDF. Usa Excel o CSV. Error: {e}")
+                # PDF export - temporalmente deshabilitado
+                st.info("📕 PDF próximamente")
+                st.caption("El informe PDF está en desarrollo. Usa Excel o CSV por ahora.")
     
     else:
         st.info("👆 Selecciona un rango de fechas y haz clic en **Consultar Reportería** para ver los datos consolidados de producción.")
