@@ -203,11 +203,13 @@ async def get_report_pdf(
     try:
         service = RendimientoService(username=username, password=password)
         
-        # Obtener datos
-        overview = service.get_overview(fecha_inicio, fecha_fin)
-        consolidado = service.get_consolidado_fruta(fecha_inicio, fecha_fin)
-        mos = service.get_rendimiento_mos(fecha_inicio, fecha_fin)
-        salas = service.get_productividad_por_sala(fecha_inicio, fecha_fin)
+        # Obtener datos usando el método unificado que tiene proceso_* y congelado_*
+        dashboard_data = service.get_dashboard_completo(fecha_inicio, fecha_fin)
+        
+        overview = dashboard_data.get('overview', {})
+        consolidado = dashboard_data.get('consolidado', {})
+        mos = dashboard_data.get('mos', [])
+        salas = dashboard_data.get('salas', [])
         
         # Generar PDF
         pdf_bytes = generate_produccion_report_pdf(

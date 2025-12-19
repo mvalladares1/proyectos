@@ -888,6 +888,15 @@ with tab_gestion:
                 qc_tbl_filter = st.selectbox("Estado QC", qc_opts, key="tbl_qc")
             with fc4:
                 pend_filter = st.selectbox("Con Pendientes", ["Todos", "Sí", "No"], key="tbl_pend_g")
+            
+            # Segunda fila de filtros
+            fc5, fc6 = st.columns([1, 3])
+            with fc5:
+                guia_filter = st.text_input(
+                    "🚚 Guía de Despacho", 
+                    placeholder="Buscar por N° guía...",
+                    key="gestion_guia_despacho"
+                )
         
         # Leyenda
         st.caption("**Leyenda:** ✅ Completo | 🟡 Pendiente | 🔵 Confirmada | ⏳ En espera | ⚪ Sin datos | ❌ Cancelada/Fallido")
@@ -904,6 +913,12 @@ with tab_gestion:
             df_filtered = df_filtered[df_filtered['pending_users'].str.len() > 0]
         elif pend_filter == "No":
             df_filtered = df_filtered[df_filtered['pending_users'].str.len() == 0]
+        
+        # Filtro por Guía de Despacho
+        if guia_filter:
+            guia_col = 'guia_despacho' if 'guia_despacho' in df_filtered.columns else 'x_studio_gua_de_despacho'
+            if guia_col in df_filtered.columns:
+                df_filtered = df_filtered[df_filtered[guia_col].fillna('').astype(str).str.contains(guia_filter, case=False, na=False)]
         
         st.caption(f"Mostrando {len(df_filtered)} de {len(df_g)} recepciones")
         

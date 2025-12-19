@@ -521,7 +521,7 @@ class ComprasService:
         # === 2. OCs SIN FACTURA (USO TENTATIVO/COMPROMETIDO) ===
         oc_domain = [
             ['partner_id', 'in', partner_ids],
-            ['state', '=', 'purchase']
+            ['state', 'in', ['purchase', 'done']]  # Incluir OCs completadas también
         ]
         if fecha_desde:
             oc_domain.append(['date_order', '>=', fecha_desde])

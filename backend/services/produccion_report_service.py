@@ -9,7 +9,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, KeepTogether
 from reportlab.lib.units import cm, mm
 
 
@@ -300,9 +300,13 @@ def generate_produccion_report_pdf(
     # === DETALLE DE FABRICACIONES ===
     if mos:
         elements.append(PageBreak())
-        elements.append(Paragraph("Detalle de Órdenes de Fabricación", subtitle_style))
-        elements.append(Paragraph(f"Total: {len(mos)} fabricaciones", normal_style))
-        elements.append(Spacer(1, 0.3*cm))
+        
+        # Título con KeepTogether para que no se separe de la tabla
+        mo_header = [
+            Paragraph("Detalle de Órdenes de Fabricación", subtitle_style),
+            Paragraph(f"Total: {len(mos)} fabricaciones", normal_style),
+            Spacer(1, 0.3*cm)
+        ]
         
         # Limitar a las primeras 50 MOs para no hacer el PDF muy largo
         mos_to_show = mos[:50]
@@ -313,13 +317,16 @@ def generate_produccion_report_pdf(
             rend = mo.get('rendimiento', 0)
             alert = "🟢" if rend >= 95 else ("🟡" if rend >= 90 else "🔴")
             product_name = mo.get('product_name', 'N/A')
-            if len(product_name) > 30:
-                product_name = product_name[:27] + "..."
+            if len(product_name) > 25:
+                product_name = product_name[:22] + "..."
+            sala_name = mo.get('sala', 'N/A') or 'N/A'
+            if len(sala_name) > 18:
+                sala_name = sala_name[:15] + "..."
             
             mo_data.append([
                 mo.get('mo_name', 'N/A'),
                 product_name,
-                mo.get('sala', 'N/A')[:15] if mo.get('sala') else 'N/A',
+                sala_name,
                 fmt_numero(mo.get('kg_mp', 0)),
                 fmt_numero(mo.get('kg_pt', 0)),
                 f"{alert} {fmt_porcentaje(rend)}",
@@ -327,18 +334,24 @@ def generate_produccion_report_pdf(
                 fmt_fecha(mo.get('fecha', ''))
             ])
         
-        mo_table = Table(mo_data, colWidths=[2.5*cm, 6*cm, 2.5*cm, 2*cm, 2*cm, 2.5*cm, 2*cm, 2.5*cm])
+        # Columnas más anchas: OF=4cm, Producto=5cm, Sala=3cm
+        mo_table = Table(mo_data, colWidths=[4*cm, 5*cm, 3*cm, 2*cm, 2*cm, 2.5*cm, 2*cm, 2.5*cm])
         mo_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16213e')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # OF alineado a izquierda
+            ('ALIGN', (1, 1), (1, -1), 'LEFT'),  # Producto alineado a izquierda
+            ('ALIGN', (2, 1), (2, -1), 'LEFT'),  # Sala alineado a izquierda
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
         ]))
+        
+        # Agregar header y tabla usando KeepTogether para primera fila
+        elements.extend(mo_header)
         elements.append(mo_table)
         
         if len(mos) > 50:
