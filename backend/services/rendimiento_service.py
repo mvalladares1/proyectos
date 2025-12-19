@@ -52,6 +52,29 @@ class RendimientoService:
         'iqf': 'IQF', 'fresco': 'Fresco', 'fresh': 'Fresco'
     }
     
+    # === CLASIFICACIÓN DE SALAS ===
+    # Identificadores de túneles/congelado (no generan merma, rendimiento ~100%)
+    TUNNEL_KEYWORDS = ['tunel', 'túnel', 'estatico', 'estático', 'congelado', 'tunnel']
+    
+    @classmethod
+    def get_sala_tipo(cls, sala_name: str) -> str:
+        """
+        Clasifica una sala como PROCESO o CONGELADO.
+        
+        PROCESO = Salas de vaciado, líneas retail/granel (generan merma)
+        CONGELADO = Túneles estáticos (solo congelan, ~100% rendimiento)
+        """
+        if not sala_name:
+            return 'SIN_SALA'
+        
+        sala_lower = sala_name.lower()
+        
+        # Detectar túneles/congelado
+        if any(keyword in sala_lower for keyword in cls.TUNNEL_KEYWORDS):
+            return 'CONGELADO'
+        
+        return 'PROCESO'
+    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self._cache = get_cache()
@@ -1199,15 +1222,28 @@ class RendimientoService:
         # 1. Obtener MOs del período (ÚNICA llamada a Odoo para MOs)
         mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin)
         
-        # Acumuladores para overview
+        # Acumuladores GLOBALES para overview (todos los procesos)
         total_kg_mp = 0.0
         total_kg_pt = 0.0
         total_hh = 0.0
-        total_costo_electricidad = 0.0  # Nuevo: costo de electricidad
+        total_costo_electricidad = 0.0
         mos_procesadas = 0
         lotes_set = set()
         
-        # Acumuladores para consolidado por fruta
+        # === ACUMULADORES SEPARADOS: PROCESO vs CONGELADO ===
+        # PROCESO = salas de vaciado, líneas retail/granel (generan merma real)
+        proceso_kg_mp = 0.0
+        proceso_kg_pt = 0.0
+        proceso_hh = 0.0
+        proceso_mos = 0
+        
+        # CONGELADO = túneles estáticos (solo congelan, ~100% rendimiento)
+        congelado_kg_mp = 0.0
+        congelado_kg_pt = 0.0
+        congelado_hh = 0.0
+        congelado_mos = 0
+        
+        # Acumuladores para consolidado por fruta (solo PROCESO)
         por_fruta = {}
         por_fruta_manejo = {}
         
@@ -1234,10 +1270,14 @@ class RendimientoService:
                 
                 rendimiento = (kg_pt / kg_mp * 100)
                 
-                # === Acumular para Overview ===
+                # Obtener sala y clasificarla
+                sala = mo.get('x_studio_sala_de_proceso', '') or 'Sin Sala'
+                sala_tipo = self.get_sala_tipo(sala)
+                
+                # === Acumular para Overview GLOBAL ===
                 total_kg_mp += kg_mp
                 total_kg_pt += kg_pt
-                total_costo_electricidad += costo_elec  # Acumular electricidad
+                total_costo_electricidad += costo_elec
                 mos_procesadas += 1
                 
                 hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
@@ -1247,6 +1287,18 @@ class RendimientoService:
                 for c in consumos:
                     if c.get('lot_id'):
                         lotes_set.add(c['lot_id'])
+                
+                # === Acumular SEPARADOS por tipo de sala ===
+                if sala_tipo == 'PROCESO':
+                    proceso_kg_mp += kg_mp
+                    proceso_kg_pt += kg_pt
+                    proceso_hh += hh if isinstance(hh, (int, float)) else 0
+                    proceso_mos += 1
+                elif sala_tipo == 'CONGELADO':
+                    congelado_kg_mp += kg_mp
+                    congelado_kg_pt += kg_pt
+                    congelado_hh += hh if isinstance(hh, (int, float)) else 0
+                    congelado_mos += 1
                 
                 # === Acumular para Consolidado por Fruta ===
                 # Detectar especie y manejo de los consumos usando campos Studio
@@ -1301,10 +1353,11 @@ class RendimientoService:
                     por_fruta_manejo[key_fm]['num_lotes'] += 1
                 
                 # === Acumular para Salas ===
-                sala = mo.get('x_studio_sala_de_proceso', '') or 'Sin Sala'
+                # sala ya está definido arriba
                 if sala not in salas_data:
                     salas_data[sala] = {
                         'sala': sala,
+                        'sala_tipo': sala_tipo,  # Nuevo: PROCESO, CONGELADO o SIN_SALA
                         'kg_mp': 0, 'kg_pt': 0,
                         'hh_total': 0, 'dotacion_sum': 0,
                         'duracion_total': 0, 'num_mos': 0
@@ -1361,12 +1414,13 @@ class RendimientoService:
                     'kg_pt': round(kg_pt, 2),
                     'rendimiento': round(rendimiento, 2),
                     'merma': round(kg_mp - kg_pt, 2),
-                    'costo_electricidad': costo_elec,  # Nuevo: costo electricidad
+                    'costo_electricidad': costo_elec,
                     'duracion_horas': duracion_horas,
                     'hh': hh if isinstance(hh, (int, float)) else 0,
                     'kg_por_hora': kg_por_hora if isinstance(kg_por_hora, (int, float)) else 0,
                     'dotacion': dotacion if isinstance(dotacion, (int, float)) else 0,
                     'sala': sala,
+                    'sala_tipo': sala_tipo,  # Nuevo: PROCESO, CONGELADO, SIN_SALA
                     'fecha': fecha
                 })
                 
@@ -1375,15 +1429,25 @@ class RendimientoService:
         
         # 3. Calcular KPIs finales
         
-        # Overview
+        # Overview GLOBAL (todos los procesos)
         rendimiento_promedio = (total_kg_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0
         merma_total = total_kg_mp - total_kg_pt
         merma_pct = (merma_total / total_kg_mp * 100) if total_kg_mp > 0 else 0
         kg_por_hh = (total_kg_pt / total_hh) if total_hh > 0 else 0
         
+        # KPIs de PROCESO (vaciado - el número real de rendimiento)
+        proceso_rendimiento = (proceso_kg_pt / proceso_kg_mp * 100) if proceso_kg_mp > 0 else 0
+        proceso_merma = proceso_kg_mp - proceso_kg_pt
+        proceso_merma_pct = (proceso_merma / proceso_kg_mp * 100) if proceso_kg_mp > 0 else 0
+        proceso_kg_por_hh = (proceso_kg_pt / proceso_hh) if proceso_hh > 0 else 0
+        
+        # KPIs de CONGELADO (túneles - ~100% pero volumen diferente)
+        congelado_rendimiento = (congelado_kg_pt / congelado_kg_mp * 100) if congelado_kg_mp > 0 else 0
+        
         overview = {
             'fecha_inicio': fecha_inicio,
             'fecha_fin': fecha_fin,
+            # KPIs globales (referencia)
             'total_kg_mp': round(total_kg_mp, 2),
             'total_kg_pt': round(total_kg_pt, 2),
             'rendimiento_promedio': round(rendimiento_promedio, 2),
@@ -1393,7 +1457,24 @@ class RendimientoService:
             'kg_por_hh': round(kg_por_hh, 2),
             'mos_procesadas': mos_procesadas,
             'lotes_unicos': len(lotes_set),
-            'total_costo_electricidad': round(total_costo_electricidad, 0)  # Nuevo
+            'total_costo_electricidad': round(total_costo_electricidad, 0),
+            
+            # === KPIs de PROCESO (vaciado) - EL NÚMERO REAL ===
+            'proceso_kg_mp': round(proceso_kg_mp, 2),
+            'proceso_kg_pt': round(proceso_kg_pt, 2),
+            'proceso_rendimiento': round(proceso_rendimiento, 2),
+            'proceso_merma_kg': round(proceso_merma, 2),
+            'proceso_merma_pct': round(proceso_merma_pct, 2),
+            'proceso_hh': round(proceso_hh, 2),
+            'proceso_kg_por_hh': round(proceso_kg_por_hh, 2),
+            'proceso_mos': proceso_mos,
+            
+            # === KPIs de CONGELADO (túneles) ===
+            'congelado_kg_mp': round(congelado_kg_mp, 2),
+            'congelado_kg_pt': round(congelado_kg_pt, 2),
+            'congelado_rendimiento': round(congelado_rendimiento, 2),
+            'congelado_hh': round(congelado_hh, 2),
+            'congelado_mos': congelado_mos
         }
         
         # Consolidado por fruta

@@ -420,35 +420,53 @@ with tab_general:
     if data:
         st.markdown("---")
         
-        # === KPIs Consolidados ===
-        st.subheader("📈 KPIs Consolidados del Período")
+        # === KPIs de PROCESO (Vaciado) - EL NÚMERO REAL ===
+        st.subheader("🏭 KPIs de Proceso (Vaciado)")
+        st.caption("Salas de vaciado, líneas retail/granel - generan merma real")
         
-        kpi_cols = st.columns(5)
-        with kpi_cols[0]:
-            st.metric("Total Kg MP", fmt_numero(data.get('total_kg_mp', 0), 0))
-        with kpi_cols[1]:
-            st.metric("Total Kg PT", fmt_numero(data.get('total_kg_pt', 0), 0))
-        with kpi_cols[2]:
-            rend = data.get('rendimiento_promedio', 0)
+        proc_cols = st.columns(5)
+        with proc_cols[0]:
+            st.metric("Kg MP Procesados", fmt_numero(data.get('proceso_kg_mp', 0), 0))
+        with proc_cols[1]:
+            st.metric("Kg PT Producidos", fmt_numero(data.get('proceso_kg_pt', 0), 0))
+        with proc_cols[2]:
+            rend = data.get('proceso_rendimiento', 0)
             alert = get_alert_color(rend)
             st.metric(f"Rendimiento {alert}", fmt_porcentaje(rend), delta=f"{rend-85:.1f}% vs 85%")
-        with kpi_cols[3]:
-            st.metric("Merma Total", fmt_numero(data.get('merma_total_kg', 0), 0) + " Kg")
-        with kpi_cols[4]:
-            st.metric("Kg/HH", fmt_numero(data.get('kg_por_hh', 0), 1))
+        with proc_cols[3]:
+            st.metric("Merma Proceso", fmt_numero(data.get('proceso_merma_kg', 0), 0) + " Kg")
+        with proc_cols[4]:
+            st.metric("Kg/HH", fmt_numero(data.get('proceso_kg_por_hh', 0), 1))
         
-        kpi_cols2 = st.columns(5)
-        with kpi_cols2[0]:
-            st.metric("MOs Procesadas", data.get('mos_procesadas', 0))
-        with kpi_cols2[1]:
+        proc_cols2 = st.columns(5)
+        with proc_cols2[0]:
+            st.metric("MOs Proceso", data.get('proceso_mos', 0))
+        with proc_cols2[1]:
+            st.metric("HH Proceso", fmt_numero(data.get('proceso_hh', 0), 1))
+        with proc_cols2[2]:
+            st.metric("Merma %", fmt_porcentaje(data.get('proceso_merma_pct', 0)))
+        with proc_cols2[3]:
             st.metric("Lotes Únicos", data.get('lotes_unicos', 0))
-        with kpi_cols2[2]:
-            st.metric("Total HH", fmt_numero(data.get('total_hh', 0), 1))
-        with kpi_cols2[3]:
-            st.metric("Merma %", fmt_porcentaje(data.get('merma_pct', 0)))
-        with kpi_cols2[4]:
+        with proc_cols2[4]:
             costo_elec = data.get('total_costo_electricidad', 0)
             st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}")
+        
+        st.markdown("---")
+        
+        # === KPIs de CONGELADO (Túneles) ===
+        with st.expander("❄️ KPIs de Congelado (Túneles Estáticos)", expanded=False):
+            st.caption("Túneles de congelación - solo congelan, rendimiento ~100%")
+            
+            cong_cols = st.columns(4)
+            with cong_cols[0]:
+                st.metric("Kg Entrada", fmt_numero(data.get('congelado_kg_mp', 0), 0))
+            with cong_cols[1]:
+                st.metric("Kg Salida", fmt_numero(data.get('congelado_kg_pt', 0), 0))
+            with cong_cols[2]:
+                cong_rend = data.get('congelado_rendimiento', 0)
+                st.metric("Rendimiento", fmt_porcentaje(cong_rend))
+            with cong_cols[3]:
+                st.metric("MOs Congelado", data.get('congelado_mos', 0))
         
         st.markdown("---")
         
@@ -637,6 +655,21 @@ with tab_general:
                     salas_unicas = sorted(df_mos_original['sala'].dropna().unique().tolist())
                     salas_sel = st.multiselect("🏭 Sala", salas_unicas, key="filtro_sala_detalle")
             
+            # Segunda fila de filtros
+            filter_cols2 = st.columns([1, 1, 2])
+            with filter_cols2[0]:
+                # Filtro por Tipo (PROCESO vs CONGELADO)
+                if 'sala_tipo' in df_mos_original.columns:
+                    tipos_unicos = sorted(df_mos_original['sala_tipo'].dropna().unique().tolist())
+                    tipo_labels = {'PROCESO': '🏭 Proceso (Vaciado)', 'CONGELADO': '❄️ Congelado (Túneles)', 'SIN_SALA': '⚠️ Sin Sala'}
+                    tipos_display = [tipo_labels.get(t, t) for t in tipos_unicos]
+                    tipo_sel_display = st.multiselect("📌 Tipo Operación", tipos_display, key="filtro_tipo_detalle")
+                    # Convertir de vuelta a valores originales
+                    tipo_reverse = {v: k for k, v in tipo_labels.items()}
+                    tipos_sel = [tipo_reverse.get(t, t) for t in tipo_sel_display]
+                else:
+                    tipos_sel = []
+            
             # Aplicar filtros
             df_mos = df_mos_original.copy()
             
@@ -655,10 +688,14 @@ with tab_general:
             if salas_sel:
                 df_mos = df_mos[df_mos['sala'].isin(salas_sel)]
             
+            # Filtro por Tipo de Operación (PROCESO/CONGELADO)
+            if tipos_sel and 'sala_tipo' in df_mos.columns:
+                df_mos = df_mos[df_mos['sala_tipo'].isin(tipos_sel)]
+            
             # Agregar columna de estado/alerta
             df_mos['estado'] = df_mos['rendimiento'].apply(get_alert_color)
             
-            # Verificar columnas disponibles (especie y manejo son nuevas)
+            # Verificar columnas disponibles
             cols_to_show = ['estado', 'mo_name', 'product_name']
             col_names = ['', 'OF', 'Producto']
             
@@ -668,6 +705,11 @@ with tab_general:
             if 'manejo' in df_mos.columns:
                 cols_to_show.append('manejo')
                 col_names.append('Manejo')
+            
+            # Agregar tipo de operación simplificado
+            if 'sala_tipo' in df_mos.columns:
+                cols_to_show.append('sala_tipo')
+                col_names.append('Tipo')
             
             cols_to_show.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma'])
             col_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma'])
@@ -722,6 +764,9 @@ with tab_general:
                 export_names.append('Manejo')
             export_cols.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma'])
             export_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg'])
+            if 'sala_tipo' in df_mos.columns:
+                export_cols.append('sala_tipo')
+                export_names.append('Tipo Operación')
             if 'costo_electricidad' in df_mos.columns:
                 export_cols.append('costo_electricidad')
                 export_names.append('Costo Electricidad $')
