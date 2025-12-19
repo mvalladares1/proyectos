@@ -200,12 +200,12 @@ class RendimientoService:
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500) -> List[Dict]:
         """
-        Obtiene MOs terminadas/por cerrar en el período.
+        Obtiene MOs terminadas en el período.
         Usa date_planned_start (fecha prevista) para filtrar.
-        Incluye state 'done' y 'to_close' (producción terminada pendiente de cierre).
+        Solo incluye state 'done' (producción completamente terminada).
         """
         domain = [
-            ['state', 'in', ['done', 'to_close']],  # Incluir ambos estados
+            ['state', '=', 'done'],  # Solo completadas
             ['date_planned_start', '!=', False],
             ['date_planned_start', '>=', fecha_inicio],
             ['date_planned_start', '<=', fecha_fin + ' 23:59:59']

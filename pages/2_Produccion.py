@@ -429,12 +429,12 @@ with tab_general:
         # Mostrar fechas seleccionadas
         st.info(f"📅 **Período:** {fecha_inicio_rep.strftime('%d/%m/%Y')} → {fecha_fin_rep.strftime('%d/%m/%Y')} ({(fecha_fin_rep - fecha_inicio_rep).days + 1} días)")
     
-    # Checkbox para filtrar solo OFs terminadas (similar a Recepciones)
+    # Checkbox para filtrar solo OFs terminadas
     solo_terminadas = st.checkbox(
-        "Solo fabricaciones terminadas (done/to_close)", 
+        "Solo fabricaciones terminadas (done)", 
         value=True, 
         key="solo_terminadas_prod",
-        help="Activa para ver solo OFs completadas o por cerrar. Desactiva para incluir todas."
+        help="Activa para ver solo OFs completadas. Desactiva para incluir todas."
     )
     
     if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria"):
@@ -899,9 +899,37 @@ with tab_general:
                     st.warning(f"No se pudo generar Excel: {e}")
             
             with col_exp3:
-                # PDF export - temporalmente deshabilitado
-                st.info("📕 PDF próximamente")
-                st.caption("El informe PDF está en desarrollo. Usa Excel o CSV por ahora.")
+                # PDF export
+                if st.button("📕 Generar Informe PDF", key="btn_pdf_prod", type="secondary"):
+                    fi = fecha_inicio_rep.strftime("%Y-%m-%d")
+                    ff = fecha_fin_rep.strftime("%Y-%m-%d")
+                    try:
+                        with st.spinner("Generando informe PDF..."):
+                            resp = requests.get(
+                                f"{API_URL}/api/v1/rendimiento/report.pdf",
+                                params={
+                                    "username": username,
+                                    "password": password,
+                                    "fecha_inicio": fi,
+                                    "fecha_fin": ff
+                                },
+                                timeout=180
+                            )
+                        if resp.status_code == 200:
+                            pdf_bytes = resp.content
+                            fname = f"produccion_{fi}_a_{ff}.pdf".replace('/', '-')
+                            st.download_button(
+                                "⬇️ Descargar PDF",
+                                data=pdf_bytes,
+                                file_name=fname,
+                                mime='application/pdf',
+                                key="download_pdf_prod"
+                            )
+                            st.success("PDF generado correctamente")
+                        else:
+                            st.error(f"Error al generar PDF: {resp.status_code}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
     
     else:
         st.info("👆 Selecciona un rango de fechas y haz clic en **Consultar Reportería** para ver los datos consolidados de producción.")

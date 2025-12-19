@@ -127,35 +127,69 @@ def generate_produccion_report_pdf(
     ))
     elements.append(Spacer(1, 0.5*cm))
     
-    # === KPIs CONSOLIDADOS ===
+    # === KPIs DE PROCESO (Vaciado) ===
     if overview:
-        elements.append(Paragraph("KPIs Consolidados del Período", subtitle_style))
+        elements.append(Paragraph("🏭 KPIs de Proceso (Vaciado)", subtitle_style))
+        elements.append(Paragraph("Salas de vaciado, líneas retail/granel - generan merma real", normal_style))
+        elements.append(Spacer(1, 0.2*cm))
         
-        kpi_data = [
-            ['Kg MP', 'Kg PT', 'Rendimiento', 'Merma', 'Kg/HH', 'MOs', 'Lotes'],
+        proceso_data = [
+            ['Kg MP', 'Kg PT', 'Rendimiento', 'Merma Kg', 'Merma %', 'HH', 'Kg/HH', 'MOs'],
             [
-                fmt_numero(overview.get('total_kg_mp', 0)),
-                fmt_numero(overview.get('total_kg_pt', 0)),
-                fmt_porcentaje(overview.get('rendimiento_promedio', 0)),
-                fmt_numero(overview.get('merma_total_kg', 0)),
-                fmt_numero(overview.get('kg_por_hh', 0), 1),
-                str(overview.get('mos_procesadas', 0)),
-                str(overview.get('lotes_unicos', 0))
+                fmt_numero(overview.get('proceso_kg_mp', 0)),
+                fmt_numero(overview.get('proceso_kg_pt', 0)),
+                fmt_porcentaje(overview.get('proceso_rendimiento', 0)),
+                fmt_numero(overview.get('proceso_merma_kg', 0)),
+                fmt_porcentaje(overview.get('proceso_merma_pct', 0)),
+                fmt_numero(overview.get('proceso_hh', 0), 1),
+                fmt_numero(overview.get('proceso_kg_por_hh', 0), 1),
+                str(overview.get('proceso_mos', 0))
             ]
         ]
         
-        kpi_table = Table(kpi_data, colWidths=[3*cm]*7)
-        kpi_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a1a2e')),
+        proceso_table = Table(proceso_data, colWidths=[2.6*cm]*8)
+        proceso_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16213e')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#e8f5e9')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ]))
-        elements.append(kpi_table)
+        elements.append(proceso_table)
+        elements.append(Spacer(1, 0.4*cm))
+        
+        # === KPIs DE CONGELADO (Túneles) ===
+        elements.append(Paragraph("❄️ KPIs de Congelado (Túneles Estáticos)", subtitle_style))
+        elements.append(Paragraph("Túneles de congelación - solo congelan, rendimiento ~100%", normal_style))
+        elements.append(Spacer(1, 0.2*cm))
+        
+        congelado_data = [
+            ['Kg Entrada', 'Kg Salida', 'Rendimiento', 'HH', 'MOs', 'Costo Electricidad'],
+            [
+                fmt_numero(overview.get('congelado_kg_mp', 0)),
+                fmt_numero(overview.get('congelado_kg_pt', 0)),
+                fmt_porcentaje(overview.get('congelado_rendimiento', 0)),
+                fmt_numero(overview.get('congelado_hh', 0), 1),
+                str(overview.get('congelado_mos', 0)),
+                f"${fmt_numero(overview.get('total_costo_electricidad', 0))}"
+            ]
+        ]
+        
+        congelado_table = Table(congelado_data, colWidths=[3.5*cm]*6)
+        congelado_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0277bd')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#e3f2fd')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(congelado_table)
         elements.append(Spacer(1, 0.5*cm))
     
     # === RESUMEN POR TIPO DE FRUTA ===
