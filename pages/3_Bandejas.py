@@ -296,8 +296,8 @@ if not df_in.empty or not df_out.empty:
             with col1:
                 selected_year = st.selectbox("Año", years, index=0, key="year_bandejas")
             with col2:
-                month_options = ['Todos'] + [months_map[m] for m in range(1, 13)]
-                selected_month_name = st.selectbox("Mes", month_options, index=0, key="month_bandejas")
+                month_options = [months_map[m] for m in range(1, 13)]
+                selected_months_names = st.multiselect("Mes(es)", month_options, default=[], placeholder="Todos los meses", key="month_bandejas")
         else:
             season_options = []
             for y in range(2024, max_year + 1):
@@ -313,10 +313,11 @@ if not df_in.empty or not df_out.empty:
             
             selected_season = st.selectbox("Temporada", season_options, index=default_idx, key="season_bandejas")
         
-        # Convertir mes a número
-        selected_month = None
-        if selected_month_name != 'Todos':
-            selected_month = [k for k, v in months_map.items() if v == selected_month_name][0]
+        # Convertir meses a números
+        selected_months = []
+        if selected_months_names:
+            for name in selected_months_names:
+                selected_months.append([k for k, v in months_map.items() if v == name][0])
         
         # Verificar si HOY está en el rango seleccionado (para mostrar stock)
         is_today_in_range = False
@@ -324,7 +325,7 @@ if not df_in.empty or not df_out.empty:
         
         if filter_type == "Por Mes/Año":
             year_match = (selected_year == 'Todos') or (selected_year == today.year)
-            month_match = (selected_month_name == 'Todos') or (selected_month == today.month)
+            month_match = (len(selected_months) == 0) or (today.month in selected_months)
             if year_match and month_match:
                 is_today_in_range = True
         else:
@@ -346,8 +347,8 @@ if not df_in.empty or not df_out.empty:
             if filter_type == "Por Mes/Año":
                 if selected_year != 'Todos':
                     mask_in &= (df_in['date_order'].dt.year == selected_year)
-                if selected_month_name != 'Todos':
-                    mask_in &= (df_in['date_order'].dt.month == selected_month)
+                if selected_months:  # Si hay meses seleccionados
+                    mask_in &= (df_in['date_order'].dt.month.isin(selected_months))
             else:
                 if selected_season:
                     parts = selected_season.replace("Temporada ", "").split("-")
@@ -373,8 +374,8 @@ if not df_in.empty or not df_out.empty:
             if filter_type == "Por Mes/Año":
                 if selected_year != 'Todos':
                     mask_out &= (df_out['date'].dt.year == selected_year)
-                if selected_month_name != 'Todos':
-                    mask_out &= (df_out['date'].dt.month == selected_month)
+                if selected_months:  # Si hay meses seleccionados
+                    mask_out &= (df_out['date'].dt.month.isin(selected_months))
             else:
                 if selected_season:
                     parts = selected_season.replace("Temporada ", "").split("-")
@@ -636,8 +637,8 @@ if not df_in.empty or not df_out.empty:
                     elif filter_type == "Por Mes/Año":
                         if selected_year != 'Todos':
                             filtros_pdf['año'] = str(selected_year)
-                        if selected_month_name != 'Todos':
-                            filtros_pdf['mes'] = selected_month_name
+                        if selected_months_names:
+                            filtros_pdf['mes'] = ', '.join(selected_months_names)
                     
                     pdf_bytes = generate_bandejas_report_pdf(
                         kpis=kpis_pdf,
@@ -788,8 +789,8 @@ if not df_in.empty or not df_out.empty:
                 elif filter_type == "Por Mes/Año":
                     if selected_year != 'Todos':
                         filtros_pdf['año'] = str(selected_year)
-                    if selected_month_name != 'Todos':
-                        filtros_pdf['mes'] = selected_month_name
+                    if selected_months_names:
+                        filtros_pdf['mes'] = ', '.join(selected_months_names)
                 
                 # Generar PDF completo con productores
                 pdf_bytes = generate_bandejas_report_pdf(
