@@ -632,92 +632,96 @@ class ComprasService:
         # Recepciones que están listas pero aún no se han ejecutado
         recepciones_preparadas_by_partner = {}
         
-        if oc_ids:
-            # Buscar pickings de compra en estado 'assigned' (preparado)
-            pickings = self.odoo.search_read(
-                'stock.picking',
-                [
-                    ['purchase_id', 'in', oc_ids],
-                    ['state', '=', 'assigned'],  # Preparado
-                    ['picking_type_code', '=', 'incoming']  # Solo recepciones
-                ],
-                ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids'],
-                limit=1000
-            )
-            
-            print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings en estado 'assigned'")
-            
-            if pickings:
-                picking_ids = [p['id'] for p in pickings]
-                picking_info_map = {p['id']: p for p in pickings}
-                
-                # Obtener move lines de estos pickings para calcular valores
-                moves = self.odoo.search_read(
-                    'stock.move',
-                    [['picking_id', 'in', picking_ids]],
-                    ['id', 'picking_id', 'product_id', 'product_uom_qty', 'quantity', 'price_unit', 'purchase_line_id'],
-                    limit=5000
+        try:
+            if oc_ids:
+                # Buscar pickings de compra en estado 'assigned' (preparado)
+                pickings = self.odoo.search_read(
+                    'stock.picking',
+                    [
+                        ['purchase_id', 'in', oc_ids],
+                        ['state', '=', 'assigned'],  # Preparado
+                        ['picking_type_code', '=', 'incoming']  # Solo recepciones
+                    ],
+                    ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids'],
+                    limit=1000
                 )
                 
-                # Procesar cada move y calcular el valor pendiente
-                for move in moves:
-                    qty_demand = float(move.get('product_uom_qty') or 0)
-                    qty_done = float(move.get('quantity') or 0)
-                    price_unit = float(move.get('price_unit') or 0)
+                print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings en estado 'assigned'")
+                
+                if pickings:
+                    picking_ids = [p['id'] for p in pickings]
+                    picking_info_map = {p['id']: p for p in pickings}
+                
+                    # Obtener move lines de estos pickings para calcular valores
+                    moves = self.odoo.search_read(
+                        'stock.move',
+                        [['picking_id', 'in', picking_ids]],
+                        ['id', 'picking_id', 'product_id', 'product_uom_qty', 'quantity', 'price_unit', 'purchase_line_id'],
+                        limit=5000
+                    )
                     
-                    # Solo considerar si hay demanda sin completar
-                    qty_pendiente = qty_demand - qty_done
-                    if qty_pendiente <= 0:
-                        continue
-                    
-                    # Calcular monto pendiente
-                    monto_pendiente = qty_pendiente * price_unit
-                    
-                    # Obtener info del picking
-                    picking_info = move.get('picking_id')
-                    picking_id = picking_info[0] if isinstance(picking_info, (list, tuple)) else picking_info
-                    picking_data = picking_info_map.get(picking_id, {})
-                    
-                    # Obtener partner_id del picking o de la OC
-                    partner_info = picking_data.get('partner_id')
-                    pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
-                    
-                    # Si no tiene partner, buscar en la OC
-                    if not pid:
-                        purchase_info = picking_data.get('purchase_id')
-                        oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
-                        oc_data = oc_info_map.get(oc_id, {})
-                        partner_info = oc_data.get('partner_id')
-                        pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
-                    
-                    if pid:
-                        picking_name = picking_data.get('name', '')
-                        if pid not in recepciones_preparadas_by_partner:
-                            recepciones_preparadas_by_partner[pid] = {}
+                    # Procesar cada move y calcular el valor pendiente
+                    for move in moves:
+                        qty_demand = float(move.get('product_uom_qty') or 0)
+                        qty_done = float(move.get('quantity') or 0)
+                        price_unit = float(move.get('price_unit') or 0)
                         
-                        if picking_name not in recepciones_preparadas_by_partner[pid]:
+                        # Solo considerar si hay demanda sin completar
+                        qty_pendiente = qty_demand - qty_done
+                        if qty_pendiente <= 0:
+                            continue
+                        
+                        # Calcular monto pendiente
+                        monto_pendiente = qty_pendiente * price_unit
+                        
+                        # Obtener info del picking
+                        picking_info = move.get('picking_id')
+                        picking_id = picking_info[0] if isinstance(picking_info, (list, tuple)) else picking_info
+                        picking_data = picking_info_map.get(picking_id, {})
+                        
+                        # Obtener partner_id del picking o de la OC
+                        partner_info = picking_data.get('partner_id')
+                        pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
+                        
+                        # Si no tiene partner, buscar en la OC
+                        if not pid:
                             purchase_info = picking_data.get('purchase_id')
                             oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
                             oc_data = oc_info_map.get(oc_id, {})
-                            
-                            recepciones_preparadas_by_partner[pid][picking_name] = {
-                                'picking_id': picking_id,
-                                'name': picking_name,
-                                'oc_id': oc_id,
-                                'oc_name': oc_data.get('name', ''),
-                                'date': picking_data.get('scheduled_date'),
-                                'currency_id': oc_data.get('currency_id'),
-                                'monto_pendiente': 0,
-                                'lineas_count': 0
-                            }
+                            partner_info = oc_data.get('partner_id')
+                            pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
                         
-                        recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_pendiente
-                        recepciones_preparadas_by_partner[pid][picking_name]['lineas_count'] += 1
-                
-                # DEBUG
-                for pid, pickings_dict in recepciones_preparadas_by_partner.items():
-                    for pick_name, data in pickings_dict.items():
-                        print(f"[DEBUG PREPARADO] Partner {pid}: {pick_name} = ${data['monto_pendiente']:,.0f}")
+                        if pid:
+                            picking_name = picking_data.get('name', '')
+                            if pid not in recepciones_preparadas_by_partner:
+                                recepciones_preparadas_by_partner[pid] = {}
+                            
+                            if picking_name not in recepciones_preparadas_by_partner[pid]:
+                                purchase_info = picking_data.get('purchase_id')
+                                oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
+                                oc_data = oc_info_map.get(oc_id, {})
+                                
+                                recepciones_preparadas_by_partner[pid][picking_name] = {
+                                    'picking_id': picking_id,
+                                    'name': picking_name,
+                                    'oc_id': oc_id,
+                                    'oc_name': oc_data.get('name', ''),
+                                    'date': picking_data.get('scheduled_date'),
+                                    'currency_id': oc_data.get('currency_id'),
+                                    'monto_pendiente': 0,
+                                    'lineas_count': 0
+                                }
+                            
+                            recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_pendiente
+                            recepciones_preparadas_by_partner[pid][picking_name]['lineas_count'] += 1
+                    
+                    # DEBUG
+                    for pid, pickings_dict in recepciones_preparadas_by_partner.items():
+                        for pick_name, data in pickings_dict.items():
+                            print(f"[DEBUG PREPARADO] Partner {pid}: {pick_name} = ${data['monto_pendiente']:,.0f}")
+        except Exception as e:
+            print(f"[ERROR PICKINGS] Error al obtener pickings preparados: {e}")
+            # Continuar sin pickings preparados, no bloquear la carga
 
         
         # === PROCESAR CADA PARTNER ===

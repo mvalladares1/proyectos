@@ -387,11 +387,13 @@ with tab_general:
     # Calcular fechas según selección
     hoy = datetime.now().date()
     
-    # Inicio de temporada (aproximado - diciembre del año anterior o actual)
-    if hoy.month >= 11:  # Nov-Dic = temporada actual
-        inicio_temporada = datetime(hoy.year, 11, 1).date()
-    else:  # Ene-Oct = temporada empezó año anterior
-        inicio_temporada = datetime(hoy.year - 1, 11, 1).date()
+    # Inicio de temporada 2025 = 20 de noviembre
+    if hoy.month >= 11 and hoy.day >= 20:  # Nov 20+ o Dic = temporada actual
+        inicio_temporada = datetime(hoy.year, 11, 20).date()
+    elif hoy.month == 12:  # Diciembre = temporada actual
+        inicio_temporada = datetime(hoy.year, 11, 20).date()
+    else:  # Ene-Nov 19 = temporada empezó año anterior
+        inicio_temporada = datetime(hoy.year - 1, 11, 20).date()
     
     if "Última Semana" in periodo_tipo:
         fecha_inicio_default = hoy - timedelta(days=7)
