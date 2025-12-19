@@ -211,52 +211,29 @@ def fetch_kpis(username: str, password: str) -> Dict:
 # ============================================
 
 @st.cache_data(ttl=120, show_spinner=False)
+def fetch_dashboard_completo(username: str, password: str, fecha_inicio: str, fecha_fin: str):
+    """
+    OPTIMIZADO: Obtiene TODOS los datos del dashboard en UNA sola llamada.
+    Retorna: overview, consolidado, salas, mos - todo junto.
+    Reduce significativamente las llamadas a la API.
+    """
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/rendimiento/dashboard", params={
+            "username": username, "password": password,
+            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
+        }, timeout=180)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        st.warning(f"Error cargando datos: {e}")
+    return None
+
+# Funciones individuales (legacy, para compatibilidad)
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_rendimiento_overview(username: str, password: str, fecha_inicio: str, fecha_fin: str):
     """Obtiene KPIs consolidados de rendimiento"""
     try:
         resp = requests.get(f"{API_URL}/api/v1/rendimiento/overview", params={
-            "username": username, "password": password,
-            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
-        }, timeout=120)
-        if resp.status_code == 200:
-            return resp.json()
-    except:
-        pass
-    return None
-
-@st.cache_data(ttl=120, show_spinner=False)
-def fetch_rendimiento_consolidado(username: str, password: str, fecha_inicio: str, fecha_fin: str):
-    """Obtiene datos consolidados por fruta/manejo/producto"""
-    try:
-        resp = requests.get(f"{API_URL}/api/v1/rendimiento/consolidado", params={
-            "username": username, "password": password,
-            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
-        }, timeout=120)
-        if resp.status_code == 200:
-            return resp.json()
-    except:
-        pass
-    return None
-
-@st.cache_data(ttl=120, show_spinner=False)
-def fetch_rendimiento_salas(username: str, password: str, fecha_inicio: str, fecha_fin: str):
-    """Obtiene productividad por sala"""
-    try:
-        resp = requests.get(f"{API_URL}/api/v1/rendimiento/salas", params={
-            "username": username, "password": password,
-            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
-        }, timeout=120)
-        if resp.status_code == 200:
-            return resp.json()
-    except:
-        pass
-    return None
-
-@st.cache_data(ttl=120, show_spinner=False)
-def fetch_rendimiento_mos(username: str, password: str, fecha_inicio: str, fecha_fin: str):
-    """Obtiene lista de MOs con rendimiento por cada una"""
-    try:
-        resp = requests.get(f"{API_URL}/api/v1/rendimiento/mos", params={
             "username": username, "password": password,
             "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
         }, timeout=120)
@@ -391,15 +368,9 @@ tab_general, tab_detalle = st.tabs(["📊 Reportería General", "📋 Detalle de
 with tab_general:
     st.subheader("📊 Reportería General de Producción")
     
-    # --- Estado de sesión para reportería ---
-    if 'prod_rend_data' not in st.session_state:
-        st.session_state.prod_rend_data = None
-    if 'prod_rend_consolidado' not in st.session_state:
-        st.session_state.prod_rend_consolidado = None
-    if 'prod_rend_salas' not in st.session_state:
-        st.session_state.prod_rend_salas = None
-    if 'prod_rend_mos' not in st.session_state:
-        st.session_state.prod_rend_mos = None
+    # --- Estado de sesión para reportería (simplificado) ---
+    if 'prod_dashboard_data' not in st.session_state:
+        st.session_state.prod_dashboard_data = None
     
     # --- Filtros de fecha ---
     col_f1, col_f2 = st.columns([1, 1])
@@ -427,25 +398,24 @@ with tab_general:
     )
     
     if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria"):
-        with st.spinner("Cargando datos de rendimiento..."):
+        with st.spinner("Cargando datos de rendimiento (optimizado - 1 consulta)..."):
             fi = fecha_inicio_rep.strftime("%Y-%m-%d")
             ff = fecha_fin_rep.strftime("%Y-%m-%d")
             
-            st.session_state.prod_rend_data = fetch_rendimiento_overview(username, password, fi, ff)
-            st.session_state.prod_rend_consolidado = fetch_rendimiento_consolidado(username, password, fi, ff)
-            st.session_state.prod_rend_salas = fetch_rendimiento_salas(username, password, fi, ff)
-            st.session_state.prod_rend_mos = fetch_rendimiento_mos(username, password, fi, ff)
+            # UNA SOLA LLAMADA que obtiene TODO
+            st.session_state.prod_dashboard_data = fetch_dashboard_completo(username, password, fi, ff)
             
-            if st.session_state.prod_rend_data:
+            if st.session_state.prod_dashboard_data:
                 st.success("✅ Datos cargados correctamente")
             else:
                 st.warning("No se pudieron cargar los datos. Verifica la conexión al servidor.")
     
-    # --- Mostrar datos ---
-    data = st.session_state.prod_rend_data
-    consolidado = st.session_state.prod_rend_consolidado
-    salas = st.session_state.prod_rend_salas
-    mos = st.session_state.prod_rend_mos
+    # --- Extraer datos del dashboard unificado ---
+    dashboard = st.session_state.prod_dashboard_data
+    data = dashboard.get('overview') if dashboard else None
+    consolidado = dashboard.get('consolidado') if dashboard else None
+    salas = dashboard.get('salas') if dashboard else None
+    mos = dashboard.get('mos') if dashboard else None
     
     if data:
         st.markdown("---")
@@ -633,9 +603,23 @@ with tab_general:
             # Agregar columna de estado/alerta
             df_mos['estado'] = df_mos['rendimiento'].apply(get_alert_color)
             
+            # Verificar columnas disponibles (especie y manejo son nuevas)
+            cols_to_show = ['estado', 'mo_name', 'product_name']
+            col_names = ['', 'OF', 'Producto']
+            
+            if 'especie' in df_mos.columns:
+                cols_to_show.append('especie')
+                col_names.append('Especie')
+            if 'manejo' in df_mos.columns:
+                cols_to_show.append('manejo')
+                col_names.append('Manejo')
+            
+            cols_to_show.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'fecha'])
+            col_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma', 'Fecha'])
+            
             # Formatear para mostrar
-            df_mos_display = df_mos[['estado', 'mo_name', 'product_name', 'sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha']].copy()
-            df_mos_display.columns = ['', 'OF', 'Producto', 'Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma', 'Horas', 'Dotación', 'Fecha']
+            df_mos_display = df_mos[cols_to_show].copy()
+            df_mos_display.columns = col_names
             
             # Aplicar formato chileno
             df_mos_display['Kg MP'] = df_mos_display['Kg MP'].apply(lambda x: fmt_numero(x, 0))
@@ -653,8 +637,19 @@ with tab_general:
             col_exp1, col_exp2, col_exp3 = st.columns([1, 1, 1])
             
             # Preparar DataFrame para exportación (valores numéricos sin formato)
-            df_export = df_mos[['mo_name', 'product_name', 'sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha']].copy()
-            df_export.columns = ['OF', 'Producto', 'Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg', 'Horas', 'Dotación', 'Fecha']
+            export_cols = ['mo_name', 'product_name']
+            export_names = ['OF', 'Producto']
+            if 'especie' in df_mos.columns:
+                export_cols.append('especie')
+                export_names.append('Especie')
+            if 'manejo' in df_mos.columns:
+                export_cols.append('manejo')
+                export_names.append('Manejo')
+            export_cols.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma', 'duracion_horas', 'dotacion', 'fecha'])
+            export_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg', 'Horas', 'Dotación', 'Fecha'])
+            
+            df_export = df_mos[export_cols].copy()
+            df_export.columns = export_names
             
             with col_exp1:
                 csv = df_export.to_csv(index=False).encode('utf-8')

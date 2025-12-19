@@ -26,6 +26,31 @@ async def get_overview(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/dashboard")
+async def get_dashboard_completo(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    OPTIMIZADO: Obtiene TODOS los datos del dashboard en una sola llamada.
+    
+    Retorna:
+    - overview: KPIs consolidados
+    - consolidado: Datos por fruta/manejo
+    - salas: Productividad por sala
+    - mos: Lista de MOs con rendimiento
+    
+    Reduce llamadas a Odoo de ~4N a ~2N (donde N = número de MOs).
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_dashboard_completo(fecha_inicio, fecha_fin)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/lotes")
 async def get_rendimiento_lotes(
     username: str = Query(..., description="Usuario Odoo"),

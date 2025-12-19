@@ -59,7 +59,11 @@ class RendimientoService:
     def _is_excluded_consumo(self, product_name: str, category_name: str = '') -> bool:
         """
         Verifica si un producto debe excluirse del consumo MP.
-        Excluye: insumos, envases, cajas, bolsas, etc.
+        Excluye SOLO: insumos puros, envases puros (no productos de proceso).
+        
+        IMPORTANTE: Productos con código [300xxx] son productos de proceso,
+        NO deben excluirse aunque tengan "caja" o "bolsa" en la descripción
+        del embalaje (ej: "AR S/V Conv. 13.61 kg en Caja").
         """
         if not product_name:
             return True
@@ -67,12 +71,26 @@ class RendimientoService:
         name_lower = product_name.lower()
         cat_lower = (category_name or '').lower()
         
+        # Si tiene código de producto [3xxxxx], NO excluir (es producto de proceso)
+        if product_name.startswith('[3') or product_name.startswith('[1'):
+            return False
+        
         # Excluir por categoría
         if any(exc in cat_lower for exc in self.EXCLUDED_CATEGORIES):
             return True
         
-        # Excluir por nombre
-        if any(exc in name_lower for exc in self.EXCLUDED_PRODUCT_NAMES):
+        # Excluir por nombre - SOLO si es claramente un insumo/envase puro
+        # No excluir productos de proceso que tienen "caja" o "bolsa" en descripción
+        pure_packaging_indicators = [
+            "caja de exportación", "cajas de exportación", 
+            "insumo", "envase", "pallet", "etiqueta", "doy pe"
+        ]
+        
+        if any(exc in name_lower for exc in pure_packaging_indicators):
+            return True
+        
+        # Si el producto ES una bolsa o caja suelta (no tiene código [xxx])
+        if name_lower.startswith('bolsa') or name_lower.startswith('caja'):
             return True
         
         return False
@@ -179,28 +197,75 @@ class RendimientoService:
     def get_consumos_mo(self, mo: Dict) -> List[Dict]:
         """
         Obtiene los consumos de MP de una MO.
-        Excluye insumos, envases, cajas, bolsas.
+        Incluye campos x_studio_categora_tipo_manejo (Org/Conv) y x_studio_sub_categora (especie).
+        Solo excluye insumos/envases reales, no productos de proceso.
         """
         move_raw_ids = mo.get('move_raw_ids', [])
         if not move_raw_ids:
             return []
         
+        # Obtener líneas de movimiento
         move_lines = self.odoo.search_read(
             'stock.move.line',
             [['move_id', 'in', move_raw_ids]],
-            ['product_id', 'lot_id', 'qty_done', 'date', 'product_category_name'],
-            limit=200
+            ['product_id', 'lot_id', 'qty_done', 'date'],
+            limit=500
         )
+        
+        if not move_lines:
+            return []
+        
+        # Obtener IDs únicos de productos para consulta batch
+        product_ids = list(set(
+            ml.get('product_id')[0] 
+            for ml in move_lines 
+            if ml.get('product_id')
+        ))
+        
+        # Consultar productos con campos Studio
+        products_data = {}
+        if product_ids:
+            try:
+                products = self.odoo.read(
+                    'product.product',
+                    product_ids,
+                    ['name', 'categ_id', 'x_studio_categora_tipo_manejo', 'x_studio_sub_categora']
+                )
+                for p in products:
+                    products_data[p['id']] = p
+            except Exception:
+                # Si falla, intentar sin campos Studio
+                try:
+                    products = self.odoo.read(
+                        'product.product',
+                        product_ids,
+                        ['name', 'categ_id']
+                    )
+                    for p in products:
+                        products_data[p['id']] = p
+                except Exception:
+                    pass
         
         consumos = []
         for ml in move_lines:
             try:
                 prod_info = ml.get('product_id')
-                prod_name = prod_info[1] if prod_info else ''
-                category = ml.get('product_category_name', '') or ''
+                if not prod_info:
+                    continue
                 
-                # Excluir insumos/envases
-                if self._is_excluded_consumo(prod_name, category):
+                prod_id = prod_info[0]
+                prod_name = prod_info[1] if len(prod_info) > 1 else ''
+                
+                # Obtener datos del producto
+                prod_data = products_data.get(prod_id, {})
+                
+                # Obtener categoría
+                categ = prod_data.get('categ_id')
+                category_name = categ[1] if categ and isinstance(categ, (list, tuple)) else ''
+                
+                # Excluir SOLO insumos/envases reales (cajas, bolsas, etc.)
+                # NO excluir productos de proceso que tienen código [300xxx]
+                if self._is_excluded_consumo(prod_name, category_name):
                     continue
                 
                 qty = ml.get('qty_done', 0) or 0
@@ -208,14 +273,35 @@ class RendimientoService:
                     continue
                 
                 lot_info = ml.get('lot_id')
+                
+                # Obtener manejo y especie de campos Studio
+                manejo_raw = prod_data.get('x_studio_categora_tipo_manejo', '') or ''
+                especie_raw = prod_data.get('x_studio_sub_categora', '') or ''
+                
+                # Normalizar manejo (puede venir como "Org." u "Orgánico", "Conv." o "Convencional")
+                manejo = 'Otro'
+                if manejo_raw:
+                    manejo_lower = str(manejo_raw).lower()
+                    if 'org' in manejo_lower:
+                        manejo = 'Orgánico'
+                    elif 'conv' in manejo_lower:
+                        manejo = 'Convencional'
+                    else:
+                        manejo = str(manejo_raw)
+                
+                # Normalizar especie
+                especie = str(especie_raw) if especie_raw else self._extract_fruit_type(prod_name)
+                
                 consumos.append({
-                    'product_id': prod_info[0] if prod_info else None,
+                    'product_id': prod_id,
                     'product_name': prod_name,
                     'lot_id': lot_info[0] if lot_info else None,
                     'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
                     'qty_done': qty,
                     'date': ml.get('date'),
-                    'category': category
+                    'category': category_name,
+                    'manejo': manejo,
+                    'especie': especie
                 })
             except Exception:
                 continue
@@ -993,3 +1079,272 @@ class RendimientoService:
             'por_producto': resultado_producto[:50]  # Limitar productos
         }
 
+    def get_dashboard_completo(self, fecha_inicio: str, fecha_fin: str) -> Dict:
+        """
+        OPTIMIZADO: Obtiene TODOS los datos del dashboard en una sola pasada.
+        Reduce drásticamente las llamadas a la API de Odoo.
+        
+        En lugar de hacer 4 endpoints separados (cada uno repitiendo get_mos_por_periodo),
+        este método:
+        1. Obtiene MOs una sola vez
+        2. Procesa consumos y producción para cada MO una sola vez
+        3. Calcula todos los KPIs y agrupaciones en una pasada
+        
+        Retorna: overview, consolidado, mos, salas - todo en un solo dict
+        """
+        # 1. Obtener MOs del período (ÚNICA llamada a Odoo para MOs)
+        mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin)
+        
+        # Acumuladores para overview
+        total_kg_mp = 0.0
+        total_kg_pt = 0.0
+        total_hh = 0.0
+        mos_procesadas = 0
+        lotes_set = set()
+        
+        # Acumuladores para consolidado por fruta
+        por_fruta = {}
+        por_fruta_manejo = {}
+        
+        # Acumuladores para salas
+        salas_data = {}
+        
+        # Lista de MOs procesadas (para detalle)
+        mos_resultado = []
+        
+        # 2. Procesar cada MO (una consulta de consumos y una de producción por MO)
+        for mo in mos:
+            try:
+                # Obtener consumos y producción (estas son las llamadas que no se pueden evitar)
+                consumos = self.get_consumos_mo(mo)
+                produccion = self.get_produccion_mo(mo)
+                
+                kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
+                kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
+                
+                if kg_mp == 0:
+                    continue
+                
+                rendimiento = (kg_pt / kg_mp * 100)
+                
+                # === Acumular para Overview ===
+                total_kg_mp += kg_mp
+                total_kg_pt += kg_pt
+                mos_procesadas += 1
+                
+                hh = mo.get('x_studio_hh_efectiva') or mo.get('x_studio_hh') or 0
+                if isinstance(hh, (int, float)):
+                    total_hh += hh
+                
+                for c in consumos:
+                    if c.get('lot_id'):
+                        lotes_set.add(c['lot_id'])
+                
+                # === Acumular para Consolidado por Fruta ===
+                # Detectar especie y manejo de los consumos usando campos Studio
+                if consumos:
+                    # Obtener todas las especies únicas en los consumos de esta MO
+                    especies_en_mo = set()
+                    manejos_en_mo = set()
+                    for c in consumos:
+                        esp = c.get('especie', '') or 'Otro'
+                        man = c.get('manejo', '') or 'Otro'
+                        if esp and esp != 'Otro' and esp != 'Desconocido':
+                            especies_en_mo.add(esp)
+                        manejos_en_mo.add(man)
+                    
+                    # Si hay más de una especie, es Mix
+                    if len(especies_en_mo) > 1:
+                        tipo_fruta = 'Mix'
+                    elif len(especies_en_mo) == 1:
+                        tipo_fruta = list(especies_en_mo)[0]
+                    else:
+                        # Fallback a extracción del nombre
+                        tipo_fruta = self._extract_fruit_type(consumos[0].get('product_name', ''))
+                    
+                    # Para manejo, usar el más común o el primero
+                    if 'Orgánico' in manejos_en_mo:
+                        manejo = 'Orgánico'
+                    elif 'Convencional' in manejos_en_mo:
+                        manejo = 'Convencional'
+                    else:
+                        manejo = list(manejos_en_mo)[0] if manejos_en_mo else 'Otro'
+                    
+                    # Por Fruta
+                    if tipo_fruta not in por_fruta:
+                        por_fruta[tipo_fruta] = {
+                            'tipo_fruta': tipo_fruta,
+                            'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
+                        }
+                    por_fruta[tipo_fruta]['kg_mp'] += kg_mp
+                    por_fruta[tipo_fruta]['kg_pt'] += kg_pt
+                    por_fruta[tipo_fruta]['num_lotes'] += len(set(c.get('lot_id') for c in consumos if c.get('lot_id')))
+                    
+                    # Por Fruta + Manejo
+                    key_fm = f"{tipo_fruta}|{manejo}"
+                    if key_fm not in por_fruta_manejo:
+                        por_fruta_manejo[key_fm] = {
+                            'tipo_fruta': tipo_fruta,
+                            'manejo': manejo,
+                            'kg_mp': 0, 'kg_pt': 0, 'num_lotes': 0
+                        }
+                    por_fruta_manejo[key_fm]['kg_mp'] += kg_mp
+                    por_fruta_manejo[key_fm]['kg_pt'] += kg_pt
+                    por_fruta_manejo[key_fm]['num_lotes'] += 1
+                
+                # === Acumular para Salas ===
+                sala = mo.get('x_studio_sala_de_proceso', '') or 'Sin Sala'
+                if sala not in salas_data:
+                    salas_data[sala] = {
+                        'sala': sala,
+                        'kg_mp': 0, 'kg_pt': 0,
+                        'hh_total': 0, 'dotacion_sum': 0,
+                        'duracion_total': 0, 'num_mos': 0
+                    }
+                
+                salas_data[sala]['kg_mp'] += kg_mp
+                salas_data[sala]['kg_pt'] += kg_pt
+                salas_data[sala]['hh_total'] += hh if isinstance(hh, (int, float)) else 0
+                
+                dotacion = mo.get('x_studio_dotacin') or 0
+                salas_data[sala]['dotacion_sum'] += dotacion if isinstance(dotacion, (int, float)) else 0
+                
+                # Calcular duración
+                duracion_horas = 0
+                inicio = mo.get('x_studio_inicio_de_proceso') or mo.get('date_start')
+                fin = mo.get('x_studio_termino_de_proceso') or mo.get('date_finished')
+                if inicio and fin:
+                    try:
+                        if isinstance(inicio, str):
+                            d0 = datetime.strptime(inicio, "%Y-%m-%d %H:%M:%S")
+                        else:
+                            d0 = inicio
+                        if isinstance(fin, str):
+                            d1 = datetime.strptime(fin, "%Y-%m-%d %H:%M:%S")
+                        else:
+                            d1 = fin
+                        duracion_horas = round((d1 - d0).total_seconds() / 3600, 2)
+                    except Exception:
+                        pass
+                
+                salas_data[sala]['duracion_total'] += duracion_horas
+                salas_data[sala]['num_mos'] += 1
+                
+                # === Agregar a lista de MOs ===
+                product_name = ''
+                prod = mo.get('product_id')
+                if isinstance(prod, (list, tuple)) and len(prod) > 1:
+                    product_name = prod[1]
+                elif isinstance(prod, dict):
+                    product_name = prod.get('name', '')
+                
+                fecha_raw = mo.get('date_planned_start', '') or mo.get('date_finished', '') or ''
+                fecha = str(fecha_raw)[:10] if fecha_raw and len(str(fecha_raw)) >= 10 else ''
+                
+                kg_por_hora = mo.get('x_studio_kghora_efectiva') or 0
+                
+                mos_resultado.append({
+                    'mo_id': mo.get('id', 0),
+                    'mo_name': mo.get('name', ''),
+                    'product_name': product_name,
+                    'especie': tipo_fruta,  # Agregado
+                    'manejo': manejo,       # Agregado
+                    'kg_mp': round(kg_mp, 2),
+                    'kg_pt': round(kg_pt, 2),
+                    'rendimiento': round(rendimiento, 2),
+                    'merma': round(kg_mp - kg_pt, 2),
+                    'duracion_horas': duracion_horas,
+                    'hh': hh if isinstance(hh, (int, float)) else 0,
+                    'kg_por_hora': kg_por_hora if isinstance(kg_por_hora, (int, float)) else 0,
+                    'dotacion': dotacion if isinstance(dotacion, (int, float)) else 0,
+                    'sala': sala,
+                    'fecha': fecha
+                })
+                
+            except Exception:
+                continue
+        
+        # 3. Calcular KPIs finales
+        
+        # Overview
+        rendimiento_promedio = (total_kg_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0
+        merma_total = total_kg_mp - total_kg_pt
+        merma_pct = (merma_total / total_kg_mp * 100) if total_kg_mp > 0 else 0
+        kg_por_hh = (total_kg_pt / total_hh) if total_hh > 0 else 0
+        
+        overview = {
+            'fecha_inicio': fecha_inicio,
+            'fecha_fin': fecha_fin,
+            'total_kg_mp': round(total_kg_mp, 2),
+            'total_kg_pt': round(total_kg_pt, 2),
+            'rendimiento_promedio': round(rendimiento_promedio, 2),
+            'merma_total_kg': round(merma_total, 2),
+            'merma_pct': round(merma_pct, 2),
+            'total_hh': round(total_hh, 2),
+            'kg_por_hh': round(kg_por_hh, 2),
+            'mos_procesadas': mos_procesadas,
+            'lotes_unicos': len(lotes_set)
+        }
+        
+        # Consolidado por fruta
+        resultado_fruta = []
+        for _, data in por_fruta.items():
+            kg_mp = data['kg_mp']
+            kg_pt = data['kg_pt']
+            resultado_fruta.append({
+                **data,
+                'rendimiento': round((kg_pt / kg_mp * 100) if kg_mp > 0 else 0, 2),
+                'merma': round(kg_mp - kg_pt, 2)
+            })
+        resultado_fruta.sort(key=lambda x: x['kg_pt'], reverse=True)
+        
+        resultado_fruta_manejo = []
+        for _, data in por_fruta_manejo.items():
+            kg_mp = data['kg_mp']
+            kg_pt = data['kg_pt']
+            resultado_fruta_manejo.append({
+                **data,
+                'rendimiento': round((kg_pt / kg_mp * 100) if kg_mp > 0 else 0, 2),
+                'merma': round(kg_mp - kg_pt, 2)
+            })
+        resultado_fruta_manejo.sort(key=lambda x: (x['tipo_fruta'], -x['kg_pt']))
+        
+        consolidado = {
+            'por_fruta': resultado_fruta,
+            'por_fruta_manejo': resultado_fruta_manejo
+        }
+        
+        # Salas
+        resultado_salas = []
+        for sala, data in salas_data.items():
+            kg_pt = data['kg_pt']
+            kg_mp = data['kg_mp']
+            hh = data['hh_total']
+            duracion = data['duracion_total']
+            num_mos = data['num_mos']
+            dotacion_prom = data['dotacion_sum'] / num_mos if num_mos > 0 else 0
+            
+            resultado_salas.append({
+                'sala': sala,
+                'kg_mp': round(kg_mp, 2),
+                'kg_pt': round(kg_pt, 2),
+                'rendimiento': round((kg_pt / kg_mp * 100) if kg_mp > 0 else 0, 2),
+                'merma': round(kg_mp - kg_pt, 2),
+                'kg_por_hh': round(kg_pt / hh if hh > 0 else 0, 2),
+                'kg_por_hora': round(kg_pt / duracion if duracion > 0 else 0, 2),
+                'kg_por_operario': round(kg_pt / dotacion_prom if dotacion_prom > 0 else 0, 2),
+                'hh_total': round(hh, 2),
+                'dotacion_promedio': round(dotacion_prom, 1),
+                'num_mos': num_mos
+            })
+        resultado_salas.sort(key=lambda x: x['kg_pt'], reverse=True)
+        
+        # MOs ordenadas
+        mos_resultado.sort(key=lambda x: x['fecha'], reverse=True)
+        
+        return {
+            'overview': overview,
+            'consolidado': consolidado,
+            'salas': resultado_salas,
+            'mos': mos_resultado
+        }
