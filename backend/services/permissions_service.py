@@ -137,14 +137,18 @@ def get_permissions_map() -> Dict[str, List[str]]:
             dashboards[slug] = []
             modified = True
     
-    # Si se agregaron nuevos dashboards, persistir cambios
+    # Limpiar entradas espurias (dashboards que no están en ALL_DASHBOARDS)
+    stray_keys = [k for k in dashboards.keys() if k not in ALL_DASHBOARDS]
+    for key in stray_keys:
+        del dashboards[key]
+        modified = True
+    
+    # Si hubo cambios, persistir
     if modified:
         full_data["dashboards"] = dashboards
         _write_permissions(full_data)
     
-    # Filtrar solo dashboards válidos (ignorar entradas espurias)
-    result = {k: v for k, v in dashboards.items() if k in ALL_DASHBOARDS}
-    return result
+    return dashboards.copy()
 
 
 def get_admins() -> List[str]:

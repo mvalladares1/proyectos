@@ -1466,7 +1466,7 @@ with tab_curva:
                                 continue
                             
                             kg = p.get('Kg Hechos', 0) or 0
-                            precio = p.get('Precio Unitario', 0) or p.get('precio', 0) or 0
+                            precio = p.get('Costo Unitario', 0) or p.get('precio', 0) or 0
                             
                             if kg <= 0 or precio <= 0:
                                 continue
