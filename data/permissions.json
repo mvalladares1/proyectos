@@ -1,10 +1,18 @@
 {
   "dashboards": {
+    "recepciones": [],
     "produccion": [],
     "bandejas": [],
     "stock": [],
     "containers": [],
-    "estado_resultado": [
+    "rendimiento": [
+      "jvidaurre@riofuturo.cl"
+    ],
+    "finanzas": [
+      "jvidaurre@riofuturo.cl"
+    ],
+    "compras": [
+      "jbrandt@riofuturo.cl",
       "jvidaurre@riofuturo.cl"
     ],
     "permisos": [
