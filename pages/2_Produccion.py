@@ -211,7 +211,7 @@ def fetch_kpis(username: str, password: str) -> Dict:
 # ============================================
 
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_dashboard_completo(username: str, password: str, fecha_inicio: str, fecha_fin: str):
+def fetch_dashboard_completo(username: str, password: str, fecha_inicio: str, fecha_fin: str, solo_terminadas: bool = True):
     """
     OPTIMIZADO: Obtiene TODOS los datos del dashboard en UNA sola llamada.
     Retorna: overview, consolidado, salas, mos - todo junto.
@@ -220,7 +220,8 @@ def fetch_dashboard_completo(username: str, password: str, fecha_inicio: str, fe
     try:
         resp = requests.get(f"{API_URL}/api/v1/rendimiento/dashboard", params={
             "username": username, "password": password,
-            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin
+            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin,
+            "solo_terminadas": solo_terminadas
         }, timeout=180)
         if resp.status_code == 200:
             return resp.json()
@@ -445,7 +446,7 @@ with tab_general:
             ff = fecha_fin_rep.strftime("%Y-%m-%d")
             
             # UNA SOLA LLAMADA que obtiene TODO
-            st.session_state.prod_dashboard_data = fetch_dashboard_completo(username, password, fi, ff)
+            st.session_state.prod_dashboard_data = fetch_dashboard_completo(username, password, fi, ff, solo_terminadas)
             
             if st.session_state.prod_dashboard_data:
                 st.success("✅ Datos cargados correctamente")

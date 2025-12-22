@@ -31,7 +31,8 @@ async def get_dashboard_completo(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
-    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    solo_terminadas: bool = Query(True, description="Solo MOs en estado 'done'")
 ):
     """
     OPTIMIZADO: Obtiene TODOS los datos del dashboard en una sola llamada.
@@ -46,7 +47,7 @@ async def get_dashboard_completo(
     """
     try:
         service = RendimientoService(username=username, password=password)
-        return service.get_dashboard_completo(fecha_inicio, fecha_fin)
+        return service.get_dashboard_completo(fecha_inicio, fecha_fin, solo_terminadas=solo_terminadas)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

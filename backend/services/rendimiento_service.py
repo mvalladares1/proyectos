@@ -198,14 +198,21 @@ class RendimientoService:
         
         return 'Otro'
     
-    def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500) -> List[Dict]:
+    def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, limit: int = 500, solo_terminadas: bool = True) -> List[Dict]:
         """
-        Obtiene MOs terminadas en el período.
+        Obtiene MOs en el período.
         Usa date_planned_start (fecha prevista) para filtrar.
-        Solo incluye state 'done' (producción completamente terminada).
+        
+        Args:
+            solo_terminadas: Si True, solo incluye state 'done'. Si False, incluye 'done' y 'to_close'.
         """
+        if solo_terminadas:
+            state_filter = ['state', '=', 'done']
+        else:
+            state_filter = ['state', 'in', ['done', 'to_close', 'progress']]
+        
         domain = [
-            ['state', '=', 'done'],  # Solo completadas
+            state_filter,
             ['date_planned_start', '!=', False],
             ['date_planned_start', '>=', fecha_inicio],
             ['date_planned_start', '<=', fecha_fin + ' 23:59:59']
@@ -1206,7 +1213,7 @@ class RendimientoService:
             'por_producto': resultado_producto[:50]  # Limitar productos
         }
 
-    def get_dashboard_completo(self, fecha_inicio: str, fecha_fin: str) -> Dict:
+    def get_dashboard_completo(self, fecha_inicio: str, fecha_fin: str, solo_terminadas: bool = True) -> Dict:
         """
         OPTIMIZADO: Obtiene TODOS los datos del dashboard en una sola pasada.
         Reduce drásticamente las llamadas a la API de Odoo.
@@ -1217,10 +1224,13 @@ class RendimientoService:
         2. Procesa consumos y producción para cada MO una sola vez
         3. Calcula todos los KPIs y agrupaciones en una pasada
         
+        Args:
+            solo_terminadas: Si True, solo MOs con state='done'. Si False, incluye 'to_close' y 'progress'.
+        
         Retorna: overview, consolidado, mos, salas - todo en un solo dict
         """
         # 1. Obtener MOs del período (ÚNICA llamada a Odoo para MOs)
-        mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin)
+        mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin, solo_terminadas=solo_terminadas)
         
         # Acumuladores GLOBALES para overview (todos los procesos)
         total_kg_mp = 0.0

@@ -917,7 +917,16 @@ class ComprasService:
                 })
             
             # Preparar detalle de OCs sin factura (TENTATIVAS) - solo informativo
+            # Excluir OCs que ya tienen recepciones preparadas para evitar duplicados
+            ocs_con_picking_preparado = set()
+            for pick_name, pick_data in preparadas_partner.items():
+                if pick_data.get('oc_id'):
+                    ocs_con_picking_preparado.add(pick_data['oc_id'])
+            
             for oc in ocs_partner:
+                # Si esta OC ya tiene picking preparado, saltar
+                if oc.get('id') in ocs_con_picking_preparado:
+                    continue
                 oc_monto_original = float(oc.get('amount_total') or 0)
                 oc_monto = oc_monto_original
                 oc_currency = oc.get('currency_id')
@@ -933,6 +942,7 @@ class ComprasService:
                 detalle_facturas.append({
                     'tipo': 'OC Tentativa',
                     'numero': oc.get('name', ''),
+                    'oc_id': oc.get('id'),  # Para enlace Odoo
                     'monto': round(oc_monto, 0),
                     'monto_original': round(oc_monto_original, 2) if oc_is_usd else None,
                     'moneda_original': 'USD' if oc_is_usd else 'CLP',

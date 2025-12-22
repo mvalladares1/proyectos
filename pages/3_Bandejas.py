@@ -289,6 +289,7 @@ if not df_in.empty or not df_out.empty:
         
         selected_year = 'Todos'
         selected_month_name = 'Todos'
+        selected_months_names = []  # Inicializar para evitar NameError
         selected_season = None
         
         if filter_type == "Por Mes/Año":
