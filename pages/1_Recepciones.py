@@ -1409,7 +1409,7 @@ with tab_curva:
             try:
                 # Obtener precios proyectados desde API
                 resp_precios = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios", 
-                    params={"planta": plantas_filtro, "especie": especies_filtro} if (plantas_filtro or especies_filtro) else {},
+                    params={"planta": plantas_usadas, "especie": especies_filtro} if (plantas_usadas or especies_filtro) else {},
                     timeout=30)
                 
                 if resp_precios.status_code == 200:
