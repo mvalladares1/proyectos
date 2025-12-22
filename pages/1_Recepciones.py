@@ -1488,6 +1488,23 @@ with tab_curva:
                 )
                 
                 st.altair_chart(chart, use_container_width=True)
+                
+                # Sumatoria del gráfico de volumen
+                total_kg_proy_vol = df_chart['kg_proyectados'].sum()
+                total_kg_recep_vol = df_chart['kg_sistema'].sum()
+                diff_kg = total_kg_proy_vol - total_kg_recep_vol
+                cumplimiento_kg = (total_kg_recep_vol / total_kg_proy_vol * 100) if total_kg_proy_vol > 0 else 0
+                
+                vol_cols = st.columns(4)
+                with vol_cols[0]:
+                    st.metric("📦 Total Kg Proyectados", fmt_numero(total_kg_proy_vol, 0))
+                with vol_cols[1]:
+                    st.metric("✅ Total Kg Recepcionados", fmt_numero(total_kg_recep_vol, 0))
+                with vol_cols[2]:
+                    delta_color = "normal" if diff_kg >= 0 else "inverse"
+                    st.metric("📊 Diferencia", fmt_numero(abs(diff_kg), 0), delta=f"{'Falta' if diff_kg > 0 else 'Exceso'}", delta_color=delta_color)
+                with vol_cols[3]:
+                    st.metric("📈 Cumplimiento", f"{fmt_numero(cumplimiento_kg, 1)}%")
             
             # ============ GRÁFICO DE PRECIOS POR SEMANA ============
             st.markdown("---")
@@ -1654,6 +1671,23 @@ with tab_curva:
                         height=300
                     )
                     st.altair_chart(gasto_chart, use_container_width=True)
+                    
+                    # Sumatoria del gráfico de gastos
+                    total_gasto_proy = df_precios_full['gasto_proy'].sum() if 'gasto_proy' in df_precios_full.columns else 0
+                    total_gasto_recep = df_precios_full['gasto_total'].sum()
+                    diff_gasto = total_gasto_proy - total_gasto_recep
+                    cumplimiento_gasto = (total_gasto_recep / total_gasto_proy * 100) if total_gasto_proy > 0 else 0
+                    
+                    gasto_cols = st.columns(4)
+                    with gasto_cols[0]:
+                        st.metric("💰 Gasto Proyectado", fmt_dinero(total_gasto_proy, 0))
+                    with gasto_cols[1]:
+                        st.metric("💵 Gasto Recepcionado", fmt_dinero(total_gasto_recep, 0))
+                    with gasto_cols[2]:
+                        delta_color = "normal" if diff_gasto >= 0 else "inverse"
+                        st.metric("📊 Diferencia", fmt_dinero(abs(diff_gasto), 0), delta=f"{'Ahorro' if diff_gasto > 0 else 'Exceso'}", delta_color=delta_color)
+                    with gasto_cols[3]:
+                        st.metric("📈 Ejecución", f"{fmt_numero(cumplimiento_gasto, 1)}%")
                     
                     # ============ GRÁFICO DE PRECIO PROMEDIO ============
                     st.markdown("#### 📈 Precio Promedio Recepcionado por Semana")
