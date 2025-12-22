@@ -40,6 +40,7 @@ DASHBOARD_NAMES = {
 
 # ============ PÁGINAS/TABS DENTRO DE CADA MÓDULO ============
 # Estructura: módulo -> lista de páginas con slug y nombre
+# Los nombres DEBEN coincidir con los tabs reales de cada página
 MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
     "recepciones": [
         {"slug": "kpis_calidad", "name": "KPIs y Calidad"},
@@ -47,25 +48,26 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "curva_abastecimiento", "name": "Curva de Abastecimiento"},
     ],
     "produccion": [
-        {"slug": "overview", "name": "Overview"},
-        {"slug": "salas", "name": "Vista por Sala"},
-        {"slug": "consolidado", "name": "Consolidado por Fruta"},
+        {"slug": "reporteria_general", "name": "Reportería General"},
+        {"slug": "detalle_of", "name": "Detalle de OF"},
     ],
     "bandejas": [
-        {"slug": "kpis", "name": "KPIs"},
-        {"slug": "detalle", "name": "Detalle"},
+        {"slug": "dashboard", "name": "Dashboard"},
     ],
     "stock": [
         {"slug": "camaras", "name": "Cámaras"},
-        {"slug": "pallets", "name": "Detalle Pallets"},
+        {"slug": "pallets", "name": "Pallets"},
+        {"slug": "trazabilidad", "name": "Trazabilidad"},
     ],
     "containers": [
         {"slug": "lista", "name": "Lista Containers"},
-        {"slug": "detalle", "name": "Detalle"},
     ],
     "finanzas": [
-        {"slug": "estado_resultado", "name": "Estado de Resultado"},
-        {"slug": "presupuesto", "name": "Presupuesto"},
+        {"slug": "agrupado", "name": "Agrupado"},
+        {"slug": "mensualizado", "name": "Mensualizado"},
+        {"slug": "ytd", "name": "YTD (Acumulado)"},
+        {"slug": "cg", "name": "CG"},
+        {"slug": "detalle", "name": "Detalle"},
     ],
     "compras": [
         {"slug": "ordenes", "name": "Órdenes de Compra"},
@@ -75,8 +77,10 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "dashboard", "name": "Dashboard"},
     ],
     "permisos": [
-        {"slug": "usuarios", "name": "Usuarios"},
         {"slug": "modulos", "name": "Módulos"},
+        {"slug": "paginas", "name": "Páginas"},
+        {"slug": "por_usuario", "name": "Por Usuario"},
+        {"slug": "configuracion", "name": "Configuración"},
     ],
 }
 
@@ -138,7 +142,9 @@ def get_permissions_map() -> Dict[str, List[str]]:
         full_data["dashboards"] = dashboards
         _write_permissions(full_data)
     
-    return dashboards.copy()
+    # Filtrar solo dashboards válidos (ignorar entradas espurias)
+    result = {k: v for k, v in dashboards.items() if k in ALL_DASHBOARDS}
+    return result
 
 
 def get_admins() -> List[str]:

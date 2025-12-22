@@ -1131,6 +1131,34 @@ with tab_curva:
         label_visibility="collapsed"
     )
     
+    # Filtro de rango de semanas
+    st.markdown("**Rango de semanas a visualizar:**")
+    # Semanas de temporada: 47-52 del año anterior, 1-17 del año actual
+    semanas_temporada = list(range(47, 53)) + list(range(1, 18))
+    semana_labels = [f"S{s}" for s in semanas_temporada]
+    
+    col_sem1, col_sem2 = st.columns(2)
+    with col_sem1:
+        semana_desde_idx = st.selectbox(
+            "Desde semana",
+            options=range(len(semanas_temporada)),
+            format_func=lambda i: semana_labels[i],
+            index=0,
+            key="semana_desde"
+        )
+    with col_sem2:
+        semana_hasta_idx = st.selectbox(
+            "Hasta semana",
+            options=range(len(semanas_temporada)),
+            format_func=lambda i: semana_labels[i],
+            index=len(semanas_temporada) - 1,
+            key="semana_hasta"
+        )
+    
+    # Obtener semanas seleccionadas
+    semana_desde = semanas_temporada[semana_desde_idx]
+    semana_hasta = semanas_temporada[semana_hasta_idx]
+    
     st.markdown("---")
     
     # Botón para cargar curva (carga TODOS los datos, sin filtro de especie)
@@ -1357,170 +1385,177 @@ with tab_curva:
             df_chart['sort_key'] = df_chart['semana'].apply(lambda x: x if x >= 47 else x + 100)
             df_chart = df_chart.sort_values('sort_key')
             
-            # Melt para formato largo
-            df_melt = df_chart.melt(
-                id_vars=['semana', 'semana_label', 'sort_key'],
-                value_vars=['kg_proyectados', 'kg_sistema'],
-                var_name='Tipo',
-                value_name='Kg'
-            )
-            df_melt['Tipo'] = df_melt['Tipo'].replace({
-                'kg_proyectados': 'Proyectado',
-                'kg_sistema': 'Recepcionado'
-            })
+            # Aplicar filtro de semanas
+            semana_desde_sk = semana_desde if semana_desde >= 47 else semana_desde + 100
+            semana_hasta_sk = semana_hasta if semana_hasta >= 47 else semana_hasta + 100
+            df_chart = df_chart[(df_chart['sort_key'] >= semana_desde_sk) & (df_chart['sort_key'] <= semana_hasta_sk)]
             
-            chart = alt.Chart(df_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
-                y=alt.Y('Kg:Q', title='Kilogramos', axis=alt.Axis(format=',.0f')),
-                color=alt.Color('Tipo:N', 
-                    scale=alt.Scale(
-                        domain=['Proyectado', 'Recepcionado'],
-                        range=['#3498db', '#2ecc71']
-                    ),
-                    legend=alt.Legend(title="Tipo", orient="top")
-                ),
-                xOffset='Tipo:N',
-                tooltip=[
-                    alt.Tooltip('semana_label:N', title='Semana'),
-                    alt.Tooltip('Tipo:N', title='Tipo'),
-                    alt.Tooltip('Kg:Q', title='Kilogramos', format=',.0f')
-                ]
-            ).properties(
-                height=350,
-                title=alt.TitleParams(
-                    text='Kg Proyectados vs Recepcionados por Semana',
-                    fontSize=16,
-                    anchor='start'
+            if df_chart.empty:
+                st.warning("No hay datos en el rango de semanas seleccionado.")
+            
+            if not df_chart.empty:
+                # Melt para formato largo
+                df_melt = df_chart.melt(
+                    id_vars=['semana', 'semana_label', 'sort_key'],
+                    value_vars=['kg_proyectados', 'kg_sistema'],
+                    var_name='Tipo',
+                    value_name='Kg'
                 )
-            ).configure_axis(
-                labelFontSize=11,
-                titleFontSize=12
-            ).configure_legend(
-                labelFontSize=12,
-                titleFontSize=12
-            )
+                df_melt['Tipo'] = df_melt['Tipo'].replace({
+                    'kg_proyectados': 'Proyectado',
+                    'kg_sistema': 'Recepcionado'
+                })
+                
+                chart = alt.Chart(df_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                    x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
+                    y=alt.Y('Kg:Q', title='Kilogramos', axis=alt.Axis(format=',.0f')),
+                    color=alt.Color('Tipo:N', 
+                        scale=alt.Scale(
+                            domain=['Proyectado', 'Recepcionado'],
+                            range=['#3498db', '#2ecc71']
+                        ),
+                        legend=alt.Legend(title="Tipo", orient="top")
+                    ),
+                    xOffset='Tipo:N',
+                    tooltip=[
+                        alt.Tooltip('semana_label:N', title='Semana'),
+                        alt.Tooltip('Tipo:N', title='Tipo'),
+                        alt.Tooltip('Kg:Q', title='Kilogramos', format=',.0f')
+                    ]
+                ).properties(
+                    height=350,
+                    title=alt.TitleParams(
+                        text='Kg Proyectados vs Recepcionados por Semana',
+                        fontSize=16,
+                        anchor='start'
+                    )
+                ).configure_axis(
+                    labelFontSize=11,
+                    titleFontSize=12
+                ).configure_legend(
+                    labelFontSize=12,
+                    titleFontSize=12
+                )
+                
+                st.altair_chart(chart, use_container_width=True)
             
-            st.altair_chart(chart, use_container_width=True)
-            
-            # ============ GRÁFICO DE PRECIOS POR ESPECIE ============
+            # ============ GRÁFICO DE PRECIOS POR SEMANA ============
             st.markdown("---")
-            st.markdown("### 💰 Comparativa de Precios por Especie")
+            st.markdown("### 💰 Comparativa de Precios por Semana")
             
             try:
-                # Obtener precios proyectados desde API
-                resp_precios = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios", 
-                    params={"planta": plantas_usadas, "especie": especies_filtro} if (plantas_usadas or especies_filtro) else {},
-                    timeout=30)
+                # Calcular precio promedio recepcionado por semana desde datos del sistema
+                precios_por_semana = {}
+                if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
+                    for rec in st.session_state.curva_sistema_raw:
+                        fecha_str = rec.get('fecha')
+                        if not fecha_str:
+                            continue
+                        
+                        try:
+                            fecha = pd.to_datetime(fecha_str)
+                            semana = fecha.isocalendar()[1]
+                            año = fecha.year
+                        except:
+                            continue
+                        
+                        productos = rec.get('productos', []) or []
+                        for p in productos:
+                            categoria = (p.get('Categoria') or '').strip().upper()
+                            if 'BANDEJ' in categoria:
+                                continue
+                            
+                            kg = p.get('Kg Hechos', 0) or 0
+                            precio = p.get('Precio Unitario', 0) or p.get('precio', 0) or 0
+                            
+                            if kg <= 0 or precio <= 0:
+                                continue
+                            
+                            # Aplicar filtro de especie si existe
+                            if especies_filtro:
+                                tipo_fruta = (rec.get('tipo_fruta') or '').upper()
+                                manejo = (p.get('Manejo') or '').upper()
+                                if 'ORGAN' in manejo or 'ORGAN' in tipo_fruta:
+                                    manejo_norm = 'Orgánico'
+                                else:
+                                    manejo_norm = 'Convencional'
+                                
+                                if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta:
+                                    especie_base = 'Arándano'
+                                elif 'FRAM' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta:
+                                    especie_base = 'Frambuesa'
+                                elif 'FRUTILLA' in tipo_fruta:
+                                    especie_base = 'Frutilla'
+                                elif 'MORA' in tipo_fruta:
+                                    especie_base = 'Mora'
+                                elif 'CEREZA' in tipo_fruta:
+                                    especie_base = 'Cereza'
+                                else:
+                                    especie_base = 'Otro'
+                                
+                                especie_manejo = f"{especie_base} {manejo_norm}"
+                                if especie_manejo not in especies_filtro:
+                                    continue
+                            
+                            if semana not in precios_por_semana:
+                                precios_por_semana[semana] = {'total_kg': 0, 'total_valor': 0, 'año': año}
+                            precios_por_semana[semana]['total_kg'] += kg
+                            precios_por_semana[semana]['total_valor'] += kg * precio
                 
-                if resp_precios.status_code == 200:
-                    precios_proyectados = resp_precios.json()
+                # Precio promedio proyectado (fijo por ahora - TODO: obtener del Excel por semana)
+                # Por ahora usamos un precio promedio de las proyecciones
+                precio_proyectado_promedio = 1000  # Valor por defecto
+                
+                # Construir DataFrame para gráfico de precios
+                precios_data = []
+                for semana, data in precios_por_semana.items():
+                    sort_key = semana if semana >= 47 else semana + 100
                     
-                    if precios_proyectados:
-                        # Para precios recepcionados, agrupar por especie_base desde los datos del sistema
-                        precios_sistema = {}
-                        if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
-                            for rec in st.session_state.curva_sistema_raw:
-                                productos = rec.get('productos', []) or []
-                                for p in productos:
-                                    categoria = (p.get('Categoria') or '').strip().upper()
-                                    if 'BANDEJ' in categoria:
-                                        continue
-                                    
-                                    kg = p.get('Kg Hechos', 0) or 0
-                                    precio = p.get('Precio Unitario', 0) or p.get('precio', 0) or 0
-                                    
-                                    if kg <= 0 or precio <= 0:
-                                        continue
-                                    
-                                    # Normalizar especie
-                                    tipo_fruta = (rec.get('tipo_fruta') or '').upper()
-                                    if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta:
-                                        especie = 'Arándano'
-                                    elif 'FRAM' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta:
-                                        especie = 'Frambuesa'
-                                    elif 'FRUTILLA' in tipo_fruta:
-                                        especie = 'Frutilla'
-                                    elif 'MORA' in tipo_fruta:
-                                        especie = 'Mora'
-                                    elif 'CEREZA' in tipo_fruta:
-                                        especie = 'Cereza'
-                                    else:
-                                        especie = 'Otro'
-                                    
-                                    if especie not in precios_sistema:
-                                        precios_sistema[especie] = {'total_kg': 0, 'total_valor': 0}
-                                    precios_sistema[especie]['total_kg'] += kg
-                                    precios_sistema[especie]['total_valor'] += kg * precio
-                        
-                        # Calcular precios promedio del sistema
-                        precios_sist_calc = {}
-                        for esp, data in precios_sistema.items():
-                            if data['total_kg'] > 0:
-                                precios_sist_calc[esp] = data['total_valor'] / data['total_kg']
-                        
-                        # Construir DataFrame para el gráfico
-                        chart_data = []
-                        for proy in precios_proyectados:
-                            esp = proy['especie']
-                            chart_data.append({
-                                'Especie': esp,
-                                'Tipo': 'Proyectado',
-                                'Precio': proy['precio_proyectado']
-                            })
-                            # Agregar precio del sistema si existe
-                            precio_sist = precios_sist_calc.get(esp, 0)
-                            if precio_sist > 0:
-                                chart_data.append({
-                                    'Especie': esp,
-                                    'Tipo': 'Recepcionado',
-                                    'Precio': round(precio_sist, 0)
-                                })
-                        
-                        if chart_data:
-                            df_precios = pd.DataFrame(chart_data)
-                            
-                            precio_chart = alt.Chart(df_precios).mark_bar(
-                                opacity=0.85, 
-                                cornerRadiusTopLeft=3, 
-                                cornerRadiusTopRight=3
-                            ).encode(
-                                x=alt.X('Especie:N', title='Especie'),
-                                y=alt.Y('Precio:Q', title='Precio por Kg ($)', axis=alt.Axis(format=',.0f')),
-                                color=alt.Color('Tipo:N', 
-                                    scale=alt.Scale(
-                                        domain=['Proyectado', 'Recepcionado'],
-                                        range=['#9b59b6', '#e67e22']
-                                    ),
-                                    legend=alt.Legend(title="Tipo", orient="top")
-                                ),
-                                xOffset='Tipo:N',
-                                tooltip=[
-                                    alt.Tooltip('Especie:N', title='Especie'),
-                                    alt.Tooltip('Tipo:N', title='Tipo'),
-                                    alt.Tooltip('Precio:Q', title='Precio $/kg', format=',.0f')
-                                ]
-                            ).properties(
-                                height=300,
-                                title=alt.TitleParams(
-                                    text='Precio Proyectado vs Recepcionado por Especie',
-                                    fontSize=16,
-                                    anchor='start'
-                                )
-                            ).configure_axis(
-                                labelFontSize=11,
-                                titleFontSize=12
-                            ).configure_legend(
-                                labelFontSize=12,
-                                titleFontSize=12
-                            )
-                            
-                            st.altair_chart(precio_chart, use_container_width=True)
-                        else:
-                            st.info("No hay datos de precios para mostrar en el rango seleccionado.")
-                    else:
-                        st.info("No hay datos de precios proyectados disponibles.")
+                    # Aplicar filtro de semanas
+                    if sort_key < semana_desde_sk or sort_key > semana_hasta_sk:
+                        continue
+                    
+                    precio_recep = data['total_valor'] / data['total_kg'] if data['total_kg'] > 0 else 0
+                    
+                    precios_data.append({
+                        'semana': semana,
+                        'semana_label': f'S{semana}',
+                        'sort_key': sort_key,
+                        'precio_recepcionado': round(precio_recep, 0)
+                    })
+                
+                if precios_data:
+                    df_precios = pd.DataFrame(precios_data)
+                    df_precios = df_precios.sort_values('sort_key')
+                    
+                    # Crear gráfico de líneas para precios por semana
+                    precio_chart = alt.Chart(df_precios).mark_line(
+                        point=alt.OverlayMarkDef(size=60),
+                        strokeWidth=3
+                    ).encode(
+                        x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
+                        y=alt.Y('precio_recepcionado:Q', title='Precio por Kg ($)', axis=alt.Axis(format=',.0f')),
+                        tooltip=[
+                            alt.Tooltip('semana_label:N', title='Semana'),
+                            alt.Tooltip('precio_recepcionado:Q', title='Precio $/kg', format=',.0f')
+                        ]
+                    ).properties(
+                        height=300,
+                        title=alt.TitleParams(
+                            text='Precio Promedio Recepcionado por Semana',
+                            fontSize=16,
+                            anchor='start'
+                        )
+                    ).configure_axis(
+                        labelFontSize=11,
+                        titleFontSize=12
+                    ).configure_line(
+                        color='#e67e22'
+                    )
+                    
+                    st.altair_chart(precio_chart, use_container_width=True)
                 else:
-                    st.warning("No se pudieron cargar los precios proyectados.")
+                    st.info("No hay datos de precios recepcionados en el rango seleccionado.")
             except Exception as e:
                 st.warning(f"Error al cargar precios: {e}")
             
