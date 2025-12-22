@@ -66,11 +66,15 @@ class StockService:
             print(f"Error fetching locations: {e}")
             return []
 
-    def get_chambers_stock(self) -> List[Dict]:
+    def get_chambers_stock(self, fecha_desde: str = None, fecha_hasta: str = None) -> List[Dict]:
         """
         Obtiene stock agrupado por cámara padre (Camara 1, 2, 3 de -25°C, Camara 0°C de RF/Stock).
         Las posiciones individuales se agregan a su cámara padre.
         La capacidad se define manualmente o se cuenta por hijos.
+        
+        Args:
+            fecha_desde: Fecha inicio para filtrar pallets (formato YYYY-MM-DD)
+            fecha_hasta: Fecha fin para filtrar pallets (formato YYYY-MM-DD)
         """
         # PASO 1: Configuración de cámaras
         # Patrón de nombre -> (padre requerido, capacidad manual o None para calcular)
@@ -190,14 +194,23 @@ class StockService:
         if not all_child_locs:
             return list(camaras_map.values())
 
+        # Construir domain con filtros de fecha
+        quants_domain = [
+            ("location_id", "in", all_child_locs),
+            ("quantity", ">", 0)
+        ]
+        
+        # Agregar filtros de fecha si se especifican
+        if fecha_desde:
+            quants_domain.append(("in_date", ">=", fecha_desde))
+        if fecha_hasta:
+            quants_domain.append(("in_date", "<=", f"{fecha_hasta} 23:59:59"))
+
         try:
             quants = self.odoo.search_read(
                 "stock.quant",
-                [
-                    ("location_id", "in", all_child_locs),
-                    ("quantity", ">", 0)
-                ],
-                ["location_id", "product_id", "quantity", "package_id"],
+                quants_domain,
+                ["location_id", "product_id", "quantity", "package_id", "in_date"],
                 limit=50000
             )
         except Exception as e:

@@ -4,7 +4,7 @@ Inventario en cámaras de frío: ubicaciones, pallets, lotes y trazabilidad de p
 import streamlit as st
 import pandas as pd
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List
 
 from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales
@@ -50,6 +50,56 @@ if not tiene_acceso_dashboard("stock"):
 st.title("📦 Stock y Cámaras")
 st.markdown("Gestión de inventario, ubicaciones y trazabilidad de pallets")
 
+# Filtros de fecha
+st.markdown("### 📅 Filtros de Fecha")
+col_fecha1, col_fecha2 = st.columns(2)
+with col_fecha1:
+    fecha_desde_stock = st.date_input(
+        "Fecha desde",
+        datetime(2025, 11, 24),
+        format="DD/MM/YYYY",
+        key="stock_fecha_desde"
+    )
+with col_fecha2:
+    fecha_hasta_stock = st.date_input(
+        "Fecha hasta", 
+        datetime.now(),
+        format="DD/MM/YYYY",
+        key="stock_fecha_hasta"
+    )
+
+# Panel de configuración de capacidades
+with st.expander("⚙️ Configurar Capacidades", expanded=False):
+    st.markdown("Modifica la capacidad de pallets de cada ubicación:")
+    
+    # Inicializar capacidades en session_state si no existen
+    if "capacidades_config" not in st.session_state:
+        st.session_state.capacidades_config = {
+            "RF/Stock/Camara 0°C REAL": 200,
+            "VLK/Camara 0°": 200,
+            "RF/Stock/Inventario Real": 500,
+            "VLK/Stock": 500
+        }
+    
+    cap_cols = st.columns(2)
+    ubicaciones = list(st.session_state.capacidades_config.keys())
+    
+    for i, ubicacion in enumerate(ubicaciones):
+        with cap_cols[i % 2]:
+            nueva_cap = st.number_input(
+                f"📦 {ubicacion}",
+                min_value=0,
+                max_value=2000,
+                value=st.session_state.capacidades_config[ubicacion],
+                step=10,
+                key=f"cap_{ubicacion.replace('/', '_').replace(' ', '_').replace('°', '')}"
+            )
+            st.session_state.capacidades_config[ubicacion] = nueva_cap
+    
+    st.caption("💡 Los cambios se aplican automáticamente al recargar los datos.")
+
+st.markdown("---")
+
 # Obtener credenciales
 username, password = get_credenciales()
 
@@ -59,15 +109,22 @@ if not (username and password):
 API_URL = st.secrets.get("API_URL", "http://localhost:8000")
 
 # Funciones de API
-def fetch_camaras() -> List[Dict]:
-    """Obtiene datos de cámaras desde la API"""
+def fetch_camaras(fecha_desde=None, fecha_hasta=None) -> List[Dict]:
+    """Obtiene datos de cámaras desde la API, opcionalmente filtrado por fecha de ingreso"""
     try:
+        params = {
+            "username": username,
+            "password": password
+        }
+        # Agregar filtros de fecha si están definidos
+        if fecha_desde:
+            params["fecha_desde"] = fecha_desde.strftime("%Y-%m-%d")
+        if fecha_hasta:
+            params["fecha_hasta"] = fecha_hasta.strftime("%Y-%m-%d")
+            
         response = httpx.get(
             f"{API_URL}/api/v1/stock/camaras",
-            params={
-                "username": username,
-                "password": password
-            },
+            params=params,
             timeout=30.0
         )
         response.raise_for_status()
@@ -124,20 +181,29 @@ def fetch_lotes(category: str, location_ids: List[int] = None) -> List[Dict]:
 
 
 # ==================== CONFIGURACIÓN DE CÁMARAS PRINCIPALES ====================
-# Definir las cámaras a mostrar por defecto con sus capacidades
+# Definir las ubicaciones a mostrar por defecto (4 ubicaciones específicas)
 CAMARAS_CONFIG = {
-    "Camara 1 de -25°C": {"capacidad": 500, "patron": ["Camara 1", "-25"]},
-    "Camara 2 de -25°C": {"capacidad": 500, "patron": ["Camara 2", "-25"]},
-    "Camara 3 de -25°C": {"capacidad": 500, "patron": ["Camara 3", "-25"]},
-    "Camara 0°C": {"capacidad": 200, "patron": ["Camara 0", "0°C"]},
+    "RF/Stock/Camara 0°C REAL": {"capacidad": 200, "patron": ["Camara 0°C REAL"], "id": 5452},
+    "VLK/Camara 0°": {"capacidad": 200, "patron": ["VLK/Camara 0", "VLK", "Camara 0°"], "id": 8528},
+    "RF/Stock/Inventario Real": {"capacidad": 500, "patron": ["Inventario Real"], "id": 8474},
+    "VLK/Stock": {"capacidad": 500, "patron": ["VLK/Stock"], "id": 8497},
 }
 
 def filtrar_camaras_principales(camaras_data):
-    """Filtra solo las cámaras principales configuradas y aplica capacidades personalizadas"""
+    """Filtra solo las ubicaciones específicas configuradas"""
     camaras_filtradas = []
     usados = set()
     
+    # Obtener capacidades del session_state o usar por defecto
+    capacidades = st.session_state.get("capacidades_config", {
+        "RF/Stock/Camara 0°C REAL": 200,
+        "VLK/Camara 0°": 200,
+        "RF/Stock/Inventario Real": 500,
+        "VLK/Stock": 500
+    })
+    
     for camara in camaras_data:
+        camara_id = camara.get("id")
         nombre = camara.get("name", "")
         full_name = camara.get("full_name", "")
         
@@ -145,13 +211,27 @@ def filtrar_camaras_principales(camaras_data):
             if config_name in usados:
                 continue
             
-            patrones = config["patron"]
-            # Verificar si todos los patrones coinciden
-            coincide = all(p.lower() in nombre.lower() or p.lower() in full_name.lower() for p in patrones)
+            # Primero intentar match por ID (más preciso)
+            if config.get("id") and camara_id == config["id"]:
+                camara_copy = camara.copy()
+                # Usar capacidad del session_state si existe, sino usar la del config
+                camara_copy["capacity_pallets"] = capacidades.get(config_name, config["capacidad"])
+                camara_copy["config_name"] = config_name
+                camaras_filtradas.append(camara_copy)
+                usados.add(config_name)
+                break
+            
+            # Si no hay match por ID, usar patrones
+            patrones = config.get("patron", [])
+            coincide = any(
+                p.lower() in nombre.lower() or p.lower() in full_name.lower() 
+                for p in patrones
+            )
             
             if coincide:
                 camara_copy = camara.copy()
-                camara_copy["capacity_pallets"] = config["capacidad"]
+                # Usar capacidad del session_state si existe, sino usar la del config
+                camara_copy["capacity_pallets"] = capacidades.get(config_name, config["capacidad"])
                 camara_copy["config_name"] = config_name
                 camaras_filtradas.append(camara_copy)
                 usados.add(config_name)
@@ -162,7 +242,8 @@ def filtrar_camaras_principales(camaras_data):
 
 # ==================== CARGA GLOBAL DE CÁMARAS ====================
 with st.spinner("Cargando datos de cámaras..."):
-    camaras_data_all = fetch_camaras()
+    # Pasar los filtros de fecha a la API
+    camaras_data_all = fetch_camaras(fecha_desde_stock, fecha_hasta_stock)
 
 # Determinar si mostrar todas o solo principales (se sincroniza con checkbox en tab1)
 if "mostrar_todas_camaras" not in st.session_state:
@@ -171,7 +252,8 @@ if "mostrar_todas_camaras" not in st.session_state:
 if st.session_state.mostrar_todas_camaras:
     camaras_data = camaras_data_all
 else:
-    camaras_data = camaras_data_all if camaras_data_all else []
+    # Aplicar filtro para mostrar solo las 4 ubicaciones específicas
+    camaras_data = filtrar_camaras_principales(camaras_data_all) if camaras_data_all else []
 
 # Tabs principales
 tab1, tab2, tab3 = st.tabs(["🏢 Cámaras", "📦 Pallets", "🏷️ Trazabilidad"])
@@ -187,7 +269,8 @@ with tab1:
         if mostrar_todas:
             camaras_data_tab = camaras_data_all
         else:
-            camaras_data_tab = camaras_data_all
+            # Aplicar filtro para mostrar solo las 4 ubicaciones específicas
+            camaras_data_tab = filtrar_camaras_principales(camaras_data_all)
         
         # Métricas generales (solo de las cámaras mostradas)
         total_camaras = len(camaras_data_tab)

@@ -12,15 +12,18 @@ router = APIRouter(prefix="/api/v1/stock", tags=["stock"])
 @router.get("/camaras")
 async def get_camaras_stock(
     username: str = Query(..., description="Usuario Odoo"),
-    password: str = Query(..., description="API Key Odoo")
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde (formato YYYY-MM-DD) para filtrar por fecha de ingreso"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha hasta (formato YYYY-MM-DD) para filtrar por fecha de ingreso")
 ):
     """
     Obtiene stock agrupado por cámaras (ubicaciones).
     Incluye capacidad y posiciones ocupadas por especie/condición.
+    Opcionalmente filtra por rango de fechas de ingreso de pallets.
     """
     try:
         service = StockService(username=username, password=password)
-        return service.get_chambers_stock()
+        return service.get_chambers_stock(fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
