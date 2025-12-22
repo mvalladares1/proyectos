@@ -1620,21 +1620,71 @@ with tab_curva:
                     )
                     st.altair_chart(vol_chart, use_container_width=True)
                     
-                    # ============ GRÁFICO DE GASTO TOTAL POR SEMANA ============
-                    st.markdown("#### 💵 Gasto Total por Semana")
+                    # ============ GRÁFICO DE GASTO PROYECTADO VS RECEPCIONADO ============
+                    st.markdown("#### 💵 Gasto Proyectado vs Recepcionado por Semana")
                     
-                    gasto_chart = alt.Chart(df_precios_full).mark_bar(
-                        color='#9b59b6',
-                        opacity=0.85,
-                        cornerRadiusTopLeft=3,
-                        cornerRadiusTopRight=3
-                    ).encode(
+                    # Combinar con gasto proyectado del Excel
+                    df_proy_gasto = df_proy[['semana', 'kg_proyectados']].copy()
+                    
+                    # Obtener gasto proyectado desde las proyecciones (si está disponible)
+                    # Verificar si las proyecciones tienen gasto_proyectado
+                    if 'gasto_proyectado' in df_proy.columns if isinstance(df_proy, pd.DataFrame) and not df_proy.empty else False:
+                        df_proy_gasto = df_proy[['semana', 'gasto_proyectado']].copy()
+                    else:
+                        # Calcular gasto proyectado desde proyecciones raw si existe
+                        # Intentar obtener proyecciones con gasto del backend
+                        try:
+                            params_gasto = {"planta": plantas_usadas}
+                            if especies_filtro:
+                                params_gasto["especie"] = especies_filtro
+                            resp_gasto = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado", 
+                                                    params=params_gasto, timeout=30)
+                            if resp_gasto.status_code == 200:
+                                proyecciones_gasto = resp_gasto.json()
+                                df_proy_gasto = pd.DataFrame(proyecciones_gasto)
+                                if 'gasto_proyectado' not in df_proy_gasto.columns:
+                                    df_proy_gasto['gasto_proyectado'] = 0
+                        except:
+                            df_proy_gasto = pd.DataFrame({'semana': [], 'gasto_proyectado': []})
+                    
+                    # Merge con datos de precios para tener gasto proyectado
+                    if not df_proy_gasto.empty and 'gasto_proyectado' in df_proy_gasto.columns:
+                        df_precios_full = df_precios_full.merge(
+                            df_proy_gasto[['semana', 'gasto_proyectado']].rename(columns={'gasto_proyectado': 'gasto_proy'}),
+                            on='semana',
+                            how='left'
+                        )
+                        df_precios_full['gasto_proy'] = df_precios_full['gasto_proy'].fillna(0)
+                    else:
+                        df_precios_full['gasto_proy'] = 0
+                    
+                    # Melt para formato largo
+                    df_gasto_melt = df_precios_full.melt(
+                        id_vars=['semana', 'semana_label', 'sort_key'],
+                        value_vars=['gasto_proy', 'gasto_total'],
+                        var_name='Tipo',
+                        value_name='Gasto'
+                    )
+                    df_gasto_melt['Tipo'] = df_gasto_melt['Tipo'].replace({
+                        'gasto_proy': 'Proyectado',
+                        'gasto_total': 'Recepcionado'
+                    })
+                    
+                    gasto_chart = alt.Chart(df_gasto_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
                         x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
-                        y=alt.Y('gasto_total:Q', title='Gasto Total ($)', axis=alt.Axis(format='$,.0f')),
+                        y=alt.Y('Gasto:Q', title='Gasto ($)', axis=alt.Axis(format='$,.0f')),
+                        color=alt.Color('Tipo:N', 
+                            scale=alt.Scale(
+                                domain=['Proyectado', 'Recepcionado'],
+                                range=['#9b59b6', '#e74c3c']  # Morado para proyectado, Rojo para recepcionado
+                            ),
+                            legend=alt.Legend(title="Tipo", orient="top")
+                        ),
+                        xOffset='Tipo:N',
                         tooltip=[
                             alt.Tooltip('semana_label:N', title='Semana'),
-                            alt.Tooltip('gasto_total:Q', title='Gasto Total', format='$,.0f'),
-                            alt.Tooltip('kg_recepcionado:Q', title='Kg Recepcionado', format=',.0f')
+                            alt.Tooltip('Tipo:N', title='Tipo'),
+                            alt.Tooltip('Gasto:Q', title='Gasto $', format='$,.0f')
                         ]
                     ).properties(
                         height=300
@@ -1667,18 +1717,21 @@ with tab_curva:
                     
                     total_kg_recep = df_precios_full['kg_recepcionado'].sum()
                     total_kg_proy = df_precios_full['kg_proyectados'].sum()
-                    total_gasto = df_precios_full['gasto_total'].sum()
-                    precio_prom = total_gasto / total_kg_recep if total_kg_recep > 0 else 0
+                    total_gasto_recep = df_precios_full['gasto_total'].sum()
+                    total_gasto_proy = df_precios_full['gasto_proy'].sum() if 'gasto_proy' in df_precios_full.columns else 0
+                    precio_prom = total_gasto_recep / total_kg_recep if total_kg_recep > 0 else 0
                     
-                    res_cols = st.columns(4)
+                    res_cols = st.columns(5)
                     with res_cols[0]:
                         st.metric("Kg Proyectados", fmt_numero(total_kg_proy, 0))
                     with res_cols[1]:
                         st.metric("Kg Recepcionados", fmt_numero(total_kg_recep, 0))
                     with res_cols[2]:
-                        st.metric("Gasto Total", fmt_dinero(total_gasto, 0))
+                        st.metric("Gasto Proyectado", fmt_dinero(total_gasto_proy, 0))
                     with res_cols[3]:
-                        st.metric("Precio Promedio $/Kg", fmt_dinero(precio_prom, 0))
+                        st.metric("Gasto Recepcionado", fmt_dinero(total_gasto_recep, 0))
+                    with res_cols[4]:
+                        st.metric("Precio Prom. $/Kg", fmt_dinero(precio_prom, 0))
                     
                 else:
                     st.info("No hay datos de precios recepcionados en el rango seleccionado.")

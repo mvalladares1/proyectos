@@ -202,7 +202,7 @@ def get_proyecciones_por_semana(
         especie: Lista de especies a filtrar (Arándano, Frambuesa, etc.)
     
     Returns:
-        Lista de diccionarios con datos por semana
+        Lista de diccionarios con datos por semana incluyendo gasto proyectado
     """
     df = load_proyecciones_consolidado()
     
@@ -215,9 +215,14 @@ def get_proyecciones_por_semana(
         # Filtrar por especie_manejo (formato normalizado)
         df = df[df['especie_manejo'].isin(especie)]
     
+    # Calcular gasto proyectado por fila (kg × precio)
+    df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0)
+    df['gasto_proyectado'] = df['kg_proyectados'] * df['precio']
+    
     # Agrupar por semana
     grouped = df.groupby(['semana', 'fecha_semana']).agg({
-        'kg_proyectados': 'sum'
+        'kg_proyectados': 'sum',
+        'gasto_proyectado': 'sum'
     }).reset_index()
     
     # Ordenar por semana (47-52 primero, luego 1-17)
@@ -232,7 +237,8 @@ def get_proyecciones_por_semana(
         result.append({
             'semana': int(row['semana']),
             'fecha_semana': row['fecha_semana'].strftime('%Y-%m-%d'),
-            'kg_proyectados': float(row['kg_proyectados'])
+            'kg_proyectados': float(row['kg_proyectados']),
+            'gasto_proyectado': float(row['gasto_proyectado'])
         })
     
     return result
