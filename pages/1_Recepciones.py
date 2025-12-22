@@ -608,16 +608,66 @@ with tab_kpis:
 
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
-        # Gráficos generales
-        st.subheader("📈 Kg recepcionados por día (por Tipo de Fruta)")
+
+        # Gráficos por Planta - Kg recepcionados por día (por Tipo de Fruta)
         df_filtrada['fecha_dt'] = pd.to_datetime(df_filtrada['fecha']).dt.strftime('%Y-%m-%d')
-        kg_por_dia_fruta = df_filtrada.groupby(['fecha_dt', 'tipo_fruta'])['kg_recepcionados'].sum().reset_index()
-        chart_kg = alt.Chart(kg_por_dia_fruta).mark_bar().encode(
-            x=alt.X('fecha_dt:N', title='Fecha', sort=None, axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y('kg_recepcionados:Q', title='Kg Recepcionados'),
-            color=alt.Color('tipo_fruta:N', title='Tipo Fruta')
-        ).properties(width=700, height=350)
-        st.altair_chart(chart_kg, use_container_width=True)
+        origen_filtro_usado = st.session_state.get('origen_filtro_usado', [])
+        
+        # Función para crear gráfico de una planta
+        def crear_grafico_planta(df_planta, nombre_planta, color_titulo):
+            kg_por_dia_fruta = df_planta.groupby(['fecha_dt', 'tipo_fruta'])['kg_recepcionados'].sum().reset_index()
+            chart = alt.Chart(kg_por_dia_fruta).mark_bar().encode(
+                x=alt.X('fecha_dt:N', title='Fecha', sort=None, axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y('kg_recepcionados:Q', title='Kg Recepcionados'),
+                color=alt.Color('tipo_fruta:N', title='Tipo Fruta')
+            ).properties(width=700, height=350)
+            return chart
+        
+        # Si ambas plantas están seleccionadas, mostrar un gráfico por cada una
+        if len(origen_filtro_usado) == 2 and 'origen' in df_filtrada.columns:
+            # Gráfico para RFP
+            st.subheader("🏭 RFP - Kg recepcionados por día (por Tipo de Fruta)")
+            df_rfp = df_filtrada[df_filtrada['origen'] == 'RFP']
+            if not df_rfp.empty:
+                chart_rfp = crear_grafico_planta(df_rfp, 'RFP', '#3498db')
+                st.altair_chart(chart_rfp, use_container_width=True)
+                total_rfp = df_rfp['kg_recepcionados'].sum()
+                st.caption(f"**Total RFP:** {fmt_numero(total_rfp, 0)} Kg")
+            else:
+                st.info("No hay datos de RFP en el período seleccionado")
+            
+            st.markdown("---")
+            
+            # Gráfico para VILKÚN
+            st.subheader("🌿 VILKÚN - Kg recepcionados por día (por Tipo de Fruta)")
+            df_vilkun = df_filtrada[df_filtrada['origen'] == 'VILKUN']
+            if not df_vilkun.empty:
+                chart_vilkun = crear_grafico_planta(df_vilkun, 'VILKUN', '#27ae60')
+                st.altair_chart(chart_vilkun, use_container_width=True)
+                total_vilkun = df_vilkun['kg_recepcionados'].sum()
+                st.caption(f"**Total VILKÚN:** {fmt_numero(total_vilkun, 0)} Kg")
+            else:
+                st.info("No hay datos de VILKÚN en el período seleccionado")
+            
+            # Resumen comparativo
+            st.markdown("---")
+            st.markdown("**📊 Resumen Comparativo:**")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                total_rfp = df_filtrada[df_filtrada['origen'] == 'RFP']['kg_recepcionados'].sum() if 'origen' in df_filtrada.columns else 0
+                st.metric("🏭 RFP", f"{fmt_numero(total_rfp, 0)} Kg")
+            with col_p2:
+                total_vilkun = df_filtrada[df_filtrada['origen'] == 'VILKUN']['kg_recepcionados'].sum() if 'origen' in df_filtrada.columns else 0
+                st.metric("🌿 VILKÚN", f"{fmt_numero(total_vilkun, 0)} Kg")
+        else:
+            # Solo una planta seleccionada - mostrar gráfico normal
+            planta_actual = origen_filtro_usado[0] if origen_filtro_usado else "Planta"
+            emoji = "🏭" if planta_actual == "RFP" else "🌿"
+            st.subheader(f"{emoji} {planta_actual} - Kg recepcionados por día (por Tipo de Fruta)")
+            chart_kg = crear_grafico_planta(df_filtrada, planta_actual, '#3498db')
+            st.altair_chart(chart_kg, use_container_width=True)
+            total_kg = df_filtrada['kg_recepcionados'].sum()
+            st.caption(f"**Total {planta_actual}:** {fmt_numero(total_kg, 0)} Kg")
 
         st.subheader("🏆 Ranking de productores por Kg")
         ranking = df_filtrada.groupby('productor')['kg_recepcionados'].sum().sort_values(ascending=False).reset_index()
@@ -1441,10 +1491,10 @@ with tab_curva:
             
             # ============ GRÁFICO DE PRECIOS POR SEMANA ============
             st.markdown("---")
-            st.markdown("### 💰 Comparativa de Precios por Semana")
+            st.markdown("### 💰 Comparativa de Precios y Gastos por Semana")
             
             try:
-                # Calcular precio promedio recepcionado por semana desde datos del sistema
+                # Calcular datos de precio y gasto recepcionado por semana desde datos del sistema
                 precios_por_semana = {}
                 if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
                     for rec in st.session_state.curva_sistema_raw:
@@ -1468,7 +1518,7 @@ with tab_curva:
                             kg = p.get('Kg Hechos', 0) or 0
                             precio = p.get('Costo Unitario', 0) or p.get('precio', 0) or 0
                             
-                            if kg <= 0 or precio <= 0:
+                            if kg <= 0:
                                 continue
                             
                             # Aplicar filtro de especie si existe
@@ -1500,13 +1550,9 @@ with tab_curva:
                             if semana not in precios_por_semana:
                                 precios_por_semana[semana] = {'total_kg': 0, 'total_valor': 0, 'año': año}
                             precios_por_semana[semana]['total_kg'] += kg
-                            precios_por_semana[semana]['total_valor'] += kg * precio
+                            precios_por_semana[semana]['total_valor'] += kg * precio if precio > 0 else 0
                 
-                # Precio promedio proyectado (fijo por ahora - TODO: obtener del Excel por semana)
-                # Por ahora usamos un precio promedio de las proyecciones
-                precio_proyectado_promedio = 1000  # Valor por defecto
-                
-                # Construir DataFrame para gráfico de precios
+                # Construir DataFrame para gráficos de precios y gastos
                 precios_data = []
                 for semana, data in precios_por_semana.items():
                     sort_key = semana if semana >= 47 else semana + 100
@@ -1521,6 +1567,8 @@ with tab_curva:
                         'semana': semana,
                         'semana_label': f'S{semana}',
                         'sort_key': sort_key,
+                        'kg_recepcionado': data['total_kg'],
+                        'gasto_total': data['total_valor'],
                         'precio_recepcionado': round(precio_recep, 0)
                     })
                 
@@ -1528,10 +1576,79 @@ with tab_curva:
                     df_precios = pd.DataFrame(precios_data)
                     df_precios = df_precios.sort_values('sort_key')
                     
+                    # Combinar con proyecciones para tener volumen proyectado
+                    df_precios_full = df_precios.merge(
+                        df_chart[['semana', 'kg_proyectados']], 
+                        on='semana', 
+                        how='left'
+                    )
+                    df_precios_full['kg_proyectados'] = df_precios_full['kg_proyectados'].fillna(0)
+                    
+                    # ============ GRÁFICO DE VOLUMEN PROYECTADO VS RECEPCIONADO ============
+                    st.markdown("#### 📊 Volumen Proyectado vs Recepcionado por Semana")
+                    
+                    # Melt para formato largo
+                    df_vol_melt = df_precios_full.melt(
+                        id_vars=['semana', 'semana_label', 'sort_key'],
+                        value_vars=['kg_proyectados', 'kg_recepcionado'],
+                        var_name='Tipo',
+                        value_name='Kg'
+                    )
+                    df_vol_melt['Tipo'] = df_vol_melt['Tipo'].replace({
+                        'kg_proyectados': 'Proyectado',
+                        'kg_recepcionado': 'Recepcionado'
+                    })
+                    
+                    vol_chart = alt.Chart(df_vol_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                        x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
+                        y=alt.Y('Kg:Q', title='Kilogramos', axis=alt.Axis(format=',.0f')),
+                        color=alt.Color('Tipo:N', 
+                            scale=alt.Scale(
+                                domain=['Proyectado', 'Recepcionado'],
+                                range=['#3498db', '#2ecc71']
+                            ),
+                            legend=alt.Legend(title="Tipo", orient="top")
+                        ),
+                        xOffset='Tipo:N',
+                        tooltip=[
+                            alt.Tooltip('semana_label:N', title='Semana'),
+                            alt.Tooltip('Tipo:N', title='Tipo'),
+                            alt.Tooltip('Kg:Q', title='Kilogramos', format=',.0f')
+                        ]
+                    ).properties(
+                        height=300
+                    )
+                    st.altair_chart(vol_chart, use_container_width=True)
+                    
+                    # ============ GRÁFICO DE GASTO TOTAL POR SEMANA ============
+                    st.markdown("#### 💵 Gasto Total por Semana")
+                    
+                    gasto_chart = alt.Chart(df_precios_full).mark_bar(
+                        color='#9b59b6',
+                        opacity=0.85,
+                        cornerRadiusTopLeft=3,
+                        cornerRadiusTopRight=3
+                    ).encode(
+                        x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
+                        y=alt.Y('gasto_total:Q', title='Gasto Total ($)', axis=alt.Axis(format='$,.0f')),
+                        tooltip=[
+                            alt.Tooltip('semana_label:N', title='Semana'),
+                            alt.Tooltip('gasto_total:Q', title='Gasto Total', format='$,.0f'),
+                            alt.Tooltip('kg_recepcionado:Q', title='Kg Recepcionado', format=',.0f')
+                        ]
+                    ).properties(
+                        height=300
+                    )
+                    st.altair_chart(gasto_chart, use_container_width=True)
+                    
+                    # ============ GRÁFICO DE PRECIO PROMEDIO ============
+                    st.markdown("#### 📈 Precio Promedio Recepcionado por Semana")
+                    
                     # Crear gráfico de líneas para precios por semana
                     precio_chart = alt.Chart(df_precios).mark_line(
                         point=alt.OverlayMarkDef(size=60),
-                        strokeWidth=3
+                        strokeWidth=3,
+                        color='#e67e22'
                     ).encode(
                         x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
                         y=alt.Y('precio_recepcionado:Q', title='Precio por Kg ($)', axis=alt.Axis(format=',.0f')),
@@ -1540,20 +1657,29 @@ with tab_curva:
                             alt.Tooltip('precio_recepcionado:Q', title='Precio $/kg', format=',.0f')
                         ]
                     ).properties(
-                        height=300,
-                        title=alt.TitleParams(
-                            text='Precio Promedio Recepcionado por Semana',
-                            fontSize=16,
-                            anchor='start'
-                        )
-                    ).configure_axis(
-                        labelFontSize=11,
-                        titleFontSize=12
-                    ).configure_line(
-                        color='#e67e22'
+                        height=300
                     )
-                    
                     st.altair_chart(precio_chart, use_container_width=True)
+                    
+                    # ============ RESUMEN DE TOTALES ============
+                    st.markdown("---")
+                    st.markdown("#### 📋 Resumen de Costos del Período")
+                    
+                    total_kg_recep = df_precios_full['kg_recepcionado'].sum()
+                    total_kg_proy = df_precios_full['kg_proyectados'].sum()
+                    total_gasto = df_precios_full['gasto_total'].sum()
+                    precio_prom = total_gasto / total_kg_recep if total_kg_recep > 0 else 0
+                    
+                    res_cols = st.columns(4)
+                    with res_cols[0]:
+                        st.metric("Kg Proyectados", fmt_numero(total_kg_proy, 0))
+                    with res_cols[1]:
+                        st.metric("Kg Recepcionados", fmt_numero(total_kg_recep, 0))
+                    with res_cols[2]:
+                        st.metric("Gasto Total", fmt_dinero(total_gasto, 0))
+                    with res_cols[3]:
+                        st.metric("Precio Promedio $/Kg", fmt_dinero(precio_prom, 0))
+                    
                 else:
                     st.info("No hay datos de precios recepcionados en el rango seleccionado.")
             except Exception as e:
