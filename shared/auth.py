@@ -242,6 +242,117 @@ def tiene_acceso_dashboard(clave: str) -> bool:
     return clave in obtener_dashboards_permitidos()
 
 
+def cargar_permisos_usuario():
+    """
+    Carga los permisos del usuario desde el backend.
+    Almacena en session_state para uso posterior.
+    Incluye permisos de páginas dentro de cada módulo.
+    """
+    token = _get_stored_token()
+    if not token:
+        return
+    
+    # Evitar recargar si ya se cargaron recientemente
+    cache_key = "_permisos_cache_time"
+    now = datetime.now().timestamp()
+    last_load = st.session_state.get(cache_key, 0)
+    
+    if now - last_load < 60:  # Cache de 60 segundos
+        return
+    
+    try:
+        response = httpx.get(
+            f"{API_URL}/api/v1/auth/user-permissions",
+            params={"token": token},
+            timeout=10.0
+        )
+        if response.status_code == 200:
+            data = response.json()
+            st.session_state['allowed_dashboards'] = data.get('allowed_dashboards', [])
+            st.session_state['allowed_pages'] = data.get('allowed_pages', {})
+            st.session_state['module_structure'] = data.get('module_structure', {})
+            st.session_state['is_admin'] = data.get('is_admin', False)
+            st.session_state[cache_key] = now
+    except:
+        pass
+
+
+def tiene_acceso_pagina(modulo: str, pagina: str) -> bool:
+    """
+    Verifica si el usuario tiene acceso a una página específica dentro de un módulo.
+    
+    Args:
+        modulo: Clave del módulo (recepciones, produccion, etc.)
+        pagina: Clave de la página/tab (curva_abastecimiento, kpis_calidad, etc.)
+    
+    Returns:
+        True si tiene acceso, False si no
+    """
+    # Admins tienen acceso a todo
+    if st.session_state.get('is_admin', False):
+        return True
+    
+    # Cargar permisos si no están cargados
+    if 'allowed_pages' not in st.session_state:
+        cargar_permisos_usuario()
+    
+    # Verificar acceso
+    allowed_pages = st.session_state.get('allowed_pages', {})
+    module_pages = allowed_pages.get(modulo, [])
+    
+    # Si la lista está vacía, permitir (público)
+    # Si tiene páginas, verificar que la página esté incluida
+    return pagina in module_pages if module_pages else True
+
+
+def proteger_modulo(modulo_key: str) -> bool:
+    """
+    Protege un módulo específico verificando autenticación y permisos.
+    
+    Args:
+        modulo_key: Clave del módulo (recepciones, produccion, stock, etc.)
+    
+    Returns:
+        True si el usuario tiene acceso, False si no (y detiene la página)
+    """
+    # 1. Verificar autenticación
+    if not verificar_autenticacion():
+        mostrar_login_requerido()
+        return False
+    
+    # 2. Mostrar banner de mantenimiento si aplica
+    mostrar_banner_mantenimiento()
+    
+    # 3. Cargar permisos si no están cargados
+    if 'allowed_dashboards' not in st.session_state:
+        cargar_permisos_usuario()
+    
+    # 4. Admins tienen acceso a todo
+    if st.session_state.get('is_admin', False):
+        return True
+    
+    # 5. Verificar acceso al módulo específico
+    allowed = st.session_state.get('allowed_dashboards', [])
+    
+    if modulo_key in allowed:
+        return True
+    
+    # Si la lista está vacía (aún no se cargó) o el módulo no está restringido, permitir
+    # Esto mantiene compatibilidad con dashboards públicos
+    if not allowed:
+        # Intentar cargar una vez más
+        cargar_permisos_usuario()
+        allowed = st.session_state.get('allowed_dashboards', [])
+        if modulo_key in allowed:
+            return True
+    
+    # No tiene acceso - mostrar mensaje y detener
+    st.error(f"🚫 No tienes acceso al módulo **{modulo_key.title()}**")
+    st.info("💡 Contacta al administrador para solicitar acceso a este módulo.")
+    st.stop()
+    return False
+
+
 def obtener_info_sesion() -> Optional[Dict[str, Any]]:
     """Obtiene información de la sesión incluyendo tiempo restante."""
     token = _get_stored_token()

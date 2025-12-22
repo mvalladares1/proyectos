@@ -11,7 +11,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import verificar_autenticacion, proteger_pagina, get_credenciales
+from shared.auth import verificar_autenticacion, proteger_modulo, get_credenciales
 from shared.odoo_client import OdooClient
 from backend.services.report_service import generate_bandejas_report_pdf
 
@@ -52,7 +52,7 @@ def fmt_numero(valor, decimales=0):
 st.set_page_config(page_title="Bandejas", page_icon="📊", layout="wide")
 
 # Verificar autenticación
-if not proteger_pagina():
+if not proteger_modulo("bandejas"):
     st.stop()
 
 st.title("Recepción Bandejas Río Futuro Procesos")

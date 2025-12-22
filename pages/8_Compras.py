@@ -12,7 +12,7 @@ import os
 import io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.auth import proteger_pagina, get_credenciales
+from shared.auth import proteger_modulo, get_credenciales
 
 
 # --- Funciones de formateo chileno ---
@@ -61,7 +61,7 @@ def get_receive_color(status):
 # Configuración de página
 st.set_page_config(page_title="Compras", page_icon="🛒", layout="wide")
 
-if not proteger_pagina():
+if not proteger_modulo("compras"):
     st.stop()
 
 username, password = get_credenciales()

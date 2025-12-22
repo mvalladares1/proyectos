@@ -144,3 +144,41 @@ async def get_credentials(token: str):
     if creds:
         return {"username": creds[0], "password": creds[1]}
     raise HTTPException(status_code=401, detail="Sesión inválida")
+
+
+@router.get("/user-permissions")
+async def get_user_permissions(token: str):
+    """
+    Obtiene los módulos/dashboards permitidos para el usuario autenticado.
+    Incluye también las páginas permitidas dentro de cada módulo.
+    """
+    from backend.services.permissions_service import (
+        get_allowed_dashboards, 
+        is_admin,
+        get_allowed_pages,
+        get_all_module_pages
+    )
+    
+    session = SessionService.validate_session(token)
+    if not session:
+        raise HTTPException(status_code=401, detail="Sesión inválida")
+    
+    email = session.get("username", "")
+    allowed = get_allowed_dashboards(email)
+    user_is_admin = is_admin(email)
+    
+    # Obtener páginas permitidas por módulo
+    module_pages = get_all_module_pages()
+    allowed_pages = {}
+    for module in allowed:
+        allowed_pages[module] = get_allowed_pages(email, module)
+    
+    return {
+        "allowed_dashboards": allowed,
+        "allowed_pages": allowed_pages,
+        "module_structure": module_pages,
+        "is_admin": user_is_admin,
+        "email": email
+    }
+
+

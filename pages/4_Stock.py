@@ -7,7 +7,7 @@ import httpx
 from datetime import datetime
 from typing import Dict, List
 
-from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciales
+from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales
 
 # ==================== FUNCIONES DE FORMATO CHILENO ====================
 def fmt_fecha(fecha):
@@ -39,7 +39,7 @@ st.set_page_config(
 )
 
 # Proteger la página
-if not proteger_pagina():
+if not proteger_modulo("stock"):
     st.stop()
 
 if not tiene_acceso_dashboard("stock"):

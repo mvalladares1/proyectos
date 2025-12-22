@@ -38,6 +38,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# GZip Compression para respuestas grandes (mejora transferencia de datos)
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Comprimir respuestas >1KB
+
 # Registrar routers
 app.include_router(auth.router)
 app.include_router(produccion.router)

@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 # Importar utilidades compartidas
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import proteger_pagina, get_credenciales, tiene_acceso_dashboard
+from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_dashboard
 
 # Configuración de página
 st.set_page_config(
@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # Verificar autenticación
-if not proteger_pagina():
+if not proteger_modulo("produccion"):
     st.stop()
 
 if not tiene_acceso_dashboard("produccion"):

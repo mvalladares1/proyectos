@@ -139,7 +139,8 @@ from backend.services.abastecimiento_service import (
     get_proyecciones_por_semana,
     get_proyecciones_por_especie,
     get_especies_disponibles,
-    get_semanas_disponibles
+    get_semanas_disponibles,
+    get_precios_por_especie
 )
 
 
@@ -179,3 +180,21 @@ async def get_semanas_abastecimiento():
         return get_semanas_disponibles()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/abastecimiento/precios')
+async def get_precios_abastecimiento(
+    planta: Optional[List[str]] = Query(None, description="Plantas a filtrar: RFP, VILKUN"),
+    especie: Optional[List[str]] = Query(None, description="Especies a filtrar")
+):
+    """
+    Obtiene los precios proyectados por especie desde el Excel.
+    Retorna precio promedio ponderado por kg para cada especie.
+    """
+    try:
+        return get_precios_por_especie(planta=planta, especie=especie)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -8,7 +8,7 @@ import httpx
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciales
+from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales
 
 # Configuración de la página
 st.set_page_config(
@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # Proteger la página
-if not proteger_pagina():
+if not proteger_modulo("containers"):
     st.stop()
 
 if not tiene_acceso_dashboard("containers"):

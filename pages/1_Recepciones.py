@@ -11,7 +11,7 @@ import os
 import io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.auth import proteger_pagina, get_credenciales
+from shared.auth import proteger_modulo, get_credenciales
 
 # --- Funciones de formateo chileno ---
 def fmt_fecha(fecha_str):
@@ -56,7 +56,7 @@ def fmt_dinero(valor, decimales=0):
 st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
 
 # Autenticación central
-if not proteger_pagina():
+if not proteger_modulo("recepciones"):
     st.stop()
 
 # Obtener credenciales del usuario autenticado
@@ -1401,6 +1401,128 @@ with tab_curva:
             )
             
             st.altair_chart(chart, use_container_width=True)
+            
+            # ============ GRÁFICO DE PRECIOS POR ESPECIE ============
+            st.markdown("---")
+            st.markdown("### 💰 Comparativa de Precios por Especie")
+            
+            try:
+                # Obtener precios proyectados desde API
+                resp_precios = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios", 
+                    params={"planta": plantas_filtro, "especie": especies_filtro} if (plantas_filtro or especies_filtro) else {},
+                    timeout=30)
+                
+                if resp_precios.status_code == 200:
+                    precios_proyectados = resp_precios.json()
+                    
+                    if precios_proyectados:
+                        # Para precios recepcionados, agrupar por especie_base desde los datos del sistema
+                        precios_sistema = {}
+                        if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
+                            for rec in st.session_state.curva_sistema_raw:
+                                productos = rec.get('productos', []) or []
+                                for p in productos:
+                                    categoria = (p.get('Categoria') or '').strip().upper()
+                                    if 'BANDEJ' in categoria:
+                                        continue
+                                    
+                                    kg = p.get('Kg Hechos', 0) or 0
+                                    precio = p.get('Precio Unitario', 0) or p.get('precio', 0) or 0
+                                    
+                                    if kg <= 0 or precio <= 0:
+                                        continue
+                                    
+                                    # Normalizar especie
+                                    tipo_fruta = (rec.get('tipo_fruta') or '').upper()
+                                    if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta:
+                                        especie = 'Arándano'
+                                    elif 'FRAM' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta:
+                                        especie = 'Frambuesa'
+                                    elif 'FRUTILLA' in tipo_fruta:
+                                        especie = 'Frutilla'
+                                    elif 'MORA' in tipo_fruta:
+                                        especie = 'Mora'
+                                    elif 'CEREZA' in tipo_fruta:
+                                        especie = 'Cereza'
+                                    else:
+                                        especie = 'Otro'
+                                    
+                                    if especie not in precios_sistema:
+                                        precios_sistema[especie] = {'total_kg': 0, 'total_valor': 0}
+                                    precios_sistema[especie]['total_kg'] += kg
+                                    precios_sistema[especie]['total_valor'] += kg * precio
+                        
+                        # Calcular precios promedio del sistema
+                        precios_sist_calc = {}
+                        for esp, data in precios_sistema.items():
+                            if data['total_kg'] > 0:
+                                precios_sist_calc[esp] = data['total_valor'] / data['total_kg']
+                        
+                        # Construir DataFrame para el gráfico
+                        chart_data = []
+                        for proy in precios_proyectados:
+                            esp = proy['especie']
+                            chart_data.append({
+                                'Especie': esp,
+                                'Tipo': 'Proyectado',
+                                'Precio': proy['precio_proyectado']
+                            })
+                            # Agregar precio del sistema si existe
+                            precio_sist = precios_sist_calc.get(esp, 0)
+                            if precio_sist > 0:
+                                chart_data.append({
+                                    'Especie': esp,
+                                    'Tipo': 'Recepcionado',
+                                    'Precio': round(precio_sist, 0)
+                                })
+                        
+                        if chart_data:
+                            df_precios = pd.DataFrame(chart_data)
+                            
+                            precio_chart = alt.Chart(df_precios).mark_bar(
+                                opacity=0.85, 
+                                cornerRadiusTopLeft=3, 
+                                cornerRadiusTopRight=3
+                            ).encode(
+                                x=alt.X('Especie:N', title='Especie'),
+                                y=alt.Y('Precio:Q', title='Precio por Kg ($)', axis=alt.Axis(format=',.0f')),
+                                color=alt.Color('Tipo:N', 
+                                    scale=alt.Scale(
+                                        domain=['Proyectado', 'Recepcionado'],
+                                        range=['#9b59b6', '#e67e22']
+                                    ),
+                                    legend=alt.Legend(title="Tipo", orient="top")
+                                ),
+                                xOffset='Tipo:N',
+                                tooltip=[
+                                    alt.Tooltip('Especie:N', title='Especie'),
+                                    alt.Tooltip('Tipo:N', title='Tipo'),
+                                    alt.Tooltip('Precio:Q', title='Precio $/kg', format=',.0f')
+                                ]
+                            ).properties(
+                                height=300,
+                                title=alt.TitleParams(
+                                    text='Precio Proyectado vs Recepcionado por Especie',
+                                    fontSize=16,
+                                    anchor='start'
+                                )
+                            ).configure_axis(
+                                labelFontSize=11,
+                                titleFontSize=12
+                            ).configure_legend(
+                                labelFontSize=12,
+                                titleFontSize=12
+                            )
+                            
+                            st.altair_chart(precio_chart, use_container_width=True)
+                        else:
+                            st.info("No hay datos de precios para mostrar en el rango seleccionado.")
+                    else:
+                        st.info("No hay datos de precios proyectados disponibles.")
+                else:
+                    st.warning("No se pudieron cargar los precios proyectados.")
+            except Exception as e:
+                st.warning(f"Error al cargar precios: {e}")
             
             # ============ TOTALES DEL PERÍODO ============
             st.markdown("---")

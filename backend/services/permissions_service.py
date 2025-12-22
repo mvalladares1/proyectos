@@ -38,8 +38,51 @@ DASHBOARD_NAMES = {
     "permisos": "Permisos",
 }
 
+# ============ PÁGINAS/TABS DENTRO DE CADA MÓDULO ============
+# Estructura: módulo -> lista de páginas con slug y nombre
+MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
+    "recepciones": [
+        {"slug": "kpis_calidad", "name": "KPIs y Calidad"},
+        {"slug": "gestion_recepciones", "name": "Gestión de Recepciones"},
+        {"slug": "curva_abastecimiento", "name": "Curva de Abastecimiento"},
+    ],
+    "produccion": [
+        {"slug": "overview", "name": "Overview"},
+        {"slug": "salas", "name": "Vista por Sala"},
+        {"slug": "consolidado", "name": "Consolidado por Fruta"},
+    ],
+    "bandejas": [
+        {"slug": "kpis", "name": "KPIs"},
+        {"slug": "detalle", "name": "Detalle"},
+    ],
+    "stock": [
+        {"slug": "camaras", "name": "Cámaras"},
+        {"slug": "pallets", "name": "Detalle Pallets"},
+    ],
+    "containers": [
+        {"slug": "lista", "name": "Lista Containers"},
+        {"slug": "detalle", "name": "Detalle"},
+    ],
+    "finanzas": [
+        {"slug": "estado_resultado", "name": "Estado de Resultado"},
+        {"slug": "presupuesto", "name": "Presupuesto"},
+    ],
+    "compras": [
+        {"slug": "ordenes", "name": "Órdenes de Compra"},
+        {"slug": "lineas_credito", "name": "Líneas de Crédito"},
+    ],
+    "rendimiento": [
+        {"slug": "dashboard", "name": "Dashboard"},
+    ],
+    "permisos": [
+        {"slug": "usuarios", "name": "Usuarios"},
+        {"slug": "modulos", "name": "Módulos"},
+    ],
+}
+
 DEFAULT_PERMISSIONS: Dict[str, Any] = {
     "dashboards": {slug: [] for slug in ALL_DASHBOARDS},  # Todos públicos por defecto
+    "pages": {},  # Permisos granulares por página: "modulo.pagina" -> [emails]
     "admins": ["mvalladares@riofuturo.cl"],
     "maintenance": {
         "enabled": False,
@@ -169,6 +212,96 @@ def get_dashboard_name(slug: str) -> str:
 def get_all_dashboards() -> List[str]:
     """Retorna la lista de todos los dashboards disponibles."""
     return ALL_DASHBOARDS.copy()
+
+
+# ============ PERMISOS A NIVEL DE PÁGINA/TAB ============
+
+def get_module_pages(module: str) -> List[Dict[str, str]]:
+    """Retorna las páginas disponibles para un módulo."""
+    return MODULE_PAGES.get(_normalize_dashboard(module), [])
+
+
+def get_all_module_pages() -> Dict[str, List[Dict[str, str]]]:
+    """Retorna todas las páginas de todos los módulos."""
+    return MODULE_PAGES.copy()
+
+
+def get_page_permissions() -> Dict[str, List[str]]:
+    """Retorna el mapa de permisos de páginas."""
+    data = _read_permissions()
+    return data.get("pages", {})
+
+
+def get_allowed_pages(email: str, module: str) -> List[str]:
+    """
+    Retorna las páginas permitidas para un usuario dentro de un módulo.
+    - Si la página no tiene restricción -> permitida
+    - Si tiene lista de emails -> solo esos usuarios
+    - Admins ven todo
+    """
+    normalized = _normalize_email(email)
+    module_key = _normalize_dashboard(module)
+    
+    # Admins ven todo
+    if is_admin(email):
+        return [p["slug"] for p in MODULE_PAGES.get(module_key, [])]
+    
+    pages_perms = get_page_permissions()
+    allowed: List[str] = []
+    
+    for page in MODULE_PAGES.get(module_key, []):
+        page_key = f"{module_key}.{page['slug']}"
+        emails_list = pages_perms.get(page_key, [])
+        
+        # Lista vacía = público
+        if not emails_list:
+            allowed.append(page["slug"])
+        # Lista con correos = restringido
+        elif normalized in {_normalize_email(addr) for addr in emails_list}:
+            allowed.append(page["slug"])
+    
+    return allowed
+
+
+def assign_page(module: str, page: str, email: str) -> Dict[str, List[str]]:
+    """Asigna acceso a una página específica para un usuario."""
+    data = _read_permissions()
+    pages = data.setdefault("pages", {})
+    page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
+    bucket = pages.setdefault(page_key, [])
+    normalized_email = _normalize_email(email)
+    
+    if normalized_email not in {_normalize_email(addr) for addr in bucket}:
+        bucket.append(email.strip())
+    
+    _write_permissions(data)
+    return pages.copy()
+
+
+def remove_page(module: str, page: str, email: str) -> Dict[str, List[str]]:
+    """Quita acceso a una página específica para un usuario."""
+    data = _read_permissions()
+    pages = data.setdefault("pages", {})
+    page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
+    bucket = pages.get(page_key, [])
+    normalized_email = _normalize_email(email)
+    
+    pages[page_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
+    _write_permissions(data)
+    return pages.copy()
+
+
+def clear_page_restriction(module: str, page: str) -> Dict[str, List[str]]:
+    """Elimina la restricción de una página (la hace pública)."""
+    data = _read_permissions()
+    pages = data.setdefault("pages", {})
+    page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
+    
+    if page_key in pages:
+        del pages[page_key]
+    
+    _write_permissions(data)
+    return pages.copy()
 
 
 # ============ BANNER DE MANTENIMIENTO ============

@@ -250,6 +250,217 @@ class RendimientoService:
         
         return [clean_record(mo) for mo in mos]
     
+    def get_consumos_batch(self, mos: List[Dict]) -> Dict[int, List[Dict]]:
+        """
+        OPTIMIZADO: Obtiene consumos de TODAS las MOs en batch.
+        Retorna: Dict[mo_id -> List[consumos]]
+        Reduce llamadas API de N*3 a ~3 totales.
+        """
+        # Recolectar todos los move_raw_ids de todas las MOs
+        all_move_raw_ids = []
+        mo_id_to_move_ids = {}
+        
+        for mo in mos:
+            mo_id = mo.get('id')
+            move_raw_ids = mo.get('move_raw_ids', [])
+            mo_id_to_move_ids[mo_id] = set(move_raw_ids)
+            all_move_raw_ids.extend(move_raw_ids)
+        
+        if not all_move_raw_ids:
+            return {mo.get('id'): [] for mo in mos}
+        
+        # UNA sola llamada para obtener TODAS las líneas de movimiento
+        move_lines = self.odoo.search_read(
+            'stock.move.line',
+            [['move_id', 'in', all_move_raw_ids]],
+            ['move_id', 'product_id', 'lot_id', 'qty_done', 'date'],
+            limit=10000
+        )
+        
+        # Obtener IDs únicos de productos
+        product_ids = list(set(
+            ml.get('product_id')[0] 
+            for ml in move_lines 
+            if ml.get('product_id')
+        ))
+        
+        # UNA sola llamada para obtener datos de productos
+        products_data = {}
+        template_data = {}
+        
+        if product_ids:
+            try:
+                products = self.odoo.read(
+                    'product.product',
+                    product_ids,
+                    ['name', 'categ_id', 'product_tmpl_id']
+                )
+                
+                template_ids = set()
+                for p in products:
+                    products_data[p['id']] = p
+                    tmpl = p.get('product_tmpl_id')
+                    if tmpl:
+                        tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
+                        template_ids.add(tmpl_id)
+                
+                # UNA sola llamada para templates
+                if template_ids:
+                    templates = self.odoo.read(
+                        'product.template',
+                        list(template_ids),
+                        ['id', 'name', 'x_studio_categora_tipo_de_manejo', 'x_studio_sub_categora']
+                    )
+                    for t in templates:
+                        template_data[t['id']] = t
+            except Exception:
+                pass
+        
+        # Crear mapa de move_id -> mo_id
+        move_to_mo = {}
+        for mo_id, move_ids in mo_id_to_move_ids.items():
+            for move_id in move_ids:
+                move_to_mo[move_id] = mo_id
+        
+        # Procesar todas las líneas y agrupar por MO
+        result = {mo.get('id'): [] for mo in mos}
+        
+        for ml in move_lines:
+            try:
+                move_info = ml.get('move_id')
+                move_id = move_info[0] if isinstance(move_info, (list, tuple)) else move_info
+                mo_id = move_to_mo.get(move_id)
+                
+                if not mo_id:
+                    continue
+                
+                prod_info = ml.get('product_id')
+                if not prod_info:
+                    continue
+                
+                prod_id = prod_info[0]
+                prod_name = prod_info[1] if len(prod_info) > 1 else ''
+                
+                prod_data = products_data.get(prod_id, {})
+                categ = prod_data.get('categ_id')
+                category_name = categ[1] if categ and isinstance(categ, (list, tuple)) else ''
+                
+                if self._is_excluded_consumo(prod_name, category_name):
+                    continue
+                
+                qty = ml.get('qty_done', 0) or 0
+                if qty <= 0:
+                    continue
+                
+                lot_info = ml.get('lot_id')
+                
+                # Obtener manejo y especie
+                tmpl = prod_data.get('product_tmpl_id')
+                tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl if tmpl else None
+                tmpl_data = template_data.get(tmpl_id, {}) if tmpl_id else {}
+                
+                manejo_raw = tmpl_data.get('x_studio_categora_tipo_de_manejo', '') or ''
+                especie_raw = tmpl_data.get('x_studio_sub_categora', '') or ''
+                
+                if isinstance(manejo_raw, (list, tuple)) and len(manejo_raw) > 1:
+                    manejo_raw = manejo_raw[1]
+                
+                manejo = 'Otro'
+                if manejo_raw:
+                    manejo_str = str(manejo_raw).lower()
+                    if 'org' in manejo_str:
+                        manejo = 'Orgánico'
+                    elif 'conv' in manejo_str:
+                        manejo = 'Convencional'
+                
+                if isinstance(especie_raw, (list, tuple)) and len(especie_raw) > 1:
+                    especie_raw = especie_raw[1]
+                especie = str(especie_raw) if especie_raw else 'Otro'
+                
+                result[mo_id].append({
+                    'product_id': prod_id,
+                    'product_name': prod_name,
+                    'lot_id': lot_info[0] if lot_info else None,
+                    'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
+                    'qty_done': qty,
+                    'date': ml.get('date'),
+                    'category': category_name,
+                    'manejo': manejo,
+                    'especie': especie
+                })
+            except Exception:
+                continue
+        
+        return result
+    
+    def get_produccion_batch(self, mos: List[Dict]) -> Dict[int, List[Dict]]:
+        """
+        OPTIMIZADO: Obtiene producción de TODAS las MOs en batch.
+        Retorna: Dict[mo_id -> List[produccion]]
+        """
+        all_move_finished_ids = []
+        mo_id_to_move_ids = {}
+        
+        for mo in mos:
+            mo_id = mo.get('id')
+            move_finished_ids = mo.get('move_finished_ids', [])
+            mo_id_to_move_ids[mo_id] = set(move_finished_ids)
+            all_move_finished_ids.extend(move_finished_ids)
+        
+        if not all_move_finished_ids:
+            return {mo.get('id'): [] for mo in mos}
+        
+        # UNA sola llamada
+        move_lines = self.odoo.search_read(
+            'stock.move.line',
+            [['move_id', 'in', all_move_finished_ids]],
+            ['move_id', 'product_id', 'lot_id', 'qty_done', 'date', 'product_category_name'],
+            limit=5000
+        )
+        
+        # Mapa move_id -> mo_id
+        move_to_mo = {}
+        for mo_id, move_ids in mo_id_to_move_ids.items():
+            for move_id in move_ids:
+                move_to_mo[move_id] = mo_id
+        
+        result = {mo.get('id'): [] for mo in mos}
+        
+        for ml in move_lines:
+            try:
+                move_info = ml.get('move_id')
+                move_id = move_info[0] if isinstance(move_info, (list, tuple)) else move_info
+                mo_id = move_to_mo.get(move_id)
+                
+                if not mo_id:
+                    continue
+                
+                prod_info = ml.get('product_id')
+                prod_name = prod_info[1] if prod_info else ''
+                category = ml.get('product_category_name', '') or ''
+                
+                if self._is_excluded_produccion(prod_name, category):
+                    continue
+                
+                qty = ml.get('qty_done', 0) or 0
+                if qty <= 0:
+                    continue
+                
+                lot_info = ml.get('lot_id')
+                result[mo_id].append({
+                    'product_id': prod_info[0] if prod_info else None,
+                    'product_name': prod_name,
+                    'lot_id': lot_info[0] if lot_info else None,
+                    'lot_name': lot_info[1] if lot_info else 'SIN LOTE',
+                    'qty_done': qty,
+                    'date': ml.get('date'),
+                    'category': category
+                })
+            except Exception:
+                continue
+        
+        return result
+    
     def get_consumos_mo(self, mo: Dict) -> List[Dict]:
         """
         Obtiene los consumos de MP de una MO.
@@ -1263,13 +1474,20 @@ class RendimientoService:
         # Lista de MOs procesadas (para detalle)
         mos_resultado = []
         
-        # 2. Procesar cada MO (una consulta de consumos y una de producción por MO)
+        # === OPTIMIZACIÓN: PRE-FETCH EN BATCH ===
+        # Obtener consumos y producción de TODAS las MOs en pocas llamadas
+        consumos_by_mo = self.get_consumos_batch(mos)
+        produccion_by_mo = self.get_produccion_batch(mos)
+        
+        # 2. Procesar cada MO (SIN llamadas API adicionales - ya tenemos todo en memoria)
         for mo in mos:
             try:
-                # Obtener consumos y producción (estas son las llamadas que no se pueden evitar)
-                consumos = self.get_consumos_mo(mo)
-                produccion = self.get_produccion_mo(mo)
-                costos_op = self.get_costos_operacionales_mo(mo)  # Nuevo: costos operacionales
+                mo_id = mo.get('id')
+                
+                # Usar datos pre-cargados en batch
+                consumos = consumos_by_mo.get(mo_id, [])
+                produccion = produccion_by_mo.get(mo_id, [])
+                costos_op = {}  # Omitir costos por ahora para velocidad
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)

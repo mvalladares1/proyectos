@@ -10,11 +10,11 @@ import requests
 import streamlit as st
 from datetime import date, datetime
 
-from shared.auth import proteger_pagina, tiene_acceso_dashboard, get_credenciales
+from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales
 
 st.set_page_config(page_title="Finanzas", page_icon="💰", layout="wide")
 
-if not proteger_pagina():
+if not proteger_modulo("finanzas"):
     st.stop()
 
 if not tiene_acceso_dashboard("finanzas"):

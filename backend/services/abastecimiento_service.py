@@ -97,8 +97,13 @@ def _load_proyecciones_from_excel() -> pd.DataFrame:
     df = df.rename(columns={
         'Etiquetas de fila': 'productor',
         'PLANTA': 'planta',
-        'especie': 'especie'
+        'especie': 'especie',
+        'precio': 'precio'  # Añadir columna de precio
     })
+    
+    # Asegurar que existe columna precio (si no, crear con valor 0)
+    if 'precio' not in df.columns:
+        df['precio'] = 0
     
     # Filtrar filas con datos válidos
     df = df[df['productor'].notna() & (df['productor'] != '')]
@@ -114,7 +119,7 @@ def _load_proyecciones_from_excel() -> pd.DataFrame:
     df = df.rename(columns=rename_dict)
     
     # Hacer melt para convertir semanas a filas
-    id_vars = ['productor', 'planta', 'especie']
+    id_vars = ['productor', 'planta', 'especie', 'precio']  # Incluir precio en id_vars
     value_vars = [c for c in df.columns if c.isdigit()]
     
     df_long = df.melt(
@@ -272,3 +277,55 @@ def get_semanas_disponibles() -> List[int]:
     # Ordenar: 47-52 primero, luego 1-17
     semanas_ordenadas = sorted([s for s in semanas if s >= 47]) + sorted([s for s in semanas if s < 47])
     return semanas_ordenadas
+
+
+def get_precios_por_especie(
+    planta: Optional[List[str]] = None,
+    especie: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Obtiene precios proyectados por especie (precio único por especie).
+    El precio está asociado a cada fila del Excel y representa el precio por kg.
+    
+    Returns:
+        Lista de diccionarios con especie_base y precio_promedio
+    """
+    df = load_proyecciones_consolidado()
+    
+    # Aplicar filtros
+    if planta:
+        planta_upper = [p.upper() for p in planta]
+        df = df[df['planta'].isin(planta_upper)]
+    
+    if especie:
+        df = df[df['especie_manejo'].isin(especie)]
+    
+    # Convertir precio a float, reemplazar 0 por NaN para promediar mejor
+    df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
+    
+    # Agrupar por especie_base y obtener precio promedio (ponderado por kg)
+    # Precio = suma(precio * kg) / suma(kg)
+    df['precio_x_kg'] = df['precio'] * df['kg_proyectados']
+    
+    grouped = df.groupby('especie_base').agg({
+        'kg_proyectados': 'sum',
+        'precio_x_kg': 'sum'
+    }).reset_index()
+    
+    grouped['precio_promedio'] = grouped.apply(
+        lambda row: row['precio_x_kg'] / row['kg_proyectados'] if row['kg_proyectados'] > 0 else 0,
+        axis=1
+    )
+    
+    result = []
+    for _, row in grouped.iterrows():
+        if row['precio_promedio'] > 0:  # Solo incluir si hay precio
+            result.append({
+                'especie': row['especie_base'],
+                'precio_proyectado': round(float(row['precio_promedio']), 0),
+                'kg_total': float(row['kg_proyectados'])
+            })
+    
+    # Ordenar por kg total descendente
+    result.sort(key=lambda x: x['kg_total'], reverse=True)
+    return result

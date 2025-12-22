@@ -8,7 +8,7 @@ import httpx
 import pandas as pd
 import streamlit as st
 
-from shared.auth import es_admin, proteger_pagina, get_credenciales
+from shared.auth import es_admin, proteger_modulo, get_credenciales
 
 st.set_page_config(
     page_title="Permisos",
@@ -18,7 +18,7 @@ st.set_page_config(
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
-if not proteger_pagina():
+if not proteger_modulo("permisos"):
     st.stop()
 
 if not es_admin():
