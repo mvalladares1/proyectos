@@ -1584,42 +1584,6 @@ with tab_curva:
                     )
                     df_precios_full['kg_proyectados'] = df_precios_full['kg_proyectados'].fillna(0)
                     
-                    # ============ GRÁFICO DE VOLUMEN PROYECTADO VS RECEPCIONADO ============
-                    st.markdown("#### 📊 Volumen Proyectado vs Recepcionado por Semana")
-                    
-                    # Melt para formato largo
-                    df_vol_melt = df_precios_full.melt(
-                        id_vars=['semana', 'semana_label', 'sort_key'],
-                        value_vars=['kg_proyectados', 'kg_recepcionado'],
-                        var_name='Tipo',
-                        value_name='Kg'
-                    )
-                    df_vol_melt['Tipo'] = df_vol_melt['Tipo'].replace({
-                        'kg_proyectados': 'Proyectado',
-                        'kg_recepcionado': 'Recepcionado'
-                    })
-                    
-                    vol_chart = alt.Chart(df_vol_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                        x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
-                        y=alt.Y('Kg:Q', title='Kilogramos', axis=alt.Axis(format=',.0f')),
-                        color=alt.Color('Tipo:N', 
-                            scale=alt.Scale(
-                                domain=['Proyectado', 'Recepcionado'],
-                                range=['#3498db', '#2ecc71']
-                            ),
-                            legend=alt.Legend(title="Tipo", orient="top")
-                        ),
-                        xOffset='Tipo:N',
-                        tooltip=[
-                            alt.Tooltip('semana_label:N', title='Semana'),
-                            alt.Tooltip('Tipo:N', title='Tipo'),
-                            alt.Tooltip('Kg:Q', title='Kilogramos', format=',.0f')
-                        ]
-                    ).properties(
-                        height=300
-                    )
-                    st.altair_chart(vol_chart, use_container_width=True)
-                    
                     # ============ GRÁFICO DE GASTO PROYECTADO VS RECEPCIONADO ============
                     st.markdown("#### 💵 Gasto Proyectado vs Recepcionado por Semana")
                     
