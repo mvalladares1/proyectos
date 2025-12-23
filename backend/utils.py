@@ -11,6 +11,7 @@ def clean_record(record: Dict) -> Dict:
     
     Convierte:
     - Relaciones many2one: (id, nombre) -> {"id": id, "name": nombre}
+      IMPORTANTE: Solo si el segundo elemento es string (nombre), no int
     - Relaciones many2many/one2many: [id1, id2, ...] -> se mantienen como lista
     
     Args:
@@ -24,11 +25,11 @@ def clean_record(record: Dict) -> Dict:
     
     cleaned = {}
     for key, value in record.items():
-        if isinstance(value, (list, tuple)) and len(value) == 2 and isinstance(value[0], int):
-            # Es una relación many2one: (id, nombre)
+        # Many2one: exactamente 2 elementos, primero int (ID), segundo string (nombre)
+        if isinstance(value, (list, tuple)) and len(value) == 2 and isinstance(value[0], int) and isinstance(value[1], str):
             cleaned[key] = {"id": value[0], "name": value[1]}
-        elif isinstance(value, list) and value and isinstance(value[0], int):
-            # Es una relación many2many o one2many: [id1, id2, ...]
+        elif isinstance(value, list) and value and all(isinstance(x, int) for x in value):
+            # Es una relación many2many o one2many: [id1, id2, ...] - mantener como lista
             cleaned[key] = value
         else:
             cleaned[key] = value
