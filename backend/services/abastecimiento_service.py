@@ -290,11 +290,11 @@ def get_precios_por_especie(
     especie: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     """
-    Obtiene precios proyectados por especie (precio único por especie).
+    Obtiene precios proyectados por especie y manejo (precio único por combinación).
     El precio está asociado a cada fila del Excel y representa el precio por kg.
     
     Returns:
-        Lista de diccionarios con especie_base y precio_promedio
+        Lista de diccionarios con especie_manejo y precio_promedio
     """
     df = load_proyecciones_consolidado()
     
@@ -309,11 +309,12 @@ def get_precios_por_especie(
     # Convertir precio a float, reemplazar 0 por NaN para promediar mejor
     df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
     
-    # Agrupar por especie_base y obtener precio promedio (ponderado por kg)
+    # Agrupar por especie_manejo (incluye tipo fruta + manejo) y obtener precio promedio (ponderado por kg)
     # Precio = suma(precio * kg) / suma(kg)
     df['precio_x_kg'] = df['precio'] * df['kg_proyectados']
     
-    grouped = df.groupby('especie_base').agg({
+    # Agrupar por especie_manejo para tener precios específicos por manejo
+    grouped = df.groupby('especie_manejo').agg({
         'kg_proyectados': 'sum',
         'precio_x_kg': 'sum'
     }).reset_index()
@@ -327,7 +328,7 @@ def get_precios_por_especie(
     for _, row in grouped.iterrows():
         if row['precio_promedio'] > 0:  # Solo incluir si hay precio
             result.append({
-                'especie': row['especie_base'],
+                'especie': row['especie_manejo'],  # Ahora incluye manejo
                 'precio_proyectado': round(float(row['precio_promedio']), 0),
                 'kg_total': float(row['kg_proyectados'])
             })
