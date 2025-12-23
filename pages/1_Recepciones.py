@@ -366,6 +366,11 @@ with tab_kpis:
         
             for tipo in sorted(agrup.keys(), key=lambda t: sum(m['kg'] for m in agrup[t].values()), reverse=True):
                 tipo_kg = sum(m['kg'] for m in agrup[tipo].values())
+                
+                # Omitir tipos de fruta sin kg recepcionados
+                if tipo_kg <= 0:
+                    continue
+                    
                 tipo_costo = sum(m['costo'] for m in agrup[tipo].values())
                 tipo_costo_prom = tipo_costo / tipo_kg if tipo_kg > 0 else 0
                 total_kg_tabla += tipo_kg
