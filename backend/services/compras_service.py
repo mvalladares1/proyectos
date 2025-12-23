@@ -657,14 +657,14 @@ class ComprasService:
                     moves = self.odoo.search_read(
                         'stock.move',
                         [['picking_id', 'in', picking_ids]],
-                        ['id', 'picking_id', 'product_id', 'product_uom_qty', 'quantity', 'price_unit', 'purchase_line_id'],
+                        ['id', 'picking_id', 'product_id', 'product_uom_qty', 'quantity_done', 'price_unit', 'purchase_line_id'],
                         limit=5000
                     )
                     
                     # Procesar cada move y calcular el valor pendiente
                     for move in moves:
                         qty_demand = float(move.get('product_uom_qty') or 0)
-                        qty_done = float(move.get('quantity') or 0)
+                        qty_done = float(move.get('quantity_done') or 0)
                         price_unit = float(move.get('price_unit') or 0)
                         
                         # Solo considerar si hay demanda sin completar
