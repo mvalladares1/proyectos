@@ -1431,6 +1431,63 @@ with tab_curva:
             else:
                 df_chart['kg_sistema'] = 0
             
+            # ============ OBTENER DATOS DEL AÑO ANTERIOR ============
+            # Calcular fechas del año anterior (temporada 2023-2024)
+            kg_anterior_por_semana = {}
+            try:
+                # Rango de fechas de la temporada anterior (un año antes)
+                from datetime import timedelta
+                fecha_inicio_anterior = datetime(2023, 11, 18)  # Inicio temporada 2023-2024
+                fecha_fin_anterior = datetime(2024, 4, 30)  # Fin temporada 2023-2024
+                
+                # Llamar a la API para obtener datos del año anterior
+                params_anterior = {
+                    "fecha_inicio": fecha_inicio_anterior.strftime("%Y-%m-%d"),
+                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d"),
+                    "origen": plantas_usadas if plantas_usadas else None
+                }
+                resp_anterior = requests.get(
+                    f"{API_URL}/api/v1/recepciones-mp/",
+                    params={k: v for k, v in params_anterior.items() if v is not None},
+                    timeout=60
+                )
+                
+                if resp_anterior.status_code == 200:
+                    recepciones_anterior = resp_anterior.json()
+                    
+                    for rec in recepciones_anterior:
+                        fecha_str = rec.get('fecha')
+                        if not fecha_str:
+                            continue
+                        try:
+                            fecha_dt = pd.to_datetime(fecha_str)
+                            semana = fecha_dt.isocalendar().week
+                        except:
+                            continue
+                        
+                        # Procesar productos
+                        productos = rec.get('productos', []) or []
+                        for p in productos:
+                            categoria = (p.get('Categoria') or '').strip().upper()
+                            if 'BANDEJ' in categoria:
+                                continue
+                            
+                            kg_hechos = p.get('Kg Hechos', 0) or 0
+                            if kg_hechos <= 0:
+                                continue
+                            
+                            # Acumular por semana
+                            if semana not in kg_anterior_por_semana:
+                                kg_anterior_por_semana[semana] = 0
+                            kg_anterior_por_semana[semana] += kg_hechos
+            except Exception as e:
+                print(f"Error obteniendo datos del año anterior: {e}")
+            
+            # Agregar columna de año anterior al df_chart
+            df_chart['kg_anterior'] = df_chart['semana'].apply(
+                lambda s: kg_anterior_por_semana.get(s, 0)
+            )
+            
             # Ordenar por semana
             df_chart['sort_key'] = df_chart['semana'].apply(lambda x: x if x >= 47 else x + 100)
             df_chart = df_chart.sort_values('sort_key')
@@ -1444,29 +1501,31 @@ with tab_curva:
                 st.warning("No hay datos en el rango de semanas seleccionado.")
             
             if not df_chart.empty:
-                # Melt para formato largo
+                # Melt para formato largo (ahora con 3 tipos)
                 df_melt = df_chart.melt(
                     id_vars=['semana', 'semana_label', 'sort_key'],
-                    value_vars=['kg_proyectados', 'kg_sistema'],
+                    value_vars=['kg_anterior', 'kg_proyectados', 'kg_sistema'],
                     var_name='Tipo',
                     value_name='Kg'
                 )
                 df_melt['Tipo'] = df_melt['Tipo'].replace({
+                    'kg_anterior': 'Año Anterior',
                     'kg_proyectados': 'Proyectado',
                     'kg_sistema': 'Recepcionado'
                 })
                 
+                # Orden específico para las barras: Año Anterior (naranjo) | Proyectado (azul) | Recepcionado (verde)
                 chart = alt.Chart(df_melt).mark_bar(opacity=0.85, cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
                     x=alt.X('semana_label:N', title='Semana', sort=alt.SortField('sort_key')),
                     y=alt.Y('Kg:Q', title='Kilogramos', axis=alt.Axis(format=',.0f')),
                     color=alt.Color('Tipo:N', 
                         scale=alt.Scale(
-                            domain=['Proyectado', 'Recepcionado'],
-                            range=['#3498db', '#2ecc71']
+                            domain=['Año Anterior', 'Proyectado', 'Recepcionado'],
+                            range=['#e67e22', '#3498db', '#2ecc71']  # Naranjo, Azul, Verde
                         ),
                         legend=alt.Legend(title="Tipo", orient="top")
                     ),
-                    xOffset='Tipo:N',
+                    xOffset=alt.XOffset('Tipo:N', sort=['Año Anterior', 'Proyectado', 'Recepcionado']),
                     tooltip=[
                         alt.Tooltip('semana_label:N', title='Semana'),
                         alt.Tooltip('Tipo:N', title='Tipo'),
@@ -1475,7 +1534,7 @@ with tab_curva:
                 ).properties(
                     height=350,
                     title=alt.TitleParams(
-                        text='Kg Proyectados vs Recepcionados por Semana',
+                        text='Kg Proyectados vs Recepcionados por Semana (incluye Año Anterior)',
                         fontSize=16,
                         anchor='start'
                     )
@@ -1489,21 +1548,24 @@ with tab_curva:
                 
                 st.altair_chart(chart, use_container_width=True)
                 
-                # Sumatoria del gráfico de volumen
+                # Sumatoria del gráfico de volumen (ahora con 5 métricas)
+                total_kg_anterior = df_chart['kg_anterior'].sum()
                 total_kg_proy_vol = df_chart['kg_proyectados'].sum()
                 total_kg_recep_vol = df_chart['kg_sistema'].sum()
                 diff_kg = total_kg_proy_vol - total_kg_recep_vol
                 cumplimiento_kg = (total_kg_recep_vol / total_kg_proy_vol * 100) if total_kg_proy_vol > 0 else 0
                 
-                vol_cols = st.columns(4)
+                vol_cols = st.columns(5)
                 with vol_cols[0]:
-                    st.metric("📦 Total Kg Proyectados", fmt_numero(total_kg_proy_vol, 0))
+                    st.metric("🟠 Año Anterior", fmt_numero(total_kg_anterior, 0))
                 with vol_cols[1]:
-                    st.metric("✅ Total Kg Recepcionados", fmt_numero(total_kg_recep_vol, 0))
+                    st.metric("📦 Total Kg Proyectados", fmt_numero(total_kg_proy_vol, 0))
                 with vol_cols[2]:
+                    st.metric("✅ Total Kg Recepcionados", fmt_numero(total_kg_recep_vol, 0))
+                with vol_cols[3]:
                     delta_color = "normal" if diff_kg >= 0 else "inverse"
                     st.metric("📊 Diferencia", fmt_numero(abs(diff_kg), 0), delta=f"{'Falta' if diff_kg > 0 else 'Exceso'}", delta_color=delta_color)
-                with vol_cols[3]:
+                with vol_cols[4]:
                     st.metric("📈 Cumplimiento", f"{fmt_numero(cumplimiento_kg, 1)}%")
             
             # ============ GRÁFICO DE PRECIOS POR SEMANA ============
