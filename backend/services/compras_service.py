@@ -570,22 +570,11 @@ class ComprasService:
                 limit=5000
             )
             
-            # DEBUG: Log para ver qué datos vienen
-            print(f"[DEBUG LINEAS CREDITO] Encontradas {len(po_lines)} líneas de OC")
-            
             # Procesar cada línea y calcular el valor pendiente
             for line in po_lines:
                 qty_received = float(line.get('qty_received') or 0)
                 qty_invoiced = float(line.get('qty_invoiced') or 0)
                 price_unit = float(line.get('price_unit') or 0)
-                
-                # DEBUG para ver los valores
-                if qty_received > 0:
-                    order_info = line.get('order_id')
-                    oc_id = order_info[0] if isinstance(order_info, (list, tuple)) else order_info
-                    oc_data = oc_info_map.get(oc_id, {})
-                    oc_name = oc_data.get('name', 'N/A')
-                    print(f"[DEBUG] Línea OC {oc_name}: qty_recv={qty_received}, qty_inv={qty_invoiced}, pendiente={qty_received - qty_invoiced}")
                 
                 # Solo considerar si hay recepción sin facturar
                 qty_pendiente = qty_received - qty_invoiced

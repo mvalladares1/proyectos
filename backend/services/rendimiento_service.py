@@ -474,7 +474,81 @@ class RendimientoService:
         
         return result
     
+    def get_costos_operacionales_batch(self, mos: List[Dict]) -> Dict[int, Dict]:
+        """
+        OPTIMIZADO: Obtiene costos operacionales de TODAS las MOs en batch.
+        Reduce llamadas API de N a 1.
+        
+        Retorna: Dict[mo_id -> {'costo_electricidad': float, 'otros_costos': float}]
+        """
+        # Recolectar todos los move_raw_ids
+        all_move_raw_ids = []
+        mo_id_to_move_ids = {}
+        
+        for mo in mos:
+            mo_id = mo.get('id')
+            move_raw_ids = mo.get('move_raw_ids', [])
+            mo_id_to_move_ids[mo_id] = set(move_raw_ids)
+            all_move_raw_ids.extend(move_raw_ids)
+        
+        # Inicializar resultado con valores por defecto
+        result = {mo.get('id'): {'costo_electricidad': 0.0, 'otros_costos': 0.0} for mo in mos}
+        
+        if not all_move_raw_ids:
+            return result
+        
+        # UNA sola llamada para obtener TODOS los movimientos
+        try:
+            moves = self.odoo.search_read(
+                'stock.move',
+                [['id', 'in', all_move_raw_ids]],
+                ['id', 'product_id', 'product_uom_qty', 'quantity_done', 'price_unit'],
+                limit=10000
+            )
+        except Exception:
+            return result
+        
+        # Crear mapa move_id -> mo_id
+        move_to_mo = {}
+        for mo_id, move_ids in mo_id_to_move_ids.items():
+            for move_id in move_ids:
+                move_to_mo[move_id] = mo_id
+        
+        # Procesar cada movimiento y acumular costos por MO
+        for move in moves:
+            try:
+                move_id = move.get('id')
+                mo_id = move_to_mo.get(move_id)
+                
+                if not mo_id:
+                    continue
+                
+                prod = move.get('product_id')
+                prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
+                
+                if not self._is_operational_cost(prod_name):
+                    continue
+                
+                qty = move.get('quantity_done', 0) or 0
+                price = move.get('price_unit', 0) or 0
+                costo = qty * price
+                
+                if 'electricidad' in prod_name.lower() or 'túnel' in prod_name.lower():
+                    result[mo_id]['costo_electricidad'] += costo
+                else:
+                    result[mo_id]['otros_costos'] += costo
+            except Exception:
+                continue
+        
+        # Redondear resultados
+        for mo_id in result:
+            result[mo_id]['costo_electricidad'] = round(result[mo_id]['costo_electricidad'], 2)
+            result[mo_id]['otros_costos'] = round(result[mo_id]['otros_costos'], 2)
+        
+        return result
+
     def get_consumos_mo(self, mo: Dict) -> List[Dict]:
+
         """
         Obtiene los consumos de MP de una MO.
         Incluye campos x_studio_categora_tipo_manejo (Org/Conv) y x_studio_sub_categora (especie).
@@ -1488,9 +1562,10 @@ class RendimientoService:
         mos_resultado = []
         
         # === OPTIMIZACIÓN: PRE-FETCH EN BATCH ===
-        # Obtener consumos y producción de TODAS las MOs en pocas llamadas
+        # Obtener consumos, producción y costos operacionales de TODAS las MOs en pocas llamadas
         consumos_by_mo = self.get_consumos_batch(mos)
         produccion_by_mo = self.get_produccion_batch(mos)
+        costos_op_by_mo = self.get_costos_operacionales_batch(mos)
         
         # 2. Procesar cada MO (SIN llamadas API adicionales - ya tenemos todo en memoria)
         for mo in mos:
@@ -1501,8 +1576,9 @@ class RendimientoService:
                 consumos = consumos_by_mo.get(mo_id, [])
                 produccion = produccion_by_mo.get(mo_id, [])
                 
-                # Obtener costos operacionales (electricidad)
-                costos_op = self.get_costos_operacionales_mo(mo)
+                # Obtener costos operacionales pre-cargados (electricidad)
+                costos_op = costos_op_by_mo.get(mo_id, {'costo_electricidad': 0, 'otros_costos': 0})
+
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
