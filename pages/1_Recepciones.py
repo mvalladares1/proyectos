@@ -1441,9 +1441,13 @@ with tab_curva:
                 fecha_fin_anterior = datetime(2024, 4, 30)  # Fin temporada 2023-2024
                 
                 # Llamar a la API para obtener datos del año anterior SIN filtros de planta
+                # IMPORTANTE: Incluir username y password que son requeridos por el endpoint
                 params_anterior = {
+                    "username": username,
+                    "password": password,
                     "fecha_inicio": fecha_inicio_anterior.strftime("%Y-%m-%d"),
-                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d")
+                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d"),
+                    "solo_hechas": True
                     # NO usar filtro de origen para que traiga todos los datos
                 }
                 resp_anterior = requests.get(
