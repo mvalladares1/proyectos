@@ -426,6 +426,34 @@ with tab_kpis:
         
             # Crear DataFrame
             df_resumen = pd.DataFrame(tabla_rows)
+            
+            # Calcular desviación de precio: (Costo/Kg - Precio Proy) / Precio Proy * 100
+            def calcular_desviacion(row):
+                costo_kg = row.get('Costo/Kg', 0) or 0
+                precio_proy = row.get('Precio Proy', 0) or 0
+                if precio_proy > 0 and costo_kg > 0:
+                    desv = ((costo_kg - precio_proy) / precio_proy) * 100
+                    return round(desv, 1)
+                return None
+            
+            df_resumen['Desv_Num'] = df_resumen.apply(calcular_desviacion, axis=1)
+            
+            # Formatear desviación con colores (emoji + texto)
+            def formatear_desviacion(desv):
+                if desv is None or pd.isna(desv):
+                    return "—"
+                if desv <= 0:
+                    # Pagando MENOS que lo proyectado = Favorable
+                    return f"✓ {abs(desv):.1f}%"
+                elif desv <= 3:
+                    # 1-3%: Verde
+                    return f"🟢 +{desv:.1f}%"
+                elif desv <= 8:
+                    # 3-8%: Amarillo
+                    return f"🟡 +{desv:.1f}%"
+                else:
+                    # >8%: Rojo
+                    return f"🔴 +{desv:.1f}%"
         
             # Formatear para mostrar (formato chileno: punto miles, coma decimal)
             df_display = df_resumen.copy()
@@ -433,11 +461,12 @@ with tab_kpis:
             df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: fmt_dinero(x) if pd.notna(x) else "—")
             df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
             df_display['Precio Proy'] = df_display['Precio Proy'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
+            df_display['% Desv'] = df_display['Desv_Num'].apply(formatear_desviacion)
             df_display['% IQF'] = df_display['% IQF'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
             df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
         
             # Mostrar usando columnas estilizadas
-            df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% IQF', '% Block']]
+            df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% Desv', '% IQF', '% Block']]
         
             # Usar st.dataframe con column_config para mejor visualización
             st.dataframe(
@@ -450,9 +479,19 @@ with tab_kpis:
                     'Costo Total': st.column_config.TextColumn('Costo Total', width='medium'),
                     'Costo/Kg': st.column_config.TextColumn('$/Kg', width='small'),
                     'Precio Proy': st.column_config.TextColumn('$/Kg Proy', width='small'),
+                    '% Desv': st.column_config.TextColumn('Desv Precio', width='small'),
                     '% IQF': st.column_config.TextColumn('% IQF', width='small'),
                     '% Block': st.column_config.TextColumn('% Block', width='small'),
                 }
+            )
+            
+            # Leyenda de colores para desviación de precio
+            st.caption(
+                "**Leyenda Desv Precio:** "
+                "✓ Favorable (pagando menos) · "
+                "🟢 +1% a +3% · "
+                "🟡 +3% a +8% · "
+                "🔴 >+8% sobre precio proyectado"
             )
 
         # --- Botones de descarga de informe PDF ---
