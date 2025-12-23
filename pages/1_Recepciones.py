@@ -1433,27 +1433,28 @@ with tab_curva:
             
             # ============ OBTENER DATOS DEL AÑO ANTERIOR ============
             # Calcular fechas del año anterior (temporada 2023-2024)
+            # IMPORTANTE: Esta consulta es INDEPENDIENTE de los filtros superiores
             kg_anterior_por_semana = {}
             try:
                 # Rango de fechas de la temporada anterior (un año antes)
-                from datetime import timedelta
                 fecha_inicio_anterior = datetime(2023, 11, 18)  # Inicio temporada 2023-2024
                 fecha_fin_anterior = datetime(2024, 4, 30)  # Fin temporada 2023-2024
                 
-                # Llamar a la API para obtener datos del año anterior
+                # Llamar a la API para obtener datos del año anterior SIN filtros de planta
                 params_anterior = {
                     "fecha_inicio": fecha_inicio_anterior.strftime("%Y-%m-%d"),
-                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d"),
-                    "origen": plantas_usadas if plantas_usadas else None
+                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d")
+                    # NO usar filtro de origen para que traiga todos los datos
                 }
                 resp_anterior = requests.get(
                     f"{API_URL}/api/v1/recepciones-mp/",
-                    params={k: v for k, v in params_anterior.items() if v is not None},
+                    params=params_anterior,
                     timeout=60
                 )
                 
                 if resp_anterior.status_code == 200:
                     recepciones_anterior = resp_anterior.json()
+                    print(f"DEBUG: Recepciones año anterior: {len(recepciones_anterior)} registros")
                     
                     for rec in recepciones_anterior:
                         fecha_str = rec.get('fecha')
@@ -1480,6 +1481,11 @@ with tab_curva:
                             if semana not in kg_anterior_por_semana:
                                 kg_anterior_por_semana[semana] = 0
                             kg_anterior_por_semana[semana] += kg_hechos
+                    
+                    print(f"DEBUG: Semanas con datos del año anterior: {list(kg_anterior_por_semana.keys())}")
+                    print(f"DEBUG: Total kg año anterior: {sum(kg_anterior_por_semana.values())}")
+                else:
+                    print(f"DEBUG: Error en API año anterior: {resp_anterior.status_code}")
             except Exception as e:
                 print(f"Error obteniendo datos del año anterior: {e}")
             
