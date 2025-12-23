@@ -69,7 +69,11 @@ def _auto_fit_columns(ws):
 
 def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, fecha_fin: str,
                                include_prev_week: bool = False, include_month_accum: bool = False,
-                               solo_hechas: bool = True) -> bytes:
+                               solo_hechas: bool = True,
+                               filter_tipo_fruta: List[str] = None,
+                               filter_clasificacion: List[str] = None,
+                               filter_manejo: List[str] = None,
+                               filter_productor: List[str] = None) -> bytes:
     """Genera un Excel con detalle de recepciones y productos desglosados.
 
     Retorna bytes del archivo .xlsx listo para enviar por StreamingResponse.
@@ -90,7 +94,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
 
     recepciones_all = get_recepciones_mp(username, password, fetch_start.isoformat(), f_fin.isoformat(), solo_hechas=solo_hechas)
 
-    # Helper to filter by date portion (compatible con formatos ISO y strings)
+    # Helper to filter by date portion
     def _in_range(r, start_date: date, end_date: date) -> bool:
         try:
             rd = datetime.fromisoformat(r.get('fecha')).date()
@@ -101,7 +105,43 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
                 return False
         return start_date <= rd <= end_date
 
-    recepciones_main = [r for r in recepciones_all if _in_range(r, f_inicio, f_fin)]
+    # Helper para verificar manejo en lista de productos (para filtado nivel recepción si aplica)
+    # Pero los filtros de manejo y tipo fruta aplican más estrictamente a nivel de fila de producto
+    
+    # 1. Filtrar RECEPCIONES por Productor y Clasificación
+    recepciones_main = []
+    for r in recepciones_all:
+        if not _in_range(r, f_inicio, f_fin):
+            continue
+            
+        # Filtro Productor
+        if filter_productor and r.get('productor') not in filter_productor:
+            continue
+            
+        # Filtro Clasificación
+        if filter_clasificacion and r.get('calific_final') not in filter_clasificacion:
+            continue
+            
+        # Si hay filtros de producto, verificamos si la recepción contiene AL MENOS UN producto válido
+        # para decidir si incluirla (aunque el filtrado fino se hace al escribir filas)
+        if filter_tipo_fruta or filter_manejo:
+            has_valid_prod = False
+            for p in r.get('productos', []) or []:
+                tf = (p.get('TipoFruta') or r.get('tipo_fruta') or '').strip()
+                if filter_tipo_fruta and tf not in filter_tipo_fruta:
+                    continue
+                
+                man = (p.get('Manejo') or '').strip()
+                if filter_manejo and man not in filter_manejo:
+                    continue
+                
+                has_valid_prod = True
+                break
+            
+            if not has_valid_prod:
+                continue
+        
+        recepciones_main.append(r)
 
     wb = Workbook()
     ws = wb.active
@@ -135,25 +175,36 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
         if not productos:
             # Solo agregar si hay kg recepcionados
             kg_rec = r.get('kg_recepcionados', 0) or 0
-            if kg_rec > 0:
-                ws.append([albaran, fecha, productor, tipo_fruta, oc_asociada, guia, '', '', '', '', kg_rec, '', '', '', calific, pct_iqf, pct_block])
+            # Solo si pasa filtros de producto vacíos (o se asume válido si no hay productos pero pasó el filtro de recepción)
+            # Como filtramos recepciones_main antes, si estamos aquí es porque la recepción es válida
+            # Pero si hay filtro estricto de tipo fruta y la recepción no tiene productos, ¿qué hacemos?
+            # Asumimos que si filter_tipo_fruta está activo, requerimos match explicito.
+            if kg_rec > 0 and not filter_tipo_fruta and not filter_manejo:
+                 ws.append([albaran, fecha, productor, tipo_fruta, oc_asociada, guia, '', '', '', '', kg_rec, '', '', '', calific, pct_iqf, pct_block])
         else:
             for p in productos:
                 kg_hechos = p.get('Kg Hechos', 0) or 0
                 # Ignorar productos con 0 kg
                 if kg_hechos <= 0:
                     continue
+                
+                # Usar TipoFruta del producto, fallback a tipo_fruta de la recepción
+                tipo_fruta_prod = (p.get('TipoFruta') or tipo_fruta or '').strip()
+                manejo = (p.get('Manejo') or '').strip()
+                
+                # --- FILTROS DE PRODUCTO ---
+                if filter_tipo_fruta and tipo_fruta_prod not in filter_tipo_fruta:
+                    continue
+                if filter_manejo and manejo not in filter_manejo:
+                    continue
+                # ---------------------------
                     
                 prod_name = p.get('Producto', '')
                 categoria = p.get('Categoria', '')
-                manejo = p.get('Manejo', '')
                 uom = p.get('UOM', '')
                 costo_unit = p.get('Costo Unitario', 0) or 0
                 costo_total = p.get('Costo Total', 0) or 0
                 bandejas_units = kg_hechos if (categoria or '').upper() == 'BANDEJAS' else ''
-                
-                # Usar TipoFruta del producto, fallback a tipo_fruta de la recepción
-                tipo_fruta_prod = (p.get('TipoFruta') or tipo_fruta or '').strip()
                 
                 ws.append([
                     albaran, fecha, productor, tipo_fruta_prod, oc_asociada, guia,
@@ -198,7 +249,15 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
     # Aggregate by tipo_fruta del PRODUCTO (no de la recepción)
     agrup = {}
     for r in recepciones_main:
+        # Nota: recepciones_main ya tiene filtros de Productor y Clasificación aplicados
         tipo_fruta_rec = (r.get('tipo_fruta') or '').strip()
+        
+        # Verificar si la recepción tiene productos válidos después de filtros (para conteo de recepciones)
+        # Esto es complejo porque una recepción puede tener mix de productos validos e invalidos.
+        # Contaremos recepción si al menos un producto contribuyó al resumen de ese tipo.
+        
+        products_contrib = set() # Tipos de fruta a los que esta recepción contribuyó
+        
         for p in r.get('productos', []) or []:
             cat = (p.get('Categoria') or '').upper()
             if cat == 'BANDEJAS':
@@ -211,30 +270,41 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
                 
             # Usar TipoFruta del producto, fallback a tipo_fruta de la recepción
             tipo = (p.get('TipoFruta') or tipo_fruta_rec or '').strip()
+            manejo = (p.get('Manejo') or '').strip()
+            
+            # --- FILTROS DE PRODUCTO ---
+            if filter_tipo_fruta and tipo not in filter_tipo_fruta:
+                continue
+            if filter_manejo and manejo not in filter_manejo:
+                continue
+            # ---------------------------
+            
             if not tipo:
                 tipo = 'SIN_TIPO'
             
             if tipo not in agrup:
-                agrup[tipo] = {'kg': 0.0, 'costo': 0.0, 'n': 0}
+                agrup[tipo] = {'kg': 0.0, 'costo': 0.0, 'recepciones_ids': set()}
             
             agrup[tipo]['kg'] += kg
             agrup[tipo]['costo'] += p.get('Costo Total', 0) or 0
-            agrup[tipo]['n'] += 1
+            agrup[tipo]['recepciones_ids'].add(r.get('name')) # Usar nombre o ID único para contar
 
     for tipo, vals in sorted(agrup.items(), key=lambda x: x[0]):
         kg = vals['kg']
         costo = vals['costo']
+        n_recep = len(vals['recepciones_ids'])
         costo_prom = (costo / kg) if kg > 0 else None
-        summary.append([tipo, kg, costo, costo_prom if costo_prom is not None else ''])
+        summary.append([tipo, kg, costo, costo_prom if costo_prom is not None else '', n_recep])
 
     # Format summary numeric columns
-    for row in summary.iter_rows(min_row=2, min_col=1, max_col=4):
+    for row in summary.iter_rows(min_row=2, min_col=1, max_col=5):
         row[1].number_format = '#,##0.00'  # Kg
         row[2].number_format = '[$$-en-US]#,##0'  # costo total
         try:
             row[3].number_format = '[$$-en-US]#,##0.00'
         except Exception:
             pass
+        row[4].number_format = '#,##0' # N recepciones
 
     _auto_fit_columns(summary)
 
