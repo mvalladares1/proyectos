@@ -118,6 +118,36 @@ def format_num(val, decimals=2):
     except:
         return str(val)
 
+# Función para detectar planta desde nombre de MO
+def detectar_planta(mo_name):
+    """Detecta la planta basándose en el prefijo del nombre de la MO.
+    RF/MO/... = RFP (default), VLK/... = VILKUN
+    """
+    if not mo_name:
+        return "RFP"  # Default
+    mo_upper = str(mo_name).upper()
+    if mo_upper.startswith("VLK"):
+        return "VILKUN"
+    return "RFP"
+
+def filtrar_mos_por_planta(lista_mos, filtro_rfp, filtro_vilkun):
+    """Filtra una lista de MOs por planta basándose en el nombre de la MO."""
+    if filtro_rfp and filtro_vilkun:
+        return lista_mos  # Mostrar todo
+    if not filtro_rfp and not filtro_vilkun:
+        return []  # No mostrar nada
+    
+    resultado = []
+    for item in lista_mos:
+        mo_name = item.get('mo_name') or item.get('name') or ''
+        planta = detectar_planta(mo_name)
+        
+        if planta == "RFP" and filtro_rfp:
+            resultado.append(item)
+        elif planta == "VILKUN" and filtro_vilkun:
+            resultado.append(item)
+    return resultado
+
 # ============================================
 # FUNCIONES DE GRÁFICOS
 # ============================================
@@ -440,6 +470,14 @@ with tab_general:
         help="Activa para ver solo OFs completadas. Desactiva para incluir todas."
     )
     
+    # Filtro de Planta (RFP / VILKUN)
+    st.markdown("**🏭 Filtro de Planta**")
+    col_planta1, col_planta2 = st.columns(2)
+    with col_planta1:
+        filtro_rfp_prod = st.checkbox("RFP", value=True, key="prod_rfp")
+    with col_planta2:
+        filtro_vilkun_prod = st.checkbox("VILKUN", value=True, key="prod_vilkun")
+    
     if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria"):
         with st.spinner("Cargando datos de rendimiento (optimizado - 1 consulta)..."):
             fi = fecha_inicio_rep.strftime("%Y-%m-%d")
@@ -458,7 +496,21 @@ with tab_general:
     data = dashboard.get('overview') if dashboard else None
     consolidado = dashboard.get('consolidado') if dashboard else None
     salas = dashboard.get('salas') if dashboard else None
-    mos = dashboard.get('mos') if dashboard else None
+    mos_original = dashboard.get('mos') if dashboard else None
+    
+    # === APLICAR FILTRO DE PLANTA A MOs ===
+    if mos_original:
+        mos = filtrar_mos_por_planta(mos_original, filtro_rfp_prod, filtro_vilkun_prod)
+        # Mostrar cuántas se filtró
+        if len(mos) != len(mos_original):
+            plantas_activas = []
+            if filtro_rfp_prod:
+                plantas_activas.append("RFP")
+            if filtro_vilkun_prod:
+                plantas_activas.append("VILKUN")
+            st.info(f"🏭 Mostrando {len(mos)} de {len(mos_original)} fabricaciones ({', '.join(plantas_activas)})")
+    else:
+        mos = None
     
     if data:
         st.markdown("---")

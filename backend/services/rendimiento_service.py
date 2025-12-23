@@ -57,19 +57,32 @@ class RendimientoService:
     TUNNEL_KEYWORDS = ['tunel', 'túnel', 'estatico', 'estático', 'congelado', 'tunnel']
     
     @classmethod
-    def get_sala_tipo(cls, sala_name: str) -> str:
+    def get_sala_tipo(cls, sala_name: str, product_name: str = None) -> str:
         """
-        Clasifica una sala como PROCESO o CONGELADO.
+        Clasifica una MO como PROCESO o CONGELADO.
         
         PROCESO = Salas de vaciado, líneas retail/granel (generan merma)
         CONGELADO = Túneles estáticos (solo congelan, ~100% rendimiento)
+        
+        La clasificación se hace por:
+        1. Nombre de la sala (x_studio_sala_de_proceso)
+        2. Nombre del producto (si contiene keywords de congelado)
         """
-        if not sala_name:
+        # Prioridad 1: Verificar nombre del producto
+        if product_name:
+            prod_lower = product_name.lower()
+            # Si el producto contiene palabras clave de congelado/túnel
+            if any(keyword in prod_lower for keyword in ['túnel', 'tunel', 'congelado túnel', 'tunnel', 'estatico', 'estático', 'cámara']):
+                return 'CONGELADO'
+        
+        # Prioridad 2: Verificar sala
+        if not sala_name or sala_name == 'Sin Sala':
+            # Si no tiene sala pero el producto indica congelado, ya se clasificó arriba
             return 'SIN_SALA'
         
         sala_lower = sala_name.lower()
         
-        # Detectar túneles/congelado
+        # Detectar túneles/congelado por sala
         if any(keyword in sala_lower for keyword in cls.TUNNEL_KEYWORDS):
             return 'CONGELADO'
         
@@ -1487,7 +1500,9 @@ class RendimientoService:
                 # Usar datos pre-cargados en batch
                 consumos = consumos_by_mo.get(mo_id, [])
                 produccion = produccion_by_mo.get(mo_id, [])
-                costos_op = {}  # Omitir costos por ahora para velocidad
+                
+                # Obtener costos operacionales (electricidad)
+                costos_op = self.get_costos_operacionales_mo(mo)
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
@@ -1498,9 +1513,17 @@ class RendimientoService:
                 
                 rendimiento = (kg_pt / kg_mp * 100)
                 
-                # Obtener sala y clasificarla
+                # Obtener nombre del producto para clasificación
+                product_name = ''
+                prod = mo.get('product_id')
+                if isinstance(prod, (list, tuple)) and len(prod) > 1:
+                    product_name = prod[1]
+                elif isinstance(prod, dict):
+                    product_name = prod.get('name', '')
+                
+                # Obtener sala y clasificarla (ahora también usando nombre del producto)
                 sala = mo.get('x_studio_sala_de_proceso', '') or 'Sin Sala'
-                sala_tipo = self.get_sala_tipo(sala)
+                sala_tipo = self.get_sala_tipo(sala, product_name)
                 
                 # === Acumular para Overview GLOBAL ===
                 total_kg_mp += kg_mp
