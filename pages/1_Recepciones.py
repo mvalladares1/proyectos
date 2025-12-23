@@ -1432,13 +1432,34 @@ with tab_curva:
                 df_chart['kg_sistema'] = 0
             
             # ============ OBTENER DATOS DEL AÑO ANTERIOR ============
-            # Calcular fechas del año anterior (temporada 2023-2024)
+            # Calcular fechas del año anterior DINÁMICAMENTE basado en las semanas de la proyección
             # IMPORTANTE: Esta consulta es INDEPENDIENTE de los filtros superiores
             kg_anterior_por_semana = {}
             try:
-                # Rango de fechas de la temporada anterior (un año antes)
-                fecha_inicio_anterior = datetime(2023, 11, 18)  # Inicio temporada 2023-2024
-                fecha_fin_anterior = datetime(2024, 4, 30)  # Fin temporada 2023-2024
+                # Obtener las semanas que tiene la proyección
+                semanas_proyeccion = df_proy['semana'].unique().tolist()
+                
+                # Calcular fechas del año anterior correspondientes a esas semanas
+                # Usamos un rango amplio para cubrir la temporada anterior (2023-2024)
+                # Las semanas 47-52 corresponden a Nov-Dic 2023
+                # Las semanas 1-17 corresponden a Ene-Abr 2024
+                from datetime import timedelta
+                
+                # Fecha inicio: primera semana de la temporada anterior
+                # Si hay semanas >= 47, el inicio es en noviembre del año anterior
+                min_semana = min(semanas_proyeccion)
+                max_semana = max(semanas_proyeccion)
+                
+                # Para temporada 2024-2025, el año anterior es 2023-2024
+                if any(s >= 47 for s in semanas_proyeccion):
+                    fecha_inicio_anterior = datetime(2023, 11, 1)  # Noviembre 2023
+                else:
+                    fecha_inicio_anterior = datetime(2024, 1, 1)  # Enero 2024
+                
+                if any(s <= 20 for s in semanas_proyeccion):
+                    fecha_fin_anterior = datetime(2024, 5, 31)  # Mayo 2024
+                else:
+                    fecha_fin_anterior = datetime(2023, 12, 31)  # Diciembre 2023
                 
                 # Llamar a la API para obtener datos del año anterior SIN filtros de planta
                 # IMPORTANTE: Incluir username y password que son requeridos por el endpoint
@@ -1450,6 +1471,7 @@ with tab_curva:
                     "solo_hechas": True
                     # NO usar filtro de origen para que traiga todos los datos
                 }
+                print(f"DEBUG: Consultando año anterior desde {fecha_inicio_anterior} hasta {fecha_fin_anterior}")
                 resp_anterior = requests.get(
                     f"{API_URL}/api/v1/recepciones-mp/",
                     params=params_anterior,
