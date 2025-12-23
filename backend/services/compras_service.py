@@ -154,9 +154,9 @@ class ComprasService:
         Obtiene las órdenes de compra con estados calculados.
         Optimizado: Trae datos en batches y procesa en memoria.
         """
-        # Dominio base
+        # Dominio base - incluir todos los estados excepto cancelado
         domain = [
-            ['state', 'in', ['draft', 'to approve', 'purchase']],
+            ['state', 'not in', ['cancel']],  # Excluir solo cancelados
             ['date_order', '>=', fecha_inicio],
             ['date_order', '<=', fecha_fin + ' 23:59:59']
         ]
@@ -519,9 +519,10 @@ class ComprasService:
                     ocs_facturadas.add(oc.strip())
         
         # === 2. OCs SIN FACTURA (USO TENTATIVO/COMPROMETIDO) ===
+        # Incluir todos los estados excepto cancelado: draft, sent, to approve, purchase, done
         oc_domain = [
             ['partner_id', 'in', partner_ids],
-            ['state', 'in', ['purchase', 'done']]  # Incluir OCs completadas también
+            ['state', 'not in', ['cancel']]  # Incluir solicitudes de presupuesto también
         ]
         if fecha_desde:
             oc_domain.append(['date_order', '>=', fecha_desde])
@@ -628,25 +629,25 @@ class ComprasService:
                 for oc_name, data in ocs.items():
                     print(f"[DEBUG RESULTADO] Partner {pid}: {oc_name} = ${data['monto_pendiente']:,.0f}")
         
-        # === 4. STOCK.PICKING EN ESTADO 'ASSIGNED' (PREPARADO) ===
-        # Recepciones que están listas pero aún no se han ejecutado
+        # === 4. STOCK.PICKING EN TODOS LOS ESTADOS EXCEPTO BORRADOR/CANCELADO ===
+        # Recepciones pendientes de facturar (incluir assigned, waiting, confirmed, done)
         recepciones_preparadas_by_partner = {}
         
         try:
             if oc_ids:
-                # Buscar pickings de compra en estado 'assigned' (preparado)
+                # Buscar pickings de compra en todos los estados excepto borrador y cancelado
                 pickings = self.odoo.search_read(
                     'stock.picking',
                     [
                         ['purchase_id', 'in', oc_ids],
-                        ['state', '=', 'assigned'],  # Preparado
+                        ['state', 'not in', ['draft', 'cancel']],  # Incluir assigned, waiting, confirmed, done
                         ['picking_type_code', '=', 'incoming']  # Solo recepciones
                     ],
-                    ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids'],
+                    ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids', 'state'],
                     limit=1000
                 )
                 
-                print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings en estado 'assigned'")
+                print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings (estados: assigned, waiting, confirmed, done)")
                 
                 if pickings:
                     picking_ids = [p['id'] for p in pickings]
