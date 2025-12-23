@@ -272,9 +272,7 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
     agrup = {}
     
     for r in recepciones:
-        tipo = (r.get('tipo_fruta') or '').strip()
-        if not tipo:
-            continue  # Skip recepciones sin tipo de fruta
+        tipo_fruta_qc = (r.get('tipo_fruta') or '').strip()
         
         productor = (r.get('productor') or '').strip()
         if not productor:
@@ -284,26 +282,34 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
         if productor.upper() == 'ADMINISTRADOR':
             continue
         
-        if tipo not in agrup:
-            agrup[tipo] = {}
-        
-        if productor not in agrup[tipo]:
-            agrup[tipo][productor] = {}
-        
-        # Recorrer productos para obtener manejo y sumar kg/costo
+        # Recorrer productos para obtener tipo, manejo y sumar kg/costo
         for p in r.get('productos', []) or []:
             cat = _normalize_categoria(p.get('Categoria', ''))
             if cat == 'BANDEJAS':
                 continue  # Excluir bandejas
             
+            kg = p.get('Kg Hechos', 0) or 0
+            if kg <= 0:
+                continue  # Ignorar productos con 0 kg
+            
+            # Usar TipoFruta del producto, con fallback al tipo_fruta del QC
+            tipo = (p.get('TipoFruta') or tipo_fruta_qc or '').strip()
+            if not tipo:
+                continue
+            
             manejo = (p.get('Manejo') or '').strip()
             if not manejo:
                 manejo = 'Sin Manejo'
             
+            if tipo not in agrup:
+                agrup[tipo] = {}
+            
+            if productor not in agrup[tipo]:
+                agrup[tipo][productor] = {}
+            
             if manejo not in agrup[tipo][productor]:
                 agrup[tipo][productor][manejo] = {'kg': 0.0, 'costo': 0.0}
             
-            kg = p.get('Kg Hechos', 0) or 0
             costo = p.get('Costo Total', 0) or 0
             agrup[tipo][productor][manejo]['kg'] += kg
             agrup[tipo][productor][manejo]['costo'] += costo
@@ -317,6 +323,11 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
         productores_list = []
         for productor, manejos in productores.items():
             prod_kg = sum(m['kg'] for m in manejos.values())
+            
+            # Omitir productores sin kg
+            if prod_kg <= 0:
+                continue
+                
             prod_costo = sum(m['costo'] for m in manejos.values())
             prod_costo_prom = (prod_costo / prod_kg) if prod_kg > 0 else None
             
@@ -326,6 +337,9 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
             manejos_list = []
             for manejo, v in sorted(manejos.items()):
                 kg = v['kg']
+                # Omitir manejos sin kg
+                if kg <= 0:
+                    continue
                 costo = v['costo']
                 costo_prom = (costo / kg) if kg > 0 else None
                 manejos_list.append({
@@ -334,6 +348,10 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
                     'costo': costo,
                     'costo_prom': costo_prom
                 })
+            
+            # Omitir productores sin manejos válidos
+            if not manejos_list:
+                continue
             
             # Ordenar manejos por kg descendente
             manejos_list.sort(key=lambda x: x['kg'], reverse=True)
@@ -345,6 +363,10 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
                 'costo_prom': prod_costo_prom,
                 'manejos': manejos_list
             })
+        
+        # Omitir tipos sin productores válidos
+        if not productores_list:
+            continue
         
         # Ordenar productores por kg descendente
         productores_list.sort(key=lambda x: x['kg'], reverse=True)
@@ -575,13 +597,13 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         if precio_proy > 0 and costo_kg > 0:
             desv = ((costo_kg - precio_proy) / precio_proy) * 100
             if desv <= 0:
-                return f"✓{abs(desv):.1f}%"  # Favorable
+                return f"OK -{abs(desv):.1f}%"  # Favorable (pagando menos)
             elif desv <= 3:
-                return f"+{desv:.1f}%"  # Verde (1-3%)
+                return f"+{desv:.1f}%"  # Verde (1-3%) - ok
             elif desv <= 8:
-                return f"⚠+{desv:.1f}%"  # Amarillo (3-8%)
+                return f"! +{desv:.1f}%"  # Amarillo (3-8%) - atención
             else:
-                return f"‼+{desv:.1f}%"  # Rojo (>8%)
+                return f"!! +{desv:.1f}%"  # Rojo (>8%) - crítico
         return "-"
     
     row_idx = 1  # Empezamos en 1 (después del header)
@@ -673,7 +695,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     
     # Leyenda de desviación de precios
     leyenda_desv = Paragraph(
-        "<b>Leyenda Desv:</b> ✓ Favorable (pagando menos) · +X% = 1-3% ok · ⚠ = 3-8% atención · ‼ = >8% crítico",
+        "<b>Leyenda Desv:</b> OK = Favorable (pagando menos) | +X% = 1-3% ok | ! = 3-8% atencion | !! = >8% critico",
         styles['Normal']
     )
     elements.append(leyenda_desv)
