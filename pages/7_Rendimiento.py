@@ -99,6 +99,15 @@ with col2:
         format="DD/MM/YYYY"
     )
 
+# Filtro de Planta (RFP / VILKUN)
+st.sidebar.markdown("---")
+st.sidebar.header("🏭 Filtro de Planta")
+col_planta1, col_planta2 = st.sidebar.columns(2)
+with col_planta1:
+    filtro_rfp = st.checkbox("RFP", value=True, key="rend_rfp")
+with col_planta2:
+    filtro_vilkun = st.checkbox("VILKUN", value=True, key="rend_vilkun")
+
 if st.sidebar.button("🔄 Consultar Rendimiento", type="primary", use_container_width=True):
     params = {
         "username": username,
@@ -156,6 +165,38 @@ if st.sidebar.button("🔄 Consultar Rendimiento", type="primary", use_container
 
 # --- Mostrar datos ---
 data = st.session_state.rend_data
+
+# Función para detectar planta desde nombre de MO
+def detectar_planta(mo_name):
+    """Detecta la planta basándose en el prefijo del nombre de la MO.
+    RF/MO/... = RFP, VLK/... = VILKUN
+    """
+    if not mo_name:
+        return "RFP"  # Default
+    mo_upper = str(mo_name).upper()
+    if mo_upper.startswith("VLK"):
+        return "VILKUN"
+    return "RFP"
+
+# Función para filtrar lista de MOs por planta
+def filtrar_por_planta(lista, filtro_rfp, filtro_vilkun):
+    """Filtra una lista de dicts que tengan 'mo_name' o similar por planta."""
+    if filtro_rfp and filtro_vilkun:
+        return lista  # Mostrar todo
+    if not filtro_rfp and not filtro_vilkun:
+        return []  # No mostrar nada
+    
+    resultado = []
+    for item in lista:
+        # Intentar obtener nombre de MO de varios campos posibles
+        mo_name = item.get('mo_name') or item.get('name') or ''
+        planta = detectar_planta(mo_name)
+        
+        if planta == "RFP" and filtro_rfp:
+            resultado.append(item)
+        elif planta == "VILKUN" and filtro_vilkun:
+            resultado.append(item)
+    return resultado
 
 if data:
     # === SECCIÓN 1: KPIs Overview ===
@@ -480,7 +521,9 @@ if data:
         mos = st.session_state.rend_mos
         
         if mos:
-            df_mos = pd.DataFrame(mos)
+            # Aplicar filtro de planta
+            mos_filtradas = filtrar_por_planta(mos, filtro_rfp, filtro_vilkun)
+            df_mos = pd.DataFrame(mos_filtradas) if mos_filtradas else pd.DataFrame()
             
             # Filtro por sala
             if 'sala' in df_mos.columns:
