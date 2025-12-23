@@ -76,92 +76,60 @@ class StockService:
             fecha_desde: Fecha inicio para filtrar pallets (formato YYYY-MM-DD)
             fecha_hasta: Fecha fin para filtrar pallets (formato YYYY-MM-DD)
         """
-        # PASO 1: Configuración de cámaras
-        # Patrón de nombre -> (padre requerido, capacidad manual o None para calcular)
-        CAMARAS_CONFIG = {
-            "Camara 1 de -25": {"padre": "Cámaras -25", "capacidad": 375},
-            "Camara 2 de -25": {"padre": "Cámaras -25", "capacidad": 199},
-            "Camara 3 de -25": {"padre": "Cámaras -25", "capacidad": 1341},
-            "Camara 0": {"padre": "RF/Stock", "capacidad": 800, "excluir": ["pos lavado", "Sjose"]},
+        # PASO 1: Configuración de las 4 ubicaciones específicas a mostrar
+        # IDs: 5452=RF/Stock/Camara 0°C REAL, 8528=VLK/Camara 0°, 8474=RF/Stock/Inventario Real, 8497=VLK/Stock
+        UBICACIONES_ESPECIFICAS = {
+            5452: {"nombre": "Camara 0°C REAL", "capacidad": 200},
+            8528: {"nombre": "VLK/Camara 0°", "capacidad": 200},
+            8474: {"nombre": "Inventario Real", "capacidad": 500},
+            8497: {"nombre": "VLK/Stock", "capacidad": 500},
         }
         
         try:
-            # Buscar con ilike para nombres flexibles
-            domain = [
-                ("usage", "=", "internal"),
-                ("active", "=", True),
-                "|", "|", "|",
-                ("name", "ilike", "Camara 1 de -25"),
-                ("name", "ilike", "Camara 2 de -25"),
-                ("name", "ilike", "Camara 3 de -25"),
-                ("name", "ilike", "Camara 0"),
-            ]
+            # Buscar directamente por IDs específicos
+            ubicacion_ids = list(UBICACIONES_ESPECIFICAS.keys())
             camaras_encontradas = self.odoo.search_read(
                 "stock.location",
-                domain,
+                [
+                    ("id", "in", ubicacion_ids),
+                    ("usage", "=", "internal"),
+                    ("active", "=", True)
+                ],
                 ["id", "name", "display_name", "location_id"]
             )
-            print(f"DEBUG: Encontradas {len(camaras_encontradas)} ubicaciones")
-            for cam in camaras_encontradas:
-                print(f"  - {cam.get('name')} | {cam.get('display_name')}")
+            print(f"DEBUG: Encontradas {len(camaras_encontradas)} ubicaciones específicas")
         except Exception as e:
             print(f"Error buscando cámaras: {e}")
             import traceback
             traceback.print_exc()
             return []
 
-        # Filtrar cámaras según configuración
+        # Crear mapa de cámaras directamente desde las ubicaciones encontradas
         camaras_map = {}
         
         for cam in camaras_encontradas:
+            cam_id = cam.get("id")
             name = cam.get("name", "")
             display_name = cam.get("display_name", "")
-            
-            # Buscar configuración que aplique
-            config_match = None
-            for patron, config in CAMARAS_CONFIG.items():
-                if patron.lower() in name.lower():
-                    config_match = (patron, config)
-                    break
-            
-            if not config_match:
-                print(f"  Skip (sin config): {name}")
-                continue
-            
-            patron, config = config_match
-            
-            # Verificar exclusiones
-            excluir = config.get("excluir", [])
-            excluded = False
-            for ex in excluir:
-                if ex.lower() in name.lower() or ex.lower() in display_name.lower():
-                    print(f"  Skip (excluido '{ex}'): {name}")
-                    excluded = True
-                    break
-            if excluded:
-                continue
-            
-            # Verificar padre requerido
-            padre_req = config.get("padre", "")
-            if padre_req and padre_req.lower() not in display_name.lower():
-                print(f"  Skip (padre incorrecto): {name} - esperado '{padre_req}'")
-                continue
-            
             parent = cam.get("location_id")
-            camaras_map[cam["id"]] = {
-                "id": cam["id"],
+            
+            # Obtener configuración específica para esta ubicación
+            config = UBICACIONES_ESPECIFICAS.get(cam_id, {"capacidad": 100})
+            
+            camaras_map[cam_id] = {
+                "id": cam_id,
                 "name": name,
                 "full_name": display_name,
                 "parent_name": parent[1] if parent and isinstance(parent, (list, tuple)) else "",
-                "capacity_pallets": config.get("capacidad", 0),  # Capacidad manual
+                "capacity_pallets": config.get("capacidad", 100),
                 "occupied_pallets": 0,
                 "stock_data": {},
                 "child_location_ids": []
             }
-            print(f"  OK: {name} (cap={config.get('capacidad', 'auto')})")
+            print(f"  OK: {name} (ID={cam_id}, cap={config.get('capacidad')})")
 
         if not camaras_map:
-            print("No se encontraron cámaras principales")
+            print("No se encontraron ubicaciones específicas")
             return []
 
         # PASO 2: Para cada cámara, obtener todas sus ubicaciones hijas
