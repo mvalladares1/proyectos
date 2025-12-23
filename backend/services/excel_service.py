@@ -133,19 +133,30 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
         productos = r.get('productos', []) or []
         oc_asociada = r.get('oc_asociada', '')
         if not productos:
-            ws.append([albaran, fecha, productor, tipo_fruta, oc_asociada, guia, '', '', '', '', r.get('kg_recepcionados', 0), '', '', '', calific, pct_iqf, pct_block])
+            # Solo agregar si hay kg recepcionados
+            kg_rec = r.get('kg_recepcionados', 0) or 0
+            if kg_rec > 0:
+                ws.append([albaran, fecha, productor, tipo_fruta, oc_asociada, guia, '', '', '', '', kg_rec, '', '', '', calific, pct_iqf, pct_block])
         else:
             for p in productos:
+                kg_hechos = p.get('Kg Hechos', 0) or 0
+                # Ignorar productos con 0 kg
+                if kg_hechos <= 0:
+                    continue
+                    
                 prod_name = p.get('Producto', '')
                 categoria = p.get('Categoria', '')
                 manejo = p.get('Manejo', '')
-                kg_hechos = p.get('Kg Hechos', 0) or 0
                 uom = p.get('UOM', '')
                 costo_unit = p.get('Costo Unitario', 0) or 0
                 costo_total = p.get('Costo Total', 0) or 0
                 bandejas_units = kg_hechos if (categoria or '').upper() == 'BANDEJAS' else ''
+                
+                # Usar TipoFruta del producto, fallback a tipo_fruta de la recepción
+                tipo_fruta_prod = (p.get('TipoFruta') or tipo_fruta or '').strip()
+                
                 ws.append([
-                    albaran, fecha, productor, tipo_fruta, oc_asociada, guia,
+                    albaran, fecha, productor, tipo_fruta_prod, oc_asociada, guia,
                     prod_name, categoria, manejo, bandejas_units, kg_hechos, uom,
                     costo_unit, costo_total, calific, pct_iqf, pct_block
                 ])
@@ -184,22 +195,31 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
         cell = summary.cell(row=1, column=c_idx)
         cell.font = header_font
 
-    # Aggregate by tipo_fruta
+    # Aggregate by tipo_fruta del PRODUCTO (no de la recepción)
     agrup = {}
     for r in recepciones_main:
-        tipo = (r.get('tipo_fruta') or '').strip()
-        if not tipo:
-            tipo = 'SIN_TIPO'
-        if tipo not in agrup:
-            agrup[tipo] = {'kg': 0.0, 'costo': 0.0, 'n': 0}
-        agrup[tipo]['n'] += 1
+        tipo_fruta_rec = (r.get('tipo_fruta') or '').strip()
         for p in r.get('productos', []) or []:
             cat = (p.get('Categoria') or '').upper()
             if cat == 'BANDEJAS':
                 # skip bandejas from kg/costo of fruta
                 continue
-            agrup[tipo]['kg'] += p.get('Kg Hechos', 0) or 0
+            
+            kg = p.get('Kg Hechos', 0) or 0
+            if kg <= 0:
+                continue
+                
+            # Usar TipoFruta del producto, fallback a tipo_fruta de la recepción
+            tipo = (p.get('TipoFruta') or tipo_fruta_rec or '').strip()
+            if not tipo:
+                tipo = 'SIN_TIPO'
+            
+            if tipo not in agrup:
+                agrup[tipo] = {'kg': 0.0, 'costo': 0.0, 'n': 0}
+            
+            agrup[tipo]['kg'] += kg
             agrup[tipo]['costo'] += p.get('Costo Total', 0) or 0
+            agrup[tipo]['n'] += 1
 
     for tipo, vals in sorted(agrup.items(), key=lambda x: x[0]):
         kg = vals['kg']

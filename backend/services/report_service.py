@@ -142,7 +142,7 @@ def _aggregate_by_fruta(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any
 
 def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Agrupa recepciones por tipo_fruta y luego por manejo (Orgánico/Convencional).
+    Agrupa recepciones por tipo_fruta (del producto) y luego por manejo.
     Retorna estructura jerárquica para mostrar en tablas.
     """
     # Estructura: {tipo_fruta: {manejo: {kg, costo, iqf_vals, block_vals}}}
@@ -154,31 +154,42 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
         if productor.upper() == 'ADMINISTRADOR':
             continue
         
-        tipo = (r.get('tipo_fruta') or '').strip()
-        if not tipo:
-            continue
-        
-        if tipo not in agrup:
-            agrup[tipo] = {}
+        # Tipo de fruta del QC (para asociar IQF/Block)
+        tipo_fruta_qc = (r.get('tipo_fruta') or '').strip()
         
         # IQF/Block son a nivel de recepción
         iqf_val = r.get('total_iqf', 0) or 0
         block_val = r.get('total_block', 0) or 0
         
-        # Primero identificar todos los manejos presentes en esta recepción
-        manejos_en_recepcion = set()
+        # Rastrear manejos por cada tipo de fruta
+        manejos_por_tipo = {}
         
-        # Recorrer productos para obtener manejo y sumar kg/costo
+        # Recorrer productos para obtener tipo y manejo del producto
         for p in r.get('productos', []) or []:
             cat = _normalize_categoria(p.get('Categoria', ''))
             if cat == 'BANDEJAS':
                 continue  # Excluir bandejas
             
+            kg = p.get('Kg Hechos', 0) or 0
+            if kg <= 0:
+                continue  # Ignorar productos con 0 kg
+            
+            # Usar TipoFruta del producto, con fallback al tipo_fruta del QC
+            tipo = (p.get('TipoFruta') or tipo_fruta_qc or '').strip()
+            if not tipo:
+                continue
+            
             manejo = (p.get('Manejo') or '').strip()
             if not manejo:
                 manejo = 'Sin Manejo'
             
-            manejos_en_recepcion.add(manejo)
+            # Rastrear manejos por tipo
+            if tipo not in manejos_por_tipo:
+                manejos_por_tipo[tipo] = set()
+            manejos_por_tipo[tipo].add(manejo)
+            
+            if tipo not in agrup:
+                agrup[tipo] = {}
             
             if manejo not in agrup[tipo]:
                 agrup[tipo][manejo] = {
@@ -188,27 +199,37 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
                     'block_vals': []
                 }
             
-            kg = p.get('Kg Hechos', 0) or 0
             costo = p.get('Costo Total', 0) or 0
             agrup[tipo][manejo]['kg'] += kg
             agrup[tipo][manejo]['costo'] += costo
         
-        # Agregar valores IQF/Block a TODOS los manejos presentes en esta recepción
-        # (ya que IQF/Block es medición de la recepción, aplica a todos los productos)
-        for manejo in manejos_en_recepcion:
-            if manejo in agrup[tipo]:
-                agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
-                agrup[tipo][manejo]['block_vals'].append(block_val)
+        # Agregar IQF/Block SOLO al tipo de fruta del QC
+        # (no a todos los productos, ya que IQF/Block son mediciones del tipo_fruta del QC)
+        if tipo_fruta_qc and tipo_fruta_qc in manejos_por_tipo:
+            for manejo in manejos_por_tipo[tipo_fruta_qc]:
+                if tipo_fruta_qc in agrup and manejo in agrup[tipo_fruta_qc]:
+                    agrup[tipo_fruta_qc][manejo]['iqf_vals'].append(iqf_val)
+                    agrup[tipo_fruta_qc][manejo]['block_vals'].append(block_val)
+
     
     # Convertir a lista jerárquica
     out = []
     for tipo, manejos in agrup.items():
         tipo_kg = sum(m['kg'] for m in manejos.values())
+        
+        # Omitir tipos de fruta sin kg
+        if tipo_kg <= 0:
+            continue
+            
         tipo_costo = sum(m['costo'] for m in manejos.values())
         
         manejo_list = []
         for manejo, v in sorted(manejos.items()):
             kg = v['kg']
+            # Omitir manejos sin kg
+            if kg <= 0:
+                continue
+                
             costo = v['costo']
             costo_prom = (costo / kg) if kg > 0 else None
             prom_iqf = (sum(v['iqf_vals']) / len(v['iqf_vals'])) if v['iqf_vals'] else 0
@@ -222,6 +243,10 @@ def _aggregate_by_fruta_manejo(recepciones: List[Dict[str, Any]]) -> List[Dict[s
                 'prom_iqf': prom_iqf,
                 'prom_block': prom_block
             })
+        
+        # Omitir tipos sin manejos válidos
+        if not manejo_list:
+            continue
         
         # Ordenar manejos por kg descendente
         manejo_list.sort(key=lambda x: x['kg'], reverse=True)
@@ -542,19 +567,35 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     except Exception as e:
         print(f"Error obteniendo precios proyectados para PDF: {e}")
     
-    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "$/Kg", "$/Kg Proy", "% IQF", "% Block"]]
+    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "$/Kg", "$/Kg Proy", "Desv", "% IQF", "% Block"]]
     tipo_fruta_rows = []  # Para trackear filas de tipo fruta (para estilo)
+    
+    # Función para calcular y formatear desviación
+    def calc_desv(costo_kg, precio_proy):
+        if precio_proy > 0 and costo_kg > 0:
+            desv = ((costo_kg - precio_proy) / precio_proy) * 100
+            if desv <= 0:
+                return f"✓{abs(desv):.1f}%"  # Favorable
+            elif desv <= 3:
+                return f"+{desv:.1f}%"  # Verde (1-3%)
+            elif desv <= 8:
+                return f"⚠+{desv:.1f}%"  # Amarillo (3-8%)
+            else:
+                return f"‼+{desv:.1f}%"  # Rojo (>8%)
+        return "-"
     
     row_idx = 1  # Empezamos en 1 (después del header)
     for tipo_data in main_agg_manejo:
         tipo_fruta = tipo_data['tipo_fruta']
         tipo_kg = tipo_data['kg_total']
         tipo_costo = tipo_data['costo_total']
-        tipo_costo_prom = fmt_dinero(tipo_costo / tipo_kg, 2) if tipo_kg > 0 else "-"
+        tipo_costo_prom_val = tipo_costo / tipo_kg if tipo_kg > 0 else 0
+        tipo_costo_prom = fmt_dinero(tipo_costo_prom_val, 2) if tipo_kg > 0 else "-"
         
         # Precio proyectado para este tipo de fruta
         precio_proy_tipo = precios_proyectados.get(tipo_fruta, 0)
         precio_proy_str = fmt_dinero(precio_proy_tipo, 0) if precio_proy_tipo > 0 else "-"
+        desv_tipo = calc_desv(tipo_costo_prom_val, precio_proy_tipo)
         
         # Fila de Tipo Fruta (totalizador)
         tbl_data.append([
@@ -563,6 +604,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
             fmt_dinero(tipo_costo),
             tipo_costo_prom,
             precio_proy_str,
+            desv_tipo,
             "-",
             "-"
         ])
@@ -572,13 +614,15 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         # Filas de Manejo (indentadas)
         for m in tipo_data['manejos']:
             manejo_name = m['manejo']
-            costo_prom = fmt_dinero(m['costo_prom'], 2) if m['costo_prom'] is not None else "-"
+            costo_prom_val = m['costo_prom'] if m['costo_prom'] is not None else 0
+            costo_prom = fmt_dinero(costo_prom_val, 2) if costo_prom_val > 0 else "-"
             
             # Precio proyectado para la combinación tipo + manejo
             manejo_norm = 'Orgánico' if 'org' in manejo_name.lower() else 'Convencional'
             especie_manejo = f"{tipo_fruta} {manejo_norm}"
             precio_proy_manejo = precios_proyectados.get(especie_manejo, precios_proyectados.get(tipo_fruta, 0))
             precio_proy_manejo_str = fmt_dinero(precio_proy_manejo, 0) if precio_proy_manejo > 0 else "-"
+            desv_manejo = calc_desv(costo_prom_val, precio_proy_manejo)
             
             tbl_data.append([
                 f"   → {manejo_name}",  # Indentado
@@ -586,6 +630,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
                 fmt_dinero(m['costo']),
                 costo_prom,
                 precio_proy_manejo_str,
+                desv_manejo,
                 f"{fmt_numero(m['prom_iqf'], 2)}%",
                 f"{fmt_numero(m['prom_block'], 2)}%"
             ])
@@ -596,6 +641,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         'TOTAL GENERAL',
         fmt_numero(total_kg, 2),
         fmt_dinero(total_costo),
+        '-',
         '-',
         '-',
         '-',
@@ -623,7 +669,16 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     
     t.setStyle(TableStyle(style_commands))
     elements.append(KeepTogether([t]))
+    elements.append(Spacer(1, 6))
+    
+    # Leyenda de desviación de precios
+    leyenda_desv = Paragraph(
+        "<b>Leyenda Desv:</b> ✓ Favorable (pagando menos) · +X% = 1-3% ok · ⚠ = 3-8% atención · ‼ = >8% crítico",
+        styles['Normal']
+    )
+    elements.append(leyenda_desv)
     elements.append(Spacer(1, 12))
+
 
     # Gráfico: Kg por Tipo de Fruta (matplotlib)
     try:

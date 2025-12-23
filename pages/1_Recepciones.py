@@ -314,11 +314,11 @@ with tab_kpis:
     
         agrup = {}
         for _, row in df.iterrows():
-            # Ya no usamos tipo_fruta de la recepción (QC) para agrupar
-            # Ahora cada producto tiene su propio TipoFruta
-            
+            # IQF/Block son del QC de la recepción, asociados al tipo_fruta del QC
             iqf_val = row.get('total_iqf', 0) or 0
             block_val = row.get('total_block', 0) or 0
+            tipo_fruta_qc = (row.get('tipo_fruta') or '').strip()  # Tipo de fruta del control de calidad
+            
             manejos_por_tipo = {}  # Rastrear manejos por tipo de fruta
         
             for p in row.get('productos', []) or []:
@@ -349,12 +349,14 @@ with tab_kpis:
                 agrup[tipo][manejo]['kg'] += p.get('Kg Hechos', 0) or 0
                 agrup[tipo][manejo]['costo'] += p.get('Costo Total', 0) or 0
         
-            # Agregar IQF/Block por tipo y manejo (solo para los manejos de esta recepción)
-            for tipo, manejos in manejos_por_tipo.items():
-                for manejo in manejos:
-                    if tipo in agrup and manejo in agrup[tipo]:
-                        agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
-                        agrup[tipo][manejo]['block_vals'].append(block_val)
+            # Agregar IQF/Block SOLO al tipo de fruta que corresponde al QC
+            # (no a todos los productos, ya que IQF/Block son mediciones del tipo_fruta del QC)
+            if tipo_fruta_qc and tipo_fruta_qc in manejos_por_tipo:
+                for manejo in manejos_por_tipo[tipo_fruta_qc]:
+                    if tipo_fruta_qc in agrup and manejo in agrup[tipo_fruta_qc]:
+                        agrup[tipo_fruta_qc][manejo]['iqf_vals'].append(iqf_val)
+                        agrup[tipo_fruta_qc][manejo]['block_vals'].append(block_val)
+
 
     
         # Construir tabla con columnas de Streamlit para mejor visualización
