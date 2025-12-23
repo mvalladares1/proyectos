@@ -314,38 +314,48 @@ with tab_kpis:
     
         agrup = {}
         for _, row in df.iterrows():
-            tipo = (row.get('tipo_fruta') or '').strip()
-            if not tipo:
-                continue
-        
-            if tipo not in agrup:
-                agrup[tipo] = {}
-        
+            # Ya no usamos tipo_fruta de la recepción (QC) para agrupar
+            # Ahora cada producto tiene su propio TipoFruta
+            
             iqf_val = row.get('total_iqf', 0) or 0
             block_val = row.get('total_block', 0) or 0
-            manejos_en_rec = set()
+            manejos_por_tipo = {}  # Rastrear manejos por tipo de fruta
         
             for p in row.get('productos', []) or []:
                 cat = _normalize_cat(p.get('Categoria', ''))
                 if cat == 'BANDEJAS':
                     continue
+                
+                # Usar el TipoFruta del producto, con fallback al tipo_fruta de la recepción
+                tipo = (p.get('TipoFruta') or row.get('tipo_fruta') or '').strip()
+                if not tipo:
+                    continue
             
                 manejo = (p.get('Manejo') or '').strip()
                 if not manejo:
                     manejo = 'Sin Manejo'
+                
+                # Rastrear qué manejos tiene cada tipo de fruta
+                if tipo not in manejos_por_tipo:
+                    manejos_por_tipo[tipo] = set()
+                manejos_por_tipo[tipo].add(manejo)
             
-                manejos_en_rec.add(manejo)
-            
+                if tipo not in agrup:
+                    agrup[tipo] = {}
+                    
                 if manejo not in agrup[tipo]:
                     agrup[tipo][manejo] = {'kg': 0.0, 'costo': 0.0, 'iqf_vals': [], 'block_vals': []}
             
                 agrup[tipo][manejo]['kg'] += p.get('Kg Hechos', 0) or 0
                 agrup[tipo][manejo]['costo'] += p.get('Costo Total', 0) or 0
         
-            for manejo in manejos_en_rec:
-                if manejo in agrup[tipo]:
-                    agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
-                    agrup[tipo][manejo]['block_vals'].append(block_val)
+            # Agregar IQF/Block por tipo y manejo (solo para los manejos de esta recepción)
+            for tipo, manejos in manejos_por_tipo.items():
+                for manejo in manejos:
+                    if tipo in agrup and manejo in agrup[tipo]:
+                        agrup[tipo][manejo]['iqf_vals'].append(iqf_val)
+                        agrup[tipo][manejo]['block_vals'].append(block_val)
+
     
         # Construir tabla con columnas de Streamlit para mejor visualización
         if agrup:

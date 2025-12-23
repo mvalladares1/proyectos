@@ -142,24 +142,32 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
                     template_ids.add(tmpl_id)
             
-            # Obtener templates con campo de manejo
+            # Obtener templates con campo de manejo y tipo de fruta
             template_map = {}
             if template_ids:
                 templates = client.read(
                     "product.template", 
                     list(template_ids), 
-                    ["id", "name", "default_code", "x_studio_categora_tipo_de_manejo"]
+                    ["id", "name", "default_code", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
                 )
                 for t in templates:
                     manejo = t.get("x_studio_categora_tipo_de_manejo", "")
                     # Si es tupla/lista (selection), tomar el valor legible
                     if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
                         manejo = manejo[1]
+                    
+                    # Tipo de fruta del producto (x_studio_sub_categora = "Categoría Tipo de Fruta")
+                    tipo_fruta_prod = t.get("x_studio_sub_categora", "")
+                    if isinstance(tipo_fruta_prod, (list, tuple)) and len(tipo_fruta_prod) > 1:
+                        tipo_fruta_prod = tipo_fruta_prod[1]
+                    
                     template_map[t["id"]] = {
                         "name": t.get("name", ""),
                         "default_code": t.get("default_code", "") or "",
-                        "manejo": manejo or ""
+                        "manejo": manejo or "",
+                        "tipo_fruta": tipo_fruta_prod or ""
                     }
+
             
             # Mapear producto -> info completa
             for info in product_infos:
@@ -174,7 +182,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     "categ": categ_name, 
                     "name": tmpl_data.get("name", ""),
                     "default_code": tmpl_data.get("default_code", ""),
-                    "manejo": tmpl_data.get("manejo", "")
+                    "manejo": tmpl_data.get("manejo", ""),
+                    "tipo_fruta": tmpl_data.get("tipo_fruta", "")
                 }
             
             # Cachear productos por 30 minutos
@@ -344,7 +353,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 "Costo Total": costo_total,
                 "UOM": uom_name,
                 "Categoria": categoria,
-                "Manejo": prod_info.get("manejo", "")
+                "Manejo": prod_info.get("manejo", ""),
+                "TipoFruta": prod_info.get("tipo_fruta", "")
             })
         
         # Procesar datos de calidad
