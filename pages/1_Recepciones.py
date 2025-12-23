@@ -194,8 +194,7 @@ with tab_kpis:
             }
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
             
-            # DEBUG: Mostrar qué se está enviando
-            st.info(f"🔍 Consultando origen: {origen_list}")
+            # Debug removido - ya no mostrar mensaje de consultando origen
             
             try:
                 resp = requests.get(api_url, params=params, timeout=60)
@@ -273,6 +272,28 @@ with tab_kpis:
         # --- Tabla Resumen por Tipo Fruta / Manejo ---
         st.markdown("---")
         st.subheader("📊 Resumen por Tipo de Fruta y Manejo")
+        
+        # Obtener precios proyectados del Excel de abastecimiento
+        # Filtrar por planta según los checkboxes de origen seleccionados
+        precios_proyectados = {}
+        try:
+            # Construir lista de plantas para el filtro (mismo que origen_list)
+            plantas_filtro = []
+            if st.session_state.get('origen_filtro_usado'):
+                plantas_filtro = st.session_state.origen_filtro_usado
+            
+            resp_precios = requests.get(
+                f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios",
+                params={"planta": plantas_filtro if plantas_filtro else None, "especie": None},
+                timeout=30
+            )
+            if resp_precios.status_code == 200:
+                for item in resp_precios.json():
+                    especie = item.get('especie', '')
+                    precio = item.get('precio_proyectado', 0)
+                    precios_proyectados[especie] = precio
+        except Exception as e:
+            print(f"Error obteniendo precios proyectados: {e}")
     
         # Agrupar por Tipo Fruta → Manejo
         def _normalize_cat(c):
@@ -344,12 +365,16 @@ with tab_kpis:
                 emoji_fruta = {'Arándano': '🫐', 'Frambuesa': '🍒', 'Frutilla': '🍓', 'Mora': '🫐', 'Cereza': '🍒'}.get(tipo, '🍇')
             
                 # Fila de Tipo Fruta (totalizador)
+                # Buscar precio proyectado para este tipo de fruta
+                precio_proy_tipo = precios_proyectados.get(tipo, 0)
+                
                 tabla_rows.append({
                     'tipo': 'fruta',
                     'Descripción': tipo,
                     'Kg': tipo_kg,
                     'Costo Total': tipo_costo,
                     'Costo/Kg': tipo_costo_prom,
+                    'Precio Proy': precio_proy_tipo,
                     '% IQF': None,
                     '% Block': None
                 })
@@ -362,6 +387,12 @@ with tab_kpis:
                     costo_prom = costo / kg if kg > 0 else 0
                     prom_iqf = sum(v['iqf_vals']) / len(v['iqf_vals']) if v['iqf_vals'] else 0
                     prom_block = sum(v['block_vals']) / len(v['block_vals']) if v['block_vals'] else 0
+                    
+                    # Buscar precio proyectado para la combinación tipo + manejo
+                    # Formato del Excel: "Arándano Orgánico" o "Frambuesa Convencional"
+                    manejo_norm = 'Orgánico' if 'org' in manejo.lower() else 'Convencional'
+                    especie_manejo = f"{tipo} {manejo_norm}"
+                    precio_proy_manejo = precios_proyectados.get(especie_manejo, precios_proyectados.get(tipo, 0))
                 
                     if 'orgánico' in manejo.lower() or 'organico' in manejo.lower():
                         icono = '🌱'
@@ -376,6 +407,7 @@ with tab_kpis:
                         'Kg': kg,
                         'Costo Total': costo,
                         'Costo/Kg': costo_prom,
+                        'Precio Proy': precio_proy_manejo,
                         '% IQF': prom_iqf,
                         '% Block': prom_block
                     })
@@ -387,6 +419,7 @@ with tab_kpis:
                 'Kg': total_kg_tabla,
                 'Costo Total': total_costo_tabla,
                 'Costo/Kg': None,
+                'Precio Proy': None,
                 '% IQF': None,
                 '% Block': None
             })
@@ -399,11 +432,12 @@ with tab_kpis:
             df_display['Kg'] = df_display['Kg'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) else "—")
             df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: fmt_dinero(x) if pd.notna(x) else "—")
             df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
+            df_display['Precio Proy'] = df_display['Precio Proy'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
             df_display['% IQF'] = df_display['% IQF'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
             df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
         
             # Mostrar usando columnas estilizadas
-            df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', '% IQF', '% Block']]
+            df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% IQF', '% Block']]
         
             # Usar st.dataframe con column_config para mejor visualización
             st.dataframe(
@@ -415,6 +449,7 @@ with tab_kpis:
                     'Kg': st.column_config.TextColumn('Kg', width='small'),
                     'Costo Total': st.column_config.TextColumn('Costo Total', width='medium'),
                     'Costo/Kg': st.column_config.TextColumn('$/Kg', width='small'),
+                    'Precio Proy': st.column_config.TextColumn('$/Kg Proy', width='small'),
                     '% IQF': st.column_config.TextColumn('% IQF', width='small'),
                     '% Block': st.column_config.TextColumn('% Block', width='small'),
                 }

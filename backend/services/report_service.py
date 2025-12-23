@@ -530,7 +530,19 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     # Tabla principal con jerarquía Tipo Fruta → Manejo
     main_agg_manejo = _aggregate_by_fruta_manejo(recepciones_main)
     
-    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "Costo Promedio/kg", "% IQF", "% Block"]]
+    # Obtener precios proyectados del servicio de abastecimiento
+    precios_proyectados = {}
+    try:
+        from backend.services.abastecimiento_service import get_precios_por_especie
+        precios_data = get_precios_por_especie(planta=None, especie=None)
+        for item in precios_data:
+            especie = item.get('especie', '')
+            precio = item.get('precio_proyectado', 0)
+            precios_proyectados[especie] = precio
+    except Exception as e:
+        print(f"Error obteniendo precios proyectados para PDF: {e}")
+    
+    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "$/Kg", "$/Kg Proy", "% IQF", "% Block"]]
     tipo_fruta_rows = []  # Para trackear filas de tipo fruta (para estilo)
     
     row_idx = 1  # Empezamos en 1 (después del header)
@@ -540,12 +552,17 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         tipo_costo = tipo_data['costo_total']
         tipo_costo_prom = fmt_dinero(tipo_costo / tipo_kg, 2) if tipo_kg > 0 else "-"
         
+        # Precio proyectado para este tipo de fruta
+        precio_proy_tipo = precios_proyectados.get(tipo_fruta, 0)
+        precio_proy_str = fmt_dinero(precio_proy_tipo, 0) if precio_proy_tipo > 0 else "-"
+        
         # Fila de Tipo Fruta (totalizador)
         tbl_data.append([
             tipo_fruta,
             fmt_numero(tipo_kg, 2),
             fmt_dinero(tipo_costo),
             tipo_costo_prom,
+            precio_proy_str,
             "-",
             "-"
         ])
@@ -556,11 +573,19 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         for m in tipo_data['manejos']:
             manejo_name = m['manejo']
             costo_prom = fmt_dinero(m['costo_prom'], 2) if m['costo_prom'] is not None else "-"
+            
+            # Precio proyectado para la combinación tipo + manejo
+            manejo_norm = 'Orgánico' if 'org' in manejo_name.lower() else 'Convencional'
+            especie_manejo = f"{tipo_fruta} {manejo_norm}"
+            precio_proy_manejo = precios_proyectados.get(especie_manejo, precios_proyectados.get(tipo_fruta, 0))
+            precio_proy_manejo_str = fmt_dinero(precio_proy_manejo, 0) if precio_proy_manejo > 0 else "-"
+            
             tbl_data.append([
                 f"   → {manejo_name}",  # Indentado
                 fmt_numero(m['kg'], 2),
                 fmt_dinero(m['costo']),
                 costo_prom,
+                precio_proy_manejo_str,
                 f"{fmt_numero(m['prom_iqf'], 2)}%",
                 f"{fmt_numero(m['prom_block'], 2)}%"
             ])
@@ -571,6 +596,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         'TOTAL GENERAL',
         fmt_numero(total_kg, 2),
         fmt_dinero(total_costo),
+        '-',
         '-',
         '-',
         '-'
