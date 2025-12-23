@@ -589,22 +589,29 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     except Exception as e:
         print(f"Error obteniendo precios proyectados para PDF: {e}")
     
-    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "$/Kg", "$/Kg Proy", "Desv", "% IQF", "% Block"]]
+    # Estilos para celdas de desviación con colores
+    from reportlab.lib.styles import ParagraphStyle
+    desv_style_green = ParagraphStyle('DesvGreen', fontName='Helvetica-Bold', fontSize=8, textColor=colors.HexColor('#2e7d32'))
+    desv_style_yellow = ParagraphStyle('DesvYellow', fontName='Helvetica-Bold', fontSize=8, textColor=colors.HexColor('#f57c00'))
+    desv_style_red = ParagraphStyle('DesvRed', fontName='Helvetica-Bold', fontSize=8, textColor=colors.HexColor('#c62828'))
+    desv_style_normal = ParagraphStyle('DesvNormal', fontName='Helvetica', fontSize=8, textColor=colors.black)
+    
+    tbl_data = [["Tipo Fruta / Manejo", "Kg", "Costo Total", "$/Kg", "PPTO", "Desviación", "% IQF", "% Block"]]
     tipo_fruta_rows = []  # Para trackear filas de tipo fruta (para estilo)
     
-    # Función para calcular y formatear desviación
+    # Función para calcular y formatear desviación - retorna Paragraph con color
     def calc_desv(costo_kg, precio_proy):
         if precio_proy > 0 and costo_kg > 0:
             desv = ((costo_kg - precio_proy) / precio_proy) * 100
             if desv <= 0:
-                return f"OK -{abs(desv):.1f}%"  # Favorable (pagando menos)
+                return Paragraph(f"✓ -{abs(desv):.1f}%", desv_style_green)  # Verde - Favorable
             elif desv <= 3:
-                return f"+{desv:.1f}%"  # Verde (1-3%) - ok
+                return Paragraph(f"🟢 +{desv:.1f}%", desv_style_green)  # Verde (1-3%) - ok
             elif desv <= 8:
-                return f"! +{desv:.1f}%"  # Amarillo (3-8%) - atención
+                return Paragraph(f"🟡 +{desv:.1f}%", desv_style_yellow)  # Amarillo (3-8%) - atención
             else:
-                return f"!! +{desv:.1f}%"  # Rojo (>8%) - crítico
-        return "-"
+                return Paragraph(f"🔴 +{desv:.1f}%", desv_style_red)  # Rojo (>8%) - crítico
+        return Paragraph("-", desv_style_normal)
     
     row_idx = 1  # Empezamos en 1 (después del header)
     for tipo_data in main_agg_manejo:
@@ -693,9 +700,13 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
     elements.append(KeepTogether([t]))
     elements.append(Spacer(1, 6))
     
-    # Leyenda de desviación de precios
+    # Leyenda de desviación de precios con colores
     leyenda_desv = Paragraph(
-        "<b>Leyenda Desv:</b> OK = Favorable (pagando menos) | +X% = 1-3% ok | ! = 3-8% atencion | !! = >8% critico",
+        '<b>Leyenda Desviación:</b> '
+        '<font color="#2e7d32"><b>✓ = Favorable</b></font> | '
+        '<font color="#2e7d32"><b>🟢 1-3%</b></font> | '
+        '<font color="#f57c00"><b>🟡 3-8%</b></font> | '
+        '<font color="#c62828"><b>🔴 >8%</b></font>',
         styles['Normal']
     )
     elements.append(leyenda_desv)
