@@ -386,6 +386,137 @@ def _aggregate_by_fruta_productor_manejo(recepciones: List[Dict[str, Any]]) -> L
     return out
 
 
+def _aggregate_by_manejo_especie_productor(recepciones: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Agrupa recepciones por Manejo → Especie (Tipo de Fruta) → Productor.
+    Orden: Orgánico primero, luego Convencional.
+    Para cada nivel calcula: Kg, Costo Total, Costo Promedio/Kg.
+    """
+    # Estructura: {manejo: {especie: {productor: {kg, costo}}}}
+    agrup = {}
+    
+    for r in recepciones:
+        tipo_fruta_qc = (r.get('tipo_fruta') or '').strip()
+        
+        productor = (r.get('productor') or '').strip()
+        if not productor:
+            productor = 'Sin Productor'
+        
+        # Excluir productor ADMINISTRADOR
+        if productor.upper() == 'ADMINISTRADOR':
+            continue
+        
+        # Recorrer productos para obtener tipo, manejo y sumar kg/costo
+        for p in r.get('productos', []) or []:
+            cat = _normalize_categoria(p.get('Categoria', ''))
+            if cat == 'BANDEJAS':
+                continue  # Excluir bandejas
+            
+            kg = p.get('Kg Hechos', 0) or 0
+            if kg <= 0:
+                continue  # Ignorar productos con 0 kg
+            
+            # Usar TipoFruta del producto, con fallback al tipo_fruta del QC
+            especie = (p.get('TipoFruta') or tipo_fruta_qc or '').strip()
+            if not especie:
+                continue
+            
+            manejo_raw = (p.get('Manejo') or '').strip()
+            # Normalizar manejo a Orgánico o Convencional
+            if 'org' in manejo_raw.lower():
+                manejo = 'Orgánico'
+            elif manejo_raw:
+                manejo = 'Convencional'
+            else:
+                manejo = 'Sin Manejo'
+            
+            if manejo not in agrup:
+                agrup[manejo] = {}
+            
+            if especie not in agrup[manejo]:
+                agrup[manejo][especie] = {}
+            
+            if productor not in agrup[manejo][especie]:
+                agrup[manejo][especie][productor] = {'kg': 0.0, 'costo': 0.0}
+            
+            costo = p.get('Costo Total', 0) or 0
+            agrup[manejo][especie][productor]['kg'] += kg
+            agrup[manejo][especie][productor]['costo'] += costo
+    
+    # Convertir a lista jerárquica
+    out = []
+    
+    # Orden de manejos: Orgánico primero, luego Convencional, luego otros
+    manejo_order = ['Orgánico', 'Convencional']
+    manejos_sorted = sorted(agrup.keys(), key=lambda x: (manejo_order.index(x) if x in manejo_order else 99, x))
+    
+    for manejo in manejos_sorted:
+        especies = agrup[manejo]
+        manejo_kg = 0.0
+        manejo_costo = 0.0
+        
+        especies_list = []
+        for especie, productores in especies.items():
+            especie_kg = sum(p['kg'] for p in productores.values())
+            
+            # Omitir especies sin kg
+            if especie_kg <= 0:
+                continue
+                
+            especie_costo = sum(p['costo'] for p in productores.values())
+            especie_costo_prom = (especie_costo / especie_kg) if especie_kg > 0 else None
+            
+            manejo_kg += especie_kg
+            manejo_costo += especie_costo
+            
+            productores_list = []
+            for prod_nombre, v in productores.items():
+                kg = v['kg']
+                # Omitir productores sin kg
+                if kg <= 0:
+                    continue
+                costo = v['costo']
+                costo_prom = (costo / kg) if kg > 0 else None
+                productores_list.append({
+                    'productor': prod_nombre,
+                    'kg': kg,
+                    'costo': costo,
+                    'costo_prom': costo_prom
+                })
+            
+            # Omitir especies sin productores válidos
+            if not productores_list:
+                continue
+            
+            # Ordenar productores por kg descendente
+            productores_list.sort(key=lambda x: x['kg'], reverse=True)
+            
+            especies_list.append({
+                'especie': especie,
+                'kg': especie_kg,
+                'costo': especie_costo,
+                'costo_prom': especie_costo_prom,
+                'productores': productores_list
+            })
+        
+        # Omitir manejos sin especies válidas
+        if not especies_list:
+            continue
+        
+        # Ordenar especies por kg descendente
+        especies_list.sort(key=lambda x: x['kg'], reverse=True)
+        
+        manejo_costo_prom = (manejo_costo / manejo_kg) if manejo_kg > 0 else None
+        
+        out.append({
+            'manejo': manejo,
+            'kg': manejo_kg,
+            'costo': manejo_costo,
+            'costo_prom': manejo_costo_prom,
+            'especies': especies_list
+        })
+    
+    return out
 
 
 def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: str, fecha_fin: str,
@@ -754,63 +885,92 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         # si falla el gráfico, continuar sin él
         pass
 
-    # Detalle por Tipo Fruta → Productor → Manejo
-    titulo_detalle = Paragraph("Detalle por Tipo de Fruta", styles['Heading2'])
+    # Detalle por Manejo → Especie → Productor
+    titulo_detalle = Paragraph("Detalle por Manejo", styles['Heading2'])
     
-    fruta_agg = _aggregate_by_fruta_productor_manejo(recepciones_main)
+    manejo_agg = _aggregate_by_manejo_especie_productor(recepciones_main)
     
     # Crear estilo para celdas con texto largo que necesita wrap
     from reportlab.lib.styles import ParagraphStyle
-    cell_style = ParagraphStyle('CellStyle', fontName='Helvetica', fontSize=8, leading=10)
-    cell_style_bold = ParagraphStyle('CellStyleBold', fontName='Helvetica-Bold', fontSize=8, leading=10)
-    cell_style_italic = ParagraphStyle('CellStyleItalic', fontName='Helvetica-Oblique', fontSize=8, leading=10)
+    cell_style = ParagraphStyle('CellStyle2', fontName='Helvetica', fontSize=8, leading=10)
+    cell_style_bold = ParagraphStyle('CellStyleBold2', fontName='Helvetica-Bold', fontSize=8, leading=10)
+    cell_style_italic = ParagraphStyle('CellStyleItalic2', fontName='Helvetica-Oblique', fontSize=8, leading=10)
+    # Estilos para Orgánico (verde)
+    cell_style_green = ParagraphStyle('CellStyleGreen', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=colors.HexColor('#1b5e20'))
+    cell_style_green_italic = ParagraphStyle('CellStyleGreenItalic', fontName='Helvetica-Oblique', fontSize=8, leading=10, textColor=colors.HexColor('#2e7d32'))
+    cell_style_green_normal = ParagraphStyle('CellStyleGreenNormal', fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#388e3c'))
     # Estilo para header con texto blanco
-    header_style = ParagraphStyle('HeaderStyle', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=colors.whitesmoke)
+    header_style2 = ParagraphStyle('HeaderStyle2', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=colors.whitesmoke)
     
-    # Crear tabla jerárquica - usar Paragraph para la primera columna
-    detail_tbl = [[Paragraph("Tipo Fruta / Productor / Manejo", header_style), "Kg", "Costo Total", "Costo Prom/Kg"]]
-    fruta_rows = []  # Filas de tipo fruta para estilo
-    productor_rows = []  # Filas de productores para estilo
+    # Crear tabla jerárquica - Manejo → Especie → Productor
+    detail_tbl = [[Paragraph("Manejo / Especie / Productor", header_style2), "Kg", "Costo Total", "$/Kg"]]
+    manejo_rows = []  # Filas de manejo para estilo
+    especie_rows = []  # Filas de especie para estilo
+    organico_rows = []  # Filas que pertenecen a Orgánico (para color verde de fondo)
     row_idx = 1
     
-    for fruta_data in fruta_agg:
-        # Fila de Tipo Fruta (totalizador principal)
-        costo_prom_str = fmt_dinero(fruta_data['costo_prom'], 2) if fruta_data['costo_prom'] is not None else "-"
+    for manejo_data in manejo_agg:
+        manejo_name = manejo_data['manejo']
+        is_organico = 'org' in manejo_name.lower()
+        
+        # Fila de Manejo (totalizador principal)
+        costo_prom_str = fmt_dinero(manejo_data['costo_prom'], 2) if manejo_data['costo_prom'] is not None else "-"
+        if is_organico:
+            manejo_label = Paragraph(f"<b>🌿 {manejo_name}</b>", cell_style_green)
+        else:
+            manejo_label = Paragraph(f"<b>{manejo_name}</b>", cell_style_bold)
+        
         detail_tbl.append([
-            Paragraph(f"<b>{fruta_data['tipo_fruta']}</b>", cell_style_bold),
-            fmt_numero(fruta_data['kg'], 2),
-            fmt_dinero(fruta_data['costo']),
+            manejo_label,
+            fmt_numero(manejo_data['kg'], 2),
+            fmt_dinero(manejo_data['costo']),
             costo_prom_str
         ])
-        fruta_rows.append(row_idx)
+        manejo_rows.append(row_idx)
+        if is_organico:
+            organico_rows.append(row_idx)
         row_idx += 1
         
-        # Filas de Productor (indentadas)
-        for prod_data in fruta_data['productores']:
-            costo_prom_prod = fmt_dinero(prod_data['costo_prom'], 2) if prod_data['costo_prom'] is not None else "-"
+        # Filas de Especie (indentadas)
+        for especie_data in manejo_data['especies']:
+            costo_prom_esp = fmt_dinero(especie_data['costo_prom'], 2) if especie_data['costo_prom'] is not None else "-"
+            if is_organico:
+                especie_label = Paragraph(f"<i>→ {especie_data['especie']}</i>", cell_style_green_italic)
+            else:
+                especie_label = Paragraph(f"<i>→ {especie_data['especie']}</i>", cell_style_italic)
+            
             detail_tbl.append([
-                Paragraph(f"<i>→ {prod_data['productor']}</i>", cell_style_italic),
-                fmt_numero(prod_data['kg'], 2),
-                fmt_dinero(prod_data['costo']),
-                costo_prom_prod
+                especie_label,
+                fmt_numero(especie_data['kg'], 2),
+                fmt_dinero(especie_data['costo']),
+                costo_prom_esp
             ])
-            productor_rows.append(row_idx)
+            especie_rows.append(row_idx)
+            if is_organico:
+                organico_rows.append(row_idx)
             row_idx += 1
             
-            # Filas de Manejo (doble indentación)
-            for manejo_data in prod_data['manejos']:
-                costo_prom_manejo = fmt_dinero(manejo_data['costo_prom'], 2) if manejo_data['costo_prom'] is not None else "-"
+            # Filas de Productor (doble indentación)
+            for prod_data in especie_data['productores']:
+                costo_prom_prod = fmt_dinero(prod_data['costo_prom'], 2) if prod_data['costo_prom'] is not None else "-"
+                if is_organico:
+                    prod_label = Paragraph(f"&nbsp;&nbsp;&nbsp;↳ {prod_data['productor']}", cell_style_green_normal)
+                else:
+                    prod_label = Paragraph(f"&nbsp;&nbsp;&nbsp;↳ {prod_data['productor']}", cell_style)
+                
                 detail_tbl.append([
-                    Paragraph(f"&nbsp;&nbsp;&nbsp;↳ {manejo_data['manejo']}", cell_style),
-                    fmt_numero(manejo_data['kg'], 2),
-                    fmt_dinero(manejo_data['costo']),
-                    costo_prom_manejo
+                    prod_label,
+                    fmt_numero(prod_data['kg'], 2),
+                    fmt_dinero(prod_data['costo']),
+                    costo_prom_prod
                 ])
+                if is_organico:
+                    organico_rows.append(row_idx)
                 row_idx += 1
     
     # Fila de TOTAL GENERAL
-    total_kg_detail = sum(f['kg'] for f in fruta_agg)
-    total_costo_detail = sum(f['costo'] for f in fruta_agg)
+    total_kg_detail = sum(m['kg'] for m in manejo_agg)
+    total_costo_detail = sum(m['costo'] for m in manejo_agg)
     total_costo_prom_detail = fmt_dinero(total_costo_detail / total_kg_detail, 2) if total_kg_detail > 0 else "-"
     detail_tbl.append([Paragraph("<b>TOTAL GENERAL</b>", cell_style_bold), fmt_numero(total_kg_detail, 2), fmt_dinero(total_costo_detail), total_costo_prom_detail])
     
@@ -828,13 +988,26 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#d0d0d0')),
     ]
     
-    # Estilo para filas de Tipo Fruta (fondo gris)
-    for row_num in fruta_rows:
-        detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#e8e8e8')))
+    # Estilo para filas de Manejo (fondo gris oscuro)
+    for row_num in manejo_rows:
+        if row_num in organico_rows:
+            # Fondo verde claro para Orgánico
+            detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#c8e6c9')))
+        else:
+            detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#e0e0e0')))
     
-    # Estilo para filas de Productor (fondo más claro)
-    for row_num in productor_rows:
-        detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f5f5f5')))
+    # Estilo para filas de Especie (fondo intermedio)
+    for row_num in especie_rows:
+        if row_num in organico_rows:
+            # Fondo verde más claro para especies orgánicas
+            detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#e8f5e9')))
+        else:
+            detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f5f5f5')))
+    
+    # Filas de productores orgánicos con fondo verde muy suave
+    for row_num in organico_rows:
+        if row_num not in manejo_rows and row_num not in especie_rows:
+            detail_style.append(('BACKGROUND', (0, row_num), (-1, row_num), colors.HexColor('#f1f8e9')))
     
     detail_table.setStyle(TableStyle(detail_style))
     
