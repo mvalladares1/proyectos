@@ -400,6 +400,11 @@ with tab_kpis:
                 for manejo in sorted(agrup[tipo].keys(), key=lambda m: agrup[tipo][m]['kg'], reverse=True):
                     v = agrup[tipo][manejo]
                     kg = v['kg']
+                    
+                    # Omitir manejos con 0 kg
+                    if kg <= 0:
+                        continue
+                        
                     costo = v['costo']
                     costo_prom = costo / kg if kg > 0 else 0
                     prom_iqf = sum(v['iqf_vals']) / len(v['iqf_vals']) if v['iqf_vals'] else 0
@@ -495,8 +500,8 @@ with tab_kpis:
                     'Kg': st.column_config.TextColumn('Kg', width='small'),
                     'Costo Total': st.column_config.TextColumn('Costo Total', width='medium'),
                     'Costo/Kg': st.column_config.TextColumn('$/Kg', width='small'),
-                    'Precio Proy': st.column_config.TextColumn('$/Kg Proy', width='small'),
-                    '% Desv': st.column_config.TextColumn('Desv Precio', width='small'),
+                    'Precio Proy': st.column_config.TextColumn('PPTO', width='small'),
+                    '% Desv': st.column_config.TextColumn('Desviación', width='small'),
                     '% IQF': st.column_config.TextColumn('% IQF', width='small'),
                     '% Block': st.column_config.TextColumn('% Block', width='small'),
                 }
@@ -504,7 +509,7 @@ with tab_kpis:
             
             # Leyenda de colores para desviación de precio
             st.caption(
-                "**Leyenda Desv Precio:** "
+                "**Leyenda Desviación:** "
                 "✓ Favorable (pagando menos) · "
                 "🟢 +1% a +3% · "
                 "🟡 +3% a +8% · "
@@ -599,6 +604,7 @@ with tab_kpis:
         if productores:
             productor_filtro = st.multiselect("Filtrar por Productor", productores, key="productor_filtro")
 
+        # Aplicar filtros
         df_filtrada = df.copy()
         if productor_filtro:
             df_filtrada = df_filtrada[df_filtrada['productor'].isin(productor_filtro)]
@@ -687,7 +693,21 @@ with tab_kpis:
             if st.button("Descargar Excel Detallado (Por Producto)"):
                 try:
                     with st.spinner("Generando Excel detallado en el servidor..."):
-                        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params={**params, 'include_prev_week': False, 'include_month_accum': False}, timeout=180)
+                        # Construir parámetros pasando las listas de filtros
+                        params_excel = {**params, 'include_prev_week': False, 'include_month_accum': False}
+                        
+                        # Pasar filtros como listas
+                        if tipo_fruta_filtro:
+                            params_excel['tipo_fruta'] = tipo_fruta_filtro
+                        if clasif_filtro:
+                            params_excel['clasificacion'] = clasif_filtro
+                        if manejo_filtro:
+                            params_excel['manejo'] = manejo_filtro
+                        if productor_filtro:
+                            params_excel['productor'] = productor_filtro
+                        
+                        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params=params_excel, timeout=180)
+                        
                     if resp.status_code == 200:
                         xlsx_bytes = resp.content
                         fname = f"recepciones_detalle_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
