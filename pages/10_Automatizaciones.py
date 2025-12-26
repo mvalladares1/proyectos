@@ -22,7 +22,7 @@ import sys
 import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.auth import proteger_pagina, obtener_info_sesion
+from shared.auth import proteger_pagina, obtener_info_sesion, get_credenciales
 
 # API URL
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
@@ -30,8 +30,9 @@ API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 # Requerir autenticación
 proteger_pagina()
 
-# Obtener info de sesión
+# Obtener info de sesión y credenciales
 session_info = obtener_info_sesion()
+username, password = get_credenciales()
 
 # ============ Estilos Custom (Mobile-First) ============
 
@@ -121,11 +122,12 @@ with tab1:
     
     # Obtener lista de túneles
     @st.cache_data(ttl=3600)
-    def get_tuneles():
+    def get_tuneles(_username, _password):
         try:
             response = requests.get(
                 f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/procesos",
-                headers={"Authorization": f"Bearer {session_info.get('token')}"}
+                params={"username": _username, "password": _password},
+                timeout=10
             )
             if response.status_code == 200:
                 return response.json()
@@ -133,7 +135,7 @@ with tab1:
         except:
             return []
     
-    tuneles = get_tuneles()
+    tuneles = get_tuneles(username, password)
     
     if not tuneles:
         st.error("❌ No se pudieron cargar los túneles disponibles")
@@ -355,13 +357,13 @@ with tab1:
                                 
                                 response = requests.post(
                                     f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/crear",
-                                    headers={"Authorization": f"Bearer {session_info.get('token')}"},
+                                    params={"username": username, "password": password},
                                     json={
                                         "tunel": selected_tunel,
                                         "pallets": pallets_payload,
                                         "buscar_ubicacion_auto": buscar_ubicacion_auto
                                     },
-                                    timeout=30  # ✅ Timeout de 30 segundos
+                                    timeout=60  # ✅ Timeout de 60 segundos (crear MO puede tardar)
                                 )
                                 
                                 if response.status_code == 200:
@@ -440,9 +442,13 @@ with tab2:
     
     # Obtener órdenes
     @st.cache_data(ttl=300)  # ✅ Optimizado: 5 minutos (antes 1 min)
-    def get_ordenes(tunel=None, estado=None):
+    def get_ordenes(_username, _password, tunel=None, estado=None):
         try:
-            params = {"limit": 20}
+            params = {
+                "username": _username,
+                "password": _password,
+                "limit": 20
+            }
             if tunel and tunel != 'Todos':
                 params['tunel'] = tunel
             if estado and estado != 'Todos':
@@ -450,7 +456,6 @@ with tab2:
             
             response = requests.get(
                 f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes",
-                headers={"Authorization": f"Bearer {session_info.get('token')}"},
                 params=params
             )
             if response.status_code == 200:
