@@ -19,10 +19,13 @@ st.set_page_config(
 
 # Importar autenticación
 import sys
+import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.auth import proteger_pagina, obtener_info_sesion
-from shared.constants import API_URL
+
+# API URL
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 # Requerir autenticación
 proteger_pagina()
