@@ -2,7 +2,7 @@
 
 Este documento describe la estructura del repositorio `rio-futuro-dashboards`.
 
-**Última actualización:** 12 de Diciembre 2025
+**Última actualización:** 26 de Diciembre 2024
 
 ---
 
@@ -43,9 +43,11 @@ proyectos/
 │   │   ├── permissions.py
 │   │   ├── recepciones_mp.py
 │   │   ├── rendimiento.py
-│   │   └── compras.py
+│   │   ├── compras.py
+│   │   └── automatizaciones.py   # 🆕 Túneles Estáticos
 │   └── services/
 │       ├── rendimiento_service.py
+│       ├── tuneles_service.py    # 🆕 Lógica de MO automáticas
 │       └── session_service.py    # 🆕 Gestión de sesiones JWT
 │
 ├── pages/                        # Páginas Streamlit
@@ -57,7 +59,8 @@ proyectos/
 │   ├── 6_Finanzas.py
 │   ├── 7_Rendimiento.py
 │   ├── 8_Compras.py
-│   └── 9_Permisos.py
+│   ├── 9_Permisos.py
+│   └── 10_Automatizaciones.py    # 🆕 Túneles Estáticos
 │
 ├── shared/                       # Módulos compartidos
 │   ├── auth.py                   # 🔐 Autenticación frontend
@@ -84,6 +87,7 @@ proyectos/
 | 7 | Rendimiento | `7_Rendimiento.py` | Análisis de rendimiento por lote (MP → PT) |
 | 8 | Compras | `8_Compras.py` | Órdenes de compra, líneas de crédito |
 | 9 | Permisos | `9_Permisos.py` | Panel de administración |
+| 10 | **Automatizaciones** | `10_Automatizaciones.py` | **🆕 Túneles Estáticos - Creación de MO** |
 
 ---
 
@@ -165,7 +169,115 @@ proyectos/
 
 ---
 
-## 7. Endpoints API Completos
+## 7. Dashboard de Automatizaciones (Túneles Estáticos) 🆕
+
+### Descripción General
+
+Dashboard para automatizar la creación de Órdenes de Fabricación (MO) en Odoo 16 para procesos de congelado en túneles estáticos. Sistema mobile-first diseñado para celulares Zebra con entrada por escaneo o manual.
+
+### Pestañas Disponibles
+
+| Tab | Descripción |
+|-----|-------------|
+| 📦 **Crear Orden** | Input de pallets, validación y creación de MO |
+| 📊 **Monitor de Órdenes** | Listado y filtrado de órdenes creadas |
+
+### Túneles Configurados
+
+| Código | Proceso | Sucursal | Ubicación Origen |
+|--------|---------|----------|------------------|
+| TE1 | Túnel Estático 1 | RF | RF/Stock/Camara 0°C REAL |
+| TE2 | Túnel Estático 2 | RF | RF/Stock/Camara 0°C REAL |
+| TE3 | Túnel Estático 3 | RF | RF/Stock/Camara 0°C REAL |
+| VLK | Túnel Estático VLK | VLK | VLK/Camara 0° |
+
+### Funcionalidades Implementadas
+
+#### Validación de Pallets
+- ✅ Buscar lote por código en `stock.lot`
+- ✅ Obtener Kg automáticamente desde `stock.quant`
+- ✅ Detectar pallets sin stock y permitir ingreso manual
+- ✅ Mostrar ubicación real del pallet
+- ✅ Búsqueda automática de ubicación (VLK con pallets mal ubicados)
+
+#### Creación de Órdenes
+- ✅ Crear MO en estado Borrador
+- ✅ Validar todos los pallets antes de crear
+- ✅ **Crear componentes (`move_raw_ids`)** con `stock.move` y `stock.move.line`
+- ✅ **Crear subproductos (`move_finished_ids`)** con sufijo `-C`
+- ✅ **Generar lotes automáticamente** con sufijo `-C` (ej: PAC0002683-C)
+- ✅ **Crear `result_package_id`** con formato PACK0002XXX-C
+- ✅ Mapeo automático producto fresco → congelado
+
+#### Monitor
+- ✅ Listar últimas 20 órdenes
+- ✅ Filtrar por túnel (TE1/TE2/TE3/VLK)
+- ✅ Filtrar por estado (draft/confirmed/progress/done/cancel)
+- ✅ Visualización con cards y badges de colores
+
+### Lógica de Creación de MO
+
+```
+Input: Pallets de fruta fresca (ej: PAC0002683, 426 Kg)
+
+1. Validar pallets → Obtener Kg y ubicación
+2. Crear MO en borrador
+3. Crear componentes (move_raw_ids):
+   - stock.move por producto
+   - stock.move.line por pallet
+   - Asignar lot_id original (PAC0002683)
+   
+4. Crear subproductos (move_finished_ids):
+   - stock.move con producto congelado
+   - stock.move.line por pallet con sufijo -C
+   - Buscar/crear lot_id: PAC0002683-C
+   - Crear result_package_id: PACK0002683-C
+
+Output: MO completa lista en Odoo
+```
+
+### Arquitectura Backend
+
+| Componente | Descripción |
+|------------|-------------|
+| `tuneles_service.py` | Lógica completa de validación y creación |
+| `automatizaciones.py` | 5 endpoints REST API |
+
+### Endpoints API
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/automatizaciones/tuneles-estaticos/procesos` | GET | Lista túneles disponibles |
+| `/api/v1/automatizaciones/tuneles-estaticos/validar-pallets` | POST | Valida lista de pallets |
+| `/api/v1/automatizaciones/tuneles-estaticos/crear` | POST | Crea orden de fabricación |
+| `/api/v1/automatizaciones/tuneles-estaticos/ordenes` | GET | Lista órdenes recientes |
+| `/api/v1/automatizaciones/tuneles-estaticos/ordenes/{id}` | GET | Detalle de orden |
+
+### Estado del Desarrollo
+
+| Feature | Estado | Notas |
+|---------|--------|-------|
+| Backend Service | ✅ | 100% implementado |
+| API Endpoints | ✅ | 5 endpoints operativos |
+| Frontend Streamlit | ✅ | Mobile-first completado |
+| Validación de pallets | ✅ | Con/sin stock |
+| Creación de componentes | ✅ | stock.move + move.line |
+| Creación de subproductos | ✅ | Con sufijo -C y packages |
+| Permisos | ✅ | Integrado en sistema de permisos |
+| Navegación Home | ✅ | Cards clicables |
+
+### TODOs Pendientes
+
+- [ ] Testing en Odoo real con pallets de producción
+- [ ] Agregar escaneo con cámara (streamlit-camera-input-live)
+- [ ] Confirmación antes de crear orden
+- [ ] Validar duplicados en lista de pallets
+- [ ] Logs y trazabilidad de automatizaciones
+- [ ] Estadísticas de uso (órdenes por túnel, Kg procesados)
+
+---
+
+## 8. Dataset de Compras
 
 ### Rendimiento
 
@@ -227,4 +339,4 @@ extra-streamlit-components>=0.1.60  # Cookies (opcional)
 
 ---
 
-*Documento actualizado el 12 de Diciembre 2025*
+*Documento actualizado el 26 de Diciembre 2024*

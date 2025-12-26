@@ -21,6 +21,7 @@ ALL_DASHBOARDS = [
     "rendimiento",
     "finanzas",
     "compras",
+    "automatizaciones",
     "permisos",
 ]
 
@@ -35,6 +36,7 @@ DASHBOARD_NAMES = {
     "finanzas": "Finanzas",
     "estado_resultado": "Finanzas",  # Alias para compatibilidad
     "compras": "Compras",
+    "automatizaciones": "Automatizaciones",
     "permisos": "Permisos",
 }
 
@@ -75,6 +77,10 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
     ],
     "rendimiento": [
         {"slug": "dashboard", "name": "Dashboard"},
+    ],
+    "automatizaciones": [
+        {"slug": "crear_orden", "name": "Crear Orden"},
+        {"slug": "monitor_ordenes", "name": "Monitor de Órdenes"},
     ],
     "permisos": [
         {"slug": "modulos", "name": "Módulos"},

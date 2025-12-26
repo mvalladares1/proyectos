@@ -172,22 +172,23 @@ else:
     
     st.markdown("---")
     st.subheader("📊 Selecciona un Dashboard")
-    st.info("👈 Usa el menú lateral para navegar a los diferentes dashboards.")
+    st.info("👈 Usa el menú lateral para navegar a los diferentes dashboards, o haz clic en las tarjetas de abajo.")
     
-    # Tarjetas informativas
+    # Tarjetas informativas con navegación
     st.markdown('<div class="section-header">📦 Operaciones</div>', unsafe_allow_html=True)
     
     cols = st.columns(3)
     dashboards_op = [
-        ("📥", "Recepciones", "KPIs de Kg, costos y calidad por productor"),
-        ("🏭", "Producción", "Órdenes de fabricación y rendimientos"),
-        ("📊", "Bandejas", "Control de bandejas por proveedor"),
-        ("📦", "Stock", "Inventario en cámaras y pallets"),
-        ("🚢", "Containers", "Pedidos y avance de producción"),
-        ("📈", "Rendimiento", "Análisis de eficiencia MP → PT por lote"),
+        ("📥", "Recepciones", "KPIs de Kg, costos y calidad por productor", "pages/1_Recepciones.py"),
+        ("🏭", "Producción", "Órdenes de fabricación y rendimientos", "pages/2_Produccion.py"),
+        ("📊", "Bandejas", "Control de bandejas por proveedor", "pages/3_Bandejas.py"),
+        ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py"),
+        ("🚢", "Containers", "Pedidos y avance de producción", "pages/5_Containers.py"),
+        ("📈", "Rendimiento", "Análisis de eficiencia MP → PT por lote", "pages/7_Rendimiento.py"),
+        ("🤖", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py"),
     ]
     
-    for i, (icon, title, desc) in enumerate(dashboards_op):
+    for i, (icon, title, desc, page) in enumerate(dashboards_op):
         with cols[i % 3]:
             st.markdown(f"""
             <div class="dashboard-card card-operaciones">
@@ -195,6 +196,8 @@ else:
                 <div class="card-desc">{desc}</div>
             </div>
             """, unsafe_allow_html=True)
+            if st.button(f"Abrir {title}", key=f"btn_{title}", use_container_width=True):
+                st.switch_page(page)
     
     st.markdown('<div class="section-header">💰 Finanzas</div>', unsafe_allow_html=True)
     
@@ -206,6 +209,9 @@ else:
             <div class="card-desc">Estado de Resultado vs Presupuesto</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Abrir Finanzas", key="btn_finanzas", use_container_width=True):
+            st.switch_page("pages/6_Finanzas.py")
+    
     with col2:
         st.markdown("""
         <div class="dashboard-card card-finanzas">
@@ -213,6 +219,8 @@ else:
             <div class="card-desc">OC, Aprobaciones y Líneas de Crédito</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Abrir Compras", key="btn_compras", use_container_width=True):
+            st.switch_page("pages/8_Compras.py")
     
     st.markdown('<div class="section-header">⚙️ Administración</div>', unsafe_allow_html=True)
     
@@ -224,6 +232,8 @@ else:
             <div class="card-desc">Gestión de accesos por usuario</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Abrir Permisos", key="btn_permisos", use_container_width=True):
+            st.switch_page("pages/9_Permisos.py")
     
     # Información del sistema
     st.markdown("---")
