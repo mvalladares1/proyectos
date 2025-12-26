@@ -190,11 +190,12 @@ with tab1:
                             try:
                                 response = requests.post(
                                     f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
-                                    headers={"Authorization": f"Bearer {session_info.get('token')}"},
+                                    params={"username": username, "password": password},
                                     json={
                                         "pallets": [pallet_codigo],
                                         "buscar_ubicacion": buscar_ubicacion_auto
-                                    }
+                                    },
+                                    timeout=10
                                 )
                                 if response.status_code == 200:
                                     validacion = response.json()[0]
@@ -235,11 +236,12 @@ with tab1:
                             try:
                                 response = requests.post(
                                     f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
-                                    headers={"Authorization": f"Bearer {session_info.get('token')}"},
+                                    params={"username": username, "password": password},
                                     json={
                                         "pallets": codigos,
                                         "buscar_ubicacion": buscar_ubicacion_auto
-                                    }
+                                    },
+                                    timeout=15
                                 )
                                 if response.status_code == 200:
                                     validaciones = response.json()
@@ -465,6 +467,8 @@ with tab2:
             return []
     
     ordenes = get_ordenes(
+        username, 
+        password,
         tunel=filtro_tunel if filtro_tunel != 'Todos' else None,
         estado=filtro_estado if filtro_estado != 'Todos' else None
     )
