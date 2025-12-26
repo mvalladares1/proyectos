@@ -21,14 +21,14 @@ st.set_page_config(
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.auth import require_auth, get_session_info
+from shared.auth import proteger_pagina, obtener_info_sesion
 from shared.constants import API_URL
 
 # Requerir autenticación
-require_auth()
+proteger_pagina()
 
 # Obtener info de sesión
-session_info = get_session_info()
+session_info = obtener_info_sesion()
 
 # ============ Estilos Custom (Mobile-First) ============
 
