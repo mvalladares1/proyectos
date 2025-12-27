@@ -227,9 +227,30 @@ with tab1:
                                         st.success(f"✅ {pallet_codigo} agregado!")
                                         st.rerun()
                                     else:
-                                        # Activar modo manual
-                                        st.session_state.manual_entry_pending = pallet_codigo
-                                        st.warning(f"⚠️ Pallet no encontrado. Ingrese los datos manualmente.")
+                                        # Verificar si hay info de recepción
+                                        reception_info = validacion.get('reception_info')
+                                        if reception_info:
+                                            # SI ES PALLET EN RECEPCIÓN PENDIENTE:
+                                            # Lo agregamos automáticamente a la lista con estado especial
+                                            st.session_state.pallets_list.append({
+                                                'codigo': validacion['codigo'],
+                                                'kg': validacion.get('kg', 0.0),
+                                                'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
+                                                'advertencia': f"Pallet en recepción {reception_info['picking_name']}. Validar en Odoo.",
+                                                'producto_id': validacion.get('producto_id'),
+                                                'producto_nombre': validacion.get('producto_nombre', 'N/A'),
+                                                'manual': False,
+                                                'pendiente_recepcion': True, # Flag para backend y UI
+                                                'odoo_url': reception_info['odoo_url'] # Guardar URL para mostrar en lista
+                                            })
+                                            
+                                            st.warning(f"⚠️ Pallet {pallet_codigo} agregado desde Recepción Pendiente.")
+                                            st.rerun()
+                                            
+                                        else:
+                                            # Activar modo manual estándar (solo si NO está en recepción)
+                                            st.session_state.manual_entry_pending = pallet_codigo
+                                            st.warning(f"⚠️ Pallet no encontrado. Ingrese los datos manualmente.")
                                 else:
                                     st.error("Error al validar pallet")
                             except Exception as e:
@@ -482,18 +503,20 @@ with tab2:
         )
     
     with col2:
+        # Nuevo filtro: incluyedo opción de ver solo problemas
         filtro_estado = st.selectbox(
-            "Estado",
-            options=['Todos', 'draft', 'confirmed', 'progress', 'done', 'cancel'],
+            "Estado / Filtro",
+            options=['Todos', 'pendientes_stock', 'draft', 'confirmed', 'progress', 'done', 'cancel'],
             format_func=lambda x: {
                 'Todos': 'Todos',
+                'pendientes_stock': '🟠 Con Pendientes de Stock',
                 'draft': '📝 Borrador',
                 'confirmed': '✅ Confirmado',
                 'progress': '🔄 En Progreso',
                 'done': '✔️ Hecho',
                 'cancel': '❌ Cancelado'
             }.get(x, x),
-            index=0
+            index=1 # Por defecto mostramos las pendientes/problemáticas primero para agilizar
         )
     
     with col3:
@@ -502,17 +525,20 @@ with tab2:
             st.rerun()
     
     # Obtener órdenes
-    @st.cache_data(ttl=300)  # ✅ Optimizado: 5 minutos (antes 1 min)
+    @st.cache_data(ttl=60) 
     def get_ordenes(_username, _password, tunel=None, estado=None):
         try:
             params = {
                 "username": _username,
                 "password": _password,
-                "limit": 20
+                "limit": 50 # Aumentar límite para ver más
             }
             if tunel and tunel != 'Todos':
                 params['tunel'] = tunel
-            if estado and estado != 'Todos':
+            
+            # Si el filtro es un estado real de Odoo, lo mandamos
+            # Si es 'pendientes_stock', filtramos en cliente sobre las drafts/confirmed
+            if estado and estado not in ['Todos', 'pendientes_stock']:
                 params['estado'] = estado
             
             response = requests.get(
@@ -520,7 +546,11 @@ with tab2:
                 params=params
             )
             if response.status_code == 200:
-                return response.json()
+                data = response.json()
+                # Filtrado cliente para 'pendientes_stock'
+                if estado == 'pendientes_stock':
+                    return [o for o in data if o.get('tiene_pendientes')]
+                return data
             return []
         except:
             return []
@@ -529,11 +559,11 @@ with tab2:
         username, 
         password,
         tunel=filtro_tunel if filtro_tunel != 'Todos' else None,
-        estado=filtro_estado if filtro_estado != 'Todos' else None
+        estado=filtro_estado
     )
     
     if not ordenes:
-        st.info("📭 No hay órdenes para mostrar")
+        st.info("📭 No hay órdenes con este criterio")
     else:
         st.markdown(f"**{len(ordenes)} órdenes encontradas**")
         
@@ -541,8 +571,15 @@ with tab2:
         for orden in ordenes:
             # Configuración de colores por estado (visibles en dark theme)
             estado = orden.get('estado', 'draft')
+            tiene_pendientes = orden.get('tiene_pendientes', False)
             
-            if estado == 'draft':
+            if tiene_pendientes:
+                # Override visual para destacar problemas
+                color_borde = '#f59e0b' # Naranja warning
+                color_badge_bg = '#78350f'
+                color_badge_text = '#fcd34d'
+                estado_label = '🟠 PENDIENTE STOCK'
+            elif estado == 'draft':
                 color_borde = '#fbbf24'
                 color_badge_bg = '#78350f'
                 color_badge_text = '#fde68a'

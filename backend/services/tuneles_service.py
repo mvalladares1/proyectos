@@ -119,11 +119,81 @@ class TunelesService:
         
         # Agregar resultados de no encontrados
         for codigo in codigos_no_encontrados:
-            resultados.append({
-                'existe': False,
-                'codigo': codigo,
-                'error': f'Paquete {codigo} no encontrado en Odoo'
-            })
+            # --- MEJORA: Búsqueda Secundaria en Recepciones Pendientes ---
+            reception_info = None
+            try:
+                # 1. Buscar package por nombre para obtener ID si existe (aunque no tenga stock)
+                pkg_search = self.odoo.search_read('stock.quant.package', [['name', '=', codigo]], ['id'], limit=1)
+                
+                domain = []
+                if pkg_search:
+                    domain = [['result_package_id', '=', pkg_search[0]['id']]]
+                else:
+                    # Intentar buscar por nombre de lote en move line si el package no existe
+                    # (A veces ingresan el lote como código de pallet)
+                    domain = [['lot_name', '=', codigo]]
+                
+                # 2. Buscar en move lines asociados a pickings NO cancelados ni hechos
+                # Estado 'assigned' = Listo para validar, 'draft' = Borrador, 'confirmed' = Esperando
+                domain.extend([
+                    ('state', 'in', ['draft', 'confirmed', 'assigned']),
+                    ('picking_id', '!=', False)
+                ])
+                
+                move_lines = self.odoo.search_read(
+                    'stock.move.line', 
+                    domain, 
+                    ['picking_id', 'product_id', 'qty_done', 'move_id'],
+                    limit=1,
+                    order='id desc'
+                )
+                
+                if move_lines:
+                    ml = move_lines[0]
+                    picking_id = ml['picking_id'][0]
+                    picking_name = ml['picking_id'][1]
+                    
+                    # Obtener estado del picking
+                    picking = self.odoo.search_read('stock.picking', [['id', '=', picking_id]], ['state'], limit=1)
+                    if picking:
+                        state = picking[0]['state']
+                        # Generar URL de Odoo
+                        # Asumimos URL base estándar, ajusta si es diferente
+                        base_url = "https://riofuturo.odoo.com" 
+                        # ID de acción para stock.picking (usualmente se busca, pero hardcodeamos el modelo)
+                        model = "stock.picking"
+                        odoo_url = f"{base_url}/web#id={picking_id}&model={model}&view_type=form"
+                        
+                        reception_info = {
+                            'found_in_reception': True,
+                            'picking_name': picking_name,
+                            'picking_id': picking_id,
+                            'state': state,
+                            'odoo_url': odoo_url,
+                            'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
+                            'kg': ml['qty_done'], 
+                            'product_id': ml['product_id'][0] if ml['product_id'] else None
+                        }
+            except Exception as e:
+                print(f"Error buscando recepción para {codigo}: {e}")
+
+            if reception_info:
+                resultados.append({
+                    'existe': False, # Falso en stock disponible
+                    'codigo': codigo,
+                    'error': f'Pallet en recepción pendiente: {reception_info["picking_name"]}',
+                    'reception_info': reception_info,
+                    'kg': reception_info['kg'], # Pasamos data real
+                    'product_id': reception_info['product_id'], # Pasamos data real
+                    'producto_nombre': reception_info['product_name']
+                })
+            else:
+                resultados.append({
+                    'existe': False,
+                    'codigo': codigo,
+                    'error': f'Paquete {codigo} no encontrado en Odoo',
+                    'reception_info': None
+                })
         
         # Si no hay packages encontrados, retornar
         if not packages:
@@ -234,7 +304,27 @@ class TunelesService:
         # 1. Validar todos los pallets primero
         pallets_validados = []
         for pallet in pallets:
-            # --- MEJORA: Soporte para Pallets Manuales ---
+            # --- NUEVO FLUJO: Pallets que están en Recepción Pendiente ---
+            if pallet.get('pendiente_recepcion'):
+                # Validamos que traiga data mínima
+                if not pallet.get('producto_id'):
+                     errores.append(f"{pallet['codigo']}: Pallet pendiente sin producto identificado")
+                     continue
+                
+                pallets_validados.append({
+                    'codigo': pallet['codigo'],
+                    'kg': float(pallet.get('kg', 0)),
+                    'lote_id': None, # No asignamos lote aún (no existe en stock)
+                    'producto_id': int(pallet['producto_id']),
+                    'ubicacion_id': config['ubicacion_origen_id'], 
+                    'package_id': None, # No asignamos package aún
+                    'manual': False,
+                    'pendiente_recepcion': True # Flag para saber que es especial
+                })
+                advertencias.append(f"Pallet {pallet['codigo']} agregado desde Recepción Pendiente (Sin reserva stock)")
+                continue
+
+            # --- MEJORA: Soporte para Pallets Manuales (Legacy/Fallback) ---
             if pallet.get('manual'):
                 # Si es manual, confiamos en los datos enviados
                 if not pallet.get('producto_id'):
@@ -750,6 +840,33 @@ class TunelesService:
         
         # Formatear resultados
         resultado = []
+        
+        # Optimización: Buscar qué órdenes tienen componentes sin lote asignado (Pendientes)
+        mo_ids = [o['id'] for o in ordenes]
+        if mo_ids:
+            # Buscamos moves asociados a estas MOs que NO tengan lote asignado y requerían (no son consumibles/servicios)
+            # Simplificación: Si tenemos move lines sin lot_id pero con qty_done/product_uom_qty > 0
+            # En Odoo 16 'stock.move' tiene 'move_line_ids'. 
+            # Hacemos una búsqueda directa de moves que pertenezcan a las MOs y no tengan lote, 
+            # asumiendo que nuestros pallets manuales/pendientes se crearon sin lote.
+            
+            # Nota: Al estar en Borrador (draft), los moves existen. 
+            # Buscamos moves con estado 'draft' y sin lote, pero cuidado con componentes que no usan lote.
+            # Nuestros componentes de fruta SI usan lote.
+            
+            moves_sin_lote = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ('reference', 'in', [o['name'] for o in ordenes]), # Referencia suele ser el nombre de la MO
+                    ('lot_id', '=', False),
+                    ('qty_done', '>', 0) # Tienen cantidad asignada
+                ],
+                ['reference']
+            )
+            moves_pendientes_refs = set(m['reference'] for m in moves_sin_lote)
+        else:
+            moves_pendientes_refs = set()
+
         for orden in ordenes:
             # Determinar túnel por producto_id
             tunel_codigo = None
@@ -757,6 +874,8 @@ class TunelesService:
                 if config['producto_proceso_id'] == orden['product_id'][0]:
                     tunel_codigo = codigo
                     break
+            
+            tiene_pendientes = orden['name'] in moves_pendientes_refs
             
             resultado.append({
                 'id': orden['id'],
@@ -766,7 +885,8 @@ class TunelesService:
                 'kg_total': orden['product_qty'],
                 'estado': orden['state'],
                 'fecha_creacion': orden.get('create_date'),
-                'fecha_planificada': orden.get('date_planned_start')
+                'fecha_planificada': orden.get('date_planned_start'),
+                'tiene_pendientes': tiene_pendientes # Nuevo Flag
             })
         
         return resultado
