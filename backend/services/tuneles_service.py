@@ -244,6 +244,7 @@ class TunelesService:
             
             if not pkg_quants:
                 # Package existe pero sin stock - BUSCAR EN RECEPCIONES PENDIENTES
+                print(f"DEBUG: Package {codigo} (ID={package['id']}) sin quants, buscando en recepciones...")
                 reception_info = None
                 try:
                     move_lines = self.odoo.search_read(
@@ -256,10 +257,12 @@ class TunelesService:
                         limit=5,
                         order='id desc'
                     )
+                    print(f"DEBUG: move_lines encontradas: {len(move_lines)}")
                     
                     for ml in move_lines:
                         picking_id = ml['picking_id'][0]
                         picking_name = ml['picking_id'][1]
+                        print(f"DEBUG: Checking picking {picking_name} (ID={picking_id})")
                         
                         picking = self.odoo.search_read(
                             'stock.picking', 
@@ -268,11 +271,14 @@ class TunelesService:
                             limit=1
                         )
                         
+                        print(f"DEBUG: Picking state = {picking[0]['state'] if picking else 'NOT FOUND'}")
+                        
                         if picking and picking[0]['state'] not in ['done', 'cancel']:
                             state = picking[0]['state']
                             base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
                             odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
                             kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
+                            print(f"DEBUG: FOUND! kg={kg}, product={ml['product_id']}")
                             
                             reception_info = {
                                 'found_in_reception': True,
@@ -286,7 +292,7 @@ class TunelesService:
                             }
                             break
                 except Exception as e:
-                    print(f"Error buscando recepción para {codigo}: {e}")
+                    print(f"ERROR buscando recepción para {codigo}: {e}")
                 
                 if reception_info:
                     resultados.append({
