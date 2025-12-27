@@ -478,48 +478,175 @@ with tab2:
     else:
         st.markdown(f"**{len(ordenes)} órdenes encontradas**")
         
-        # Mapeo de estados a badges
-        estado_badge = {
-            'draft': 'badge-draft',
-            'confirmed': 'badge-progress',
-            'progress': 'badge-progress',
-            'done': 'badge-done',
-            'cancel': 'badge-cancel'
-        }
-        
-        estado_emoji = {
-            'draft': '📝',
-            'confirmed': '✅',
-            'progress': '🔄',
-            'done': '✔️',
-            'cancel': '❌'
-        }
-        
-        # Mostrar órdenes
+        # Mostrar órdenes con diseño expandido
         for orden in ordenes:
-            estado_class = estado_badge.get(orden['estado'], 'badge-draft')
-            emoji = estado_emoji.get(orden['estado'], '📋')
+            # Configuración de colores por estado (visibles en dark theme)
+            estado = orden.get('estado', 'draft')
+            
+            if estado == 'draft':
+                color_borde = '#fbbf24'
+                color_badge_bg = '#78350f'
+                color_badge_text = '#fde68a'
+                estado_label = '📝 BORRADOR'
+            elif estado == 'confirmed':
+                color_borde = '#3b82f6'
+                color_badge_bg = '#1e3a8a'
+                color_badge_text = '#93c5fd'
+                estado_label = '✅ CONFIRMADO'
+            elif estado == 'progress':
+                color_borde = '#f97316'
+                color_badge_bg = '#7c2d12'
+                color_badge_text = '#fed7aa'
+                estado_label = '🔄 EN PROCESO'
+            elif estado == 'done':
+                color_borde = '#22c55e'
+                color_badge_bg = '#14532d'
+                color_badge_text = '#86efac'
+                estado_label = '✔️ TERMINADO'
+            else:  # cancel
+                color_borde = '#ef4444'
+                color_badge_bg = '#7f1d1d'
+                color_badge_text = '#fca5a5'
+                estado_label = '❌ CANCELADO'
+            
+            # Formatear fecha
+            fecha_str = orden.get('fecha_creacion', 'N/A')
+            if fecha_str != 'N/A':
+                try:
+                    from datetime import datetime
+                    fecha_dt = datetime.fromisoformat(fecha_str.replace('Z', '+00:00'))
+                    fecha_str = fecha_dt.strftime('%d/%m/%Y %H:%M')
+                except:
+                    fecha_str = fecha_str[:16] if len(fecha_str) > 16 else fecha_str
+            
+            # Calcular info adicional (estimaciones si no vienen del backend)
+            total_kg = orden.get('total_kg', 0)
+            pallets = orden.get('pallets_count', int(total_kg / 400) if total_kg > 0 else 0)
+            componentes = orden.get('componentes_count', pallets)
+            subproductos = orden.get('subproductos_count', pallets)
+            
+            # Calcular electricidad estimada (0.15 USD/kg aprox)
+            electricidad = orden.get('costo_electricidad', total_kg * 0.15)
             
             st.markdown(f"""
-            <div class="orden-card">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div>
-                        <h4 style="margin: 0;">{emoji} {orden['nombre']}</h4>
-                        <p style="margin: 4px 0; color: #666;">
-                            <strong>{orden.get('tunel', 'N/A')}</strong> | {orden['producto']}
+            <div style="
+                background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); 
+                border-left: 5px solid {color_borde}; 
+                border-radius: 14px; 
+                padding: 24px; 
+                margin-bottom: 20px;
+                box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+            ">
+                <!-- Header -->
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">
+                            {orden.get('mo_name', orden.get('nombre', 'N/A'))}
+                        </h3>
+                        <p style="margin: 0; color: #a0a0b0; font-size: 0.95em;">
+                            🏭 <strong style="color: #e0e0e0;">{orden.get('tunel', 'N/A')}</strong> | 
+                            📦 {orden.get('producto_nombre', orden.get('producto', 'N/A'))}
                         </p>
                     </div>
-                    <span class="badge {estado_class}">{orden['estado'].upper()}</span>
+                    <span style="
+                        background: {color_badge_bg}; 
+                        color: {color_badge_text}; 
+                        padding: 8px 16px; 
+                        border-radius: 24px; 
+                        font-size: 0.7em; 
+                        font-weight: 800;
+                        white-space: nowrap;
+                        margin-left: 16px;
+                        letter-spacing: 1px;
+                    ">
+                        {estado_label}
+                    </span>
                 </div>
-                <div style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                
+                <!-- Grid Principal -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    
+                    <!-- Columna Izquierda: Componentes -->
+                    <div style="
+                        background: rgba(59,130,246,0.1); 
+                        border-left: 3px solid #3b82f6;
+                        border-radius: 10px; 
+                        padding: 16px;
+                    ">
+                        <div style="color: #93c5fd; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                            🔵 Componentes (Entrada)
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div>
+                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
+                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
+                            </div>
+                            <div>
+                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
+                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{componentes}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Columna Derecha: Subproductos -->
+                    <div style="
+                        background: rgba(34,197,94,0.1); 
+                        border-left: 3px solid #22c55e;
+                        border-radius: 10px; 
+                        padding: 16px;
+                    ">
+                        <div style="color: #86efac; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                            🟢 Subproductos (Salida)
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div>
+                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
+                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
+                            </div>
+                            <div>
+                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
+                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{subproductos}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Fila Inferior -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
                     <div>
-                        <small style="color: #666;">Total Kg</small><br>
-                        <strong style="font-size: 18px;">{orden['kg_total']:,.2f}</strong>
+                        <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
+                            📦 Pallets
+                        </div>
+                        <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
+                            {pallets} unidades
+                        </div>
                     </div>
                     <div>
-                        <small style="color: #666;">Fecha Creación</small><br>
-                        <strong>{orden.get('fecha_creacion', 'N/A')[:10] if orden.get('fecha_creacion') else 'N/A'}</strong>
+                        <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
+                            📅 Creación
+                        </div>
+                        <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
+                            {fecha_str}
+                        </div>
+                    </div>
+                    <div style="
+                        background: rgba(251,191,36,0.15); 
+                        border-left: 3px solid #fbbf24;
+                        border-radius: 8px;
+                        padding: 12px;
+                    ">
+                        <div style="color: #fde68a; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase; font-weight: 700;">
+                            ⚡ Electricidad
+                        </div>
+                        <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">
+                            ${electricidad:,.2f}
+                        </div>
+                        <div style="color: #a0a0b0; font-size: 0.65em; margin-top: 2px;">
+                            ~$0.15/kg
+                        </div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+

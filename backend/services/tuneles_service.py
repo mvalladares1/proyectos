@@ -85,10 +85,10 @@ class TunelesService:
     
     def validar_pallets_batch(self, codigos_pallets: List[str], buscar_ubicacion: bool = False) -> List[Dict]:
         """
-        Valida múltiples pallets en 2 llamadas a Odoo (OPTIMIZADO).
+        Valida múltiples pallets buscando por PACKAGE (PACK000XXXX) en 2 llamadas a Odoo.
         
         Args:
-            codigos_pallets: Lista de códigos de pallets
+            codigos_pallets: Lista de códigos de PACKAGES (ej: PACK0010337)
             buscar_ubicacion: Si True, busca la ubicación real del pallet
             
         Returns:
@@ -99,18 +99,18 @@ class TunelesService:
         
         resultados = []
         
-        # LLAMADA 1: Buscar TODOS los lotes en una sola llamada
-        lotes = self.odoo.search_read(
-            'stock.lot',
+        # LLAMADA 1: Buscar TODOS los packages en una sola llamada
+        packages = self.odoo.search_read(
+            'stock.quant.package',
             [('name', 'in', codigos_pallets)],
-            ['id', 'name', 'product_id']
+            ['id', 'name']
         )
         
-        # Crear mapa de lotes por código
-        lotes_map = {lote['name']: lote for lote in lotes}
+        # Crear mapa de packages por código
+        packages_map = {pkg['name']: pkg for pkg in packages}
         
         # Identificar pallets no encontrados
-        codigos_encontrados = set(lotes_map.keys())
+        codigos_encontrados = set(packages_map.keys())
         codigos_no_encontrados = set(codigos_pallets) - codigos_encontrados
         
         # Agregar resultados de no encontrados
@@ -118,53 +118,54 @@ class TunelesService:
             resultados.append({
                 'existe': False,
                 'codigo': codigo,
-                'error': f'Lote {codigo} no encontrado en Odoo'
+                'error': f'Paquete {codigo} no encontrado en Odoo'
             })
         
-        # Si no hay lotes encontrados, retornar
-        if not lotes:
+        # Si no hay packages encontrados, retornar
+        if not packages:
             return resultados
         
-        # LLAMADA 2: Buscar TODAS las cantidades en una sola llamada
-        lote_ids = [lote['id'] for lote in lotes]
+        # LLAMADA 2: Buscar TODOS los quants asociados a esos packages
+        package_ids = [pkg['id'] for pkg in packages]
         quants = self.odoo.search_read(
             'stock.quant',
-            [('lot_id', 'in', lote_ids), ('quantity', '>', 0)],
-            ['lot_id', 'quantity', 'location_id', 'product_id']
+            [('package_id', 'in', package_ids), ('quantity', '>', 0)],
+            ['package_id', 'lot_id', 'quantity', 'location_id', 'product_id']
         )
         
-        # Agrupar quants por lote_id
-        quants_por_lote = {}
+        # Agrupar quants por package_id
+        quants_por_package = {}
         for quant in quants:
-            lot_id = quant['lot_id'][0]
-            if lot_id not in quants_por_lote:
-                quants_por_lote[lot_id] = []
-            quants_por_lote[lot_id].append(quant)
+            pkg_id = quant['package_id'][0]
+            if pkg_id not in quants_por_package:
+                quants_por_package[pkg_id] = []
+            quants_por_package[pkg_id].append(quant)
         
-        # Procesar cada lote encontrado
+        # Procesar cada package encontrado
         for codigo in codigos_encontrados:
-            lote = lotes_map[codigo]
-            lote_quants = quants_por_lote.get(lote['id'], [])
+            package = packages_map[codigo]
+            pkg_quants = quants_por_package.get(package['id'], [])
             
-            if not lote_quants:
+            if not pkg_quants:
                 resultados.append({
                     'existe': True,
                     'codigo': codigo,
                     'kg': 0.0,
                     'ubicacion_id': None,
                     'ubicacion_nombre': None,
-                    'producto_id': lote['product_id'][0] if lote['product_id'] else None,
-                    'lote_id': lote['id'],
-                    'advertencia': 'Pallet sin stock disponible'
+                    'producto_id': None,
+                    'package_id': package['id'],
+                    'advertencia': 'Paquete sin stock disponible'
                 })
                 continue
             
             # Sumar cantidades
-            kg_total = sum(q['quantity'] for q in lote_quants)
+            kg_total = sum(q['quantity'] for q in pkg_quants)
             
-            # Usar primera ubicación
-            ubicacion = lote_quants[0]['location_id']
-            producto_id = lote_quants[0]['product_id'][0] if lote_quants[0]['product_id'] else None
+            # Usar primera ubicación y producto
+            ubicacion = pkg_quants[0]['location_id']
+            producto_id = pkg_quants[0]['product_id'][0] if pkg_quants[0]['product_id'] else None
+            lote_id = pkg_quants[0]['lot_id'][0] if pkg_quants[0].get('lot_id') else None
             
             resultados.append({
                 'existe': True,
@@ -173,71 +174,28 @@ class TunelesService:
                 'ubicacion_id': ubicacion[0] if ubicacion else None,
                 'ubicacion_nombre': ubicacion[1] if ubicacion else None,
                 'producto_id': producto_id,
-                'lote_id': lote['id']
+                'package_id': package['id'],
+                'lote_id': lote_id
             })
         
         return resultados
     
     def validar_pallet(self, codigo_pallet: str, buscar_ubicacion: bool = False) -> Dict:
         """
-        Valida si un pallet existe y obtiene su información.
+        Valida un solo pallet buscando por PACKAGE (wrapper sobre validar_pallets_batch).
         
         Args:
-            codigo_pallet: Código del pallet (ej: PAC0002683)
+            codigo_pallet: Código del PACKAGE (ej: PACK0010337)
             buscar_ubicacion: Si True, busca la ubicación real del pallet
             
         Returns:
-            Dict con: existe, kg, ubicacion_id, ubicacion_nombre, producto_id
+            Dict con: existe, kg, ubicacion_id, ubicacion_nombre, producto_id, package_id
         """
-        # Buscar lote (lot) por nombre
-        lotes = self.odoo.search_read(
-            'stock.lot',
-            [('name', '=', codigo_pallet)],
-            ['id', 'name', 'product_id']
-        )
-        
-        if not lotes:
-            return {
-                'existe': False,
-                'codigo': codigo_pallet,
-                'error': f'Lote {codigo_pallet} no encontrado en Odoo'
-            }
-        
-        lote = lotes[0]
-        
-        # Buscar cantidad y ubicación en stock.quant
-        quants = self.odoo.search_read(
-            'stock.quant',
-            [('lot_id', '=', lote['id']), ('quantity', '>', 0)],
-            ['quantity', 'location_id', 'product_id']
-        )
-        
-        if not quants:
-            return {
-                'existe': True,
-                'codigo': codigo_pallet,
-                'kg': 0.0,
-                'ubicacion_id': None,
-                'ubicacion_nombre': None,
-                'producto_id': lote['product_id'][0] if lote['product_id'] else None,
-                'advertencia': 'Pallet sin stock disponible'
-            }
-        
-        # Sumar cantidades si hay múltiples ubicaciones
-        kg_total = sum(q['quantity'] for q in quants)
-        
-        # Usar la primera ubicación (o buscar la correcta)
-        ubicacion = quants[0]['location_id']
-        producto_id = quants[0]['product_id'][0] if quants[0]['product_id'] else None
-        
-        return {
-            'existe': True,
+        resultados = self.validar_pallets_batch([codigo_pallet], buscar_ubicacion)
+        return resultados[0] if resultados else {
+            'existe': False,
             'codigo': codigo_pallet,
-            'kg': kg_total,
-            'ubicacion_id': ubicacion[0] if ubicacion else None,
-            'ubicacion_nombre': ubicacion[1] if ubicacion else None,
-            'producto_id': producto_id,
-            'lote_id': lote['id']
+            'error': 'Error al validar pallet'
         }
     
     def crear_orden_fabricacion(
