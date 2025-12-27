@@ -20,6 +20,13 @@ class PalletInput(BaseModel):
     """Modelo para input de pallet."""
     codigo: str = Field(..., description="Código del pallet (ej: PAC0002683)")
     kg: Optional[float] = Field(None, description="Kg manual si el pallet no tiene stock")
+    # Campos para pallets en recepción pendiente
+    pendiente_recepcion: Optional[bool] = Field(False, description="Si viene de recepción pendiente")
+    producto_id: Optional[int] = Field(None, description="ID del producto en Odoo")
+    picking_id: Optional[int] = Field(None, description="ID del picking/recepción")
+    lot_id: Optional[int] = Field(None, description="ID del lote")
+    # Campo para pallets manuales
+    manual: Optional[bool] = Field(False, description="Si fue ingresado manualmente")
 
 
 class ValidarPalletsRequest(BaseModel):
@@ -46,6 +53,8 @@ class ReceptionInfo(BaseModel):
     product_name: Optional[str] = None
     kg: Optional[float] = None
     product_id: Optional[int] = None
+    lot_id: Optional[int] = None
+    lot_name: Optional[str] = None
 
 
 class PalletValidado(BaseModel):
@@ -144,9 +153,17 @@ async def crear_orden(
     try:
         service = get_tuneles_service(odoo)
         
-        # Convertir PalletInput a dict
+        # Convertir PalletInput a dict con todos los campos
         pallets = [
-            {'codigo': p.codigo, 'kg': p.kg}
+            {
+                'codigo': p.codigo, 
+                'kg': p.kg,
+                'pendiente_recepcion': p.pendiente_recepcion,
+                'producto_id': p.producto_id,
+                'picking_id': p.picking_id,
+                'lot_id': p.lot_id,
+                'manual': p.manual
+            }
             for p in request.pallets
         ]
         
@@ -260,6 +277,57 @@ async def obtener_orden_detalle(
             'componentes': componentes,
             'subproductos': subproductos
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tuneles-estaticos/ordenes/{orden_id}/pendientes")
+async def verificar_pendientes(
+    orden_id: int,
+    odoo: OdooClient = Depends(get_odoo_client),
+):
+    """
+    Verifica el estado de las recepciones pendientes de una MO.
+    
+    Returns:
+        Dict con: mo_name, has_pending, pickings (con estado actual), all_ready
+    """
+    try:
+        service = get_tuneles_service(odoo)
+        resultado = service.verificar_pendientes(orden_id)
+        
+        if not resultado.get('success'):
+            raise HTTPException(status_code=400, detail=resultado.get('error'))
+        
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes")
+async def completar_pendientes(
+    orden_id: int,
+    odoo: OdooClient = Depends(get_odoo_client),
+):
+    """
+    Completa los pendientes de una MO cuando todas las recepciones están validadas.
+    Quita el flag x_studio_pending_receptions.
+    
+    Returns:
+        Dict con: success, mensaje
+    """
+    try:
+        service = get_tuneles_service(odoo)
+        resultado = service.completar_pendientes(orden_id)
+        
+        if not resultado.get('success'):
+            raise HTTPException(status_code=400, detail=resultado.get('error'))
+        
+        return resultado
     except HTTPException:
         raise
     except Exception as e:

@@ -238,8 +238,11 @@ with tab1:
                                                     'kg': validacion.get('kg', 0.0),
                                                     'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
                                                     'advertencia': f"Pallet en recepción {reception_info['picking_name']}. Validar en Odoo.",
-                                                    'producto_id': validacion.get('product_id'),
-                                                    'producto_nombre': validacion.get('producto_nombre', 'N/A'),
+                                                    'producto_id': reception_info.get('product_id'),
+                                                    'producto_nombre': reception_info.get('product_name', 'N/A'),
+                                                    'lot_name': reception_info.get('lot_name'),
+                                                    'lot_id': reception_info.get('lot_id'),
+                                                    'picking_id': reception_info.get('picking_id'),
                                                     'manual': False,
                                                     'pendiente_recepcion': True,
                                                     'odoo_url': reception_info['odoo_url']
@@ -318,8 +321,11 @@ with tab1:
                                                 'kg': val.get('kg', 0.0),
                                                 'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
                                                 'advertencia': f"Pallet en recepción {reception_info['picking_name']}",
-                                                'producto_id': val.get('product_id'),
-                                                'producto_nombre': val.get('producto_nombre', 'N/A'),
+                                                'producto_id': reception_info.get('product_id'),
+                                                'producto_nombre': reception_info.get('product_name', 'N/A'),
+                                                'lot_name': reception_info.get('lot_name'),
+                                                'lot_id': reception_info.get('lot_id'),
+                                                'picking_id': reception_info.get('picking_id'),
                                                 'manual': False,
                                                 'pendiente_recepcion': True,
                                                 'odoo_url': reception_info['odoo_url']
@@ -368,28 +374,54 @@ with tab1:
             
             # Mostrar pallets
             for idx, pallet in enumerate(st.session_state.pallets_list):
-                col1, col2 = st.columns([5, 1])
+                is_pending = pallet.get('pendiente_recepcion', False)
+                border_color = '#ff9800' if is_pending else '#4caf50'
                 
-                with col1:
-                    kg_display = f"{pallet['kg']:,.2f} Kg" if pallet['kg'] > 0 else "⚠️ Sin stock"
-                    ubicacion_display = f"📍 {pallet['ubicacion']}" if pallet['ubicacion'] != 'N/A' else ""
+                with st.container():
+                    col1, col2 = st.columns([5, 1])
                     
-                    st.markdown(f"""
-                    <div class="pallet-card">
-                        <strong>{pallet['codigo']}</strong> - {kg_display}<br>
-                        <small>{ubicacion_display}</small>
-                        {f'<br><small style="color: orange;">⚠️ {pallet["advertencia"]}</small>' if pallet.get('advertencia') else ''}
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    if st.button("🗑️", key=f"delete_{idx}", help="Eliminar pallet"):
-                        st.session_state.pallets_list.pop(idx)
-                        st.rerun()
-                
-                # Si tiene link a Odoo (pallet pendiente), mostrar botón
-                if pallet.get('odoo_url'):
-                    st.markdown(f"[🔗 Abrir Recepción en Odoo]({pallet['odoo_url']})")
+                    with col1:
+                        kg_display = f"{pallet['kg']:,.2f} Kg" if pallet.get('kg', 0) > 0 else "⚠️ Sin Kg"
+                        producto_display = pallet.get('producto_nombre', 'N/A')
+                        
+                        # Tarjeta base
+                        html_content = f"""
+<div style="border-left: 4px solid {border_color}; padding: 10px; margin: 5px 0; background: rgba(255,255,255,0.05); border-radius: 4px;">
+    <strong>{pallet['codigo']}</strong> - {kg_display}<br>
+    <small style="color: #aaa;">🍎 {producto_display}</small>
+"""
+                        # Info adicional si es pendiente
+                        if is_pending:
+                            reception_state = pallet.get('ubicacion', 'Pendiente').replace('RECEPCIÓN PENDIENTE ', '')
+                            lot_name = pallet.get('lot_name', '')
+                            html_content += f"""
+    <br><small style="color: #ff9800;">📦 {reception_state}</small>
+"""
+                            if lot_name:
+                                html_content += f"""<small style="color: #aaa;"> | 🏷️ Lote: {lot_name}</small>"""
+                            
+                            html_content += f"""
+    <br><small style="color: orange;">⚠️ {pallet.get('advertencia', 'En recepción pendiente')}</small>
+"""
+                        else:
+                            # Pallet normal - mostrar ubicación
+                            ubicacion = pallet.get('ubicacion', 'N/A')
+                            if ubicacion and ubicacion != 'N/A':
+                                html_content += f"""<br><small style="color: #aaa;">📍 {ubicacion}</small>"""
+                            if pallet.get('advertencia'):
+                                html_content += f"""<br><small style="color: orange;">⚠️ {pallet['advertencia']}</small>"""
+                        
+                        html_content += "</div>"
+                        st.markdown(html_content, unsafe_allow_html=True)
+                    
+                    with col2:
+                        if st.button("🗑️", key=f"delete_{idx}", help="Eliminar pallet"):
+                            st.session_state.pallets_list.pop(idx)
+                            st.rerun()
+                    
+                    # Link a Odoo si es pendiente
+                    if pallet.get('odoo_url'):
+                        st.markdown(f"[🔗 Abrir Recepción en Odoo]({pallet['odoo_url']})")
             
             st.divider()
             
@@ -426,11 +458,23 @@ with tab1:
                         # Crear orden
                         with st.spinner("Creando orden de fabricación..."):
                             try:
-                                pallets_payload = [
-                                    {'codigo': p['codigo'], 'kg': p['kg']}
-                                    for p in st.session_state.pallets_list
-                                ]
-                                
+                                # Construir payload con datos completos para cada pallet
+                                pallets_payload = []
+                                for p in st.session_state.pallets_list:
+                                    pallet_data = {
+                                        'codigo': p['codigo'],
+                                        'kg': p['kg']
+                                    }
+                                    # Si es pallet pendiente, incluir campos adicionales
+                                    if p.get('pendiente_recepcion'):
+                                        pallet_data['pendiente_recepcion'] = True
+                                        pallet_data['producto_id'] = p.get('producto_id')
+                                        pallet_data['picking_id'] = p.get('picking_id')
+                                        pallet_data['lot_id'] = p.get('lot_id')
+                                    elif p.get('manual'):
+                                        pallet_data['manual'] = True
+                                        pallet_data['producto_id'] = p.get('producto_id')
+                                    pallets_payload.append(pallet_data)                   
                                 response = requests.post(
                                     f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/crear",
                                     params={"username": username, "password": password},

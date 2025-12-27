@@ -244,7 +244,6 @@ class TunelesService:
             
             if not pkg_quants:
                 # Package existe pero sin stock - BUSCAR EN RECEPCIONES PENDIENTES
-                print(f"DEBUG: Package {codigo} (ID={package['id']}) sin quants, buscando en recepciones...")
                 reception_info = None
                 try:
                     move_lines = self.odoo.search_read(
@@ -253,16 +252,14 @@ class TunelesService:
                             ('result_package_id', '=', package['id']),
                             ('picking_id', '!=', False)
                         ], 
-                        ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty'],
+                        ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty', 'lot_id'],
                         limit=5,
                         order='id desc'
                     )
-                    print(f"DEBUG: move_lines encontradas: {len(move_lines)}")
                     
                     for ml in move_lines:
                         picking_id = ml['picking_id'][0]
                         picking_name = ml['picking_id'][1]
-                        print(f"DEBUG: Checking picking {picking_name} (ID={picking_id})")
                         
                         picking = self.odoo.search_read(
                             'stock.picking', 
@@ -271,14 +268,15 @@ class TunelesService:
                             limit=1
                         )
                         
-                        print(f"DEBUG: Picking state = {picking[0]['state'] if picking else 'NOT FOUND'}")
-                        
                         if picking and picking[0]['state'] not in ['done', 'cancel']:
                             state = picking[0]['state']
                             base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
                             odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
                             kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
-                            print(f"DEBUG: FOUND! kg={kg}, product={ml['product_id']}")
+                            
+                            # Extraer info del lote
+                            lot_id = ml['lot_id'][0] if ml.get('lot_id') else None
+                            lot_name = ml['lot_id'][1] if ml.get('lot_id') else None
                             
                             reception_info = {
                                 'found_in_reception': True,
@@ -288,11 +286,13 @@ class TunelesService:
                                 'odoo_url': odoo_url,
                                 'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
                                 'kg': kg,
-                                'product_id': ml['product_id'][0] if ml['product_id'] else None
+                                'product_id': ml['product_id'][0] if ml['product_id'] else None,
+                                'lot_id': lot_id,
+                                'lot_name': lot_name
                             }
                             break
                 except Exception as e:
-                    print(f"ERROR buscando recepción para {codigo}: {e}")
+                    print(f"Error buscando recepción para {codigo}: {e}")
                 
                 if reception_info:
                     resultados.append({
@@ -355,6 +355,148 @@ class TunelesService:
             'codigo': codigo_pallet,
             'error': 'Error al validar pallet'
         }
+    
+    def verificar_pendientes(self, mo_id: int) -> Dict:
+        """
+        Verifica el estado de las recepciones pendientes de una MO.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: mo_name, has_pending, pickings (con estado actual), all_ready
+        """
+        import json
+        
+        try:
+            # Leer la MO
+            mo = self.odoo.search_read(
+                'mrp.production',
+                [('id', '=', mo_id)],
+                ['name', 'x_studio_pending_receptions', 'state'],
+                limit=1
+            )
+            
+            if not mo:
+                return {'success': False, 'error': 'MO no encontrada'}
+            
+            mo = mo[0]
+            pending_json = mo.get('x_studio_pending_receptions')
+            
+            # Si no hay datos JSON o está vacío
+            if not pending_json:
+                return {
+                    'success': True,
+                    'mo_name': mo['name'],
+                    'has_pending': False,
+                    'all_ready': True,
+                    'pickings': []
+                }
+            
+            # Parsear JSON
+            try:
+                pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            except:
+                return {
+                    'success': True,
+                    'mo_name': mo['name'],
+                    'has_pending': True,
+                    'all_ready': False,
+                    'pickings': [],
+                    'error': 'Error al parsear JSON de pendientes'
+                }
+            
+            # Si pending es False, no hay pendientes
+            if not pending_data.get('pending', True):
+                return {
+                    'success': True,
+                    'mo_name': mo['name'],
+                    'has_pending': False,
+                    'all_ready': True,
+                    'pickings': []
+                }
+            
+            picking_ids = pending_data.get('picking_ids', [])
+            
+            # Verificar estado de cada picking
+            pickings = self.odoo.search_read(
+                'stock.picking',
+                [('id', 'in', picking_ids)],
+                ['name', 'state', 'id']
+            )
+            
+            pickings_info = []
+            all_done = True
+            
+            for p in pickings:
+                is_done = p['state'] == 'done'
+                pickings_info.append({
+                    'id': p['id'],
+                    'name': p['name'],
+                    'state': p['state'],
+                    'is_done': is_done
+                })
+                if not is_done:
+                    all_done = False
+            
+            return {
+                'success': True,
+                'mo_id': mo_id,
+                'mo_name': mo['name'],
+                'mo_state': mo['state'],
+                'has_pending': True,
+                'all_ready': all_done,
+                'pickings': pickings_info,
+                'pending_count': len([p for p in pickings_info if not p['is_done']]),
+                'ready_count': len([p for p in pickings_info if p['is_done']])
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def completar_pendientes(self, mo_id: int) -> Dict:
+        """
+        Quita el flag de pendientes cuando todas las recepciones están validadas.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: success, mensaje
+        """
+        try:
+            # Primero verificar que todas estén listas
+            verificacion = self.verificar_pendientes(mo_id)
+            
+            if not verificacion.get('success'):
+                return verificacion
+            
+            if not verificacion.get('all_ready'):
+                pending = verificacion.get('pending_count', 0)
+                return {
+                    'success': False,
+                    'error': f'Aún hay {pending} recepciones pendientes de validar'
+                }
+            
+            # Limpiar el JSON de pendientes (marcar como completado)
+            import json
+            completed_data = json.dumps({
+                'pending': False,
+                'completed_at': datetime.now().isoformat()
+            })
+            self.odoo.execute('mrp.production', 'write', [[mo_id], {
+                'x_studio_pending_receptions': completed_data
+            }])
+            
+            return {
+                'success': True,
+                'mo_id': mo_id,
+                'mo_name': verificacion['mo_name'],
+                'mensaje': 'Flag de pendientes removido. MO lista para confirmar.'
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
     
     def crear_orden_fabricacion(
         self,
@@ -517,6 +659,41 @@ class TunelesService:
             
             mo_name = mo_data_read['name']
             
+            # --- NUEVO: Detectar pallets pendientes y marcar MO ---
+            pallets_pendientes = [p for p in pallets_validados if p.get('pendiente_recepcion')]
+            has_pending = len(pallets_pendientes) > 0
+            
+            if has_pending:
+                # Crear estructura JSON con datos de pendientes
+                pending_data = {
+                    'pending': True,
+                    'created_at': datetime.now().isoformat(),
+                    'pallets': []
+                }
+                
+                picking_ids_set = set()
+                for p in pallets:
+                    if p.get('pendiente_recepcion') and p.get('picking_id'):
+                        picking_ids_set.add(p['picking_id'])
+                        pending_data['pallets'].append({
+                            'codigo': p['codigo'],
+                            'picking_id': p['picking_id'],
+                            'kg': p.get('kg', 0),
+                            'producto_id': p.get('producto_id')
+                        })
+                
+                pending_data['picking_ids'] = list(picking_ids_set)
+                
+                # Actualizar MO con JSON de pendientes
+                try:
+                    import json
+                    self.odoo.execute('mrp.production', 'write', [[mo_id], {
+                        'x_studio_pending_receptions': json.dumps(pending_data)
+                    }])
+                    advertencias.append(f"MO marcada con {len(pallets_pendientes)} pallets pendientes de recepción")
+                except Exception as e:
+                    advertencias.append(f"Error al guardar pendientes: {e}")
+            
             # 4. Crear componentes (move_raw_ids)
             componentes_creados = self._crear_componentes(
                 mo_id, 
@@ -571,7 +748,10 @@ class TunelesService:
                 'componentes_count': componentes_creados,
                 'subproductos_count': subproductos_creados,
                 'advertencias': advertencias,
-                'mensaje': f'Orden {mo_name} creada con {componentes_creados} componentes y {subproductos_creados} subproductos'
+                'has_pending': has_pending,
+                'pending_count': len(pallets_pendientes),
+                'mensaje': f'Orden {mo_name} creada con {componentes_creados} componentes y {subproductos_creados} subproductos' + 
+                          (f' ({len(pallets_pendientes)} pallets pendientes de recepción)' if has_pending else '')
             }
             
         except Exception as e:
