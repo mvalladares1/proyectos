@@ -119,50 +119,66 @@ class TunelesService:
         
         # Agregar resultados de no encontrados
         for codigo in codigos_no_encontrados:
-            # --- MEJORA: Búsqueda Secundaria en Recepciones Pendientes ---
+            # --- BÚSQUEDA EN RECEPCIONES PENDIENTES ---
             reception_info = None
             try:
-                # SOLUCIÓN: Buscar directamente en stock.move.line usando el nombre del paquete
-                # Esto funciona para recepciones en CUALQUIER estado (draft, assigned, confirmed)
-                move_lines = self.odoo.search_read(
-                    'stock.move.line', 
-                    [
-                        ('result_package_id.name', '=', codigo), # Búsqueda directa por nombre
-                        ('state', 'in', ['draft', 'confirmed', 'assigned', 'partially_available']),
-                        ('picking_id', '!=', False)
-                    ], 
-                    ['picking_id', 'product_id', 'qty_done', 'product_uom_qty', 'move_id'],
-                    limit=1,
-                    order='id desc'
+                # PASO 1: Buscar el package por nombre para obtener su ID
+                pkg_search = self.odoo.search_read(
+                    'stock.quant.package', 
+                    [('name', '=', codigo)], 
+                    ['id'],
+                    limit=1
                 )
                 
-                # Si no encontró por result_package_id, intentar por package_id (origen)
-                if not move_lines:
+                move_lines = []
+                if pkg_search:
+                    pkg_id = pkg_search[0]['id']
+                    
+                    # PASO 2: Buscar move_lines que usen este package como destino
+                    # SIN filtro de estado de move_line - buscamos todo
                     move_lines = self.odoo.search_read(
                         'stock.move.line', 
                         [
-                            ('package_id.name', '=', codigo),
-                            ('state', 'in', ['draft', 'confirmed', 'assigned', 'partially_available']),
+                            ('result_package_id', '=', pkg_id),
                             ('picking_id', '!=', False)
                         ], 
-                        ['picking_id', 'product_id', 'qty_done', 'product_uom_qty', 'move_id'],
-                        limit=1,
+                        ['picking_id', 'product_id', 'qty_done', 'product_uom_qty'],
+                        limit=5,  # Traemos varios por si hay múltiples
                         order='id desc'
                     )
+                    
+                    # Si no hay como destino, buscar como origen
+                    if not move_lines:
+                        move_lines = self.odoo.search_read(
+                            'stock.move.line', 
+                            [
+                                ('package_id', '=', pkg_id),
+                                ('picking_id', '!=', False)
+                            ], 
+                            ['picking_id', 'product_id', 'qty_done', 'product_uom_qty'],
+                            limit=5,
+                            order='id desc'
+                        )
                 
-                if move_lines:
-                    ml = move_lines[0]
+                # PASO 3: Filtrar para obtener picking que NO esté done/cancel
+                for ml in move_lines:
                     picking_id = ml['picking_id'][0]
                     picking_name = ml['picking_id'][1]
                     
                     # Obtener estado del picking
-                    picking = self.odoo.search_read('stock.picking', [['id', '=', picking_id]], ['state'], limit=1)
-                    if picking:
+                    picking = self.odoo.search_read(
+                        'stock.picking', 
+                        [('id', '=', picking_id)], 
+                        ['state'],
+                        limit=1
+                    )
+                    
+                    if picking and picking[0]['state'] not in ['done', 'cancel']:
                         state = picking[0]['state']
+                        
                         # Generar URL de Odoo
                         base_url = "https://riofuturo.odoo.com" 
-                        model = "stock.picking"
-                        odoo_url = f"{base_url}/web#id={picking_id}&model={model}&view_type=form"
+                        odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
                         
                         # Obtener Kg: usar qty_done si existe, sino product_uom_qty (demanda)
                         kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('product_uom_qty', 0)
@@ -177,6 +193,8 @@ class TunelesService:
                             'kg': kg, 
                             'product_id': ml['product_id'][0] if ml['product_id'] else None
                         }
+                        break  # Encontramos uno válido, salimos del loop
+                        
             except Exception as e:
                 print(f"Error buscando recepción para {codigo}: {e}")
 
@@ -186,8 +204,8 @@ class TunelesService:
                     'codigo': codigo,
                     'error': f'Pallet en recepción pendiente: {reception_info["picking_name"]}',
                     'reception_info': reception_info,
-                    'kg': reception_info['kg'], # Pasamos data real
-                    'product_id': reception_info['product_id'], # Pasamos data real
+                    'kg': reception_info['kg'],
+                    'product_id': reception_info['product_id'],
                     'producto_nombre': reception_info['product_name']
                 })
             else:
