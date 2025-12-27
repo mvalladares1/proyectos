@@ -344,17 +344,9 @@ with tab1:
                         st.session_state.pallets_list.pop(idx)
                         st.rerun()
                 
-                # Si no tiene kg, permitir ingresar manualmente
-                if pallet['kg'] <= 0:
-                    kg_manual = st.number_input(
-                        f"Kg para {pallet['codigo']}",
-                        min_value=0.0,
-                        step=0.1,
-                        key=f"kg_{idx}",
-                        help="Este pallet no tiene stock. Ingresa los Kg manualmente."
-                    )
-                    if kg_manual > 0:
-                        st.session_state.pallets_list[idx]['kg'] = kg_manual
+                # Si tiene link a Odoo (pallet pendiente), mostrar botón
+                if pallet.get('odoo_url'):
+                    st.markdown(f"[🔗 Abrir Recepción en Odoo]({pallet['odoo_url']})")
             
             st.divider()
             

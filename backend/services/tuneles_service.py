@@ -243,16 +243,72 @@ class TunelesService:
             pkg_quants = quants_por_package.get(package['id'], [])
             
             if not pkg_quants:
-                resultados.append({
-                    'existe': True,
-                    'codigo': codigo,
-                    'kg': 0.0,
-                    'ubicacion_id': None,
-                    'ubicacion_nombre': None,
-                    'producto_id': None,
-                    'package_id': package['id'],
-                    'advertencia': 'Paquete sin stock disponible'
-                })
+                # Package existe pero sin stock - BUSCAR EN RECEPCIONES PENDIENTES
+                reception_info = None
+                try:
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line', 
+                        [
+                            ('result_package_id', '=', package['id']),
+                            ('picking_id', '!=', False)
+                        ], 
+                        ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty'],
+                        limit=5,
+                        order='id desc'
+                    )
+                    
+                    for ml in move_lines:
+                        picking_id = ml['picking_id'][0]
+                        picking_name = ml['picking_id'][1]
+                        
+                        picking = self.odoo.search_read(
+                            'stock.picking', 
+                            [('id', '=', picking_id)], 
+                            ['state'],
+                            limit=1
+                        )
+                        
+                        if picking and picking[0]['state'] not in ['done', 'cancel']:
+                            state = picking[0]['state']
+                            base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
+                            odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
+                            kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
+                            
+                            reception_info = {
+                                'found_in_reception': True,
+                                'picking_name': picking_name,
+                                'picking_id': picking_id,
+                                'state': state,
+                                'odoo_url': odoo_url,
+                                'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
+                                'kg': kg,
+                                'product_id': ml['product_id'][0] if ml['product_id'] else None
+                            }
+                            break
+                except Exception as e:
+                    print(f"Error buscando recepción para {codigo}: {e}")
+                
+                if reception_info:
+                    resultados.append({
+                        'existe': False,
+                        'codigo': codigo,
+                        'error': f'Pallet en recepción pendiente: {reception_info["picking_name"]}',
+                        'reception_info': reception_info,
+                        'kg': reception_info['kg'],
+                        'product_id': reception_info['product_id'],
+                        'producto_nombre': reception_info['product_name']
+                    })
+                else:
+                    resultados.append({
+                        'existe': True,
+                        'codigo': codigo,
+                        'kg': 0.0,
+                        'ubicacion_id': None,
+                        'ubicacion_nombre': None,
+                        'producto_id': None,
+                        'package_id': package['id'],
+                        'advertencia': 'Paquete sin stock disponible'
+                    })
                 continue
             
             # Sumar cantidades
