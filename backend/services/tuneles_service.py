@@ -748,14 +748,20 @@ class TunelesService:
                 try:
                     import json
                     pending_json = json.dumps(pending_data)
+                    print(f"DEBUG: Intentando guardar JSON en MO {mo_id}: {pending_json[:100]}...")
                     # Usar execute_kw directamente con formato correcto para write
-                    self.odoo.models.execute_kw(
+                    write_result = self.odoo.models.execute_kw(
                         self.odoo.db, self.odoo.uid, self.odoo.password,
                         'mrp.production', 'write',
                         [[mo_id], {'x_studio_pending_receptions': pending_json}]
                     )
-                    advertencias.append(f"MO marcada con {len(pallets_pendientes)} pallets pendientes de recepción")
+                    print(f"DEBUG: Resultado del write: {write_result}")
+                    if write_result:
+                        advertencias.append(f"MO marcada con {len(pallets_pendientes)} pallets pendientes de recepción")
+                    else:
+                        advertencias.append(f"Write retornó False para guardar pendientes")
                 except Exception as e:
+                    print(f"DEBUG: Error en write: {e}")
                     advertencias.append(f"Error al guardar pendientes: {e}")
             
             # 4. Crear componentes (move_raw_ids)
@@ -1007,7 +1013,11 @@ class TunelesService:
                 'company_id': 1,
                 'reference': mo_name
             }
-            self.odoo.execute('stock.move', 'create', elect_move)
+            # Usar execute_kw DIRECTO porque el wrapper execute tiene formato incorrecto
+            self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'stock.move', 'create', [elect_move]
+            )
             movimientos_creados += 1
         except Exception as e:
             # Si falla electricidad, no detenemos el proceso
