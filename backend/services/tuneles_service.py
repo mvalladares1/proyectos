@@ -234,6 +234,29 @@ class TunelesService:
         # 1. Validar todos los pallets primero
         pallets_validados = []
         for pallet in pallets:
+            # --- MEJORA: Soporte para Pallets Manuales ---
+            if pallet.get('manual'):
+                # Si es manual, confiamos en los datos enviados
+                if not pallet.get('producto_id'):
+                    errores.append(f"{pallet['codigo']}: Pallet manual debe incluir producto_id")
+                    continue
+                if not pallet.get('kg') or pallet['kg'] <= 0:
+                    errores.append(f"{pallet['codigo']}: Pallet manual debe incluir Kg > 0")
+                    continue
+                
+                pallets_validados.append({
+                    'codigo': pallet['codigo'],
+                    'kg': pallet['kg'],
+                    'lote_id': None, # Sin lote en Odoo
+                    'producto_id': pallet['producto_id'],
+                    'ubicacion_id': config['ubicacion_origen_id'], # Usar ubicación por defecto del túnel
+                    'package_id': None, # Sin package en Odoo
+                    'manual': True # Marcamos como manual
+                })
+                advertencias.append(f"Pallet {pallet['codigo']} ingresado manualmente sin trazabilidad")
+                continue
+            
+            # Flujo normal: Validar en Odoo
             validacion = self.validar_pallet(pallet['codigo'], buscar_ubicacion_auto)
             
             if not validacion['existe']:
@@ -256,7 +279,8 @@ class TunelesService:
                 'lote_id': validacion.get('lote_id'),
                 'producto_id': validacion.get('producto_id'),
                 'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id']),
-                'package_id': validacion.get('package_id')  # ID del paquete origen
+                'package_id': validacion.get('package_id'),  # ID del paquete origen
+                'manual': False
             })
         
         if errores:
@@ -288,6 +312,9 @@ class TunelesService:
         
         # 3. Crear la orden de fabricación
         try:
+            # --- MEJORA: Fechas sincronizadas ---
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
             mo_data = {
                 'product_id': config['producto_proceso_id'],
                 'product_qty': total_kg,
@@ -297,6 +324,10 @@ class TunelesService:
                 'picking_type_id': config['picking_type_id'],  # Tipo de operación para correlativo
                 'state': 'draft',  # Borrador
                 'company_id': 1,  # RIO FUTURO PROCESOS SPA
+                'date_planned_start': now,
+                'date_planned_finished': now,
+                'x_studio_inicio_de_proceso': now,
+                'x_studio_termino_de_proceso': now,
             }
             
             if responsable_id:
@@ -304,9 +335,13 @@ class TunelesService:
             
             mo_id = self.odoo.execute('mrp.production', 'create', mo_data)
             
-            # Leer el nombre generado
-            mo = self.odoo.read('mrp.production', [mo_id], ['name'])[0]
-            mo_name = mo['name']
+            # --- MEJORA: Limpiar componentes del BoM por defecto ---
+            # Al crear la MO, Odoo inserta componentes del BoM. Debemos borrarlos.
+            mo_data_read = self.odoo.read('mrp.production', [mo_id], ['move_raw_ids', 'name'])[0]
+            if mo_data_read.get('move_raw_ids'):
+                self.odoo.execute('stock.move', 'unlink', mo_data_read['move_raw_ids'])
+            
+            mo_name = mo_data_read['name']
             
             # 4. Crear componentes (move_raw_ids)
             componentes_creados = self._crear_componentes(
@@ -316,6 +351,35 @@ class TunelesService:
                 config
             )
             
+            # --- MEJORA: Agregar línea de Electricidad ---
+            # Buscar producto 'ETE' -> Provisión Electricidad Túnel Estático
+            try:
+                ete_ids = self.odoo.execute('product.product', 'search', [['default_code', '=', 'ETE']], {'limit': 1})
+                if ete_ids:
+                    ete_id = ete_ids[0]
+                    
+                    # La ubicación de consumo (destino del componente) es la virtual de producción
+                    ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
+                    
+                    elect_data = {
+                        'name': mo_name,
+                        'product_id': ete_id,
+                        'product_uom_qty': total_kg, # Cantidad igual al total de Kg
+                        'product_uom': 12, # kg
+                        'location_id': config['ubicacion_origen_id'],
+                        'location_dest_id': ubicacion_virtual,
+                        'state': 'draft',
+                        'raw_material_production_id': mo_id, # Vincular como componente
+                        'company_id': 1,
+                        'reference': mo_name
+                    }
+                    self.odoo.execute('stock.move', 'create', elect_data)
+                    componentes_creados += 1
+            except Exception as e:
+                print(f"Advertencia: No se pudo agregar electricidad: {e}")
+                # No detenemos el proceso si falla esto, pero advertimos
+                advertencias.append(f"No se pudo agregar línea de electricidad: {str(e)}")
+
             # 5. Crear subproductos (move_finished_ids)
             subproductos_creados = self._crear_subproductos(
                 mo_id,

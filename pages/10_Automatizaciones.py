@@ -216,18 +216,67 @@ with tab1:
                                             'codigo': validacion['codigo'],
                                             'kg': validacion.get('kg', 0.0),
                                             'ubicacion': validacion.get('ubicacion_nombre', 'N/A'),
-                                            'advertencia': validacion.get('advertencia')
+                                            'advertencia': validacion.get('advertencia'),
+                                            'producto_id': validacion.get('producto_id'),
+                                            'producto_nombre': validacion.get('producto_nombre', 'N/A'),
+                                            'manual': False
                                         })
+                                        # Limpiar estado manual si existía
+                                        if 'manual_entry_pending' in st.session_state:
+                                            del st.session_state.manual_entry_pending
                                         st.success(f"✅ {pallet_codigo} agregado!")
                                         st.rerun()
                                     else:
-                                        st.error(f"❌ {validacion.get('error', 'Pallet no encontrado')}")
+                                        # Activar modo manual
+                                        st.session_state.manual_entry_pending = pallet_codigo
+                                        st.warning(f"⚠️ Pallet no encontrado. Ingrese los datos manualmente.")
                                 else:
                                     st.error("Error al validar pallet")
                             except Exception as e:
                                 st.error(f"Error: {str(e)}")
                     else:
                         st.warning("⚠️ Ingresa un código de pallet")
+
+            # Formulario de Ingreso Manual
+            if 'manual_entry_pending' in st.session_state:
+                st.info(f"📝 Ingreso Manual para: **{st.session_state.manual_entry_pending}**")
+                
+                # Productos disponibles (Hardcoded por ahora o extraer de config si es posible)
+                # Idealmente esto vendría del backend. Usaremos una lista genérica basada en los túneles.
+                productos_manuales = {
+                    15999: "[102122000] FB MK Conv. IQF en Bandeja",
+                    15741: "[103151000] FT S/V Conv. Block en Bandeja"
+                }
+                
+                with st.form("form_manual_pallet"):
+                    col_man1, col_man2 = st.columns([3, 1])
+                    with col_man1:
+                        prod_manual = st.selectbox(
+                            "Producto", 
+                            options=list(productos_manuales.keys()),
+                            format_func=lambda x: productos_manuales[x]
+                        )
+                    with col_man2:
+                        kg_manual = st.number_input("Kg Reales", min_value=0.1, step=0.1, format="%.2f")
+                    
+                    submitted = st.form_submit_button("✅ Confirmar Ingreso Manual")
+                    if submitted:
+                        st.session_state.pallets_list.append({
+                            'codigo': st.session_state.manual_entry_pending,
+                            'kg': kg_manual,
+                            'ubicacion': 'MANUAL',
+                            'advertencia': 'Ingreso Manual sin Trazabilidad',
+                            'producto_id': prod_manual,
+                            'producto_nombre': productos_manuales[prod_manual],
+                            'manual': True
+                        })
+                        del st.session_state.manual_entry_pending
+                        st.success("Pallet manual agregado")
+                        st.rerun()
+                
+                if st.button("❌ Cancelar Manual"):
+                    del st.session_state.manual_entry_pending
+                    st.rerun()
         
         with input_tab2:
             pallets_textarea = st.text_area(
@@ -538,93 +587,96 @@ with tab2:
             # Calcular electricidad estimada (0.15 USD/kg aprox)
             electricidad = orden.get('costo_electricidad', total_kg * 0.15)
             
-            st.markdown(f"""
-<div style="background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); border-left: 5px solid {color_borde}; border-radius: 14px; padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.6);">
-    <!-- Header -->
-    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
-        <div style="flex: 1;">
-            <h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">
-                {orden.get('mo_name', orden.get('nombre', 'N/A'))}
-            </h3>
-            <p style="margin: 0; color: #a0a0b0; font-size: 0.95em;">
-                🏭 <strong style="color: #e0e0e0;">{orden.get('tunel', 'N/A')}</strong> | 
-                📦 {orden.get('producto_nombre', orden.get('producto', 'N/A'))}
-            </p>
-        </div>
-        <span style="background: {color_badge_bg}; color: {color_badge_text}; padding: 8px 16px; border-radius: 24px; font-size: 0.7em; font-weight: 800; white-space: nowrap; margin-left: 16px; letter-spacing: 1px;">
-            {estado_label}
-        </span>
-    </div>
-    
-    <!-- Grid Principal -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-        
-        <!-- Columna Izquierda: Componentes -->
-        <div style="background: rgba(59,130,246,0.1); border-left: 3px solid #3b82f6; border-radius: 10px; padding: 16px;">
-            <div style="color: #93c5fd; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
-                🔵 Componentes (Entrada)
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
-                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
+            # Renderizar HTML usando textwrap.dedent para evitar bloques de código
+            import textwrap
+            html_content = textwrap.dedent(f"""
+                <div style="background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); border-left: 5px solid {color_borde}; border-radius: 14px; padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.6);">
+                    <!-- Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
+                        <div style="flex: 1;">
+                            <h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">
+                                {orden.get('mo_name', orden.get('nombre', 'N/A'))}
+                            </h3>
+                            <p style="margin: 0; color: #a0a0b0; font-size: 0.95em;">
+                                🏭 <strong style="color: #e0e0e0;">{orden.get('tunel', 'N/A')}</strong> | 
+                                📦 {orden.get('producto_nombre', orden.get('producto', 'N/A'))}
+                            </p>
+                        </div>
+                        <span style="background: {color_badge_bg}; color: {color_badge_text}; padding: 8px 16px; border-radius: 24px; font-size: 0.7em; font-weight: 800; white-space: nowrap; margin-left: 16px; letter-spacing: 1px;">
+                            {estado_label}
+                        </span>
+                    </div>
+                    
+                    <!-- Grid Principal -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        
+                        <!-- Columna Izquierda: Componentes -->
+                        <div style="background: rgba(59,130,246,0.1); border-left: 3px solid #3b82f6; border-radius: 10px; padding: 16px;">
+                            <div style="color: #93c5fd; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                                🔵 Componentes (Entrada)
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div>
+                                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
+                                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
+                                </div>
+                                <div>
+                                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
+                                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{componentes}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Columna Derecha: Subproductos -->
+                        <div style="background: rgba(34,197,94,0.1); border-left: 3px solid #22c55e; border-radius: 10px; padding: 16px;">
+                            <div style="color: #86efac; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                                🟢 Subproductos (Salida)
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div>
+                                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
+                                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
+                                </div>
+                                <div>
+                                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
+                                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{subproductos}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Fila Inferior -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div>
+                            <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
+                                📦 Pallets
+                            </div>
+                            <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
+                                {pallets} unidades
+                            </div>
+                        </div>
+                        <div>
+                            <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
+                                📅 Creación
+                            </div>
+                            <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
+                                {fecha_str}
+                            </div>
+                        </div>
+                        <div style="background: rgba(251,191,36,0.15); border-left: 3px solid #fbbf24; border-radius: 8px; padding: 12px;">
+                            <div style="color: #fde68a; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase; font-weight: 700;">
+                                ⚡ Electricidad
+                            </div>
+                            <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">
+                                ${electricidad:,.2f}
+                            </div>
+                            <div style="color: #a0a0b0; font-size: 0.65em; margin-top: 2px;">
+                                ~$0.15/kg
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
-                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{componentes}</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Columna Derecha: Subproductos -->
-        <div style="background: rgba(34,197,94,0.1); border-left: 3px solid #22c55e; border-radius: 10px; padding: 16px;">
-            <div style="color: #86efac; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
-                🟢 Subproductos (Salida)
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
-                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
-                </div>
-                <div>
-                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
-                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{subproductos}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Fila Inferior -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
-        <div>
-            <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
-                📦 Pallets
-            </div>
-            <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
-                {pallets} unidades
-            </div>
-        </div>
-        <div>
-            <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
-                📅 Creación
-            </div>
-            <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
-                {fecha_str}
-            </div>
-        </div>
-        <div style="background: rgba(251,191,36,0.15); border-left: 3px solid #fbbf24; border-radius: 8px; padding: 12px;">
-            <div style="color: #fde68a; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase; font-weight: 700;">
-                ⚡ Electricidad
-            </div>
-            <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">
-                ${electricidad:,.2f}
-            </div>
-            <div style="color: #a0a0b0; font-size: 0.65em; margin-top: 2px;">
-                ~$0.15/kg
-            </div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+            """)
+            st.markdown(html_content, unsafe_allow_html=True)
 
 
