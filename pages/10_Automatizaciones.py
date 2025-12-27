@@ -384,34 +384,30 @@ with tab1:
                         kg_display = f"{pallet['kg']:,.2f} Kg" if pallet.get('kg', 0) > 0 else "⚠️ Sin Kg"
                         producto_display = pallet.get('producto_nombre', 'N/A')
                         
-                        # Tarjeta base
-                        html_content = f"""
-<div style="border-left: 4px solid {border_color}; padding: 10px; margin: 5px 0; background: rgba(255,255,255,0.05); border-radius: 4px;">
-    <strong>{pallet['codigo']}</strong> - {kg_display}<br>
-    <small style="color: #aaa;">🍎 {producto_display}</small>
-"""
+                        # Construir info de la tarjeta
+                        lines = [f"<strong>{pallet['codigo']}</strong> - {kg_display}"]
+                        lines.append(f"<br><small style='color: #aaa;'>🍎 {producto_display}</small>")
+                        
                         # Info adicional si es pendiente
                         if is_pending:
                             reception_state = pallet.get('ubicacion', 'Pendiente').replace('RECEPCIÓN PENDIENTE ', '')
-                            lot_name = pallet.get('lot_name', '')
-                            html_content += f"""
-    <br><small style="color: #ff9800;">📦 {reception_state}</small>
-"""
-                            if lot_name:
-                                html_content += f"""<small style="color: #aaa;"> | 🏷️ Lote: {lot_name}</small>"""
+                            lines.append(f"<br><small style='color: #ff9800;'>📦 {reception_state}</small>")
                             
-                            html_content += f"""
-    <br><small style="color: orange;">⚠️ {pallet.get('advertencia', 'En recepción pendiente')}</small>
-"""
+                            lot_name = pallet.get('lot_name', '')
+                            if lot_name:
+                                lines.append(f"<small style='color: #aaa;'> | 🏷️ Lote: {lot_name}</small>")
+                            
+                            advertencia = pallet.get('advertencia', 'En recepción pendiente')
+                            lines.append(f"<br><small style='color: orange;'>⚠️ {advertencia}</small>")
                         else:
                             # Pallet normal - mostrar ubicación
                             ubicacion = pallet.get('ubicacion', 'N/A')
                             if ubicacion and ubicacion != 'N/A':
-                                html_content += f"""<br><small style="color: #aaa;">📍 {ubicacion}</small>"""
+                                lines.append(f"<br><small style='color: #aaa;'>📍 {ubicacion}</small>")
                             if pallet.get('advertencia'):
-                                html_content += f"""<br><small style="color: orange;">⚠️ {pallet['advertencia']}</small>"""
+                                lines.append(f"<br><small style='color: orange;'>⚠️ {pallet['advertencia']}</small>")
                         
-                        html_content += "</div>"
+                        html_content = f"<div style='border-left: 4px solid {border_color}; padding: 10px; margin: 5px 0; background: rgba(255,255,255,0.05); border-radius: 4px;'>{''.join(lines)}</div>"
                         st.markdown(html_content, unsafe_allow_html=True)
                     
                     with col2:

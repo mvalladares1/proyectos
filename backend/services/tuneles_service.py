@@ -527,6 +527,62 @@ class TunelesService:
         errores = []
         advertencias = []
         
+        # 0. VALIDAR DUPLICADOS: Verificar que los pallets no estén en otras MOs activas
+        codigos_pallets = [p['codigo'] for p in pallets]
+        
+        # Buscar packages con estos códigos
+        packages = self.odoo.search_read(
+            'stock.quant.package',
+            [('name', 'in', codigos_pallets)],
+            ['id', 'name']
+        )
+        package_ids = [pkg['id'] for pkg in packages]
+        packages_map = {pkg['name']: pkg['id'] for pkg in packages}
+        
+        if package_ids:
+            # Buscar en stock.move.line si estos packages están en MOs no canceladas/terminadas
+            move_lines = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ('package_id', 'in', package_ids),
+                    ('production_id', '!=', False)
+                ],
+                ['package_id', 'production_id'],
+                limit=100
+            )
+            
+            if move_lines:
+                # Verificar estado de las MOs encontradas
+                mo_ids = list(set([ml['production_id'][0] for ml in move_lines]))
+                mos = self.odoo.search_read(
+                    'mrp.production',
+                    [('id', 'in', mo_ids), ('state', 'not in', ['done', 'cancel'])],
+                    ['id', 'name', 'state']
+                )
+                
+                if mos:
+                    # Mapear package_id a mo_name
+                    pkg_to_mo = {}
+                    for ml in move_lines:
+                        pkg_id = ml['package_id'][0]
+                        mo_id = ml['production_id'][0]
+                        mo_match = [m for m in mos if m['id'] == mo_id]
+                        if mo_match:
+                            pkg_to_mo[pkg_id] = mo_match[0]['name']
+                    
+                    # Verificar si algún pallet de la lista está en estas MOs
+                    for codigo in codigos_pallets:
+                        pkg_id = packages_map.get(codigo)
+                        if pkg_id and pkg_id in pkg_to_mo:
+                            errores.append(f"{codigo}: Ya está en orden {pkg_to_mo[pkg_id]} (activa)")
+        
+        if errores:
+            return {
+                'success': False,
+                'errores': errores,
+                'error': f"Pallets ya usados en otras órdenes activas: {', '.join(codigos_pallets[:3])}"
+            }
+        
         # 1. Validar todos los pallets primero
         pallets_validados = []
         for pallet in pallets:
@@ -540,12 +596,13 @@ class TunelesService:
                 pallets_validados.append({
                     'codigo': pallet['codigo'],
                     'kg': float(pallet.get('kg', 0)),
-                    'lote_id': None, # No asignamos lote aún (no existe en stock)
+                    'lote_id': pallet.get('lot_id'),  # Puede venir del frontend
                     'producto_id': int(pallet['producto_id']),
                     'ubicacion_id': config['ubicacion_origen_id'], 
-                    'package_id': None, # No asignamos package aún
+                    'package_id': None,  # No asignamos package aún
                     'manual': False,
-                    'pendiente_recepcion': True # Flag para saber que es especial
+                    'pendiente_recepcion': True,  # Flag para saber que es especial
+                    'picking_id': pallet.get('picking_id')  # Guardar picking_id para JSON
                 })
                 advertencias.append(f"Pallet {pallet['codigo']} agregado desde Recepción Pendiente (Sin reserva stock)")
                 continue
@@ -672,15 +729,15 @@ class TunelesService:
                 }
                 
                 picking_ids_set = set()
-                for p in pallets:
-                    if p.get('pendiente_recepcion') and p.get('picking_id'):
+                for p in pallets_pendientes:  # Usar pallets_validados filtrados
+                    if p.get('picking_id'):
                         picking_ids_set.add(p['picking_id'])
-                        pending_data['pallets'].append({
-                            'codigo': p['codigo'],
-                            'picking_id': p['picking_id'],
-                            'kg': p.get('kg', 0),
-                            'producto_id': p.get('producto_id')
-                        })
+                    pending_data['pallets'].append({
+                        'codigo': p['codigo'],
+                        'picking_id': p.get('picking_id'),
+                        'kg': p.get('kg', 0),
+                        'producto_id': p.get('producto_id')
+                    })
                 
                 pending_data['picking_ids'] = list(picking_ids_set)
                 
