@@ -36,6 +36,18 @@ class CrearOrdenRequest(BaseModel):
     responsable_id: Optional[int] = Field(None, description="ID del usuario responsable")
 
 
+class ReceptionInfo(BaseModel):
+    """Información de recepción pendiente."""
+    found_in_reception: bool = True
+    picking_name: str
+    picking_id: int
+    state: str
+    odoo_url: str
+    product_name: Optional[str] = None
+    kg: Optional[float] = None
+    product_id: Optional[int] = None
+
+
 class PalletValidado(BaseModel):
     """Respuesta de validación de pallet."""
     codigo: str
@@ -43,8 +55,12 @@ class PalletValidado(BaseModel):
     kg: Optional[float] = None
     ubicacion_nombre: Optional[str] = None
     producto_id: Optional[int] = None
+    producto_nombre: Optional[str] = None
     advertencia: Optional[str] = None
     error: Optional[str] = None
+    reception_info: Optional[ReceptionInfo] = None
+    product_id: Optional[int] = None  # Cuando viene de recepción
+
 
 
 class TunelInfo(BaseModel):
