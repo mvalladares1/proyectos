@@ -765,23 +765,8 @@ class TunelesService:
                 productos_totales, 
                 config
             )
-            
-            # --- MEJORA: Agregar línea de Electricidad ---
-            # TODO: Descomentar cuando se confirme ID correcto del producto de electricidad
-            # El ID 15033 no existe o está archivado
-            # try:
-            #     ete_id = 15033
-            #     ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
-            #     elect_data = {
-            #         'name': mo_name, 'product_id': ete_id, 'product_uom_qty': total_kg,
-            #         'product_uom': 12, 'location_id': config['ubicacion_origen_id'],
-            #         'location_dest_id': ubicacion_virtual, 'state': 'draft',
-            #         'raw_material_production_id': mo_id, 'company_id': 1, 'reference': mo_name
-            #     }
-            #     self.odoo.execute('stock.move', 'create', elect_data)
-            #     componentes_creados += 1
-            # except Exception as e:
-            #     advertencias.append(f"No se pudo agregar línea de electricidad: {str(e)}")
+
+            # NOTA: Electricidad ya se agrega en _crear_componentes
 
             # 5. Crear subproductos (move_finished_ids)
             subproductos_creados = self._crear_subproductos(
@@ -1002,6 +987,31 @@ class TunelesService:
                 self.odoo.execute('stock.move.line', 'create', move_line_data)
             
             movimientos_creados += 1
+        
+        # --- Agregar componente de Electricidad ---
+        # Producto: Provisión Electricidad Túnel Estático ($/hr) ID 15033
+        # La cantidad es el total de kg de todos los productos
+        try:
+            total_kg = sum(data['kg'] for data in productos_totales.values())
+            ete_id = 15033
+            
+            elect_move = {
+                'name': mo_name,
+                'product_id': ete_id,
+                'product_uom_qty': total_kg,
+                'product_uom': 12,  # kg
+                'location_id': config['ubicacion_origen_id'],
+                'location_dest_id': ubicacion_virtual,
+                'state': 'draft',
+                'raw_material_production_id': mo_id,
+                'company_id': 1,
+                'reference': mo_name
+            }
+            self.odoo.execute('stock.move', 'create', elect_move)
+            movimientos_creados += 1
+        except Exception as e:
+            # Si falla electricidad, no detenemos el proceso
+            print(f"Advertencia: No se pudo agregar electricidad: {e}")
         
         return movimientos_creados
     
