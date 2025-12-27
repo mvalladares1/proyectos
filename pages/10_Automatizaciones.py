@@ -237,67 +237,26 @@ with tab1:
                                                 'kg': validacion.get('kg', 0.0),
                                                 'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
                                                 'advertencia': f"Pallet en recepción {reception_info['picking_name']}. Validar en Odoo.",
-                                                'producto_id': validacion.get('producto_id'),
+                                                'producto_id': validacion.get('product_id'),
                                                 'producto_nombre': validacion.get('producto_nombre', 'N/A'),
                                                 'manual': False,
-                                                'pendiente_recepcion': True, # Flag para backend y UI
-                                                'odoo_url': reception_info['odoo_url'] # Guardar URL para mostrar en lista
+                                                'pendiente_recepcion': True,
+                                                'odoo_url': reception_info['odoo_url']
                                             })
                                             
                                             st.warning(f"⚠️ Pallet {pallet_codigo} agregado desde Recepción Pendiente.")
                                             st.rerun()
                                             
                                         else:
-                                            # Activar modo manual estándar (solo si NO está en recepción)
-                                            st.session_state.manual_entry_pending = pallet_codigo
-                                            st.warning(f"⚠️ Pallet no encontrado. Ingrese los datos manualmente.")
+                                            # NO se encontró en stock NI en recepciones pendientes
+                                            st.error(f"❌ Pallet {pallet_codigo} NO existe en Odoo.")
+                                            st.info("Verifica que el código sea correcto o que el pallet esté registrado en alguna recepción.")
                                 else:
                                     st.error("Error al validar pallet")
                             except Exception as e:
                                 st.error(f"Error: {str(e)}")
                     else:
                         st.warning("⚠️ Ingresa un código de pallet")
-
-            # Formulario de Ingreso Manual
-            if 'manual_entry_pending' in st.session_state:
-                st.info(f"📝 Ingreso Manual para: **{st.session_state.manual_entry_pending}**")
-                
-                # Productos disponibles (Hardcoded por ahora o extraer de config si es posible)
-                # Idealmente esto vendría del backend. Usaremos una lista genérica basada en los túneles.
-                productos_manuales = {
-                    15999: "[102122000] FB MK Conv. IQF en Bandeja",
-                    15741: "[103151000] FT S/V Conv. Block en Bandeja"
-                }
-                
-                with st.form("form_manual_pallet"):
-                    col_man1, col_man2 = st.columns([3, 1])
-                    with col_man1:
-                        prod_manual = st.selectbox(
-                            "Producto", 
-                            options=list(productos_manuales.keys()),
-                            format_func=lambda x: productos_manuales[x]
-                        )
-                    with col_man2:
-                        kg_manual = st.number_input("Kg Reales", min_value=0.1, step=0.1, format="%.2f")
-                    
-                    submitted = st.form_submit_button("✅ Confirmar Ingreso Manual")
-                    if submitted:
-                        st.session_state.pallets_list.append({
-                            'codigo': st.session_state.manual_entry_pending,
-                            'kg': kg_manual,
-                            'ubicacion': 'MANUAL',
-                            'advertencia': 'Ingreso Manual sin Trazabilidad',
-                            'producto_id': prod_manual,
-                            'producto_nombre': productos_manuales[prod_manual],
-                            'manual': True
-                        })
-                        del st.session_state.manual_entry_pending
-                        st.success("Pallet manual agregado")
-                        st.rerun()
-                
-                if st.button("❌ Cancelar Manual"):
-                    del st.session_state.manual_entry_pending
-                    st.rerun()
         
         with input_tab2:
             pallets_textarea = st.text_area(
