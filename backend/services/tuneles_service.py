@@ -3,6 +3,7 @@ Servicio para automatización de órdenes de fabricación en túneles estáticos
 Maneja la lógica de creación de componentes y subproductos con sufijo -C.
 """
 
+import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from shared.odoo_client import OdooClient
@@ -142,8 +143,8 @@ class TunelesService:
                             ('result_package_id', '=', pkg_id),
                             ('picking_id', '!=', False)
                         ], 
-                        ['picking_id', 'product_id', 'qty_done', 'product_uom_qty'],
-                        limit=5,  # Traemos varios por si hay múltiples
+                        ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty'],
+                        limit=5,
                         order='id desc'
                     )
                     
@@ -155,7 +156,7 @@ class TunelesService:
                                 ('package_id', '=', pkg_id),
                                 ('picking_id', '!=', False)
                             ], 
-                            ['picking_id', 'product_id', 'qty_done', 'product_uom_qty'],
+                            ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty'],
                             limit=5,
                             order='id desc'
                         )
@@ -176,12 +177,12 @@ class TunelesService:
                     if picking and picking[0]['state'] not in ['done', 'cancel']:
                         state = picking[0]['state']
                         
-                        # Generar URL de Odoo
-                        base_url = "https://riofuturo.odoo.com" 
+                        # Generar URL de Odoo (usar env var)
+                        base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
                         odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
                         
-                        # Obtener Kg: usar qty_done si existe, sino product_uom_qty (demanda)
-                        kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('product_uom_qty', 0)
+                        # Obtener Kg: usar qty_done si existe, sino reserved_uom_qty
+                        kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
                         
                         reception_info = {
                             'found_in_reception': True,
