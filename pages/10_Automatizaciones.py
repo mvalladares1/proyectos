@@ -613,10 +613,15 @@ with tab2:
                 data = response.json()
                 # Filtrado cliente para 'pendientes_stock'
                 if estado == 'pendientes_stock':
-                    return [o for o in data if o.get('tiene_pendientes')]
+                    pendientes = [o for o in data if o.get('tiene_pendientes')]
+                    print(f"DEBUG Frontend: Total órdenes={len(data)}, con pendientes={len(pendientes)}")
+                    for o in data:
+                        print(f"  - {o.get('nombre')}: tiene_pendientes={o.get('tiene_pendientes')}")
+                    return pendientes
                 return data
             return []
-        except:
+        except Exception as e:
+            print(f"DEBUG Frontend Error: {e}")
             return []
     
     ordenes = get_ordenes(
