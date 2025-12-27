@@ -195,66 +195,67 @@ with tab1:
             with col2:
                 if st.button("➕ Agregar", use_container_width=True, type="primary"):
                     if pallet_codigo:
-                        # Validar pallet
-                        with st.spinner("Validando pallet..."):
-                            try:
-                                response = requests.post(
-                                    f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
-                                    params={"username": username, "password": password},
-                                    json={
-                                        "pallets": [pallet_codigo],
-                                        "buscar_ubicacion": buscar_ubicacion_auto
-                                    },
-                                    timeout=10
-                                )
-                                if response.status_code == 200:
-                                    validacion = response.json()[0]
-                                    
-                                    if validacion['existe']:
-                                        # Agregar a la lista
-                                        st.session_state.pallets_list.append({
-                                            'codigo': validacion['codigo'],
-                                            'kg': validacion.get('kg', 0.0),
-                                            'ubicacion': validacion.get('ubicacion_nombre', 'N/A'),
-                                            'advertencia': validacion.get('advertencia'),
-                                            'producto_id': validacion.get('producto_id'),
-                                            'producto_nombre': validacion.get('producto_nombre', 'N/A'),
-                                            'manual': False
-                                        })
-                                        # Limpiar estado manual si existía
-                                        if 'manual_entry_pending' in st.session_state:
-                                            del st.session_state.manual_entry_pending
-                                        st.success(f"✅ {pallet_codigo} agregado!")
-                                        st.rerun()
-                                    else:
-                                        # Verificar si hay info de recepción
-                                        reception_info = validacion.get('reception_info')
-                                        if reception_info:
-                                            # SI ES PALLET EN RECEPCIÓN PENDIENTE:
-                                            # Lo agregamos automáticamente a la lista con estado especial
+                        # Verificar duplicados primero
+                        codigos_existentes = {p['codigo'] for p in st.session_state.pallets_list}
+                        if pallet_codigo.strip() in codigos_existentes:
+                            st.warning(f"⚠️ {pallet_codigo} ya está en la lista")
+                        else:
+                            # Validar pallet
+                            with st.spinner("Validando pallet..."):
+                                try:
+                                    response = requests.post(
+                                        f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
+                                        params={"username": username, "password": password},
+                                        json={
+                                            "pallets": [pallet_codigo],
+                                            "buscar_ubicacion": buscar_ubicacion_auto
+                                        },
+                                        timeout=10
+                                    )
+                                    if response.status_code == 200:
+                                        validacion = response.json()[0]
+                                        
+                                        if validacion.get('existe') and validacion.get('kg', 0) > 0:
+                                            # Agregar a la lista
                                             st.session_state.pallets_list.append({
                                                 'codigo': validacion['codigo'],
                                                 'kg': validacion.get('kg', 0.0),
-                                                'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
-                                                'advertencia': f"Pallet en recepción {reception_info['picking_name']}. Validar en Odoo.",
-                                                'producto_id': validacion.get('product_id'),
+                                                'ubicacion': validacion.get('ubicacion_nombre', 'N/A'),
+                                                'advertencia': validacion.get('advertencia'),
+                                                'producto_id': validacion.get('producto_id'),
                                                 'producto_nombre': validacion.get('producto_nombre', 'N/A'),
-                                                'manual': False,
-                                                'pendiente_recepcion': True,
-                                                'odoo_url': reception_info['odoo_url']
+                                                'manual': False
                                             })
-                                            
-                                            st.warning(f"⚠️ Pallet {pallet_codigo} agregado desde Recepción Pendiente.")
+                                            st.success(f"✅ {pallet_codigo} agregado!")
                                             st.rerun()
-                                            
                                         else:
-                                            # NO se encontró en stock NI en recepciones pendientes
-                                            st.error(f"❌ Pallet {pallet_codigo} NO existe en Odoo.")
-                                            st.info("Verifica que el código sea correcto o que el pallet esté registrado en alguna recepción.")
-                                else:
-                                    st.error("Error al validar pallet")
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
+                                            # Verificar si hay info de recepción
+                                            reception_info = validacion.get('reception_info')
+                                            if reception_info:
+                                                # SI ES PALLET EN RECEPCIÓN PENDIENTE:
+                                                st.session_state.pallets_list.append({
+                                                    'codigo': validacion['codigo'],
+                                                    'kg': validacion.get('kg', 0.0),
+                                                    'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
+                                                    'advertencia': f"Pallet en recepción {reception_info['picking_name']}. Validar en Odoo.",
+                                                    'producto_id': validacion.get('product_id'),
+                                                    'producto_nombre': validacion.get('producto_nombre', 'N/A'),
+                                                    'manual': False,
+                                                    'pendiente_recepcion': True,
+                                                    'odoo_url': reception_info['odoo_url']
+                                                })
+                                                
+                                                st.warning(f"⚠️ Pallet {pallet_codigo} agregado desde Recepción Pendiente.")
+                                                st.rerun()
+                                                
+                                            else:
+                                                # NO se encontró en stock NI en recepciones pendientes
+                                                st.error(f"❌ Pallet {pallet_codigo} NO existe en Odoo.")
+                                                st.info("Verifica que el código sea correcto o que el pallet esté registrado en alguna recepción.")
+                                    else:
+                                        st.error("Error al validar pallet")
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
                     else:
                         st.warning("⚠️ Ingresa un código de pallet")
         
@@ -268,9 +269,16 @@ with tab1:
             
             if st.button("➕ Agregar Todos", use_container_width=True, type="primary"):
                 if pallets_textarea:
-                    codigos = [c.strip() for c in pallets_textarea.split('\n') if c.strip()]
+                    codigos_raw = [c.strip() for c in pallets_textarea.split('\n') if c.strip()]
                     
-                    if codigos:
+                    # Filtrar duplicados ya existentes en la lista
+                    codigos_existentes = {p['codigo'] for p in st.session_state.pallets_list}
+                    codigos = [c for c in codigos_raw if c not in codigos_existentes]
+                    duplicados_ignorados = len(codigos_raw) - len(codigos)
+                    
+                    if not codigos:
+                        st.warning("⚠️ Todos los pallets ya están en la lista")
+                    else:
                         with st.spinner(f"Validando {len(codigos)} pallets..."):
                             try:
                                 response = requests.post(
@@ -286,21 +294,56 @@ with tab1:
                                     validaciones = response.json()
                                     
                                     agregados = 0
+                                    en_recepcion = 0
+                                    no_encontrados = []
+                                    
                                     for val in validaciones:
-                                        if val['existe']:
+                                        # Caso 1: Existe en stock
+                                        if val.get('existe') and val.get('kg', 0) > 0:
                                             st.session_state.pallets_list.append({
                                                 'codigo': val['codigo'],
                                                 'kg': val.get('kg', 0.0),
                                                 'ubicacion': val.get('ubicacion_nombre', 'N/A'),
-                                                'advertencia': val.get('advertencia')
+                                                'advertencia': val.get('advertencia'),
+                                                'producto_id': val.get('producto_id'),
+                                                'producto_nombre': val.get('producto_nombre', 'N/A'),
+                                                'manual': False
                                             })
                                             agregados += 1
+                                        # Caso 2: Pallet en recepción pendiente
+                                        elif val.get('reception_info'):
+                                            reception_info = val['reception_info']
+                                            st.session_state.pallets_list.append({
+                                                'codigo': val['codigo'],
+                                                'kg': val.get('kg', 0.0),
+                                                'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
+                                                'advertencia': f"Pallet en recepción {reception_info['picking_name']}",
+                                                'producto_id': val.get('product_id'),
+                                                'producto_nombre': val.get('producto_nombre', 'N/A'),
+                                                'manual': False,
+                                                'pendiente_recepcion': True,
+                                                'odoo_url': reception_info['odoo_url']
+                                            })
+                                            en_recepcion += 1
+                                        else:
+                                            no_encontrados.append(val['codigo'])
                                     
+                                    # Mostrar resumen
+                                    msgs = []
                                     if agregados > 0:
-                                        st.success(f"✅ {agregados}/{len(codigos)} pallets agregados")
+                                        msgs.append(f"✅ {agregados} en stock")
+                                    if en_recepcion > 0:
+                                        msgs.append(f"⚠️ {en_recepcion} en recepción pendiente")
+                                    if duplicados_ignorados > 0:
+                                        msgs.append(f"🔄 {duplicados_ignorados} duplicados ignorados")
+                                    if no_encontrados:
+                                        msgs.append(f"❌ {len(no_encontrados)} no encontrados")
+                                    
+                                    if agregados + en_recepcion > 0:
+                                        st.success(" | ".join(msgs))
                                         st.rerun()
                                     else:
-                                        st.error("❌ Ningún pallet fue encontrado")
+                                        st.error("❌ Ningún pallet fue encontrado: " + ", ".join(no_encontrados))
                                 else:
                                     st.error("Error al validar pallets")
                             except Exception as e:
