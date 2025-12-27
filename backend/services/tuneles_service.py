@@ -767,29 +767,27 @@ class TunelesService:
             )
             
             # --- MEJORA: Agregar línea de Electricidad ---
-            # Buscar producto 'ETE' -> Provisión Electricidad Túnel Estático
+            # ID del producto Provisión Electricidad Túnel Estático ($/hr)
             try:
-                ete_ids = self.odoo.execute('product.product', 'search', [['default_code', '=', 'ETE']], {'limit': 1})
-                if ete_ids:
-                    ete_id = ete_ids[0]
-                    
-                    # La ubicación de consumo (destino del componente) es la virtual de producción
-                    ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
-                    
-                    elect_data = {
-                        'name': mo_name,
-                        'product_id': ete_id,
-                        'product_uom_qty': total_kg, # Cantidad igual al total de Kg
-                        'product_uom': 12, # kg
-                        'location_id': config['ubicacion_origen_id'],
-                        'location_dest_id': ubicacion_virtual,
-                        'state': 'draft',
-                        'raw_material_production_id': mo_id, # Vincular como componente
-                        'company_id': 1,
-                        'reference': mo_name
-                    }
-                    self.odoo.execute('stock.move', 'create', elect_data)
-                    componentes_creados += 1
+                ete_id = 15033  # Hardcoded para evitar problemas de búsqueda
+                
+                # La ubicación de consumo (destino del componente) es la virtual de producción
+                ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
+                
+                elect_data = {
+                    'name': mo_name,
+                    'product_id': ete_id,
+                    'product_uom_qty': total_kg,  # Cantidad igual al total de Kg
+                    'product_uom': 12,  # kg
+                    'location_id': config['ubicacion_origen_id'],
+                    'location_dest_id': ubicacion_virtual,
+                    'state': 'draft',
+                    'raw_material_production_id': mo_id,  # Vincular como componente
+                    'company_id': 1,
+                    'reference': mo_name
+                }
+                self.odoo.execute('stock.move', 'create', elect_data)
+                componentes_creados += 1
             except Exception as e:
                 print(f"Advertencia: No se pudo agregar electricidad: {e}")
                 # No detenemos el proceso si falla esto, pero advertimos
