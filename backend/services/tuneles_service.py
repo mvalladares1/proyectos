@@ -767,31 +767,21 @@ class TunelesService:
             )
             
             # --- MEJORA: Agregar línea de Electricidad ---
-            # ID del producto Provisión Electricidad Túnel Estático ($/hr)
-            try:
-                ete_id = 15033  # Hardcoded para evitar problemas de búsqueda
-                
-                # La ubicación de consumo (destino del componente) es la virtual de producción
-                ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
-                
-                elect_data = {
-                    'name': mo_name,
-                    'product_id': ete_id,
-                    'product_uom_qty': total_kg,  # Cantidad igual al total de Kg
-                    'product_uom': 12,  # kg
-                    'location_id': config['ubicacion_origen_id'],
-                    'location_dest_id': ubicacion_virtual,
-                    'state': 'draft',
-                    'raw_material_production_id': mo_id,  # Vincular como componente
-                    'company_id': 1,
-                    'reference': mo_name
-                }
-                self.odoo.execute('stock.move', 'create', elect_data)
-                componentes_creados += 1
-            except Exception as e:
-                print(f"Advertencia: No se pudo agregar electricidad: {e}")
-                # No detenemos el proceso si falla esto, pero advertimos
-                advertencias.append(f"No se pudo agregar línea de electricidad: {str(e)}")
+            # TODO: Descomentar cuando se confirme ID correcto del producto de electricidad
+            # El ID 15033 no existe o está archivado
+            # try:
+            #     ete_id = 15033
+            #     ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
+            #     elect_data = {
+            #         'name': mo_name, 'product_id': ete_id, 'product_uom_qty': total_kg,
+            #         'product_uom': 12, 'location_id': config['ubicacion_origen_id'],
+            #         'location_dest_id': ubicacion_virtual, 'state': 'draft',
+            #         'raw_material_production_id': mo_id, 'company_id': 1, 'reference': mo_name
+            #     }
+            #     self.odoo.execute('stock.move', 'create', elect_data)
+            #     componentes_creados += 1
+            # except Exception as e:
+            #     advertencias.append(f"No se pudo agregar línea de electricidad: {str(e)}")
 
             # 5. Crear subproductos (move_finished_ids)
             subproductos_creados = self._crear_subproductos(
@@ -1159,7 +1149,7 @@ class TunelesService:
         ordenes = self.odoo.search_read(
             'mrp.production',
             domain,
-            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start'],
+            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start', 'x_studio_pending_receptions'],
             limit=limit,
             order='create_date desc'
         )
@@ -1201,7 +1191,19 @@ class TunelesService:
                     tunel_codigo = codigo
                     break
             
+            # Determinar tiene_pendientes desde el campo JSON o desde moves sin lote
             tiene_pendientes = orden['name'] in moves_pendientes_refs
+            
+            # Priorizar el campo JSON si existe
+            pending_json = orden.get('x_studio_pending_receptions')
+            if pending_json:
+                try:
+                    import json
+                    pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+                    if pending_data.get('pending'):
+                        tiene_pendientes = True
+                except:
+                    pass
             
             resultado.append({
                 'id': orden['id'],
@@ -1212,7 +1214,7 @@ class TunelesService:
                 'estado': orden['state'],
                 'fecha_creacion': orden.get('create_date'),
                 'fecha_planificada': orden.get('date_planned_start'),
-                'tiene_pendientes': tiene_pendientes # Nuevo Flag
+                'tiene_pendientes': tiene_pendientes  # Nuevo Flag
             })
         
         return resultado
