@@ -18,27 +18,30 @@ TUNELES_CONFIG = {
         'ubicacion_origen_nombre': 'RF/Stock/Camara 0°C REAL',
         'ubicacion_destino_id': 8479,
         'ubicacion_destino_nombre': 'Tránsito/Salida Túneles Estáticos',
-        'sala_proceso': 'Tunel - Estatico 1'
+        'sala_proceso': 'Tunel - Estatico 1',
+        'picking_type_id': 192  # Rio Futuro: Congelar TE1 → RF/MO/CongTE1/XXXXX
     },
     'TE2': {
-        'producto_proceso_id': 15985,  # TODO: Confirmar ID real
+        'producto_proceso_id': 15985,
         'producto_proceso_nombre': '[1.2] PROCESO CONGELADO TÚNEL ESTÁTICO 2',
         'sucursal': 'RF',
         'ubicacion_origen_id': 5452,
         'ubicacion_origen_nombre': 'RF/Stock/Camara 0°C REAL',
         'ubicacion_destino_id': 8479,
         'ubicacion_destino_nombre': 'Tránsito/Salida Túneles Estáticos',
-        'sala_proceso': 'Tunel - Estatico 2'
+        'sala_proceso': 'Tunel - Estatico 2',
+        'picking_type_id': 190  # Rio Futuro: Congelar TE2 → RF/MO/CongTE2/XXXXX
     },
     'TE3': {
-        'producto_proceso_id': 15986,  # TODO: Confirmar ID real
+        'producto_proceso_id': 15986,
         'producto_proceso_nombre': '[1.3] PROCESO CONGELADO TÚNEL ESTÁTICO 3',
         'sucursal': 'RF',
         'ubicacion_origen_id': 5452,
         'ubicacion_origen_nombre': 'RF/Stock/Camara 0°C REAL',
         'ubicacion_destino_id': 8479,
         'ubicacion_destino_nombre': 'Tránsito/Salida Túneles Estáticos',
-        'sala_proceso': 'Tunel - Estatico 3'
+        'sala_proceso': 'Tunel - Estatico 3',
+        'picking_type_id': 191  # Rio Futuro: Congelar TE3 → RF/MO/CongTE3/XXXXX
     },
     'VLK': {
         'producto_proceso_id': 16446,
@@ -48,7 +51,8 @@ TUNELES_CONFIG = {
         'ubicacion_origen_nombre': 'VLK/Camara 0°',
         'ubicacion_destino_id': 8532,
         'ubicacion_destino_nombre': 'Tránsito VLK/Salida Túnel Estático',
-        'sala_proceso': 'Tunel - Estatico VLK'
+        'sala_proceso': 'Tunel - Estatico VLK',
+        'picking_type_id': 219  # VILKUN: Congelar TE VLK → MO/CongTE/XXXXX
     }
 }
 
@@ -251,7 +255,8 @@ class TunelesService:
                 'kg': kg,
                 'lote_id': validacion.get('lote_id'),
                 'producto_id': validacion.get('producto_id'),
-                'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id'])
+                'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id']),
+                'package_id': validacion.get('package_id')  # ID del paquete origen
             })
         
         if errores:
@@ -289,6 +294,7 @@ class TunelesService:
                 'product_uom_id': 12,  # kg
                 'location_src_id': config['ubicacion_origen_id'],
                 'location_dest_id': config['ubicacion_destino_id'],
+                'picking_type_id': config['picking_type_id'],  # Tipo de operación para correlativo
                 'state': 'draft',  # Borrador
                 'company_id': 1,  # RIO FUTURO PROCESOS SPA
             }
@@ -498,15 +504,13 @@ class TunelesService:
             
             # Crear stock.move.line por cada pallet
             for pallet in data['pallets']:
-                # Buscar el lote del pallet
+                # Obtener lote_id del quant del pallet (viene de la validación)
                 lote_id = pallet.get('lote_id')
-                if not lote_id:
-                    lote_id = self._buscar_o_crear_lote(pallet['codigo'], producto_id)
+                package_id = pallet.get('package_id')  # ID del package origen
                 
                 move_line_data = {
                     'move_id': move_id,
                     'product_id': producto_id,
-                    'lot_id': lote_id,
                     'qty_done': pallet['kg'],
                     'reserved_uom_qty': pallet['kg'],
                     'product_uom_id': 12,  # kg
@@ -516,6 +520,14 @@ class TunelesService:
                     'reference': mo_name,
                     'company_id': 1
                 }
+                
+                # Agregar lote si existe
+                if lote_id:
+                    move_line_data['lot_id'] = lote_id
+                
+                # Agregar package de origen si existe
+                if package_id:
+                    move_line_data['package_id'] = package_id
                 
                 self.odoo.execute('stock.move.line', 'create', move_line_data)
             

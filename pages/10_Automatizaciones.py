@@ -67,27 +67,37 @@ st.markdown("""
         cursor: pointer;
     }
     
-    /* Cards de pallets */
+    /* Cards de pallets (dark mode compatible) */
     .pallet-card {
-        background: #f8f9fa;
-        border-left: 4px solid #4CAF50;
-        padding: 12px;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border-left: 4px solid #22c55e;
+        padding: 16px;
         margin: 8px 0;
-        border-radius: 4px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     
-    /* Cards de órdenes */
+    .pallet-card strong {
+        color: #ffffff;
+        font-size: 1.05em;
+    }
+    
+    .pallet-card small {
+        color: #94a3b8;
+    }
+    
+    /* Cards de órdenes (dark mode compatible) */
     .orden-card {
-        background: white;
-        border: 1px solid #e0e0e0;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border: 1px solid #475569;
         padding: 16px;
         margin: 12px 0;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     
     .orden-card:hover {
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
     
     /* Estados */
@@ -99,10 +109,10 @@ st.markdown("""
         font-weight: 600;
     }
     
-    .badge-draft { background: #FFF3CD; color: #856404; }
-    .badge-progress { background: #D1ECF1; color: #0C5460; }
-    .badge-done { background: #D4EDDA; color: #155724; }
-    .badge-cancel { background: #F8D7DA; color: #721C24; }
+    .badge-draft { background: #78350f; color: #fde68a; }
+    .badge-progress { background: #1e3a8a; color: #93c5fd; }
+    .badge-done { background: #14532d; color: #86efac; }
+    .badge-cancel { background: #7f1d1d; color: #fca5a5; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -529,124 +539,92 @@ with tab2:
             electricidad = orden.get('costo_electricidad', total_kg * 0.15)
             
             st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); 
-                border-left: 5px solid {color_borde}; 
-                border-radius: 14px; 
-                padding: 24px; 
-                margin-bottom: 20px;
-                box-shadow: 0 6px 16px rgba(0,0,0,0.6);
-            ">
-                <!-- Header -->
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
-                    <div style="flex: 1;">
-                        <h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">
-                            {orden.get('mo_name', orden.get('nombre', 'N/A'))}
-                        </h3>
-                        <p style="margin: 0; color: #a0a0b0; font-size: 0.95em;">
-                            🏭 <strong style="color: #e0e0e0;">{orden.get('tunel', 'N/A')}</strong> | 
-                            📦 {orden.get('producto_nombre', orden.get('producto', 'N/A'))}
-                        </p>
-                    </div>
-                    <span style="
-                        background: {color_badge_bg}; 
-                        color: {color_badge_text}; 
-                        padding: 8px 16px; 
-                        border-radius: 24px; 
-                        font-size: 0.7em; 
-                        font-weight: 800;
-                        white-space: nowrap;
-                        margin-left: 16px;
-                        letter-spacing: 1px;
-                    ">
-                        {estado_label}
-                    </span>
+<div style="background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); border-left: 5px solid {color_borde}; border-radius: 14px; padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.6);">
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
+        <div style="flex: 1;">
+            <h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">
+                {orden.get('mo_name', orden.get('nombre', 'N/A'))}
+            </h3>
+            <p style="margin: 0; color: #a0a0b0; font-size: 0.95em;">
+                🏭 <strong style="color: #e0e0e0;">{orden.get('tunel', 'N/A')}</strong> | 
+                📦 {orden.get('producto_nombre', orden.get('producto', 'N/A'))}
+            </p>
+        </div>
+        <span style="background: {color_badge_bg}; color: {color_badge_text}; padding: 8px 16px; border-radius: 24px; font-size: 0.7em; font-weight: 800; white-space: nowrap; margin-left: 16px; letter-spacing: 1px;">
+            {estado_label}
+        </span>
+    </div>
+    
+    <!-- Grid Principal -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        
+        <!-- Columna Izquierda: Componentes -->
+        <div style="background: rgba(59,130,246,0.1); border-left: 3px solid #3b82f6; border-radius: 10px; padding: 16px;">
+            <div style="color: #93c5fd; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                🔵 Componentes (Entrada)
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
+                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
                 </div>
-                
-                <!-- Grid Principal -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                    
-                    <!-- Columna Izquierda: Componentes -->
-                    <div style="
-                        background: rgba(59,130,246,0.1); 
-                        border-left: 3px solid #3b82f6;
-                        border-radius: 10px; 
-                        padding: 16px;
-                    ">
-                        <div style="color: #93c5fd; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
-                            🔵 Componentes (Entrada)
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
-                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
-                            </div>
-                            <div>
-                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
-                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{componentes}</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Columna Derecha: Subproductos -->
-                    <div style="
-                        background: rgba(34,197,94,0.1); 
-                        border-left: 3px solid #22c55e;
-                        border-radius: 10px; 
-                        padding: 16px;
-                    ">
-                        <div style="color: #86efac; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
-                            🟢 Subproductos (Salida)
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
-                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
-                            </div>
-                            <div>
-                                <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
-                                <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{subproductos}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Fila Inferior -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    <div>
-                        <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
-                            📦 Pallets
-                        </div>
-                        <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
-                            {pallets} unidades
-                        </div>
-                    </div>
-                    <div>
-                        <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
-                            📅 Creación
-                        </div>
-                        <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
-                            {fecha_str}
-                        </div>
-                    </div>
-                    <div style="
-                        background: rgba(251,191,36,0.15); 
-                        border-left: 3px solid #fbbf24;
-                        border-radius: 8px;
-                        padding: 12px;
-                    ">
-                        <div style="color: #fde68a; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase; font-weight: 700;">
-                            ⚡ Electricidad
-                        </div>
-                        <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">
-                            ${electricidad:,.2f}
-                        </div>
-                        <div style="color: #a0a0b0; font-size: 0.65em; margin-top: 2px;">
-                            ~$0.15/kg
-                        </div>
-                    </div>
+                <div>
+                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
+                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{componentes}</div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        
+        <!-- Columna Derecha: Subproductos -->
+        <div style="background: rgba(34,197,94,0.1); border-left: 3px solid #22c55e; border-radius: 10px; padding: 16px;">
+            <div style="color: #86efac; font-size: 0.7em; font-weight: 700; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                🟢 Subproductos (Salida)
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Total Kg</div>
+                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{total_kg:,.1f}</div>
+                </div>
+                <div>
+                    <div style="color: #888; font-size: 0.7em; margin-bottom: 4px;">Registros</div>
+                    <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">{subproductos}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Fila Inferior -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <div>
+            <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
+                📦 Pallets
+            </div>
+            <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
+                {pallets} unidades
+            </div>
+        </div>
+        <div>
+            <div style="color: #888; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase;">
+                📅 Creación
+            </div>
+            <div style="color: #ffffff; font-size: 1.1em; font-weight: 600;">
+                {fecha_str}
+            </div>
+        </div>
+        <div style="background: rgba(251,191,36,0.15); border-left: 3px solid #fbbf24; border-radius: 8px; padding: 12px;">
+            <div style="color: #fde68a; font-size: 0.7em; margin-bottom: 4px; text-transform: uppercase; font-weight: 700;">
+                ⚡ Electricidad
+            </div>
+            <div style="color: #ffffff; font-size: 1.3em; font-weight: 700;">
+                ${electricidad:,.2f}
+            </div>
+            <div style="color: #a0a0b0; font-size: 0.65em; margin-top: 2px;">
+                ~$0.15/kg
+            </div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 
