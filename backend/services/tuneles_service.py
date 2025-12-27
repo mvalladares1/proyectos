@@ -995,32 +995,44 @@ class TunelesService:
             movimientos_creados += 1
         
         # --- Agregar componente de Electricidad ---
-        # Producto: Provisión Electricidad Túnel Estático ($/hr) ID 15033
-        # La cantidad es el total de kg de todos los productos
+        # Producto: Provisión Electricidad Túnel Estático ($/hr)
+        # Buscamos por código 'ETE' en product.product (no template)
         try:
             total_kg = sum(data['kg'] for data in productos_totales.values())
-            ete_id = 15033
             
-            elect_move = {
-                'name': mo_name,
-                'product_id': ete_id,
-                'product_uom_qty': total_kg,
-                'product_uom': 12,  # kg
-                'location_id': config['ubicacion_origen_id'],
-                'location_dest_id': ubicacion_virtual,
-                'state': 'draft',
-                'raw_material_production_id': mo_id,
-                'company_id': 1,
-                'reference': mo_name
-            }
-            # Usar execute_kw DIRECTO porque el wrapper execute tiene formato incorrecto
-            self.odoo.models.execute_kw(
+            # Buscar product.product por código
+            ete_products = self.odoo.models.execute_kw(
                 self.odoo.db, self.odoo.uid, self.odoo.password,
-                'stock.move', 'create', [elect_move]
+                'product.product', 'search_read',
+                [[('default_code', '=', 'ETE')]],
+                {'fields': ['id', 'name'], 'limit': 1}
             )
-            movimientos_creados += 1
+            
+            if ete_products:
+                ete_id = ete_products[0]['id']
+                print(f"DEBUG: Producto electricidad encontrado: ID={ete_id}, Name={ete_products[0]['name']}")
+                
+                elect_move = {
+                    'name': mo_name,
+                    'product_id': ete_id,
+                    'product_uom_qty': total_kg,
+                    'product_uom': 12,  # kg
+                    'location_id': config['ubicacion_origen_id'],
+                    'location_dest_id': ubicacion_virtual,
+                    'state': 'draft',
+                    'raw_material_production_id': mo_id,
+                    'company_id': 1,
+                    'reference': mo_name
+                }
+                self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'stock.move', 'create', [elect_move]
+                )
+                movimientos_creados += 1
+                print(f"DEBUG: Electricidad agregada correctamente")
+            else:
+                print("DEBUG: Producto ETE no encontrado")
         except Exception as e:
-            # Si falla electricidad, no detenemos el proceso
             print(f"Advertencia: No se pudo agregar electricidad: {e}")
         
         return movimientos_creados
@@ -1219,11 +1231,13 @@ class TunelesService:
             if pending_json:
                 try:
                     import json
+                    print(f"DEBUG listar: MO {orden['name']} tiene pending_json: {str(pending_json)[:50]}...")
                     pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
                     if pending_data.get('pending'):
                         tiene_pendientes = True
-                except:
-                    pass
+                        print(f"DEBUG listar: MO {orden['name']} marcada como tiene_pendientes=True")
+                except Exception as e:
+                    print(f"DEBUG listar: Error parseando JSON para {orden['name']}: {e}")
             
             resultado.append({
                 'id': orden['id'],
