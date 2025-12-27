@@ -122,31 +122,33 @@ class TunelesService:
             # --- MEJORA: Búsqueda Secundaria en Recepciones Pendientes ---
             reception_info = None
             try:
-                # 1. Buscar package por nombre para obtener ID si existe (aunque no tenga stock)
-                pkg_search = self.odoo.search_read('stock.quant.package', [['name', '=', codigo]], ['id'], limit=1)
-                
-                domain = []
-                if pkg_search:
-                    domain = [['result_package_id', '=', pkg_search[0]['id']]]
-                else:
-                    # Intentar buscar por nombre de lote en move line si el package no existe
-                    # (A veces ingresan el lote como código de pallet)
-                    domain = [['lot_name', '=', codigo]]
-                
-                # 2. Buscar en move lines asociados a pickings NO cancelados ni hechos
-                # Estado 'assigned' = Listo para validar, 'draft' = Borrador, 'confirmed' = Esperando
-                domain.extend([
-                    ('state', 'in', ['draft', 'confirmed', 'assigned']),
-                    ('picking_id', '!=', False)
-                ])
-                
+                # SOLUCIÓN: Buscar directamente en stock.move.line usando el nombre del paquete
+                # Esto funciona para recepciones en CUALQUIER estado (draft, assigned, confirmed)
                 move_lines = self.odoo.search_read(
                     'stock.move.line', 
-                    domain, 
-                    ['picking_id', 'product_id', 'qty_done', 'move_id'],
+                    [
+                        ('result_package_id.name', '=', codigo), # Búsqueda directa por nombre
+                        ('state', 'in', ['draft', 'confirmed', 'assigned', 'partially_available']),
+                        ('picking_id', '!=', False)
+                    ], 
+                    ['picking_id', 'product_id', 'qty_done', 'product_uom_qty', 'move_id'],
                     limit=1,
                     order='id desc'
                 )
+                
+                # Si no encontró por result_package_id, intentar por package_id (origen)
+                if not move_lines:
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line', 
+                        [
+                            ('package_id.name', '=', codigo),
+                            ('state', 'in', ['draft', 'confirmed', 'assigned', 'partially_available']),
+                            ('picking_id', '!=', False)
+                        ], 
+                        ['picking_id', 'product_id', 'qty_done', 'product_uom_qty', 'move_id'],
+                        limit=1,
+                        order='id desc'
+                    )
                 
                 if move_lines:
                     ml = move_lines[0]
@@ -158,11 +160,12 @@ class TunelesService:
                     if picking:
                         state = picking[0]['state']
                         # Generar URL de Odoo
-                        # Asumimos URL base estándar, ajusta si es diferente
                         base_url = "https://riofuturo.odoo.com" 
-                        # ID de acción para stock.picking (usualmente se busca, pero hardcodeamos el modelo)
                         model = "stock.picking"
                         odoo_url = f"{base_url}/web#id={picking_id}&model={model}&view_type=form"
+                        
+                        # Obtener Kg: usar qty_done si existe, sino product_uom_qty (demanda)
+                        kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('product_uom_qty', 0)
                         
                         reception_info = {
                             'found_in_reception': True,
@@ -171,7 +174,7 @@ class TunelesService:
                             'state': state,
                             'odoo_url': odoo_url,
                             'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
-                            'kg': ml['qty_done'], 
+                            'kg': kg, 
                             'product_id': ml['product_id'][0] if ml['product_id'] else None
                         }
             except Exception as e:
