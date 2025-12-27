@@ -588,8 +588,7 @@ with tab2:
             st.cache_data.clear()
             st.rerun()
     
-    # Obtener órdenes
-    @st.cache_data(ttl=60) 
+    # Obtener órdenes - SIN cache para obtener datos frescos con tiene_pendientes
     def get_ordenes(_username, _password, tunel=None, estado=None):
         try:
             params = {
