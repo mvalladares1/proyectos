@@ -484,9 +484,9 @@ class TunelesService:
                 'pending': False,
                 'completed_at': datetime.now().isoformat()
             })
-            self.odoo.execute('mrp.production', 'write', [[mo_id], {
+            self.odoo.execute('mrp.production', 'write', [mo_id], {
                 'x_studio_pending_receptions': completed_data
-            }])
+            })
             
             return {
                 'success': True,
@@ -744,9 +744,9 @@ class TunelesService:
                 # Actualizar MO con JSON de pendientes
                 try:
                     import json
-                    self.odoo.execute('mrp.production', 'write', [[mo_id], {
+                    self.odoo.execute('mrp.production', 'write', [mo_id], {
                         'x_studio_pending_receptions': json.dumps(pending_data)
-                    }])
+                    })
                     advertencias.append(f"MO marcada con {len(pallets_pendientes)} pallets pendientes de recepción")
                 except Exception as e:
                     advertencias.append(f"Error al guardar pendientes: {e}")

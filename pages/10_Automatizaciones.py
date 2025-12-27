@@ -121,6 +121,42 @@ st.markdown("""
 st.title("🤖 Automatizaciones")
 st.markdown("**Túneles Estáticos** - Creación automatizada de órdenes de fabricación")
 
+# ============ Mostrar resultado persistente de última orden ============
+
+if 'last_order_result' in st.session_state and st.session_state.last_order_result:
+    result = st.session_state.last_order_result
+    
+    with st.container():
+        if result.get('success'):
+            st.success(f"✅ {result.get('mensaje')}")
+            
+            col_info1, col_info2 = st.columns(2)
+            col_info1.info(f"📋 Orden: **{result.get('mo_name')}**")
+            col_info2.info(f"📊 Total: **{result.get('total_kg', 0):,.2f} Kg** en **{result.get('pallets_count')}** pallets")
+            
+            # Mostrar componentes y subproductos
+            if result.get('componentes_count') or result.get('subproductos_count'):
+                col_a, col_b = st.columns(2)
+                if result.get('componentes_count'):
+                    col_a.metric("🔵 Componentes", result['componentes_count'])
+                if result.get('subproductos_count'):
+                    col_b.metric("🟢 Subproductos", result['subproductos_count'])
+            
+            # Mostrar advertencias
+            for adv in result.get('advertencias', []):
+                st.warning(f"⚠️ {adv}")
+            
+            # Si tiene pendientes, mostrar info
+            if result.get('has_pending'):
+                st.info(f"🟠 {result.get('pending_count', 0)} pallets pendientes de recepción")
+        
+        # Botón para cerrar el mensaje
+        if st.button("✖️ Cerrar mensaje", key="close_order_result"):
+            del st.session_state.last_order_result
+            st.rerun()
+    
+    st.divider()
+
 # ============ Tabs ============
 
 tab1, tab2 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes"])
@@ -484,31 +520,25 @@ with tab1:
                                 
                                 if response.status_code == 200:
                                     result = response.json()
-                                    st.success(f"✅ {result.get('mensaje', 'Orden creada exitosamente')}")
-                                    st.info(f"📋 Orden: **{result.get('mo_name')}**")
-                                    st.info(f"📊 Total: **{result.get('total_kg'):,.2f} Kg** en **{result.get('pallets_count')}** pallets")
                                     
-                                    # Mostrar componentes y subproductos creados
-                                    if result.get('componentes_count') or result.get('subproductos_count'):
-                                        col_a, col_b = st.columns(2)
-                                        if result.get('componentes_count'):
-                                            col_a.metric("🔵 Componentes", result['componentes_count'])
-                                        if result.get('subproductos_count'):
-                                            col_b.metric("🟢 Subproductos", result['subproductos_count'])
-                                    
-                                    # Mostrar advertencias si existen
-                                    if result.get('advertencias'):
-                                        for adv in result['advertencias']:
-                                            st.warning(f"⚠️ {adv}")
+                                    # Guardar resultado en session_state para mostrar después del rerun
+                                    st.session_state.last_order_result = {
+                                        'success': True,
+                                        'mensaje': result.get('mensaje', 'Orden creada exitosamente'),
+                                        'mo_name': result.get('mo_name'),
+                                        'total_kg': result.get('total_kg'),
+                                        'pallets_count': result.get('pallets_count'),
+                                        'componentes_count': result.get('componentes_count'),
+                                        'subproductos_count': result.get('subproductos_count'),
+                                        'advertencias': result.get('advertencias', []),
+                                        'has_pending': result.get('has_pending', False),
+                                        'pending_count': result.get('pending_count', 0)
+                                    }
                                     
                                     # Limpiar lista y resetear flag
                                     st.session_state.pallets_list = []
                                     st.session_state.creando_orden = False
                                     st.balloons()
-                                    
-                                    # Refrescar después de 2 segundos
-                                    import time
-                                    time.sleep(2)
                                     st.rerun()
                                 else:
                                     error_detail = response.json().get('detail', 'Error desconocido')
