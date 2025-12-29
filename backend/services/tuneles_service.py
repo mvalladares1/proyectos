@@ -1694,27 +1694,35 @@ class TunelesService:
                 except Exception as e:
                     pass
             
-            # Contar componentes y calcular electricidad
+            # Contar componentes (move.lines) y calcular electricidad
             componentes_count = 0
             electricidad_costo = 0
             move_raw_ids = orden.get('move_raw_ids', [])
             if move_raw_ids:
-                # Obtener moves para contar y calcular electricidad
-                raw_moves = self.odoo.search_read(
-                    'stock.move',
-                    [('id', 'in', move_raw_ids)],
-                    ['product_id', 'product_uom_qty']
+                # Contar move_lines para precisión
+                move_lines = self.odoo.search_read(
+                    'stock.move.line',
+                    [('move_id', 'in', move_raw_ids)],
+                    ['product_id', 'qty_done']
                 )
-                for move in raw_moves:
-                    prod_name = move['product_id'][1] if move['product_id'] else ''
+                for line in move_lines:
+                    prod_name = line['product_id'][1] if line.get('product_id') else ''
                     if 'ETE' in prod_name or 'Electricidad' in prod_name:
                         # Calcular costo electricidad (~$35.10/kg)
-                        electricidad_costo = move.get('product_uom_qty', 0) * 35.10
+                        electricidad_costo = line.get('qty_done', 0) * 35.10
                     else:
                         componentes_count += 1
             
-            # Contar subproductos
-            subproductos_count = len(orden.get('move_finished_ids', []))
+            # Contar subproductos (move_lines de finished)
+            subproductos_count = 0
+            move_finished_ids = orden.get('move_finished_ids', [])
+            if move_finished_ids:
+                finished_lines = self.odoo.search_read(
+                    'stock.move.line',
+                    [('move_id', 'in', move_finished_ids)],
+                    ['id']
+                )
+                subproductos_count = len(finished_lines)
             
             resultado.append({
                 'id': orden['id'],

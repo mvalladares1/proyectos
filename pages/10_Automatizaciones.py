@@ -216,182 +216,100 @@ with tab1:
         if 'pallets_list' not in st.session_state:
             st.session_state.pallets_list = []
         
-        # Tabs para modo de ingreso
-        input_tab1, input_tab2 = st.tabs(["➕ Individual", "📋 Múltiple"])
+        # Ingreso múltiple de pallets (uno por línea)
+        pallets_textarea = st.text_area(
+            "Ingresa los códigos de pallet (uno por línea)",
+            placeholder="PAC0002683\nPAC0006041\nPAC0005928",
+            height=200,  # Altura aumentada para mejor visibilidad
+            key="pallets_multiple_input"
+        )
         
-        with input_tab1:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                pallet_codigo = st.text_input(
-                    "Código del pallet",
-                    placeholder="PAC0002683",
-                    key="pallet_input",
-                    label_visibility="collapsed"
-                )
-            with col2:
-                if st.button("➕ Agregar", use_container_width=True, type="primary"):
-                    if pallet_codigo:
-                        # Verificar duplicados primero
-                        codigos_existentes = {p['codigo'] for p in st.session_state.pallets_list}
-                        if pallet_codigo.strip() in codigos_existentes:
-                            st.warning(f"⚠️ {pallet_codigo} ya está en la lista")
-                        else:
-                            # Validar pallet
-                            with st.spinner("Validando pallet..."):
-                                try:
-                                    response = requests.post(
-                                        f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
-                                        params={"username": username, "password": password},
-                                        json={
-                                            "pallets": [pallet_codigo],
-                                            "buscar_ubicacion": buscar_ubicacion_auto
-                                        },
-                                        timeout=10
-                                    )
-                                    if response.status_code == 200:
-                                        validacion = response.json()[0]
-                                        
-                                        if validacion.get('existe') and validacion.get('kg', 0) > 0:
-                                            # Agregar a la lista
-                                            st.session_state.pallets_list.append({
-                                                'codigo': validacion['codigo'],
-                                                'kg': validacion.get('kg', 0.0),
-                                                'ubicacion': validacion.get('ubicacion_nombre', 'N/A'),
-                                                'advertencia': validacion.get('advertencia'),
-                                                'producto_id': validacion.get('producto_id'),
-                                                'producto_nombre': validacion.get('producto_nombre', 'N/A'),
-                                                'manual': False
-                                            })
-                                            st.success(f"✅ {pallet_codigo} agregado!")
-                                            st.rerun()
-                                        else:
-                                            # Verificar si hay info de recepción
-                                            reception_info = validacion.get('reception_info')
-                                            if reception_info:
-                                                # SI ES PALLET EN RECEPCIÓN PENDIENTE:
-                                                st.session_state.pallets_list.append({
-                                                    'codigo': validacion['codigo'],
-                                                    'kg': validacion.get('kg', 0.0),
-                                                    'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
-                                                    'advertencia': f"Pallet en recepción {reception_info['picking_name']}. Validar en Odoo.",
-                                                    'producto_id': reception_info.get('product_id'),
-                                                    'producto_nombre': reception_info.get('product_name', 'N/A'),
-                                                    'lot_name': reception_info.get('lot_name'),
-                                                    'lot_id': reception_info.get('lot_id'),
-                                                    'picking_id': reception_info.get('picking_id'),
-                                                    'manual': False,
-                                                    'pendiente_recepcion': True,
-                                                    'odoo_url': reception_info['odoo_url']
-                                                })
-                                                
-                                                st.warning(f"⚠️ Pallet {pallet_codigo} agregado desde Recepción Pendiente.")
-                                                st.rerun()
-                                                
-                                            else:
-                                                # NO se encontró en stock NI en recepciones pendientes
-                                                st.error(f"❌ Pallet {pallet_codigo} NO existe en Odoo.")
-                                                st.info("Verifica que el código sea correcto o que el pallet esté registrado en alguna recepción.")
-                                    else:
-                                        st.error("Error al validar pallet")
-                                except Exception as e:
-                                    st.error(f"Error: {str(e)}")
-                    else:
-                        st.warning("⚠️ Ingresa un código de pallet")
-        
-        with input_tab2:
-            pallets_textarea = st.text_area(
-                "Ingresa múltiples pallets (uno por línea)",
-                placeholder="PAC0002683\nPAC0006041\nPAC0005928",
-                height=150,
-                label_visibility="collapsed"
-            )
-            
-            if st.button("➕ Agregar Todos", use_container_width=True, type="primary"):
-                if pallets_textarea:
-                    codigos_raw = [c.strip() for c in pallets_textarea.split('\n') if c.strip()]
-                    
-                    # Filtrar duplicados ya existentes en la lista
-                    codigos_existentes = {p['codigo'] for p in st.session_state.pallets_list}
-                    codigos = [c for c in codigos_raw if c not in codigos_existentes]
-                    duplicados_ignorados = len(codigos_raw) - len(codigos)
-                    
-                    if not codigos:
-                        st.warning("⚠️ Todos los pallets ya están en la lista")
-                    else:
-                        with st.spinner(f"Validando {len(codigos)} pallets..."):
-                            try:
-                                response = requests.post(
-                                    f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
-                                    params={"username": username, "password": password},
-                                    json={
-                                        "pallets": codigos,
-                                        "buscar_ubicacion": buscar_ubicacion_auto
-                                    },
-                                    timeout=15
-                                )
-                                if response.status_code == 200:
-                                    validaciones = response.json()
-                                    
-                                    agregados = 0
-                                    en_recepcion = 0
-                                    no_encontrados = []
-                                    
-                                    for val in validaciones:
-                                        # Caso 1: Existe en stock
-                                        if val.get('existe') and val.get('kg', 0) > 0:
-                                            st.session_state.pallets_list.append({
-                                                'codigo': val['codigo'],
-                                                'kg': val.get('kg', 0.0),
-                                                'ubicacion': val.get('ubicacion_nombre', 'N/A'),
-                                                'advertencia': val.get('advertencia'),
-                                                'producto_id': val.get('producto_id'),
-                                                'producto_nombre': val.get('producto_nombre', 'N/A'),
-                                                'manual': False
-                                            })
-                                            agregados += 1
-                                        # Caso 2: Pallet en recepción pendiente
-                                        elif val.get('reception_info'):
-                                            reception_info = val['reception_info']
-                                            st.session_state.pallets_list.append({
-                                                'codigo': val['codigo'],
-                                                'kg': val.get('kg', 0.0),
-                                                'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
-                                                'advertencia': f"Pallet en recepción {reception_info['picking_name']}",
-                                                'producto_id': reception_info.get('product_id'),
-                                                'producto_nombre': reception_info.get('product_name', 'N/A'),
-                                                'lot_name': reception_info.get('lot_name'),
-                                                'lot_id': reception_info.get('lot_id'),
-                                                'picking_id': reception_info.get('picking_id'),
-                                                'manual': False,
-                                                'pendiente_recepcion': True,
-                                                'odoo_url': reception_info['odoo_url']
-                                            })
-                                            en_recepcion += 1
-                                        else:
-                                            no_encontrados.append(val['codigo'])
-                                    
-                                    # Mostrar resumen
-                                    msgs = []
-                                    if agregados > 0:
-                                        msgs.append(f"✅ {agregados} en stock")
-                                    if en_recepcion > 0:
-                                        msgs.append(f"⚠️ {en_recepcion} en recepción pendiente")
-                                    if duplicados_ignorados > 0:
-                                        msgs.append(f"🔄 {duplicados_ignorados} duplicados ignorados")
-                                    if no_encontrados:
-                                        msgs.append(f"❌ {len(no_encontrados)} no encontrados")
-                                    
-                                    if agregados + en_recepcion > 0:
-                                        st.success(" | ".join(msgs))
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Ningún pallet fue encontrado: " + ", ".join(no_encontrados))
-                                else:
-                                    st.error("Error al validar pallets")
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
+        if st.button("➕ Agregar Todos", use_container_width=True, type="primary"):
+            if pallets_textarea:
+                codigos_raw = [c.strip() for c in pallets_textarea.split('\n') if c.strip()]
+                
+                # Filtrar duplicados ya existentes en la lista
+                codigos_existentes = {p['codigo'] for p in st.session_state.pallets_list}
+                codigos = [c for c in codigos_raw if c not in codigos_existentes]
+                duplicados_ignorados = len(codigos_raw) - len(codigos)
+                
+                if not codigos:
+                    st.warning("⚠️ Todos los pallets ya están en la lista")
                 else:
-                    st.warning("⚠️ Ingresa al menos un código de pallet")
+                    with st.spinner(f"Validando {len(codigos)} pallets..."):
+                        try:
+                            response = requests.post(
+                                f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/validar-pallets",
+                                params={"username": username, "password": password},
+                                json={
+                                    "pallets": codigos,
+                                    "buscar_ubicacion": buscar_ubicacion_auto
+                                },
+                                timeout=15
+                            )
+                            if response.status_code == 200:
+                                validaciones = response.json()
+                                
+                                agregados = 0
+                                en_recepcion = 0
+                                no_encontrados = []
+                                
+                                for val in validaciones:
+                                    # Caso 1: Existe en stock
+                                    if val.get('existe') and val.get('kg', 0) > 0:
+                                        st.session_state.pallets_list.append({
+                                            'codigo': val['codigo'],
+                                            'kg': val.get('kg', 0.0),
+                                            'ubicacion': val.get('ubicacion_nombre', 'N/A'),
+                                            'advertencia': val.get('advertencia'),
+                                            'producto_id': val.get('producto_id'),
+                                            'producto_nombre': val.get('producto_nombre', 'N/A'),
+                                            'manual': False
+                                        })
+                                        agregados += 1
+                                    # Caso 2: Pallet en recepción pendiente
+                                    elif val.get('reception_info'):
+                                        reception_info = val['reception_info']
+                                        st.session_state.pallets_list.append({
+                                            'codigo': val['codigo'],
+                                            'kg': val.get('kg', 0.0),
+                                            'ubicacion': f"RECEPCIÓN PENDIENTE ({reception_info['state']})",
+                                            'advertencia': f"Pallet en recepción {reception_info['picking_name']}",
+                                            'producto_id': reception_info.get('product_id'),
+                                            'producto_nombre': reception_info.get('product_name', 'N/A'),
+                                            'lot_name': reception_info.get('lot_name'),
+                                            'lot_id': reception_info.get('lot_id'),
+                                            'picking_id': reception_info.get('picking_id'),
+                                            'manual': False,
+                                            'pendiente_recepcion': True,
+                                            'odoo_url': reception_info['odoo_url']
+                                        })
+                                        en_recepcion += 1
+                                    else:
+                                        no_encontrados.append(val['codigo'])
+                                
+                                # Mostrar resumen
+                                msgs = []
+                                if agregados > 0:
+                                    msgs.append(f"✅ {agregados} en stock")
+                                if en_recepcion > 0:
+                                    msgs.append(f"⚠️ {en_recepcion} en recepción pendiente")
+                                if duplicados_ignorados > 0:
+                                    msgs.append(f"🔄 {duplicados_ignorados} duplicados ignorados")
+                                if no_encontrados:
+                                    msgs.append(f"❌ {len(no_encontrados)} no encontrados")
+                                
+                                if agregados + en_recepcion > 0:
+                                    st.success(" | ".join(msgs))
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Ningún pallet fue encontrado: " + ", ".join(no_encontrados))
+                            else:
+                                st.error("Error al validar pallets")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+            else:
+                st.warning("⚠️ Ingresa al menos un código de pallet")
         
         st.divider()
         
@@ -732,154 +650,156 @@ with tab2:
 </div>
 </div>
 </div>'''
-            st.markdown(html_content, unsafe_allow_html=True)
             
-            # Expander para órdenes con pendientes
-            if tiene_pendientes:
-                with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
-                    orden_id = orden.get('id')
-                    
-                    # Botón para cargar/actualizar detalle
-                    col_btn1, col_btn2, col_btn3 = st.columns(3)
-                    
-                    with col_btn1:
-                        if st.button("🔄 Validar Disponibilidad", key=f"validar_{orden_id}"):
-                            try:
-                                resp = requests.get(
-                                    f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes",
-                                    params={"username": username, "password": password}
-                                )
-                                if resp.status_code == 200:
-                                    st.session_state[f'pendientes_{orden_id}'] = resp.json()
-                                    st.rerun()
-                                else:
-                                    st.error(f"Error: {resp.text}")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                    
-                    # Mostrar detalle si está cargado
-                    detalle_key = f'pendientes_{orden_id}'
-                    if detalle_key in st.session_state:
-                        detalle = st.session_state[detalle_key]
+            # Usar container para mantener todo junto
+            with st.container():
+                st.markdown(html_content, unsafe_allow_html=True)
+                
+                # Expander DENTRO del mismo bloque visual para órdenes con pendientes
+                if tiene_pendientes:
+                    with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
+                        orden_id = orden.get('id')
                         
-                        if detalle.get('success'):
-                            resumen = detalle.get('resumen', {})
-                            st.markdown(f"""
-                            **Resumen:** ✅ {resumen.get('agregados', 0)} agregados | 
-                            🟢 {resumen.get('disponibles', 0)} disponibles | 
-                            🟠 {resumen.get('pendientes', 0)} pendientes
-                            """)
+                        # Botón para cargar/actualizar detalle
+                        col_btn1, col_btn2, col_btn3 = st.columns(3)
+                        
+                        with col_btn1:
+                            if st.button("🔄 Validar Disponibilidad", key=f"validar_{orden_id}"):
+                                try:
+                                    resp = requests.get(
+                                        f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes",
+                                        params={"username": username, "password": password}
+                                    )
+                                    if resp.status_code == 200:
+                                        st.session_state[f'pendientes_{orden_id}'] = resp.json()
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error: {resp.text}")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                        
+                        # Mostrar detalle si está cargado
+                        detalle_key = f'pendientes_{orden_id}'
+                        if detalle_key in st.session_state:
+                            detalle = st.session_state[detalle_key]
                             
-                            # Tabla de pallets pendientes
-                            pallets = detalle.get('pallets', [])
-                            if pallets:
-                                import pandas as pd
-                                st.markdown("##### 📦 Pallets Pendientes")
-                                df_pallets = pd.DataFrame([
-                                    {
-                                        'Código': p['codigo'],
-                                        'Kg': f"{p['kg']:,.2f}",
-                                        'Estado': p['estado_label'],
-                                        'Recepción': p.get('picking_name', 'N/A')
-                                    }
-                                    for p in pallets
-                                ])
-                                st.dataframe(df_pallets, use_container_width=True, hide_index=True)
-                            
-                            # Electricidad
-                            electricidad_total = detalle.get('electricidad_total', 0)
-                            if electricidad_total > 0:
-                                st.markdown(f"##### ⚡ Electricidad: **${electricidad_total:,.2f}**")
-                            
-                            # Componentes (ordenados: no-electricidad primero)
-                            componentes = detalle.get('componentes', [])
-                            if componentes:
-                                st.markdown("##### 🔵 Componentes (Entrada)")
-                                comp_no_elec = [c for c in componentes if not c.get('es_electricidad')]
-                                comp_elec = [c for c in componentes if c.get('es_electricidad')]
+                            if detalle.get('success'):
+                                resumen = detalle.get('resumen', {})
+                                st.markdown(f"""
+                                **Resumen:** ✅ {resumen.get('agregados', 0)} agregados | 
+                                🟢 {resumen.get('disponibles', 0)} disponibles | 
+                                🟠 {resumen.get('pendientes', 0)} pendientes
+                                """)
                                 
-                                if comp_no_elec:
-                                    df_comp = pd.DataFrame([
+                                # Tabla de pallets pendientes
+                                pallets = detalle.get('pallets', [])
+                                if pallets:
+                                    import pandas as pd
+                                    st.markdown("##### 📦 Pallets Pendientes")
+                                    df_pallets = pd.DataFrame([
                                         {
-                                            'Producto': c['producto'][:40],
-                                            'Lote': c['lote'],
-                                            'Pallet': c['pallet'],
-                                            'Kg': f"{c['kg']:,.2f}"
+                                            'Código': p['codigo'],
+                                            'Kg': f"{p['kg']:,.2f}",
+                                            'Estado': p['estado_label'],
+                                            'Recepción': p.get('picking_name', 'N/A')
                                         }
-                                        for c in comp_no_elec
+                                        for p in pallets
                                     ])
-                                    st.dataframe(df_comp, use_container_width=True, hide_index=True)
+                                    st.dataframe(df_pallets, use_container_width=True, hide_index=True)
                                 
-                                if comp_elec:
-                                    st.caption(f"⚡ Electricidad: {len(comp_elec)} registro(s)")
-                            
-                            # Subproductos
-                            subproductos = detalle.get('subproductos', [])
-                            if subproductos:
-                                st.markdown("##### 🟢 Subproductos (Salida)")
-                                df_sub = pd.DataFrame([
-                                    {
-                                        'Producto': s['producto'][:40],
-                                        'Lote': s['lote'],
-                                        'Pallet': s['pallet'],
-                                        'Kg': f"{s['kg']:,.2f}"
-                                    }
-                                    for s in subproductos
-                                ])
-                                st.dataframe(df_sub, use_container_width=True, hide_index=True)
-                            
-                            # Botones de acción
-                            col_a, col_b = st.columns(2)
-                            
-                            with col_a:
-                                if detalle.get('hay_disponibles_sin_agregar'):
-                                    if st.button("✅ Agregar Disponibles", key=f"agregar_{orden_id}", type="primary"):
-                                        try:
-                                            resp = requests.post(
-                                                f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles",
-                                                params={"username": username, "password": password}
-                                            )
-                                            if resp.status_code == 200:
-                                                result = resp.json()
-                                                st.success(f"✅ {result.get('mensaje')}")
-                                                # Recargar detalle
-                                                del st.session_state[detalle_key]
-                                                st.rerun()
-                                            else:
-                                                st.error(f"Error: {resp.text}")
-                                        except Exception as e:
-                                            st.error(f"Error: {e}")
-                            
-                            with col_b:
-                                if detalle.get('todos_listos'):
-                                    if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}"):
-                                        try:
-                                            resp = requests.post(
-                                                f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes",
-                                                params={"username": username, "password": password}
-                                            )
-                                            if resp.status_code == 200:
-                                                st.success("✅ Pendientes completados!")
-                                                st.cache_data.clear()
-                                                st.rerun()
-                                            else:
-                                                st.error(f"Error: {resp.text}")
-                                        except Exception as e:
-                                            st.error(f"Error: {e}")
-                            
-                            # Link a Odoo para aprobar recepciones
-                            pendientes_lista = [p for p in pallets if p['estado'] == 'pendiente']
-                            if pendientes_lista:
-                                picking_ids = list(set(p.get('picking_id') for p in pendientes_lista if p.get('picking_id')))
-                                if picking_ids:
-                                    st.markdown("**📋 Recepciones pendientes de aprobar:**")
-                                    for pid in picking_ids:
-                                        picking_name = next((p['picking_name'] for p in pendientes_lista if p.get('picking_id') == pid), f"Picking {pid}")
-                                        odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={pid}&model=stock.picking&view_type=form"
-                                        st.markdown(f"- [{picking_name}]({odoo_url}) ← Click para aprobar en Odoo")
+                                # Electricidad
+                                electricidad_total = detalle.get('electricidad_total', 0)
+                                if electricidad_total > 0:
+                                    st.markdown(f"##### ⚡ Electricidad: **${electricidad_total:,.2f}**")
+                                
+                                # Componentes (ordenados: no-electricidad primero)
+                                componentes = detalle.get('componentes', [])
+                                if componentes:
+                                    st.markdown("##### 🔵 Componentes (Entrada)")
+                                    comp_no_elec = [c for c in componentes if not c.get('es_electricidad')]
+                                    comp_elec = [c for c in componentes if c.get('es_electricidad')]
+                                    
+                                    if comp_no_elec:
+                                        df_comp = pd.DataFrame([
+                                            {
+                                                'Producto': c['producto'][:40],
+                                                'Lote': c['lote'],
+                                                'Pallet': c['pallet'],
+                                                'Kg': f"{c['kg']:,.2f}"
+                                            }
+                                            for c in comp_no_elec
+                                        ])
+                                        st.dataframe(df_comp, use_container_width=True, hide_index=True)
+                                    
+                                    if comp_elec:
+                                        st.caption(f"⚡ Electricidad: {len(comp_elec)} registro(s)")
+                                
+                                # Subproductos
+                                subproductos = detalle.get('subproductos', [])
+                                if subproductos:
+                                    st.markdown("##### 🟢 Subproductos (Salida)")
+                                    df_sub = pd.DataFrame([
+                                        {
+                                            'Producto': s['producto'][:40],
+                                            'Lote': s['lote'],
+                                            'Pallet': s['pallet'],
+                                            'Kg': f"{s['kg']:,.2f}"
+                                        }
+                                        for s in subproductos
+                                    ])
+                                    st.dataframe(df_sub, use_container_width=True, hide_index=True)
+                                
+                                # Botones de acción
+                                col_a, col_b = st.columns(2)
+                                
+                                with col_a:
+                                    if detalle.get('hay_disponibles_sin_agregar'):
+                                        if st.button("✅ Agregar Disponibles", key=f"agregar_{orden_id}", type="primary"):
+                                            try:
+                                                resp = requests.post(
+                                                    f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles",
+                                                    params={"username": username, "password": password}
+                                                )
+                                                if resp.status_code == 200:
+                                                    result = resp.json()
+                                                    st.success(f"✅ {result.get('mensaje')}")
+                                                    del st.session_state[detalle_key]
+                                                    st.rerun()
+                                                else:
+                                                    st.error(f"Error: {resp.text}")
+                                            except Exception as e:
+                                                st.error(f"Error: {e}")
+                                
+                                with col_b:
+                                    if detalle.get('todos_listos'):
+                                        if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}"):
+                                            try:
+                                                resp = requests.post(
+                                                    f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes",
+                                                    params={"username": username, "password": password}
+                                                )
+                                                if resp.status_code == 200:
+                                                    st.success("✅ Pendientes completados!")
+                                                    st.cache_data.clear()
+                                                    st.rerun()
+                                                else:
+                                                    st.error(f"Error: {resp.text}")
+                                            except Exception as e:
+                                                st.error(f"Error: {e}")
+                                
+                                # Link a Odoo para aprobar recepciones
+                                pendientes_lista = [p for p in pallets if p['estado'] == 'pendiente']
+                                if pendientes_lista:
+                                    picking_ids = list(set(p.get('picking_id') for p in pendientes_lista if p.get('picking_id')))
+                                    if picking_ids:
+                                        st.markdown("**📋 Recepciones pendientes de aprobar:**")
+                                        for pid in picking_ids:
+                                            picking_name = next((p['picking_name'] for p in pendientes_lista if p.get('picking_id') == pid), f"Picking {pid}")
+                                            odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={pid}&model=stock.picking&view_type=form"
+                                            st.markdown(f"- [{picking_name}]({odoo_url}) ← Click para aprobar en Odoo")
+                            else:
+                                st.error(detalle.get('error', 'Error desconocido'))
                         else:
-                            st.error(detalle.get('error', 'Error desconocido'))
-                    else:
-                        st.info("👆 Click en 'Validar Disponibilidad' para ver el detalle de pallets")
+                            st.info("👆 Click en 'Validar Disponibilidad' para ver el detalle de pallets")
 
 
