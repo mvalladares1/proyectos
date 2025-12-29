@@ -951,6 +951,7 @@ class TunelesService:
         Returns:
             Cantidad de movimientos creados
         """
+        print(f"DEBUG _crear_componentes: mo_id={mo_id}, mo_name={mo_name}, productos={len(productos_totales)}")
         movimientos_creados = 0
         ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
         

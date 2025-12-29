@@ -632,6 +632,9 @@ with tab2:
         estado=filtro_estado
     )
     
+    # DEBUG: Mostrar qué filtro se usó
+    st.caption(f"🔍 Filtro: {filtro_estado} | Órdenes: {len(ordenes)}")
+    
     if not ordenes:
         st.info("📭 No hay órdenes con este criterio")
     else:
