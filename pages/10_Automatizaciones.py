@@ -770,10 +770,11 @@ with tab2:
                             🟠 {resumen.get('pendientes', 0)} pendientes
                             """)
                             
-                            # Tabla de pallets
+                            # Tabla de pallets pendientes
                             pallets = detalle.get('pallets', [])
                             if pallets:
                                 import pandas as pd
+                                st.markdown("##### 📦 Pallets Pendientes")
                                 df_pallets = pd.DataFrame([
                                     {
                                         'Código': p['codigo'],
@@ -784,6 +785,48 @@ with tab2:
                                     for p in pallets
                                 ])
                                 st.dataframe(df_pallets, use_container_width=True, hide_index=True)
+                            
+                            # Electricidad
+                            electricidad_total = detalle.get('electricidad_total', 0)
+                            if electricidad_total > 0:
+                                st.markdown(f"##### ⚡ Electricidad: **${electricidad_total:,.2f}**")
+                            
+                            # Componentes (ordenados: no-electricidad primero)
+                            componentes = detalle.get('componentes', [])
+                            if componentes:
+                                st.markdown("##### 🔵 Componentes (Entrada)")
+                                comp_no_elec = [c for c in componentes if not c.get('es_electricidad')]
+                                comp_elec = [c for c in componentes if c.get('es_electricidad')]
+                                
+                                if comp_no_elec:
+                                    df_comp = pd.DataFrame([
+                                        {
+                                            'Producto': c['producto'][:40],
+                                            'Lote': c['lote'],
+                                            'Pallet': c['pallet'],
+                                            'Kg': f"{c['kg']:,.2f}"
+                                        }
+                                        for c in comp_no_elec
+                                    ])
+                                    st.dataframe(df_comp, use_container_width=True, hide_index=True)
+                                
+                                if comp_elec:
+                                    st.caption(f"⚡ Electricidad: {len(comp_elec)} registro(s)")
+                            
+                            # Subproductos
+                            subproductos = detalle.get('subproductos', [])
+                            if subproductos:
+                                st.markdown("##### 🟢 Subproductos (Salida)")
+                                df_sub = pd.DataFrame([
+                                    {
+                                        'Producto': s['producto'][:40],
+                                        'Lote': s['lote'],
+                                        'Pallet': s['pallet'],
+                                        'Kg': f"{s['kg']:,.2f}"
+                                    }
+                                    for s in subproductos
+                                ])
+                                st.dataframe(df_sub, use_container_width=True, hide_index=True)
                             
                             # Botones de acción
                             col_a, col_b = st.columns(2)

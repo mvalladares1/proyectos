@@ -635,12 +635,84 @@ class TunelesService:
             disponibles = sum(1 for p in resultado_pallets if p['estado'] == 'disponible')
             pendientes = sum(1 for p in resultado_pallets if p['estado'] == 'pendiente')
             
+            # Ordenar pallets: disponibles primero, luego pendientes
+            resultado_pallets_ordenados = sorted(resultado_pallets, 
+                key=lambda x: (0 if x['estado'] == 'agregado' else 1 if x['estado'] == 'disponible' else 2))
+            
+            # Obtener componentes (move_raw_ids) con detalle
+            componentes = []
+            electricidad_total = 0
+            move_raw_ids = mo_data.get('move_raw_ids', [])
+            if move_raw_ids:
+                # Obtener los moves
+                raw_moves = self.odoo.search_read(
+                    'stock.move',
+                    [('id', 'in', move_raw_ids)],
+                    ['product_id', 'product_uom_qty', 'quantity_done', 'state', 'reference']
+                )
+                
+                for move in raw_moves:
+                    producto_nombre = move['product_id'][1] if move['product_id'] else 'N/A'
+                    kg = move.get('quantity_done', 0) or move.get('product_uom_qty', 0)
+                    
+                    # Detectar electricidad
+                    es_electricidad = 'ETE' in producto_nombre or 'Electricidad' in producto_nombre
+                    if es_electricidad:
+                        # Calcular costo (asumiendo precio ~$35.10 por kg según imagen)
+                        electricidad_total = kg * 35.10
+                    
+                    # Obtener move_lines para lote y package
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line',
+                        [('move_id', '=', move['id'])],
+                        ['lot_id', 'package_id', 'qty_done', 'location_id']
+                    )
+                    
+                    for line in move_lines:
+                        componentes.append({
+                            'producto': producto_nombre,
+                            'lote': line['lot_id'][1] if line.get('lot_id') else 'Sin lote',
+                            'pallet': line['package_id'][1] if line.get('package_id') else 'Sin pallet',
+                            'kg': line.get('qty_done', 0),
+                            'ubicacion': line['location_id'][1] if line.get('location_id') else 'N/A',
+                            'es_electricidad': es_electricidad
+                        })
+            
+            # Obtener subproductos (move_finished_ids) - leer de la MO
+            subproductos = []
+            mo_full = self.odoo.read('mrp.production', [mo_id], ['move_finished_ids'])[0]
+            move_finished_ids = mo_full.get('move_finished_ids', [])
+            if move_finished_ids:
+                finished_moves = self.odoo.search_read(
+                    'stock.move',
+                    [('id', 'in', move_finished_ids)],
+                    ['product_id', 'product_uom_qty', 'quantity_done', 'state']
+                )
+                
+                for move in finished_moves:
+                    producto_nombre = move['product_id'][1] if move['product_id'] else 'N/A'
+                    
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line',
+                        [('move_id', '=', move['id'])],
+                        ['lot_id', 'package_id', 'qty_done', 'location_dest_id']
+                    )
+                    
+                    for line in move_lines:
+                        subproductos.append({
+                            'producto': producto_nombre,
+                            'lote': line['lot_id'][1] if line.get('lot_id') else 'Sin lote',
+                            'pallet': line['package_id'][1] if line.get('package_id') else 'Sin pallet',
+                            'kg': line.get('qty_done', 0),
+                            'ubicacion': line['location_dest_id'][1] if line.get('location_dest_id') else 'N/A'
+                        })
+            
             return {
                 'success': True,
                 'mo_id': mo_id,
                 'mo_name': mo_name,
                 'tiene_pendientes': pendientes > 0,
-                'pallets': resultado_pallets,
+                'pallets': resultado_pallets_ordenados,
                 'resumen': {
                     'total': total,
                     'agregados': agregados,
@@ -648,7 +720,10 @@ class TunelesService:
                     'pendientes': pendientes
                 },
                 'todos_listos': pendientes == 0 and disponibles == 0,
-                'hay_disponibles_sin_agregar': disponibles > 0
+                'hay_disponibles_sin_agregar': disponibles > 0,
+                'componentes': componentes,
+                'subproductos': subproductos,
+                'electricidad_total': electricidad_total
             }
             
         except Exception as e:
