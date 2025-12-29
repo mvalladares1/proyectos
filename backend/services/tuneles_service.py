@@ -1014,23 +1014,28 @@ class TunelesService:
                 self.odoo.db, self.odoo.uid, self.odoo.password,
                 'product.product', 'search_read',
                 [[('default_code', '=', 'ETE')]],
-                {'fields': ['id', 'name'], 'limit': 1}
+                {'fields': ['id', 'name', 'uom_id'], 'limit': 1}  # También traer uom_id
             )
             
+            ete_uom_id = 12  # Fallback a kg
             if ete_products:
                 ete_id = ete_products[0]['id']
-                print(f"DEBUG: Electricidad encontrada por código ETE: ID={ete_id}")
+                if ete_products[0].get('uom_id'):
+                    ete_uom_id = ete_products[0]['uom_id'][0]  # Odoo retorna [id, name]
+                print(f"DEBUG: Electricidad encontrada por código ETE: ID={ete_id}, UoM={ete_uom_id}")
             else:
                 # Intento 2: Buscar por nombre que contenga 'Electricidad' y 'Túnel'
                 ete_products = self.odoo.models.execute_kw(
                     self.odoo.db, self.odoo.uid, self.odoo.password,
                     'product.product', 'search_read',
                     [[('name', 'ilike', 'Electricidad'), ('name', 'ilike', 'Túnel')]],
-                    {'fields': ['id', 'name'], 'limit': 1}
+                    {'fields': ['id', 'name', 'uom_id'], 'limit': 1}
                 )
                 if ete_products:
                     ete_id = ete_products[0]['id']
-                    print(f"DEBUG: Electricidad encontrada por nombre: ID={ete_id}, Name={ete_products[0]['name']}")
+                    if ete_products[0].get('uom_id'):
+                        ete_uom_id = ete_products[0]['uom_id'][0]
+                    print(f"DEBUG: Electricidad encontrada por nombre: ID={ete_id}, UoM={ete_uom_id}")
                 else:
                     # Fallback: Usar ID fijo
                     ete_id = PRODUCTO_ELECTRICIDAD_ID
@@ -1042,7 +1047,7 @@ class TunelesService:
                     'name': mo_name,
                     'product_id': ete_id,
                     'product_uom_qty': total_kg,
-                    'product_uom': 12,  # kg
+                    'product_uom': ete_uom_id,  # Usar UoM del producto
                     'location_id': config['ubicacion_origen_id'],
                     'location_dest_id': ubicacion_virtual,
                     'state': 'draft',
@@ -1062,7 +1067,7 @@ class TunelesService:
                         'product_id': ete_id,
                         'qty_done': total_kg,
                         'reserved_uom_qty': total_kg,
-                        'product_uom_id': UOM_DOLARES_KG_ID,  # $/Kg
+                        'product_uom_id': ete_uom_id,  # Usar UoM del producto
                         'location_id': config['ubicacion_origen_id'],
                         'location_dest_id': ubicacion_virtual,
                         'state': 'draft',

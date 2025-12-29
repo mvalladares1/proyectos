@@ -89,6 +89,7 @@ class OrdenInfo(BaseModel):
     estado: str
     fecha_creacion: Optional[str]
     fecha_planificada: Optional[str]
+    tiene_pendientes: bool = False  # Flag para órdenes con stock pendiente
 
 
 class CrearOrdenResponse(BaseModel):
