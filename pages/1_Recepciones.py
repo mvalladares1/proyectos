@@ -2577,7 +2577,7 @@ with tab_aprobaciones:
                                     if kg <= 0:
                                         continue
                                     
-                                    prod_name = (p.get('Producto') or '')[:30]
+                                    prod_name = (p.get('Producto') or '')[:45]
                                     precio = p.get('Costo Unitario', 0) or 0
                                     
                                     data.append([
@@ -2597,7 +2597,7 @@ with tab_aprobaciones:
                             data.append(["", "", "", "TOTAL", fmt_numero(total_kg, 2), "", "", "", ""])
                             
                             # Crear tabla
-                            col_widths = [0.8*inch, 0.7*inch, 1*inch, 2.2*inch, 0.9*inch, 0.9*inch, 0.6*inch, 0.6*inch, 0.5*inch]
+                            col_widths = [0.75*inch, 0.55*inch, 0.85*inch, 3*inch, 0.85*inch, 0.8*inch, 0.55*inch, 0.55*inch, 0.45*inch]
                             table = Table(data, colWidths=col_widths)
                             table.setStyle(TableStyle([
                                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a5276')),
