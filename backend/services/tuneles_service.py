@@ -64,7 +64,8 @@ PRODUCTOS_TRANSFORMACION = {
 }
 
 # Provisión eléctrica
-PRODUCTO_ELECTRICIDAD_ID = 15995  # [ETE] Provisión Electricidad Túnel Estático ($/hr)
+PRODUCTO_ELECTRICIDAD_ID = 15033  # [ETE] Provisión Electricidad Túnel Estático ($/hr)
+UOM_DOLARES_KG_ID = 210  # $/Kg - UoM para provisión eléctrica
 
 # Ubicaciones virtuales
 UBICACION_VIRTUAL_CONGELADO_ID = 8485  # Virtual Locations/Ubicación Congelado
@@ -1048,12 +1049,31 @@ class TunelesService:
                     'company_id': 1,
                     'reference': mo_name
                 }
-                self.odoo.models.execute_kw(
+                elect_move_id = self.odoo.models.execute_kw(
                     self.odoo.db, self.odoo.uid, self.odoo.password,
                     'stock.move', 'create', [elect_move]
                 )
+                
+                # Crear stock.move.line con qty_done para que aparezca en "Hecho"
+                if elect_move_id:
+                    elect_line = {
+                        'move_id': elect_move_id,
+                        'product_id': ete_id,
+                        'qty_done': total_kg,
+                        'reserved_uom_qty': total_kg,
+                        'product_uom_id': UOM_DOLARES_KG_ID,  # $/Kg
+                        'location_id': config['ubicacion_origen_id'],
+                        'location_dest_id': ubicacion_virtual,
+                        'state': 'draft',
+                        'company_id': 1
+                    }
+                    self.odoo.models.execute_kw(
+                        self.odoo.db, self.odoo.uid, self.odoo.password,
+                        'stock.move.line', 'create', [elect_line]
+                    )
+                
                 movimientos_creados += 1
-                print(f"DEBUG: Electricidad agregada correctamente")
+                print(f"DEBUG: Electricidad agregada correctamente con qty_done={total_kg}")
         except Exception as e:
             import traceback
             print(f"ERROR Electricidad: {e}")
