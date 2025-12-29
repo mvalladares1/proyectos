@@ -2243,16 +2243,21 @@ with tab_aprobaciones:
     # Leyenda de semáforos
     st.markdown("""
     <div style="background: rgba(50,50,50,0.5); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-        <b>🚦 Semáforo de Desviación:</b> 
+        <b>🚦 Semáforo:</b> 
         <span style="color: #2ecc71;">🟢 OK (0-3%)</span> · 
         <span style="color: #f1c40f;">🟡 Alerta (3-8%)</span> · 
         <span style="color: #e74c3c;">🔴 Crítico (>8%)</span>
     </div>
     """, unsafe_allow_html=True)
     
-    # Layout responsive para móvil
-    col1, col2 = st.columns(2)
+    # Inicializar session_state
+    if 'aprob_data' not in st.session_state:
+        st.session_state.aprob_data = None
+    if 'aprob_ppto' not in st.session_state:
+        st.session_state.aprob_ppto = {}
     
+    # --- FILTROS DE FECHA ---
+    col1, col2 = st.columns(2)
     with col1:
         fecha_inicio_aprob = st.date_input("Desde", datetime.now() - timedelta(days=7), key="fecha_inicio_aprob", format="DD/MM/YYYY")
     with col2:
@@ -2260,10 +2265,10 @@ with tab_aprobaciones:
     
     estado_filtro = st.radio("Estado", ["Pendientes", "Aprobadas", "Todas"], horizontal=True, key="estado_filtro_aprob")
 
-    if st.button("🔄 Cargar Recepciones a Revisar", type="primary"):
+    # Botón de carga
+    if st.button("🔄 Cargar Recepciones", type="primary", use_container_width=True):
         with st.spinner("Cargando datos..."):
             try:
-                # 1. Cargar Recepciones
                 params = {
                     "username": username,
                     "password": password,
@@ -2273,13 +2278,9 @@ with tab_aprobaciones:
                 }
                 resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
                 
-                if resp.status_code != 200:
-                    st.error(f"Error cargando recepciones: {resp.text}")
-                else:
-                    recepciones = resp.json()
-                    
-                    # 2. Cargar PPTO
-                    precios_ppto_dict = {}
+                if resp.status_code == 200:
+                    st.session_state.aprob_data = resp.json()
+                    # Cargar PPTO
                     try:
                         resp_ppto = requests.get(
                             f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios",
@@ -2287,130 +2288,169 @@ with tab_aprobaciones:
                             timeout=30
                         )
                         if resp_ppto.status_code == 200:
-                            for item in resp_ppto.json():
-                                esp = item.get('especie', '')
-                                prec = item.get('precio_proyectado', 0)
-                                precios_ppto_dict[esp] = prec
+                            st.session_state.aprob_ppto = {item.get('especie', ''): item.get('precio_proyectado', 0) for item in resp_ppto.json()}
                     except:
                         pass
-
-                    # 3. Aprobaciones
-                    aprobadas_ids = get_aprobaciones()
-
-                    # 4. Procesar
-                    filas_aprobacion = []
-                    
-                    for rec in recepciones:
-                        recep_name = rec.get('albaran', '')
-                        fecha_recep = rec.get('fecha', '')
-                        productor = rec.get('productor', '')
-                        es_aprobada = recep_name in aprobadas_ids
-                        
-                        if estado_filtro == "Pendientes" and es_aprobada: continue
-                        if estado_filtro == "Aprobadas" and not es_aprobada: continue
-
-                        productos = rec.get('productos', []) or []
-                        for p in productos:
-                            cat = (p.get('Categoria') or '').strip().upper()
-                            if 'BANDEJ' in cat: continue
-                                
-                            kg = p.get('Kg Hechos', 0) or 0
-                            if kg <= 0: continue
-                                
-                            precio_real = float(p.get('Costo Unitario', 0) or p.get('precio', 0) or 0)
-                            
-                            # Normalizar - Múltiples fuentes para tipo de fruta
-                            tf = (rec.get('tipo_fruta') or '').strip()
-                            if not tf: tf = (p.get('TipoFruta') or '').strip()
-                            # Fallback: nombre del producto
-                            prod_name = (p.get('Producto') or p.get('producto') or '').upper()
-                                
-                            man = (p.get('Manejo') or 'Convencional').strip()
-                            man_norm = 'Orgánico' if 'ORGAN' in man.upper() else 'Convencional'
-                            
-                            # Combinar para detección
-                            search_str = f"{tf.upper()} {prod_name}"
-                            esp_base = 'Otro'
-                            if 'ARAND' in search_str or 'BLUEBERRY' in search_str or 'BLUEB' in search_str: esp_base = 'Arándano'
-                            elif 'FRAM' in search_str or 'MEEKER' in search_str or 'HERITAGE' in search_str or 'RASPBERRY' in search_str: esp_base = 'Frambuesa'
-                            elif 'FRUTI' in search_str or 'STRAW' in search_str or 'FRUTILLA' in search_str: esp_base = 'Frutilla'
-                            elif 'MORA' in search_str or 'BLACKBERRY' in search_str: esp_base = 'Mora'
-                            elif 'CEREZA' in search_str or 'CHERRY' in search_str: esp_base = 'Cereza'
-                            
-                            key_ppto = f"{esp_base} {man_norm}"
-                            ppto_val = precios_ppto_dict.get(key_ppto, 0)
-                            
-                            desv = 0
-                            if ppto_val > 0:
-                                desv = ((precio_real - ppto_val) / ppto_val)
-                            
-                            sema = "🟢"
-                            if desv > 0.08: sema = "🔴"
-                            elif desv > 0.03: sema = "🟡"
-                                
-                            filas_aprobacion.append({
-                                "Aprobar": es_aprobada,
-                                "Recepción": recep_name,
-                                "Fecha": fmt_fecha(fecha_recep),
-                                "Productor": productor,
-                                "Especie": f"{esp_base} {man_norm}",
-                                "Kg": kg,
-                                "$/Kg Real": round(precio_real, 0),
-                                "PPTO": round(ppto_val, 0),
-                                "Desv %": desv,
-                                "Semaforo": sema,
-                                "id_oculto": recep_name
-                            })
-
-                    if not filas_aprobacion:
-                        st.info("No hay datos.")
-                    else:
-                        df_aprob = pd.DataFrame(filas_aprobacion)
-                        
-                        edited_df = st.data_editor(
-                            df_aprob,
-                            column_config={
-                                "Aprobar": st.column_config.CheckboxColumn("Sel", default=False),
-                                "Desv %": st.column_config.NumberColumn("Desv %", format="%.1f %%"),
-                                "$/Kg Real": st.column_config.NumberColumn("$/Kg", format="$%d"),
-                                "PPTO": st.column_config.NumberColumn("PPTO", format="$%d"),
-                                "Kg": st.column_config.NumberColumn("Kg", format="%.0f"),
-                                "Semaforo": st.column_config.TextColumn("🚦", width="small"),
-                                "id_oculto": None  # Ocultar
-                            },
-                            column_order=["Aprobar", "Recepción", "Fecha", "Productor", "Especie", "Kg", "$/Kg Real", "PPTO", "Desv %", "Semaforo"],
-                            disabled=["Recepción", "Fecha", "Productor", "Especie", "Kg", "$/Kg Real", "PPTO", "Desv %", "Semaforo"],
-                            hide_index=True,
-                            key="editor_aprob",
-                            height=600
-                        )
-                        
-                        # Solo admin puede aprobar
-                        ADMIN_APROBADOR = "mvalladares@riofuturo.cl"
-                        es_admin = username == ADMIN_APROBADOR
-                        
-                        if es_admin:
-                            col_a, col_b = st.columns([1, 1])
-                            with col_a:
-                                if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
-                                    sels = edited_df[edited_df["Aprobar"] == True]
-                                    ids = sels["id_oculto"].unique().tolist()
-                                    if ids:
-                                        if save_aprobaciones(ids):
-                                            st.success(f"Aprobadas {len(ids)} recepciones.")
-                                            st.rerun()
-                                    else:
-                                        st.warning("Selecciona al menos una recepción.")
-                            with col_b:
-                                if estado_filtro != "Pendientes":
-                                    if st.button("↩️ Quitar Aprobación", use_container_width=True):
-                                        sels_del = edited_df[edited_df["Aprobar"] == True]
-                                        ids_del = sels_del["id_oculto"].unique().tolist()
-                                        if ids_del:
-                                            if remove_aprobaciones(ids_del):
-                                                st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
-                                                st.rerun()
-                        else:
-                            st.info("👁️ Solo visualización. Contacta al administrador para aprobar.")
+                    st.success(f"✅ Cargadas {len(st.session_state.aprob_data)} recepciones")
+                else:
+                    st.error(f"Error: {resp.text}")
             except Exception as e:
                 st.error(f"Error: {e}")
+    
+    # --- MOSTRAR DATOS SI EXISTEN ---
+    if st.session_state.aprob_data:
+        recepciones = st.session_state.aprob_data
+        precios_ppto_dict = st.session_state.aprob_ppto
+        aprobadas_ids = get_aprobaciones()
+        
+        # Procesar datos
+        filas_aprobacion = []
+        for rec in recepciones:
+            recep_name = rec.get('albaran', '')
+            fecha_recep = rec.get('fecha', '')
+            productor = rec.get('productor', '')
+            oc = rec.get('orden_compra', '') or rec.get('OC', '') or ''
+            es_aprobada = recep_name in aprobadas_ids
+            
+            if estado_filtro == "Pendientes" and es_aprobada: continue
+            if estado_filtro == "Aprobadas" and not es_aprobada: continue
+
+            productos = rec.get('productos', []) or []
+            for p in productos:
+                cat = (p.get('Categoria') or '').strip().upper()
+                if 'BANDEJ' in cat: continue
+                    
+                kg = p.get('Kg Hechos', 0) or 0
+                if kg <= 0: continue
+                    
+                precio_real = float(p.get('Costo Unitario', 0) or p.get('precio', 0) or 0)
+                
+                # Normalizar tipo de fruta
+                tf = (rec.get('tipo_fruta') or '').strip()
+                if not tf: tf = (p.get('TipoFruta') or '').strip()
+                prod_name = (p.get('Producto') or p.get('producto') or '').upper()
+                    
+                man = (p.get('Manejo') or 'Convencional').strip()
+                man_norm = 'Orgánico' if 'ORGAN' in man.upper() else 'Convencional'
+                
+                search_str = f"{tf.upper()} {prod_name}"
+                esp_base = 'Otro'
+                if 'ARAND' in search_str or 'BLUEBERRY' in search_str: esp_base = 'Arándano'
+                elif 'FRAM' in search_str or 'MEEKER' in search_str or 'HERITAGE' in search_str: esp_base = 'Frambuesa'
+                elif 'FRUTI' in search_str or 'STRAW' in search_str: esp_base = 'Frutilla'
+                elif 'MORA' in search_str or 'BLACKBERRY' in search_str: esp_base = 'Mora'
+                elif 'CEREZA' in search_str or 'CHERRY' in search_str: esp_base = 'Cereza'
+                
+                key_ppto = f"{esp_base} {man_norm}"
+                ppto_val = precios_ppto_dict.get(key_ppto, 0)
+                
+                desv = 0
+                if ppto_val > 0:
+                    desv = ((precio_real - ppto_val) / ppto_val)
+                
+                sema = "🟢"
+                if desv > 0.08: sema = "🔴"
+                elif desv > 0.03: sema = "🟡"
+                    
+                filas_aprobacion.append({
+                    "Sel": es_aprobada,
+                    "Recepción": recep_name,
+                    "Fecha": fmt_fecha(fecha_recep),
+                    "Productor": productor,
+                    "OC": oc,
+                    "Especie": f"{esp_base} {man_norm}",
+                    "Kg": kg,
+                    "$/Kg": round(precio_real, 0),
+                    "PPTO": round(ppto_val, 0),
+                    "Desv": desv,
+                    "🚦": sema,
+                    "_id": recep_name
+                })
+        
+        if filas_aprobacion:
+            df_full = pd.DataFrame(filas_aprobacion)
+            
+            # --- FILTROS ADICIONALES ---
+            with st.expander("🔍 Filtros adicionales", expanded=False):
+                col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+                with col_f1:
+                    filtro_recep = st.text_input("Recepción", "", key="filtro_recep", placeholder="Buscar...")
+                with col_f2:
+                    filtro_prod = st.selectbox("Productor", ["Todos"] + sorted(df_full["Productor"].unique().tolist()), key="filtro_prod")
+                with col_f3:
+                    filtro_esp = st.selectbox("Especie", ["Todos"] + sorted(df_full["Especie"].unique().tolist()), key="filtro_esp")
+                with col_f4:
+                    filtro_oc = st.text_input("OC", "", key="filtro_oc", placeholder="Buscar OC...")
+            
+            # Aplicar filtros
+            df_filtered = df_full.copy()
+            if filtro_recep:
+                df_filtered = df_filtered[df_filtered["Recepción"].str.contains(filtro_recep, case=False, na=False)]
+            if filtro_prod != "Todos":
+                df_filtered = df_filtered[df_filtered["Productor"] == filtro_prod]
+            if filtro_esp != "Todos":
+                df_filtered = df_filtered[df_filtered["Especie"] == filtro_esp]
+            if filtro_oc:
+                df_filtered = df_filtered[df_filtered["OC"].str.contains(filtro_oc, case=False, na=False)]
+            
+            # Mostrar tabla
+            edited_df = st.data_editor(
+                df_filtered,
+                column_config={
+                    "Sel": st.column_config.CheckboxColumn("✓", default=False, width="small"),
+                    "Desv": st.column_config.NumberColumn("Desv", format="%.1f%%", width="small"),
+                    "$/Kg": st.column_config.NumberColumn("$/Kg", format="$ %,.0f"),
+                    "PPTO": st.column_config.NumberColumn("PPTO", format="$ %,.0f"),
+                    "Kg": st.column_config.NumberColumn("Kg", format="%,.0f"),
+                    "🚦": st.column_config.TextColumn("🚦", width="small"),
+                    "_id": None
+                },
+                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Especie", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                disabled=["Recepción", "Fecha", "Productor", "OC", "Especie", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                hide_index=True,
+                key="editor_aprob",
+                height=500,
+                use_container_width=True
+            )
+            
+            # --- BARRA DE ESTADO ---
+            seleccionados = edited_df[edited_df["Sel"] == True]
+            n_sel = len(seleccionados)
+            kg_sel = seleccionados["Kg"].sum() if n_sel > 0 else 0
+            receps_sel = seleccionados["_id"].nunique() if n_sel > 0 else 0
+            
+            st.markdown(f"""
+            <div style="background: rgba(50,100,150,0.3); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                <b>📊 Selección:</b> {n_sel} líneas · {receps_sel} recepciones · {kg_sel:,.0f} Kg
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # --- BOTONES DE ACCIÓN ---
+            ADMIN_APROBADOR = "mvalladares@riofuturo.cl"
+            es_admin = username == ADMIN_APROBADOR
+            
+            if es_admin:
+                col_a, col_b = st.columns([1, 1])
+                with col_a:
+                    if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
+                        ids = seleccionados["_id"].unique().tolist()
+                        if ids:
+                            if save_aprobaciones(ids):
+                                st.success(f"✅ Aprobadas {len(ids)} recepciones.")
+                                st.rerun()
+                        else:
+                            st.warning("Selecciona al menos una línea.")
+                with col_b:
+                    if estado_filtro != "Pendientes":
+                        if st.button("↩️ Quitar Aprobación", use_container_width=True):
+                            ids_del = seleccionados["_id"].unique().tolist()
+                            if ids_del:
+                                if remove_aprobaciones(ids_del):
+                                    st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
+                                    st.rerun()
+            else:
+                st.info("👁️ Solo visualización. Contacta al administrador para aprobar.")
+        else:
+            st.info("No hay datos con los filtros seleccionados.")
+    else:
+        st.info("👆 Selecciona un rango de fechas y presiona **Cargar Recepciones**")
