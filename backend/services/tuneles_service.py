@@ -1597,32 +1597,6 @@ class TunelesService:
         
         # Formatear resultados
         resultado = []
-        
-        # Optimización: Buscar qué órdenes tienen componentes sin lote asignado (Pendientes)
-        mo_ids = [o['id'] for o in ordenes]
-        if mo_ids:
-            # Buscamos moves asociados a estas MOs que NO tengan lote asignado y requerían (no son consumibles/servicios)
-            # Simplificación: Si tenemos move lines sin lot_id pero con qty_done/product_uom_qty > 0
-            # En Odoo 16 'stock.move' tiene 'move_line_ids'. 
-            # Hacemos una búsqueda directa de moves que pertenezcan a las MOs y no tengan lote, 
-            # asumiendo que nuestros pallets manuales/pendientes se crearon sin lote.
-            
-            # Nota: Al estar en Borrador (draft), los moves existen. 
-            # Buscamos moves con estado 'draft' y sin lote, pero cuidado con componentes que no usan lote.
-            # Nuestros componentes de fruta SI usan lote.
-            
-            moves_sin_lote = self.odoo.search_read(
-                'stock.move.line',
-                [
-                    ('reference', 'in', [o['name'] for o in ordenes]), # Referencia suele ser el nombre de la MO
-                    ('lot_id', '=', False),
-                    ('qty_done', '>', 0) # Tienen cantidad asignada
-                ],
-                ['reference']
-            )
-            moves_pendientes_refs = set(m['reference'] for m in moves_sin_lote)
-        else:
-            moves_pendientes_refs = set()
 
         for orden in ordenes:
             # Determinar túnel por producto_id
@@ -1632,17 +1606,16 @@ class TunelesService:
                     tunel_codigo = codigo
                     break
             
-            # Determinar tiene_pendientes desde el campo JSON o desde moves sin lote
-            tiene_pendientes = orden['name'] in moves_pendientes_refs
-            
-            # Priorizar el campo JSON si existe
+            # Determinar tiene_pendientes SOLO desde el campo JSON
+            # NO usamos moves_sin_lote porque eso captura órdenes antiguas incorrectamente
+            tiene_pendientes = False
             pending_json = orden.get('x_studio_pending_receptions')
             if pending_json:
                 try:
                     import json
-                    print(f"DEBUG listar: MO {orden['name']} tiene pending_json: {str(pending_json)[:50]}...")
                     pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
-                    if pending_data.get('pending'):
+                    # Solo marcar como pendiente si pending=True en el JSON
+                    if pending_data.get('pending') == True:
                         tiene_pendientes = True
                         print(f"DEBUG listar: MO {orden['name']} marcada como tiene_pendientes=True")
                 except Exception as e:
@@ -1657,15 +1630,12 @@ class TunelesService:
                 'estado': orden['state'],
                 'fecha_creacion': orden.get('create_date'),
                 'fecha_planificada': orden.get('date_planned_start'),
-                'tiene_pendientes': tiene_pendientes  # Nuevo Flag
+                'tiene_pendientes': tiene_pendientes
             })
         
-        # DEBUG: Mostrar resumen de órdenewith pendientes
+        # DEBUG: Mostrar resumen
         pendientes_count = sum(1 for r in resultado if r.get('tiene_pendientes'))
         print(f"DEBUG listar FINAL: Retornando {len(resultado)} órdenes, {pendientes_count} con pendientes")
-        for r in resultado:
-            if r.get('tiene_pendientes'):
-                print(f"  - {r['nombre']}: tiene_pendientes=True")
         
         return resultado
 
