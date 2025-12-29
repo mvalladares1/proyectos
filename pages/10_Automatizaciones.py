@@ -688,14 +688,14 @@ with tab2:
                 except:
                     fecha_str = fecha_str[:16] if len(fecha_str) > 16 else fecha_str
             
-            # Calcular info adicional (estimaciones si no vienen del backend)
-            total_kg = orden.get('total_kg', 0)
-            pallets = orden.get('pallets_count', int(total_kg / 400) if total_kg > 0 else 0)
-            componentes = orden.get('componentes_count', pallets)
-            subproductos = orden.get('subproductos_count', pallets)
+            # Usar datos del backend (componentes, subproductos, electricidad)
+            total_kg = orden.get('kg_total', 0)
+            pallets = orden.get('pallets_count', 0)
+            componentes = orden.get('componentes_count', 0)
+            subproductos = orden.get('subproductos_count', 0)
             
-            # Calcular electricidad estimada (0.15 USD/kg aprox)
-            electricidad = orden.get('costo_electricidad', total_kg * 0.15)
+            # Electricidad del backend
+            electricidad = orden.get('electricidad_costo', 0)
             
             # Renderizar HTML - SIN INDENTACIÓN para evitar que st.markdown lo trate como código
             html_content = f'''<div style="background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); border-left: 5px solid {color_borde}; border-radius: 14px; padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.6);">

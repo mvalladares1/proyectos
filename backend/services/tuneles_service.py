@@ -1665,7 +1665,8 @@ class TunelesService:
         ordenes = self.odoo.search_read(
             'mrp.production',
             domain,
-            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start', 'x_studio_pending_receptions'],
+            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start', 
+             'x_studio_pending_receptions', 'move_raw_ids', 'move_finished_ids'],
             limit=limit,
             order='create_date desc'
         )
@@ -1682,19 +1683,38 @@ class TunelesService:
                     break
             
             # Determinar tiene_pendientes SOLO desde el campo JSON
-            # NO usamos moves_sin_lote porque eso captura órdenes antiguas incorrectamente
             tiene_pendientes = False
             pending_json = orden.get('x_studio_pending_receptions')
             if pending_json:
                 try:
                     import json
                     pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
-                    # Solo marcar como pendiente si pending=True en el JSON
                     if pending_data.get('pending') == True:
                         tiene_pendientes = True
-                        print(f"DEBUG listar: MO {orden['name']} marcada como tiene_pendientes=True")
                 except Exception as e:
-                    print(f"DEBUG listar: Error parseando JSON para {orden['name']}: {e}")
+                    pass
+            
+            # Contar componentes y calcular electricidad
+            componentes_count = 0
+            electricidad_costo = 0
+            move_raw_ids = orden.get('move_raw_ids', [])
+            if move_raw_ids:
+                # Obtener moves para contar y calcular electricidad
+                raw_moves = self.odoo.search_read(
+                    'stock.move',
+                    [('id', 'in', move_raw_ids)],
+                    ['product_id', 'product_uom_qty']
+                )
+                for move in raw_moves:
+                    prod_name = move['product_id'][1] if move['product_id'] else ''
+                    if 'ETE' in prod_name or 'Electricidad' in prod_name:
+                        # Calcular costo electricidad (~$35.10/kg)
+                        electricidad_costo = move.get('product_uom_qty', 0) * 35.10
+                    else:
+                        componentes_count += 1
+            
+            # Contar subproductos
+            subproductos_count = len(orden.get('move_finished_ids', []))
             
             resultado.append({
                 'id': orden['id'],
@@ -1705,12 +1725,11 @@ class TunelesService:
                 'estado': orden['state'],
                 'fecha_creacion': orden.get('create_date'),
                 'fecha_planificada': orden.get('date_planned_start'),
-                'tiene_pendientes': tiene_pendientes
+                'tiene_pendientes': tiene_pendientes,
+                'componentes_count': componentes_count,
+                'subproductos_count': subproductos_count,
+                'electricidad_costo': electricidad_costo
             })
-        
-        # DEBUG: Mostrar resumen
-        pendientes_count = sum(1 for r in resultado if r.get('tiene_pendientes'))
-        print(f"DEBUG listar FINAL: Retornando {len(resultado)} órdenes, {pendientes_count} con pendientes")
         
         return resultado
 
