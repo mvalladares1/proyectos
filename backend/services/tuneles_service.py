@@ -1349,6 +1349,13 @@ class TunelesService:
                 'tiene_pendientes': tiene_pendientes  # Nuevo Flag
             })
         
+        # DEBUG: Mostrar resumen de órdenewith pendientes
+        pendientes_count = sum(1 for r in resultado if r.get('tiene_pendientes'))
+        print(f"DEBUG listar FINAL: Retornando {len(resultado)} órdenes, {pendientes_count} con pendientes")
+        for r in resultado:
+            if r.get('tiene_pendientes'):
+                print(f"  - {r['nombre']}: tiene_pendientes=True")
+        
         return resultado
 
 
