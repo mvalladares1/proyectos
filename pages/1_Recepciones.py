@@ -2240,14 +2240,25 @@ with tab_aprobaciones:
     st.markdown("### 📥 Aprobaciones de Precios MP")
     st.markdown("Valida masivamente los precios de recepción comparándolos con el presupuesto.")
     
-    col1, col2, col3 = st.columns([1, 1, 2])
+    # Leyenda de semáforos
+    st.markdown("""
+    <div style="background: rgba(50,50,50,0.5); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+        <b>🚦 Semáforo de Desviación:</b> 
+        <span style="color: #2ecc71;">🟢 OK (0-3%)</span> · 
+        <span style="color: #f1c40f;">🟡 Alerta (3-8%)</span> · 
+        <span style="color: #e74c3c;">🔴 Crítico (>8%)</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Layout responsive para móvil
+    col1, col2 = st.columns(2)
     
     with col1:
         fecha_inicio_aprob = st.date_input("Desde", datetime.now() - timedelta(days=7), key="fecha_inicio_aprob", format="DD/MM/YYYY")
     with col2:
         fecha_fin_aprob = st.date_input("Hasta", datetime.now() + timedelta(days=1), key="fecha_fin_aprob", format="DD/MM/YYYY")
-    with col3:
-        estado_filtro = st.radio("Estado", ["Pendientes", "Aprobadas", "Todas"], horizontal=True, key="estado_filtro_aprob")
+    
+    estado_filtro = st.radio("Estado", ["Pendientes", "Aprobadas", "Todas"], horizontal=True, key="estado_filtro_aprob")
 
     if st.button("🔄 Cargar Recepciones a Revisar", type="primary"):
         with st.spinner("Cargando datos..."):
@@ -2308,20 +2319,23 @@ with tab_aprobaciones:
                                 
                             precio_real = float(p.get('Costo Unitario', 0) or p.get('precio', 0) or 0)
                             
-                            # Normalizar
+                            # Normalizar - Múltiples fuentes para tipo de fruta
                             tf = (rec.get('tipo_fruta') or '').strip()
                             if not tf: tf = (p.get('TipoFruta') or '').strip()
+                            # Fallback: nombre del producto
+                            prod_name = (p.get('Producto') or p.get('producto') or '').upper()
                                 
                             man = (p.get('Manejo') or 'Convencional').strip()
                             man_norm = 'Orgánico' if 'ORGAN' in man.upper() else 'Convencional'
                             
-                            tf_upper = tf.upper()
+                            # Combinar para detección
+                            search_str = f"{tf.upper()} {prod_name}"
                             esp_base = 'Otro'
-                            if 'ARAND' in tf_upper or 'BLUEBERRY' in tf_upper: esp_base = 'Arándano'
-                            elif 'FRAM' in tf_upper or 'MEEKER' in tf_upper or 'HERITAGE' in tf_upper: esp_base = 'Frambuesa'
-                            elif 'FRUTI' in tf_upper or 'STRAW' in tf_upper: esp_base = 'Frutilla'
-                            elif 'MORA' in tf_upper: esp_base = 'Mora'
-                            elif 'CEREZA' in tf_upper: esp_base = 'Cereza'
+                            if 'ARAND' in search_str or 'BLUEBERRY' in search_str or 'BLUEB' in search_str: esp_base = 'Arándano'
+                            elif 'FRAM' in search_str or 'MEEKER' in search_str or 'HERITAGE' in search_str or 'RASPBERRY' in search_str: esp_base = 'Frambuesa'
+                            elif 'FRUTI' in search_str or 'STRAW' in search_str or 'FRUTILLA' in search_str: esp_base = 'Frutilla'
+                            elif 'MORA' in search_str or 'BLACKBERRY' in search_str: esp_base = 'Mora'
+                            elif 'CEREZA' in search_str or 'CHERRY' in search_str: esp_base = 'Cereza'
                             
                             key_ppto = f"{esp_base} {man_norm}"
                             ppto_val = precios_ppto_dict.get(key_ppto, 0)
@@ -2361,36 +2375,42 @@ with tab_aprobaciones:
                                 "$/Kg Real": st.column_config.NumberColumn("$/Kg", format="$%d"),
                                 "PPTO": st.column_config.NumberColumn("PPTO", format="$%d"),
                                 "Kg": st.column_config.NumberColumn("Kg", format="%.0f"),
-                                "Semaforo": st.column_config.TextColumn("🚦", width="small")
+                                "Semaforo": st.column_config.TextColumn("🚦", width="small"),
+                                "id_oculto": None  # Ocultar
                             },
+                            column_order=["Aprobar", "Recepción", "Fecha", "Productor", "Especie", "Kg", "$/Kg Real", "PPTO", "Desv %", "Semaforo"],
                             disabled=["Recepción", "Fecha", "Productor", "Especie", "Kg", "$/Kg Real", "PPTO", "Desv %", "Semaforo"],
                             hide_index=True,
                             key="editor_aprob",
                             height=600
                         )
                         
-                        col_a, col_b = st.columns([1, 4])
-                        with col_a:
-                            if st.button("✅ Aprobar Seleccionadas", type="primary"):
-                                # Filtrar filas marcadas
-                                sels = edited_df[edited_df["Aprobar"] == True]
-                                # Solo conservar las que NO estaban aprobadas (optimización)
-                                # Aunque save_aprobaciones hace un set update, así que es seguro enviar todo.
-                                ids = sels["id_oculto"].unique().tolist()
-                                if ids:
-                                     if save_aprobaciones(ids):
-                                        st.success(f"Aprobadas {len(ids)} recepciones.")
-                                        st.rerun()
-                                else:
-                                    pass
-                        with col_b:
-                             if estado_filtro != "Pendientes":
-                                 if st.button("↩️ Quitar Aprobación"):
-                                     sels_del = edited_df[edited_df["Aprobar"] == True]
-                                     ids_del = sels_del["id_oculto"].unique().tolist()
-                                     if ids_del:
-                                         if remove_aprobaciones(ids_del):
-                                             st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
-                                             st.rerun()
+                        # Solo admin puede aprobar
+                        ADMIN_APROBADOR = "mvalladares@riofuturo.cl"
+                        es_admin = username == ADMIN_APROBADOR
+                        
+                        if es_admin:
+                            col_a, col_b = st.columns([1, 1])
+                            with col_a:
+                                if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
+                                    sels = edited_df[edited_df["Aprobar"] == True]
+                                    ids = sels["id_oculto"].unique().tolist()
+                                    if ids:
+                                        if save_aprobaciones(ids):
+                                            st.success(f"Aprobadas {len(ids)} recepciones.")
+                                            st.rerun()
+                                    else:
+                                        st.warning("Selecciona al menos una recepción.")
+                            with col_b:
+                                if estado_filtro != "Pendientes":
+                                    if st.button("↩️ Quitar Aprobación", use_container_width=True):
+                                        sels_del = edited_df[edited_df["Aprobar"] == True]
+                                        ids_del = sels_del["id_oculto"].unique().tolist()
+                                        if ids_del:
+                                            if remove_aprobaciones(ids_del):
+                                                st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
+                                                st.rerun()
+                        else:
+                            st.info("👁️ Solo visualización. Contacta al administrador para aprobar.")
             except Exception as e:
                 st.error(f"Error: {e}")
