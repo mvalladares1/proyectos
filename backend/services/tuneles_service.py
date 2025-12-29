@@ -1001,11 +1001,11 @@ class TunelesService:
         
         # --- Agregar componente de Electricidad ---
         # Producto: Provisión Electricidad Túnel Estático ($/hr)
-        # Buscamos por código 'ETE' en product.product (no template)
         try:
             total_kg = sum(data['kg'] for data in productos_totales.values())
+            ete_id = None
             
-            # Buscar product.product por código
+            # Intento 1: Buscar por código exacto 'ETE'
             ete_products = self.odoo.models.execute_kw(
                 self.odoo.db, self.odoo.uid, self.odoo.password,
                 'product.product', 'search_read',
@@ -1015,13 +1015,24 @@ class TunelesService:
             
             if ete_products:
                 ete_id = ete_products[0]['id']
-                print(f"DEBUG: Producto electricidad encontrado por código: ID={ete_id}")
+                print(f"DEBUG: Electricidad encontrada por código ETE: ID={ete_id}")
             else:
-                # Fallback: Usar ID hardcodeado
-                ete_id = PRODUCTO_ELECTRICIDAD_ID
-                print(f"DEBUG: Producto ETE no encontrado por código, usando ID fijo: {ete_id}")
+                # Intento 2: Buscar por nombre que contenga 'Electricidad' y 'Túnel'
+                ete_products = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'product.product', 'search_read',
+                    [[('name', 'ilike', 'Electricidad'), ('name', 'ilike', 'Túnel')]],
+                    {'fields': ['id', 'name'], 'limit': 1}
+                )
+                if ete_products:
+                    ete_id = ete_products[0]['id']
+                    print(f"DEBUG: Electricidad encontrada por nombre: ID={ete_id}, Name={ete_products[0]['name']}")
+                else:
+                    # Fallback: Usar ID fijo
+                    ete_id = PRODUCTO_ELECTRICIDAD_ID
+                    print(f"DEBUG: Usando ID fijo de electricidad: {ete_id}")
 
-            # Validar que tengamos un ID válido (aunque sea el fijo)
+            # Crear el movimiento de electricidad
             if ete_id:
                 elect_move = {
                     'name': mo_name,
@@ -1099,7 +1110,8 @@ class TunelesService:
             
             for pallet in data['pallets']:
                 # LOTE: Usar nombre del lote original + sufijo -C
-                lote_origen = pallet.get('lote_nombre') or pallet.get('codigo')
+                # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
+                lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
                 lotes_data.append({
                     'codigo': lote_output_name,
@@ -1128,7 +1140,8 @@ class TunelesService:
             # Ahora crear los move.lines
             for idx, pallet in enumerate(data['pallets']):
                 # LOTE: Usar nombre del lote original + sufijo -C
-                lote_origen = pallet.get('lote_nombre') or pallet.get('codigo')
+                # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
+                lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
                 
                 # PACKAGE: Extraer solo el número y generar nombre correcto
