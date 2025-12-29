@@ -742,7 +742,13 @@ with tab_kpis:
             if not df_rfp.empty:
                 chart_rfp = crear_grafico_planta(df_rfp, 'RFP', '#3498db')
                 st.altair_chart(chart_rfp, use_container_width=True)
-                total_rfp = df_rfp['kg_recepcionados'].sum()
+                # Calcular total excluyendo bandejas
+                total_rfp = 0.0
+                for _, row in df_rfp.iterrows():
+                    for p in row.get('productos', []) or []:
+                        cat = (p.get('Categoria') or '').strip().upper()
+                        if 'BANDEJ' not in cat:
+                            total_rfp += p.get('Kg Hechos', 0) or 0
                 st.caption(f"**Total RFP:** {fmt_numero(total_rfp, 0)} Kg")
             else:
                 st.info("No hay datos de RFP en el período seleccionado")
@@ -755,7 +761,13 @@ with tab_kpis:
             if not df_vilkun.empty:
                 chart_vilkun = crear_grafico_planta(df_vilkun, 'VILKUN', '#27ae60')
                 st.altair_chart(chart_vilkun, use_container_width=True)
-                total_vilkun = df_vilkun['kg_recepcionados'].sum()
+                # Calcular total excluyendo bandejas
+                total_vilkun = 0.0
+                for _, row in df_vilkun.iterrows():
+                    for p in row.get('productos', []) or []:
+                        cat = (p.get('Categoria') or '').strip().upper()
+                        if 'BANDEJ' not in cat:
+                            total_vilkun += p.get('Kg Hechos', 0) or 0
                 st.caption(f"**Total VILKÚN:** {fmt_numero(total_vilkun, 0)} Kg")
             else:
                 st.info("No hay datos de VILKÚN en el período seleccionado")
@@ -765,10 +777,24 @@ with tab_kpis:
             st.markdown("**📊 Resumen Comparativo:**")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
-                total_rfp = df_filtrada[df_filtrada['origen'] == 'RFP']['kg_recepcionados'].sum() if 'origen' in df_filtrada.columns else 0
+                # Calcular total RFP excluyendo bandejas
+                total_rfp = 0.0
+                df_rfp_comp = df_filtrada[df_filtrada['origen'] == 'RFP'] if 'origen' in df_filtrada.columns else df_filtrada.head(0)
+                for _, row in df_rfp_comp.iterrows():
+                    for p in row.get('productos', []) or []:
+                        cat = (p.get('Categoria') or '').strip().upper()
+                        if 'BANDEJ' not in cat:
+                            total_rfp += p.get('Kg Hechos', 0) or 0
                 st.metric("🏭 RFP", f"{fmt_numero(total_rfp, 0)} Kg")
             with col_p2:
-                total_vilkun = df_filtrada[df_filtrada['origen'] == 'VILKUN']['kg_recepcionados'].sum() if 'origen' in df_filtrada.columns else 0
+                # Calcular total VILKÚN excluyendo bandejas
+                total_vilkun = 0.0
+                df_vilkun_comp = df_filtrada[df_filtrada['origen'] == 'VILKUN'] if 'origen' in df_filtrada.columns else df_filtrada.head(0)
+                for _, row in df_vilkun_comp.iterrows():
+                    for p in row.get('productos', []) or []:
+                        cat = (p.get('Categoria') or '').strip().upper()
+                        if 'BANDEJ' not in cat:
+                            total_vilkun += p.get('Kg Hechos', 0) or 0
                 st.metric("🌿 VILKÚN", f"{fmt_numero(total_vilkun, 0)} Kg")
         else:
             # Solo una planta seleccionada - mostrar gráfico normal
@@ -777,7 +803,13 @@ with tab_kpis:
             st.subheader(f"{emoji} {planta_actual} - Kg recepcionados por día (por Tipo de Fruta)")
             chart_kg = crear_grafico_planta(df_filtrada, planta_actual, '#3498db')
             st.altair_chart(chart_kg, use_container_width=True)
-            total_kg = df_filtrada['kg_recepcionados'].sum()
+            # Calcular total excluyendo bandejas
+            total_kg = 0.0
+            for _, row in df_filtrada.iterrows():
+                for p in row.get('productos', []) or []:
+                    cat = (p.get('Categoria') or '').strip().upper()
+                    if 'BANDEJ' not in cat:
+                        total_kg += p.get('Kg Hechos', 0) or 0
             st.caption(f"**Total {planta_actual}:** {fmt_numero(total_kg, 0)} Kg")
 
         st.subheader("🏆 Ranking de productores por Kg")
