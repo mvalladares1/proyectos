@@ -2309,7 +2309,8 @@ with tab_aprobaciones:
             recep_name = rec.get('albaran', '')
             fecha_recep = rec.get('fecha', '')
             productor = rec.get('productor', '')
-            oc = rec.get('orden_compra', '') or rec.get('OC', '') or ''
+            guia = rec.get('guia_despacho', '') or ''
+            oc = rec.get('oc_asociada', '') or ''
             es_aprobada = recep_name in aprobadas_ids
             
             if estado_filtro == "Pendientes" and es_aprobada: continue
@@ -2413,16 +2414,18 @@ with tab_aprobaciones:
                 df_filtered,
                 column_config={
                     "Sel": st.column_config.CheckboxColumn("✓", default=False, width="small"),
+                    "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
                     "PPTO": st.column_config.TextColumn("PPTO"),
                     "Kg": st.column_config.TextColumn("Kg"),
                     "🚦": st.column_config.TextColumn("🚦", width="small"),
+                    "Especie": None,  # Ocultar pero mantener para PPTO
                     "_id": None,
                     "_kg_raw": None
                 },
-                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Especie", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
-                disabled=["Recepción", "Fecha", "Productor", "OC", "Especie", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
                 hide_index=True,
                 key="editor_aprob",
                 height=500,
@@ -2466,7 +2469,110 @@ with tab_aprobaciones:
                                     st.rerun()
             else:
                 st.info("👁️ Solo visualización. Contacta al administrador para aprobar.")
+            
+            # ========== SECCIÓN: REPORTE PDF PARA PRODUCTORES ==========
+            st.markdown("---")
+            st.markdown("### 📄 Reporte PDF para Productores")
+            
+            with st.expander("Generar Reporte PDF", expanded=False):
+                # Selector de productor
+                productores_unicos = sorted(df_full["Productor"].unique().tolist())
+                productor_pdf = st.selectbox("Seleccionar Productor", productores_unicos, key="productor_pdf")
+                
+                if st.button("📥 Generar PDF", type="secondary", use_container_width=True):
+                    # Filtrar datos del productor
+                    df_prod = df_full[df_full["Productor"] == productor_pdf].copy()
+                    
+                    if len(df_prod) > 0:
+                        try:
+                            from io import BytesIO
+                            from reportlab.lib import colors
+                            from reportlab.lib.pagesizes import letter, landscape
+                            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                            from reportlab.lib.units import inch
+                            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                            from reportlab.lib.enums import TA_CENTER, TA_LEFT
+                            
+                            buffer = BytesIO()
+                            doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                                                    leftMargin=0.5*inch, rightMargin=0.5*inch,
+                                                    topMargin=0.5*inch, bottomMargin=0.5*inch)
+                            
+                            styles = getSampleStyleSheet()
+                            titulo_style = ParagraphStyle('Titulo', parent=styles['Heading1'], 
+                                                          fontSize=16, alignment=TA_CENTER, spaceAfter=20)
+                            subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Normal'], 
+                                                             fontSize=10, alignment=TA_CENTER, spaceAfter=10)
+                            
+                            elements = []
+                            
+                            # Título
+                            elements.append(Paragraph(f"Reporte de Recepciones", titulo_style))
+                            elements.append(Paragraph(f"Productor: {productor_pdf}", subtitulo_style))
+                            elements.append(Paragraph(f"Período: {fecha_inicio_aprob.strftime('%d/%m/%Y')} - {fecha_fin_aprob.strftime('%d/%m/%Y')}", subtitulo_style))
+                            elements.append(Spacer(1, 20))
+                            
+                            # Tabla de datos
+                            data = [["Fecha", "Guía/Recepción", "Producto", "Kg", "$/Kg"]]
+                            
+                            total_kg = 0
+                            for _, row in df_prod.iterrows():
+                                data.append([
+                                    row.get("Fecha", ""),
+                                    row.get("Recepción", ""),
+                                    row.get("Producto", "")[:35],  # Truncar
+                                    row.get("Kg", ""),
+                                    row.get("$/Kg", "")
+                                ])
+                                total_kg += row.get("_kg_raw", 0)
+                            
+                            # Fila de totales
+                            data.append(["", "", "TOTAL", fmt_numero(total_kg, 2), ""])
+                            
+                            table = Table(data, colWidths=[1.2*inch, 1.5*inch, 3*inch, 1.2*inch, 1.2*inch])
+                            table.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+                                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                                ('BACKGROUND', (0, 1), (-1, -2), colors.HexColor('#ecf0f1')),
+                                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#3498db')),
+                                ('TEXTCOLOR', (0, -1), (-1, -1), colors.whitesmoke),
+                                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                            ]))
+                            
+                            elements.append(table)
+                            doc.build(elements)
+                            
+                            pdf_data = buffer.getvalue()
+                            buffer.close()
+                            
+                            # Nombre del archivo
+                            prod_clean = "".join(c for c in productor_pdf if c.isalnum() or c in " _-")[:30]
+                            filename = f"Reporte_{prod_clean}_{fecha_inicio_aprob.strftime('%Y%m%d')}.pdf"
+                            
+                            st.download_button(
+                                label="⬇️ Descargar PDF",
+                                data=pdf_data,
+                                file_name=filename,
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                            st.success(f"✅ PDF generado: {len(df_prod)} líneas, {fmt_numero(total_kg, 2)} Kg")
+                            
+                        except ImportError:
+                            st.error("⚠️ Librería reportlab no instalada. Ejecuta: pip install reportlab")
+                        except Exception as e:
+                            st.error(f"Error generando PDF: {e}")
+                    else:
+                        st.warning("No hay datos para este productor.")
         else:
             st.info("No hay datos con los filtros seleccionados.")
     else:
         st.info("👆 Selecciona un rango de fechas y presiona **Cargar Recepciones**")
+
