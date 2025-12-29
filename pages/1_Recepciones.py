@@ -222,18 +222,40 @@ with tab_kpis:
     # Mostrar tabla y detalle si hay datos
     df = st.session_state.df_recepcion
     if df is not None:
+        # --- Cargar exclusiones de valorización ---
+        import json
+        exclusiones_ids = []
+        try:
+            exclusions_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
+            if os.path.exists(exclusions_file):
+                with open(exclusions_file, 'r') as f:
+                    exclusiones = json.load(f)
+                    exclusiones_ids = exclusiones.get("recepciones", [])
+        except:
+            pass
+        
         # --- KPIs Consolidados ---
         st.subheader("📊 KPIs Consolidados")
         # Calcular Totales separando por categoría de producto (BANDEJAS)
         total_kg_mp = 0.0
         total_costo_mp = 0.0
         total_bandejas = 0.0
+        recepciones_excluidas = 0
+        
         # recorrer todas las recepciones y sus productos
         for _, row in df.iterrows():
             # Asegurarnos que solo consideramos recepciones que sean fruta
             tipo_fruta_row = (row.get('tipo_fruta') or "").strip()
             if not tipo_fruta_row:
                 continue
+            
+            # Verificar si esta recepción está excluida de valorización
+            recep_id = row.get('id') or row.get('picking_id')
+            recep_name = row.get('albaran', '')
+            excluir_costo = recep_id in exclusiones_ids or recep_name in exclusiones_ids
+            if excluir_costo:
+                recepciones_excluidas += 1
+            
             if 'productos' in row and isinstance(row['productos'], list):
                 for p in row['productos']:
                     kg = p.get('Kg Hechos', 0) or 0
@@ -244,7 +266,9 @@ with tab_kpis:
                         total_bandejas += kg
                     else:
                         total_kg_mp += kg
-                        total_costo_mp += costo
+                        # Solo sumar costo si NO está excluida
+                        if not excluir_costo:
+                            total_costo_mp += costo
 
         # Calcular métricas y promedios existentes
         # Nota: eliminamos 'Total Kg Recepcionados (global)'.

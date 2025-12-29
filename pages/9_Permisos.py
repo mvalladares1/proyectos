@@ -417,3 +417,71 @@ with tab_config:
     admins = permisos.get("admins", [])
     for admin_email in admins:
         st.markdown(f"• **{admin_email}**")
+    
+    st.divider()
+    
+    # ============ EXCLUSIONES DE RECEPCIONES ============
+    st.subheader("🚫 Exclusiones de Valorización")
+    st.caption("Recepciones que se contabilizan en Kg pero se excluyen del cálculo de costos. Útil para corregir malos ingresos.")
+    
+    # Archivo de configuración para exclusiones
+    import json
+    EXCLUSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
+    
+    # Cargar exclusiones existentes
+    exclusiones = {"recepciones": []}
+    try:
+        if os.path.exists(EXCLUSIONS_FILE):
+            with open(EXCLUSIONS_FILE, 'r') as f:
+                exclusiones = json.load(f)
+    except:
+        pass
+    
+    # Mostrar exclusiones actuales
+    col_excl1, col_excl2 = st.columns([2, 1])
+    
+    with col_excl1:
+        st.markdown("**Recepciones excluidas de valorización:**")
+        if exclusiones.get("recepciones"):
+            for recep_id in exclusiones["recepciones"]:
+                col_id, col_del = st.columns([5, 1])
+                with col_id:
+                    st.text(f"📋 Recepción ID: {recep_id}")
+                with col_del:
+                    if st.button("🗑️", key=f"del_excl_{recep_id}"):
+                        exclusiones["recepciones"].remove(recep_id)
+                        with open(EXCLUSIONS_FILE, 'w') as f:
+                            json.dump(exclusiones, f, indent=2)
+                        st.success(f"Recepción {recep_id} eliminada de exclusiones")
+                        st.rerun()
+        else:
+            st.info("No hay recepciones excluidas actualmente.")
+    
+    with col_excl2:
+        st.markdown("**Agregar exclusión:**")
+        st.caption("Ingresa el ID de la recepción (ej: 123456 o RF/REC/00123)")
+        nueva_exclusion = st.text_input("ID de recepción", placeholder="12345 o RF/REC/00123", key="nueva_exclusion")
+        
+        if st.button("➕ Excluir recepción", type="primary", key="btn_add_exclusion"):
+            if nueva_exclusion and nueva_exclusion.strip():
+                excl_val = nueva_exclusion.strip()
+                # Intentar convertir a int si es solo números
+                try:
+                    excl_val = int(excl_val)
+                except:
+                    pass  # Mantener como string si tiene letras
+                    
+                if excl_val not in exclusiones["recepciones"]:
+                    exclusiones["recepciones"].append(excl_val)
+                    # Guardar en archivo
+                    os.makedirs(os.path.dirname(EXCLUSIONS_FILE), exist_ok=True)
+                    with open(EXCLUSIONS_FILE, 'w') as f:
+                        json.dump(exclusiones, f, indent=2)
+                    st.success(f"✅ Recepción {excl_val} agregada a exclusiones")
+                    st.rerun()
+                else:
+                    st.warning("Esta recepción ya está excluida")
+            else:
+                st.warning("Ingresa un ID de recepción válido")
+    
+    st.info("💡 Las recepciones excluidas se contarán en los Kg totales pero su costo NO se sumará a la valorización.")
