@@ -1205,8 +1205,17 @@ class TunelesService:
         if not lotes_data:
             return {}
         
-        codigos = [d['codigo'] for d in lotes_data]
-        producto_ids = list(set(d['producto_id'] for d in lotes_data))
+        # DEDUPLICAR entrada: evitar crear el mismo lote 2 veces en la misma llamada
+        seen_keys = set()
+        lotes_data_uniq = []
+        for d in lotes_data:
+            key = (d['codigo'], d['producto_id'])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                lotes_data_uniq.append(d)
+        
+        codigos = [d['codigo'] for d in lotes_data_uniq]
+        producto_ids = list(set(d['producto_id'] for d in lotes_data_uniq))
         
         # LLAMADA 1: Buscar todos los lotes existentes por nombre Y producto
         lotes_existentes = self.odoo.search_read(
@@ -1225,7 +1234,7 @@ class TunelesService:
         lotes_map = {}
         faltantes = []
         
-        for d in lotes_data:
+        for d in lotes_data_uniq:
             key = (d['codigo'], d['producto_id'])
             if key in lotes_existentes_set:
                 # Ya existe, reusar
@@ -1234,8 +1243,9 @@ class TunelesService:
                 # No existe, necesita crearse
                 faltantes.append(d)
         
-        # LLAMADA 2: Crear SOLO los faltantes
+        # LLAMADA 2: Crear SOLO los faltantes (ya deduplicados)
         if faltantes:
+            print(f"DEBUG _buscar_o_crear_lotes_batch: Creando {len(faltantes)} lotes: {[(d['codigo'], d['producto_id']) for d in faltantes]}")
             nuevos_ids = self.odoo.execute('stock.lot', 'create', [
                 {
                     'name': d['codigo'],
