@@ -426,6 +426,7 @@ with tab_config:
     
     # Archivo de configuración para exclusiones
     import json
+    from datetime import datetime, timedelta
     EXCLUSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
     
     # Cargar exclusiones existentes
@@ -437,16 +438,16 @@ with tab_config:
     except:
         pass
     
-    # Mostrar exclusiones actuales
-    col_excl1, col_excl2 = st.columns([2, 1])
+    # --- Tab para exclusiones ---
+    tab_lista, tab_agregar = st.tabs(["📋 Exclusiones Actuales", "➕ Agregar Exclusiones"])
     
-    with col_excl1:
+    with tab_lista:
         st.markdown("**Recepciones excluidas de valorización:**")
         if exclusiones.get("recepciones"):
             for recep_id in exclusiones["recepciones"]:
                 col_id, col_del = st.columns([5, 1])
                 with col_id:
-                    st.text(f"📋 Recepción ID: {recep_id}")
+                    st.text(f"📋 {recep_id}")
                 with col_del:
                     if st.button("🗑️", key=f"del_excl_{recep_id}"):
                         exclusiones["recepciones"].remove(recep_id)
@@ -457,31 +458,83 @@ with tab_config:
         else:
             st.info("No hay recepciones excluidas actualmente.")
     
-    with col_excl2:
-        st.markdown("**Agregar exclusión:**")
-        st.caption("Ingresa el ID de la recepción (ej: 123456 o RF/REC/00123)")
-        nueva_exclusion = st.text_input("ID de recepción", placeholder="12345 o RF/REC/00123", key="nueva_exclusion")
+    with tab_agregar:
+        st.markdown("**Buscar recepciones por rango de fechas:**")
         
-        if st.button("➕ Excluir recepción", type="primary", key="btn_add_exclusion"):
-            if nueva_exclusion and nueva_exclusion.strip():
-                excl_val = nueva_exclusion.strip()
-                # Intentar convertir a int si es solo números
-                try:
-                    excl_val = int(excl_val)
-                except:
-                    pass  # Mantener como string si tiene letras
+        col_fecha1, col_fecha2 = st.columns(2)
+        with col_fecha1:
+            fecha_ini_excl = st.date_input("Fecha inicio", datetime.now() - timedelta(days=30), key="fecha_ini_excl", format="DD/MM/YYYY")
+        with col_fecha2:
+            fecha_fin_excl = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_excl", format="DD/MM/YYYY")
+        
+        if st.button("🔍 Buscar recepciones", type="primary", key="btn_buscar_recep_excl"):
+            try:
+                with st.spinner("Consultando recepciones..."):
+                    resp = httpx.get(
+                        f"{API_URL}/api/v1/recepciones-mp/",
+                        params={
+                            "username": username,
+                            "password": password,
+                            "fecha_inicio": fecha_ini_excl.strftime("%Y-%m-%d"),
+                            "fecha_fin": fecha_fin_excl.strftime("%Y-%m-%d"),
+                            "solo_hechas": False,
+                            "origen": ["RFP", "VILKUN"]
+                        },
+                        timeout=60.0
+                    )
+                    if resp.status_code == 200:
+                        recepciones_list = resp.json()
+                        st.session_state['recepciones_para_excluir'] = recepciones_list
+                        st.success(f"✅ Se encontraron {len(recepciones_list)} recepciones")
+                    else:
+                        st.error("Error al consultar recepciones")
+            except Exception as e:
+                st.error(f"Error: {e}")
+        
+        # Mostrar lista de recepciones si hay
+        if 'recepciones_para_excluir' in st.session_state and st.session_state['recepciones_para_excluir']:
+            recepciones_list = st.session_state['recepciones_para_excluir']
+            
+            # Crear opciones para multiselect
+            opciones = []
+            for r in recepciones_list:
+                albaran = r.get('albaran', 'N/A')
+                fecha = r.get('fecha', '')[:10] if r.get('fecha') else ''
+                productor = r.get('productor', 'N/A')
+                kg = r.get('kg_recepcionados', 0)
+                # Marcar si ya está excluida
+                ya_excluida = albaran in exclusiones.get("recepciones", [])
+                marca = "⛔ " if ya_excluida else ""
+                opciones.append(f"{marca}{albaran} | {fecha} | {productor} | {kg:.0f} Kg")
+            
+            st.markdown("**Selecciona las recepciones a excluir:**")
+            seleccionadas = st.multiselect(
+                "Recepciones disponibles",
+                options=opciones,
+                default=[],
+                key="recep_seleccionadas_excl",
+                help="Las marcadas con ⛔ ya están excluidas"
+            )
+            
+            if st.button("✅ Excluir seleccionadas", type="primary", key="btn_excluir_selec"):
+                if seleccionadas:
+                    nuevas = 0
+                    for sel in seleccionadas:
+                        # Extraer el albarán (primera parte antes del |)
+                        albaran = sel.split("|")[0].strip().replace("⛔ ", "")
+                        if albaran not in exclusiones["recepciones"]:
+                            exclusiones["recepciones"].append(albaran)
+                            nuevas += 1
                     
-                if excl_val not in exclusiones["recepciones"]:
-                    exclusiones["recepciones"].append(excl_val)
-                    # Guardar en archivo
-                    os.makedirs(os.path.dirname(EXCLUSIONS_FILE), exist_ok=True)
-                    with open(EXCLUSIONS_FILE, 'w') as f:
-                        json.dump(exclusiones, f, indent=2)
-                    st.success(f"✅ Recepción {excl_val} agregada a exclusiones")
-                    st.rerun()
+                    if nuevas > 0:
+                        os.makedirs(os.path.dirname(EXCLUSIONS_FILE), exist_ok=True)
+                        with open(EXCLUSIONS_FILE, 'w') as f:
+                            json.dump(exclusiones, f, indent=2)
+                        st.success(f"✅ {nuevas} recepciones agregadas a exclusiones")
+                        st.rerun()
+                    else:
+                        st.info("Todas las recepciones seleccionadas ya estaban excluidas")
                 else:
-                    st.warning("Esta recepción ya está excluida")
-            else:
-                st.warning("Ingresa un ID de recepción válido")
+                    st.warning("Selecciona al menos una recepción")
     
     st.info("💡 Las recepciones excluidas se contarán en los Kg totales pero su costo NO se sumará a la valorización.")
