@@ -421,13 +421,14 @@ with tab1:
                         producto_display = pallet.get('producto_nombre', 'N/A')
                         
                         # Construir info de la tarjeta
-                        lines = [f"<strong>{pallet['codigo']}</strong> - {kg_display}"]
-                        lines.append(f"<br><small style='color: #aaa;'>🍎 {producto_display}</small>")
+                        # MODIFICADO: Producto primero, luego Código
+                        lines = [f"<strong>{producto_display}</strong> - {kg_display}"]
+                        lines.append(f"<br><small style='color: #aaa;'>📦 {pallet['codigo']}</small>")
                         
                         # Info adicional si es pendiente
                         if is_pending:
                             reception_state = pallet.get('ubicacion', 'Pendiente').replace('RECEPCIÓN PENDIENTE ', '')
-                            lines.append(f"<br><small style='color: #ff9800;'>📦 {reception_state}</small>")
+                            lines.append(f"<br><small style='color: #ff9800;'>⚠️ EN RECEPCIÓN: {reception_state}</small>")
                             
                             lot_name = pallet.get('lot_name', '')
                             if lot_name:

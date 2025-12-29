@@ -332,6 +332,7 @@ class TunelesService:
                 'ubicacion_id': ubicacion[0] if ubicacion else None,
                 'ubicacion_nombre': ubicacion[1] if ubicacion else None,
                 'producto_id': producto_id,
+                'producto_nombre': pkg_quants[0]['product_id'][1] if pkg_quants[0]['product_id'] else None,
                 'package_id': package['id'],
                 'lote_id': lote_id
             })
@@ -1010,8 +1011,14 @@ class TunelesService:
             
             if ete_products:
                 ete_id = ete_products[0]['id']
-                print(f"DEBUG: Producto electricidad encontrado: ID={ete_id}, Name={ete_products[0]['name']}")
-                
+                print(f"DEBUG: Producto electricidad encontrado por código: ID={ete_id}")
+            else:
+                # Fallback: Usar ID hardcodeado
+                ete_id = PRODUCTO_ELECTRICIDAD_ID
+                print(f"DEBUG: Producto ETE no encontrado por código, usando ID fijo: {ete_id}")
+
+            # Validar que tengamos un ID válido (aunque sea el fijo)
+            if ete_id:
                 elect_move = {
                     'name': mo_name,
                     'product_id': ete_id,
@@ -1030,8 +1037,6 @@ class TunelesService:
                 )
                 movimientos_creados += 1
                 print(f"DEBUG: Electricidad agregada correctamente")
-            else:
-                print("DEBUG: Producto ETE no encontrado")
         except Exception as e:
             print(f"Advertencia: No se pudo agregar electricidad: {e}")
         
