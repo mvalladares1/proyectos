@@ -2469,21 +2469,67 @@ with tab_aprobaciones:
                                     st.rerun()
             else:
                 st.info("👁️ Solo visualización. Contacta al administrador para aprobar.")
-            
-            # ========== SECCIÓN: REPORTE PDF PARA PRODUCTORES ==========
-            st.markdown("---")
-            st.markdown("### 📄 Reporte PDF para Productores")
-            
-            with st.expander("Generar Reporte PDF", expanded=False):
-                # Selector de productor
-                productores_unicos = sorted(df_full["Productor"].unique().tolist())
-                productor_pdf = st.selectbox("Seleccionar Productor", productores_unicos, key="productor_pdf")
-                
-                if st.button("📥 Generar PDF", type="secondary", use_container_width=True):
-                    # Filtrar datos del productor
-                    df_prod = df_full[df_full["Productor"] == productor_pdf].copy()
+        else:
+            st.info("No hay datos con los filtros seleccionados.")
+    else:
+        st.info("👆 Selecciona un rango de fechas y presiona **Cargar Recepciones**")
+    
+    # ========== SECCIÓN INDEPENDIENTE: REPORTE PDF PARA PRODUCTORES ==========
+    st.markdown("---")
+    st.markdown("### 📄 Reportes PDF para Productores")
+    st.caption("Genera reportes con datos de recepción para entregar a productores.")
+    
+    with st.expander("📊 Generar Reporte de Recepciones", expanded=False):
+        # Filtros propios independientes
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            fecha_ini_rep = st.date_input("Desde", datetime.now() - timedelta(days=30), key="fecha_ini_rep", format="DD/MM/YYYY")
+        with col_r2:
+            fecha_fin_rep = st.date_input("Hasta", datetime.now(), key="fecha_fin_rep", format="DD/MM/YYYY")
+        
+        estado_rep = st.radio("Estado de Recepción", ["Hechas", "Todas"], horizontal=True, key="estado_rep")
+        
+        if st.button("🔄 Cargar Productores", type="secondary", use_container_width=True):
+            with st.spinner("Cargando datos..."):
+                try:
+                    params_rep = {
+                        "username": username,
+                        "password": password,
+                        "fecha_inicio": fecha_ini_rep.strftime("%Y-%m-%d"),
+                        "fecha_fin": fecha_fin_rep.strftime("%Y-%m-%d"),
+                        "origen": None
+                    }
+                    resp_rep = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params_rep, timeout=60)
                     
-                    if len(df_prod) > 0:
+                    if resp_rep.status_code == 200:
+                        recepciones_rep = resp_rep.json()
+                        
+                        # Filtrar por estado si es necesario
+                        if estado_rep == "Hechas":
+                            recepciones_rep = [r for r in recepciones_rep if r.get('state') == 'done']
+                        
+                        st.session_state.reporte_recepciones = recepciones_rep
+                        st.success(f"✅ Cargadas {len(recepciones_rep)} recepciones")
+                    else:
+                        st.error(f"Error: {resp_rep.text}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+        
+        # Si hay datos cargados para reporte
+        if 'reporte_recepciones' in st.session_state and st.session_state.reporte_recepciones:
+            recepciones_rep = st.session_state.reporte_recepciones
+            
+            # Obtener productores únicos
+            productores_rep = sorted(list(set(r.get('productor', '') for r in recepciones_rep if r.get('productor'))))
+            
+            if productores_rep:
+                productor_sel = st.selectbox("Seleccionar Productor", productores_rep, key="productor_rep_sel")
+                
+                if st.button("📥 Generar PDF", type="primary", use_container_width=True):
+                    # Filtrar recepciones del productor
+                    recs_prod = [r for r in recepciones_rep if r.get('productor') == productor_sel]
+                    
+                    if recs_prod:
                         try:
                             from io import BytesIO
                             from reportlab.lib import colors
@@ -2491,59 +2537,85 @@ with tab_aprobaciones:
                             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
                             from reportlab.lib.units import inch
                             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-                            from reportlab.lib.enums import TA_CENTER, TA_LEFT
+                            from reportlab.lib.enums import TA_CENTER
                             
                             buffer = BytesIO()
-                            doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
-                                                    leftMargin=0.5*inch, rightMargin=0.5*inch,
-                                                    topMargin=0.5*inch, bottomMargin=0.5*inch)
+                            doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                                                    leftMargin=0.4*inch, rightMargin=0.4*inch,
+                                                    topMargin=0.4*inch, bottomMargin=0.4*inch)
                             
                             styles = getSampleStyleSheet()
-                            titulo_style = ParagraphStyle('Titulo', parent=styles['Heading1'], 
-                                                          fontSize=16, alignment=TA_CENTER, spaceAfter=20)
-                            subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Normal'], 
-                                                             fontSize=10, alignment=TA_CENTER, spaceAfter=10)
+                            titulo_style = ParagraphStyle('Titulo', parent=styles['Heading1'],
+                                                          fontSize=14, alignment=TA_CENTER, spaceAfter=15)
+                            subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Normal'],
+                                                             fontSize=9, alignment=TA_CENTER, spaceAfter=8)
                             
                             elements = []
+                            elements.append(Paragraph("Reporte de Recepciones de Materia Prima", titulo_style))
+                            elements.append(Paragraph(f"Productor: {productor_sel}", subtitulo_style))
+                            elements.append(Paragraph(f"Período: {fecha_ini_rep.strftime('%d/%m/%Y')} al {fecha_fin_rep.strftime('%d/%m/%Y')}", subtitulo_style))
+                            elements.append(Spacer(1, 15))
                             
-                            # Título
-                            elements.append(Paragraph(f"Reporte de Recepciones", titulo_style))
-                            elements.append(Paragraph(f"Productor: {productor_pdf}", subtitulo_style))
-                            elements.append(Paragraph(f"Período: {fecha_inicio_aprob.strftime('%d/%m/%Y')} - {fecha_fin_aprob.strftime('%d/%m/%Y')}", subtitulo_style))
-                            elements.append(Spacer(1, 20))
-                            
-                            # Tabla de datos
-                            data = [["Fecha", "Guía/Recepción", "Producto", "Kg", "$/Kg"]]
+                            # Encabezados de tabla
+                            data = [["Fecha", "Guía", "Recepción", "Producto", "Kg", "$/Kg", "IQF%", "Block%", "Calif."]]
                             
                             total_kg = 0
-                            for _, row in df_prod.iterrows():
-                                data.append([
-                                    row.get("Fecha", ""),
-                                    row.get("Recepción", ""),
-                                    row.get("Producto", "")[:35],  # Truncar
-                                    row.get("Kg", ""),
-                                    row.get("$/Kg", "")
-                                ])
-                                total_kg += row.get("_kg_raw", 0)
+                            for rec in recs_prod:
+                                fecha_str = fmt_fecha(rec.get('fecha', ''))
+                                guia = rec.get('guia_despacho', '') or rec.get('x_studio_gua_de_despacho', '') or ''
+                                recepcion = rec.get('albaran', '')
+                                iqf_pct = rec.get('total_iqf', 0) or 0
+                                block_pct = rec.get('total_block', 0) or 0
+                                calific = rec.get('calific_final', '') or ''
+                                
+                                productos = rec.get('productos', []) or []
+                                for p in productos:
+                                    cat = (p.get('Categoria') or '').upper()
+                                    if 'BANDEJ' in cat:
+                                        continue
+                                    kg = p.get('Kg Hechos', 0) or 0
+                                    if kg <= 0:
+                                        continue
+                                    
+                                    prod_name = (p.get('Producto') or '')[:30]
+                                    precio = p.get('Costo Unitario', 0) or 0
+                                    
+                                    data.append([
+                                        fecha_str,
+                                        str(guia)[:10],
+                                        recepcion[-8:] if len(recepcion) > 8 else recepcion,
+                                        prod_name,
+                                        fmt_numero(kg, 2),
+                                        fmt_dinero(precio),
+                                        f"{iqf_pct:.1f}%" if iqf_pct else "",
+                                        f"{block_pct:.1f}%" if block_pct else "",
+                                        calific[:3] if calific else ""
+                                    ])
+                                    total_kg += kg
                             
-                            # Fila de totales
-                            data.append(["", "", "TOTAL", fmt_numero(total_kg, 2), ""])
+                            # Fila totales
+                            data.append(["", "", "", "TOTAL", fmt_numero(total_kg, 2), "", "", "", ""])
                             
-                            table = Table(data, colWidths=[1.2*inch, 1.5*inch, 3*inch, 1.2*inch, 1.2*inch])
+                            # Crear tabla
+                            col_widths = [0.8*inch, 0.7*inch, 1*inch, 2.2*inch, 0.9*inch, 0.9*inch, 0.6*inch, 0.6*inch, 0.5*inch]
+                            table = Table(data, colWidths=col_widths)
                             table.setStyle(TableStyle([
-                                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+                                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a5276')),
                                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-                                ('BACKGROUND', (0, 1), (-1, -2), colors.HexColor('#ecf0f1')),
-                                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#3498db')),
+                                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                                ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+                                ('TOPPADDING', (0, 0), (-1, 0), 6),
+                                ('BACKGROUND', (0, 1), (-1, -2), colors.HexColor('#f8f9fa')),
+                                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#2980b9')),
                                 ('TEXTCOLOR', (0, -1), (-1, -1), colors.whitesmoke),
                                 ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-                                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bdc3c7')),
+                                ('FONTSIZE', (0, 1), (-1, -1), 7),
                                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                                ('LEFTPADDING', (0, 0), (-1, -1), 3),
+                                ('RIGHTPADDING', (0, 0), (-1, -1), 3),
                             ]))
                             
                             elements.append(table)
@@ -2552,9 +2624,9 @@ with tab_aprobaciones:
                             pdf_data = buffer.getvalue()
                             buffer.close()
                             
-                            # Nombre del archivo
-                            prod_clean = "".join(c for c in productor_pdf if c.isalnum() or c in " _-")[:30]
-                            filename = f"Reporte_{prod_clean}_{fecha_inicio_aprob.strftime('%Y%m%d')}.pdf"
+                            # Nombre archivo
+                            prod_clean = "".join(c for c in productor_sel if c.isalnum() or c in " _-")[:25]
+                            filename = f"Recepciones_{prod_clean}_{fecha_ini_rep.strftime('%Y%m%d')}.pdf"
                             
                             st.download_button(
                                 label="⬇️ Descargar PDF",
@@ -2563,16 +2635,13 @@ with tab_aprobaciones:
                                 mime="application/pdf",
                                 use_container_width=True
                             )
-                            st.success(f"✅ PDF generado: {len(df_prod)} líneas, {fmt_numero(total_kg, 2)} Kg")
+                            st.success(f"✅ PDF generado: {len(data)-2} líneas, {fmt_numero(total_kg, 2)} Kg")
                             
                         except ImportError:
-                            st.error("⚠️ Librería reportlab no instalada. Ejecuta: pip install reportlab")
+                            st.error("⚠️ Instalar reportlab: pip install reportlab")
                         except Exception as e:
-                            st.error(f"Error generando PDF: {e}")
+                            st.error(f"Error: {e}")
                     else:
-                        st.warning("No hay datos para este productor.")
-        else:
-            st.info("No hay datos con los filtros seleccionados.")
-    else:
-        st.info("👆 Selecciona un rango de fechas y presiona **Cargar Recepciones**")
-
+                        st.warning("No hay recepciones para este productor.")
+            else:
+                st.info("No hay productores en el rango de fechas seleccionado.")
