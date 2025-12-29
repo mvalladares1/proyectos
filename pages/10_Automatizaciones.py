@@ -504,6 +504,7 @@ with tab1:
                                         pallet_data['producto_id'] = p.get('producto_id')
                                         pallet_data['picking_id'] = p.get('picking_id')
                                         pallet_data['lot_id'] = p.get('lot_id')
+                                        pallet_data['lot_name'] = p.get('lot_name')  # Nombre del lote original
                                     elif p.get('manual'):
                                         pallet_data['manual'] = True
                                         pallet_data['producto_id'] = p.get('producto_id')

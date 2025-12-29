@@ -603,6 +603,7 @@ class TunelesService:
                     'codigo': pallet['codigo'],
                     'kg': float(pallet.get('kg', 0)),
                     'lote_id': pallet.get('lot_id'),  # Puede venir del frontend
+                    'lote_nombre': pallet.get('lot_name'),  # Nombre del lote desde recepción
                     'producto_id': int(pallet['producto_id']),
                     'ubicacion_id': config['ubicacion_origen_id'], 
                     'package_id': None,  # No asignamos package aún
@@ -1105,12 +1106,16 @@ class TunelesService:
                     'producto_id': producto_id_output
                 })
                 
-                # Nombre de package
-                try:
-                    numero_pallet = pallet['codigo'].replace('PAC', '').replace('PACK', '')
-                    package_name = f"PACK{numero_pallet}-C"
-                except:
-                    package_name = f"{pallet['codigo'].replace('PAC', 'PACK')}-C"
+                # PACKAGE: Extraer solo el número y generar nombre correcto
+                codigo_pallet = pallet['codigo']
+                # Extraer solo el número (quitar PACK o PAC)
+                if codigo_pallet.startswith('PACK'):
+                    numero_pallet = codigo_pallet[4:]  # Quitar 'PACK'
+                elif codigo_pallet.startswith('PAC'):
+                    numero_pallet = codigo_pallet[3:]  # Quitar 'PAC'
+                else:
+                    numero_pallet = codigo_pallet
+                package_name = f"PACK{numero_pallet}-C"
                 
                 package_names.append(package_name)
             
@@ -1126,12 +1131,15 @@ class TunelesService:
                 lote_origen = pallet.get('lote_nombre') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
                 
-                # PACKAGE: Usar el código del pallet (PACK) + sufijo -C
-                try:
-                    numero_pallet = pallet['codigo'].replace('PAC', '').replace('PACK', '')
-                    package_name = f"PACK{numero_pallet}-C"
-                except:
-                    package_name = f"{pallet['codigo'].replace('PAC', 'PACK')}-C"
+                # PACKAGE: Extraer solo el número y generar nombre correcto
+                codigo_pallet = pallet['codigo']
+                if codigo_pallet.startswith('PACK'):
+                    numero_pallet = codigo_pallet[4:]  # Quitar 'PACK'
+                elif codigo_pallet.startswith('PAC'):
+                    numero_pallet = codigo_pallet[3:]  # Quitar 'PAC'
+                else:
+                    numero_pallet = codigo_pallet
+                package_name = f"PACK{numero_pallet}-C"
                 
                 # Obtener IDs del mapa (ya creados en batch)
                 lote_id_output = lotes_map.get(lote_output_name)
