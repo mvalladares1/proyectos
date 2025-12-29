@@ -2377,21 +2377,19 @@ with tab_aprobaciones:
                                 # Aunque save_aprobaciones hace un set update, así que es seguro enviar todo.
                                 ids = sels["id_oculto"].unique().tolist()
                                 if ids:
-                                    if save_aprobaciones(ids):
+                                     if save_aprobaciones(ids):
                                         st.success(f"Aprobadas {len(ids)} recepciones.")
                                         st.rerun()
                                 else:
-                                    # Si ids está vacío es porque desmarcaron todo?
                                     pass
                         with col_b:
-                             # Botón para eliminar aprobación (si se desmarcan)
-                             # En esta UI, si de-select, no pasa nada hasta que se llame una función de eliminar.
-                             # Agregamos botón explícito para consistencia.
                              if estado_filtro != "Pendientes":
-                                 if st.button("↩️ Quitar Aprobación a No Seleccionadas"):
-                                     # Lógica inversa: borrar las que NO tienen check, pero que SI estan en aprobadas_ids?
-                                     # Muy complejo para el usuario.
-                                     # Mejor: Borrar las Seleccionadas (Check = Borrar?) No, Check = Aprobar.
-                                     # Entonces botón: "Eliminar Aprobación de Seleccionadas" (si el estado es Aprobado)
-                                     pass
-
+                                 if st.button("↩️ Quitar Aprobación"):
+                                     sels_del = edited_df[edited_df["Aprobar"] == True]
+                                     ids_del = sels_del["id_oculto"].unique().tolist()
+                                     if ids_del:
+                                         if remove_aprobaciones(ids_del):
+                                             st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
+                                             st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
