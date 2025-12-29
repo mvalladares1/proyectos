@@ -1781,11 +1781,29 @@ with tab_curva:
             try:
                 # Calcular datos de precio y gasto recepcionado por semana desde datos del sistema
                 precios_por_semana = {}
+                
+                # Cargar exclusiones para ignorar costos
+                import json as json_curva
+                exclusiones_ids_curva = []
+                try:
+                    exclusions_file_curva = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
+                    if os.path.exists(exclusions_file_curva):
+                        with open(exclusions_file_curva, 'r') as f:
+                            exclusiones_curva = json_curva.load(f)
+                            exclusiones_ids_curva = exclusiones_curva.get("recepciones", [])
+                except:
+                    pass
+                
                 if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
                     for rec in st.session_state.curva_sistema_raw:
                         fecha_str = rec.get('fecha')
                         if not fecha_str:
                             continue
+                        
+                        # Verificar si esta recepción está excluida de valorización
+                        recep_id_curva = rec.get('id') or rec.get('picking_id')
+                        recep_name_curva = rec.get('albaran', '')
+                        excluir_costo_curva = recep_id_curva in exclusiones_ids_curva or recep_name_curva in exclusiones_ids_curva
                         
                         try:
                             fecha = pd.to_datetime(fecha_str)
@@ -1835,7 +1853,9 @@ with tab_curva:
                             if semana not in precios_por_semana:
                                 precios_por_semana[semana] = {'total_kg': 0, 'total_valor': 0, 'año': año}
                             precios_por_semana[semana]['total_kg'] += kg
-                            precios_por_semana[semana]['total_valor'] += kg * precio if precio > 0 else 0
+                            # Solo sumar valor si NO está excluida
+                            if not excluir_costo_curva:
+                                precios_por_semana[semana]['total_valor'] += kg * precio if precio > 0 else 0
                 
                 # Construir DataFrame para gráficos de precios y gastos
                 precios_data = []
