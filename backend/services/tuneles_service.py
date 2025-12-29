@@ -611,6 +611,8 @@ class TunelesService:
                     'pendiente_recepcion': True,  # Flag para saber que es especial
                     'picking_id': pallet.get('picking_id')  # Guardar picking_id para JSON
                 })
+                # DEBUG: Log de datos del pallet pendiente
+                print(f"DEBUG Pallet Pendiente: codigo={pallet['codigo']}, lot_name={pallet.get('lot_name')}, lot_id={pallet.get('lot_id')}")
                 advertencias.append(f"Pallet {pallet['codigo']} agregado desde Recepción Pendiente (Sin reserva stock)")
                 continue
 
@@ -1053,7 +1055,9 @@ class TunelesService:
                 movimientos_creados += 1
                 print(f"DEBUG: Electricidad agregada correctamente")
         except Exception as e:
-            print(f"Advertencia: No se pudo agregar electricidad: {e}")
+            import traceback
+            print(f"ERROR Electricidad: {e}")
+            print(f"ERROR Traceback: {traceback.format_exc()}")
         
         return movimientos_creados
     
@@ -1081,12 +1085,50 @@ class TunelesService:
         ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
         
         for producto_id_input, data in productos_totales.items():
-            # Obtener producto congelado (output)
-            producto_id_output = PRODUCTOS_TRANSFORMACION.get(producto_id_input)
+            # Obtener producto congelado (output) - DINÁMICO
+            # La lógica es: código 10xxxxxx → 20xxxxxx (cambiar primer dígito de 1 a 2)
+            producto_id_output = None
             
+            try:
+                # Obtener el código del producto de entrada
+                prod_input = self.odoo.search_read(
+                    'product.product',
+                    [('id', '=', producto_id_input)],
+                    ['default_code', 'name'],
+                    limit=1
+                )
+                
+                if prod_input and prod_input[0].get('default_code'):
+                    codigo_input = prod_input[0]['default_code']
+                    
+                    # Transformar código: primer dígito 1 → 2 para variante congelada
+                    if codigo_input and len(codigo_input) >= 1 and codigo_input[0] == '1':
+                        codigo_output = '2' + codigo_input[1:]
+                        
+                        # Buscar producto con el nuevo código
+                        prod_output = self.odoo.search_read(
+                            'product.product',
+                            [('default_code', '=', codigo_output)],
+                            ['id', 'name'],
+                            limit=1
+                        )
+                        
+                        if prod_output:
+                            producto_id_output = prod_output[0]['id']
+                            print(f"DEBUG Transformación: {codigo_input} ({prod_input[0]['name']}) → {codigo_output} ({prod_output[0]['name']})")
+                        else:
+                            print(f"DEBUG: Producto congelado {codigo_output} no encontrado, usando mismo producto")
+                    else:
+                        print(f"DEBUG: Código {codigo_input} no empieza con 1, usando fallback estático")
+                else:
+                    print(f"DEBUG: Producto ID {producto_id_input} sin código, usando fallback estático")
+                    
+            except Exception as e:
+                print(f"ERROR buscando producto congelado: {e}")
+            
+            # Fallback: usar mapeo estático o mismo producto
             if not producto_id_output:
-                # Si no hay mapeo, usar el mismo producto
-                producto_id_output = producto_id_input
+                producto_id_output = PRODUCTOS_TRANSFORMACION.get(producto_id_input, producto_id_input)
             
             # Crear stock.move principal
             move_data = {
@@ -1113,6 +1155,10 @@ class TunelesService:
                 # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
                 lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
+                
+                # DEBUG: Log detallado del lote
+                print(f"DEBUG Subprod: pallet={pallet.get('codigo')}, lote_nombre={pallet.get('lote_nombre')}, lot_name={pallet.get('lot_name')}, lote_origen={lote_origen}, lote_output={lote_output_name}")
+                
                 lotes_data.append({
                     'codigo': lote_output_name,
                     'producto_id': producto_id_output
