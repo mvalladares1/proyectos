@@ -1206,20 +1206,35 @@ class TunelesService:
             return {}
         
         codigos = [d['codigo'] for d in lotes_data]
+        producto_ids = list(set(d['producto_id'] for d in lotes_data))
         
-        # LLAMADA 1: Buscar todos los lotes existentes
+        # LLAMADA 1: Buscar todos los lotes existentes por nombre Y producto
         lotes_existentes = self.odoo.search_read(
             'stock.lot',
-            [('name', 'in', codigos)],
-            ['name', 'id']
+            [('name', 'in', codigos), ('product_id', 'in', producto_ids)],
+            ['name', 'id', 'product_id']
         )
         
-        lotes_map = {lot['name']: lot['id'] for lot in lotes_existentes}
+        # Crear mapa con clave compuesta: (nombre, producto_id) -> lot_id
+        lotes_existentes_set = {}
+        for lot in lotes_existentes:
+            key = (lot['name'], lot['product_id'][0] if lot['product_id'] else 0)
+            lotes_existentes_set[key] = lot['id']
         
-        # Identificar los que faltan
-        faltantes = [d for d in lotes_data if d['codigo'] not in lotes_map]
+        # Mapa simple por nombre para retornar
+        lotes_map = {}
+        faltantes = []
         
-        # LLAMADA 2: Crear TODOS los faltantes en una sola llamada
+        for d in lotes_data:
+            key = (d['codigo'], d['producto_id'])
+            if key in lotes_existentes_set:
+                # Ya existe, reusar
+                lotes_map[d['codigo']] = lotes_existentes_set[key]
+            else:
+                # No existe, necesita crearse
+                faltantes.append(d)
+        
+        # LLAMADA 2: Crear SOLO los faltantes
         if faltantes:
             nuevos_ids = self.odoo.execute('stock.lot', 'create', [
                 {
