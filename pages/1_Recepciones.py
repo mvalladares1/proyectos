@@ -2325,23 +2325,36 @@ with tab_aprobaciones:
                     
                 precio_real = float(p.get('Costo Unitario', 0) or p.get('precio', 0) or 0)
                 
-                # Normalizar tipo de fruta
-                tf = (rec.get('tipo_fruta') or '').strip()
-                if not tf: tf = (p.get('TipoFruta') or '').strip()
-                prod_name = (p.get('Producto') or p.get('producto') or '').upper()
-                    
-                man = (p.get('Manejo') or 'Convencional').strip()
-                man_norm = 'Orgánico' if 'ORGAN' in man.upper() else 'Convencional'
+                # Obtener nombre del producto
+                prod_name_raw = p.get('Producto') or p.get('producto') or ''
+                prod_name = prod_name_raw.upper()
                 
-                search_str = f"{tf.upper()} {prod_name}"
-                esp_base = 'Otro'
-                if 'ARAND' in search_str or 'BLUEBERRY' in search_str: esp_base = 'Arándano'
-                elif 'FRAM' in search_str or 'MEEKER' in search_str or 'HERITAGE' in search_str: esp_base = 'Frambuesa'
-                elif 'FRUTI' in search_str or 'STRAW' in search_str: esp_base = 'Frutilla'
-                elif 'MORA' in search_str or 'BLACKBERRY' in search_str: esp_base = 'Mora'
-                elif 'CEREZA' in search_str or 'CHERRY' in search_str: esp_base = 'Cereza'
+                # Usar TipoFruta del producto directamente (como hace KPIs)
+                tipo_fruta = (p.get('TipoFruta') or rec.get('tipo_fruta') or '').strip()
+                manejo = (p.get('Manejo') or '').strip()
                 
-                key_ppto = f"{esp_base} {man_norm}"
+                # Si hay TipoFruta directo, usarlo
+                if tipo_fruta:
+                    esp_base = tipo_fruta
+                    man_norm = manejo if manejo else 'Convencional'
+                else:
+                    # Fallback: detectar desde nombre del producto
+                    man_norm = 'Orgánico' if ('ORG' in prod_name or 'ORGAN' in manejo.upper()) else 'Convencional'
+                    esp_base = 'Otro'
+                    # Detectar especie desde código/nombre
+                    if 'AR ' in prod_name or 'AR HB' in prod_name or 'ARAND' in prod_name or 'BLUEBERRY' in prod_name:
+                        esp_base = 'Arándano'
+                    elif 'FR ' in prod_name or 'FRAM' in prod_name or 'MEEKER' in prod_name or 'HERITAGE' in prod_name or 'RASPBERRY' in prod_name:
+                        esp_base = 'Frambuesa'
+                    elif 'FT ' in prod_name or 'FRUTI' in prod_name or 'STRAW' in prod_name:
+                        esp_base = 'Frutilla'
+                    elif 'MO ' in prod_name or 'MORA' in prod_name or 'BLACKBERRY' in prod_name:
+                        esp_base = 'Mora'
+                    elif 'CE ' in prod_name or 'CEREZA' in prod_name or 'CHERRY' in prod_name:
+                        esp_base = 'Cereza'
+                
+                especie_manejo = f"{esp_base} {man_norm}"
+                key_ppto = especie_manejo
                 ppto_val = precios_ppto_dict.get(key_ppto, 0)
                 
                 desv = 0
@@ -2358,14 +2371,15 @@ with tab_aprobaciones:
                     "Fecha": fmt_fecha(fecha_recep),
                     "Productor": productor,
                     "OC": oc,
-                    "Especie": f"{esp_base} {man_norm}",
+                    "Producto": prod_name_raw[:40] if len(prod_name_raw) > 40 else prod_name_raw,  # Truncar si muy largo
+                    "Especie": especie_manejo,
                     "Kg": fmt_numero(kg, 2),
                     "$/Kg": fmt_dinero(precio_real),
                     "PPTO": fmt_dinero(ppto_val),
                     "Desv": f"{desv*100:.1f}%",
                     "🚦": sema,
                     "_id": recep_name,
-                    "_kg_raw": kg  # Para calcular suma
+                    "_kg_raw": kg
                 })
         
         if filas_aprobacion:
