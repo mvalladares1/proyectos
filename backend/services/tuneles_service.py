@@ -324,6 +324,7 @@ class TunelesService:
             ubicacion = pkg_quants[0]['location_id']
             producto_id = pkg_quants[0]['product_id'][0] if pkg_quants[0]['product_id'] else None
             lote_id = pkg_quants[0]['lot_id'][0] if pkg_quants[0].get('lot_id') else None
+            lote_nombre = pkg_quants[0]['lot_id'][1] if pkg_quants[0].get('lot_id') else None
             
             resultados.append({
                 'existe': True,
@@ -334,7 +335,8 @@ class TunelesService:
                 'producto_id': producto_id,
                 'producto_nombre': pkg_quants[0]['product_id'][1] if pkg_quants[0]['product_id'] else None,
                 'package_id': package['id'],
-                'lote_id': lote_id
+                'lote_id': lote_id,
+                'lote_nombre': lote_nombre
             })
         
         return resultados
@@ -654,6 +656,7 @@ class TunelesService:
                 'codigo': pallet['codigo'],
                 'kg': kg,
                 'lote_id': validacion.get('lote_id'),
+                'lote_nombre': validacion.get('lote_nombre'),  # Nombre del lote original
                 'producto_id': validacion.get('producto_id'),
                 'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id']),
                 'package_id': validacion.get('package_id'),  # ID del paquete origen
@@ -1094,10 +1097,11 @@ class TunelesService:
             package_names = []
             
             for pallet in data['pallets']:
-                # Código con sufijo -C
-                codigo_output = f"{pallet['codigo']}-C"
+                # LOTE: Usar nombre del lote original + sufijo -C
+                lote_origen = pallet.get('lote_nombre') or pallet.get('codigo')
+                lote_output_name = f"{lote_origen}-C"
                 lotes_data.append({
-                    'codigo': codigo_output,
+                    'codigo': lote_output_name,
                     'producto_id': producto_id_output
                 })
                 
@@ -1118,9 +1122,11 @@ class TunelesService:
             
             # Ahora crear los move.lines
             for idx, pallet in enumerate(data['pallets']):
-                codigo_output = f"{pallet['codigo']}-C"
+                # LOTE: Usar nombre del lote original + sufijo -C
+                lote_origen = pallet.get('lote_nombre') or pallet.get('codigo')
+                lote_output_name = f"{lote_origen}-C"
                 
-                # Generar nombre de package
+                # PACKAGE: Usar el código del pallet (PACK) + sufijo -C
                 try:
                     numero_pallet = pallet['codigo'].replace('PAC', '').replace('PACK', '')
                     package_name = f"PACK{numero_pallet}-C"
@@ -1128,7 +1134,7 @@ class TunelesService:
                     package_name = f"{pallet['codigo'].replace('PAC', 'PACK')}-C"
                 
                 # Obtener IDs del mapa (ya creados en batch)
-                lote_id_output = lotes_map.get(codigo_output)
+                lote_id_output = lotes_map.get(lote_output_name)
                 package_id = packages_map.get(package_name)
                 
                 move_line_data = {
