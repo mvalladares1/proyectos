@@ -2359,12 +2359,13 @@ with tab_aprobaciones:
                     "Productor": productor,
                     "OC": oc,
                     "Especie": f"{esp_base} {man_norm}",
-                    "Kg": kg,
-                    "$/Kg": round(precio_real, 0),
-                    "PPTO": round(ppto_val, 0),
-                    "Desv": desv,
+                    "Kg": fmt_numero(kg, 2),
+                    "$/Kg": fmt_dinero(precio_real),
+                    "PPTO": fmt_dinero(ppto_val),
+                    "Desv": f"{desv*100:.1f}%",
                     "🚦": sema,
-                    "_id": recep_name
+                    "_id": recep_name,
+                    "_kg_raw": kg  # Para calcular suma
                 })
         
         if filas_aprobacion:
@@ -2398,12 +2399,13 @@ with tab_aprobaciones:
                 df_filtered,
                 column_config={
                     "Sel": st.column_config.CheckboxColumn("✓", default=False, width="small"),
-                    "Desv": st.column_config.NumberColumn("Desv", format="%.1f%%", width="small"),
-                    "$/Kg": st.column_config.NumberColumn("$/Kg", format="$ %,.0f"),
-                    "PPTO": st.column_config.NumberColumn("PPTO", format="$ %,.0f"),
-                    "Kg": st.column_config.NumberColumn("Kg", format="%,.0f"),
+                    "Desv": st.column_config.TextColumn("Desv", width="small"),
+                    "$/Kg": st.column_config.TextColumn("$/Kg"),
+                    "PPTO": st.column_config.TextColumn("PPTO"),
+                    "Kg": st.column_config.TextColumn("Kg"),
                     "🚦": st.column_config.TextColumn("🚦", width="small"),
-                    "_id": None
+                    "_id": None,
+                    "_kg_raw": None
                 },
                 column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Especie", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
                 disabled=["Recepción", "Fecha", "Productor", "OC", "Especie", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
@@ -2416,12 +2418,12 @@ with tab_aprobaciones:
             # --- BARRA DE ESTADO ---
             seleccionados = edited_df[edited_df["Sel"] == True]
             n_sel = len(seleccionados)
-            kg_sel = seleccionados["Kg"].sum() if n_sel > 0 else 0
+            kg_sel = seleccionados["_kg_raw"].sum() if n_sel > 0 else 0
             receps_sel = seleccionados["_id"].nunique() if n_sel > 0 else 0
             
             st.markdown(f"""
             <div style="background: rgba(50,100,150,0.3); padding: 10px; border-radius: 8px; margin: 10px 0;">
-                <b>📊 Selección:</b> {n_sel} líneas · {receps_sel} recepciones · {kg_sel:,.0f} Kg
+                <b>📊 Selección:</b> {n_sel} líneas · {receps_sel} recepciones · {fmt_numero(kg_sel, 2)} Kg
             </div>
             """, unsafe_allow_html=True)
             
