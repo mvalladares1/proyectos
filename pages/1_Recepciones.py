@@ -2254,12 +2254,13 @@ with tab_aprobaciones:
             try:
                 # 1. Cargar Recepciones
                 params = {
+                    "username": username,
+                    "password": password,
                     "fecha_inicio": fecha_inicio_aprob.strftime("%Y-%m-%d"),
                     "fecha_fin": fecha_fin_aprob.strftime("%Y-%m-%d"),
                     "origen": None 
                 }
-                # Auth using variables from top of file
-                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60, auth=(username, password))
+                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
                 
                 if resp.status_code != 200:
                     st.error(f"Error cargando recepciones: {resp.text}")
