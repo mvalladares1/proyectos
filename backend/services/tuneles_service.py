@@ -505,6 +505,311 @@ class TunelesService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
+    def obtener_detalle_pendientes(self, mo_id: int) -> Dict:
+        """
+        Obtiene el detalle de los pallets pendientes de una MO,
+        verificando cuáles ya tienen stock disponible.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: success, mo_name, pallets (lista con estado de cada uno)
+        """
+        try:
+            import json
+            
+            # Leer MO y su JSON de pendientes
+            mo_data = self.odoo.read('mrp.production', [mo_id], 
+                ['name', 'x_studio_pending_receptions', 'move_raw_ids'])[0]
+            
+            mo_name = mo_data['name']
+            pending_json = mo_data.get('x_studio_pending_receptions')
+            
+            if not pending_json:
+                return {
+                    'success': True,
+                    'mo_id': mo_id,
+                    'mo_name': mo_name,
+                    'tiene_pendientes': False,
+                    'pallets': [],
+                    'mensaje': 'Esta MO no tiene pendientes registrados'
+                }
+            
+            # Parsear JSON
+            pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            
+            if not pending_data.get('pending'):
+                return {
+                    'success': True,
+                    'mo_id': mo_id,
+                    'mo_name': mo_name,
+                    'tiene_pendientes': False,
+                    'pallets': [],
+                    'mensaje': 'Pendientes ya fueron completados'
+                }
+            
+            pallets_info = pending_data.get('pallets', [])
+            picking_ids = pending_data.get('picking_ids', [])
+            
+            # Obtener info de pickings para mostrar nombre
+            picking_names = {}
+            if picking_ids:
+                pickings = self.odoo.search_read(
+                    'stock.picking',
+                    [('id', 'in', picking_ids)],
+                    ['id', 'name', 'state']
+                )
+                picking_names = {p['id']: {'name': p['name'], 'state': p['state']} for p in pickings}
+            
+            # Obtener los componentes actuales de la MO para saber cuáles ya se agregaron
+            move_raw_ids = mo_data.get('move_raw_ids', [])
+            componentes_existentes = set()
+            if move_raw_ids:
+                moves = self.odoo.search_read(
+                    'stock.move.line',
+                    [('move_id', 'in', move_raw_ids)],
+                    ['package_id']
+                )
+                for m in moves:
+                    if m.get('package_id'):
+                        componentes_existentes.add(m['package_id'][1])  # Nombre del package
+            
+            # Verificar disponibilidad de cada pallet
+            resultado_pallets = []
+            for p in pallets_info:
+                codigo = p.get('codigo', '')
+                kg = p.get('kg', 0)
+                producto_id = p.get('producto_id')
+                picking_id = p.get('picking_id')
+                
+                # Verificar si el pallet ya fue agregado como componente
+                ya_agregado = codigo in componentes_existentes
+                
+                # Verificar si tiene stock disponible
+                quants = self.odoo.search_read(
+                    'stock.quant',
+                    [
+                        ('package_id.name', '=', codigo),
+                        ('quantity', '>', 0),
+                        ('location_id.usage', '=', 'internal')
+                    ],
+                    ['quantity', 'location_id', 'product_id', 'lot_id'],
+                    limit=1
+                )
+                
+                tiene_stock = len(quants) > 0
+                
+                picking_info = picking_names.get(picking_id, {})
+                picking_state = picking_info.get('state', 'unknown')
+                picking_name = picking_info.get('name', 'N/A')
+                
+                # Determinar estado
+                if ya_agregado:
+                    estado = 'agregado'
+                    estado_label = '✅ Ya agregado'
+                elif tiene_stock:
+                    estado = 'disponible'
+                    estado_label = '🟢 Disponible'
+                else:
+                    estado = 'pendiente'
+                    estado_label = '🟠 Pendiente'
+                
+                resultado_pallets.append({
+                    'codigo': codigo,
+                    'kg': kg,
+                    'producto_id': producto_id,
+                    'picking_id': picking_id,
+                    'picking_name': picking_name,
+                    'picking_state': picking_state,
+                    'estado': estado,
+                    'estado_label': estado_label,
+                    'tiene_stock': tiene_stock,
+                    'ya_agregado': ya_agregado,
+                    'quant_info': quants[0] if quants else None
+                })
+            
+            # Contar estados
+            total = len(resultado_pallets)
+            agregados = sum(1 for p in resultado_pallets if p['estado'] == 'agregado')
+            disponibles = sum(1 for p in resultado_pallets if p['estado'] == 'disponible')
+            pendientes = sum(1 for p in resultado_pallets if p['estado'] == 'pendiente')
+            
+            return {
+                'success': True,
+                'mo_id': mo_id,
+                'mo_name': mo_name,
+                'tiene_pendientes': pendientes > 0,
+                'pallets': resultado_pallets,
+                'resumen': {
+                    'total': total,
+                    'agregados': agregados,
+                    'disponibles': disponibles,
+                    'pendientes': pendientes
+                },
+                'todos_listos': pendientes == 0 and disponibles == 0,
+                'hay_disponibles_sin_agregar': disponibles > 0
+            }
+            
+        except Exception as e:
+            import traceback
+            return {
+                'success': False, 
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
+    
+    def agregar_componentes_disponibles(self, mo_id: int) -> Dict:
+        """
+        Agrega como componentes los pallets que ahora están disponibles.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: success, agregados (cantidad), mensaje
+        """
+        try:
+            import json
+            
+            # Obtener detalle actual
+            detalle = self.obtener_detalle_pendientes(mo_id)
+            if not detalle.get('success'):
+                return detalle
+            
+            if not detalle.get('hay_disponibles_sin_agregar'):
+                return {
+                    'success': True,
+                    'agregados': 0,
+                    'mensaje': 'No hay pallets disponibles pendientes de agregar'
+                }
+            
+            # Obtener config del túnel basado en la MO
+            mo_data = self.odoo.read('mrp.production', [mo_id], 
+                ['name', 'product_id', 'x_studio_pending_receptions'])[0]
+            mo_name = mo_data['name']
+            
+            # Identificar túnel por producto
+            config = None
+            for codigo, cfg in TUNELES_CONFIG.items():
+                if cfg['producto_proceso_id'] == mo_data['product_id'][0]:
+                    config = cfg
+                    break
+            
+            if not config:
+                return {
+                    'success': False,
+                    'error': 'No se pudo identificar el túnel de esta MO'
+                }
+            
+            ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
+            
+            # Procesar pallets disponibles
+            agregados = 0
+            pallets_agregados = []
+            pending_json = mo_data.get('x_studio_pending_receptions')
+            pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            
+            for pallet in detalle['pallets']:
+                if pallet['estado'] != 'disponible':
+                    continue
+                
+                codigo = pallet['codigo']
+                producto_id = pallet['producto_id']
+                quant_info = pallet.get('quant_info', {})
+                kg = quant_info.get('quantity', pallet['kg'])
+                lote_id = quant_info.get('lot_id', [None])[0] if quant_info.get('lot_id') else None
+                ubicacion_id = quant_info.get('location_id', [None])[0] if quant_info.get('location_id') else config['ubicacion_origen_id']
+                
+                # Buscar el package_id
+                package = self.odoo.search_read(
+                    'stock.quant.package',
+                    [('name', '=', codigo)],
+                    ['id'],
+                    limit=1
+                )
+                package_id = package[0]['id'] if package else None
+                
+                # Crear stock.move para el componente
+                move_data = {
+                    'name': mo_name,
+                    'product_id': producto_id,
+                    'product_uom_qty': kg,
+                    'product_uom': 12,  # kg
+                    'location_id': ubicacion_id,
+                    'location_dest_id': ubicacion_virtual,
+                    'state': 'draft',
+                    'raw_material_production_id': mo_id,
+                    'company_id': 1,
+                    'reference': mo_name
+                }
+                
+                move_id = self.odoo.execute('stock.move', 'create', move_data)
+                
+                # Crear stock.move.line con qty_done
+                move_line_data = {
+                    'move_id': move_id,
+                    'product_id': producto_id,
+                    'qty_done': kg,
+                    'reserved_uom_qty': kg,
+                    'product_uom_id': 12,
+                    'location_id': ubicacion_id,
+                    'location_dest_id': ubicacion_virtual,
+                    'state': 'draft',
+                    'reference': mo_name,
+                    'company_id': 1
+                }
+                
+                if lote_id:
+                    move_line_data['lot_id'] = lote_id
+                if package_id:
+                    move_line_data['package_id'] = package_id
+                
+                self.odoo.execute('stock.move.line', 'create', move_line_data)
+                
+                agregados += 1
+                pallets_agregados.append(codigo)
+            
+            # Actualizar JSON: marcar pallets como procesados
+            pallets_actualizados = []
+            for p in pending_data.get('pallets', []):
+                if p.get('codigo') in pallets_agregados:
+                    p['procesado'] = True
+                    p['procesado_at'] = datetime.now().isoformat()
+                pallets_actualizados.append(p)
+            
+            pending_data['pallets'] = pallets_actualizados
+            
+            # Verificar si quedan pendientes
+            pendientes_restantes = sum(1 for p in pallets_actualizados 
+                                       if not p.get('procesado'))
+            if pendientes_restantes == 0:
+                pending_data['pending'] = False
+                pending_data['completed_at'] = datetime.now().isoformat()
+            
+            # Guardar JSON actualizado
+            self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'mrp.production', 'write',
+                [[mo_id], {'x_studio_pending_receptions': json.dumps(pending_data)}]
+            )
+            
+            return {
+                'success': True,
+                'agregados': agregados,
+                'pallets_agregados': pallets_agregados,
+                'pendientes_restantes': pendientes_restantes,
+                'mensaje': f'Se agregaron {agregados} componentes. Quedan {pendientes_restantes} pendientes.'
+            }
+            
+        except Exception as e:
+            import traceback
+            return {
+                'success': False,
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
+    
     def crear_orden_fabricacion(
         self,
         tunel: str,

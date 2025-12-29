@@ -733,5 +733,110 @@ with tab2:
 </div>
 </div>'''
             st.markdown(html_content, unsafe_allow_html=True)
+            
+            # Expander para órdenes con pendientes
+            if tiene_pendientes:
+                with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
+                    orden_id = orden.get('id')
+                    
+                    # Botón para cargar/actualizar detalle
+                    col_btn1, col_btn2, col_btn3 = st.columns(3)
+                    
+                    with col_btn1:
+                        if st.button("🔄 Validar Disponibilidad", key=f"validar_{orden_id}"):
+                            try:
+                                resp = requests.get(
+                                    f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes",
+                                    params={"username": username, "password": password}
+                                )
+                                if resp.status_code == 200:
+                                    st.session_state[f'pendientes_{orden_id}'] = resp.json()
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error: {resp.text}")
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                    
+                    # Mostrar detalle si está cargado
+                    detalle_key = f'pendientes_{orden_id}'
+                    if detalle_key in st.session_state:
+                        detalle = st.session_state[detalle_key]
+                        
+                        if detalle.get('success'):
+                            resumen = detalle.get('resumen', {})
+                            st.markdown(f"""
+                            **Resumen:** ✅ {resumen.get('agregados', 0)} agregados | 
+                            🟢 {resumen.get('disponibles', 0)} disponibles | 
+                            🟠 {resumen.get('pendientes', 0)} pendientes
+                            """)
+                            
+                            # Tabla de pallets
+                            pallets = detalle.get('pallets', [])
+                            if pallets:
+                                import pandas as pd
+                                df_pallets = pd.DataFrame([
+                                    {
+                                        'Código': p['codigo'],
+                                        'Kg': f"{p['kg']:,.2f}",
+                                        'Estado': p['estado_label'],
+                                        'Recepción': p.get('picking_name', 'N/A')
+                                    }
+                                    for p in pallets
+                                ])
+                                st.dataframe(df_pallets, use_container_width=True, hide_index=True)
+                            
+                            # Botones de acción
+                            col_a, col_b = st.columns(2)
+                            
+                            with col_a:
+                                if detalle.get('hay_disponibles_sin_agregar'):
+                                    if st.button("✅ Agregar Disponibles", key=f"agregar_{orden_id}", type="primary"):
+                                        try:
+                                            resp = requests.post(
+                                                f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles",
+                                                params={"username": username, "password": password}
+                                            )
+                                            if resp.status_code == 200:
+                                                result = resp.json()
+                                                st.success(f"✅ {result.get('mensaje')}")
+                                                # Recargar detalle
+                                                del st.session_state[detalle_key]
+                                                st.rerun()
+                                            else:
+                                                st.error(f"Error: {resp.text}")
+                                        except Exception as e:
+                                            st.error(f"Error: {e}")
+                            
+                            with col_b:
+                                if detalle.get('todos_listos'):
+                                    if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}"):
+                                        try:
+                                            resp = requests.post(
+                                                f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes",
+                                                params={"username": username, "password": password}
+                                            )
+                                            if resp.status_code == 200:
+                                                st.success("✅ Pendientes completados!")
+                                                st.cache_data.clear()
+                                                st.rerun()
+                                            else:
+                                                st.error(f"Error: {resp.text}")
+                                        except Exception as e:
+                                            st.error(f"Error: {e}")
+                            
+                            # Link a Odoo para aprobar recepciones
+                            pendientes_lista = [p for p in pallets if p['estado'] == 'pendiente']
+                            if pendientes_lista:
+                                picking_ids = list(set(p.get('picking_id') for p in pendientes_lista if p.get('picking_id')))
+                                if picking_ids:
+                                    st.markdown("**📋 Recepciones pendientes de aprobar:**")
+                                    for pid in picking_ids:
+                                        picking_name = next((p['picking_name'] for p in pendientes_lista if p.get('picking_id') == pid), f"Picking {pid}")
+                                        odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={pid}&model=stock.picking&view_type=form"
+                                        st.markdown(f"- [{picking_name}]({odoo_url}) ← Click para aprobar en Odoo")
+                        else:
+                            st.error(detalle.get('error', 'Error desconocido'))
+                    else:
+                        st.info("👆 Click en 'Validar Disponibilidad' para ver el detalle de pallets")
 
 
