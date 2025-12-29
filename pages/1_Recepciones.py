@@ -343,6 +343,11 @@ with tab_kpis:
             block_val = row.get('total_block', 0) or 0
             tipo_fruta_qc = (row.get('tipo_fruta') or '').strip()  # Tipo de fruta del control de calidad
             
+            # Verificar si esta recepción está excluida de valorización
+            recep_id = row.get('id') or row.get('picking_id')
+            recep_name = row.get('albaran', '')
+            excluir_costo = recep_id in exclusiones_ids or recep_name in exclusiones_ids
+            
             manejos_por_tipo = {}  # Rastrear manejos por tipo de fruta
         
             for p in row.get('productos', []) or []:
@@ -371,7 +376,9 @@ with tab_kpis:
                     agrup[tipo][manejo] = {'kg': 0.0, 'costo': 0.0, 'iqf_vals': [], 'block_vals': []}
             
                 agrup[tipo][manejo]['kg'] += p.get('Kg Hechos', 0) or 0
-                agrup[tipo][manejo]['costo'] += p.get('Costo Total', 0) or 0
+                # Solo sumar costo si NO está excluida
+                if not excluir_costo:
+                    agrup[tipo][manejo]['costo'] += p.get('Costo Total', 0) or 0
         
             # Agregar IQF/Block SOLO al tipo de fruta que corresponde al QC
             # (no a todos los productos, ya que IQF/Block son mediciones del tipo_fruta del QC)
