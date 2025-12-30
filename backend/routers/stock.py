@@ -1,12 +1,33 @@
 """
 Router de Stock - Gestión de cámaras, pallets y lotes
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from typing import Optional
+from pydantic import BaseModel
 
 from backend.services.stock_service import StockService
 
 router = APIRouter(prefix="/api/v1/stock", tags=["stock"])
+
+class MoveRequest(BaseModel):
+    pallet_code: str
+    target_location_id: int
+    username: str
+    password: str
+
+@router.post("/move")
+async def move_pallet(request: MoveRequest):
+    """
+    Mueve un pallet a una ubicación destino.
+    Maneja tanto Stock Real (Transferencia) como Pre-Recepción (Reasignación).
+    """
+    try:
+        service = StockService(username=request.username, password=request.password)
+        result = service.move_pallet(request.pallet_code, request.target_location_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/camaras")
