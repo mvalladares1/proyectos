@@ -116,52 +116,54 @@ if st.sidebar.button("🔄 Consultar Rendimiento", type="primary", use_container
         "fecha_fin": fecha_fin.strftime("%Y-%m-%d")
     }
     
-    with st.spinner("Cargando datos de rendimiento..."):
+    # Función para cargar datos con timeout reducido y manejo de errores individual
+    def safe_api_call(url, params, timeout=45):
         try:
-            # Obtener overview
-            resp_overview = requests.get(f"{API_URL}/api/v1/rendimiento/overview", params=params, timeout=120)
-            if resp_overview.status_code == 200:
-                st.session_state.rend_data = resp_overview.json()
-            
-            # Obtener lotes
-            resp_lotes = requests.get(f"{API_URL}/api/v1/rendimiento/lotes", params=params, timeout=120)
-            if resp_lotes.status_code == 200:
-                st.session_state.rend_lotes = resp_lotes.json()
-            
-            # Obtener proveedores
-            resp_prov = requests.get(f"{API_URL}/api/v1/rendimiento/proveedores", params=params, timeout=120)
-            if resp_prov.status_code == 200:
-                st.session_state.rend_proveedores = resp_prov.json()
-            
-            # Obtener MOs
-            resp_mos = requests.get(f"{API_URL}/api/v1/rendimiento/mos", params=params, timeout=120)
-            if resp_mos.status_code == 200:
-                st.session_state.rend_mos = resp_mos.json()
-            
-            # Obtener ranking
-            resp_ranking = requests.get(f"{API_URL}/api/v1/rendimiento/ranking", params=params, timeout=120)
-            if resp_ranking.status_code == 200:
-                st.session_state.rend_ranking = resp_ranking.json()
-            
-            # Obtener salas
-            resp_salas = requests.get(f"{API_URL}/api/v1/rendimiento/salas", params=params, timeout=120)
-            if resp_salas.status_code == 200:
-                st.session_state.rend_salas = resp_salas.json()
-            
-            # Obtener detalle PT
-            resp_pt = requests.get(f"{API_URL}/api/v1/rendimiento/pt-detalle", params=params, timeout=120)
-            if resp_pt.status_code == 200:
-                st.session_state.rend_pt_detalle = resp_pt.json()
-            
-            # Obtener consolidado por fruta
-            resp_cons = requests.get(f"{API_URL}/api/v1/rendimiento/consolidado", params=params, timeout=120)
-            if resp_cons.status_code == 200:
-                st.session_state.rend_consolidado = resp_cons.json()
-                
+            resp = requests.get(url, params=params, timeout=timeout)
+            if resp.status_code == 200:
+                return resp.json()
+        except requests.exceptions.Timeout:
+            st.warning(f"Timeout en {url.split('/')[-1]}")
         except requests.exceptions.ConnectionError:
-            st.error("No se puede conectar al servidor API.")
+            pass
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.warning(f"Error en {url.split('/')[-1]}: {str(e)[:50]}")
+        return None
+    
+    progress_bar = st.progress(0, text="Cargando datos...")
+    
+    try:
+        # === OPTIMIZADO: Usar endpoint unificado /dashboard ===
+        # Este endpoint retorna overview, consolidado, mos y salas en UNA sola llamada
+        # Reduce queries a Odoo de ~4N a ~2N (donde N = número de MOs)
+        progress_bar.progress(15, text="Cargando dashboard principal...")
+        dashboard_data = safe_api_call(f"{API_URL}/api/v1/rendimiento/dashboard", params, timeout=90)
+        
+        if dashboard_data:
+            st.session_state.rend_data = dashboard_data.get('overview')
+            st.session_state.rend_consolidado = dashboard_data.get('consolidado')
+            st.session_state.rend_mos = dashboard_data.get('mos')
+            st.session_state.rend_salas = dashboard_data.get('salas')
+        
+        # Solo llamadas adicionales para datos que no están en /dashboard
+        progress_bar.progress(50, text="Cargando lotes...")
+        st.session_state.rend_lotes = safe_api_call(f"{API_URL}/api/v1/rendimiento/lotes", params)
+        
+        progress_bar.progress(65, text="Cargando proveedores...")
+        st.session_state.rend_proveedores = safe_api_call(f"{API_URL}/api/v1/rendimiento/proveedores", params)
+        
+        progress_bar.progress(80, text="Cargando ranking...")
+        st.session_state.rend_ranking = safe_api_call(f"{API_URL}/api/v1/rendimiento/ranking", params)
+        
+        progress_bar.progress(95, text="Cargando detalle PT...")
+        st.session_state.rend_pt_detalle = safe_api_call(f"{API_URL}/api/v1/rendimiento/pt-detalle", params)
+        
+        progress_bar.progress(100, text="¡Completado!")
+        progress_bar.empty()
+                
+    except Exception as e:
+        progress_bar.empty()
+        st.error(f"Error general: {str(e)}")
 
 # --- Mostrar datos ---
 data = st.session_state.rend_data
