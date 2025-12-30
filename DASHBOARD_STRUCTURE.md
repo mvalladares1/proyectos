@@ -332,11 +332,103 @@ extra-streamlit-components>=0.1.60  # Cookies (opcional)
 
 ---
 
-## 10. TODOs / WIP
+## 10. Troubleshooting
+
+### Problema: "Port 8501 is already in use"
+
+**Síntoma:** El servicio `rio-futuro-web` falla con error "Port 8501 is already in use"
+
+**Causa:** Alguien ejecutó un Streamlit manualmente sin detenerlo, ocupando el puerto.
+
+**Solución:**
+```bash
+# 1. Identificar el proceso fantasma
+sudo lsof -i :8501
+
+# 2. Matar el proceso (reemplazar PID con el número real)
+sudo kill -9 [PID]
+
+# 3. Reiniciar el servicio
+sudo systemctl restart rio-futuro-web
+
+# 4. Verificar
+sudo systemctl status rio-futuro-web
+```
+
+---
+
+### Problema: "404 Not Found" al acceder a /dashboards/ (sin puerto)
+
+**Síntoma:** El dashboard funciona con `http://IP:8501/dashboards/` pero no con `http://IP/dashboards/`
+
+**Causa:** Configuración incorrecta del proxy en Nginx. El `proxy_pass` tiene trailing slash `/` que elimina el path base.
+
+**Configuración INCORRECTA:**
+```nginx
+location ^~ /dashboards/ {
+    proxy_pass http://127.0.0.1:8501/;  # ❌ El / final quita /dashboards/
+}
+```
+
+**Configuración CORRECTA:**
+```nginx
+location ^~ /dashboards/ {
+    proxy_pass http://127.0.0.1:8501;   # ✅ Sin / final, preserva /dashboards/
+}
+```
+
+**Solución:**
+```bash
+# 1. Editar configuración
+sudo nano /etc/nginx/sites-available/rio-futuro-dashboards
+
+# 2. Cambiar proxy_pass (quitar el / final)
+# De: proxy_pass http://127.0.0.1:8501/;
+# A:  proxy_pass http://127.0.0.1:8501;
+
+# 3. Probar sintaxis
+sudo nginx -t
+
+# 4. Recargar Nginx
+sudo systemctl reload nginx
+```
+
+---
+
+### Configuración de Referencia
+
+**Archivos de servicio systemd:**
+- `/etc/systemd/system/rio-futuro-api.service` → Backend FastAPI (puerto 8000)
+- `/etc/systemd/system/rio-futuro-web.service` → Frontend Streamlit (puerto 8501)
+
+**Configuración Nginx:**
+- `/etc/nginx/sites-available/rio-futuro-dashboards`
+
+**Configuración Streamlit:**
+- `/home/debian/rio-futuro-dashboards/app/.streamlit/config.toml`
+  - `baseUrlPath = "dashboards"` (requiere que Nginx preserve el path)
+
+**Comandos útiles:**
+```bash
+# Ver logs en tiempo real
+sudo journalctl -u rio-futuro-web -f
+sudo journalctl -u rio-futuro-api -f
+
+# Ver qué usa cada puerto
+sudo lsof -i :8501
+sudo lsof -i :8000
+
+# Reiniciar todo
+sudo systemctl restart rio-futuro-api rio-futuro-web nginx
+```
+
+---
+
+## 11. TODOs / WIP
 
 - [ ] **Persistencia de sesión**: `st.query_params` no persiste en recarga de Streamlit
 - [ ] Investigar alternativas: proxy con nginx para cookies, o iframe approach
 
 ---
 
-*Documento actualizado el 26 de Diciembre 2024*
+*Documento actualizado el 30 de Diciembre 2024*
