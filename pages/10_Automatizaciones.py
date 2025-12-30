@@ -12,7 +12,7 @@ import pandas as pd
 # Configuración de la página
 st.set_page_config(
     page_title="Automatizaciones",
-    page_icon="🤖",
+    page_icon="🦾",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -118,7 +118,7 @@ st.markdown("""
 
 # ============ Título ============
 
-st.title("🤖 Automatizaciones")
+st.title("🦾 Automatizaciones")
 st.markdown("**Túneles Estáticos** - Creación automatizada de órdenes de fabricación")
 
 # ============ Mostrar resultado persistente de última orden ============
