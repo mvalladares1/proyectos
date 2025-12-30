@@ -90,6 +90,7 @@ MODULE_NAMES = {
     "rendimiento": "📈 Rendimiento",
     "finanzas": "💰 Finanzas",
     "compras": "🛒 Compras",
+    "automatizaciones": "🦾 Automatizaciones",
     "permisos": "⚙️ Permisos",
 }
 
