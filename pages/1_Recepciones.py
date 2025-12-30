@@ -1541,9 +1541,6 @@ with tab_curva:
                 kg_por_semana = {}
                 
                 for rec in recepciones:
-                    # No requerimos tipo_fruta para procesar - usamos TipoFruta del producto si existe
-                    tipo_fruta_rec = (rec.get('tipo_fruta') or '').strip()
-                    
                     # Obtener semana de la fecha
                     fecha_str = rec.get('fecha')
                     if not fecha_str:
@@ -1555,56 +1552,51 @@ with tab_curva:
                     except:
                         continue
                     
-                    # Procesar productos igual que KPIs
+                    # Procesar productos
                     productos = rec.get('productos', []) or []
                     for p in productos:
                         categoria = (p.get('Categoria') or '').strip().upper()
                         producto_nombre = (p.get('Producto') or '').strip().upper()
                         
-                        # Excluir BANDEJAS y PALLETS igual que Año Anterior
-                        if 'BANDEJ' in categoria or 'PALLET' in categoria:
+                        # Excluir BANDEJAS (igual que loop de precios)
+                        if 'BANDEJ' in categoria:
                             continue
-                        if 'BANDEJ' in producto_nombre or 'PALLET' in producto_nombre:
+                        # Excluir PALLETS
+                        if 'PALLET' in producto_nombre:
                             continue
                         
                         kg_hechos = p.get('Kg Hechos', 0) or 0
                         if kg_hechos <= 0:
                             continue
                         
-                        # Obtener manejo del producto
-                        manejo = (p.get('Manejo') or '').strip()
-                        if not manejo:
-                            manejo = 'Sin Manejo'
-                        
-                        # Normalizar especie base - usar TipoFruta del producto si existe, sino de la recepción
-                        tipo_fruta = (p.get('TipoFruta') or tipo_fruta_rec or '').upper()
-                        if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta or 'BLUEBERRY' in tipo_fruta:
-                            especie_base = 'Arándano'
-                        elif 'FRAM' in tipo_fruta or 'FRAMBUESA' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta or 'WAKEFIELD' in tipo_fruta or 'RASPBERRY' in tipo_fruta:
-                            especie_base = 'Frambuesa'
-                        elif 'FRUTILLA' in tipo_fruta or 'FRESA' in tipo_fruta or 'STRAWBERRY' in tipo_fruta:
-                            especie_base = 'Frutilla'
-                        elif 'MORA' in tipo_fruta or 'BLACKBERRY' in tipo_fruta:
-                            especie_base = 'Mora'
-                        elif 'CEREZA' in tipo_fruta or 'CHERRY' in tipo_fruta:
-                            especie_base = 'Cereza'
-                        else:
-                            especie_base = 'Otro'
-                        
-                        # Determinar manejo normalizado (Convencional / Orgánico)
-                        manejo_upper = manejo.upper()
-                        if 'ORGAN' in manejo_upper:
-                            manejo_norm = 'Orgánico'
-                        elif 'CONVENCIONAL' in manejo_upper:
-                            manejo_norm = 'Convencional'
-                        else:
-                            manejo_norm = 'Convencional'  # Por defecto
-                        
-                        especie_manejo = f"{especie_base} {manejo_norm}"
-                        
-                        # Filtrar por especie si hay filtro activo
-                        if especies_filtro and especie_manejo not in especies_filtro:
-                            continue
+                        # Solo aplicar filtro de especie si está activo
+                        if especies_filtro:
+                            tipo_fruta = (rec.get('tipo_fruta') or '').upper()
+                            manejo = (p.get('Manejo') or '').upper()
+                            
+                            # Determinar manejo normalizado
+                            if 'ORGAN' in manejo or 'ORGAN' in tipo_fruta:
+                                manejo_norm = 'Orgánico'
+                            else:
+                                manejo_norm = 'Convencional'
+                            
+                            # Detectar especie
+                            if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta or 'BLUEBERRY' in tipo_fruta:
+                                especie_base = 'Arándano'
+                            elif 'FRAM' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta or 'RASPBERRY' in tipo_fruta:
+                                especie_base = 'Frambuesa'
+                            elif 'FRUTILLA' in tipo_fruta or 'FRESA' in tipo_fruta or 'STRAWBERRY' in tipo_fruta:
+                                especie_base = 'Frutilla'
+                            elif 'MORA' in tipo_fruta or 'BLACKBERRY' in tipo_fruta:
+                                especie_base = 'Mora'
+                            elif 'CEREZA' in tipo_fruta or 'CHERRY' in tipo_fruta:
+                                especie_base = 'Cereza'
+                            else:
+                                especie_base = 'Otro'
+                            
+                            especie_manejo = f"{especie_base} {manejo_norm}"
+                            if especie_manejo not in especies_filtro:
+                                continue
                         
                         # Acumular kg por semana
                         if semana not in kg_por_semana:
