@@ -4,7 +4,7 @@ Endpoints para el Dashboard de Clientes
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List, Dict, Any
-from ..services.comercial_service import comercial_service
+from ..services.comercial_service import ComercialService
 
 router = APIRouter(
     prefix="/comercial",
@@ -13,6 +13,8 @@ router = APIRouter(
 
 @router.get("/data")
 async def get_comercial_data(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="Contraseña Odoo"),
     anio: Optional[List[int]] = Query(None),
     mes: Optional[List[int]] = Query(None),
     trimestre: Optional[List[str]] = Query(None),
@@ -23,6 +25,7 @@ async def get_comercial_data(
     Obtiene datos del Dashboard de Relación Comercial con filtros opcionales.
     """
     try:
+        service = ComercialService(username=username, password=password)
         filters = {}
         if anio: filters['anio'] = anio
         if mes: filters['mes'] = mes
@@ -30,17 +33,21 @@ async def get_comercial_data(
         if cliente: filters['cliente'] = cliente
         if especie: filters['especie'] = especie
         
-        data = comercial_service.get_relacion_comercial_data(filters if filters else None)
+        data = service.get_relacion_comercial_data(filters if filters else None)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/filters")
-async def get_filter_values() -> Dict[str, List[Any]]:
+async def get_filter_values(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="Contraseña Odoo")
+) -> Dict[str, List[Any]]:
     """
     Obtiene valores únicos para los filtros del dashboard.
     """
     try:
-        return comercial_service.get_filter_values()
+        service = ComercialService(username=username, password=password)
+        return service.get_filter_values()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

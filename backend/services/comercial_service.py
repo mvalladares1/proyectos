@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from ..core.odoo_client import odoo_client
+from shared.odoo_client import OdooClient
 import pandas as pd
 import time
 import datetime
@@ -9,7 +9,8 @@ class ComercialService:
     Servicio para manejar lógica de negocio del Dashboard Comercial.
     Interactúa con Odoo o Archivos Locales para obtener ventas y categorizarlas.
     """
-    def __init__(self):
+    def __init__(self, username: str = None, password: str = None):
+        self.odoo = OdooClient(username=username, password=password)
         self._filter_cache = None
         self._last_cache_update = 0
         self._cache_duration = 300  # 5 minutos - reducir llamadas a Odoo
@@ -75,7 +76,7 @@ class ComercialService:
         # 1.0 Obtener tasa de USD
         usd_rate = 1.0
         try:
-            usd_info = odoo_client.search_read('res.currency', [('name', '=', 'USD')], ['rate'])
+            usd_info = self.odoo.search_read('res.currency', [('name', '=', 'USD')], ['rate'])
             if usd_info: usd_rate = usd_info[0]['rate']
         except: pass
 
@@ -93,7 +94,7 @@ class ComercialService:
                 
                 # Campos mínimos necesarios
                 fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state']
-                results_inv = odoo_client.search_read('account.move.line', domain_inv, fields_inv, limit=50000, order='date desc')
+                results_inv = self.odoo.search_read('account.move.line', domain_inv, fields_inv, limit=50000, order='date desc')
                 
                 # 1.2 COMPROMETIDO (sale.order.line) - solo pedidos recientes
                 domain_sale = [
@@ -104,7 +105,7 @@ class ComercialService:
                 ]
                 # Campos mínimos
                 fields_sale = ['product_id', 'order_partner_id', 'price_subtotal', 'product_uom_qty', 'qty_invoiced', 'order_id']
-                results_sale = odoo_client.search_read('sale.order.line', domain_sale, fields_sale, limit=10000)
+                results_sale = self.odoo.search_read('sale.order.line', domain_sale, fields_sale, limit=10000)
 
                 # Mapas de soporte
                 partner_map = {}
@@ -131,7 +132,7 @@ class ComercialService:
 
                 # Lecturas masivas
                 if all_partner_ids:
-                    partners_info = odoo_client.read('res.partner', list(all_partner_ids), ['id', 'country_id', 'x_studio_categora_de_contacto'])
+                    partners_info = self.odoo.read('res.partner', list(all_partner_ids), ['id', 'country_id', 'x_studio_categora_de_contacto'])
                     for p in partners_info:
                         partner_map[p['id']] = {
                             'pais': p['country_id'][1] if p['country_id'] else "Desconocido",
@@ -139,7 +140,7 @@ class ComercialService:
                         }
 
                 if all_move_ids:
-                    moves_info = odoo_client.read('account.move', list(all_move_ids), ['id', 'invoice_incoterm_id', 'sii_pais_destino_id', 'move_type'])
+                    moves_info = self.odoo.read('account.move', list(all_move_ids), ['id', 'invoice_incoterm_id', 'sii_pais_destino_id', 'move_type'])
                     for m in moves_info:
                         move_map[m['id']] = {
                             'incoterm': m['invoice_incoterm_id'][1] if m['invoice_incoterm_id'] else "N/A",
@@ -148,7 +149,7 @@ class ComercialService:
                         }
 
                 if all_sale_ids:
-                    sales_info = odoo_client.read('sale.order', list(all_sale_ids), ['id', 'date_order', 'incoterm', 'currency_id'])
+                    sales_info = self.odoo.read('sale.order', list(all_sale_ids), ['id', 'date_order', 'incoterm', 'currency_id'])
                     for s in sales_info:
                         sale_map[s['id']] = {
                             'fecha': s['date_order'],
@@ -160,7 +161,7 @@ class ComercialService:
                     prod_fields = ['id', 'categ_id', 'product_tag_ids', 'x_studio_sub_categora', 
                                    'x_studio_categora_tipo_de_manejo', 'x_studio_categora_variedad',
                                    'x_studio_selection_field_7qfiv']
-                    products_info = odoo_client.read('product.product', list(all_product_ids), prod_fields)
+                    products_info = self.odoo.read('product.product', list(all_product_ids), prod_fields)
                     all_variety_ids = set()
                     for p in products_info:
                         product_map[p['id']] = p
@@ -168,7 +169,7 @@ class ComercialService:
                             for v_id in p['x_studio_categora_variedad']: all_variety_ids.add(v_id)
                     
                     if all_variety_ids:
-                        varieties = odoo_client.read('x_variedad', list(all_variety_ids), ['id', 'display_name'])
+                        varieties = self.odoo.read('x_variedad', list(all_variety_ids), ['id', 'display_name'])
                         for v in varieties: variety_map[v['id']] = v.get('display_name', "Variedad Desconocida")
 
                 # Procesar Facturas
