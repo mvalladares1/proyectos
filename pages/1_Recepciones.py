@@ -1560,8 +1560,12 @@ with tab_curva:
                     productos = rec.get('productos', []) or []
                     for p in productos:
                         categoria = (p.get('Categoria') or '').strip().upper()
-                        # Excluir BANDEJAS igual que KPIs
-                        if 'BANDEJ' in categoria:
+                        producto_nombre = (p.get('Producto') or '').strip().upper()
+                        
+                        # Excluir BANDEJAS y PALLETS igual que Año Anterior
+                        if 'BANDEJ' in categoria or 'PALLET' in categoria:
+                            continue
+                        if 'BANDEJ' in producto_nombre or 'PALLET' in producto_nombre:
                             continue
                         
                         kg_hechos = p.get('Kg Hechos', 0) or 0
@@ -1646,26 +1650,24 @@ with tab_curva:
                 semanas_proyeccion = df_proy['semana'].unique().tolist()
                 
                 # Calcular fechas del año anterior correspondientes a esas semanas
-                # Usamos un rango amplio para cubrir la temporada anterior (2023-2024)
-                # Las semanas 47-52 corresponden a Nov-Dic 2023
-                # Las semanas 1-17 corresponden a Ene-Abr 2024
+                # Dinámico: restamos 1 año a las fechas de la proyección actual
                 from datetime import timedelta
                 
-                # Fecha inicio: primera semana de la temporada anterior
-                # Si hay semanas >= 47, el inicio es en noviembre del año anterior
-                min_semana = min(semanas_proyeccion)
-                max_semana = max(semanas_proyeccion)
+                # Obtener los años presentes en la proyección actual
+                # Por ejemplo, si la proyección es 2024-2025, los años serán 2024 y 2025
+                # El año anterior para comparar debe ser 2023-2024
                 
-                # Para temporada 2024-2025, el año anterior es 2023-2024
                 if any(s >= 47 for s in semanas_proyeccion):
-                    fecha_inicio_anterior = datetime(2023, 11, 1)  # Noviembre 2023
+                    # Temporada que empieza en año N y termina en N+1
+                    # Determinamos el año de inicio (donde están las semanas >= 47)
+                    year_start = datetime.now().year if datetime.now().month >= 6 else datetime.now().year - 1
+                    fecha_inicio_anterior = datetime(year_start - 1, 11, 1)  # Noviembre del año tras-anterior
+                    fecha_fin_anterior = datetime(year_start, 5, 31, 23, 59, 59)   # Mayo del año anterior
                 else:
-                    fecha_inicio_anterior = datetime(2024, 1, 1)  # Enero 2024
-                
-                if any(s <= 20 for s in semanas_proyeccion):
-                    fecha_fin_anterior = datetime(2024, 5, 31)  # Mayo 2024
-                else:
-                    fecha_fin_anterior = datetime(2023, 12, 31)  # Diciembre 2023
+                    # Temporada de un solo año
+                    year_curr = datetime.now().year
+                    fecha_inicio_anterior = datetime(year_curr - 1, 1, 1)
+                    fecha_fin_anterior = datetime(year_curr - 1, 12, 31, 23, 59, 59)
                 
                 # Llamar a la API para obtener datos del año anterior SIN filtros de planta
                 # IMPORTANTE: Incluir username y password que son requeridos por el endpoint
@@ -1673,9 +1675,8 @@ with tab_curva:
                     "username": username,
                     "password": password,
                     "fecha_inicio": fecha_inicio_anterior.strftime("%Y-%m-%d"),
-                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d"),
+                    "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d %H:%M:%S"),
                     "solo_hechas": True
-                    # NO usar filtro de origen para que traiga todos los datos
                 }
                 print(f"DEBUG: Consultando año anterior desde {fecha_inicio_anterior} hasta {fecha_fin_anterior}")
                 resp_anterior = requests.get(
@@ -1702,12 +1703,50 @@ with tab_curva:
                         productos = rec.get('productos', []) or []
                         for p in productos:
                             categoria = (p.get('Categoria') or '').strip().upper()
-                            if 'BANDEJ' in categoria:
+                            producto_nombre = (p.get('Producto') or '').strip().upper()
+                            
+                            # Excluir bandejas y pallets por categoría o nombre
+                            if 'BANDEJ' in categoria or 'PALLET' in categoria:
+                                continue
+                            if 'BANDEJ' in producto_nombre or 'PALLET' in producto_nombre:
                                 continue
                             
                             kg_hechos = p.get('Kg Hechos', 0) or 0
                             if kg_hechos <= 0:
                                 continue
+
+                            # SINCRO FILTROS: Aplicar los mismos filtros que el año actual
+                            # (especie y manejo) si están activos
+                            if especies_filtro:
+                                tipo_fruta = (rec.get('tipo_fruta') or '').upper()
+                                # Obtener manejo del producto
+                                manejo_prod = (p.get('Manejo') or '').strip()
+                                if not manejo_prod:
+                                    manejo_prod = 'Sin Manejo'
+                                
+                                # Normalizar especie base (igual que en df_sistema_semana)
+                                if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta or 'BLUEBERRY' in tipo_fruta:
+                                    esp_base = 'Arándano'
+                                elif 'FRAM' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta or 'RASPBERRY' in tipo_fruta:
+                                    esp_base = 'Frambuesa'
+                                elif 'FRUTILLA' in tipo_fruta or 'FRESA' in tipo_fruta or 'STRAWBERRY' in tipo_fruta:
+                                    esp_base = 'Frutilla'
+                                elif 'MORA' in tipo_fruta or 'BLACKBERRY' in tipo_fruta:
+                                    esp_base = 'Mora'
+                                elif 'CEREZA' in tipo_fruta or 'CHERRY' in tipo_fruta:
+                                    esp_base = 'Cereza'
+                                else:
+                                    esp_base = 'Otro'
+                                
+                                # Normalizar manejo (Convencional / Orgánico)
+                                if 'ORGAN' in manejo_prod.upper() or 'ORGAN' in tipo_fruta:
+                                    man_norm = 'Orgánico'
+                                else:
+                                    man_norm = 'Convencional'
+                                
+                                especie_key = f"{esp_base} {man_norm}"
+                                if especie_key not in especies_filtro:
+                                    continue
                             
                             # Acumular por semana
                             if semana not in kg_anterior_por_semana:
