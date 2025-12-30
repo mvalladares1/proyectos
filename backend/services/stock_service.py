@@ -22,167 +22,144 @@ class StockService:
         """
         Mueve un pallet a una ubicación destino.
         Lógica Dual:
-        1. Si es Stock Real (Quant): Crea Transferencia Interna.
-        2. Si es Pre-Recepción (Moving Line): Actualiza destino en recepción abierta.
+        1. Si es Stock Real (Quant): Crea Transferencia Interna para TODOS los quants del paquete.
+        2. Si es Pre-Recepción (Moving Line): Actualiza destino en TODAS las líneas de recepción abiertas del paquete.
         """
         print(f"DEBUG: Intentando mover '{pallet_code}' a {location_dest_id}")
         
-        # 1. Buscar en Stock Real (Quants)
-        # Buscamos por nombre de paquete
+        # 0. Buscar el record del paquete (necesario para ambos casos)
         packages = self.odoo.search_read(
             "stock.quant.package", 
             [("name", "=", pallet_code)], 
             ["id", "name"]
         )
         
-        if packages:
-            package_id = packages[0]["id"]
-            # Verificar si tiene quants positivos
-            quants = self.odoo.search_read(
-                "stock.quant",
-                [("package_id", "=", package_id), ("quantity", ">", 0)],
-                ["location_id", "product_id", "quantity"]
-            )
+        if not packages:
+            return {"success": False, "message": f"❌ Código {pallet_code} no encontrado en sistema (Package)."}
             
-            if quants:
-                current_loc_id = quants[0]["location_id"][0]
-                
-                if current_loc_id == location_dest_id:
-                    return {"success": False, "message": f"El pallet ya está en la ubicación destino."}
+        package_id = packages[0]["id"]
 
-                print(f"DEBUG: Pallet {pallet_code} encontrado en Stock (Loc: {current_loc_id}). Creando transferencia.")
-                
-                # Crear Transferencia Interna (Picking)
-                # Obtenemos tipo de operación para Internal Transfers de la compañía
-                # Asumimos que la compañía 1 es la principal por ahora o la del usuario
-                picking_type_id = 5 # ID hardcoded habitual para Internal Transfers en Odoo standard, MEJORAR buscarlo dinámicamente
-                
-                # Buscar picking type interno dinamicamente
-                picking_types = self.odoo.search_read(
-                    "stock.picking.type",
-                    [("code", "=", "internal"), ("warehouse_id", "!=", False)],
-                    ["id"],
-                    limit=1
-                )
-                if picking_types:
-                    picking_type_id = picking_types[0]["id"]
-                
-                # Crear Picking
-                picking_vals = {
-                    "picking_type_id": picking_type_id,
-                    "location_id": current_loc_id,
-                    "location_dest_id": location_dest_id,
-                    "origin": f"Dashboard Move: {pallet_code}",
-                    "move_type": "direct"
-                }
-                # create espera un dict o lista de dicts. execute lo envuelve en lista.
-                # execute(..., picking_vals) -> [picking_vals] -> create(picking_vals) OK
-                picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
-                
-                # Crear Move Line Directamente (sin move previo para simplificar, o stock.move luego asignar)
-                # Odoo requiere stock.move primero
+        # 1. Buscar en Stock Real (Quants)
+        quants = self.odoo.search_read(
+            "stock.quant",
+            [("package_id", "=", package_id), ("quantity", ">", 0)],
+            ["location_id", "product_id", "quantity", "product_uom_id"]
+        )
+        
+        if quants:
+            # Agrupar quants por ubicación actual (en teoría deberían estar todos en la misma, pero por seguridad)
+            locations_found = set(q["location_id"][0] for q in quants)
+            
+            # Si ya están en el destino, informar
+            if len(locations_found) == 1 and list(locations_found)[0] == location_dest_id:
+                return {"success": False, "message": f"El pallet ya está en la ubicación destino."}
+
+            print(f"DEBUG: Pallet {pallet_code} encontrado en Stock con {len(quants)} registros. Creando transferencia.")
+            
+            # Buscar picking type interno dinamicamente
+            picking_type_id = 5 # Default
+            picking_types = self.odoo.search_read(
+                "stock.picking.type",
+                [("code", "=", "internal"), ("warehouse_id", "!=", False)],
+                ["id"],
+                limit=1
+            )
+            if picking_types:
+                picking_type_id = picking_types[0]["id"]
+            
+            # Crear un único Picking para todos los movimientos
+            # Usamos la primera ubicación encontrada como origen del picking (lo más común)
+            first_loc_id = quants[0]["location_id"][0]
+            
+            picking_vals = {
+                "picking_type_id": picking_type_id,
+                "location_id": first_loc_id,
+                "location_dest_id": location_dest_id,
+                "origin": f"Dashboard Move Multi: {pallet_code}",
+                "move_type": "direct"
+            }
+            picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
+            
+            # Crear un Stock Move por cada Quant
+            for q in quants:
                 move_vals = {
-                    "name": f"Movimiento {pallet_code}",
+                    "name": f"Movimiento {pallet_code} - {q['product_id'][1]}",
                     "picking_id": picking_id,
-                    "product_id": quants[0]["product_id"][0],
-                    "product_uom_qty": quants[0]["quantity"],
-                    "product_uom": 1, # Unid default
-                    "location_id": current_loc_id,
+                    "product_id": q["product_id"][0],
+                    "product_uom_qty": q["quantity"],
+                    "product_uom": q["product_uom_id"][0] if q.get("product_uom_id") else 1,
+                    "location_id": q["location_id"][0],
                     "location_dest_id": location_dest_id
                 }
-                move_id = self.odoo.execute("stock.move", "create", move_vals)
-                
-                # Confirmar Picking (pasa a assigned)
-                self.odoo.execute("stock.picking", "action_confirm", [picking_id])
-                
-                # Update move line to set package (importante)
-                # Al confirmar se crean move lines. Buscamos la line y seteamos package
-                # O bien, creamos la move line manualmente si no se creó.
-                # Estrategia segura: action_assign
-                self.odoo.execute("stock.picking", "action_assign", [picking_id])
-                
-                # Buscar la move line creada y asignar package y qty_done
-                m_lines = self.odoo.search_read(
-                    "stock.move.line",
-                    [("picking_id", "=", picking_id)],
-                    ["id"]
+                self.odoo.execute("stock.move", "create", move_vals)
+            
+            # Confirmar y Asignar Picking
+            self.odoo.execute("stock.picking", "action_confirm", [picking_id])
+            self.odoo.execute("stock.picking", "action_assign", [picking_id])
+            
+            # Buscar las move lines creadas y asignar package y qty_done
+            m_lines = self.odoo.search_read(
+                "stock.move.line",
+                [("picking_id", "=", picking_id)],
+                ["id", "product_id", "product_uom_qty"]
+            )
+            
+            for ml in m_lines:
+                # Intentar matchear con el quant original por producto (simplificado)
+                # En un flujo directo, la qty_done suele ser igual a la product_uom_qty
+                self.odoo.execute(
+                    "stock.move.line", 
+                    "write", 
+                    [ml["id"]],
+                    {
+                        "package_id": package_id, 
+                        "result_package_id": package_id, 
+                        "qty_done": ml["product_uom_qty"]
+                    }
                 )
-                
-                if m_lines:
-                    self.odoo.execute(
-                        "stock.move.line", 
-                        "write", 
-                        [m_lines[0]["id"]],  # IDs list
-                        {   # Vals dict
-                            "package_id": package_id, 
-                            "result_package_id": package_id, 
-                            "qty_done": quants[0]["quantity"]
-                        }
-                    )
-                
-                # Validar Picking
-                self.odoo.execute("stock.picking", "button_validate", [picking_id])
-                
-                return {
-                    "success": True, 
-                    "message": f"✅ Transferencia Realizada: {pallet_code} movido a destino.",
-                    "type": "transfer"
-                }
+            
+            # Validar Picking
+            self.odoo.execute("stock.picking", "button_validate", [picking_id])
+            
+            return {
+                "success": True, 
+                "message": f"✅ Transferencia Realizada: {pallet_code} ({len(quants)} items) movido a destino.",
+                "type": "transfer"
+            }
 
         # 2. Buscar en Pre-Recepción (Stock Entrante no validado)
         print(f"DEBUG: Buscando {pallet_code} en recepciones abiertas...")
         
-        # Buscar move lines donde el result_package_id sea nuestro pallet
-        # Y el picking NO esté hecho ni cancelado
-        # Buscamos package por nombre primero (si existe pero vacio, o no existe package record aun)
-        
-        # Ojo: En recepciones a veces el package se crea al vuelo.
-        # Buscamos primero el ID del package si existe, sino buscamos por texto en algun lado?
-        # Normalmente package_id es Many2one. Debe existir el record stock.quant.package
-        
-        # Si packages estaba vacio linea 63, quizas no existe el record package.
-        # Pero si es un scanner, el codigo es lo que importa.
-        # Intentemos buscar package por nombre de nuevo o quizas buscar en move_lines directo si aceptara nombre (no acepta, es ID).
-        
-        # Asumiendo que el package record YA EXISTE porque se pistoleó en la recepción.
-        if not packages:
-             return {"success": False, "message": f"❌ Código {pallet_code} no encontrado en sistema (Package)."}
-             
-        pkg_id = packages[0]["id"]
-        
         move_lines = self.odoo.search_read(
             "stock.move.line",
             [
-                ("result_package_id", "=", pkg_id),
+                ("result_package_id", "=", package_id),
                 ("state", "not in", ["done", "cancel"]),
-                ("picking_id.picking_type_code", "=", "incoming") # Solo recepciones
+                ("picking_id.picking_type_code", "=", "incoming")
             ],
             ["id", "picking_id", "location_dest_id"]
         )
         
         if move_lines:
-            line = move_lines[0]
-            old_loc_id = line["location_dest_id"]
-            picking_name = line["picking_id"][1]
+            line_ids = [ml["id"] for ml in move_lines]
+            picking_names = list(set(ml["picking_id"][1] for ml in move_lines))
             
-            # Actualizar destino
+            # Actualizar destino en TODAS las líneas
             self.odoo.execute(
                 "stock.move.line", 
                 "write", 
-                [line["id"]], # IDs list
-                {"location_dest_id": location_dest_id} # Vals dict
+                line_ids,
+                {"location_dest_id": location_dest_id}
             )
             
-            # Tambien actualizar el stock.move asociado si es posible? 
-            # No, move line manda en la ubicación final al validar.
-            
+            res_msg = f"✅ Reasignado en {', '.join(picking_names)}: Destino cambiado para {len(line_ids)} líneas."
             return {
                 "success": True,
-                "message": f"✅ Reasignado en {picking_name}: Destino cambiado a ubicación seleccionada.",
+                "message": res_msg,
                 "type": "realloc"
             }
             
-        return {"success": False, "message": f"❌ Pallet {pallet_code} no encontrado en Stock ni en Recepciones Abiertas."}
+        return {"success": False, "message": f"❌ Pallet {pallet_code} no tiene quants activos ni recepciones pendientes."}
     
     def _get_products_cached(self, product_ids: List[int]) -> Dict[int, Dict]:
         """
