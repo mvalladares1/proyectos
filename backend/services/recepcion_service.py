@@ -204,6 +204,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             [("id", "in", all_check_ids)],
             [
                 "id", "picking_id",
+                "quality_state",  # Estado del QC: none, pass, fail
                 "x_studio_tipo_de_fruta",
                 "x_studio_total_iqf_",
                 "x_studio_total_block_",
@@ -381,6 +382,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "crumble": 0,
             "jefe_calidad": "",
             "calific_final": "",
+            "quality_state": "",  # Estado del QC: none, pass, fail
             "lineas_analisis": []
         }
         
@@ -408,6 +410,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 "crumble": 0,
                 "jefe_calidad": qc.get("x_studio_jefe_de_calidad_y_aseguramiento_", ""),
                 "calific_final": qc.get("x_studio_calific_final", ""),
+                "quality_state": qc.get("quality_state", ""),  # none, pass, fail
                 "lineas_analisis": []
             }
             
@@ -535,6 +538,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "state": rec.get("state", ""),
             "origen": origen_rec,
             "calific_final": calidad_data["calific_final"],
+            "quality_state": calidad_data["quality_state"],  # Estado del QC: none, pass, fail
             "tipo_fruta": calidad_data["tipo_fruta"],
             "total_iqf": calidad_data["total_iqf"],
             "total_block": calidad_data["total_block"],
