@@ -500,7 +500,7 @@ with tab2:
             options=['Todos', 'pendientes', 'done', 'cancel'],
             format_func=lambda x: {
                 'Todos': '📋 Todas (sin canceladas)',
-                'pendientes': '� Pendientes',
+                'pendientes': '🟡 Pendientes',
                 'done': '✅ Finalizadas',
                 'cancel': '❌ Canceladas'
             }.get(x, x),
