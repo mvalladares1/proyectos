@@ -7,6 +7,7 @@ from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
 from fastapi.responses import StreamingResponse
 from io import BytesIO
+import os
 
 router = APIRouter(prefix="/api/v1/recepciones-mp", tags=["recepciones-mp"])
 
@@ -51,7 +52,20 @@ async def get_recepciones_report(
 ):
     """Genera y entrega un PDF con el informe de recepciones para el rango solicitado."""
     try:
-        pdf_bytes = generate_recepcion_report_pdf(username, password, fecha_inicio, fecha_fin, include_prev_week, include_month_accum, solo_hechas=solo_hechas)
+        # Calcular path del logo: ../../docs/LOGO.png
+        current_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        logo_path = os.path.join(current_dir, 'docs', 'LOGO.png')
+        
+        pdf_bytes = generate_recepcion_report_pdf(
+            username, 
+            password, 
+            fecha_inicio, 
+            fecha_fin, 
+            include_prev_week, 
+            include_month_accum, 
+            solo_hechas=solo_hechas,
+            logo_path=logo_path
+        )
         buf = BytesIO(pdf_bytes)
         filename = f"informe_recepciones_{fecha_inicio}_a_{fecha_fin}.pdf"
         return StreamingResponse(buf, media_type='application/pdf', headers={
