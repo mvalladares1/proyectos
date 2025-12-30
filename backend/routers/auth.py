@@ -156,7 +156,8 @@ async def get_user_permissions(token: str):
         get_allowed_dashboards, 
         is_admin,
         get_allowed_pages,
-        get_all_module_pages
+        get_all_module_pages,
+        get_restricted_modules
     )
     
     session = SessionService.validate_session(token)
@@ -166,6 +167,7 @@ async def get_user_permissions(token: str):
     email = session.get("username", "")
     allowed = get_allowed_dashboards(email)
     user_is_admin = is_admin(email)
+    restricted = get_restricted_modules()  # Módulos que tienen restricciones
     
     # Obtener páginas permitidas por módulo
     module_pages = get_all_module_pages()
@@ -177,6 +179,7 @@ async def get_user_permissions(token: str):
         "allowed_dashboards": allowed,
         "allowed_pages": allowed_pages,
         "module_structure": module_pages,
+        "restricted_modules": restricted,  # Agregar módulos restringidos
         "is_admin": user_is_admin,
         "email": email
     }
