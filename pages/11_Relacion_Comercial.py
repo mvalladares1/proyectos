@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.auth import proteger_modulo
-from backend.services.comercial_service import comercial_service
+from backend.services.comercial_service import ComercialService
 from backend.utils.pdf_generator import generate_commercial_pdf
 
 # --- Page Config ---
@@ -36,6 +36,12 @@ if current_email not in allowed_emails:
     st.error("🚫 Acceso restringido. No tienes permisos para ver Relación Comercial.")
     st.info("💡 Solicita acceso a tu administrador si necesitas ingresar.")
     st.stop()
+
+# Instantiate service with user credentials
+comercial_service = ComercialService(
+    username=st.session_state.get("username"), 
+    password=st.session_state.get("password")
+)
 
 # --- Exact Colors from Image ---
 COLOR_NAVY = "#1b4f72"
