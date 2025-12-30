@@ -75,7 +75,9 @@ class StockService:
                     "origin": f"Dashboard Move: {pallet_code}",
                     "move_type": "direct"
                 }
-                picking_id = self.odoo.execute("stock.picking", "create", [picking_vals])
+                # create espera un dict o lista de dicts. execute lo envuelve en lista.
+                # execute(..., picking_vals) -> [picking_vals] -> create(picking_vals) OK
+                picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
                 
                 # Crear Move Line Directamente (sin move previo para simplificar, o stock.move luego asignar)
                 # Odoo requiere stock.move primero
@@ -88,7 +90,7 @@ class StockService:
                     "location_id": current_loc_id,
                     "location_dest_id": location_dest_id
                 }
-                move_id = self.odoo.execute("stock.move", "create", [move_vals])
+                move_id = self.odoo.execute("stock.move", "create", move_vals)
                 
                 # Confirmar Picking (pasa a assigned)
                 self.odoo.execute("stock.picking", "action_confirm", [picking_id])
@@ -110,11 +112,12 @@ class StockService:
                     self.odoo.execute(
                         "stock.move.line", 
                         "write", 
-                        [m_lines[0]["id"], {
+                        [m_lines[0]["id"]],  # IDs list
+                        {   # Vals dict
                             "package_id": package_id, 
                             "result_package_id": package_id, 
                             "qty_done": quants[0]["quantity"]
-                        }]
+                        }
                     )
                 
                 # Validar Picking
@@ -166,7 +169,8 @@ class StockService:
             self.odoo.execute(
                 "stock.move.line", 
                 "write", 
-                [line["id"], {"location_dest_id": location_dest_id}]
+                [line["id"]], # IDs list
+                {"location_dest_id": location_dest_id} # Vals dict
             )
             
             # Tambien actualizar el stock.move asociado si es posible? 
