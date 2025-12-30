@@ -1649,13 +1649,10 @@ with tab_curva:
                 # El año anterior para comparar debe ser 2023-2024
                 
                 if any(s >= 47 for s in semanas_proyeccion):
-                    # Temporada que empieza en año N y termina en N+1
-                    # Si estamos en la temporada 2024-2025, el Año Anterior es 2023-2024
-                    # Determinamos el año de la temporada ACTUAL de las proyecciones
-                    year_start = datetime.now().year if datetime.now().month >= 6 else datetime.now().year - 1
-                    # Restamos 1 año COMPLETO para obtener la temporada anterior
-                    fecha_inicio_anterior = datetime(year_start - 2, 11, 1)  # Noviembre (año -2)
-                    fecha_fin_anterior = datetime(year_start - 1, 5, 31, 23, 59, 59)   # Mayo (año -1)
+                    # FECHAS FIJAS para Año Anterior según solicitud del usuario
+                    # Temporada 2023-2024: Nov 2023 - Abr 2024
+                    fecha_inicio_anterior = datetime(2023, 11, 24)
+                    fecha_fin_anterior = datetime(2024, 4, 30, 23, 59, 59)
                 else:
                     # Temporada de un solo año
                     year_curr = datetime.now().year
@@ -2577,31 +2574,25 @@ with tab_aprobaciones:
             </div>
             """, unsafe_allow_html=True)
             
-            # --- BOTONES DE ACCIÓN ---
-            ADMIN_APROBADOR = "mvalladares@riofuturo.cl"
-            es_admin = username == ADMIN_APROBADOR
-            
-            if es_admin:
-                col_a, col_b = st.columns([1, 1])
-                with col_a:
-                    if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
-                        ids = seleccionados["_id"].unique().tolist()
-                        if ids:
-                            if save_aprobaciones(ids):
-                                st.success(f"✅ Aprobadas {len(ids)} recepciones.")
+            # --- BOTONES DE ACCIÓN --- (Habilitado para todos los usuarios autenticados)
+            col_a, col_b = st.columns([1, 1])
+            with col_a:
+                if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
+                    ids = seleccionados["_id"].unique().tolist()
+                    if ids:
+                        if save_aprobaciones(ids):
+                            st.success(f"✅ Aprobadas {len(ids)} recepciones.")
+                            st.rerun()
+                    else:
+                        st.warning("Selecciona al menos una línea.")
+            with col_b:
+                if estado_filtro != "Pendientes":
+                    if st.button("↩️ Quitar Aprobación", use_container_width=True):
+                        ids_del = seleccionados["_id"].unique().tolist()
+                        if ids_del:
+                            if remove_aprobaciones(ids_del):
+                                st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
                                 st.rerun()
-                        else:
-                            st.warning("Selecciona al menos una línea.")
-                with col_b:
-                    if estado_filtro != "Pendientes":
-                        if st.button("↩️ Quitar Aprobación", use_container_width=True):
-                            ids_del = seleccionados["_id"].unique().tolist()
-                            if ids_del:
-                                if remove_aprobaciones(ids_del):
-                                    st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
-                                    st.rerun()
-            else:
-                st.info("👁️ Solo visualización. Contacta al administrador para aprobar.")
         else:
             st.info("No hay datos con los filtros seleccionados.")
     else:
