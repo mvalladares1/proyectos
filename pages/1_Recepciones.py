@@ -2464,14 +2464,22 @@ with tab_aprobaciones:
                 axis=1
             )
             
-            # --- BOTONES SELECCIÓN SIN RERUN ---
-            col_sel_all, col_desel, col_info = st.columns([1, 1, 2])
+            # --- CHECKBOX SELECCIONAR TODO INTELIGENTE ---
+            # Guardar estado previo para detectar cambios
+            if 'sel_all_state' not in st.session_state:
+                st.session_state.sel_all_state = False
+            
+            col_sel_all, col_info = st.columns([1, 3])
             with col_sel_all:
-                if st.button("☑️ Seleccionar todo", key="btn_sel_all"):
-                    df_filtered["Sel"] = True
-            with col_desel:
-                if st.button("☐ Deseleccionar", key="btn_desel_all"):
-                    df_filtered["Sel"] = False
+                sel_all_input = st.checkbox("☑️ Seleccionar todo", value=st.session_state.sel_all_state, key="chk_sel_all")
+            
+            # Detectar si cambió
+            if sel_all_input != st.session_state.sel_all_state:
+                st.session_state.sel_all_state = sel_all_input
+                df_filtered["Sel"] = sel_all_input
+                # Forzar recarga para que data_editor tome el cambio
+                st.rerun()
+
             with col_info:
                 st.caption(f"📋 {len(df_filtered)} líneas filtradas")
             
