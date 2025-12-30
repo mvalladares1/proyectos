@@ -1,9 +1,11 @@
 """
 Panel de administración: gestiona qué usuarios pueden acceder a cada dashboard y página del sistema.
-Rediseñado para ser más usable y dinámico.
+Rediseñado para ser más usable y dinámico mediante fragments.
 """
 import os
+import json
 from typing import Dict, List
+from datetime import datetime, timedelta
 
 import httpx
 import pandas as pd
@@ -11,6 +13,7 @@ import streamlit as st
 
 from shared.auth import es_admin, proteger_modulo, get_credenciales
 
+# Configuración de página
 st.set_page_config(
     page_title="Permisos",
     page_icon="⚙️",
@@ -33,105 +36,49 @@ if not username or not password:
     st.warning("Inicia sesión con credenciales válidas para administrar los permisos.")
     st.stop()
 
+# ============ ESTADOS Y PERSISTENCIA ============
+if "perms_version" not in st.session_state:
+    st.session_state.perms_version = 0
+
+def refresh_perms():
+    st.session_state.perms_version += 1
+    st.cache_data.clear()
+
 # ============ ESTILOS CSS ============
 st.markdown("""
 <style>
 .permission-card {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border-radius: 10px;
-    padding: 15px;
+    border-radius: 12px;
+    padding: 20px;
     margin: 10px 0;
-    border: 1px solid #3498db33;
+    border: 1px solid #3498db44;
+    transition: all 0.3s ease;
 }
-.module-header {
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 10px;
+.permission-card:hover {
+    border-color: #3498db88;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
 }
-.page-item {
-    background: rgba(255,255,255,0.05);
-    border-radius: 8px;
-    padding: 10px 15px;
-    margin: 5px 0;
+.module-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid #ffffff11;
 }
-.public-badge {
-    background: #27ae60;
-    color: white;
-    padding: 3px 10px;
-    border-radius: 15px;
-    font-size: 12px;
+.module-row:last-child {
+    border-bottom: none;
 }
-.restricted-badge {
-    background: #e74c3c;
-    color: white;
-    padding: 3px 10px;
-    border-radius: 15px;
-    font-size: 12px;
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
 }
+.badge-public { background: #2ecc71; color: white; }
+.badge-restricted { background: #e74c3c; color: white; }
 </style>
 """, unsafe_allow_html=True)
-
-# ============ FUNCIONES API ============
-
-@st.cache_data(ttl=30)
-def fetch_full_permissions():
-    """Obtiene todos los permisos (módulos y páginas)"""
-    try:
-        resp = httpx.get(
-            f"{API_URL}/api/v1/permissions/all",
-            params={"admin_username": username, "admin_password": password},
-            timeout=10.0
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except:
-        return {"dashboards": {}, "pages": {}}
-
-@st.cache_data(ttl=60)
-def fetch_module_structure():
-    """Obtiene la estructura de módulos y páginas"""
-    try:
-        resp = httpx.get(f"{API_URL}/api/v1/permissions/pages/structure", timeout=10.0)
-        resp.raise_for_status()
-        return resp.json().get("modules", {})
-    except:
-        return {}
-
-def update_module_permission(action: str, dashboard: str, email: str):
-    """Asigna o revoca permiso a un módulo"""
-    resp = httpx.post(
-        f"{API_URL}/api/v1/permissions/{action}",
-        json={
-            "dashboard": dashboard,
-            "email": email,
-            "admin_username": username,
-            "admin_password": password
-        },
-        timeout=10.0
-    )
-    resp.raise_for_status()
-    st.cache_data.clear()
-    return resp.json()
-
-def update_page_permission(action: str, module: str, page: str, email: str):
-    """Asigna o revoca permiso a una página"""
-    resp = httpx.post(
-        f"{API_URL}/api/v1/permissions/pages/{action}",
-        json={
-            "module": module,
-            "page": page,
-            "email": email,
-            "admin_username": username,
-            "admin_password": password
-        },
-        timeout=10.0
-    )
-    resp.raise_for_status()
-    st.cache_data.clear()
-    return resp.json()
 
 # ============ MAPEO DE NOMBRES ============
 MODULE_NAMES = {
@@ -146,395 +93,301 @@ MODULE_NAMES = {
     "permisos": "⚙️ Permisos",
 }
 
+# ============ FUNCIONES API (CON CALLBACKS) ============
+
+@st.cache_data(ttl=30)
+def fetch_full_permissions(version=0):
+    """Obtiene todos los permisos (módulos y páginas)"""
+    try:
+        resp = httpx.get(
+            f"{API_URL}/api/v1/permissions/all",
+            params={"admin_username": username, "admin_password": password},
+            timeout=10.0
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except:
+        return {"dashboards": {}, "pages": {}, "admins": []}
+
+@st.cache_data(ttl=60)
+def fetch_module_structure():
+    """Obtiene la estructura de módulos y páginas"""
+    try:
+        resp = httpx.get(f"{API_URL}/api/v1/permissions/pages/structure", timeout=10.0)
+        resp.raise_for_status()
+        return resp.json().get("modules", {})
+    except:
+        return {}
+
+def cb_update_module(action: str, dashboard: str, email: str = None):
+    """Callback para asignar o revocar permiso a un módulo"""
+    # Si viene de un form_submit sin email directo, lo sacamos del session_state
+    if email is None:
+        email = st.session_state.get(f"new_email_{dashboard}", "").strip()
+    
+    if not email:
+        st.error("Email requerido")
+        return
+
+    try:
+        resp = httpx.post(
+            f"{API_URL}/api/v1/permissions/{action}",
+            json={
+                "dashboard": dashboard,
+                "email": email,
+                "admin_username": username,
+                "admin_password": password
+            },
+            timeout=10.0
+        )
+        resp.raise_for_status()
+        refresh_perms()
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+def cb_update_page(action: str, module: str, page: str, email: str = None):
+    """Callback para asignar o revocar permiso a una página"""
+    if email is None:
+        email = st.session_state.get(f"new_email_{module}_{page}", "").strip()
+        
+    if not email:
+        st.error("Email requerido")
+        return
+
+    try:
+        resp = httpx.post(
+            f"{API_URL}/api/v1/permissions/pages/{action}",
+            json={
+                "module": module,
+                "page": page,
+                "email": email,
+                "admin_username": username,
+                "admin_password": password
+            },
+            timeout=10.0
+        )
+        resp.raise_for_status()
+        refresh_perms()
+    except Exception as e:
+        st.error(f"Error: {e}")
+
 # ============ UI PRINCIPAL ============
 st.title("🛠️ Panel de Permisos")
 st.caption("Configura quién puede ver cada módulo y página del sistema")
 
-# Cargar datos
-permisos = fetch_full_permissions()
-estructura = fetch_module_structure()
-modulos_perms = permisos.get("dashboards", {})
-paginas_perms = permisos.get("pages", {})
+# ============ FRAGMENTS ============
 
-# ============ TABS PRINCIPALES ============
-tab_modulos, tab_paginas, tab_usuarios, tab_config = st.tabs([
-    "📁 Módulos", 
-    "📄 Páginas",
-    "👤 Por Usuario",
-    "⚙️ Configuración"
-])
-
-# ============ TAB: MÓDULOS ============
-with tab_modulos:
+@st.fragment
+def fragment_modulos():
     st.subheader("Permisos por Módulo")
-    st.info("💡 **Lista vacía** = Módulo público. **Con emails** = Solo esos usuarios pueden acceder.")
+    st.info("💡 **Sin emails** = Público. **Con emails** = Restringido.")
     
-    col1, col2 = st.columns([2, 1])
+    permisos = fetch_full_permissions(st.session_state.perms_version)
+    modulos_perms = permisos.get("dashboards", {})
     
-    with col1:
-        # Mostrar módulos con sus permisos
+    col_list, col_manage = st.columns([2, 1])
+    
+    with col_list:
         for modulo, emails in modulos_perms.items():
-            with st.container():
-                nombre = MODULE_NAMES.get(modulo, modulo.title())
-                es_publico = len(emails) == 0
+            nombre = MODULE_NAMES.get(modulo, modulo.title())
+            es_publico = len(emails) == 0
+            
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([3, 1, 1])
+                c1.markdown(f"#### {nombre}")
+                if es_publico:
+                    c2.markdown('<span class="badge badge-public">Público</span>', unsafe_allow_html=True)
+                else:
+                    c2.markdown(f'<span class="badge badge-restricted">Restringido ({len(emails)})</span>', unsafe_allow_html=True)
                 
-                col_nombre, col_estado, col_accion = st.columns([3, 1, 2])
-                
-                with col_nombre:
-                    st.markdown(f"**{nombre}**")
-                    if emails:
-                        st.caption(f"Acceso: {', '.join(emails[:3])}{'...' if len(emails) > 3 else ''}")
-                    else:
-                        st.caption("Acceso: Todos los usuarios")
-                
-                with col_estado:
-                    if es_publico:
-                        st.success("Público")
-                    else:
-                        st.error(f"Restringido ({len(emails)})")
-                
-                with col_accion:
-                    if st.button("Gestionar", key=f"manage_{modulo}", use_container_width=True):
-                        st.session_state['selected_module'] = modulo
-                
-                st.divider()
+                # Al hacer clic, guardamos en session_state. Esto NO dispara rerun global si está en fragment.
+                if c3.button("Gestionar", key=f"btn_m_{modulo}", use_container_width=True):
+                    st.session_state.selected_module_id = modulo
     
-    with col2:
-        st.markdown("### Asignar Acceso")
-        
-        selected = st.session_state.get('selected_module', list(modulos_perms.keys())[0] if modulos_perms else '')
-        
-        modulo_sel = st.selectbox(
-            "Módulo",
-            options=list(modulos_perms.keys()),
-            format_func=lambda x: MODULE_NAMES.get(x, x.title()),
-            index=list(modulos_perms.keys()).index(selected) if selected in modulos_perms else 0,
-            key="modulo_select"
-        )
-        
-        nuevo_email = st.text_input("Email del usuario", placeholder="usuario@empresa.cl", key="nuevo_email_modulo")
-        
-        col_asignar, col_revocar = st.columns(2)
-        
-        with col_asignar:
-            if st.button("➕ Asignar", type="primary", use_container_width=True):
-                if nuevo_email:
-                    try:
-                        update_module_permission("assign", modulo_sel, nuevo_email)
-                        st.success(f"✅ Acceso asignado")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                else:
-                    st.warning("Ingresa un email")
-        
-        with col_revocar:
-            if st.button("➖ Revocar", use_container_width=True):
-                if nuevo_email:
-                    try:
-                        update_module_permission("remove", modulo_sel, nuevo_email)
-                        st.success(f"✅ Acceso revocado")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                else:
-                    st.warning("Ingresa un email")
-        
-        # Mostrar emails actuales del módulo seleccionado
-        st.markdown("---")
-        st.markdown(f"**Usuarios con acceso a {MODULE_NAMES.get(modulo_sel, modulo_sel)}:**")
-        emails_modulo = modulos_perms.get(modulo_sel, [])
-        if emails_modulo:
-            for email in emails_modulo:
-                col_email, col_del = st.columns([4, 1])
-                with col_email:
-                    st.text(email)
-                with col_del:
-                    if st.button("🗑️", key=f"del_{modulo_sel}_{email}"):
-                        try:
-                            update_module_permission("remove", modulo_sel, email)
-                            st.rerun()
-                        except:
-                            pass
-        else:
-            st.caption("Sin restricciones (público)")
+    with col_manage:
+        active_mod = st.session_state.get('selected_module_id', list(modulos_perms.keys())[0] if modulos_perms else None)
+        if active_mod:
+            st.markdown(f"### Gestionar {MODULE_NAMES.get(active_mod, active_mod)}")
+            
+            # Usamos on_click para que se procese ANTES de que el fragment se redibuje
+            st.text_input("Agregar email:", placeholder="ejemplo@riofuturo.cl", key=f"new_email_{active_mod}")
+            if st.button("➕ Asignar", use_container_width=True, key=f"btn_assign_{active_mod}"):
+                cb_update_module("assign", active_mod)
+            
+            st.divider()
+            st.markdown("**Usuarios con acceso:**")
+            emails_mod = modulos_perms.get(active_mod, [])
+            if emails_mod:
+                for email in emails_mod:
+                    ce, cd = st.columns([4, 1])
+                    ce.text(email)
+                    cd.button("🗑️", key=f"del_m_{active_mod}_{email}", 
+                              on_click=cb_update_module, 
+                              args=("remove", active_mod, email))
+            else:
+                st.caption("Cualquier usuario logueado puede entrar.")
 
-# ============ TAB: PÁGINAS ============
-with tab_paginas:
+@st.fragment
+def fragment_paginas():
     st.subheader("Permisos por Página/Tab")
-    st.info("💡 Control granular: restringe acceso a tabs específicos dentro de cada módulo.")
+    st.info("💡 Control granular: restringe acceso a pestañas internas de cada módulo.")
     
-    # Selector de módulo
-    modulo_paginas = st.selectbox(
-        "Selecciona un módulo para ver sus páginas",
+    estructura = fetch_module_structure()
+    permisos = fetch_full_permissions(st.session_state.perms_version)
+    paginas_perms = permisos.get("pages", {})
+    
+    mod_selected = st.selectbox(
+        "Módulo",
         options=list(estructura.keys()),
         format_func=lambda x: MODULE_NAMES.get(x, x.title()),
-        key="modulo_paginas_select"
+        key="frag_paginas_mod_sel"
     )
     
-    if modulo_paginas and modulo_paginas in estructura:
-        paginas = estructura[modulo_paginas]
-        
-        st.markdown(f"### Páginas de {MODULE_NAMES.get(modulo_paginas, modulo_paginas)}")
-        
-        for pagina in paginas:
-            page_slug = pagina["slug"]
-            page_name = pagina["name"]
-            page_key = f"{modulo_paginas}.{page_slug}"
-            emails_pagina = paginas_perms.get(page_key, [])
-            es_publico = len(emails_pagina) == 0
+    if mod_selected and mod_selected in estructura:
+        paginas = estructura[mod_selected]
+        for pg in paginas:
+            slug, name = pg["slug"], pg["name"]
+            key = f"{mod_selected}.{slug}"
+            emails_pg = paginas_perms.get(key, [])
+            es_publico = len(emails_pg) == 0
             
-            with st.expander(f"📄 {page_name} {'🌐 Público' if es_publico else f'🔒 Restringido ({len(emails_pagina)})'}", expanded=False):
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    if emails_pagina:
-                        st.markdown("**Usuarios con acceso:**")
-                        for email in emails_pagina:
-                            col_e, col_d = st.columns([5, 1])
-                            with col_e:
-                                st.text(f"  • {email}")
-                            with col_d:
-                                if st.button("❌", key=f"del_page_{page_key}_{email}"):
-                                    try:
-                                        update_page_permission("remove", modulo_paginas, page_slug, email)
-                                        st.rerun()
-                                    except:
-                                        pass
+            with st.expander(f"📄 {name} | {'🌐 Público' if es_publico else f'🔒 Restringido ({len(emails_pg)})'}"):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    if emails_pg:
+                        for e in emails_pg:
+                            ce, cd = st.columns([5, 1])
+                            ce.text(f"• {e}")
+                            cd.button("🗑️", key=f"del_p_{key}_{e}", 
+                                      on_click=cb_update_page, 
+                                      args=("remove", mod_selected, slug, e))
                     else:
-                        st.success("✅ Esta página es pública para todos los usuarios con acceso al módulo.")
+                        st.success("Acceso público (si tiene acceso al módulo)")
                 
-                with col2:
-                    st.markdown("**Agregar acceso:**")
-                    nuevo_email_pg = st.text_input("Email", placeholder="usuario@empresa.cl", key=f"email_{page_key}")
-                    if st.button("Asignar", key=f"assign_{page_key}", type="primary"):
-                        if nuevo_email_pg:
-                            try:
-                                update_page_permission("assign", modulo_paginas, page_slug, nuevo_email_pg)
-                                st.success("✅ Acceso asignado")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {e}")
+                with c2:
+                    st.text_input("Nuevo acceso:", key=f"new_email_{mod_selected}_{slug}")
+                    st.button("Asignar", key=f"btn_p_{key}", type="primary",
+                              on_click=cb_update_page,
+                              args=("assign", mod_selected, slug))
 
-# ============ TAB: POR USUARIO ============
-with tab_usuarios:
-    st.subheader("Ver Permisos de un Usuario")
-    st.info("💡 Consulta a qué módulos y páginas tiene acceso un usuario específico.")
-    
-    email_consulta = st.text_input("Email del usuario a consultar", placeholder="usuario@empresa.cl", key="email_consulta")
-    
-    if st.button("🔍 Consultar permisos", type="primary") and email_consulta:
+@st.fragment
+def fragment_usuarios():
+    st.subheader("Control por Usuario")
+    q_email = st.text_input("Buscar email:", placeholder="usuario@riofuturo.cl")
+    if q_email or st.button("🔍 Consultar"):
         try:
-            resp = httpx.get(
-                f"{API_URL}/api/v1/permissions/user",
-                params={"username": email_consulta},
-                timeout=10.0
-            )
+            resp = httpx.get(f"{API_URL}/api/v1/permissions/user", params={"username": q_email})
             if resp.status_code == 200:
                 data = resp.json()
-                allowed = data.get("allowed", [])
-                is_admin = data.get("is_admin", False)
-                
-                if is_admin:
-                    st.success(f"🔑 **{email_consulta}** es ADMINISTRADOR - Tiene acceso a todo el sistema")
+                if data.get("is_admin"):
+                    st.success(f"👑 **{q_email}** es ADMINISTRADOR")
                 else:
-                    st.markdown(f"### Módulos permitidos para **{email_consulta}**:")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    for i, modulo in enumerate(allowed):
-                        with [col1, col2, col3][i % 3]:
-                            st.success(f"✅ {MODULE_NAMES.get(modulo, modulo)}")
-                    
-                    # Módulos sin acceso
-                    no_access = [m for m in modulos_perms.keys() if m not in allowed]
-                    if no_access:
-                        st.markdown("### Módulos sin acceso:")
-                        for modulo in no_access:
-                            st.error(f"🚫 {MODULE_NAMES.get(modulo, modulo)}")
+                    allowed = data.get("allowed", [])
+                    st.markdown(f"**Módulos para {q_email}:**")
+                    for m in allowed:
+                        st.markdown(f"- {MODULE_NAMES.get(m, m)}")
             else:
-                st.error("Error al consultar permisos")
-        except Exception as e:
-            st.error(f"Error: {e}")
+                st.error("No se encontró el usuario o error en API")
+        except:
+            st.error("Error de conexión")
 
-# ============ TAB: CONFIGURACIÓN ============
-with tab_config:
-    st.subheader("⚠️ Banner de Mantenimiento")
-    st.caption("Activa este banner para mostrar un aviso en todas las páginas del sistema.")
+@st.fragment
+def fragment_config():
+    st.subheader("Configuración Global")
     
-    # Obtener estado actual del banner
-    try:
-        maint_resp = httpx.get(f"{API_URL}/api/v1/permissions/maintenance/status", timeout=5.0)
-        maint_config = maint_resp.json() if maint_resp.status_code == 200 else {"enabled": False, "message": ""}
-    except:
-        maint_config = {"enabled": False, "message": "El sistema está siendo ajustado en este momento."}
-    
-    col1, col2 = st.columns([1, 3])
-    
-    with col1:
-        banner_enabled = st.toggle(
-            "Banner activo",
-            value=maint_config.get("enabled", False),
-            key="banner_toggle"
-        )
-    
-    with col2:
-        banner_message = st.text_input(
-            "Mensaje del banner",
-            value=maint_config.get("message", "El sistema está siendo ajustado en este momento."),
-            key="banner_message",
-            placeholder="El sistema está siendo ajustado..."
-        )
-    
-    if st.button("💾 Guardar configuración de banner", type="primary"):
+    # 1. Mantenimiento
+    with st.container(border=True):
+        st.markdown("### ⚠️ Modo Mantenimiento")
         try:
-            resp = httpx.post(
-                f"{API_URL}/api/v1/permissions/maintenance",
-                json={
-                    "enabled": banner_enabled,
-                    "message": banner_message,
-                    "admin_username": username,
-                    "admin_password": password
-                },
-                timeout=10.0
-            )
-            if resp.status_code == 200:
-                st.success("✅ Configuración de banner guardada.")
-                st.rerun()
-            else:
-                st.error(f"Error: {resp.text}")
-        except Exception as e:
-            st.error(f"Error al guardar: {e}")
-    
-    if banner_enabled:
-        st.warning(f"⚠️ **AVISO (Vista previa):** {banner_message}")
-    
+            m_resp = httpx.get(f"{API_URL}/api/v1/permissions/maintenance/status")
+            m_cfg = m_resp.json() if m_resp.status_code == 200 else {"enabled": False, "message": ""}
+        except:
+            m_cfg = {"enabled": False, "message": ""}
+            
+        c1, c2 = st.columns([1, 3])
+        m_enabled = c1.toggle("Activar Banner", value=m_cfg["enabled"], key="cfg_maint_enabled")
+        m_msg = c2.text_input("Mensaje", value=m_cfg["message"], key="cfg_maint_msg")
+        
+        def cb_save_maint():
+            try:
+                httpx.post(f"{API_URL}/api/v1/permissions/maintenance", json={
+                    "enabled": st.session_state.cfg_maint_enabled, 
+                    "message": st.session_state.cfg_maint_msg,
+                    "admin_username": username, "admin_password": password
+                })
+                st.toast("✅ Configuración de mantenimiento guardada")
+            except: 
+                st.error("Error al guardar mantenimiento")
+
+        st.button("Guardar Mantenimiento", type="primary", on_click=cb_save_maint)
+
+    # 2. Exclusiones
     st.divider()
-    
-    # Sección de administradores
-    st.subheader("👑 Administradores")
-    st.caption("Los administradores tienen acceso completo a todo el sistema.")
-    
-    admins = permisos.get("admins", [])
-    for admin_email in admins:
-        st.markdown(f"• **{admin_email}**")
-    
-    st.divider()
-    
-    # ============ EXCLUSIONES DE RECEPCIONES ============
-    st.subheader("🚫 Exclusiones de Valorización")
-    st.caption("Recepciones que se contabilizan en Kg pero se excluyen del cálculo de costos. Útil para corregir malos ingresos.")
-    
-    # Archivo de configuración para exclusiones
-    import json
-    from datetime import datetime, timedelta
+    st.markdown("### 🚫 Exclusiones de Valorización")
     EXCLUSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
     
-    # Cargar exclusiones existentes
-    exclusiones = {"recepciones": []}
     try:
-        if os.path.exists(EXCLUSIONS_FILE):
-            with open(EXCLUSIONS_FILE, 'r') as f:
-                exclusiones = json.load(f)
-    except:
-        pass
+        with open(EXCLUSIONS_FILE, 'r') as f: exclusiones = json.load(f)
+    except: exclusiones = {"recepciones": []}
     
-    # --- Tab para exclusiones ---
-    tab_lista, tab_agregar = st.tabs(["📋 Exclusiones Actuales", "➕ Agregar Exclusiones"])
+    tabL, tabA = st.tabs(["📋 Actuales", "➕ Agregar"])
     
-    with tab_lista:
-        st.markdown("**Recepciones excluidas de valorización:**")
-        if exclusiones.get("recepciones"):
-            for recep_id in exclusiones["recepciones"]:
-                col_id, col_del = st.columns([5, 1])
-                with col_id:
-                    st.text(f"📋 {recep_id}")
-                with col_del:
-                    if st.button("🗑️", key=f"del_excl_{recep_id}"):
-                        exclusiones["recepciones"].remove(recep_id)
-                        with open(EXCLUSIONS_FILE, 'w') as f:
-                            json.dump(exclusiones, f, indent=2)
-                        st.success(f"Recepción {recep_id} eliminada de exclusiones")
-                        st.rerun()
-        else:
-            st.info("No hay recepciones excluidas actualmente.")
-    
-    with tab_agregar:
-        st.markdown("**Buscar recepciones por rango de fechas:**")
+    with tabL:
+        if exclusiones["recepciones"]:
+            for rid in exclusiones["recepciones"]:
+                cl, cd = st.columns([5, 1])
+                cl.text(rid)
+                
+                def cb_del_excl(target_id=rid):
+                    exclusiones["recepciones"].remove(target_id)
+                    with open(EXCLUSIONS_FILE, 'w') as f: json.dump(exclusiones, f)
+                    st.toast(f"Recepción {target_id} eliminada de exclusiones")
+
+                cd.button("🗑️", key=f"excl_del_{rid}", on_click=cb_del_excl)
+        else: st.caption("No hay exclusiones")
         
-        col_fecha1, col_fecha2 = st.columns(2)
-        with col_fecha1:
-            fecha_ini_excl = st.date_input("Fecha inicio", datetime.now() - timedelta(days=30), key="fecha_ini_excl", format="DD/MM/YYYY")
-        with col_fecha2:
-            fecha_fin_excl = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_excl", format="DD/MM/YYYY")
+    with tabA:
+        c1, c2 = st.columns(2)
+        f1 = c1.date_input("Desde", datetime.now()-timedelta(days=7), key="excl_date_from")
+        f2 = c2.date_input("Hasta", datetime.now(), key="excl_date_to")
         
-        if st.button("🔍 Buscar recepciones", type="primary", key="btn_buscar_recep_excl"):
+        def cb_search_receps():
             try:
-                with st.spinner("Consultando recepciones..."):
-                    resp = httpx.get(
-                        f"{API_URL}/api/v1/recepciones-mp/",
-                        params={
-                            "username": username,
-                            "password": password,
-                            "fecha_inicio": fecha_ini_excl.strftime("%Y-%m-%d"),
-                            "fecha_fin": fecha_fin_excl.strftime("%Y-%m-%d"),
-                            "solo_hechas": False,
-                            "origen": ["RFP", "VILKUN"]
-                        },
-                        timeout=60.0
-                    )
-                    if resp.status_code == 200:
-                        recepciones_list = resp.json()
-                        st.session_state['recepciones_para_excluir'] = recepciones_list
-                        st.success(f"✅ Se encontraron {len(recepciones_list)} recepciones")
-                    else:
-                        st.error("Error al consultar recepciones")
-            except Exception as e:
-                st.error(f"Error: {e}")
-        
-        # Mostrar lista de recepciones si hay
-        if 'recepciones_para_excluir' in st.session_state and st.session_state['recepciones_para_excluir']:
-            recepciones_list = st.session_state['recepciones_para_excluir']
+                resp = httpx.get(f"{API_URL}/api/v1/recepciones-mp/", params={
+                    "username": username, "password": password,
+                    "fecha_inicio": st.session_state.excl_date_from.isoformat(), 
+                    "fecha_fin": st.session_state.excl_date_to.isoformat()
+                })
+                if resp.status_code == 200:
+                    st.session_state.r_list_excl = resp.json()
+            except:
+                st.error("Error al buscar recepciones")
+
+        st.button("🔍 Buscar Recepciones", on_click=cb_search_receps)
+                
+        if "r_list_excl" in st.session_state:
+            r_list = st.session_state.r_list_excl
+            opts = [f"{r['albaran']} | {r['productor']} ({r['kg_recepcionados']:.0f}Kg)" for r in r_list]
+            sels = st.multiselect("Seleccionar para excluir:", opts, key="excl_multiselect")
             
-            # Crear opciones para multiselect
-            opciones = []
-            for r in recepciones_list:
-                albaran = r.get('albaran', 'N/A')
-                fecha = r.get('fecha', '')[:10] if r.get('fecha') else ''
-                productor = r.get('productor', 'N/A')
-                kg = r.get('kg_recepcionados', 0)
-                # Marcar si ya está excluida
-                ya_excluida = albaran in exclusiones.get("recepciones", [])
-                marca = "⛔ " if ya_excluida else ""
-                opciones.append(f"{marca}{albaran} | {fecha} | {productor} | {kg:.0f} Kg")
-            
-            st.markdown("**Selecciona las recepciones a excluir:**")
-            seleccionadas = st.multiselect(
-                "Recepciones disponibles",
-                options=opciones,
-                default=[],
-                key="recep_seleccionadas_excl",
-                help="Las marcadas con ⛔ ya están excluidas"
-            )
-            
-            if st.button("✅ Excluir seleccionadas", type="primary", key="btn_excluir_selec"):
-                if seleccionadas:
-                    nuevas = 0
-                    for sel in seleccionadas:
-                        # Extraer el albarán (primera parte antes del |)
-                        albaran = sel.split("|")[0].strip().replace("⛔ ", "")
-                        if albaran not in exclusiones["recepciones"]:
-                            exclusiones["recepciones"].append(albaran)
-                            nuevas += 1
-                    
-                    if nuevas > 0:
-                        os.makedirs(os.path.dirname(EXCLUSIONS_FILE), exist_ok=True)
-                        with open(EXCLUSIONS_FILE, 'w') as f:
-                            json.dump(exclusiones, f, indent=2)
-                        st.success(f"✅ {nuevas} recepciones agregadas a exclusiones")
-                        st.rerun()
-                    else:
-                        st.info("Todas las recepciones seleccionadas ya estaban excluidas")
-                else:
-                    st.warning("Selecciona al menos una recepción")
-    
-    st.info("💡 Las recepciones excluidas se contarán en los Kg totales pero su costo NO se sumará a la valorización.")
+            def cb_confirm_excl():
+                current_excl = exclusiones["recepciones"]
+                for s in st.session_state.excl_multiselect:
+                    alb = s.split("|")[0].strip()
+                    if alb not in current_excl: 
+                        current_excl.append(alb)
+                with open(EXCLUSIONS_FILE, 'w') as f: json.dump(exclusiones, f)
+                st.toast("✅ Exclusiones guardadas")
+                if "r_list_excl" in st.session_state:
+                    del st.session_state.r_list_excl
+
+            if sels:
+                st.button("✅ Confirmar Exclusión", type="primary", on_click=cb_confirm_excl)
+
+# ============ TABS PRINCIPALES ============
+tab1, tab2, tab3, tab4 = st.tabs(["📁 Módulos", "📄 Páginas", "👤 Usuarios", "⚙️ Configuración"])
+
+with tab1: fragment_modulos()
+with tab2: fragment_paginas()
+with tab3: fragment_usuarios()
+with tab4: fragment_config()
