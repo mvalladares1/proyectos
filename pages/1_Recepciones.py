@@ -1649,9 +1649,9 @@ with tab_curva:
                 # El año anterior para comparar debe ser 2023-2024
                 
                 if any(s >= 47 for s in semanas_proyeccion):
-                    # FECHAS FIJAS para Año Anterior según solicitud del usuario
-                    # Temporada 2023-2024: Nov 2023 - Abr 2024
-                    fecha_inicio_anterior = datetime(2023, 11, 24)
+                    # FECHAS FIJAS para Año Anterior: Temporada 2023-2024
+                    # Desde Semana 47 (Nov 20 2023) hasta Semana 17 (Abr 28 2024)
+                    fecha_inicio_anterior = datetime(2023, 11, 20)
                     fecha_fin_anterior = datetime(2024, 4, 30, 23, 59, 59)
                 else:
                     # Temporada de un solo año
@@ -1751,9 +1751,13 @@ with tab_curva:
                 print(f"Error obteniendo datos del año anterior: {e}")
             
             # Agregar columna de año anterior al df_chart
+            print(f"DEBUG: Semanas en df_chart: {df_chart['semana'].unique().tolist()}")
+            print(f"DEBUG: Semanas en kg_anterior: {list(kg_anterior_por_semana.keys())}")
+            print(f"DEBUG: kg_anterior_por_semana total: {sum(kg_anterior_por_semana.values())}")
             df_chart['kg_anterior'] = df_chart['semana'].apply(
                 lambda s: kg_anterior_por_semana.get(s, 0)
             )
+            print(f"DEBUG: Total kg_anterior en df_chart: {df_chart['kg_anterior'].sum()}")
             
             # Ordenar por semana
             df_chart['sort_key'] = df_chart['semana'].apply(lambda x: x if x >= 47 else x + 100)
@@ -2389,6 +2393,11 @@ with tab_aprobaciones:
         # Procesar datos
         filas_aprobacion = []
         for rec in recepciones:
+            # Excluir recepciones sin control de calidad
+            calific_final = rec.get('calific_final', '') or ''
+            if not calific_final.strip():
+                continue  # Sin QC asociado, no mostrar en Aprobaciones
+            
             recep_name = rec.get('albaran', '')
             picking_id = rec.get('id', 0)  # ID para link a Odoo
             fecha_recep = rec.get('fecha', '')
