@@ -282,9 +282,24 @@ with tab_kpis:
         # Calcular métricas y promedios existentes
         # Nota: eliminamos 'Total Kg Recepcionados (global)'.
         # El "Costo Total (global)" se mostrará en base a Total Kg Recepcionados MP (total_costo_mp).
-        prom_iqf = df['total_iqf'].mean()
-        prom_block = df['total_block'].mean()
-        clasif = df['calific_final'].value_counts().idxmax() if not df['calific_final'].isnull().all() and not df['calific_final'].eq('').all() else "-"
+        
+        # Filtramos solo las que tienen calidad para el promedio de IQF/Block
+        df_con_calidad = df[df['calific_final'].notna() & (df['calific_final'] != '')]
+        if not df_con_calidad.empty:
+            raw_iqf = df_con_calidad['total_iqf'].mean()
+            raw_block = df_con_calidad['total_block'].mean()
+            total_raw = raw_iqf + raw_block
+            if total_raw > 0:
+                prom_iqf = (raw_iqf / total_raw) * 100
+                prom_block = (raw_block / total_raw) * 100
+            else:
+                prom_iqf = 0
+                prom_block = 0
+            clasif = df_con_calidad['calific_final'].value_counts().idxmax()
+        else:
+            prom_iqf = 0
+            prom_block = 0
+            clasif = "-"
 
         # Mostrar en dos filas compactas
         top_cols = st.columns([1,1,1])
@@ -1096,11 +1111,15 @@ with tab_gestion:
         with kpi_cols[2]:
             st.metric("Listas para validar 🟡", overview['listas_validar'])
         with kpi_cols[3]:
-            st.metric("Con QC Aprobado ✅", overview['con_qc_aprobado'])
+            # Otras = Total - Validadas - Listas validar
+            otras = overview['total_recepciones'] - (overview['validadas'] + overview['listas_validar'])
+            st.metric("Confirmadas/Otras 🔵", otras)
         with kpi_cols[4]:
-            st.metric("Con QC Pendiente 🟡", overview['con_qc_pendiente'])
+            st.metric("Con QC Aprobado ✅", overview['con_qc_aprobado'])
         with kpi_cols[5]:
-            st.metric("Sin QC ⚪", overview['sin_qc'])
+            # Pendiente/Sin QC/Fallido = Total - Aprobado
+            pend_otros = overview['total_recepciones'] - overview['con_qc_aprobado']
+            st.metric("QC Pendientes/Resto 🟡", pend_otros)
         
         st.markdown("---")
     
@@ -2369,6 +2388,11 @@ with tab_aprobaciones:
                 # Usar TipoFruta del producto directamente (como hace KPIs)
                 tipo_fruta = (p.get('TipoFruta') or rec.get('tipo_fruta') or '').strip()
                 manejo = (p.get('Manejo') or '').strip()
+                
+                # REQUERIMIENTO: Solo mostrar si tiene calidad asociada y aprobada (Clasificación != "")
+                clasif_qc = rec.get('calific_final', '')
+                if not clasif_qc or clasif_qc == "":
+                    continue
                 
                 # Si hay TipoFruta directo, usarlo
                 if tipo_fruta:
