@@ -2425,30 +2425,30 @@ with tab_aprobaciones:
             if filtro_oc:
                 df_filtered = df_filtered[df_filtered["OC"].str.contains(filtro_oc, case=False, na=False)]
             
-            # --- GENERAR LINK A ODOO ---
+            # --- GENERAR LINK A ODOO (reemplazar Recepción con URL) ---
             ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
-            df_filtered["_odoo_link"] = df_filtered["_picking_id"].apply(
-                lambda pid: f"{ODOO_BASE}id={pid}&menu_id=350&cids=1&action=540&model=stock.picking&view_type=form" if pid else ""
+            df_filtered["Recepción"] = df_filtered.apply(
+                lambda row: f"{ODOO_BASE}id={row['_picking_id']}&menu_id=350&cids=1&action=540&model=stock.picking&view_type=form&display_name={row['Recepción']}" if row['_picking_id'] else row['Recepción'],
+                axis=1
             )
             
-            # --- CHECKBOX SELECCIONAR TODO ---
-            col_sel_all, col_info = st.columns([1, 3])
+            # --- BOTONES SELECCIÓN SIN RERUN ---
+            col_sel_all, col_desel, col_info = st.columns([1, 1, 2])
             with col_sel_all:
-                seleccionar_todo = st.checkbox("☑️ Seleccionar todo", key="sel_all_aprob", value=False)
+                if st.button("☑️ Seleccionar todo", key="btn_sel_all"):
+                    df_filtered["Sel"] = True
+            with col_desel:
+                if st.button("☐ Deseleccionar", key="btn_desel_all"):
+                    df_filtered["Sel"] = False
             with col_info:
                 st.caption(f"📋 {len(df_filtered)} líneas filtradas")
-            
-            # Aplicar selección masiva
-            if seleccionar_todo:
-                df_filtered["Sel"] = True
             
             # Mostrar tabla
             edited_df = st.data_editor(
                 df_filtered,
                 column_config={
                     "Sel": st.column_config.CheckboxColumn("✓", default=False, width="small"),
-                    "Recepción": st.column_config.TextColumn("Recepción", width="medium"),
-                    "_odoo_link": st.column_config.LinkColumn("🔗", display_text="Odoo", width="small"),
+                    "Recepción": st.column_config.LinkColumn("Recepción", display_text=r"display_name=(.*?)(&|$)", width="medium"),
                     "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
@@ -2460,8 +2460,8 @@ with tab_aprobaciones:
                     "_kg_raw": None,
                     "_picking_id": None,
                 },
-                column_order=["Sel", "Recepción", "_odoo_link", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
-                disabled=["Recepción", "_odoo_link", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
                 hide_index=True,
                 key="editor_aprob",
                 height=500,
