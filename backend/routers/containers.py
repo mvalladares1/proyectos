@@ -85,3 +85,23 @@ async def get_partners(
         return service.get_partners_with_orders()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sankey")
+async def get_sankey_data(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    limit: int = Query(50, description="Número máximo de containers")
+):
+    """
+    Obtiene datos para diagrama Sankey de trazabilidad.
+    Muestra Container → Fabricación → Pallets (consumidos y de salida).
+    """
+    try:
+        service = ContainersService(username=username, password=password)
+        return service.get_sankey_data(start_date=start_date, end_date=end_date, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

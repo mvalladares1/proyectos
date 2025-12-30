@@ -429,3 +429,191 @@ class ContainersService:
             "kg_pendientes": total_kg - total_producidos,
             "avance_global_pct": round(avance_global, 2)
         }
+    
+    def get_sankey_data(self, start_date: Optional[str] = None, 
+                       end_date: Optional[str] = None, 
+                       limit: int = 50) -> Dict:
+        """
+        Genera datos para diagrama Sankey de trazabilidad.
+        Flujo: Container → Fabricación → Pallets Consumidos
+               Fabricación → Pallets de Salida
+        
+        Returns:
+            {
+                "nodes": [{"label": "...", "color": "..."}],
+                "links": [{"source": idx, "target": idx, "value": kg}]
+            }
+        """
+        print(f"Generando Sankey data con límite {limit}...")
+        
+        # Obtener containers con sus fabricaciones
+        containers = self.get_containers(start_date, end_date)[:limit]
+        
+        nodes = []
+        links = []
+        node_index = {}  # id único -> índice en array nodes
+        
+        for container in containers:
+            # NODO: Container
+            c_id = f"C:{container['id']}"
+            if c_id not in node_index:
+                node_index[c_id] = len(nodes)
+                nodes.append({
+                    "label": container['name'],
+                    "color": "#3498db"  # Azul
+                })
+            
+            c_idx = node_index[c_id]
+            
+            # Para cada fabricación del container
+            for fab in container.get('productions', []):
+                # NODO: Fabricación
+                f_id = f"F:{fab['id']}"
+                if f_id not in node_index:
+                    node_index[f_id] = len(nodes)
+                    nodes.append({
+                        "label": fab['name'],
+                        "color": "#e74c3c"  # Rojo
+                    })
+                
+                f_idx = node_index[f_id]
+                
+                # LINK: Container → Fabricación
+                kg_fab = fab.get('kg_producidos', 0) or 1
+                links.append({
+                    "source": c_idx,
+                    "target": f_idx,
+                    "value": kg_fab
+                })
+                
+                # Obtener pallets consumidos y de salida
+                pallets_data = self._get_pallets_from_production(fab['id'])
+                
+                # PALLETS CONSUMIDOS (input)
+                for pallet_in in pallets_data.get('consumidos', []):
+                    p_in_id = f"PIN:{pallet_in['name']}"
+                    if p_in_id not in node_index:
+                        node_index[p_in_id] = len(nodes)
+                        nodes.append({
+                            "label": f"IN: {pallet_in['name']}",
+                            "color": "#f39c12"  # Naranja
+                        })
+                    
+                    p_in_idx = node_index[p_in_id]
+                    
+                    # LINK: Pallet Consumido → Fabricación
+                    links.append({
+                        "source": p_in_idx,
+                        "target": f_idx,
+                        "value": pallet_in.get('qty', 1)
+                    })
+                
+                # PALLETS DE SALIDA (output)
+                for pallet_out in pallets_data.get('salida', []):
+                    p_out_id = f"POUT:{pallet_out['name']}"
+                    if p_out_id not in node_index:
+                        node_index[p_out_id] = len(nodes)
+                        nodes.append({
+                            "label": f"OUT: {pallet_out['name']}",
+                            "color": "#2ecc71"  # Verde
+                        })
+                    
+                    p_out_idx = node_index[p_out_id]
+                    
+                    # LINK: Fabricación → Pallet de Salida
+                    links.append({
+                        "source": f_idx,
+                        "target": p_out_idx,
+                        "value": pallet_out.get('qty', 1)
+                    })
+        
+        print(f"Generados {len(nodes)} nodos y {len(links)} links")
+        return {
+            "nodes": nodes,
+            "links": links
+        }
+    
+    def _get_pallets_from_production(self, production_id: int) -> Dict:
+        """
+        Obtiene pallets consumidos y de salida de una fabricación.
+        
+        Returns:
+            {
+                "consumidos": [{"name": "...", "qty": 100}],
+                "salida": [{"name": "...", "qty": 50}]
+            }
+        """
+        try:
+            # Leer move_raw_ids (consumos) y move_finished_ids (salida)
+            prod = self.odoo.read('mrp.production', [production_id], 
+                                 ['move_raw_ids', 'move_finished_ids'])
+            
+            if not prod:
+                return {"consumidos": [], "salida": []}
+            
+            prod = prod[0]
+            pallets_consumidos = []
+            pallets_salida = []
+            
+            # PALLETS CONSUMIDOS (de move_raw_ids)
+            if prod.get('move_raw_ids'):
+                lines_in = self.odoo.search_read(
+                    'stock.move.line',
+                    [['move_id', 'in', prod['move_raw_ids']]],
+                    ['package_id', 'qty_done', 'product_id'],
+                    limit=100
+                )
+                
+                for line in lines_in:
+                    pkg = line.get('package_id')
+                    qty = line.get('qty_done', 0)
+                    
+                    if pkg and qty > 0:
+                        # Filtrar insumos/envases por nombre del producto
+                        prod_name = ""
+                        prod_info = line.get('product_id')
+                        if prod_info and isinstance(prod_info, (list, tuple)) and len(prod_info) > 1:
+                            prod_name = prod_info[1].lower()
+                        
+                        # Excluir insumos
+                        excluded = ['caja', 'bolsa', 'insumo', 'envase', 'pallet', 'etiqueta']
+                        if not any(ex in prod_name for ex in excluded):
+                            pallets_consumidos.append({
+                                'name': pkg[1] if isinstance(pkg, (list, tuple)) else str(pkg),
+                                'qty': qty
+                            })
+            
+            # PALLETS DE SALIDA (de move_finished_ids)
+            if prod.get('move_finished_ids'):
+                lines_out = self.odoo.search_read(
+                    'stock.move.line',
+                    [['move_id', 'in', prod['move_finished_ids']]],
+                    ['result_package_id', 'qty_done', 'product_id'],
+                    limit=100
+                )
+                
+                for line in lines_out:
+                    pkg = line.get('result_package_id')
+                    qty = line.get('qty_done', 0)
+                    
+                    if pkg and qty > 0:
+                        # Excluir "Proceso Retail" y merma
+                        prod_name = ""
+                        prod_info = line.get('product_id')
+                        if prod_info and isinstance(prod_info, (list, tuple)) and len(prod_info) > 1:
+                            prod_name = prod_info[1].lower()
+                        
+                        if 'proceso retail' not in prod_name and 'merma' not in prod_name:
+                            pallets_salida.append({
+                                'name': pkg[1] if isinstance(pkg, (list, tuple)) else str(pkg),
+                                'qty': qty
+                            })
+            
+            return {
+                "consumidos": pallets_consumidos,
+                "salida": pallets_salida
+            }
+            
+        except Exception as e:
+            print(f"Error obteniendo pallets de producción {production_id}: {e}")
+            return {"consumidos": [], "salida": []}

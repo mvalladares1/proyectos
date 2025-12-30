@@ -96,7 +96,7 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
 DEFAULT_PERMISSIONS: Dict[str, Any] = {
     "dashboards": {slug: [] for slug in ALL_DASHBOARDS},  # Todos públicos por defecto
     "pages": {},  # Permisos granulares por página: "modulo.pagina" -> [emails]
-    "admins": ["mvalladares@riofuturo.cl"],
+    "admins": ["mvalladares@riofuturo.cl", "frios@riofuturo.cl"],
     "maintenance": {
         "enabled": False,
         "message": "El sistema está siendo ajustado en este momento."
