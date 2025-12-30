@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["*"]
 
     # Permisos
-    PERMISSION_ADMINS: List[str] = ["mvalladares@riofuturo.cl"]
+    PERMISSION_ADMINS: List[str] = ["mvalladares@riofuturo.cl", "frios@riofuturo.cl"]
     
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
