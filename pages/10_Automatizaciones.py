@@ -22,7 +22,7 @@ import sys
 import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.auth import proteger_pagina, obtener_info_sesion, get_credenciales
+from shared.auth import proteger_pagina, obtener_info_sesion, get_credenciales, tiene_acceso_pagina
 
 # API URL
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
@@ -158,12 +158,17 @@ if 'last_order_result' in st.session_state and st.session_state.last_order_resul
     st.divider()
 
 # ============ Tabs ============
+# Pre-calcular permisos de página
+_perm_crear = tiene_acceso_pagina("automatizaciones", "crear_orden")
+_perm_monitor = tiene_acceso_pagina("automatizaciones", "monitor_ordenes")
 
 tab1, tab2 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes"])
 
 # ============ TAB 1: Crear Orden ============
 
 with tab1:
+    if not _perm_crear:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Crear Orden'. Contacta al administrador.")
     st.header("Crear Orden de Fabricación")
     
     # Obtener lista de túneles
@@ -474,6 +479,8 @@ with tab1:
 # ============ TAB 2: Monitor de Órdenes ============
 
 with tab2:
+    if not _perm_monitor:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor de Órdenes'. Contacta al administrador.")
     st.header("Monitor de Órdenes")
     
     # Filtros

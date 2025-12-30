@@ -11,7 +11,7 @@ import os
 import io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.auth import proteger_modulo, get_credenciales
+from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_pagina
 from backend.services.aprobaciones_service import get_aprobaciones, save_aprobaciones, remove_aprobaciones
 
 # --- Funciones de formateo chileno ---
@@ -144,12 +144,20 @@ def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
     return None
 
 # === TABS PRINCIPALES ===
+# Pre-calcular permisos de página para cada tab
+_perm_kpis = tiene_acceso_pagina("recepciones", "kpis_calidad")
+_perm_gestion = tiene_acceso_pagina("recepciones", "gestion_recepciones")
+_perm_curva = tiene_acceso_pagina("recepciones", "curva_abastecimiento")
+_perm_aprobaciones = tiene_acceso_pagina("recepciones", "aprobaciones_mp")
+
 tab_kpis, tab_gestion, tab_curva, tab_aprobaciones = st.tabs(["📊 KPIs y Calidad", "📋 Gestión de Recepciones", "📈 Curva de Abastecimiento", "📥 Aprobaciones MP"])
 
 # =====================================================
 #           TAB 1: KPIs Y CALIDAD (Código existente)
 # =====================================================
 with tab_kpis:
+    if not _perm_kpis:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'KPIs y Calidad'. Contacta al administrador.")
     # Filtros
     col1, col2 = st.columns(2)
     with col1:
@@ -1030,6 +1038,8 @@ with tab_kpis:
 #           TAB 2: GESTIÓN DE RECEPCIONES
 # =====================================================
 with tab_gestion:
+    if not _perm_gestion:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Gestión de Recepciones'. Contacta al administrador.")
     st.subheader("📋 Gestión de Recepciones MP")
     st.caption("Monitoreo de estados de validación y control de calidad")
     
@@ -1304,6 +1314,8 @@ with tab_gestion:
 #           TAB 3: CURVA DE ABASTECIMIENTO
 # =====================================================
 with tab_curva:
+    if not _perm_curva:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Curva de Abastecimiento'. Contacta al administrador.")
     st.subheader("📈 Curva de Abastecimiento")
     st.caption("Comparación entre kilogramos proyectados (Excel) vs recepcionados (Sistema)")
     
@@ -2237,6 +2249,8 @@ with tab_curva:
 #           TAB 4: APROBACIONES MP (Nuevo)
 # =====================================================
 with tab_aprobaciones:
+    if not _perm_aprobaciones:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Aprobaciones MP'. Contacta al administrador.")
     st.markdown("### 📥 Aprobaciones de Precios MP")
     st.markdown("Valida masivamente los precios de recepción comparándolos con el presupuesto.")
     

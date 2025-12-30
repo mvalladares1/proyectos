@@ -12,7 +12,7 @@ import os
 import io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.auth import proteger_modulo, get_credenciales
+from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_pagina
 
 
 # --- Funciones de formateo chileno ---
@@ -79,12 +79,18 @@ for key in ['compras_data', 'compras_ordenes', 'lineas_credito', 'lineas_resumen
         st.session_state[key] = None
 
 # --- TABS PRINCIPALES ---
+# Pre-calcular permisos de página
+_perm_ordenes = tiene_acceso_pagina("compras", "ordenes")
+_perm_lineas = tiene_acceso_pagina("compras", "lineas_credito")
+
 tab_po, tab_credito = st.tabs(["📋 Órdenes de Compra", "💳 Líneas de Crédito"])
 
 # =====================================================
 #                  TAB 1: ÓRDENES DE COMPRA
 # =====================================================
 with tab_po:
+    if not _perm_ordenes:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Órdenes de Compra'. Contacta al administrador.")
     st.subheader("Gestión de Órdenes de Compra")
     
     # Filtros
@@ -343,6 +349,8 @@ with tab_po:
 #                  TAB 2: LÍNEAS DE CRÉDITO
 # =====================================================
 with tab_credito:
+    if not _perm_lineas:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Líneas de Crédito'. Contacta al administrador.")
     st.subheader("💳 Monitoreo de Líneas de Crédito")
     st.caption("Proveedores con línea de crédito activa y uso actual")
     

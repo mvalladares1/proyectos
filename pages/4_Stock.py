@@ -7,7 +7,7 @@ import httpx
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales
+from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales, tiene_acceso_pagina
 
 # ==================== FUNCIONES DE FORMATO CHILENO ====================
 def fmt_fecha(fecha):
@@ -256,10 +256,17 @@ else:
     camaras_data = filtrar_camaras_principales(camaras_data_all) if camaras_data_all else []
 
 # Tabs principales
+# Pre-calcular permisos de página
+_perm_camaras = tiene_acceso_pagina("stock", "camaras")
+_perm_pallets = tiene_acceso_pagina("stock", "pallets")
+_perm_trazabilidad = tiene_acceso_pagina("stock", "trazabilidad")
+
 tab1, tab2, tab3 = st.tabs(["🏢 Cámaras", "📦 Pallets", "🏷️ Trazabilidad"])
 
 # ========== TAB 1: CÁMARAS ==========
 with tab1:
+    if not _perm_camaras:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Cámaras'. Contacta al administrador.")
     st.header("Stock por Cámaras")
     
     if camaras_data_all:
@@ -398,6 +405,8 @@ with tab1:
 
 # ========== TAB 2: PALLETS ==========
 with tab2:
+    if not _perm_pallets:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Pallets'. Contacta al administrador.")
     st.header("Consulta de Pallets")
     
     if camaras_data:
@@ -488,6 +497,8 @@ with tab2:
 
 # ========== TAB 3: TRAZABILIDAD ==========
 with tab3:
+    if not _perm_trazabilidad:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Trazabilidad'. Contacta al administrador.")
     st.header("Trazabilidad de Lotes")
     st.markdown("Análisis FIFO y antigüedad de lotes por categoría")
     

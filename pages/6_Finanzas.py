@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 from datetime import date, datetime
 
-from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales
+from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales, tiene_acceso_pagina
 
 st.set_page_config(page_title="Finanzas", page_icon="💰", layout="wide")
 
@@ -199,9 +199,18 @@ if datos:
             ppto_mensual = ppto.get("mensual", {})
 
         # === TABS PRINCIPALES ===
+        # Pre-calcular permisos
+        _perm_agrupado = tiene_acceso_pagina("finanzas", "agrupado")
+        _perm_mensualizado = tiene_acceso_pagina("finanzas", "mensualizado")
+        _perm_ytd = tiene_acceso_pagina("finanzas", "ytd")
+        _perm_cg = tiene_acceso_pagina("finanzas", "cg")
+        _perm_detalle = tiene_acceso_pagina("finanzas", "detalle")
+        
         tab_mensual, tab_control_mensual, tab_ytd, tab_cg, tab_detalle = st.tabs(["📅 Agrupado", "💰 Mensualizado", "📊 YTD (Acumulado)", "📊 CG", "📋 Detalle"])
 
         with tab_mensual:
+            if not _perm_agrupado:
+                st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Agrupado'. Contacta al administrador.")
             st.subheader("Estado de Resultados - Agrupado por Meses Seleccionados")
 
             # Filtrar datos mensuales por meses seleccionados
@@ -311,6 +320,8 @@ if datos:
             )
 
         with tab_control_mensual:
+            if not _perm_mensualizado:
+                st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Mensualizado'. Contacta al administrador.")
             st.subheader("💰 Control Presupuestario - Mensualizado Detalle")
             st.caption("Detalle mes a mes de los meses seleccionados")
 
@@ -480,6 +491,8 @@ if datos:
 
 
         with tab_ytd:
+            if not _perm_ytd:
+                st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'YTD'. Contacta al administrador.")
             st.subheader("Estado de Resultados - YTD (Acumulado)")
 
             # === MÉTRICAS PRINCIPALES (calculadas con las mismas fórmulas que la tabla) ===
@@ -628,6 +641,8 @@ if datos:
             )
 
         with tab_cg:
+            if not _perm_cg:
+                st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'CG'. Contacta al administrador.")
             st.subheader("📊 CG - Por Cuenta Contable")
             st.caption("Análisis detallado por cuenta contable | Filtros aplicables en sidebar")
 
@@ -775,6 +790,8 @@ if datos:
                         st.write("Estructura vacía")
 
         with tab_detalle:
+            if not _perm_detalle:
+                st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Detalle'. Contacta al administrador.")
             st.subheader("📋 Estado de Resultados - Vista Desplegable")
             st.caption("Haz clic en cada categoría para ver el detalle de subcategorías y cuentas")
             

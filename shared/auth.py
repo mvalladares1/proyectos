@@ -305,6 +305,75 @@ def tiene_acceso_pagina(modulo: str, pagina: str) -> bool:
     return pagina in module_pages if module_pages else True
 
 
+def filtrar_tabs_permitidos(modulo: str, tabs_config: List[Dict[str, str]]) -> tuple:
+    """
+    Filtra los tabs de un módulo según los permisos del usuario.
+    
+    Args:
+        modulo: Clave del módulo (recepciones, produccion, etc.)
+        tabs_config: Lista de dicts con 'slug' y 'label'
+                     Ejemplo: [{"slug": "kpis", "label": "📊 KPIs"}, ...]
+        
+    Returns:
+        tuple: (list de labels permitidos, list de slugs permitidos)
+    """
+    # Cargar permisos si no están cargados
+    if 'allowed_pages' not in st.session_state:
+        cargar_permisos_usuario()
+    
+    # Admins ven todo
+    if st.session_state.get('is_admin', False):
+        labels = [t['label'] for t in tabs_config]
+        slugs = [t['slug'] for t in tabs_config]
+        return (labels, slugs)
+    
+    # Obtener páginas permitidas para este módulo
+    allowed_pages = st.session_state.get('allowed_pages', {}).get(modulo, [])
+    
+    # Si lista vacía, significa que no hay restricciones (módulo público)
+    if not allowed_pages:
+        labels = [t['label'] for t in tabs_config]
+        slugs = [t['slug'] for t in tabs_config]
+        return (labels, slugs)
+    
+    # Filtrar solo los tabs permitidos
+    tabs_filtrados = [t for t in tabs_config if t['slug'] in allowed_pages]
+    labels = [t['label'] for t in tabs_filtrados]
+    slugs = [t['slug'] for t in tabs_filtrados]
+    
+    return (labels, slugs)
+
+
+def verificar_acceso_tab(modulo: str, pagina: str, nombre_pagina: str = None) -> bool:
+    """
+    Verifica si el usuario tiene acceso a un tab/página.
+    Si no tiene acceso, muestra mensaje de error.
+    
+    Uso dentro de un tab:
+        with tab_kpis:
+            if not verificar_acceso_tab("recepciones", "kpis_calidad", "KPIs y Calidad"):
+                pass  # st.stop() ya fue llamado internamente si no hay acceso
+            else:
+                # contenido del tab
+    
+    Args:
+        modulo: Clave del módulo (recepciones, produccion, etc.)
+        pagina: Slug de la página/tab
+        nombre_pagina: Nombre amigable para mostrar en el mensaje
+        
+    Returns:
+        True si tiene acceso, False si no (y muestra mensaje)
+    """
+    if tiene_acceso_pagina(modulo, pagina):
+        return True
+    
+    # Mostrar mensaje de acceso denegado
+    nombre = nombre_pagina or pagina.replace("_", " ").title()
+    st.error(f"🚫 **Acceso Restringido** - No tienes permisos para ver '{nombre}'.")
+    st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    return False
+
+
 def proteger_modulo(modulo_key: str) -> bool:
     """
     Protege un módulo específico verificando autenticación y permisos.

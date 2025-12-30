@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 # Importar utilidades compartidas
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_dashboard
+from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_dashboard, tiene_acceso_pagina
 
 # Configuración de página
 st.set_page_config(
@@ -391,12 +391,18 @@ st.caption("Monitorea rendimientos productivos y detalle de órdenes de fabricac
 # ============================================
 # TABS PRINCIPALES
 # ============================================
+# Pre-calcular permisos de página
+_perm_reporteria = tiene_acceso_pagina("produccion", "reporteria_general")
+_perm_detalle = tiene_acceso_pagina("produccion", "detalle_of")
+
 tab_general, tab_detalle = st.tabs(["📊 Reportería General", "📋 Detalle de OF"])
 
 # ============================================
 # TAB 1: REPORTERÍA GENERAL
 # ============================================
 with tab_general:
+    if not _perm_reporteria:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Reportería General'. Contacta al administrador.")
     st.subheader("📊 Reportería General de Producción")
     
     # --- Estado de sesión para reportería (simplificado) ---
@@ -1011,6 +1017,8 @@ with tab_general:
 # TAB 2: DETALLE DE OF (código original)
 # ============================================
 with tab_detalle:
+    if not _perm_detalle:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Detalle de OF'. Contacta al administrador.")
     st.subheader("📋 Detalle de Órdenes de Fabricación")
     
     # --- KPIs rápidos de estado de OFs ---
