@@ -312,15 +312,7 @@ class ComercialService:
         if filters:
             for k, v in filters.items():
                 if v and k in df_filtered.columns:
-                    if k == 'documento':
-                        # Búsqueda en documento O en doc_origen (para encontrar NC que referencian una factura)
-                        search_term = v if isinstance(v, str) else v[0] if v else ''
-                        if search_term:
-                            mask_doc = df_filtered['documento'].str.contains(search_term, case=False, na=False)
-                            mask_origen = df_filtered['doc_origen'].str.contains(search_term, case=False, na=False)
-                            df_filtered = df_filtered[mask_doc | mask_origen]
-                    else:
-                        df_filtered = df_filtered[df_filtered[k].isin(v)]
+                    df_filtered = df_filtered[df_filtered[k].isin(v)]
 
         now = datetime.datetime.now()
         cur_anio, cur_mes = now.year, now.month
@@ -329,15 +321,7 @@ class ComercialService:
         if filters:
             for k, v in filters.items():
                 if v and k not in ['anio', 'mes', 'trimestre'] and k in df_inv_base.columns:
-                    if k == 'documento':
-                        # Búsqueda en documento O en doc_origen (string, no lista)
-                        search_term = v if isinstance(v, str) else v[0] if v else ''
-                        if search_term:
-                            mask_doc = df_inv_base['documento'].str.contains(search_term, case=False, na=False)
-                            mask_origen = df_inv_base['doc_origen'].str.contains(search_term, case=False, na=False)
-                            df_inv_base = df_inv_base[mask_doc | mask_origen]
-                    else:
-                        df_inv_base = df_inv_base[df_inv_base[k].isin(v)]
+                    df_inv_base = df_inv_base[df_inv_base[k].isin(v)]
 
         sel_anios = filters.get('anio', []) if filters else []
         sel_meses = filters.get('mes', []) if filters else []
