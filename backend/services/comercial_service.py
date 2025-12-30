@@ -96,6 +96,21 @@ class ComercialService:
                 fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state', 'move_name']
                 results_inv = self.odoo.search_read('account.move.line', domain_inv, fields_inv, limit=50000, order='date desc')
                 
+                # Consulta 2: Líneas SIN producto pero con cuenta de ingresos (facturas antiguas 2023)
+                # Estas facturas fueron registradas sin producto específico
+                domain_inv_legacy = [
+                    ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+                    ('account_id', 'in', [132, 133]),  # Solo cuentas de ingresos principales
+                    ('parent_state', '=', 'posted'),
+                    ('display_type', '=', 'product'),  # Solo líneas de producto (no payment_term)
+                    ('product_id', '=', False),  # SIN producto
+                    ('quantity', '>', 0)  # Con cantidad positiva
+                ]
+                results_inv_legacy = self.odoo.search_read('account.move.line', domain_inv_legacy, fields_inv, limit=10000, order='date desc')
+                # Combinar resultados
+                print(f"[INFO] Lineas con producto: {len(results_inv)}, Sin producto (legacy): {len(results_inv_legacy)}")
+                results_inv = results_inv + results_inv_legacy
+                
                 # 1.2 COMPROMETIDO (sale.order.line) - solo pedidos recientes
                 domain_sale = [
                     ('state', 'in', ['draft', 'sent', 'sale']),  # Excluir 'done' ya facturados
@@ -212,9 +227,10 @@ class ComercialService:
                         monto_clp = 0
                         qty = 0
                     elif nc_sin_efecto:
-                        # NC código 2 (corrige texto) o 3 (corrige monto) → valores en 0
-                        monto_clp = 0
-                        qty = 0
+                        # NC código 2 (corrige texto) o 3 (corrige monto) → solo kilos en 0, monto normal
+                        balance = line.get('balance', 0)
+                        monto_clp = -balance  # El monto SÍ se considera
+                        qty = 0  # Los kilos NO se consideran
                     else:
                         balance = line.get('balance', 0)
                         monto_clp = -balance 
@@ -236,8 +252,17 @@ class ComercialService:
                     pais = destino_real if destino_real else partner_map.get(p_id, {}).get('pais', "Desconocido")
                     cat_cliente = partner_map.get(p_id, {}).get('categoria', "Sin Categoría")
 
-                    prod_id = line['product_id'][0]
-                    especie, manejo, variedad, temporada, programa = self._classify_product(prod_id, line['product_id'][1], product_map, variety_map, anio)
+                    # Manejar líneas CON y SIN producto
+                    if line.get('product_id'):
+                        prod_id = line['product_id'][0]
+                        especie, manejo, variedad, temporada, programa = self._classify_product(prod_id, line['product_id'][1], product_map, variety_map, anio)
+                    else:
+                        # Líneas legacy (2023) sin producto - asignar valores por defecto
+                        especie = "Arándano"  # Default más común para exportación
+                        manejo = "Convencional"
+                        variedad = "S/V"
+                        temporada = f"{anio}-{anio+1}"
+                        programa = "Granel"  # Default para exportación
 
                     # Excluir servicios (no son productos físicos)
                     if especie == "SERVICIOS":
