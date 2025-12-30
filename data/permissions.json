@@ -6,7 +6,8 @@
     "stock": [],
     "containers": [],
     "rendimiento": [
-      "jvidaurre@riofuturo.cl"
+      "jvidaurre@riofuturo.cl",
+      "frios@riofuturo.cl"
     ],
     "relacion_comercial": [
       "fhorst@riofuturo.cl",
@@ -22,7 +23,8 @@
     ],
     "permisos": [
       "mvalladares@riofuturo.cl"
-    ]
+    ],
+    "automatizaciones": []
   },
   "admins": [
     "mvalladares@riofuturo.cl"
