@@ -229,9 +229,9 @@ if data:
     st.markdown("---")
     
     # === TABS para diferentes vistas ===
-    tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab0, tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🍓 Consolidado", "🧺 Por Lote", "🏭 Por Proveedor", "⚙️ Por MO", 
-        "🏠 Por Sala", "📊 Gráficos", "🔍 Trazabilidad"
+        "🏠 Por Sala", "📊 Gráficos", "🔍 Trazabilidad", "🔗 Diagrama"
     ])
     
     # --- TAB 0: CONSOLIDADO POR FRUTA/MANEJO/PRODUCTO ---
@@ -729,146 +729,134 @@ if data:
                 resumen_fruta['Rend. Ponderado %'] = resumen_fruta['Rend. Ponderado %'].apply(lambda x: fmt_porcentaje(x))
                 st.dataframe(resumen_fruta, use_container_width=True, hide_index=True)
     
-    # --- TAB 6: Trazabilidad ---
+    # --- TAB 6: Trazabilidad Inversa ---
     with tab6:
-        st.subheader("🔍 Trazabilidad")
+        st.subheader("🔍 Trazabilidad Inversa: PT → MP")
+        st.markdown("Ingresa un lote de Producto Terminado para encontrar los lotes de Materia Prima originales.")
         
-        # Toggle entre Trazabilidad Inversa y Sankey
-        tipo_traz = st.radio(
-            "Selecciona tipo de visualización",
-            ["PT → MP (Inversa)", "Container → Fabricación → Pallets (Sankey)"],
-            horizontal=True
-        )
+        lote_pt_input = st.text_input("Número de Lote PT", placeholder="Ej: 0000304776")
         
-        st.markdown("---")
-        
-        if tipo_traz == "PT → MP (Inversa)":
-            # TRAZABILIDAD INVERSA (código original)
-            st.markdown("### 🔍 Trazabilidad Inversa: PT → MP")
-            st.markdown("Ingresa un lote de Producto Terminado para encontrar los lotes de Materia Prima originales.")
-            
-            lote_pt_input = st.text_input("Número de Lote PT", placeholder="Ej: 0000304776")
-            
-            if st.button("Buscar Origen", type="primary"):
-                if lote_pt_input:
-                    with st.spinner("Buscando trazabilidad..."):
-                        try:
-                            params = {"username": username, "password": password}
-                            resp = requests.get(
-                                f"{API_URL}/api/v1/rendimiento/trazabilidad-inversa/{lote_pt_input}",
-                                params=params,
-                                timeout=60
-                            )
-                            if resp.status_code == 200:
-                                traz = resp.json()
-                                
-                                if traz.get('error'):
-                                    st.warning(traz['error'])
-                                else:
-                                    st.success(f"✅ Lote encontrado: **{traz['lote_pt']}**")
-                                    
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        st.markdown(f"**Producto PT:** {traz.get('producto_pt', 'N/A')}")
-                                        st.markdown(f"**Fecha Creación:** {traz.get('fecha_creacion', 'N/A')}")
-                                    with col2:
-                                        if traz.get('mo'):
-                                            st.markdown(f"**MO:** {traz['mo'].get('name', 'N/A')}")
-                                            st.markdown(f"**Fecha MO:** {traz['mo'].get('fecha', 'N/A')}")
-                                    
-                                    st.markdown("---")
-                                    st.markdown("### 📦 Lotes MP Originales")
-                                    
-                                    lotes_mp = traz.get('lotes_mp', [])
-                                    if lotes_mp:
-                                        df_mp = pd.DataFrame(lotes_mp)
-                                        df_mp['kg'] = df_mp['kg'].apply(lambda x: fmt_numero(x, 2))
-                                        st.dataframe(df_mp[['lot_name', 'product_name', 'kg', 'proveedor', 'fecha_recepcion']], 
-                                                   use_container_width=True, hide_index=True)
-                                        st.metric("Total Kg MP", fmt_numero(traz.get('total_kg_mp', 0), 2))
-                                    else:
-                                        st.info("No se encontraron lotes MP asociados")
+        if st.button("Buscar Origen", type="primary"):
+            if lote_pt_input:
+                with st.spinner("Buscando trazabilidad..."):
+                    try:
+                        params = {"username": username, "password": password}
+                        resp = requests.get(
+                            f"{API_URL}/api/v1/rendimiento/trazabilidad-inversa/{lote_pt_input}",
+                            params=params,
+                            timeout=60
+                        )
+                        if resp.status_code == 200:
+                            traz = resp.json()
+                            
+                            if traz.get('error'):
+                                st.warning(traz['error'])
                             else:
-                                st.error(f"Error: {resp.status_code}")
-                        except Exception as e:
-                            st.error(f"Error: {str(e)}")
-                else:
-                    st.warning("Ingresa un número de lote")
-        
-        else:
-            # DIAGRAMA SANKEY
-            import plotly.graph_objects as go
-            
-            st.markdown("### 🔗 Diagrama Sankey: Container → Fabricación → Pallets")
-            st.caption("Visualización del flujo de containers, fabricaciones y pallets (consumidos y de salida)")
-            
-            with st.spinner("Generando diagrama Sankey..."):
-                try:
-                    params = {
-                        "username": username, 
-                        "password": password,
-                        "start_date": fecha_inicio.strftime("%Y-%m-%d"),
-                        "end_date": fecha_fin.strftime("%Y-%m-%d"),
-                        "limit": 30  # Limitar a 30 containers para no saturar
-                    }
-                    
-                    resp = requests.get(
-                        f"{API_URL}/api/v1/containers/sankey",
-                        params=params,
-                        timeout=120
-                    )
-                    
-                    if resp.status_code == 200:
-                        sankey_data = resp.json()
-                        
-                        if not sankey_data.get('nodes') or not sankey_data.get('links'):
-                            st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                                st.success(f"✅ Lote encontrado: **{traz['lote_pt']}**")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.markdown(f"**Producto PT:** {traz.get('producto_pt', 'N/A')}")
+                                    st.markdown(f"**Fecha Creación:** {traz.get('fecha_creacion', 'N/A')}")
+                                with col2:
+                                    if traz.get('mo'):
+                                        st.markdown(f"**MO:** {traz['mo'].get('name', 'N/A')}")
+                                        st.markdown(f"**Fecha MO:** {traz['mo'].get('fecha', 'N/A')}")
+                                
+                                st.markdown("---")
+                                st.markdown("### 📦 Lotes MP Originales")
+                                
+                                lotes_mp = traz.get('lotes_mp', [])
+                                if lotes_mp:
+                                    df_mp = pd.DataFrame(lotes_mp)
+                                    df_mp['kg'] = df_mp['kg'].apply(lambda x: fmt_numero(x, 2))
+                                    st.dataframe(df_mp[['lot_name', 'product_name', 'kg', 'proveedor', 'fecha_recepcion']], 
+                                               use_container_width=True, hide_index=True)
+                                    st.metric("Total Kg MP", fmt_numero(traz.get('total_kg_mp', 0), 2))
+                                else:
+                                    st.info("No se encontraron lotes MP asociados")
                         else:
-                            # Crear figura Sankey
-                            fig = go.Figure(data=[go.Sankey(
-                                node=dict(
-                                    pad=15,
-                                    thickness=20,
-                                    line=dict(color="black", width=0.5),
-                                    label=[n["label"] for n in sankey_data["nodes"]],
-                                    color=[n["color"] for n in sankey_data["nodes"]]
-                                ),
-                                link=dict(
-                                    source=[l["source"] for l in sankey_data["links"]],
-                                    target=[l["target"] for l in sankey_data["links"]],
-                                    value=[l["value"] for l in sankey_data["links"]]
-                                )
-                            )])
-                            
-                            fig.update_layout(
-                                title="Flujo: Container → Fabricación → Pallets",
-                                height=700,
-                                font=dict(size=10)
-                            )
-                            
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # Estadísticas
-                            st.markdown("---")
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("Containers", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
-                            with col2:
-                                st.metric("Fabricaciones", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
-                            with col3:
-                                total_pallets = len([n for n in sankey_data["nodes"] if n["color"] in ["#f39c12", "#2ecc71"]])
-                                st.metric("Pallets", total_pallets)
-                            
-                            # Leyenda
-                            st.markdown("##### Leyenda de colores:")
-                            st.markdown("🔵 **Azul**: Containers | 🔴 **Rojo**: Fabricaciones | 🟠 **Naranja**: Pallets IN (consumidos) | 🟢 **Verde**: Pallets OUT (salida)")
+                            st.error(f"Error: {resp.status_code}")
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+            else:
+                st.warning("Ingresa un número de lote")
+    
+    # --- TAB 7: Diagrama Sankey ---
+    with tab7:
+        import plotly.graph_objects as go
+        
+        st.subheader("🔗 Diagrama Sankey: Container → Fabricación → Pallets")
+        st.caption("Visualización del flujo de containers, fabricaciones y pallets (consumidos y de salida)")
+        
+        with st.spinner("Generando diagrama Sankey..."):
+            try:
+                params = {
+                    "username": username, 
+                    "password": password,
+                    "start_date": fecha_inicio.strftime("%Y-%m-%d"),
+                    "end_date": fecha_fin.strftime("%Y-%m-%d"),
+                    "limit": 30  # Limitar a 30 containers para no saturar
+                }
+                
+                resp = requests.get(
+                    f"{API_URL}/api/v1/containers/sankey",
+                    params=params,
+                    timeout=120
+                )
+                
+                if resp.status_code == 200:
+                    sankey_data = resp.json()
+                    
+                    if not sankey_data.get('nodes') or not sankey_data.get('links'):
+                        st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
                     else:
-                        st.error(f"Error al obtener datos del Sankey: {resp.status_code}")
+                        # Crear figura Sankey
+                        fig = go.Figure(data=[go.Sankey(
+                            node=dict(
+                                pad=15,
+                                thickness=20,
+                                line=dict(color="black", width=0.5),
+                                label=[n["label"] for n in sankey_data["nodes"]],
+                                color=[n["color"] for n in sankey_data["nodes"]]
+                            ),
+                            link=dict(
+                                source=[l["source"] for l in sankey_data["links"]],
+                                target=[l["target"] for l in sankey_data["links"]],
+                                value=[l["value"] for l in sankey_data["links"]]
+                            )
+                        )])
                         
-                except requests.exceptions.ConnectionError:
-                    st.error("No se puede conectar al servidor API. Asegúrate de que el backend esté corriendo.")
-                except Exception as e:
-                    st.error(f"Error al generar el diagrama: {str(e)}")
+                        fig.update_layout(
+                            title="Flujo: Container → Fabricación → Pallets",
+                            height=700,
+                            font=dict(size=10)
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Estadísticas
+                        st.markdown("---")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Containers", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
+                        with col2:
+                            st.metric("Fabricaciones", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
+                        with col3:
+                            total_pallets = len([n for n in sankey_data["nodes"] if n["color"] in ["#f39c12", "#2ecc71"]])
+                            st.metric("Pallets", total_pallets)
+                        
+                        # Leyenda
+                        st.markdown("##### Leyenda de colores:")
+                        st.markdown("🔵 **Azul**: Containers | 🔴 **Rojo**: Fabricaciones | 🟠 **Naranja**: Pallets IN (consumidos) | 🟢 **Verde**: Pallets OUT (salida)")
+                else:
+                    st.error(f"Error al obtener datos del Sankey: {resp.status_code}")
+                    
+            except requests.exceptions.ConnectionError:
+                st.error("No se puede conectar al servidor API. Asegúrate de que el backend esté corriendo.")
+            except Exception as e:
+                st.error(f"Error al generar el diagrama: {str(e)}")
+
 
 
 else:
