@@ -185,7 +185,7 @@ else:
         ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py"),
         ("🚢", "Containers", "Pedidos y avance de producción", "pages/5_Containers.py"),
         ("📈", "Rendimiento", "Análisis de eficiencia MP → PT por lote", "pages/7_Rendimiento.py"),
-        ("🤖", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py"),
+        ("🦾", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py"),
     ]
     
     for i, (icon, title, desc, page) in enumerate(dashboards_op):
