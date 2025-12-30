@@ -64,7 +64,8 @@ PRODUCTOS_TRANSFORMACION = {
 }
 
 # Provisión eléctrica
-PRODUCTO_ELECTRICIDAD_ID = 15995  # [ETE] Provisión Electricidad Túnel Estático ($/hr)
+PRODUCTO_ELECTRICIDAD_ID = 15033  # [ETE] Provisión Electricidad Túnel Estático ($/hr)
+UOM_DOLARES_KG_ID = 210  # $/Kg - UoM para provisión eléctrica
 
 # Ubicaciones virtuales
 UBICACION_VIRTUAL_CONGELADO_ID = 8485  # Virtual Locations/Ubicación Congelado
@@ -324,6 +325,7 @@ class TunelesService:
             ubicacion = pkg_quants[0]['location_id']
             producto_id = pkg_quants[0]['product_id'][0] if pkg_quants[0]['product_id'] else None
             lote_id = pkg_quants[0]['lot_id'][0] if pkg_quants[0].get('lot_id') else None
+            lote_nombre = pkg_quants[0]['lot_id'][1] if pkg_quants[0].get('lot_id') else None
             
             resultados.append({
                 'existe': True,
@@ -332,8 +334,10 @@ class TunelesService:
                 'ubicacion_id': ubicacion[0] if ubicacion else None,
                 'ubicacion_nombre': ubicacion[1] if ubicacion else None,
                 'producto_id': producto_id,
+                'producto_nombre': pkg_quants[0]['product_id'][1] if pkg_quants[0]['product_id'] else None,
                 'package_id': package['id'],
-                'lote_id': lote_id
+                'lote_id': lote_id,
+                'lote_nombre': lote_nombre
             })
         
         return resultados
@@ -501,6 +505,386 @@ class TunelesService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
+    def obtener_detalle_pendientes(self, mo_id: int) -> Dict:
+        """
+        Obtiene el detalle de los pallets pendientes de una MO,
+        verificando cuáles ya tienen stock disponible.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: success, mo_name, pallets (lista con estado de cada uno)
+        """
+        try:
+            import json
+            
+            # Leer MO y su JSON de pendientes
+            mo_data = self.odoo.read('mrp.production', [mo_id], 
+                ['name', 'x_studio_pending_receptions', 'move_raw_ids'])[0]
+            
+            mo_name = mo_data['name']
+            pending_json = mo_data.get('x_studio_pending_receptions')
+            
+            if not pending_json:
+                return {
+                    'success': True,
+                    'mo_id': mo_id,
+                    'mo_name': mo_name,
+                    'tiene_pendientes': False,
+                    'pallets': [],
+                    'mensaje': 'Esta MO no tiene pendientes registrados'
+                }
+            
+            # Parsear JSON
+            pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            
+            if not pending_data.get('pending'):
+                return {
+                    'success': True,
+                    'mo_id': mo_id,
+                    'mo_name': mo_name,
+                    'tiene_pendientes': False,
+                    'pallets': [],
+                    'mensaje': 'Pendientes ya fueron completados'
+                }
+            
+            pallets_info = pending_data.get('pallets', [])
+            picking_ids = pending_data.get('picking_ids', [])
+            
+            # Obtener info de pickings para mostrar nombre
+            picking_names = {}
+            if picking_ids:
+                pickings = self.odoo.search_read(
+                    'stock.picking',
+                    [('id', 'in', picking_ids)],
+                    ['id', 'name', 'state']
+                )
+                picking_names = {p['id']: {'name': p['name'], 'state': p['state']} for p in pickings}
+            
+            # Obtener los componentes actuales de la MO para saber cuáles ya se agregaron
+            move_raw_ids = mo_data.get('move_raw_ids', [])
+            componentes_existentes = set()
+            if move_raw_ids:
+                moves = self.odoo.search_read(
+                    'stock.move.line',
+                    [('move_id', 'in', move_raw_ids)],
+                    ['package_id']
+                )
+                for m in moves:
+                    if m.get('package_id'):
+                        componentes_existentes.add(m['package_id'][1])  # Nombre del package
+            
+            # Verificar disponibilidad de cada pallet
+            resultado_pallets = []
+            for p in pallets_info:
+                codigo = p.get('codigo', '')
+                kg = p.get('kg', 0)
+                producto_id = p.get('producto_id')
+                picking_id = p.get('picking_id')
+                
+                # Verificar si el pallet ya fue agregado como componente
+                ya_agregado = codigo in componentes_existentes
+                
+                # Verificar si tiene stock disponible
+                quants = self.odoo.search_read(
+                    'stock.quant',
+                    [
+                        ('package_id.name', '=', codigo),
+                        ('quantity', '>', 0),
+                        ('location_id.usage', '=', 'internal')
+                    ],
+                    ['quantity', 'location_id', 'product_id', 'lot_id'],
+                    limit=1
+                )
+                
+                tiene_stock = len(quants) > 0
+                
+                picking_info = picking_names.get(picking_id, {})
+                picking_state = picking_info.get('state', 'unknown')
+                picking_name = picking_info.get('name', 'N/A')
+                
+                # Determinar estado
+                if ya_agregado:
+                    estado = 'agregado'
+                    estado_label = '✅ Ya agregado'
+                elif tiene_stock:
+                    estado = 'disponible'
+                    estado_label = '🟢 Disponible'
+                else:
+                    estado = 'pendiente'
+                    estado_label = '🟠 Pendiente'
+                
+                resultado_pallets.append({
+                    'codigo': codigo,
+                    'kg': kg,
+                    'producto_id': producto_id,
+                    'picking_id': picking_id,
+                    'picking_name': picking_name,
+                    'picking_state': picking_state,
+                    'estado': estado,
+                    'estado_label': estado_label,
+                    'tiene_stock': tiene_stock,
+                    'ya_agregado': ya_agregado,
+                    'quant_info': quants[0] if quants else None
+                })
+            
+            # Contar estados
+            total = len(resultado_pallets)
+            agregados = sum(1 for p in resultado_pallets if p['estado'] == 'agregado')
+            disponibles = sum(1 for p in resultado_pallets if p['estado'] == 'disponible')
+            pendientes = sum(1 for p in resultado_pallets if p['estado'] == 'pendiente')
+            
+            # Ordenar pallets: disponibles primero, luego pendientes
+            resultado_pallets_ordenados = sorted(resultado_pallets, 
+                key=lambda x: (0 if x['estado'] == 'agregado' else 1 if x['estado'] == 'disponible' else 2))
+            
+            # Obtener componentes (move_raw_ids) con detalle
+            componentes = []
+            electricidad_total = 0
+            move_raw_ids = mo_data.get('move_raw_ids', [])
+            if move_raw_ids:
+                # Obtener los moves
+                raw_moves = self.odoo.search_read(
+                    'stock.move',
+                    [('id', 'in', move_raw_ids)],
+                    ['product_id', 'product_uom_qty', 'quantity_done', 'state', 'reference']
+                )
+                
+                for move in raw_moves:
+                    producto_nombre = move['product_id'][1] if move['product_id'] else 'N/A'
+                    kg = move.get('quantity_done', 0) or move.get('product_uom_qty', 0)
+                    
+                    # Detectar electricidad
+                    es_electricidad = 'ETE' in producto_nombre or 'Electricidad' in producto_nombre
+                    if es_electricidad:
+                        # Calcular costo (asumiendo precio ~$35.10 por kg según imagen)
+                        electricidad_total = kg * 35.10
+                    
+                    # Obtener move_lines para lote y package
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line',
+                        [('move_id', '=', move['id'])],
+                        ['lot_id', 'package_id', 'qty_done', 'location_id']
+                    )
+                    
+                    for line in move_lines:
+                        componentes.append({
+                            'producto': producto_nombre,
+                            'lote': line['lot_id'][1] if line.get('lot_id') else 'Sin lote',
+                            'pallet': line['package_id'][1] if line.get('package_id') else 'Sin pallet',
+                            'kg': line.get('qty_done', 0),
+                            'ubicacion': line['location_id'][1] if line.get('location_id') else 'N/A',
+                            'es_electricidad': es_electricidad
+                        })
+            
+            # Obtener subproductos (move_finished_ids) - leer de la MO
+            subproductos = []
+            mo_full = self.odoo.read('mrp.production', [mo_id], ['move_finished_ids'])[0]
+            move_finished_ids = mo_full.get('move_finished_ids', [])
+            if move_finished_ids:
+                finished_moves = self.odoo.search_read(
+                    'stock.move',
+                    [('id', 'in', move_finished_ids)],
+                    ['product_id', 'product_uom_qty', 'quantity_done', 'state']
+                )
+                
+                for move in finished_moves:
+                    producto_nombre = move['product_id'][1] if move['product_id'] else 'N/A'
+                    
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line',
+                        [('move_id', '=', move['id'])],
+                        ['lot_id', 'package_id', 'qty_done', 'location_dest_id']
+                    )
+                    
+                    for line in move_lines:
+                        subproductos.append({
+                            'producto': producto_nombre,
+                            'lote': line['lot_id'][1] if line.get('lot_id') else 'Sin lote',
+                            'pallet': line['package_id'][1] if line.get('package_id') else 'Sin pallet',
+                            'kg': line.get('qty_done', 0),
+                            'ubicacion': line['location_dest_id'][1] if line.get('location_dest_id') else 'N/A'
+                        })
+            
+            return {
+                'success': True,
+                'mo_id': mo_id,
+                'mo_name': mo_name,
+                'tiene_pendientes': pendientes > 0,
+                'pallets': resultado_pallets_ordenados,
+                'resumen': {
+                    'total': total,
+                    'agregados': agregados,
+                    'disponibles': disponibles,
+                    'pendientes': pendientes
+                },
+                'todos_listos': pendientes == 0 and disponibles == 0,
+                'hay_disponibles_sin_agregar': disponibles > 0,
+                'componentes': componentes,
+                'subproductos': subproductos,
+                'electricidad_total': electricidad_total
+            }
+            
+        except Exception as e:
+            import traceback
+            return {
+                'success': False, 
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
+    
+    def agregar_componentes_disponibles(self, mo_id: int) -> Dict:
+        """
+        Agrega como componentes los pallets que ahora están disponibles.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: success, agregados (cantidad), mensaje
+        """
+        try:
+            import json
+            
+            # Obtener detalle actual
+            detalle = self.obtener_detalle_pendientes(mo_id)
+            if not detalle.get('success'):
+                return detalle
+            
+            if not detalle.get('hay_disponibles_sin_agregar'):
+                return {
+                    'success': True,
+                    'agregados': 0,
+                    'mensaje': 'No hay pallets disponibles pendientes de agregar'
+                }
+            
+            # Obtener config del túnel basado en la MO
+            mo_data = self.odoo.read('mrp.production', [mo_id], 
+                ['name', 'product_id', 'x_studio_pending_receptions'])[0]
+            mo_name = mo_data['name']
+            
+            # Identificar túnel por producto
+            config = None
+            for codigo, cfg in TUNELES_CONFIG.items():
+                if cfg['producto_proceso_id'] == mo_data['product_id'][0]:
+                    config = cfg
+                    break
+            
+            if not config:
+                return {
+                    'success': False,
+                    'error': 'No se pudo identificar el túnel de esta MO'
+                }
+            
+            ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
+            
+            # Procesar pallets disponibles
+            agregados = 0
+            pallets_agregados = []
+            pending_json = mo_data.get('x_studio_pending_receptions')
+            pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            
+            for pallet in detalle['pallets']:
+                if pallet['estado'] != 'disponible':
+                    continue
+                
+                codigo = pallet['codigo']
+                producto_id = pallet['producto_id']
+                quant_info = pallet.get('quant_info', {})
+                kg = quant_info.get('quantity', pallet['kg'])
+                lote_id = quant_info.get('lot_id', [None])[0] if quant_info.get('lot_id') else None
+                ubicacion_id = quant_info.get('location_id', [None])[0] if quant_info.get('location_id') else config['ubicacion_origen_id']
+                
+                # Buscar el package_id
+                package = self.odoo.search_read(
+                    'stock.quant.package',
+                    [('name', '=', codigo)],
+                    ['id'],
+                    limit=1
+                )
+                package_id = package[0]['id'] if package else None
+                
+                # Crear stock.move para el componente
+                move_data = {
+                    'name': mo_name,
+                    'product_id': producto_id,
+                    'product_uom_qty': kg,
+                    'product_uom': 12,  # kg
+                    'location_id': ubicacion_id,
+                    'location_dest_id': ubicacion_virtual,
+                    'state': 'draft',
+                    'raw_material_production_id': mo_id,
+                    'company_id': 1,
+                    'reference': mo_name
+                }
+                
+                move_id = self.odoo.execute('stock.move', 'create', move_data)
+                
+                # Crear stock.move.line con qty_done
+                move_line_data = {
+                    'move_id': move_id,
+                    'product_id': producto_id,
+                    'qty_done': kg,
+                    'reserved_uom_qty': kg,
+                    'product_uom_id': 12,
+                    'location_id': ubicacion_id,
+                    'location_dest_id': ubicacion_virtual,
+                    'state': 'draft',
+                    'reference': mo_name,
+                    'company_id': 1
+                }
+                
+                if lote_id:
+                    move_line_data['lot_id'] = lote_id
+                if package_id:
+                    move_line_data['package_id'] = package_id
+                
+                self.odoo.execute('stock.move.line', 'create', move_line_data)
+                
+                agregados += 1
+                pallets_agregados.append(codigo)
+            
+            # Actualizar JSON: marcar pallets como procesados
+            pallets_actualizados = []
+            for p in pending_data.get('pallets', []):
+                if p.get('codigo') in pallets_agregados:
+                    p['procesado'] = True
+                    p['procesado_at'] = datetime.now().isoformat()
+                pallets_actualizados.append(p)
+            
+            pending_data['pallets'] = pallets_actualizados
+            
+            # Verificar si quedan pendientes
+            pendientes_restantes = sum(1 for p in pallets_actualizados 
+                                       if not p.get('procesado'))
+            if pendientes_restantes == 0:
+                pending_data['pending'] = False
+                pending_data['completed_at'] = datetime.now().isoformat()
+            
+            # Guardar JSON actualizado
+            self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'mrp.production', 'write',
+                [[mo_id], {'x_studio_pending_receptions': json.dumps(pending_data)}]
+            )
+            
+            return {
+                'success': True,
+                'agregados': agregados,
+                'pallets_agregados': pallets_agregados,
+                'pendientes_restantes': pendientes_restantes,
+                'mensaje': f'Se agregaron {agregados} componentes. Quedan {pendientes_restantes} pendientes.'
+            }
+            
+        except Exception as e:
+            import traceback
+            return {
+                'success': False,
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
+    
     def crear_orden_fabricacion(
         self,
         tunel: str,
@@ -600,6 +984,7 @@ class TunelesService:
                     'codigo': pallet['codigo'],
                     'kg': float(pallet.get('kg', 0)),
                     'lote_id': pallet.get('lot_id'),  # Puede venir del frontend
+                    'lote_nombre': pallet.get('lot_name'),  # Nombre del lote desde recepción
                     'producto_id': int(pallet['producto_id']),
                     'ubicacion_id': config['ubicacion_origen_id'], 
                     'package_id': None,  # No asignamos package aún
@@ -607,6 +992,8 @@ class TunelesService:
                     'pendiente_recepcion': True,  # Flag para saber que es especial
                     'picking_id': pallet.get('picking_id')  # Guardar picking_id para JSON
                 })
+                # DEBUG: Log de datos del pallet pendiente
+                print(f"DEBUG Pallet Pendiente: codigo={pallet['codigo']}, lot_name={pallet.get('lot_name')}, lot_id={pallet.get('lot_id')}")
                 advertencias.append(f"Pallet {pallet['codigo']} agregado desde Recepción Pendiente (Sin reserva stock)")
                 continue
 
@@ -653,6 +1040,7 @@ class TunelesService:
                 'codigo': pallet['codigo'],
                 'kg': kg,
                 'lote_id': validacion.get('lote_id'),
+                'lote_nombre': validacion.get('lote_nombre'),  # Nombre del lote original
                 'producto_id': validacion.get('producto_id'),
                 'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id']),
                 'package_id': validacion.get('package_id'),  # ID del paquete origen
@@ -817,22 +1205,47 @@ class TunelesService:
         if not lotes_data:
             return {}
         
-        codigos = [d['codigo'] for d in lotes_data]
+        # DEDUPLICAR entrada: evitar crear el mismo lote 2 veces en la misma llamada
+        seen_keys = set()
+        lotes_data_uniq = []
+        for d in lotes_data:
+            key = (d['codigo'], d['producto_id'])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                lotes_data_uniq.append(d)
         
-        # LLAMADA 1: Buscar todos los lotes existentes
+        codigos = [d['codigo'] for d in lotes_data_uniq]
+        producto_ids = list(set(d['producto_id'] for d in lotes_data_uniq))
+        
+        # LLAMADA 1: Buscar todos los lotes existentes por nombre Y producto
         lotes_existentes = self.odoo.search_read(
             'stock.lot',
-            [('name', 'in', codigos)],
-            ['name', 'id']
+            [('name', 'in', codigos), ('product_id', 'in', producto_ids)],
+            ['name', 'id', 'product_id']
         )
         
-        lotes_map = {lot['name']: lot['id'] for lot in lotes_existentes}
+        # Crear mapa con clave compuesta: (nombre, producto_id) -> lot_id
+        lotes_existentes_set = {}
+        for lot in lotes_existentes:
+            key = (lot['name'], lot['product_id'][0] if lot['product_id'] else 0)
+            lotes_existentes_set[key] = lot['id']
         
-        # Identificar los que faltan
-        faltantes = [d for d in lotes_data if d['codigo'] not in lotes_map]
+        # Mapa simple por nombre para retornar
+        lotes_map = {}
+        faltantes = []
         
-        # LLAMADA 2: Crear TODOS los faltantes en una sola llamada
+        for d in lotes_data_uniq:
+            key = (d['codigo'], d['producto_id'])
+            if key in lotes_existentes_set:
+                # Ya existe, reusar
+                lotes_map[d['codigo']] = lotes_existentes_set[key]
+            else:
+                # No existe, necesita crearse
+                faltantes.append(d)
+        
+        # LLAMADA 2: Crear SOLO los faltantes (ya deduplicados)
         if faltantes:
+            print(f"DEBUG _buscar_o_crear_lotes_batch: Creando {len(faltantes)} lotes: {[(d['codigo'], d['producto_id']) for d in faltantes]}")
             nuevos_ids = self.odoo.execute('stock.lot', 'create', [
                 {
                     'name': d['codigo'],
@@ -943,6 +1356,7 @@ class TunelesService:
         Returns:
             Cantidad de movimientos creados
         """
+        print(f"DEBUG _crear_componentes: mo_id={mo_id}, mo_name={mo_name}, productos={len(productos_totales)}")
         movimientos_creados = 0
         ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
         
@@ -996,27 +1410,49 @@ class TunelesService:
         
         # --- Agregar componente de Electricidad ---
         # Producto: Provisión Electricidad Túnel Estático ($/hr)
-        # Buscamos por código 'ETE' en product.product (no template)
         try:
             total_kg = sum(data['kg'] for data in productos_totales.values())
+            ete_id = None
             
-            # Buscar product.product por código
+            # Intento 1: Buscar por código exacto 'ETE'
             ete_products = self.odoo.models.execute_kw(
                 self.odoo.db, self.odoo.uid, self.odoo.password,
                 'product.product', 'search_read',
                 [[('default_code', '=', 'ETE')]],
-                {'fields': ['id', 'name'], 'limit': 1}
+                {'fields': ['id', 'name', 'uom_id'], 'limit': 1}  # También traer uom_id
             )
             
+            ete_uom_id = 12  # Fallback a kg
             if ete_products:
                 ete_id = ete_products[0]['id']
-                print(f"DEBUG: Producto electricidad encontrado: ID={ete_id}, Name={ete_products[0]['name']}")
-                
+                if ete_products[0].get('uom_id'):
+                    ete_uom_id = ete_products[0]['uom_id'][0]  # Odoo retorna [id, name]
+                print(f"DEBUG: Electricidad encontrada por código ETE: ID={ete_id}, UoM={ete_uom_id}")
+            else:
+                # Intento 2: Buscar por nombre que contenga 'Electricidad' y 'Túnel'
+                ete_products = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'product.product', 'search_read',
+                    [[('name', 'ilike', 'Electricidad'), ('name', 'ilike', 'Túnel')]],
+                    {'fields': ['id', 'name', 'uom_id'], 'limit': 1}
+                )
+                if ete_products:
+                    ete_id = ete_products[0]['id']
+                    if ete_products[0].get('uom_id'):
+                        ete_uom_id = ete_products[0]['uom_id'][0]
+                    print(f"DEBUG: Electricidad encontrada por nombre: ID={ete_id}, UoM={ete_uom_id}")
+                else:
+                    # Fallback: Usar ID fijo
+                    ete_id = PRODUCTO_ELECTRICIDAD_ID
+                    print(f"DEBUG: Usando ID fijo de electricidad: {ete_id}")
+
+            # Crear el movimiento de electricidad
+            if ete_id:
                 elect_move = {
                     'name': mo_name,
                     'product_id': ete_id,
                     'product_uom_qty': total_kg,
-                    'product_uom': 12,  # kg
+                    'product_uom': ete_uom_id,  # Usar UoM del producto
                     'location_id': config['ubicacion_origen_id'],
                     'location_dest_id': ubicacion_virtual,
                     'state': 'draft',
@@ -1024,16 +1460,35 @@ class TunelesService:
                     'company_id': 1,
                     'reference': mo_name
                 }
-                self.odoo.models.execute_kw(
+                elect_move_id = self.odoo.models.execute_kw(
                     self.odoo.db, self.odoo.uid, self.odoo.password,
                     'stock.move', 'create', [elect_move]
                 )
+                
+                # Crear stock.move.line con qty_done para que aparezca en "Hecho"
+                if elect_move_id:
+                    elect_line = {
+                        'move_id': elect_move_id,
+                        'product_id': ete_id,
+                        'qty_done': total_kg,
+                        'reserved_uom_qty': total_kg,
+                        'product_uom_id': ete_uom_id,  # Usar UoM del producto
+                        'location_id': config['ubicacion_origen_id'],
+                        'location_dest_id': ubicacion_virtual,
+                        'state': 'draft',
+                        'company_id': 1
+                    }
+                    self.odoo.models.execute_kw(
+                        self.odoo.db, self.odoo.uid, self.odoo.password,
+                        'stock.move.line', 'create', [elect_line]
+                    )
+                
                 movimientos_creados += 1
-                print(f"DEBUG: Electricidad agregada correctamente")
-            else:
-                print("DEBUG: Producto ETE no encontrado")
+                print(f"DEBUG: Electricidad agregada correctamente con qty_done={total_kg}")
         except Exception as e:
-            print(f"Advertencia: No se pudo agregar electricidad: {e}")
+            import traceback
+            print(f"ERROR Electricidad: {e}")
+            print(f"ERROR Traceback: {traceback.format_exc()}")
         
         return movimientos_creados
     
@@ -1061,12 +1516,50 @@ class TunelesService:
         ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
         
         for producto_id_input, data in productos_totales.items():
-            # Obtener producto congelado (output)
-            producto_id_output = PRODUCTOS_TRANSFORMACION.get(producto_id_input)
+            # Obtener producto congelado (output) - DINÁMICO
+            # La lógica es: código 10xxxxxx → 20xxxxxx (cambiar primer dígito de 1 a 2)
+            producto_id_output = None
             
+            try:
+                # Obtener el código del producto de entrada
+                prod_input = self.odoo.search_read(
+                    'product.product',
+                    [('id', '=', producto_id_input)],
+                    ['default_code', 'name'],
+                    limit=1
+                )
+                
+                if prod_input and prod_input[0].get('default_code'):
+                    codigo_input = prod_input[0]['default_code']
+                    
+                    # Transformar código: primer dígito 1 → 2 para variante congelada
+                    if codigo_input and len(codigo_input) >= 1 and codigo_input[0] == '1':
+                        codigo_output = '2' + codigo_input[1:]
+                        
+                        # Buscar producto con el nuevo código
+                        prod_output = self.odoo.search_read(
+                            'product.product',
+                            [('default_code', '=', codigo_output)],
+                            ['id', 'name'],
+                            limit=1
+                        )
+                        
+                        if prod_output:
+                            producto_id_output = prod_output[0]['id']
+                            print(f"DEBUG Transformación: {codigo_input} ({prod_input[0]['name']}) → {codigo_output} ({prod_output[0]['name']})")
+                        else:
+                            print(f"DEBUG: Producto congelado {codigo_output} no encontrado, usando mismo producto")
+                    else:
+                        print(f"DEBUG: Código {codigo_input} no empieza con 1, usando fallback estático")
+                else:
+                    print(f"DEBUG: Producto ID {producto_id_input} sin código, usando fallback estático")
+                    
+            except Exception as e:
+                print(f"ERROR buscando producto congelado: {e}")
+            
+            # Fallback: usar mapeo estático o mismo producto
             if not producto_id_output:
-                # Si no hay mapeo, usar el mismo producto
-                producto_id_output = producto_id_input
+                producto_id_output = PRODUCTOS_TRANSFORMACION.get(producto_id_input, producto_id_input)
             
             # Crear stock.move principal
             move_data = {
@@ -1089,19 +1582,29 @@ class TunelesService:
             package_names = []
             
             for pallet in data['pallets']:
-                # Código con sufijo -C
-                codigo_output = f"{pallet['codigo']}-C"
+                # LOTE: Usar nombre del lote original + sufijo -C
+                # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
+                lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
+                lote_output_name = f"{lote_origen}-C"
+                
+                # DEBUG: Log detallado del lote
+                print(f"DEBUG Subprod: pallet={pallet.get('codigo')}, lote_nombre={pallet.get('lote_nombre')}, lot_name={pallet.get('lot_name')}, lote_origen={lote_origen}, lote_output={lote_output_name}")
+                
                 lotes_data.append({
-                    'codigo': codigo_output,
+                    'codigo': lote_output_name,
                     'producto_id': producto_id_output
                 })
                 
-                # Nombre de package
-                try:
-                    numero_pallet = pallet['codigo'].replace('PAC', '').replace('PACK', '')
-                    package_name = f"PACK{numero_pallet}-C"
-                except:
-                    package_name = f"{pallet['codigo'].replace('PAC', 'PACK')}-C"
+                # PACKAGE: Extraer solo el número y generar nombre correcto
+                codigo_pallet = pallet['codigo']
+                # Extraer solo el número (quitar PACK o PAC)
+                if codigo_pallet.startswith('PACK'):
+                    numero_pallet = codigo_pallet[4:]  # Quitar 'PACK'
+                elif codigo_pallet.startswith('PAC'):
+                    numero_pallet = codigo_pallet[3:]  # Quitar 'PAC'
+                else:
+                    numero_pallet = codigo_pallet
+                package_name = f"PACK{numero_pallet}-C"
                 
                 package_names.append(package_name)
             
@@ -1113,17 +1616,23 @@ class TunelesService:
             
             # Ahora crear los move.lines
             for idx, pallet in enumerate(data['pallets']):
-                codigo_output = f"{pallet['codigo']}-C"
+                # LOTE: Usar nombre del lote original + sufijo -C
+                # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
+                lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
+                lote_output_name = f"{lote_origen}-C"
                 
-                # Generar nombre de package
-                try:
-                    numero_pallet = pallet['codigo'].replace('PAC', '').replace('PACK', '')
-                    package_name = f"PACK{numero_pallet}-C"
-                except:
-                    package_name = f"{pallet['codigo'].replace('PAC', 'PACK')}-C"
+                # PACKAGE: Extraer solo el número y generar nombre correcto
+                codigo_pallet = pallet['codigo']
+                if codigo_pallet.startswith('PACK'):
+                    numero_pallet = codigo_pallet[4:]  # Quitar 'PACK'
+                elif codigo_pallet.startswith('PAC'):
+                    numero_pallet = codigo_pallet[3:]  # Quitar 'PAC'
+                else:
+                    numero_pallet = codigo_pallet
+                package_name = f"PACK{numero_pallet}-C"
                 
                 # Obtener IDs del mapa (ya creados en batch)
-                lote_id_output = lotes_map.get(codigo_output)
+                lote_id_output = lotes_map.get(lote_output_name)
                 package_id = packages_map.get(package_name)
                 
                 move_line_data = {
@@ -1181,39 +1690,14 @@ class TunelesService:
         ordenes = self.odoo.search_read(
             'mrp.production',
             domain,
-            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start', 'x_studio_pending_receptions'],
+            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start', 
+             'x_studio_pending_receptions', 'move_raw_ids', 'move_finished_ids'],
             limit=limit,
             order='create_date desc'
         )
         
         # Formatear resultados
         resultado = []
-        
-        # Optimización: Buscar qué órdenes tienen componentes sin lote asignado (Pendientes)
-        mo_ids = [o['id'] for o in ordenes]
-        if mo_ids:
-            # Buscamos moves asociados a estas MOs que NO tengan lote asignado y requerían (no son consumibles/servicios)
-            # Simplificación: Si tenemos move lines sin lot_id pero con qty_done/product_uom_qty > 0
-            # En Odoo 16 'stock.move' tiene 'move_line_ids'. 
-            # Hacemos una búsqueda directa de moves que pertenezcan a las MOs y no tengan lote, 
-            # asumiendo que nuestros pallets manuales/pendientes se crearon sin lote.
-            
-            # Nota: Al estar en Borrador (draft), los moves existen. 
-            # Buscamos moves con estado 'draft' y sin lote, pero cuidado con componentes que no usan lote.
-            # Nuestros componentes de fruta SI usan lote.
-            
-            moves_sin_lote = self.odoo.search_read(
-                'stock.move.line',
-                [
-                    ('reference', 'in', [o['name'] for o in ordenes]), # Referencia suele ser el nombre de la MO
-                    ('lot_id', '=', False),
-                    ('qty_done', '>', 0) # Tienen cantidad asignada
-                ],
-                ['reference']
-            )
-            moves_pendientes_refs = set(m['reference'] for m in moves_sin_lote)
-        else:
-            moves_pendientes_refs = set()
 
         for orden in ordenes:
             # Determinar túnel por producto_id
@@ -1223,21 +1707,47 @@ class TunelesService:
                     tunel_codigo = codigo
                     break
             
-            # Determinar tiene_pendientes desde el campo JSON o desde moves sin lote
-            tiene_pendientes = orden['name'] in moves_pendientes_refs
-            
-            # Priorizar el campo JSON si existe
+            # Determinar tiene_pendientes SOLO desde el campo JSON
+            tiene_pendientes = False
             pending_json = orden.get('x_studio_pending_receptions')
             if pending_json:
                 try:
                     import json
-                    print(f"DEBUG listar: MO {orden['name']} tiene pending_json: {str(pending_json)[:50]}...")
                     pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
-                    if pending_data.get('pending'):
+                    if pending_data.get('pending') == True:
                         tiene_pendientes = True
-                        print(f"DEBUG listar: MO {orden['name']} marcada como tiene_pendientes=True")
                 except Exception as e:
-                    print(f"DEBUG listar: Error parseando JSON para {orden['name']}: {e}")
+                    pass
+            
+            # Contar componentes (move.lines) y calcular electricidad
+            componentes_count = 0
+            electricidad_costo = 0
+            move_raw_ids = orden.get('move_raw_ids', [])
+            if move_raw_ids:
+                # Contar move_lines para precisión
+                move_lines = self.odoo.search_read(
+                    'stock.move.line',
+                    [('move_id', 'in', move_raw_ids)],
+                    ['product_id', 'qty_done']
+                )
+                for line in move_lines:
+                    prod_name = line['product_id'][1] if line.get('product_id') else ''
+                    if 'ETE' in prod_name or 'Electricidad' in prod_name:
+                        # Calcular costo electricidad (~$35.10/kg)
+                        electricidad_costo = line.get('qty_done', 0) * 35.10
+                    else:
+                        componentes_count += 1
+            
+            # Contar subproductos (move_lines de finished)
+            subproductos_count = 0
+            move_finished_ids = orden.get('move_finished_ids', [])
+            if move_finished_ids:
+                finished_lines = self.odoo.search_read(
+                    'stock.move.line',
+                    [('move_id', 'in', move_finished_ids)],
+                    ['id']
+                )
+                subproductos_count = len(finished_lines)
             
             resultado.append({
                 'id': orden['id'],
@@ -1248,7 +1758,10 @@ class TunelesService:
                 'estado': orden['state'],
                 'fecha_creacion': orden.get('create_date'),
                 'fecha_planificada': orden.get('date_planned_start'),
-                'tiene_pendientes': tiene_pendientes  # Nuevo Flag
+                'tiene_pendientes': tiene_pendientes,
+                'componentes_count': componentes_count,
+                'subproductos_count': subproductos_count,
+                'electricidad_costo': electricidad_costo
             })
         
         return resultado

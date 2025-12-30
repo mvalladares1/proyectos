@@ -89,6 +89,10 @@ class OrdenInfo(BaseModel):
     estado: str
     fecha_creacion: Optional[str]
     fecha_planificada: Optional[str]
+    tiene_pendientes: bool = False
+    componentes_count: int = 0
+    subproductos_count: int = 0
+    electricidad_costo: float = 0
 
 
 class CrearOrdenResponse(BaseModel):
@@ -284,19 +288,45 @@ async def obtener_orden_detalle(
 
 
 @router.get("/tuneles-estaticos/ordenes/{orden_id}/pendientes")
-async def verificar_pendientes(
+async def obtener_detalle_pendientes(
     orden_id: int,
     odoo: OdooClient = Depends(get_odoo_client),
 ):
     """
-    Verifica el estado de las recepciones pendientes de una MO.
+    Obtiene el detalle de los pallets pendientes de una MO,
+    verificando cuáles ya tienen stock disponible.
     
     Returns:
-        Dict con: mo_name, has_pending, pickings (con estado actual), all_ready
+        Dict con: mo_name, pallets (con estado cada uno), resumen
     """
     try:
         service = get_tuneles_service(odoo)
-        resultado = service.verificar_pendientes(orden_id)
+        resultado = service.obtener_detalle_pendientes(orden_id)
+        
+        if not resultado.get('success'):
+            raise HTTPException(status_code=400, detail=resultado.get('error'))
+        
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles")
+async def agregar_componentes_disponibles(
+    orden_id: int,
+    odoo: OdooClient = Depends(get_odoo_client),
+):
+    """
+    Agrega como componentes los pallets que ahora están disponibles.
+    
+    Returns:
+        Dict con: success, agregados (cantidad), pendientes_restantes
+    """
+    try:
+        service = get_tuneles_service(odoo)
+        resultado = service.agregar_componentes_disponibles(orden_id)
         
         if not resultado.get('success'):
             raise HTTPException(status_code=400, detail=resultado.get('error'))
