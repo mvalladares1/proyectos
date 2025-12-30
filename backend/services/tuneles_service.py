@@ -885,6 +885,115 @@ class TunelesService:
                 'traceback': traceback.format_exc()
             }
     
+    def listar_ordenes_recientes(
+        self, 
+        tunel: Optional[str] = None, 
+        estado: Optional[str] = None, 
+        limit: int = 20
+    ) -> List[Dict]:
+        """
+        Lista las órdenes de fabricación recientes de túneles estáticos.
+        
+        Args:
+            tunel: Filtrar por túnel (TE1, TE2, TE3, VLK)
+            estado: Filtrar por estado (draft, confirmed, progress, done, cancel)
+            limit: Límite de resultados
+            
+        Returns:
+            Lista de dicts con información de cada orden
+        """
+        try:
+            import json
+            
+            # Construir filtro de productos de túneles
+            producto_ids = [cfg['producto_proceso_id'] for cfg in TUNELES_CONFIG.values()]
+            
+            # Si se especifica un túnel, filtrar solo por ese producto
+            if tunel and tunel in TUNELES_CONFIG:
+                producto_ids = [TUNELES_CONFIG[tunel]['producto_proceso_id']]
+            
+            # Construir dominio base
+            domain = [('product_id', 'in', producto_ids)]
+            
+            # Filtrar por estado
+            if estado == 'pendientes':
+                # Agrupar todos los estados activos
+                domain.append(('state', 'in', ['draft', 'confirmed', 'progress']))
+            elif estado == 'done':
+                domain.append(('state', '=', 'done'))
+            elif estado == 'cancel':
+                domain.append(('state', '=', 'cancel'))
+            elif estado and estado in ['draft', 'confirmed', 'progress']:
+                domain.append(('state', '=', estado))
+            else:
+                # Por defecto, excluir canceladas
+                domain.append(('state', '!=', 'cancel'))
+            
+            # Buscar órdenes
+            ordenes = self.odoo.search_read(
+                'mrp.production',
+                domain,
+                [
+                    'id', 'name', 'product_id', 'product_qty', 'state',
+                    'create_date', 'date_planned_start',
+                    'x_studio_pending_receptions',
+                    'move_raw_ids', 'move_finished_ids'
+                ],
+                limit=limit,
+                order='create_date desc'
+            )
+            
+            resultado = []
+            
+            for orden in ordenes:
+                # Identificar túnel por producto
+                tunel_codigo = None
+                for codigo, cfg in TUNELES_CONFIG.items():
+                    if orden['product_id'] and cfg['producto_proceso_id'] == orden['product_id'][0]:
+                        tunel_codigo = codigo
+                        break
+                
+                # Verificar si tiene pendientes
+                tiene_pendientes = False
+                pending_json = orden.get('x_studio_pending_receptions')
+                if pending_json:
+                    try:
+                        pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+                        tiene_pendientes = pending_data.get('pending', False)
+                    except:
+                        pass
+                
+                # Contar componentes y subproductos
+                componentes_count = len(orden.get('move_raw_ids', []))
+                subproductos_count = len(orden.get('move_finished_ids', []))
+                
+                # Calcular electricidad (aproximado: $0.15 por kg)
+                electricidad_costo = orden.get('product_qty', 0) * 0.15
+                
+                resultado.append({
+                    'id': orden['id'],
+                    'nombre': orden['name'],
+                    'mo_name': orden['name'],
+                    'tunel': tunel_codigo,
+                    'producto': orden['product_id'][1] if orden['product_id'] else 'N/A',
+                    'producto_nombre': orden['product_id'][1] if orden['product_id'] else 'N/A',
+                    'kg_total': orden.get('product_qty', 0),
+                    'estado': orden.get('state', 'draft'),
+                    'fecha_creacion': orden.get('create_date'),
+                    'fecha_planificada': orden.get('date_planned_start'),
+                    'tiene_pendientes': tiene_pendientes,
+                    'componentes_count': componentes_count,
+                    'subproductos_count': subproductos_count,
+                    'electricidad_costo': electricidad_costo,
+                    'pallets_count': componentes_count  # Aproximación
+                })
+            
+            return resultado
+            
+        except Exception as e:
+            print(f"Error en listar_ordenes_recientes: {e}")
+            return []
+    
     def crear_orden_fabricacion(
         self,
         tunel: str,

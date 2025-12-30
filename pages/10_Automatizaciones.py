@@ -494,20 +494,17 @@ with tab2:
         )
     
     with col2:
-        # Nuevo filtro: incluyedo opción de ver solo problemas
+        # Filtro simplificado de estados
         filtro_estado = st.selectbox(
-            "Estado / Filtro",
-            options=['Todos', 'pendientes_stock', 'draft', 'confirmed', 'progress', 'done', 'cancel'],
+            "Estado",
+            options=['Todos', 'pendientes', 'done', 'cancel'],
             format_func=lambda x: {
-                'Todos': 'Todos',
-                'pendientes_stock': '🟠 Con Pendientes de Stock',
-                'draft': '📝 Borrador',
-                'confirmed': '✅ Confirmado',
-                'progress': '🔄 En Progreso',
-                'done': '✔️ Hecho',
-                'cancel': '❌ Cancelado'
+                'Todos': '📋 Todas (sin canceladas)',
+                'pendientes': '� Pendientes',
+                'done': '✅ Finalizadas',
+                'cancel': '❌ Canceladas'
             }.get(x, x),
-            index=1 # Por defecto mostramos las pendientes/problemáticas primero para agilizar
+            index=0  # Por defecto "Todos" (excluye canceladas)
         )
     
     with col3:
@@ -515,20 +512,19 @@ with tab2:
             st.cache_data.clear()
             st.rerun()
     
-    # Obtener órdenes - SIN cache para obtener datos frescos con tiene_pendientes
+    # Obtener órdenes
     def get_ordenes(_username, _password, tunel=None, estado=None):
         try:
             params = {
                 "username": _username,
                 "password": _password,
-                "limit": 50 # Aumentar límite para ver más
+                "limit": 50
             }
             if tunel and tunel != 'Todos':
                 params['tunel'] = tunel
             
-            # Si el filtro es un estado real de Odoo, lo mandamos
-            # Si es 'pendientes_stock', filtramos en cliente sobre las drafts/confirmed
-            if estado and estado not in ['Todos', 'pendientes_stock']:
+            # Enviar estado al backend (excepto 'Todos' que usa el filtro por defecto)
+            if estado and estado != 'Todos':
                 params['estado'] = estado
             
             response = requests.get(
@@ -536,18 +532,10 @@ with tab2:
                 params=params
             )
             if response.status_code == 200:
-                data = response.json()
-                # Filtrado cliente para 'pendientes_stock'
-                if estado == 'pendientes_stock':
-                    pendientes = [o for o in data if o.get('tiene_pendientes')]
-                    print(f"DEBUG Frontend: Total órdenes={len(data)}, con pendientes={len(pendientes)}")
-                    for o in data:
-                        print(f"  - {o.get('nombre')}: tiene_pendientes={o.get('tiene_pendientes')}")
-                    return pendientes
-                return data
+                return response.json()
             return []
         except Exception as e:
-            print(f"DEBUG Frontend Error: {e}")
+            print(f"Error obteniendo órdenes: {e}")
             return []
     
     ordenes = get_ordenes(
