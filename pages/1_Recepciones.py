@@ -2269,6 +2269,8 @@ with tab_aprobaciones:
         st.session_state.aprob_data = None
     if 'aprob_ppto' not in st.session_state:
         st.session_state.aprob_ppto = {}
+    if 'aprob_ppto_detalle' not in st.session_state:
+        st.session_state.aprob_ppto_detalle = {}
     
     # --- FILTROS DE FECHA ---
     col1, col2 = st.columns(2)
@@ -2294,7 +2296,7 @@ with tab_aprobaciones:
                 
                 if resp.status_code == 200:
                     st.session_state.aprob_data = resp.json()
-                    # Cargar PPTO
+                    # Cargar PPTO General
                     try:
                         resp_ppto = requests.get(
                             f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios",
@@ -2305,6 +2307,23 @@ with tab_aprobaciones:
                             st.session_state.aprob_ppto = {item.get('especie', ''): item.get('precio_proyectado', 0) for item in resp_ppto.json()}
                     except:
                         pass
+                    
+                    # Cargar PPTO Detallado por Productor
+                    try:
+                        resp_ppto_det = requests.get(
+                            f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios-detalle",
+                            params={"planta": None, "especie": None},
+                            timeout=30
+                        )
+                        if resp_ppto_det.status_code == 200:
+                            # Clave compuesta: (productor, especie)
+                            st.session_state.aprob_ppto_detalle = {
+                                (item.get('productor', ''), item.get('especie', '')): item.get('precio_proyectado', 0) 
+                                for item in resp_ppto_det.json()
+                            }
+                    except:
+                        pass
+                        
                     st.success(f"✅ Cargadas {len(st.session_state.aprob_data)} recepciones")
                 else:
                     st.error(f"Error: {resp.text}")
@@ -2315,6 +2334,7 @@ with tab_aprobaciones:
     if st.session_state.aprob_data:
         recepciones = st.session_state.aprob_data
         precios_ppto_dict = st.session_state.aprob_ppto
+        precios_ppto_detalle = st.session_state.aprob_ppto_detalle
         aprobadas_ids = get_aprobaciones()
         
         # Procesar datos
@@ -2370,8 +2390,14 @@ with tab_aprobaciones:
                         esp_base = 'Cereza'
                 
                 especie_manejo = f"{esp_base} {man_norm}"
-                key_ppto = especie_manejo
-                ppto_val = precios_ppto_dict.get(key_ppto, 0)
+                
+                # Obtener PPTO (Prioridad: Productor+Especie -> Solo Especie)
+                ppto_val = 0
+                if precios_ppto_detalle:
+                     ppto_val = precios_ppto_detalle.get((productor, especie_manejo), 0)
+                
+                if ppto_val == 0:
+                     ppto_val = precios_ppto_dict.get(especie_manejo, 0)
                 
                 desv = 0
                 if ppto_val > 0:
@@ -2381,6 +2407,11 @@ with tab_aprobaciones:
                 if desv > 0.08: sema = "🔴"
                 elif desv > 0.03: sema = "🟡"
                     
+                calificacion = rec.get('calific_final', '')
+                
+                # Desviación con color (para usar en columna texto)
+                desv_pct = f"{desv*100:.1f}%"
+                
                 filas_aprobacion.append({
                     "Sel": es_aprobada,
                     "Recepción": recep_name,
@@ -2391,8 +2422,9 @@ with tab_aprobaciones:
                     "Kg": fmt_numero(kg, 2),
                     "$/Kg": fmt_dinero(precio_real),
                     "PPTO": fmt_dinero(ppto_val),
-                    "Desv": f"{desv*100:.1f}%",
-                    "🚦": sema,
+                    "Desv": desv_pct,
+                    "Status": sema,  # Símbolo solo
+                    "Calidad": calificacion,
                     "_id": recep_name,
                     "_kg_raw": kg,
                     "_picking_id": picking_id,
@@ -2451,17 +2483,18 @@ with tab_aprobaciones:
                     "Recepción": st.column_config.LinkColumn("Recepción", display_text=r"display_name=(.*?)(&|$)", width="medium"),
                     "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
+                    "Status": st.column_config.TextColumn("", width="small"),  # Semáforo sin título
+                    "Calidad": st.column_config.TextColumn("Calidad", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
                     "PPTO": st.column_config.TextColumn("PPTO"),
                     "Kg": st.column_config.TextColumn("Kg"),
-                    "🚦": st.column_config.TextColumn("🚦", width="small"),
                     "Especie": None,
                     "_id": None,
                     "_kg_raw": None,
                     "_picking_id": None,
                 },
-                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
-                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Status", "Calidad"],
+                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Status", "Calidad"],
                 hide_index=True,
                 key="editor_aprob",
                 height=500,

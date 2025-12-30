@@ -336,3 +336,53 @@ def get_precios_por_especie(
     # Ordenar por kg total descendente
     result.sort(key=lambda x: x['kg_total'], reverse=True)
     return result
+
+
+def get_precios_detalle_productor(
+    planta: Optional[List[str]] = None,
+    especie: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Obtiene precios proyectados detallados por PRODUCTOR y especie.
+    
+    Returns:
+        Lista de diccionarios con: productor, especie, precio_proyectado, kg_total
+    """
+    df = load_proyecciones_consolidado()
+    
+    # Aplicar filtros
+    if planta:
+        planta_upper = [p.upper() for p in planta]
+        df = df[df['planta'].isin(planta_upper)]
+    
+    if especie:
+        df = df[df['especie_manejo'].isin(especie)]
+    
+    # Convertir precio a float
+    df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
+    
+    # Calcular monto total para promediar ponderado
+    df['precio_x_kg'] = df['precio'] * df['kg_proyectados']
+    
+    # Agrupar por Productor y Especie
+    grouped = df.groupby(['productor', 'especie_manejo']).agg({
+        'kg_proyectados': 'sum',
+        'precio_x_kg': 'sum'
+    }).reset_index()
+    
+    grouped['precio_promedio'] = grouped.apply(
+        lambda row: row['precio_x_kg'] / row['kg_proyectados'] if row['kg_proyectados'] > 0 else 0,
+        axis=1
+    )
+    
+    result = []
+    for _, row in grouped.iterrows():
+        if row['precio_promedio'] > 0:
+            result.append({
+                'productor': row['productor'],
+                'especie': row['especie_manejo'],
+                'precio_proyectado': round(float(row['precio_promedio']), 0),
+                'kg_total': float(row['kg_proyectados'])
+            })
+    
+    return result
