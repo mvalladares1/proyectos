@@ -271,6 +271,7 @@ def cargar_permisos_usuario():
             st.session_state['allowed_dashboards'] = data.get('allowed_dashboards', [])
             st.session_state['allowed_pages'] = data.get('allowed_pages', {})
             st.session_state['module_structure'] = data.get('module_structure', {})
+            st.session_state['restricted_modules'] = data.get('restricted_modules', {})
             st.session_state['is_admin'] = data.get('is_admin', False)
             st.session_state[cache_key] = now
     except:
@@ -393,27 +394,24 @@ def proteger_modulo(modulo_key: str) -> bool:
     mostrar_banner_mantenimiento()
     
     # 3. Cargar permisos si no están cargados
-    if 'allowed_dashboards' not in st.session_state:
+    if 'allowed_dashboards' not in st.session_state or 'restricted_modules' not in st.session_state:
         cargar_permisos_usuario()
     
     # 4. Admins tienen acceso a todo
     if st.session_state.get('is_admin', False):
         return True
     
-    # 5. Verificar acceso al módulo específico
-    allowed = st.session_state.get('allowed_dashboards', [])
+    # 5. Verificar si el módulo tiene restricciones
+    restricted_modules = st.session_state.get('restricted_modules', {})
     
+    # Si el módulo NO está restringido (lista vacía o no existe), es público
+    if modulo_key not in restricted_modules or not restricted_modules.get(modulo_key):
+        return True  # Módulo público, permitir acceso
+    
+    # 6. Si está restringido, verificar si el usuario está en la lista
+    allowed = st.session_state.get('allowed_dashboards', [])
     if modulo_key in allowed:
         return True
-    
-    # Si la lista está vacía (aún no se cargó) o el módulo no está restringido, permitir
-    # Esto mantiene compatibilidad con dashboards públicos
-    if not allowed:
-        # Intentar cargar una vez más
-        cargar_permisos_usuario()
-        allowed = st.session_state.get('allowed_dashboards', [])
-        if modulo_key in allowed:
-            return True
     
     # No tiene acceso - mostrar mensaje y detener
     st.error(f"🚫 No tienes acceso al módulo **{modulo_key.title()}**")

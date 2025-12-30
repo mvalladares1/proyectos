@@ -196,6 +196,20 @@ def get_allowed_dashboards(email: str) -> List[str]:
     return allowed
 
 
+def get_restricted_modules() -> Dict[str, List[str]]:
+    """
+    Retorna un diccionario de módulos que tienen restricciones.
+    Solo incluye módulos con lista de usuarios no vacía.
+    Módulos con [] (públicos) NO se incluyen.
+    """
+    dashboards = get_permissions_map()
+    restricted: Dict[str, List[str]] = {}
+    for slug, emails in dashboards.items():
+        if emails:  # Solo incluir si tiene restricciones
+            restricted[slug] = emails
+    return restricted
+
+
 def assign_dashboard(slug: str, email: str) -> Dict[str, List[str]]:
     data = _read_permissions()
     slug_key = _normalize_dashboard(slug)
