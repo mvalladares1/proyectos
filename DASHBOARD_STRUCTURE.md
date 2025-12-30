@@ -431,4 +431,4 @@ sudo systemctl restart rio-futuro-api rio-futuro-web nginx
 
 ---
 
-*Documento actualizado el 30 de Diciembre 2024*
+*Documento actualizado el 31 de Diciembre 2024*
