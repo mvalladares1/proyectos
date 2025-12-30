@@ -1541,9 +1541,8 @@ with tab_curva:
                 kg_por_semana = {}
                 
                 for rec in recepciones:
-                    tipo_fruta = (rec.get('tipo_fruta') or '').strip()
-                    if not tipo_fruta:
-                        continue
+                    # No requerimos tipo_fruta para procesar - usamos TipoFruta del producto si existe
+                    tipo_fruta_rec = (rec.get('tipo_fruta') or '').strip()
                     
                     # Obtener semana de la fecha
                     fecha_str = rec.get('fecha')
@@ -1577,17 +1576,17 @@ with tab_curva:
                         if not manejo:
                             manejo = 'Sin Manejo'
                         
-                        # Normalizar especie base
-                        tf = tipo_fruta.upper()
-                        if 'ARANDANO' in tf or 'ARÁNDANO' in tf or 'BLUEBERRY' in tf:
+                        # Normalizar especie base - usar TipoFruta del producto si existe, sino de la recepción
+                        tipo_fruta = (p.get('TipoFruta') or tipo_fruta_rec or '').upper()
+                        if 'ARANDANO' in tipo_fruta or 'ARÁNDANO' in tipo_fruta or 'BLUEBERRY' in tipo_fruta:
                             especie_base = 'Arándano'
-                        elif 'FRAM' in tf or 'FRAMBUESA' in tf or 'MEEKER' in tf or 'HERITAGE' in tf or 'WAKEFIELD' in tf or 'RASPBERRY' in tf:
+                        elif 'FRAM' in tipo_fruta or 'FRAMBUESA' in tipo_fruta or 'MEEKER' in tipo_fruta or 'HERITAGE' in tipo_fruta or 'WAKEFIELD' in tipo_fruta or 'RASPBERRY' in tipo_fruta:
                             especie_base = 'Frambuesa'
-                        elif 'FRUTILLA' in tf or 'FRESA' in tf or 'STRAWBERRY' in tf:
+                        elif 'FRUTILLA' in tipo_fruta or 'FRESA' in tipo_fruta or 'STRAWBERRY' in tipo_fruta:
                             especie_base = 'Frutilla'
-                        elif 'MORA' in tf or 'BLACKBERRY' in tf:
+                        elif 'MORA' in tipo_fruta or 'BLACKBERRY' in tipo_fruta:
                             especie_base = 'Mora'
-                        elif 'CEREZA' in tf or 'CHERRY' in tf:
+                        elif 'CEREZA' in tipo_fruta or 'CHERRY' in tipo_fruta:
                             especie_base = 'Cereza'
                         else:
                             especie_base = 'Otro'
@@ -1659,15 +1658,17 @@ with tab_curva:
                 
                 if any(s >= 47 for s in semanas_proyeccion):
                     # Temporada que empieza en año N y termina en N+1
-                    # Determinamos el año de inicio (donde están las semanas >= 47)
+                    # Si estamos en la temporada 2024-2025, el Año Anterior es 2023-2024
+                    # Determinamos el año de la temporada ACTUAL de las proyecciones
                     year_start = datetime.now().year if datetime.now().month >= 6 else datetime.now().year - 1
-                    fecha_inicio_anterior = datetime(year_start - 1, 11, 1)  # Noviembre del año tras-anterior
-                    fecha_fin_anterior = datetime(year_start, 5, 31, 23, 59, 59)   # Mayo del año anterior
+                    # Restamos 1 año COMPLETO para obtener la temporada anterior
+                    fecha_inicio_anterior = datetime(year_start - 2, 11, 1)  # Noviembre (año -2)
+                    fecha_fin_anterior = datetime(year_start - 1, 5, 31, 23, 59, 59)   # Mayo (año -1)
                 else:
                     # Temporada de un solo año
                     year_curr = datetime.now().year
-                    fecha_inicio_anterior = datetime(year_curr - 1, 1, 1)
-                    fecha_fin_anterior = datetime(year_curr - 1, 12, 31, 23, 59, 59)
+                    fecha_inicio_anterior = datetime(year_curr - 2, 1, 1)
+                    fecha_fin_anterior = datetime(year_curr - 2, 12, 31, 23, 59, 59)
                 
                 # Llamar a la API para obtener datos del año anterior SIN filtros de planta
                 # IMPORTANTE: Incluir username y password que son requeridos por el endpoint
