@@ -2321,6 +2321,7 @@ with tab_aprobaciones:
         filas_aprobacion = []
         for rec in recepciones:
             recep_name = rec.get('albaran', '')
+            picking_id = rec.get('id', 0)  # ID para link a Odoo
             fecha_recep = rec.get('fecha', '')
             productor = rec.get('productor', '')
             guia = rec.get('guia_despacho', '') or ''
@@ -2386,15 +2387,16 @@ with tab_aprobaciones:
                     "Fecha": fmt_fecha(fecha_recep),
                     "Productor": productor,
                     "OC": oc,
-                    "Producto": prod_name_raw[:40] if len(prod_name_raw) > 40 else prod_name_raw,  # Truncar si muy largo
-                    "Especie": especie_manejo,
+                    "Producto": prod_name_raw[:40] if len(prod_name_raw) > 40 else prod_name_raw,
                     "Kg": fmt_numero(kg, 2),
                     "$/Kg": fmt_dinero(precio_real),
                     "PPTO": fmt_dinero(ppto_val),
                     "Desv": f"{desv*100:.1f}%",
                     "🚦": sema,
                     "_id": recep_name,
-                    "_kg_raw": kg
+                    "_kg_raw": kg,
+                    "_picking_id": picking_id,
+                    "Especie": especie_manejo
                 })
         
         if filas_aprobacion:
@@ -2423,23 +2425,43 @@ with tab_aprobaciones:
             if filtro_oc:
                 df_filtered = df_filtered[df_filtered["OC"].str.contains(filtro_oc, case=False, na=False)]
             
+            # --- GENERAR LINK A ODOO ---
+            ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
+            df_filtered["_odoo_link"] = df_filtered["_picking_id"].apply(
+                lambda pid: f"{ODOO_BASE}id={pid}&menu_id=350&cids=1&action=540&model=stock.picking&view_type=form" if pid else ""
+            )
+            
+            # --- CHECKBOX SELECCIONAR TODO ---
+            col_sel_all, col_info = st.columns([1, 3])
+            with col_sel_all:
+                seleccionar_todo = st.checkbox("☑️ Seleccionar todo", key="sel_all_aprob", value=False)
+            with col_info:
+                st.caption(f"📋 {len(df_filtered)} líneas filtradas")
+            
+            # Aplicar selección masiva
+            if seleccionar_todo:
+                df_filtered["Sel"] = True
+            
             # Mostrar tabla
             edited_df = st.data_editor(
                 df_filtered,
                 column_config={
                     "Sel": st.column_config.CheckboxColumn("✓", default=False, width="small"),
+                    "Recepción": st.column_config.TextColumn("Recepción", width="medium"),
+                    "_odoo_link": st.column_config.LinkColumn("🔗", display_text="Odoo", width="small"),
                     "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
                     "PPTO": st.column_config.TextColumn("PPTO"),
                     "Kg": st.column_config.TextColumn("Kg"),
                     "🚦": st.column_config.TextColumn("🚦", width="small"),
-                    "Especie": None,  # Ocultar pero mantener para PPTO
+                    "Especie": None,
                     "_id": None,
-                    "_kg_raw": None
+                    "_kg_raw": None,
+                    "_picking_id": None,
                 },
-                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
-                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                column_order=["Sel", "Recepción", "_odoo_link", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
+                disabled=["Recepción", "_odoo_link", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "🚦"],
                 hide_index=True,
                 key="editor_aprob",
                 height=500,
