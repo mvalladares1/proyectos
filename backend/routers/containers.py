@@ -48,29 +48,6 @@ async def get_containers_summary(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.get("/{sale_id}")
-async def get_container_detail(
-    sale_id: int,
-    username: str = Query(..., description="Usuario Odoo"),
-    password: str = Query(..., description="API Key Odoo")
-):
-    """
-    Obtiene detalle completo de un container/venta específico.
-    Incluye todas las fabricaciones vinculadas y líneas de pedido.
-    """
-    try:
-        service = ContainersService(username=username, password=password)
-        container = service.get_container_detail(sale_id)
-        if not container:
-            raise HTTPException(status_code=404, detail="Container no encontrado")
-        return container
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/partners/list")
 async def get_partners(
     username: str = Query(..., description="Usuario Odoo"),
@@ -105,3 +82,23 @@ async def get_sankey_data(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/{sale_id}")
+async def get_container_detail(
+    sale_id: int,
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene detalle completo de un container/venta específico.
+    Incluye todas las fabricaciones vinculadas y líneas de pedido.
+    """
+    try:
+        service = ContainersService(username=username, password=password)
+        container = service.get_container_detail(sale_id)
+        if not container:
+            raise HTTPException(status_code=404, detail="Container no encontrado")
+        return container
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
