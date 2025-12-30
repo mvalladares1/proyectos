@@ -2409,8 +2409,8 @@ with tab_aprobaciones:
                     
                 calificacion = rec.get('calific_final', '')
                 
-                # Desviación con color (para usar en columna texto)
-                desv_pct = f"{desv*100:.1f}%"
+                # Desviación con color combinado
+                desv_pct = f"{desv*100:.1f}% {sema}"
                 
                 filas_aprobacion.append({
                     "Sel": es_aprobada,
@@ -2423,7 +2423,6 @@ with tab_aprobaciones:
                     "$/Kg": fmt_dinero(precio_real),
                     "PPTO": fmt_dinero(ppto_val),
                     "Desv": desv_pct,
-                    "Status": sema,  # Símbolo solo
                     "Calidad": calificacion,
                     "_id": recep_name,
                     "_kg_raw": kg,
@@ -2468,6 +2467,8 @@ with tab_aprobaciones:
             # Guardar estado previo para detectar cambios
             if 'sel_all_state' not in st.session_state:
                 st.session_state.sel_all_state = False
+            if 'editor_key' not in st.session_state:
+                st.session_state.editor_key = 0
             
             col_sel_all, col_info = st.columns([1, 3])
             with col_sel_all:
@@ -2476,9 +2477,8 @@ with tab_aprobaciones:
             # Detectar si cambió
             if sel_all_input != st.session_state.sel_all_state:
                 st.session_state.sel_all_state = sel_all_input
+                st.session_state.editor_key += 1 # Forzar reinicio del editor
                 df_filtered["Sel"] = sel_all_input
-                # Forzar recarga para que data_editor tome el cambio
-                st.rerun()
 
             with col_info:
                 st.caption(f"📋 {len(df_filtered)} líneas filtradas")
@@ -2491,7 +2491,6 @@ with tab_aprobaciones:
                     "Recepción": st.column_config.LinkColumn("Recepción", display_text=r"display_name=(.*?)(&|$)", width="medium"),
                     "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
-                    "Status": st.column_config.TextColumn("", width="small"),  # Semáforo sin título
                     "Calidad": st.column_config.TextColumn("Calidad", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
                     "PPTO": st.column_config.TextColumn("PPTO"),
@@ -2501,10 +2500,10 @@ with tab_aprobaciones:
                     "_kg_raw": None,
                     "_picking_id": None,
                 },
-                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Status", "Calidad"],
-                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Status", "Calidad"],
+                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
+                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
                 hide_index=True,
-                key="editor_aprob",
+                key=f"editor_aprob_{st.session_state.editor_key}",
                 height=500,
                 use_container_width=True
             )
