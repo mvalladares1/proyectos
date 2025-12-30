@@ -388,4 +388,4 @@ class ComercialService:
 
         return especie, manejo, variedad, temporada, programa
 
-comercial_service = ComercialService()
+
