@@ -26,16 +26,6 @@ st.set_page_config(
 if not proteger_modulo("relacion_comercial"):
     st.stop()
 
-allowed_emails = {
-    "fhorst@riofuturo.cl",
-    "vdominguez@riofuturo.cl",
-    "vpa@riofuturo.cl",
-}
-current_email = (st.session_state.get("username") or "").strip().lower()
-if current_email not in allowed_emails:
-    st.error("🚫 Acceso restringido. No tienes permisos para ver Relación Comercial.")
-    st.info("💡 Solicita acceso a tu administrador si necesitas ingresar.")
-    st.stop()
 
 # Instantiate service with user credentials
 comercial_service = ComercialService(
