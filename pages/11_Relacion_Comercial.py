@@ -336,6 +336,12 @@ with st.form("filtros_form"):
     with f4: s_cliente = st.multiselect("Cliente", options=filter_options.get('cliente', []), placeholder="ELEGIR")
     with f5: s_especie = st.multiselect("Tipo Fruta", options=filter_options.get('especie', []), placeholder="ELEGIR")
     
+    # Segunda fila de filtros - Búsqueda por factura
+    st.markdown('<div style="margin-top:10px;"></div>', unsafe_allow_html=True)
+    f6, f7 = st.columns([1, 4])
+    with f6:
+        s_documento = st.text_input("🔍 Buscar Factura/Documento", placeholder="Ej: NCXE 000095", help="Ingresa el número de factura o nota de crédito")
+    
     col_met, col_btn = st.columns([2, 1])
     with col_met: 
         metric_type = st.radio("Ver Datos por:", ["Kilos", "Ventas ($)"], horizontal=True)
@@ -357,6 +363,7 @@ if submitted:
     if s_trim: new_f['trimestre'] = s_trim
     if s_cliente: new_f['cliente'] = s_cliente
     if s_especie: new_f['especie'] = s_especie
+    if s_documento: new_f['documento'] = s_documento.strip()
     st.session_state.applied_filters = new_f
 
 # --- Caching PDF generation ---
@@ -419,6 +426,54 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# --- TABLA DE BÚSQUEDA POR FACTURA (si hay filtro de documento) ---
+if st.session_state.applied_filters.get('documento'):
+    st.markdown('<div style="margin-top:30px;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<p class="section-header">📄 RESULTADOS DE BÚSQUEDA: "{st.session_state.applied_filters.get("documento")}"</p>', unsafe_allow_html=True)
+    
+    if not df_raw.empty:
+        # Mapeo de códigos de referencia SII
+        REF_CODE_MAP = {
+            '1': '1-Anula',
+            '2': '2-Corrige Texto',
+            '3': '3-Corrige Monto',
+            '': '-'
+        }
+        
+        # Mostrar tabla con doc_origen y ref_code
+        df_doc = df_raw[['tipo', 'documento', 'doc_origen', 'ref_code', 'cliente', 'date', 'especie', 'kilos', 'monto']].copy()
+        df_doc['Fecha'] = pd.to_datetime(df_doc['date']).dt.strftime('%d/%m/%Y')
+        df_doc['Monto (CLP)'] = df_doc['monto'].apply(lambda x: f"${x:,.0f}")
+        df_doc['Kilos'] = df_doc['kilos'].apply(lambda x: f"{x:,.0f}")
+        df_doc['Código Ref'] = df_doc['ref_code'].apply(lambda x: REF_CODE_MAP.get(str(x), str(x) if x else '-'))
+        df_doc['Doc Origen'] = df_doc['doc_origen'].apply(lambda x: x if x else '-')
+        
+        df_display = df_doc[['tipo', 'documento', 'Doc Origen', 'Código Ref', 'cliente', 'Fecha', 'especie', 'Kilos', 'Monto (CLP)']].copy()
+        df_display.columns = ['Tipo', 'Documento', 'Doc Origen', 'Código Ref', 'Cliente', 'Fecha', 'Especie', 'Kilos', 'Monto (CLP)']
+        
+        # Métricas
+        col_sum1, col_sum2, col_sum3 = st.columns(3)
+        with col_sum1: st.metric("📊 Total Registros", len(df_raw))
+        with col_sum2: st.metric("💰 Total Monto", f"${df_raw['monto'].sum():,.0f}")
+        with col_sum3: st.metric("⚖️ Total Kilos", f"{df_raw['kilos'].sum():,.0f}")
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        
+        # Resumen de NC
+        df_nc = df_raw[df_raw['tipo'] == 'Nota de Crédito']
+        if not df_nc.empty:
+            nc_anula = len(df_nc[df_nc['ref_code'] == '1'])
+            nc_texto = len(df_nc[df_nc['ref_code'] == '2'])
+            nc_monto = len(df_nc[df_nc['ref_code'] == '3'])
+            st.markdown(f"""
+            **📋 Resumen Notas de Crédito:**
+            - ✅ **Código 1 (Anula)**: {nc_anula} → Afectan totales
+            - ❌ **Código 2 (Corrige Texto)**: {nc_texto} → Excluidas de totales
+            - ❌ **Código 3 (Corrige Monto)**: {nc_monto} → Excluidas de totales
+            """)
+    else:
+        st.warning("⚠️ No se encontraron resultados para este documento.")
 
 # --- Layout: Charts Side by Side ---
 chart_col1, chart_col2 = st.columns(2)

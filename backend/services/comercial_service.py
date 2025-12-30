@@ -92,8 +92,8 @@ class ComercialService:
                     ('product_id', '!=', False)
                 ]
                 
-                # Campos mínimos necesarios
-                fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state']
+                # Campos mínimos necesarios (incluye move_name para identificar documento)
+                fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state', 'move_name']
                 results_inv = self.odoo.search_read('account.move.line', domain_inv, fields_inv, limit=50000, order='date desc')
                 
                 # 1.2 COMPROMETIDO (sale.order.line) - solo pedidos recientes
@@ -145,8 +145,29 @@ class ComercialService:
                         move_map[m['id']] = {
                             'incoterm': m['invoice_incoterm_id'][1] if m['invoice_incoterm_id'] else "N/A",
                             'destino_real': m['sii_pais_destino_id'][1] if m.get('sii_pais_destino_id') else None,
-                            'move_type': m.get('move_type', 'out_invoice')
+                            'move_type': m.get('move_type', 'out_invoice'),
+                            'reference_doc_code': '',
+                            'origin_doc_number': ''
                         }
+                    
+                    # Consultar referencias SII para Notas de Crédito (l10n_cl.account.invoice.reference)
+                    try:
+                        ref_fields = ['move_id', 'reference_doc_code', 'origin_doc_number']
+                        references = self.odoo.search_read(
+                            'l10n_cl.account.invoice.reference',
+                            [('move_id', 'in', list(all_move_ids))],
+                            ref_fields
+                        )
+                        for ref in references:
+                            move_id = ref['move_id'][0] if isinstance(ref['move_id'], list) else ref['move_id']
+                            ref_code = ref.get('reference_doc_code', '')
+                            origin_doc = ref.get('origin_doc_number', '')
+                            
+                            if move_id in move_map:
+                                move_map[move_id]['reference_doc_code'] = str(ref_code) if ref_code else ''
+                                move_map[move_id]['origin_doc_number'] = origin_doc if origin_doc else ''
+                    except Exception as e:
+                        print(f"⚠️ No se pudo consultar referencias SII: {e}")
 
                 if all_sale_ids:
                     sales_info = self.odoo.read('sale.order', list(all_sale_ids), ['id', 'date_order', 'incoterm', 'currency_id'])
@@ -176,10 +197,22 @@ class ComercialService:
                 for line in results_inv:
                     # Obtener información del movimiento (factura/nota de crédito)
                     m_id = line['move_id'][0] if line.get('move_id') else None
-                    m_type = move_map.get(m_id, {}).get('move_type', 'out_invoice')
+                    m_data = move_map.get(m_id, {})
+                    m_type = m_data.get('move_type', 'out_invoice')
                     is_refund = (m_type == 'out_refund')
                     
+                    # Obtener código de referencia SII y documento origen para NC
+                    ref_code = m_data.get('reference_doc_code', '') if is_refund else ''
+                    origin_doc = m_data.get('origin_doc_number', '') if is_refund else ''
+                    
+                    # NC con código 2 (corrige texto) o 3 (corrige monto) no deben afectar totales
+                    nc_sin_efecto = is_refund and ref_code in ['2', '3']
+                    
                     if line.get('parent_state') != 'posted':
+                        monto_clp = 0
+                        qty = 0
+                    elif nc_sin_efecto:
+                        # NC código 2 (corrige texto) o 3 (corrige monto) → valores en 0
                         monto_clp = 0
                         qty = 0
                     else:
@@ -187,7 +220,7 @@ class ComercialService:
                         monto_clp = -balance 
                         raw_qty = abs(line.get('quantity', 0))
                         
-                        # Si es nota de crédito, los kilos deben ser negativos
+                        # Si es nota de crédito (código 1 - anula), los kilos deben ser negativos
                         # Si es factura normal, los kilos son positivos
                         qty = -raw_qty if is_refund else raw_qty
                     
@@ -218,7 +251,9 @@ class ComercialService:
                         'especie': especie, 'variedad': variedad, 'temporada': temporada,
                         'incoterm': incoterm, 'pais': pais, 'categoria_cliente': cat_cliente,
                         'kilos': qty, 'monto': monto_clp, 'date': fecha_str,
-                        'documento': line.get('move_name', 'N/A')
+                        'documento': line.get('move_name', 'N/A'),
+                        'doc_origen': origin_doc,  # Factura referenciada por la NC
+                        'ref_code': ref_code  # Código SII (1, 2, 3)
                     })
 
                 # Procesar Pedidos
@@ -254,7 +289,9 @@ class ComercialService:
                         'pais': partner_map.get(line['order_partner_id'][0], {}).get('pais', "Descon.") if line['order_partner_id'] else "Descon.",
                         'categoria_cliente': partner_map.get(line['order_partner_id'][0], {}).get('categoria', "S/C") if line['order_partner_id'] else "S/C",
                         'kilos': qty_ordered, 'monto': monto, 'date': fecha_order,
-                        'documento': line['order_id'][1] if line.get('order_id') else 'S/N'
+                        'documento': line['order_id'][1] if line.get('order_id') else 'S/N',
+                        'doc_origen': '',  # Pedidos no tienen documento origen
+                        'ref_code': ''  # Pedidos no tienen código SII
                     })
 
         except Exception as e:
@@ -275,7 +312,15 @@ class ComercialService:
         if filters:
             for k, v in filters.items():
                 if v and k in df_filtered.columns:
-                    df_filtered = df_filtered[df_filtered[k].isin(v)]
+                    if k == 'documento':
+                        # Búsqueda en documento O en doc_origen (para encontrar NC que referencian una factura)
+                        search_term = v if isinstance(v, str) else v[0] if v else ''
+                        if search_term:
+                            mask_doc = df_filtered['documento'].str.contains(search_term, case=False, na=False)
+                            mask_origen = df_filtered['doc_origen'].str.contains(search_term, case=False, na=False)
+                            df_filtered = df_filtered[mask_doc | mask_origen]
+                    else:
+                        df_filtered = df_filtered[df_filtered[k].isin(v)]
 
         now = datetime.datetime.now()
         cur_anio, cur_mes = now.year, now.month
