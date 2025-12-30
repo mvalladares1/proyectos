@@ -19,6 +19,7 @@ ALL_DASHBOARDS = [
     "stock",
     "containers",
     "rendimiento",
+    "relacion_comercial",
     "finanzas",
     "compras",
     "automatizaciones",
@@ -33,6 +34,7 @@ DASHBOARD_NAMES = {
     "stock": "Stock",
     "containers": "Containers",
     "rendimiento": "Rendimiento",
+    "relacion_comercial": "Relación Comercial",
     "finanzas": "Finanzas",
     "estado_resultado": "Finanzas",  # Alias para compatibilidad
     "compras": "Compras",
