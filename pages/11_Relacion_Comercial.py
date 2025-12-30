@@ -11,7 +11,7 @@ import os
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.auth import proteger_modulo
+from shared.auth import proteger_modulo, get_credenciales
 from backend.services.comercial_service import ComercialService
 from backend.utils.pdf_generator import generate_commercial_pdf
 
@@ -27,10 +27,16 @@ if not proteger_modulo("relacion_comercial"):
     st.stop()
 
 
+# Obtener credenciales del usuario autenticado
+username, password = get_credenciales()
+if not username or not password:
+    st.error("No se encontraron credenciales. Por favor inicie sesión nuevamente.")
+    st.stop()
+
 # Instantiate service with user credentials
 comercial_service = ComercialService(
-    username=st.session_state.get("username"), 
-    password=st.session_state.get("password")
+    username=username, 
+    password=password
 )
 
 # --- Exact Colors from Image ---
