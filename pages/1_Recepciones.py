@@ -2393,10 +2393,14 @@ with tab_aprobaciones:
         # Procesar datos
         filas_aprobacion = []
         for rec in recepciones:
-            # Excluir recepciones sin control de calidad
+            # Excluir recepciones sin control de calidad aprobado
+            # El QC debe existir (calific_final no vacío) Y estar aprobado (quality_state = 'pass')
             calific_final = rec.get('calific_final', '') or ''
-            if not calific_final.strip():
-                continue  # Sin QC asociado, no mostrar en Aprobaciones
+            quality_state = rec.get('quality_state', '') or ''
+            
+            # Solo mostrar si tiene QC Y está aprobado
+            if not calific_final.strip() or quality_state != 'pass':
+                continue
             
             recep_name = rec.get('albaran', '')
             picking_id = rec.get('id', 0)  # ID para link a Odoo
