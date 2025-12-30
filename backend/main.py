@@ -18,7 +18,8 @@ from backend.routers import (
     recepcion,
     rendimiento,
     compras,
-    automatizaciones
+    automatizaciones,
+    comercial
 )
 
 # Crear aplicación
@@ -57,6 +58,7 @@ app.include_router(recepcion.router)
 app.include_router(rendimiento.router)
 app.include_router(compras.router)
 app.include_router(automatizaciones.router)
+app.include_router(comercial.router)
 
 
 @app.get("/")

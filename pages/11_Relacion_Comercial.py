@@ -11,6 +11,7 @@ import os
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from shared.auth import proteger_modulo
 from backend.services.comercial_service import comercial_service
 from backend.utils.pdf_generator import generate_commercial_pdf
 
@@ -21,6 +22,20 @@ st.set_page_config(
     page_icon="📊",
     initial_sidebar_state="collapsed"
 )
+
+if not proteger_modulo("relacion_comercial"):
+    st.stop()
+
+allowed_emails = {
+    "fhorst@riofuturo.cl",
+    "vdominguez@riofuturo.cl",
+    "vpa@riofuturo.cl",
+}
+current_email = (st.session_state.get("username") or "").strip().lower()
+if current_email not in allowed_emails:
+    st.error("🚫 Acceso restringido. No tienes permisos para ver Relación Comercial.")
+    st.info("💡 Solicita acceso a tu administrador si necesitas ingresar.")
+    st.stop()
 
 # --- Exact Colors from Image ---
 COLOR_NAVY = "#1b4f72"
