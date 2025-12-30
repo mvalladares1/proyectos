@@ -19,7 +19,8 @@ async def get_recepciones(
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     productor_id: Optional[int] = Query(None, description="ID del productor"),
     solo_hechas: bool = Query(True, description="Si es True, solo muestra recepciones en estado 'hecho'. Si es False, muestra todas."),
-    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, o ambos. Si no se especifica, muestra ambos.")
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, o ambos. Si no se especifica, muestra ambos."),
+    estados: Optional[List[str]] = Query(None, description="Estados a filtrar explícitamente (ej. assigned, done). Ignora solo_hechas.")
 ):
     """
     Obtiene las recepciones de materia prima con datos de calidad.
@@ -32,7 +33,7 @@ async def get_recepciones(
     print(f"[DEBUG router] origen recibido en endpoint: {origen}, tipo: {type(origen)}")
     
     try:
-        data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen)
+        data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen, estados)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

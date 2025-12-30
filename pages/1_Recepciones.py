@@ -2290,7 +2290,8 @@ with tab_aprobaciones:
                     "password": password,
                     "fecha_inicio": fecha_inicio_aprob.strftime("%Y-%m-%d"),
                     "fecha_fin": fecha_fin_aprob.strftime("%Y-%m-%d"),
-                    "origen": None 
+                    "origen": None,
+                    "estados": ["assigned"] # Filtrar solo 'Preparado', ignorar 'Hecho'
                 }
                 resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
                 

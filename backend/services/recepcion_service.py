@@ -17,7 +17,7 @@ def _normalize_categoria(cat: str) -> str:
     return c
 
 
-def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None, solo_hechas: bool = True, origen: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None, solo_hechas: bool = True, origen: Optional[List[str]] = None, estados: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Obtiene recepciones de materia prima con datos de calidad.
     
@@ -30,8 +30,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     6. x_quality_check_line_* (líneas por tipo)
     
     Args:
-        solo_hechas: Si es True, solo muestra recepciones en estado "done".
-                     Si es False, muestra recepciones en todos los estados.
+        solo_hechas: Si es True (y no se especifica 'estados'), solo muestra recepciones en estado "done".
+        estados: Lista explícita de estados a filtrar (ej. ['assigned', 'done']). Si se usa, ignora solo_hechas.
         origen: Lista de orígenes a filtrar. Valores válidos: "RFP", "VILKUN".
                 Si es None o vacío, se incluyen ambos.
     """
@@ -66,9 +66,13 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         ("scheduled_date", ">=", fecha_inicio),
         ("scheduled_date", "<=", fecha_fin),
     ]
-    # Si solo_hechas es True, filtrar solo recepciones completadas/validadas
-    if solo_hechas:
+    
+    # Lógica de filtrado de estados
+    if estados:
+        domain.append(("state", "in", estados))
+    elif solo_hechas:
         domain.append(("state", "=", "done"))
+        
     if productor_id:
         domain.append(("partner_id", "=", productor_id))
     
