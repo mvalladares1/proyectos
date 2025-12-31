@@ -96,9 +96,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     
     # Recolectar IDs para batch queries
     picking_ids = [r["id"] for r in recepciones]
-    all_check_ids = []
-    for r in recepciones:
-        all_check_ids.extend(r.get("check_ids", []))
+    # all_check_ids REMOVIDO: Se buscará por picking_id
     
     # ============ PASO 2: Obtener TODOS los movimientos en UNA llamada ============
     moves = client.search_read(
@@ -194,17 +192,17 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             # Cachear productos por 30 minutos
             cache.set(cache_key, product_info_map, ttl=OdooCache.TTL_PRODUCTOS)
     
-    # ============ PASO 4: Obtener TODOS los quality.check en UNA llamada ============
     checks_map = {}
     checks_by_picking = {}
     
-    if all_check_ids:
+    if picking_ids:
+        # Requerimiento: Buscar quality.check asociados a estos pickings
         checks = client.search_read(
             "quality.check",
-            [("id", "in", all_check_ids)],
+            [("picking_id", "in", picking_ids)],
             [
                 "id", "picking_id",
-                "quality_state",  # Estado del QC: none, pass, fail
+                "quality_state",
                 "x_studio_tipo_de_fruta",
                 "x_studio_total_iqf_",
                 "x_studio_total_block_",
@@ -386,9 +384,9 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "lineas_analisis": []
         }
         
-        check_ids = rec.get("check_ids", [])
-        if check_ids and check_ids[0] in checks_map:
-            qc = checks_map[check_ids[0]]
+        checks_rec = checks_by_picking.get(picking_id, [])
+        if checks_rec:
+            qc = checks_rec[0] # Tomar el primer control de calidad encontrado
             tipo_fruta = qc.get("x_studio_tipo_de_fruta", "")
             
             calidad_data = {
