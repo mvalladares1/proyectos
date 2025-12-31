@@ -1695,10 +1695,11 @@ with tab_curva:
                             categoria = (p.get('Categoria') or '').strip().upper()
                             producto_nombre = (p.get('Producto') or '').strip().upper()
                             
-                            # Excluir bandejas y pallets por categoría o nombre
-                            if 'BANDEJ' in categoria or 'PALLET' in categoria:
+                            # Excluir bandejas y pallets por categoría únicamente
+                            # IMPORTANTE: No filtrar por nombre de producto, ya que 'IQF en Bandeja' son productos válidos
+                            if 'BANDEJ' in categoria:
                                 continue
-                            if 'BANDEJ' in producto_nombre or 'PALLET' in producto_nombre:
+                            if 'PALLET' in categoria:
                                 continue
                             
                             kg_hechos = p.get('Kg Hechos', 0) or 0
