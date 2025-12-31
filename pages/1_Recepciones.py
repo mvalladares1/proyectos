@@ -2407,14 +2407,14 @@ with tab_aprobaciones:
         # Procesar datos
         filas_aprobacion = []
         for rec in recepciones:
-            # Excluir recepciones sin control de calidad aprobado
-            # El QC debe existir (calific_final no vacío) Y estar aprobado (quality_state = 'pass')
-            calific_final = rec.get('calific_final', '') or ''
-            quality_state = rec.get('quality_state', '') or ''
+            # --- FILTRO QC REMOVIDO: Mostrar incluso si no tiene QC ---
+            # calific_final = rec.get('calific_final', '') or ''
+            # quality_state = rec.get('quality_state', '') or ''
+            # if not calific_final.strip() or quality_state != 'pass':
+            #     continue
             
-            # Solo mostrar si tiene QC Y está aprobado
-            if not calific_final.strip() or quality_state != 'pass':
-                continue
+            calific_final = rec.get('calific_final', '') or ''
+            # No poner "PENDIENTE" aquí para que el filtro funcione mejor
             
             recep_name = rec.get('albaran', '')
             picking_id = rec.get('id', 0)  # ID para link a Odoo
@@ -2433,7 +2433,8 @@ with tab_aprobaciones:
                 if 'BANDEJ' in cat: continue
                     
                 kg = p.get('Kg Hechos', 0) or 0
-                if kg <= 0: continue
+                # Permitir kg = 0 para recepciones preparadas pero no terminadas
+                # if kg <= 0: continue
                     
                 precio_real = float(p.get('Costo Unitario', 0) or p.get('precio', 0) or 0)
                 
@@ -2445,10 +2446,8 @@ with tab_aprobaciones:
                 tipo_fruta = (p.get('TipoFruta') or rec.get('tipo_fruta') or '').strip()
                 manejo = (p.get('Manejo') or '').strip()
                 
-                # REQUERIMIENTO: Solo mostrar si tiene calidad asociada y aprobada (Clasificación != "")
-                clasif_qc = rec.get('calific_final', '')
-                if not clasif_qc or clasif_qc == "":
-                    continue
+                # QC Status visual (vacío si no hay datos)
+                clasif_qc = rec.get('calific_final', '') or ""
                 
                 # Si hay TipoFruta directo, usarlo
                 if tipo_fruta:
@@ -2488,7 +2487,7 @@ with tab_aprobaciones:
                 if desv > 0.08: sema = "🔴"
                 elif desv > 0.03: sema = "🟡"
                     
-                calificacion = rec.get('calific_final', '')
+                calificacion = rec.get('calific_final', '') or ""
                 
                 # Desviación con color combinado
                 desv_pct = f"{desv*100:.1f}% {sema}"
@@ -2524,7 +2523,14 @@ with tab_aprobaciones:
                 with col_f3:
                     filtro_esp = st.selectbox("Especie", ["Todos"] + sorted(df_full["Especie"].unique().tolist()), key="filtro_esp")
                 with col_f4:
+                    filtro_cal = st.selectbox("Calidad", ["Todos"] + sorted(df_full["Calidad"].unique().tolist()), key="filtro_cal")
+            
+            with st.expander("🔍 Más filtros", expanded=False):
+                col_f5, col_f6 = st.columns(2)
+                with col_f5:
                     filtro_oc = st.text_input("OC", "", key="filtro_oc", placeholder="Buscar OC...")
+                with col_f6:
+                    pass # Espacio para futuro
             
             # Aplicar filtros
             df_filtered = df_full.copy()
@@ -2536,6 +2542,8 @@ with tab_aprobaciones:
                 df_filtered = df_filtered[df_filtered["Especie"] == filtro_esp]
             if filtro_oc:
                 df_filtered = df_filtered[df_filtered["OC"].str.contains(filtro_oc, case=False, na=False)]
+            if filtro_cal != "Todos":
+                df_filtered = df_filtered[df_filtered["Calidad"] == filtro_cal]
             
             # --- GENERAR LINK A ODOO (reemplazar Recepción con URL) ---
             ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
