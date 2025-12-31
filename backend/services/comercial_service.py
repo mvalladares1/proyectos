@@ -68,9 +68,11 @@ class ComercialService:
             data_processed = []
 
         kpis = {
-            "total_ventas_anio": 0,
-            "total_ventas_mes": 0,
-            "total_comprometido": 0
+            "total_ventas": 0,
+            "total_kilos": 0,
+            "total_comprometido": 0,
+            "kpi_label": "Total Ventas",
+            "has_filters": False
         }
         
         # 1.0 Obtener tasa de USD
@@ -85,6 +87,7 @@ class ComercialService:
             if not is_cache_valid:
                 domain_inv = [
                     ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+                    ('move_id.payment_state', '!=', 'reversed'),
                     ('account_id', 'in', [132, 133, 581, 1741, 1857]), 
                     ('product_id.product_tag_ids', 'in', [18, 19, 20, 25, 21]),  # Excluir 41 (Servicio)
                     ('parent_state', '=', 'posted'),
@@ -92,14 +95,15 @@ class ComercialService:
                     ('product_id', '!=', False)
                 ]
                 
-                # Campos mínimos necesarios (incluye move_name para identificar documento)
-                fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state', 'move_name']
+                # Campos mínimos necesarios
+                fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state', 'move_name', 'credit']
                 results_inv = self.odoo.search_read('account.move.line', domain_inv, fields_inv, limit=50000, order='date desc')
                 
                 # Consulta 2: Líneas SIN producto pero con cuenta de ingresos (facturas antiguas 2023)
                 # Estas facturas fueron registradas sin producto específico
                 domain_inv_legacy = [
                     ('move_id.move_type', 'in', ['out_invoice', 'out_refund']),
+                    ('move_id.payment_state', '!=', 'reversed'),
                     ('account_id', 'in', [132, 133]),  # Solo cuentas de ingresos principales
                     ('parent_state', '=', 'posted'),
                     ('display_type', '=', 'product'),  # Solo líneas de producto (no payment_term)
@@ -155,12 +159,13 @@ class ComercialService:
                         }
 
                 if all_move_ids:
-                    moves_info = self.odoo.read('account.move', list(all_move_ids), ['id', 'invoice_incoterm_id', 'sii_pais_destino_id', 'move_type'])
+                    moves_info = self.odoo.read('account.move', list(all_move_ids), ['id', 'invoice_incoterm_id', 'sii_pais_destino_id', 'move_type', 'name'])
                     for m in moves_info:
                         move_map[m['id']] = {
                             'incoterm': m['invoice_incoterm_id'][1] if m['invoice_incoterm_id'] else "N/A",
                             'destino_real': m['sii_pais_destino_id'][1] if m.get('sii_pais_destino_id') else None,
                             'move_type': m.get('move_type', 'out_invoice'),
+                            'move_name': m.get('name', ''),
                             'reference_doc_code': '',
                             'origin_doc_number': ''
                         }
@@ -182,7 +187,26 @@ class ComercialService:
                                 move_map[move_id]['reference_doc_code'] = str(ref_code) if ref_code else ''
                                 move_map[move_id]['origin_doc_number'] = origin_doc if origin_doc else ''
                     except Exception as e:
-                        print(f"⚠️ No se pudo consultar referencias SII: {e}")
+                        print(f"[WARNING] No se pudo consultar referencias SII: {e}")
+                    
+                    # 1.2.B Identificar Documentos Anulados (Clave Normalizada)
+                    docs_anulados = set()
+                    for m_id, m_data in move_map.items():
+                        ref_code = m_data.get('reference_doc_code')
+                        if ref_code == '1':
+                            # Prefijo y número de la NC
+                            m_name = m_data.get('move_name', '')
+                            if m_name and ' ' in m_name:
+                                pref = m_name.split(' ')[0]
+                                num = m_name.split(' ')[-1].lstrip('0')
+                                docs_anulados.add(f"{pref}_{num}")
+                                
+                                # Prefijo y número del documento original referenciado
+                                origin_num = m_data.get('origin_doc_number', '').lstrip('0')
+                                if origin_num:
+                                    # Mapeo simple: NCXE -> FCXE, NC -> FAC
+                                    target_pref = "FCXE" if "NCXE" in pref else "FAC"
+                                    docs_anulados.add(f"{target_pref}_{origin_num}")
 
                 if all_sale_ids:
                     sales_info = self.odoo.read('sale.order', list(all_sale_ids), ['id', 'date_order', 'incoterm', 'currency_id'])
@@ -216,29 +240,33 @@ class ComercialService:
                     m_type = m_data.get('move_type', 'out_invoice')
                     is_refund = (m_type == 'out_refund')
                     
-                    # Obtener código de referencia SII y documento origen para NC
-                    ref_code = m_data.get('reference_doc_code', '') if is_refund else ''
-                    origin_doc = m_data.get('origin_doc_number', '') if is_refund else ''
+                    # Lógica de Kilos y Anulaciones (Normalización Crítica)
+                    balance = line.get('balance', 0)
+                    credit = line.get('credit', 0)
+                    monto_clp = -balance
                     
-                    # NC con código 2 (corrige texto) o 3 (corrige monto) no deben afectar totales
-                    nc_sin_efecto = is_refund and ref_code in ['2', '3']
+                    # Normalizar nombre del documento actual
+                    move_name_raw = line.get('move_name', '') or m_data.get('move_name', '')
+                    doc_key = ""
+                    if move_name_raw and ' ' in move_name_raw:
+                        p_parts = move_name_raw.split(' ')
+                        doc_key = f"{p_parts[0]}_{p_parts[-1].lstrip('0')}"
                     
-                    if line.get('parent_state') != 'posted':
-                        monto_clp = 0
+                    # Cálculo base de kilos con signo según 'credit'
+                    raw_qty = abs(line.get('quantity', 0))
+                    qty = raw_qty if credit >= 0 else -raw_qty
+                    
+                    # Aplicar Reglas de Negocio
+                    if doc_key in docs_anulados:
+                        # Documento anulado o NC que anula -> 0 kilos
                         qty = 0
-                    elif nc_sin_efecto:
-                        # NC código 2 (corrige texto) o 3 (corrige monto) → solo kilos en 0, monto normal
-                        balance = line.get('balance', 0)
-                        monto_clp = -balance  # El monto SÍ se considera
-                        qty = 0  # Los kilos NO se consideran
-                    else:
-                        balance = line.get('balance', 0)
-                        monto_clp = -balance 
-                        raw_qty = abs(line.get('quantity', 0))
-                        
-                        # Si es nota de crédito (código 1 - anula), los kilos deben ser negativos
-                        # Si es factura normal, los kilos son positivos
-                        qty = -raw_qty if is_refund else raw_qty
+                    elif is_refund:
+                        # NC que no es código 1 -> 0 kilos
+                        if ref_code != '1':
+                            qty = 0
+                        else:
+                            # NC código 1 que NO está en el set (raro) -> mantener signo
+                            qty = -raw_qty if qty > 0 else qty
                     
                     cliente_name = line['partner_id'][1] if line['partner_id'] else "Desconocido"
                     fecha_str = str(line['date'])[:10]
@@ -321,7 +349,7 @@ class ComercialService:
 
         except Exception as e:
             if not is_cache_valid:
-                print(f"⚠️ Error Odoo: {e}")
+                print(f"[WARNING] Error Odoo: {e}")
 
         # Guardar caché
         if not is_cache_valid and data_processed:
