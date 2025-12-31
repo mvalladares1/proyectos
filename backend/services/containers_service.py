@@ -622,6 +622,17 @@ class ContainersService:
             except Exception as e:
                 print(f"Error fetching moves with extra fields: {e}")
                 moves_raw = self.odoo.read("stock.move", move_ids, fallback_move_fields)
+            moves_raw = self.odoo.read(
+                "stock.move",
+                move_ids,
+                [
+                    "id",
+                    "product_id",
+                    "quantity_done",
+                    "product_uom_qty",
+                    "x_studio_float_field_hZJh1"
+                ]
+            )
             moves_by_id = {move["id"]: move for move in moves_raw}
 
         production_details = {}
