@@ -2528,7 +2528,7 @@ with tab_aprobaciones:
                 with col_f5:
                     filtro_oc = st.text_input("OC", "", key="filtro_oc", placeholder="Buscar OC...")
                 with col_f6:
-                    pass # Espacio para futuro
+                    filtro_est_odoo = st.selectbox("Estado Odoo", ["Todos"] + sorted(df_full["Estado"].unique().tolist()), key="filtro_est_odoo")
             
             # Aplicar filtros
             df_filtered = df_full.copy()
@@ -2542,6 +2542,8 @@ with tab_aprobaciones:
                 df_filtered = df_filtered[df_filtered["OC"].str.contains(filtro_oc, case=False, na=False)]
             if filtro_cal != "Todos":
                 df_filtered = df_filtered[df_filtered["Calidad"] == filtro_cal]
+            if filtro_est_odoo != "Todos":
+                df_filtered = df_filtered[df_filtered["Estado"] == filtro_est_odoo]
             
             # --- GENERAR LINK A ODOO (reemplazar Recepción con URL) ---
             ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
