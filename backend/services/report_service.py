@@ -654,7 +654,7 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         canvas.saveState()
         header_y = PAGE_HEIGHT - 40
         # Logo (si existe)
-        if logo_path and os.path.exists(logo_path):
+        # if logo_path and os.path.exists(logo_path):
         #     try:
         #         img = ImageReader(logo_path)
         #         iw, ih = img.getSize()
