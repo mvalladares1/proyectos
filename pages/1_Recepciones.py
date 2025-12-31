@@ -1680,6 +1680,19 @@ with tab_curva:
                     print(f"DEBUG: Recepciones año anterior: {len(recepciones_anterior)} registros")
                     
                     for rec in recepciones_anterior:
+                        # Filtrar recepciones sin tipo_fruta (igual que año actual y KPIs)
+                        tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
+                        # Si no hay tipo_fruta en recepción, intentar obtener del primer producto válido
+                        if not tipo_fruta_row:
+                            for p_check in rec.get('productos', []) or []:
+                                cat_check = (p_check.get('Categoria') or '').upper()
+                                if 'BANDEJ' not in cat_check:
+                                    tipo_fruta_row = (p_check.get('TipoFruta') or '').strip()
+                                    if tipo_fruta_row:
+                                        break
+                        if not tipo_fruta_row:
+                            continue
+                        
                         fecha_str = rec.get('fecha')
                         if not fecha_str:
                             continue
