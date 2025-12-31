@@ -140,3 +140,54 @@ def init_session_state():
     for key, default in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default
+
+
+# --------------------- Normalización de especies ---------------------
+
+def normalizar_especie_manejo(tipo_fruta: str, manejo: str = "") -> str:
+    """
+    Normaliza tipo_fruta + manejo a formato 'Especie Manejo'.
+    Ejemplo: 'ARANDANO ORGANICO' -> 'Arándano Orgánico'
+    """
+    tf = str(tipo_fruta or '').upper().strip()
+    man = str(manejo or '').upper().strip()
+    
+    # Detectar manejo
+    if 'ORGAN' in tf or 'ORGAN' in man:
+        manejo_norm = 'Orgánico'
+    else:
+        manejo_norm = 'Convencional'
+    
+    # Detectar especie
+    if 'ARANDANO' in tf or 'ARÁNDANO' in tf or 'BLUEBERRY' in tf:
+        especie = 'Arándano'
+    elif 'FRAM' in tf or 'MEEKER' in tf or 'HERITAGE' in tf or 'WAKEFIELD' in tf or 'RASPBERRY' in tf:
+        especie = 'Frambuesa'
+    elif 'FRUTILLA' in tf or 'FRESA' in tf or 'STRAWBERRY' in tf:
+        especie = 'Frutilla'
+    elif 'MORA' in tf or 'BLACKBERRY' in tf:
+        especie = 'Mora'
+    elif 'CEREZA' in tf or 'CHERRY' in tf:
+        especie = 'Cereza'
+    else:
+        especie = 'Otro'
+    
+    return f"{especie} {manejo_norm}"
+
+
+# --------------------- Carga de exclusiones ---------------------
+
+import json as _json
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_exclusiones():
+    """Carga lista de IDs de recepciones excluidas de valorización."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return _json.load(f).get("recepciones", [])
+    except:
+        pass
+    return []
+
