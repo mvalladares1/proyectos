@@ -157,7 +157,9 @@ with tab2:
                                 thickness=20,
                                 line=dict(color="black", width=0.5),
                                 label=[n["label"] for n in sankey_data["nodes"]],
-                                color=[n["color"] for n in sankey_data["nodes"]]
+                                color=[n["color"] for n in sankey_data["nodes"]],
+                                customdata=[n.get("detail", "") for n in sankey_data["nodes"]],
+                                hovertemplate="%{label}<br>%{customdata}<extra></extra>"
                             ),
                             link=dict(
                                 source=[l["source"] for l in sankey_data["links"]],
