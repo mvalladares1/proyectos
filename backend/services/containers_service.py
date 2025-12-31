@@ -38,6 +38,13 @@ class ContainersService:
             "x_studio_kg_disponibles_po", "x_studio_sala_de_proceso",
             "x_studio_clientes"
         ]
+        fallback_prod_fields = [
+            "name", "product_id", "product_qty", "qty_produced",
+            "state", "date_planned_start", "date_start", "date_finished",
+            "user_id", "x_studio_po_asociada_1", "x_studio_po_cliente_1",
+            "x_studio_kg_totales_po", "x_studio_kg_consumidos_po",
+            "x_studio_kg_disponibles_po", "x_studio_sala_de_proceso"
+        ]
         
         try:
             print("Buscando fabricaciones con PO asociada...")
@@ -54,7 +61,11 @@ class ContainersService:
             
             print(f"Encontradas {len(prod_ids)} fabricaciones con PO")
             
-            prods_raw = self.odoo.read("mrp.production", prod_ids, prod_fields)
+            try:
+                prods_raw = self.odoo.read("mrp.production", prod_ids, prod_fields)
+            except Exception as e:
+                print(f"Error fetching productions with extra fields: {e}")
+                prods_raw = self.odoo.read("mrp.production", prod_ids, fallback_prod_fields)
         except Exception as e:
             print(f"Error fetching productions: {e}")
             return []
@@ -126,6 +137,11 @@ class ContainersService:
             "state", "amount_total", "currency_id", "origin",
             "user_id", "order_line", "client_id", "validity_date"
         ]
+        fallback_sale_fields = [
+            "name", "partner_id", "date_order", "commitment_date",
+            "state", "amount_total", "currency_id", "origin",
+            "user_id", "order_line"
+        ]
         
         sale_domain = [("id", "in", list(sale_ids_to_fetch))]
         if partner_id:
@@ -139,7 +155,11 @@ class ContainersService:
             if not filtered_sale_ids:
                 return []
             
-            sales_raw = self.odoo.read("sale.order", filtered_sale_ids, sale_fields)
+            try:
+                sales_raw = self.odoo.read("sale.order", filtered_sale_ids, sale_fields)
+            except Exception as e:
+                print(f"Error fetching sales with extra fields: {e}")
+                sales_raw = self.odoo.read("sale.order", filtered_sale_ids, fallback_sale_fields)
         except Exception as e:
             print(f"Error fetching sales: {e}")
             return []
@@ -584,6 +604,24 @@ class ContainersService:
         move_ids = list(set(raw_move_ids + finished_move_ids))
         moves_by_id = {}
         if move_ids:
+            move_fields = [
+                "id",
+                "product_id",
+                "quantity_done",
+                "product_uom_qty",
+                "x_studio_float_field_hZJh1"
+            ]
+            fallback_move_fields = [
+                "id",
+                "product_id",
+                "quantity_done",
+                "product_uom_qty"
+            ]
+            try:
+                moves_raw = self.odoo.read("stock.move", move_ids, move_fields)
+            except Exception as e:
+                print(f"Error fetching moves with extra fields: {e}")
+                moves_raw = self.odoo.read("stock.move", move_ids, fallback_move_fields)
             moves_raw = self.odoo.read(
                 "stock.move",
                 move_ids,
