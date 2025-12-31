@@ -2611,13 +2611,37 @@ with tab_aprobaciones:
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
-                    ids = seleccionados["_id"].unique().tolist()
-                    if ids:
-                        if save_aprobaciones(ids):
-                            st.success(f"✅ Aprobadas {len(ids)} recepciones.")
-                            st.rerun()
+                    ids_names = seleccionados["_id"].unique().tolist()
+                    picking_ids = [int(pid) for pid in seleccionados["_picking_id"].unique().tolist() if pid]
+                    
+                    if picking_ids:
+                        with st.spinner("Validando en Odoo..."):
+                            try:
+                                resp_val = requests.post(
+                                    f"{API_URL}/api/v1/recepciones-mp/validate",
+                                    params={"username": username, "password": password},
+                                    json=picking_ids,
+                                    timeout=60
+                                )
+                                if resp_val.status_code == 200:
+                                    res_json = resp_val.json()
+                                    if res_json.get("success"):
+                                        save_aprobaciones(ids_names)
+                                        st.success(f"✅ {len(picking_ids)} recepciones validadas correctamente.")
+                                        st.rerun()
+                                    else:
+                                        # Mostrar lista de errores si existen
+                                        errores_msg = "\n".join(res_json.get("errores", []))
+                                        st.error(f"Error al validar algunas recepciones:\n{errores_msg}")
+                                        # Aún así recargar por si algunas sí se validaron
+                                        if res_json.get("validados"):
+                                            st.rerun()
+                                else:
+                                    st.error(f"Error en el servidor: {resp_val.text}")
+                            except Exception as e:
+                                st.error(f"Error al conectar con la API: {e}")
                     else:
-                        st.warning("Selecciona al menos una línea.")
+                        st.warning("Selecciona al menos una recepción con ID válido.")
             with col_b:
                 if estado_filtro != "Pendientes":
                     if st.button("↩️ Quitar Aprobación", use_container_width=True):

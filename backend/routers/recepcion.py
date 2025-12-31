@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 
-from backend.services.recepcion_service import get_recepciones_mp
+from backend.services.recepcion_service import get_recepciones_mp, validar_recepciones
 from backend.services.recepciones_gestion_service import RecepcionesGestionService
 from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
@@ -236,6 +236,21 @@ async def get_precios_abastecimiento(
         return get_precios_por_especie(planta=planta, especie=especie)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/validate')
+async def validate_recepciones(
+    username: str,
+    password: str,
+    picking_ids: List[int]
+):
+    """
+    Valida masivamente un conjunto de recepciones en Odoo.
+    """
+    try:
+        return validar_recepciones(username, password, picking_ids)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
