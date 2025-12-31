@@ -345,7 +345,7 @@ def render(username: str, password: str):
                     "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d %H:%M:%S"),
                     "solo_hechas": True
                 }
-                print(f"DEBUG: Consultando año anterior desde {fecha_inicio_anterior} hasta {fecha_fin_anterior}")
+                # DEBUG removed
                 resp_anterior = requests.get(
                     f"{API_URL}/api/v1/recepciones-mp/",
                     params=params_anterior,
@@ -354,7 +354,7 @@ def render(username: str, password: str):
 
                 if resp_anterior.status_code == 200:
                     recepciones_anterior = resp_anterior.json()
-                    print(f"DEBUG: Recepciones año anterior: {len(recepciones_anterior)} registros")
+
 
                     for rec in recepciones_anterior:
                         # Filtrar recepciones sin tipo_fruta (igual que año actual y KPIs)
@@ -434,21 +434,18 @@ def render(username: str, password: str):
                                 kg_anterior_por_semana[semana] = 0
                             kg_anterior_por_semana[semana] += kg_hechos
 
-                    print(f"DEBUG: Semanas con datos del año anterior: {list(kg_anterior_por_semana.keys())}")
-                    print(f"DEBUG: Total kg año anterior: {sum(kg_anterior_por_semana.values())}")
+
                 else:
-                    print(f"DEBUG: Error en API año anterior: {resp_anterior.status_code}")
+                    pass  # Error silenciado
             except Exception as e:
-                print(f"Error obteniendo datos del año anterior: {e}")
+                pass  # Error silenciado
 
             # Agregar columna de año anterior al df_chart
-            print(f"DEBUG: Semanas en df_chart: {df_chart['semana'].unique().tolist()}")
-            print(f"DEBUG: Semanas en kg_anterior: {list(kg_anterior_por_semana.keys())}")
-            print(f"DEBUG: kg_anterior_por_semana total: {sum(kg_anterior_por_semana.values())}")
+
             df_chart['kg_anterior'] = df_chart['semana'].apply(
                 lambda s: kg_anterior_por_semana.get(s, 0)
             )
-            print(f"DEBUG: Total kg_anterior en df_chart: {df_chart['kg_anterior'].sum()}")
+
 
             # Ordenar por semana
             df_chart['sort_key'] = df_chart['semana'].apply(lambda x: x if x >= 47 else x + 100)
@@ -538,17 +535,9 @@ def render(username: str, password: str):
                 # Calcular datos de precio y gasto recepcionado por semana desde datos del sistema
                 precios_por_semana = {}
 
-                # Cargar exclusiones para ignorar costos
-                import json as json_curva
-                exclusiones_ids_curva = []
-                try:
-                    exclusions_file_curva = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
-                    if os.path.exists(exclusions_file_curva):
-                        with open(exclusions_file_curva, 'r') as f:
-                            exclusiones_curva = json_curva.load(f)
-                            exclusiones_ids_curva = exclusiones_curva.get("recepciones", [])
-                except:
-                    pass
+                # Cargar exclusiones usando función centralizada
+                from .shared import get_exclusiones
+                exclusiones_ids_curva = get_exclusiones()
 
                 if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
                     for rec in st.session_state.curva_sistema_raw:

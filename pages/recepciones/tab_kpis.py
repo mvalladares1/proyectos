@@ -8,7 +8,6 @@ import requests
 import altair as alt
 import io
 import os
-import json
 from datetime import datetime, timedelta
 from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL
 
@@ -88,17 +87,9 @@ def render(username: str, password: str):
     # Mostrar tabla y detalle si hay datos
     df = st.session_state.df_recepcion
     if df is not None:
-        # --- Cargar exclusiones de valorización ---
-        import json
-        exclusiones_ids = []
-        try:
-            exclusions_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
-            if os.path.exists(exclusions_file):
-                with open(exclusions_file, 'r') as f:
-                    exclusiones = json.load(f)
-                    exclusiones_ids = exclusiones.get("recepciones", [])
-        except:
-            pass
+        # --- Cargar exclusiones de valorización usando función centralizada ---
+        from .shared import get_exclusiones
+        exclusiones_ids = get_exclusiones()
 
         # --- KPIs Consolidados ---
         st.subheader("📊 KPIs Consolidados")
