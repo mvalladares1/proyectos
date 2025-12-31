@@ -622,6 +622,17 @@ class ContainersService:
             except Exception as e:
                 print(f"Error fetching moves with extra fields: {e}")
                 moves_raw = self.odoo.read("stock.move", move_ids, fallback_move_fields)
+            moves_raw = self.odoo.read(
+                "stock.move",
+                move_ids,
+                [
+                    "id",
+                    "product_id",
+                    "quantity_done",
+                    "product_uom_qty",
+                    "x_studio_float_field_hZJh1"
+                ]
+            )
             moves_by_id = {move["id"]: move for move in moves_raw}
 
         production_details = {}
@@ -759,6 +770,95 @@ class ContainersService:
                     [["package_id", "in", list(package_ids)]],
                     fallback_quant_fields
                 )
+            for quant in quants:
+                pkg = quant.get("package_id")
+                pkg_id = pkg[0] if isinstance(pkg, (list, tuple)) else pkg
+                quants_by_package.setdefault(pkg_id, []).append(quant)
+
+        for (prod_id, pkg_id, tipo), data in pallets_by_key.items():
+            pkg_info = package_info.get(pkg_id, {})
+            pallet = {
+                "id": pkg_id,
+                "name": pkg_info.get("name", str(pkg_id)),
+                "pack_date": pkg_info.get("pack_date", ""),
+                "qty": data.get("qty", 0),
+                "products": self._build_pallet_products(quants_by_package.get(pkg_id, []))
+            }
+            pallets_by_production[prod_id][tipo].append(pallet)
+
+        return {
+            "productions": production_details,
+            "pallets": pallets_by_production
+        }
+
+    def _build_pallet_products(self, quants: List[Dict]) -> List[Dict]:
+        products = []
+        for quant in quants:
+            product_name = quant.get("name")
+            if not product_name:
+                product_name = get_name_from_relation(quant.get("product_id"))
+            products.append({
+                "name": product_name or "N/A",
+                "lot_id": get_name_from_relation(quant.get("lot_id")),
+                "quantity": quant.get("quantity", 0) or 0
+            })
+        return products
+
+    def _build_container_detail(self, container: Dict) -> str:
+        lines = container.get("lines", [])
+        totals_by_product = {}
+        for line in lines:
+            product = get_name_from_relation(line.get("product_id"))
+            totals_by_product.setdefault(product, {"qty": 0, "subtotal": 0})
+            totals_by_product[product]["qty"] += line.get("product_uom_qty", 0) or 0
+            totals_by_product[product]["subtotal"] += line.get("price_subtotal", 0) or 0
+
+        details = [
+            f"Cliente: {container.get('client_name', 'N/A')}",
+            f"Validez: {container.get('validity_date', '') or 'N/A'}"
+        ]
+
+        if totals_by_product:
+            details.append("Productos:")
+            for product, totals in totals_by_product.items():
+                details.append(
+                    f"- {product}: {totals['qty']} kg | {totals['subtotal']}"
+                )
+            total_qty = sum(t["qty"] for t in totals_by_product.values())
+            total_subtotal = sum(t["subtotal"] for t in totals_by_product.values())
+            details.append(f"Total kg: {total_qty}")
+            details.append(f"Total subtotal: {total_subtotal}")
+        return "<br>".join(details)
+
+    def _build_fabrication_detail(self, fab: Dict, production_detail: Dict) -> str:
+        details = [
+            f"Producto: {fab.get('product_name', 'N/A')}",
+            f"Fecha planificada: {fab.get('date_planned_start', '') or 'N/A'}",
+            f"Cliente: {fab.get('cliente', 'N/A')}",
+            f"Sala: {fab.get('sala_proceso', 'N/A')}"
+        ]
+
+        moves = production_detail.get("moves", [])
+        if moves:
+            details.append("Productos en fabricación:")
+            for move in moves:
+                details.append(
+                    f"- {move['product']}: {move['quantity_done']} kg"
+                )
+            packages = self.odoo.read(
+                "stock.quant.package",
+                list(package_ids),
+                ["id", "name", "pack_date"]
+            )
+            package_info = {pkg["id"]: pkg for pkg in packages}
+
+        quants_by_package = {}
+        if package_ids:
+            quants = self.odoo.search_read(
+                "stock.quant",
+                [["package_id", "in", list(package_ids)]],
+                ["package_id", "name", "lot_id", "quantity", "product_id"]
+            )
             for quant in quants:
                 pkg = quant.get("package_id")
                 pkg_id = pkg[0] if isinstance(pkg, (list, tuple)) else pkg

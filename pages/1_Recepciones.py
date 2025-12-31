@@ -1363,7 +1363,7 @@ with tab_curva:
     
     with col_row1_3:
         st.markdown("**Período:**")
-        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 11, 24), format="DD/MM/YYYY", key="curva_desde")
+        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 11, 17), format="DD/MM/YYYY", key="curva_desde")
         curva_fecha_fin = datetime.now()
         st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (hoy)")
     
@@ -1649,10 +1649,10 @@ with tab_curva:
                 # El año anterior para comparar debe ser 2023-2024
                 
                 if any(s >= 47 for s in semanas_proyeccion):
-                    # FECHAS FIJAS para Año Anterior: Temporada 2023-2024
-                    # Desde Semana 47 (Nov 20 2023) hasta Semana 17 (Abr 28 2024)
-                    fecha_inicio_anterior = datetime(2023, 11, 20)
-                    fecha_fin_anterior = datetime(2024, 4, 30, 23, 59, 59)
+                    # FECHAS FIJAS para Año Anterior: Temporada 2024-2025
+                    # Desde 01-Nov-2024 hasta 30-Abr-2025
+                    fecha_inicio_anterior = datetime(2024, 11, 1)
+                    fecha_fin_anterior = datetime(2025, 4, 30, 23, 59, 59)
                 else:
                     # Temporada de un solo año
                     year_curr = datetime.now().year
@@ -1680,6 +1680,19 @@ with tab_curva:
                     print(f"DEBUG: Recepciones año anterior: {len(recepciones_anterior)} registros")
                     
                     for rec in recepciones_anterior:
+                        # Filtrar recepciones sin tipo_fruta (igual que año actual y KPIs)
+                        tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
+                        # Si no hay tipo_fruta en recepción, intentar obtener del primer producto válido
+                        if not tipo_fruta_row:
+                            for p_check in rec.get('productos', []) or []:
+                                cat_check = (p_check.get('Categoria') or '').upper()
+                                if 'BANDEJ' not in cat_check:
+                                    tipo_fruta_row = (p_check.get('TipoFruta') or '').strip()
+                                    if tipo_fruta_row:
+                                        break
+                        if not tipo_fruta_row:
+                            continue
+                        
                         fecha_str = rec.get('fecha')
                         if not fecha_str:
                             continue
@@ -2344,7 +2357,7 @@ with tab_aprobaciones:
                     "fecha_inicio": fecha_inicio_aprob.strftime("%Y-%m-%d"),
                     "fecha_fin": fecha_fin_aprob.strftime("%Y-%m-%d"),
                     "origen": None,
-                    "estados": ["assigned"] # Filtrar solo 'Preparado', ignorar 'Hecho'
+                    "estados": ["assigned", "done"] # Mostrar 'Preparado' y 'Hecho'
                 }
                 resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
                 
@@ -2394,14 +2407,11 @@ with tab_aprobaciones:
         # Procesar datos
         filas_aprobacion = []
         for rec in recepciones:
-            # Excluir recepciones sin control de calidad aprobado
-            # El QC debe existir (calific_final no vacío) Y estar aprobado (quality_state = 'pass')
-            calific_final = rec.get('calific_final', '') or ''
-            quality_state = rec.get('quality_state', '') or ''
-            
-            # Solo mostrar si tiene QC Y está aprobado
-            if not calific_final.strip() or quality_state != 'pass':
-                continue
+            # Filtro de QC relajado: permitir mostrar incluso sin 'pass' si el usuario lo necesita
+            # calific_final = rec.get('calific_final', '') or ''
+            # quality_state = rec.get('quality_state', '') or ''
+            # if not calific_final.strip() or quality_state != 'pass':
+            #     continue
             
             recep_name = rec.get('albaran', '')
             picking_id = rec.get('id', 0)  # ID para link a Odoo
@@ -2420,7 +2430,8 @@ with tab_aprobaciones:
                 if 'BANDEJ' in cat: continue
                     
                 kg = p.get('Kg Hechos', 0) or 0
-                if kg <= 0: continue
+                # Permitir kg = 0 para recepciones preparadas pero no terminadas
+                # if kg <= 0: continue
                     
                 precio_real = float(p.get('Costo Unitario', 0) or p.get('precio', 0) or 0)
                 
@@ -2432,10 +2443,8 @@ with tab_aprobaciones:
                 tipo_fruta = (p.get('TipoFruta') or rec.get('tipo_fruta') or '').strip()
                 manejo = (p.get('Manejo') or '').strip()
                 
-                # REQUERIMIENTO: Solo mostrar si tiene calidad asociada y aprobada (Clasificación != "")
-                clasif_qc = rec.get('calific_final', '')
-                if not clasif_qc or clasif_qc == "":
-                    continue
+                # QC Status visual (vacío si no hay datos)
+                clasif_qc = rec.get('calific_final', '') or ""
                 
                 # Si hay TipoFruta directo, usarlo
                 if tipo_fruta:
@@ -2475,7 +2484,7 @@ with tab_aprobaciones:
                 if desv > 0.08: sema = "🔴"
                 elif desv > 0.03: sema = "🟡"
                     
-                calificacion = rec.get('calific_final', '')
+                calificacion = rec.get('calific_final', '') or ""
                 
                 # Desviación con color combinado
                 desv_pct = f"{desv*100:.1f}% {sema}"
@@ -2495,7 +2504,8 @@ with tab_aprobaciones:
                     "_id": recep_name,
                     "_kg_raw": kg,
                     "_picking_id": picking_id,
-                    "Especie": especie_manejo
+                    "Especie": especie_manejo,
+                    "Estado": "✅ Hecho" if rec.get('state') == 'done' else "📦 Preparado"
                 })
         
         if filas_aprobacion:
@@ -2511,7 +2521,22 @@ with tab_aprobaciones:
                 with col_f3:
                     filtro_esp = st.selectbox("Especie", ["Todos"] + sorted(df_full["Especie"].unique().tolist()), key="filtro_esp")
                 with col_f4:
+                    filtro_cal = st.selectbox("Calidad", ["Todos"] + sorted(df_full["Calidad"].unique().tolist()), key="filtro_cal")
+            
+            with st.expander("🔍 Más filtros", expanded=False):
+                col_f5, col_f6 = st.columns(2)
+                with col_f5:
                     filtro_oc = st.text_input("OC", "", key="filtro_oc", placeholder="Buscar OC...")
+                with col_f6:
+                    opciones_estado = ["Todos"] + sorted(df_full["Estado"].unique().tolist())
+                    # Intentar seleccionar "Preparado" por defecto si existe
+                    idx_def = 0
+                    try:
+                        idx_def = opciones_estado.index("📦 Preparado")
+                    except ValueError:
+                        idx_def = 0
+                        
+                    filtro_est_odoo = st.selectbox("Estado Odoo", opciones_estado, index=idx_def, key="filtro_est_odoo")
             
             # Aplicar filtros
             df_filtered = df_full.copy()
@@ -2523,6 +2548,10 @@ with tab_aprobaciones:
                 df_filtered = df_filtered[df_filtered["Especie"] == filtro_esp]
             if filtro_oc:
                 df_filtered = df_filtered[df_filtered["OC"].str.contains(filtro_oc, case=False, na=False)]
+            if filtro_cal != "Todos":
+                df_filtered = df_filtered[df_filtered["Calidad"] == filtro_cal]
+            if filtro_est_odoo != "Todos":
+                df_filtered = df_filtered[df_filtered["Estado"] == filtro_est_odoo]
             
             # --- GENERAR LINK A ODOO (reemplazar Recepción con URL) ---
             ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
@@ -2560,6 +2589,7 @@ with tab_aprobaciones:
                     "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
                     "Calidad": st.column_config.TextColumn("Calidad", width="small"),
+                    "Estado": st.column_config.TextColumn("Estado", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
                     "PPTO": st.column_config.TextColumn("PPTO"),
                     "Kg": st.column_config.TextColumn("Kg"),
@@ -2568,8 +2598,8 @@ with tab_aprobaciones:
                     "_kg_raw": None,
                     "_picking_id": None,
                 },
-                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
-                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
+                column_order=["Sel", "Recepción", "Fecha", "Estado", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
+                disabled=["Recepción", "Fecha", "Estado", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
                 hide_index=True,
                 key=f"editor_aprob_{st.session_state.editor_key}",
                 height=500,
@@ -2592,13 +2622,37 @@ with tab_aprobaciones:
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
-                    ids = seleccionados["_id"].unique().tolist()
-                    if ids:
-                        if save_aprobaciones(ids):
-                            st.success(f"✅ Aprobadas {len(ids)} recepciones.")
-                            st.rerun()
+                    ids_names = seleccionados["_id"].unique().tolist()
+                    picking_ids = [int(pid) for pid in seleccionados["_picking_id"].unique().tolist() if pid]
+                    
+                    if picking_ids:
+                        with st.spinner("Validando en Odoo..."):
+                            try:
+                                resp_val = requests.post(
+                                    f"{API_URL}/api/v1/recepciones-mp/validate",
+                                    params={"username": username, "password": password},
+                                    json=picking_ids,
+                                    timeout=60
+                                )
+                                if resp_val.status_code == 200:
+                                    res_json = resp_val.json()
+                                    if res_json.get("success"):
+                                        save_aprobaciones(ids_names)
+                                        st.success(f"✅ {len(picking_ids)} recepciones validadas correctamente.")
+                                        st.rerun()
+                                    else:
+                                        # Mostrar lista de errores si existen
+                                        errores_msg = "\n".join(res_json.get("errores", []))
+                                        st.error(f"Error al validar algunas recepciones:\n{errores_msg}")
+                                        # Aún así recargar por si algunas sí se validaron
+                                        if res_json.get("validados"):
+                                            st.rerun()
+                                else:
+                                    st.error(f"Error en el servidor: {resp_val.text}")
+                            except Exception as e:
+                                st.error(f"Error al conectar con la API: {e}")
                     else:
-                        st.warning("Selecciona al menos una línea.")
+                        st.warning("Selecciona al menos una recepción con ID válido.")
             with col_b:
                 if estado_filtro != "Pendientes":
                     if st.button("↩️ Quitar Aprobación", use_container_width=True):

@@ -496,15 +496,16 @@ with tab2:
     with col2:
         # Filtro simplificado de estados
         filtro_estado = st.selectbox(
-            "Estado",
-            options=['Todos', 'pendientes', 'done', 'cancel'],
+            "Estado / Filtro",
+            options=['Todos', 'stock_pendiente', 'pendientes', 'done', 'cancel'],
             format_func=lambda x: {
                 'Todos': '📋 Todas (sin canceladas)',
-                'pendientes': '🟡 Pendientes',
+                'stock_pendiente': '🟠 Con Stock Pendiente',
+                'pendientes': '🟡 Pendientes (Odoo)',
                 'done': '✅ Finalizadas',
                 'cancel': '❌ Canceladas'
             }.get(x, x),
-            index=0  # Por defecto "Todos" (excluye canceladas)
+            index=0
         )
     
     with col3:
@@ -523,8 +524,10 @@ with tab2:
             if tunel and tunel != 'Todos':
                 params['tunel'] = tunel
             
-            # Enviar estado al backend (excepto 'Todos' que usa el filtro por defecto)
-            if estado and estado != 'Todos':
+            # Filtro especial de stock pendiente
+            if estado == 'stock_pendiente':
+                params['solo_pendientes'] = True
+            elif estado and estado != 'Todos':
                 params['estado'] = estado
             
             response = requests.get(
@@ -652,8 +655,48 @@ with tab2:
                 
                 # Expander DENTRO del mismo bloque visual para órdenes con pendientes
                 if tiene_pendientes:
+                    # BOTÓN DE ACCIÓN RÁPIDA FUERA DEL EXPANDER
+                    orden_id = orden.get('id')
+                    detalle_key = f'pendientes_{orden_id}'
+                    
+                    col_act1, col_act2 = st.columns([2, 1])
+                    with col_act1:
+                        st.warning(f"⚠️ Esta orden tiene pallets esperando recepción")
+                    
+                    with col_act2:
+                        # Si ya validamos y hay disponibles, mostrar botón de agregar
+                        if detalle_key in st.session_state and st.session_state[detalle_key].get('hay_disponibles_sin_agregar'):
+                            if st.button("✅ Agregar Listos", key=f"quick_agregar_{orden_id}", type="primary", use_container_width=True):
+                                try:
+                                    resp = requests.post(
+                                        f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles",
+                                        params={"username": username, "password": password}
+                                    )
+                                    if resp.status_code == 200:
+                                        st.success("¡Pallets agregados!")
+                                        del st.session_state[detalle_key]
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error: {resp.text}")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                        else:
+                            # Botón normal de validar
+                            if st.button("🔄 Validar Stock", key=f"quick_validar_{orden_id}", type="secondary", use_container_width=True):
+                                try:
+                                    resp = requests.get(
+                                        f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes",
+                                        params={"username": username, "password": password}
+                                    )
+                                    if resp.status_code == 200:
+                                        st.session_state[detalle_key] = resp.json()
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error: {resp.text}")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
                     with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
-                        orden_id = orden.get('id')
                         
                         # Botón para cargar/actualizar detalle
                         col_btn1, col_btn2, col_btn3 = st.columns(3)

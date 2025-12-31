@@ -195,7 +195,8 @@ async def crear_orden(
 async def listar_ordenes(
     tunel: Optional[str] = None,
     estado: Optional[str] = None,
-    limit: int = 20,
+    limit: int = 50,
+    solo_pendientes: bool = False,
     odoo: OdooClient = Depends(get_odoo_client),
 ):
     """
@@ -204,11 +205,12 @@ async def listar_ordenes(
     Args:
         tunel: Filtrar por túnel (TE1, TE2, TE3, VLK)
         estado: Filtrar por estado (draft, confirmed, progress, done, cancel)
-        limit: Límite de resultados (default: 20)
+        limit: Límite de resultados (default: 50)
+        solo_pendientes: Filtrar por órdenes con stock pendiente
     """
     try:
         service = get_tuneles_service(odoo)
-        ordenes = service.listar_ordenes_recientes(tunel, estado, limit)
+        ordenes = service.listar_ordenes_recientes(tunel, estado, limit, solo_pendientes)
         return ordenes
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
