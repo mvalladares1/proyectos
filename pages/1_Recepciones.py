@@ -2528,15 +2528,15 @@ with tab_aprobaciones:
                 with col_f5:
                     filtro_oc = st.text_input("OC", "", key="filtro_oc", placeholder="Buscar OC...")
                 with col_f6:
-            opciones_estado = ["Todos"] + sorted(df_full["Estado"].unique().tolist())
-            # Intentar seleccionar "Preparado" por defecto si existe
-            idx_def = 0
-            try:
-                idx_def = opciones_estado.index("📦 Preparado")
-            except ValueError:
-                idx_def = 0
-                
-            filtro_est_odoo = st.selectbox("Estado Odoo", opciones_estado, index=idx_def, key="filtro_est_odoo")
+                    opciones_estado = ["Todos"] + sorted(df_full["Estado"].unique().tolist())
+                    # Intentar seleccionar "Preparado" por defecto si existe
+                    idx_def = 0
+                    try:
+                        idx_def = opciones_estado.index("📦 Preparado")
+                    except ValueError:
+                        idx_def = 0
+                        
+                    filtro_est_odoo = st.selectbox("Estado Odoo", opciones_estado, index=idx_def, key="filtro_est_odoo")
             
             # Aplicar filtros
             df_filtered = df_full.copy()
