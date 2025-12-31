@@ -1363,7 +1363,7 @@ with tab_curva:
     
     with col_row1_3:
         st.markdown("**Período:**")
-        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 11, 24), format="DD/MM/YYYY", key="curva_desde")
+        curva_fecha_inicio = st.date_input("Desde", datetime(2025, 11, 17), format="DD/MM/YYYY", key="curva_desde")
         curva_fecha_fin = datetime.now()
         st.caption(f"Hasta: {curva_fecha_fin.strftime('%d/%m/%Y')} (hoy)")
     
@@ -1649,10 +1649,10 @@ with tab_curva:
                 # El año anterior para comparar debe ser 2023-2024
                 
                 if any(s >= 47 for s in semanas_proyeccion):
-                    # FECHAS FIJAS para Año Anterior: Temporada 2023-2024
-                    # Desde Semana 47 (Nov 20 2023) hasta Semana 17 (Abr 28 2024)
-                    fecha_inicio_anterior = datetime(2023, 11, 20)
-                    fecha_fin_anterior = datetime(2024, 4, 30, 23, 59, 59)
+                    # FECHAS FIJAS para Año Anterior: Temporada 2024-2025
+                    # Desde 01-Nov-2024 hasta 30-Abr-2025
+                    fecha_inicio_anterior = datetime(2024, 11, 1)
+                    fecha_fin_anterior = datetime(2025, 4, 30, 23, 59, 59)
                 else:
                     # Temporada de un solo año
                     year_curr = datetime.now().year
