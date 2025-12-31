@@ -117,6 +117,50 @@ def _ensure_file() -> None:
         _write_permissions(DEFAULT_PERMISSIONS)
 
 
+import time
+from contextlib import contextmanager
+
+LOCK_FILE = DATA_DIR / "permissions.lock"
+
+class FileLock:
+    def __init__(self, lock_file: Path, timeout: float = 10.0, delay: float = 0.1):
+        self.lock_file = lock_file
+        self.timeout = timeout
+        self.delay = delay
+    
+    def acquire(self):
+        start_time = time.time()
+        while True:
+            try:
+                # Modos 'x' crea archivo exclusivo, falla si existe. Atomic en POSIX y Windows (Python 3)
+                with open(self.lock_file, "x"):
+                    return
+            except FileExistsError:
+                if time.time() - start_time > self.timeout:
+                    raise TimeoutError(f"Could not acquire lock on {self.lock_file}")
+                time.sleep(self.delay)
+
+    def release(self):
+        try:
+            self.lock_file.unlink()
+        except FileNotFoundError:
+            pass
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+
+@contextmanager
+def permission_transaction():
+    """Transaction context for read-modify-write operations."""
+    with FileLock(LOCK_FILE):
+        data = _read_permissions()
+        yield data
+        _write_permissions(data)
+
 def _read_permissions() -> Dict[str, Any]:
     _ensure_file()
     try:
@@ -124,43 +168,54 @@ def _read_permissions() -> Dict[str, Any]:
             data: Dict[str, Any] = json.load(handler)
     except json.JSONDecodeError:
         data = DEFAULT_PERMISSIONS.copy()
+    
+    # Ensure structure
     data.setdefault("dashboards", {})
+    data.setdefault("pages", {})
     data.setdefault("admins", [])
+    data.setdefault("maintenance", DEFAULT_PERMISSIONS["maintenance"])
+    
     return data
 
 
 def _write_permissions(data: Dict[str, Any]) -> None:
-    with PERMISSIONS_FILE.open("w", encoding="utf-8") as handler:
+    # Atomic write pattern: write to temp file then rename
+    temp_file = PERMISSIONS_FILE.with_suffix(".tmp")
+    with temp_file.open("w", encoding="utf-8") as handler:
         json.dump(data, handler, ensure_ascii=False, indent=2)
+    temp_file.replace(PERMISSIONS_FILE)
 
 
 def get_permissions_map() -> Dict[str, List[str]]:
-    """Retorna el mapa de permisos, asegurando que todos los dashboards estén incluidos."""
-    full_data = _read_permissions()
-    dashboards = full_data["dashboards"]
-    modified = False
-    
-    # Asegurar que todos los dashboards de ALL_DASHBOARDS estén presentes
-    for slug in ALL_DASHBOARDS:
-        if slug not in dashboards:
-            dashboards[slug] = []
+    """Retorna el mapa de permisos, asegurando consistencia."""
+    # Usamos lock para asegurar que la limpieza no colisione con otras escrituras
+    with FileLock(LOCK_FILE):
+        full_data = _read_permissions()
+        dashboards = full_data["dashboards"]
+        modified = False
+        
+        # Asegurar keys requeridas
+        for slug in ALL_DASHBOARDS:
+            if slug not in dashboards:
+                dashboards[slug] = []
+                modified = True
+        
+        # Limpiar keys viejas
+        stray_keys = [k for k in dashboards.keys() if k not in ALL_DASHBOARDS]
+        for key in stray_keys:
+            del dashboards[key]
             modified = True
-    
-    # Limpiar entradas espurias (dashboards que no están en ALL_DASHBOARDS)
-    stray_keys = [k for k in dashboards.keys() if k not in ALL_DASHBOARDS]
-    for key in stray_keys:
-        del dashboards[key]
-        modified = True
-    
-    # Si hubo cambios, persistir
-    if modified:
-        full_data["dashboards"] = dashboards
-        _write_permissions(full_data)
-    
-    return dashboards.copy()
+        
+        if modified:
+            full_data["dashboards"] = dashboards
+            _write_permissions(full_data)
+        
+        return dashboards.copy()
 
 
 def get_admins() -> List[str]:
+    # Read is safe enough without lock if we accept slightly stale data, 
+    # but strictly a shared lock would be better. For now simple read.
     return _read_permissions().get("admins", [])
 
 
@@ -172,65 +227,50 @@ def is_admin(email: str) -> bool:
 
 
 def get_allowed_dashboards(email: str) -> List[str]:
-    """
-    Retorna los dashboards que el usuario puede ver.
-    - Si un dashboard tiene lista vacía [] → es público (todos pueden ver)
-    - Si tiene correos específicos → solo esos correos pueden ver
-    - Admins pueden ver todo
-    """
     normalized = _normalize_email(email)
     dashboards = get_permissions_map()
     
-    # Admins pueden ver todo
     if is_admin(email):
         return list(dashboards.keys())
     
     allowed: List[str] = []
     for slug, emails in dashboards.items():
-        # Lista vacía = público
         if not emails:
             allowed.append(slug)
-        # Lista con correos = restringido
         elif normalized in {_normalize_email(addr) for addr in emails}:
             allowed.append(slug)
     return allowed
 
 
 def get_restricted_modules() -> Dict[str, List[str]]:
-    """
-    Retorna un diccionario de módulos que tienen restricciones.
-    Solo incluye módulos con lista de usuarios no vacía.
-    Módulos con [] (públicos) NO se incluyen.
-    """
     dashboards = get_permissions_map()
     restricted: Dict[str, List[str]] = {}
     for slug, emails in dashboards.items():
-        if emails:  # Solo incluir si tiene restricciones
+        if emails:
             restricted[slug] = emails
     return restricted
 
 
 def assign_dashboard(slug: str, email: str) -> Dict[str, List[str]]:
-    data = _read_permissions()
-    slug_key = _normalize_dashboard(slug)
-    dashboards = data.setdefault("dashboards", {})
-    bucket = dashboards.setdefault(slug_key, [])
-    normalized_email = _normalize_email(email)
-    if normalized_email not in {_normalize_email(addr) for addr in bucket}:
-        bucket.append(email.strip())
-    _write_permissions(data)
-    return dashboards.copy()
+    with permission_transaction() as data:
+        slug_key = _normalize_dashboard(slug)
+        dashboards = data.setdefault("dashboards", {})
+        bucket = dashboards.setdefault(slug_key, [])
+        normalized_email = _normalize_email(email)
+        if normalized_email not in {_normalize_email(addr) for addr in bucket}:
+            bucket.append(email.strip())
+        # Triggers _write_permissions on exit
+    return data["dashboards"]
 
 
 def remove_dashboard(slug: str, email: str) -> Dict[str, List[str]]:
-    data = _read_permissions()
-    slug_key = _normalize_dashboard(slug)
-    dashboards = data.setdefault("dashboards", {})
-    bucket = dashboards.get(slug_key, [])
-    normalized_email = _normalize_email(email)
-    dashboards[slug_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
-    _write_permissions(data)
-    return dashboards.copy()
+    with permission_transaction() as data:
+        slug_key = _normalize_dashboard(slug)
+        dashboards = data.setdefault("dashboards", {})
+        bucket = dashboards.get(slug_key, [])
+        normalized_email = _normalize_email(email)
+        dashboards[slug_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
+    return data["dashboards"]
 
 
 def get_full_permissions() -> Dict[str, Any]:
@@ -238,47 +278,36 @@ def get_full_permissions() -> Dict[str, Any]:
 
 
 def get_dashboard_name(slug: str) -> str:
-    """Obtiene el nombre amigable de un dashboard."""
     return DASHBOARD_NAMES.get(_normalize_dashboard(slug), slug)
 
 
 def get_all_dashboards() -> List[str]:
-    """Retorna la lista de todos los dashboards disponibles."""
     return ALL_DASHBOARDS.copy()
 
 
 # ============ PERMISOS A NIVEL DE PÁGINA/TAB ============
 
 def get_module_pages(module: str) -> List[Dict[str, str]]:
-    """Retorna las páginas disponibles para un módulo."""
     return MODULE_PAGES.get(_normalize_dashboard(module), [])
 
 
 def get_all_module_pages() -> Dict[str, List[Dict[str, str]]]:
-    """Retorna todas las páginas de todos los módulos."""
     return MODULE_PAGES.copy()
 
 
 def get_page_permissions() -> Dict[str, List[str]]:
-    """Retorna el mapa de permisos de páginas."""
     data = _read_permissions()
     return data.get("pages", {})
 
 
 def get_allowed_pages(email: str, module: str) -> List[str]:
-    """
-    Retorna las páginas permitidas para un usuario dentro de un módulo.
-    - Si la página no tiene restricción -> permitida
-    - Si tiene lista de emails -> solo esos usuarios
-    - Admins ven todo
-    """
     normalized = _normalize_email(email)
     module_key = _normalize_dashboard(module)
     
-    # Admins ven todo
     if is_admin(email):
         return [p["slug"] for p in MODULE_PAGES.get(module_key, [])]
     
+    # We read once here
     pages_perms = get_page_permissions()
     allowed: List[str] = []
     
@@ -286,10 +315,8 @@ def get_allowed_pages(email: str, module: str) -> List[str]:
         page_key = f"{module_key}.{page['slug']}"
         emails_list = pages_perms.get(page_key, [])
         
-        # Lista vacía = público
         if not emails_list:
             allowed.append(page["slug"])
-        # Lista con correos = restringido
         elif normalized in {_normalize_email(addr) for addr in emails_list}:
             allowed.append(page["slug"])
     
@@ -297,76 +324,56 @@ def get_allowed_pages(email: str, module: str) -> List[str]:
 
 
 def assign_page(module: str, page: str, email: str) -> Dict[str, List[str]]:
-    """Asigna acceso a una página específica para un usuario."""
-    data = _read_permissions()
-    pages = data.setdefault("pages", {})
-    page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
-    bucket = pages.setdefault(page_key, [])
-    normalized_email = _normalize_email(email)
-    
-    if normalized_email not in {_normalize_email(addr) for addr in bucket}:
-        bucket.append(email.strip())
-    
-    _write_permissions(data)
-    return pages.copy()
+    with permission_transaction() as data:
+        pages = data.setdefault("pages", {})
+        page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
+        bucket = pages.setdefault(page_key, [])
+        normalized_email = _normalize_email(email)
+        
+        if normalized_email not in {_normalize_email(addr) for addr in bucket}:
+            bucket.append(email.strip())
+    return data["pages"]
 
 
 def remove_page(module: str, page: str, email: str) -> Dict[str, List[str]]:
-    """Quita acceso a una página específica para un usuario."""
-    data = _read_permissions()
-    pages = data.setdefault("pages", {})
-    page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
-    bucket = pages.get(page_key, [])
-    normalized_email = _normalize_email(email)
-    
-    pages[page_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
-    _write_permissions(data)
-    return pages.copy()
+    with permission_transaction() as data:
+        pages = data.setdefault("pages", {})
+        page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
+        bucket = pages.get(page_key, [])
+        normalized_email = _normalize_email(email)
+        
+        pages[page_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
+    return data["pages"]
 
 
 def clear_page_restriction(module: str, page: str) -> Dict[str, List[str]]:
-    """Elimina la restricción de una página (la hace pública)."""
-    data = _read_permissions()
-    pages = data.setdefault("pages", {})
-    page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
-    
-    if page_key in pages:
-        del pages[page_key]
-    
-    _write_permissions(data)
-    return pages.copy()
+    with permission_transaction() as data:
+        pages = data.setdefault("pages", {})
+        page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
+        if page_key in pages:
+            del pages[page_key]
+    return data["pages"]
 
 
 # ============ BANNER DE MANTENIMIENTO ============
 
 def get_maintenance_config() -> Dict[str, Any]:
-    """Obtiene la configuración del banner de mantenimiento."""
     data = _read_permissions()
-    default_maintenance = {
-        "enabled": False,
-        "message": "El sistema está siendo ajustado en este momento."
-    }
-    return data.get("maintenance", default_maintenance)
+    # Ensure maintenance key exists inside _read_permissions, so just get it
+    return data.get("maintenance", DEFAULT_PERMISSIONS["maintenance"])
 
 
 def set_maintenance_mode(enabled: bool, message: Optional[str] = None) -> Dict[str, Any]:
-    """Activa o desactiva el modo de mantenimiento."""
-    data = _read_permissions()
-    if "maintenance" not in data:
-        data["maintenance"] = {
-            "enabled": False,
-            "message": "El sistema está siendo ajustado en este momento."
-        }
-    
-    data["maintenance"]["enabled"] = enabled
-    if message is not None:
-        data["maintenance"]["message"] = message
-    
-    _write_permissions(data)
+    with permission_transaction() as data:
+        if "maintenance" not in data:
+            data["maintenance"] = DEFAULT_PERMISSIONS["maintenance"].copy()
+        
+        data["maintenance"]["enabled"] = enabled
+        if message is not None:
+            data["maintenance"]["message"] = message
     return data["maintenance"]
 
 
 def is_maintenance_mode() -> bool:
-    """Verifica si el modo de mantenimiento está activo."""
     config = get_maintenance_config()
     return config.get("enabled", False)
