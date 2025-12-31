@@ -527,6 +527,18 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 calidad_data["fruta_verde"] = sum_fruta_verde
                 calidad_data["herida_partida"] = sum_herida_partida
         
+        # ============ FALLBACK: Si no hay tipo_fruta del QC, obtener del producto ============
+        if not calidad_data["tipo_fruta"] and productos:
+            # Buscar el primer producto válido (no bandeja) que tenga TipoFruta
+            for p in productos:
+                categoria_p = (p.get("Categoria") or "").upper()
+                if "BANDEJ" in categoria_p:
+                    continue
+                tipo_fruta_producto = (p.get("TipoFruta") or "").strip()
+                if tipo_fruta_producto:
+                    calidad_data["tipo_fruta"] = tipo_fruta_producto
+                    break
+        
         resultado.append({
             "id": picking_id,
             "albaran": albaran,

@@ -1541,6 +1541,11 @@ with tab_curva:
                 kg_por_semana = {}
                 
                 for rec in recepciones:
+                    # Filtrar recepciones sin tipo_fruta (igual que KPIs)
+                    tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
+                    if not tipo_fruta_row:
+                        continue
+                    
                     # Obtener semana de la fecha
                     fecha_str = rec.get('fecha')
                     if not fecha_str:
@@ -1558,11 +1563,8 @@ with tab_curva:
                         categoria = (p.get('Categoria') or '').strip().upper()
                         producto_nombre = (p.get('Producto') or '').strip().upper()
                         
-                        # Excluir BANDEJAS (igual que loop de precios)
+                        # Excluir solo BANDEJAS por categoría (igual que KPIs)
                         if 'BANDEJ' in categoria:
-                            continue
-                        # Excluir PALLETS
-                        if 'PALLET' in producto_nombre:
                             continue
                         
                         kg_hechos = p.get('Kg Hechos', 0) or 0
