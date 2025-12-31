@@ -131,7 +131,7 @@ class RecepcionesGestionService:
              'check_ids', 'quality_check_todo', 'quality_check_fail',
              'activity_ids', 'message_ids', 'x_studio_gua_de_despacho',
              'x_studio_tiene_calidad', 'x_studio_fecha_de_qc'],
-            limit=2000,
+            limit=5000,
             order='scheduled_date desc'
         )
         
