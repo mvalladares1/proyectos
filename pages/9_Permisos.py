@@ -210,10 +210,11 @@ def fragment_modulos():
         if active_mod:
             st.markdown(f"### Gestionar {MODULE_NAMES.get(active_mod, active_mod)}")
             
-            # Usamos on_click para que se procese ANTES de que el fragment se redibuje
-            st.text_input("Agregar email:", placeholder="ejemplo@riofuturo.cl", key=f"new_email_{active_mod}")
-            if st.button("➕ Asignar", use_container_width=True, key=f"btn_assign_{active_mod}"):
-                cb_update_module("assign", active_mod)
+            # Form para evitar re-runs al escribir
+            with st.form(key=f"form_mod_{active_mod}", clear_on_submit=True):
+                new_email = st.text_input("Agregar email:", placeholder="ejemplo@riofuturo.cl")
+                if st.form_submit_button("➕ Asignar", use_container_width=True):
+                    cb_update_module("assign", active_mod, email=new_email)
             
             st.divider()
             st.markdown("**Usuarios con acceso:**")
@@ -266,10 +267,10 @@ def fragment_paginas():
                         st.success("Acceso público (si tiene acceso al módulo)")
                 
                 with c2:
-                    st.text_input("Nuevo acceso:", key=f"new_email_{mod_selected}_{slug}")
-                    st.button("Asignar", key=f"btn_p_{key}", type="primary",
-                              on_click=cb_update_page,
-                              args=("assign", mod_selected, slug))
+                    with st.form(key=f"form_p_{key}", clear_on_submit=True):
+                        new_email_p = st.text_input("Nuevo acceso:", key=f"in_p_{key}")
+                        if st.form_submit_button("Asignar", type="primary"):
+                             cb_update_page("assign", mod_selected, slug, email=new_email_p)
 
 @st.fragment
 def fragment_usuarios():

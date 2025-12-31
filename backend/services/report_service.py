@@ -631,16 +631,18 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         canvas.saveState()
         # Logo en la esquina superior izquierda (si existe)
         header_y = PAGE_HEIGHT - 40
-        if logo_path and os.path.exists(logo_path):
-            try:
-                img = ImageReader(logo_path)
-                iw, ih = img.getSize()
-                max_h = 36
-                scale = max_h / float(ih)
-                draw_w = iw * scale
-                canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
-            except Exception:
-                pass
+        # Logo en la esquina superior izquierda (si existe)
+        header_y = PAGE_HEIGHT - 40
+        # if logo_path and os.path.exists(logo_path):
+        #     try:
+        #         img = ImageReader(logo_path)
+        #         iw, ih = img.getSize()
+        #         max_h = 36
+        #         scale = max_h / float(ih)
+        #         draw_w = iw * scale
+        #         canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
+        #     except Exception:
+        #         pass
         # Footer: fecha generación a la izquierda, página a la derecha
         canvas.setFont('Helvetica', 8)
         canvas.drawString(doc.leftMargin, 20, f"Generado: {generated_str}")
@@ -653,15 +655,15 @@ def generate_recepcion_report_pdf(username: str, password: str, fecha_inicio: st
         header_y = PAGE_HEIGHT - 40
         # Logo (si existe)
         if logo_path and os.path.exists(logo_path):
-            try:
-                img = ImageReader(logo_path)
-                iw, ih = img.getSize()
-                max_h = 30
-                scale = max_h / float(ih)
-                draw_w = iw * scale
-                canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
-            except Exception:
-                pass
+        #     try:
+        #         img = ImageReader(logo_path)
+        #         iw, ih = img.getSize()
+        #         max_h = 30
+        #         scale = max_h / float(ih)
+        #         draw_w = iw * scale
+        #         canvas.drawImage(img, doc.leftMargin, header_y - max_h + 6, width=draw_w, height=max_h, preserveAspectRatio=True)
+        #     except Exception:
+        #         pass
         # Título compacto al centro
         canvas.setFont('Helvetica-Bold', 9)
         canvas.drawCentredString(PAGE_WIDTH / 2.0, header_y - 6, f"Recepciones MP: {fmt_fecha(fecha_inicio)} a {fmt_fecha(fecha_fin)}")
