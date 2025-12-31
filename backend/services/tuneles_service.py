@@ -805,21 +805,38 @@ class TunelesService:
                 )
                 package_id = package[0]['id'] if package else None
                 
-                # Crear stock.move para el componente
-                move_data = {
-                    'name': mo_name,
-                    'product_id': producto_id,
-                    'product_uom_qty': kg,
-                    'product_uom': 12,  # kg
-                    'location_id': ubicacion_id,
-                    'location_dest_id': ubicacion_virtual,
-                    'state': 'draft',
-                    'raw_material_production_id': mo_id,
-                    'company_id': 1,
-                    'reference': mo_name
-                }
+                # --- MEJORA: Buscar stock.move existente para NO duplicar demanda ---
+                # Buscamos el move_id que ya creamos al inicio (el que tiene la demanda)
+                moves = self.odoo.search_read(
+                    'stock.move',
+                    [
+                        ('raw_material_production_id', '=', mo_id),
+                        ('product_id', '=', producto_id),
+                        ('state', '!=', 'cancel')
+                    ],
+                    ['id'],
+                    limit=1
+                )
                 
-                move_id = self.odoo.execute('stock.move', 'create', move_data)
+                if moves:
+                    move_id = moves[0]['id']
+                    print(f"DEBUG: Reutilizando stock.move {move_id} para pallet {codigo}")
+                else:
+                    # Fallback por si alguien borró la línea manual en Odoo
+                    move_data = {
+                        'name': mo_name,
+                        'product_id': producto_id,
+                        'product_uom_qty': kg,
+                        'product_uom': 12,  # kg
+                        'location_id': ubicacion_id,
+                        'location_dest_id': ubicacion_virtual,
+                        'state': 'draft',
+                        'raw_material_production_id': mo_id,
+                        'company_id': 1,
+                        'reference': mo_name
+                    }
+                    move_id = self.odoo.execute('stock.move', 'create', move_data)
+                    print(f"DEBUG: Creado nuevo stock.move {move_id} (fallback) para pallet {codigo}")
                 
                 # Crear stock.move.line con qty_done
                 move_line_data = {
@@ -841,6 +858,70 @@ class TunelesService:
                     move_line_data['package_id'] = package_id
                 
                 self.odoo.execute('stock.move.line', 'create', move_line_data)
+
+                # --- NUEVO: También crear la línea de SUBPRODUCTO (-C) ---
+                # Ya que también se saltó al crear la MO
+                try:
+                    # Determinar producto de salida
+                    # Transformar código: primer dígito 1 → 2 para variante congelada
+                    producto_id_output = producto_id # Fallback
+                    prod_input_data = self.odoo.read('product.product', [producto_id], ['default_code'])[0]
+                    codigo_input = prod_input_data.get('default_code')
+                    if codigo_input and len(codigo_input) >= 1 and codigo_input[0] == '1':
+                        codigo_output = '2' + codigo_input[1:]
+                        prod_output_ids = self.odoo.search('product.product', [('default_code', '=', codigo_output)])
+                        if prod_output_ids:
+                            producto_id_output = prod_output_ids[0]
+
+                    # Buscar el stock.move de salida existente en la MO
+                    moves_out = self.odoo.search_read(
+                        'stock.move',
+                        [
+                            ('production_id', '=', mo_id),
+                            ('product_id', '=', producto_id_output),
+                            ('state', '!=', 'cancel')
+                        ],
+                        ['id'],
+                        limit=1
+                    )
+                    
+                    if moves_out:
+                        move_out_id = moves_out[0]['id']
+                        
+                        # Generar nombres para lote y package -C
+                        # Prioridad: usar lote de origen si existe
+                        lote_name_out = f"{pallet.get('lote_nombre') or pallet.get('codigo') or codigo}-C"
+                        
+                        # Limpiar nombre del pallet para el sufijo -C
+                        clean_code = codigo[4:] if codigo.startswith('PACK') else codigo[3:] if codigo.startswith('PAC') else codigo
+                        package_name_out = f"PACK{clean_code}-C"
+                        
+                        # Buscar/Crear Lote y Package de salida
+                        lote_id_out = self._buscar_o_crear_lote(lote_name_out, producto_id_output)
+                        pkgs_out = self.odoo.search('stock.quant.package', [('name', '=', package_name_out)])
+                        if pkgs_out:
+                            package_id_out = pkgs_out[0]
+                        else:
+                            package_id_out = self.odoo.execute('stock.quant.package', 'create', {'name': package_name_out, 'company_id': 1})
+                        
+                        # Crear la línea de subproducto (stock.move.line)
+                        subprod_line = {
+                            'move_id': move_out_id,
+                            'product_id': producto_id_output,
+                            'qty_done': kg,
+                            'product_uom_id': 12, # kg
+                            'location_id': ubicacion_virtual,
+                            'location_dest_id': config['ubicacion_destino_id'],
+                            'lot_id': lote_id_out,
+                            'result_package_id': package_id_out,
+                            'state': 'draft',
+                            'reference': mo_name,
+                            'company_id': 1
+                        }
+                        self.odoo.execute('stock.move.line', 'create', subprod_line)
+                        print(f"DEBUG: Creada línea de subproducto {package_name_out} para pallet {codigo}")
+                except Exception as e_sub:
+                    print(f"ERROR: No se pudo crear subproducto para {codigo}: {e_sub}")
                 
                 agregados += 1
                 pallets_agregados.append(codigo)
@@ -889,15 +970,17 @@ class TunelesService:
         self, 
         tunel: Optional[str] = None, 
         estado: Optional[str] = None, 
-        limit: int = 20
+        limit: int = 50,
+        solo_pendientes: bool = False
     ) -> List[Dict]:
         """
-        Lista las órdenes de fabricación recientes de túneles estáticos.
+        Lista las órdenes de fabricación recientes de túneles estáticos con información extendida.
         
         Args:
             tunel: Filtrar por túnel (TE1, TE2, TE3, VLK)
-            estado: Filtrar por estado (draft, confirmed, progress, done, cancel)
+            estado: Filtrar por estado de Odoo (draft, confirmed, progress, done, cancel)
             limit: Límite de resultados
+            solo_pendientes: Si True, solo retorna órdenes con stock pendiente (en JSON)
             
         Returns:
             Lista de dicts con información de cada orden
@@ -905,19 +988,17 @@ class TunelesService:
         try:
             import json
             
-            # Construir filtro de productos de túneles
+            # Construir dominio base: Solo productos de túneles
             producto_ids = [cfg['producto_proceso_id'] for cfg in TUNELES_CONFIG.values()]
-            
-            # Si se especifica un túnel, filtrar solo por ese producto
-            if tunel and tunel in TUNELES_CONFIG:
-                producto_ids = [TUNELES_CONFIG[tunel]['producto_proceso_id']]
-            
-            # Construir dominio base
             domain = [('product_id', 'in', producto_ids)]
             
-            # Filtrar por estado
+            # Filtrar por túnel específico
+            if tunel and tunel in TUNELES_CONFIG:
+                domain = [('product_id', '=', TUNELES_CONFIG[tunel]['producto_proceso_id'])]
+            
+            # Filtrar por estado de Odoo
             if estado == 'pendientes':
-                # Agrupar todos los estados activos
+                # 'pendientes' tradicional: estados activos
                 domain.append(('state', 'in', ['draft', 'confirmed', 'progress']))
             elif estado == 'done':
                 domain.append(('state', '=', 'done'))
@@ -925,9 +1006,10 @@ class TunelesService:
                 domain.append(('state', '=', 'cancel'))
             elif estado and estado in ['draft', 'confirmed', 'progress']:
                 domain.append(('state', '=', estado))
-            else:
-                # Por defecto, excluir canceladas
-                domain.append(('state', '!=', 'cancel'))
+            
+            # Filtro especial: Solo órdenes que tienen el flag de pendientes en el JSON de Studio
+            if solo_pendientes:
+                domain.append(('x_studio_pending_receptions', '!=', False))
             
             # Buscar órdenes
             ordenes = self.odoo.search_read(
@@ -946,29 +1028,45 @@ class TunelesService:
             resultado = []
             
             for orden in ordenes:
-                # Identificar túnel por producto
+                # 1. Identificar túnel
                 tunel_codigo = None
                 for codigo, cfg in TUNELES_CONFIG.items():
                     if orden['product_id'] and cfg['producto_proceso_id'] == orden['product_id'][0]:
                         tunel_codigo = codigo
                         break
                 
-                # Verificar si tiene pendientes
+                # 2. Verificar si tiene pendientes REALES en el JSON
                 tiene_pendientes = False
                 pending_json = orden.get('x_studio_pending_receptions')
                 if pending_json:
                     try:
-                        pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
-                        tiene_pendientes = pending_data.get('pending', False)
+                        p_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+                        tiene_pendientes = p_data.get('pending', False)
                     except:
                         pass
                 
-                # Contar componentes y subproductos
-                componentes_count = len(orden.get('move_raw_ids', []))
-                subproductos_count = len(orden.get('move_finished_ids', []))
+                # Si pedimos solo pendientes y esta no tiene, saltar
+                if solo_pendientes and not tiene_pendientes:
+                    continue
                 
-                # Calcular electricidad (aproximado: $0.15 por kg)
-                electricidad_costo = orden.get('product_qty', 0) * 0.15
+                # 3. Calcular electricidad y contar componentes reales (no-servicios)
+                componentes_count = 0
+                electricidad_costo = 0
+                move_raw_ids = orden.get('move_raw_ids', [])
+                
+                if move_raw_ids:
+                    # Contar move_lines para mayor precisión si es necesario, 
+                    # pero para el listado usamos move_ids por performance a menos que sea necesario
+                    # Aquí usamos el conteo de move_raw_ids como fallback rápido
+                    componentes_count = len(move_raw_ids)
+                    
+                    # Intentar obtener costo de electricidad si ya existe el movimiento
+                    # (Se calculó en la creación: Kg * $35.10 aprox)
+                    # Por ahora usamos la fórmula rápida para el listado
+                    electricidad_costo = orden.get('product_qty', 0) * 35.10
+                
+                # 4. Contar subproductos
+                subproductos_count = len(orden.get('move_finished_ids', []))
                 
                 resultado.append({
                     'id': orden['id'],
@@ -985,13 +1083,15 @@ class TunelesService:
                     'componentes_count': componentes_count,
                     'subproductos_count': subproductos_count,
                     'electricidad_costo': electricidad_costo,
-                    'pallets_count': componentes_count  # Aproximación
+                    'pallets_count': componentes_count
                 })
             
             return resultado
             
         except Exception as e:
             print(f"Error en listar_ordenes_recientes: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def crear_orden_fabricacion(
@@ -1488,6 +1588,11 @@ class TunelesService:
             
             # Crear stock.move.line por cada pallet
             for pallet in data['pallets']:
+                # --- NUEVO: Si es pendiente de recepción, NO crear la línea física ---
+                if pallet.get('pendiente_recepcion'):
+                    print(f"DEBUG: Saltando stock.move.line para pallet PENDIENTE: {pallet['codigo']}")
+                    continue
+
                 # Obtener lote_id del quant del pallet (viene de la validación)
                 lote_id = pallet.get('lote_id')
                 package_id = pallet.get('package_id')  # ID del package origen
@@ -1725,6 +1830,11 @@ class TunelesService:
             
             # Ahora crear los move.lines
             for idx, pallet in enumerate(data['pallets']):
+                # --- NUEVO: Si es pendiente de recepción, NO crear la línea física de salida ---
+                if pallet.get('pendiente_recepcion'):
+                    print(f"DEBUG: Saltando stock.move.line (subproducto) para pallet PENDIENTE: {pallet['codigo']}")
+                    continue
+
                 # LOTE: Usar nombre del lote original + sufijo -C
                 # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
                 lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
@@ -1765,115 +1875,6 @@ class TunelesService:
         
         return movimientos_creados
     
-    def listar_ordenes_recientes(
-        self,
-        tunel: Optional[str] = None,
-        estado: Optional[str] = None,
-        limit: int = 20
-    ) -> List[Dict]:
-        """
-        Lista las órdenes de fabricación recientes.
-        
-        Args:
-            tunel: Filtrar por túnel (TE1, TE2, TE3, VLK)
-            estado: Filtrar por estado (draft, confirmed, progress, done, cancel)
-            limit: Límite de resultados
-            
-        Returns:
-            Lista de órdenes con información resumida
-        """
-        domain = []
-        
-        # Filtrar por túneles estáticos
-        if tunel:
-            if tunel in TUNELES_CONFIG:
-                domain.append(('product_id', '=', TUNELES_CONFIG[tunel]['producto_proceso_id']))
-        else:
-            # Todos los túneles
-            producto_ids = [config['producto_proceso_id'] for config in TUNELES_CONFIG.values()]
-            domain.append(('product_id', 'in', producto_ids))
-        
-        if estado:
-            domain.append(('state', '=', estado))
-        
-        ordenes = self.odoo.search_read(
-            'mrp.production',
-            domain,
-            ['name', 'product_id', 'product_qty', 'state', 'create_date', 'date_planned_start', 
-             'x_studio_pending_receptions', 'move_raw_ids', 'move_finished_ids'],
-            limit=limit,
-            order='create_date desc'
-        )
-        
-        # Formatear resultados
-        resultado = []
-
-        for orden in ordenes:
-            # Determinar túnel por producto_id
-            tunel_codigo = None
-            for codigo, config in TUNELES_CONFIG.items():
-                if config['producto_proceso_id'] == orden['product_id'][0]:
-                    tunel_codigo = codigo
-                    break
-            
-            # Determinar tiene_pendientes SOLO desde el campo JSON
-            tiene_pendientes = False
-            pending_json = orden.get('x_studio_pending_receptions')
-            if pending_json:
-                try:
-                    import json
-                    pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
-                    if pending_data.get('pending') == True:
-                        tiene_pendientes = True
-                except Exception as e:
-                    pass
-            
-            # Contar componentes (move.lines) y calcular electricidad
-            componentes_count = 0
-            electricidad_costo = 0
-            move_raw_ids = orden.get('move_raw_ids', [])
-            if move_raw_ids:
-                # Contar move_lines para precisión
-                move_lines = self.odoo.search_read(
-                    'stock.move.line',
-                    [('move_id', 'in', move_raw_ids)],
-                    ['product_id', 'qty_done']
-                )
-                for line in move_lines:
-                    prod_name = line['product_id'][1] if line.get('product_id') else ''
-                    if 'ETE' in prod_name or 'Electricidad' in prod_name:
-                        # Calcular costo electricidad (~$35.10/kg)
-                        electricidad_costo = line.get('qty_done', 0) * 35.10
-                    else:
-                        componentes_count += 1
-            
-            # Contar subproductos (move_lines de finished)
-            subproductos_count = 0
-            move_finished_ids = orden.get('move_finished_ids', [])
-            if move_finished_ids:
-                finished_lines = self.odoo.search_read(
-                    'stock.move.line',
-                    [('move_id', 'in', move_finished_ids)],
-                    ['id']
-                )
-                subproductos_count = len(finished_lines)
-            
-            resultado.append({
-                'id': orden['id'],
-                'nombre': orden['name'],
-                'tunel': tunel_codigo,
-                'producto': orden['product_id'][1] if orden['product_id'] else 'N/A',
-                'kg_total': orden['product_qty'],
-                'estado': orden['state'],
-                'fecha_creacion': orden.get('create_date'),
-                'fecha_planificada': orden.get('date_planned_start'),
-                'tiene_pendientes': tiene_pendientes,
-                'componentes_count': componentes_count,
-                'subproductos_count': subproductos_count,
-                'electricidad_costo': electricidad_costo
-            })
-        
-        return resultado
 
 
 def get_tuneles_service(odoo: OdooClient) -> TunelesService:
