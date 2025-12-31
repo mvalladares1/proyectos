@@ -88,7 +88,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "picking_type_id",
             "origin"  # Orden de compra asociada
         ],
-        limit=2000
+        limit=5000
     )
     
     if not recepciones:
