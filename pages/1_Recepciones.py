@@ -7,9 +7,12 @@ import streamlit as st
 import sys
 import os
 
-# Añadir el directorio raíz al path para imports
+# Añadir el directorio raíz al path para imports de shared/auth
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_pagina
+
+# Añadir el directorio pages al path para imports de recepciones
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Importar módulos de tabs
 from recepciones import shared
