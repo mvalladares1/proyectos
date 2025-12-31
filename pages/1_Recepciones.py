@@ -2357,7 +2357,7 @@ with tab_aprobaciones:
                     "fecha_inicio": fecha_inicio_aprob.strftime("%Y-%m-%d"),
                     "fecha_fin": fecha_fin_aprob.strftime("%Y-%m-%d"),
                     "origen": None,
-                    "estados": ["assigned"] # Filtrar solo 'Preparado', ignorar 'Hecho'
+                    "estados": ["assigned", "done"] # Mostrar 'Preparado' y 'Hecho'
                 }
                 resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
                 
@@ -2407,12 +2407,11 @@ with tab_aprobaciones:
         # Procesar datos
         filas_aprobacion = []
         for rec in recepciones:
-            # REQUERIMIENTO: Solo mostrar si tiene QC Aprobado (Pass)
-            calific_final = rec.get('calific_final', '') or ''
-            quality_state = rec.get('quality_state', '') or ''
-            
-            if not calific_final.strip() or quality_state != 'pass':
-                continue
+            # Filtro de QC relajado: permitir mostrar incluso sin 'pass' si el usuario lo necesita
+            # calific_final = rec.get('calific_final', '') or ''
+            # quality_state = rec.get('quality_state', '') or ''
+            # if not calific_final.strip() or quality_state != 'pass':
+            #     continue
             
             recep_name = rec.get('albaran', '')
             picking_id = rec.get('id', 0)  # ID para link a Odoo
@@ -2505,7 +2504,8 @@ with tab_aprobaciones:
                     "_id": recep_name,
                     "_kg_raw": kg,
                     "_picking_id": picking_id,
-                    "Especie": especie_manejo
+                    "Especie": especie_manejo,
+                    "Estado": "✅ Hecho" if rec.get('state') == 'done' else "📦 Preparado"
                 })
         
         if filas_aprobacion:
@@ -2579,6 +2579,7 @@ with tab_aprobaciones:
                     "Producto": st.column_config.TextColumn("Producto", width="medium"),
                     "Desv": st.column_config.TextColumn("Desv", width="small"),
                     "Calidad": st.column_config.TextColumn("Calidad", width="small"),
+                    "Estado": st.column_config.TextColumn("Estado", width="small"),
                     "$/Kg": st.column_config.TextColumn("$/Kg"),
                     "PPTO": st.column_config.TextColumn("PPTO"),
                     "Kg": st.column_config.TextColumn("Kg"),
@@ -2587,8 +2588,8 @@ with tab_aprobaciones:
                     "_kg_raw": None,
                     "_picking_id": None,
                 },
-                column_order=["Sel", "Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
-                disabled=["Recepción", "Fecha", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
+                column_order=["Sel", "Recepción", "Fecha", "Estado", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
+                disabled=["Recepción", "Fecha", "Estado", "Productor", "OC", "Producto", "Kg", "$/Kg", "PPTO", "Desv", "Calidad"],
                 hide_index=True,
                 key=f"editor_aprob_{st.session_state.editor_key}",
                 height=500,
