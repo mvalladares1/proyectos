@@ -1568,8 +1568,6 @@ with tab_curva:
                             continue
                         
                         kg_hechos = p.get('Kg Hechos', 0) or 0
-                        if kg_hechos <= 0:
-                            continue
                         
                         # Solo aplicar filtro de especie si está activo
                         if especies_filtro:
