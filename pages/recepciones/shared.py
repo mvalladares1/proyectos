@@ -1,0 +1,142 @@
+"""
+Módulo compartido para Recepciones.
+Contiene funciones de utilidad, formateo y llamadas a API.
+"""
+import streamlit as st
+import pandas as pd
+import requests
+import os
+from datetime import datetime
+
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+
+
+# --------------------- Funciones de formateo ---------------------
+
+def fmt_fecha(fecha_str):
+    """Convierte fecha ISO a formato DD/MM/AAAA"""
+    if not fecha_str:
+        return ""
+    try:
+        if isinstance(fecha_str, str):
+            # Manejar formato con hora
+            if " " in fecha_str:
+                fecha_str = fecha_str.split(" ")[0]
+            elif "T" in fecha_str:
+                fecha_str = fecha_str.split("T")[0]
+            dt = datetime.strptime(fecha_str, "%Y-%m-%d")
+        else:
+            dt = fecha_str
+        return dt.strftime("%d/%m/%Y")
+    except:
+        return str(fecha_str)
+
+
+def fmt_numero(valor, decimales=0):
+    """Formatea número con punto como miles y coma como decimal (formato chileno)."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return "0"
+    try:
+        if decimales > 0:
+            formatted = f"{valor:,.{decimales}f}"
+        else:
+            formatted = f"{valor:,.0f}"
+        # Intercambiar: coma -> temporal, punto -> coma, temporal -> punto
+        formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+        return formatted
+    except:
+        return str(valor)
+
+
+def fmt_dinero(valor, decimales=0):
+    """Formatea valor monetario con símbolo $"""
+    return f"${fmt_numero(valor, decimales)}"
+
+
+# --------------------- Funciones de estado ---------------------
+
+def get_validation_icon(status):
+    """Retorna icono según estado de validación."""
+    return {
+        'Validada': '✅',
+        'Lista para validar': '🟡',
+        'Confirmada': '🔵',
+        'En espera': '⏳',
+        'Borrador': '⚪',
+        'Cancelada': '❌'
+    }.get(status, '⚪')
+
+
+def get_qc_icon(status):
+    """Retorna icono según estado de QC."""
+    return {
+        'Con QC Aprobado': '✅',
+        'Con QC Pendiente': '🟡',
+        'QC Fallido': '🔴',
+        'Sin QC': '⚪'
+    }.get(status, '⚪')
+
+
+# --------------------- Llamadas API con caché ---------------------
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_gestion_data(_username, _password, fecha_inicio, fecha_fin, status_filter=None, qc_filter=None, search_text=None):
+    """Obtiene datos de gestión con caché de 2 minutos."""
+    params = {
+        "username": _username, "password": _password,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin
+    }
+    if status_filter and status_filter != "Todos":
+        params["status_filter"] = status_filter
+    if qc_filter and qc_filter != "Todos":
+        params["qc_filter"] = qc_filter
+    if search_text:
+        params["search_text"] = search_text
+    
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion", params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return None
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
+    """Obtiene overview con caché de 2 minutos."""
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion/overview", params={
+            "username": _username, "password": _password,
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin
+        }, timeout=60)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return None
+
+
+# --------------------- Inicialización de Session State ---------------------
+
+def init_session_state():
+    """Inicializa variables de session_state para el módulo Recepciones."""
+    defaults = {
+        'df_recepcion': None,
+        'idx_recepcion': None,
+        'gestion_data': None,
+        'gestion_overview': None,
+        'gestion_loaded': False,
+        'curva_proyecciones_raw': None,
+        'curva_recepciones_raw': None,
+        'curva_plantas_usadas': [],
+        'aprob_data': [],
+        'aprob_ppto': {},
+        'aprob_ppto_detalle': {},
+        'origen_filtro_usado': [],
+    }
+    for key, default in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = default

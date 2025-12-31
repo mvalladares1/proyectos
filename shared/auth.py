@@ -348,14 +348,13 @@ def filtrar_tabs_permitidos(modulo: str, tabs_config: List[Dict[str, str]]) -> t
 def verificar_acceso_tab(modulo: str, pagina: str, nombre_pagina: str = None) -> bool:
     """
     Verifica si el usuario tiene acceso a un tab/página.
-    Si no tiene acceso, muestra mensaje de error.
+    Si no tiene acceso, muestra mensaje de error Y DETIENE la ejecución del tab.
     
     Uso dentro de un tab:
         with tab_kpis:
             if not verificar_acceso_tab("recepciones", "kpis_calidad", "KPIs y Calidad"):
-                pass  # st.stop() ya fue llamado internamente si no hay acceso
-            else:
-                # contenido del tab
+                pass  # El código después de esto NO se ejecutará
+            # resto del contenido del tab se ejecuta solo si tiene acceso
     
     Args:
         modulo: Clave del módulo (recepciones, produccion, etc.)
@@ -363,12 +362,41 @@ def verificar_acceso_tab(modulo: str, pagina: str, nombre_pagina: str = None) ->
         nombre_pagina: Nombre amigable para mostrar en el mensaje
         
     Returns:
-        True si tiene acceso, False si no (y muestra mensaje)
+        True si tiene acceso, False si no (y muestra mensaje + st.stop())
     """
     if tiene_acceso_pagina(modulo, pagina):
         return True
     
     # Mostrar mensaje de acceso denegado
+    nombre = nombre_pagina or pagina.replace("_", " ").title()
+    st.error(f"🚫 **Acceso Restringido** - No tienes permisos para ver '{nombre}'.")
+    st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    # NO llamamos st.stop() aquí porque detendría toda la página, no solo el tab
+    return False
+
+
+def proteger_tab(modulo: str, pagina: str, nombre_pagina: str = None) -> bool:
+    """
+    Protege un tab específico. Si no tiene acceso, muestra error y retorna False.
+    El código que llama DEBE verificar el retorno y no continuar si es False.
+    
+    Uso recomendado:
+        with tab_kpis:
+            if not proteger_tab("recepciones", "kpis_calidad", "KPIs y Calidad"):
+                st.stop()  # Detiene solo este tab
+            # Contenido del tab aquí
+    
+    Args:
+        modulo: Clave del módulo
+        pagina: Slug de la página/tab
+        nombre_pagina: Nombre amigable para mostrar
+        
+    Returns:
+        True si tiene acceso, False si no (y muestra mensaje)
+    """
+    if tiene_acceso_pagina(modulo, pagina):
+        return True
+    
     nombre = nombre_pagina or pagina.replace("_", " ").title()
     st.error(f"🚫 **Acceso Restringido** - No tienes permisos para ver '{nombre}'.")
     st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
