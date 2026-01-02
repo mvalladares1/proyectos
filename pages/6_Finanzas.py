@@ -1173,17 +1173,70 @@ if datos:
                     
                     return (None, None)
                 
-                # === BANNER DE VALIDACIÓN PRINCIPAL ===
-                # Punto 1: Solo verde si otros==0 Y no hay cuentas sin clasificar
-                if otros == 0 and not cuentas_nc:
-                    st.success("✅ **Flujo validado correctamente.** Todas las cuentas están clasificadas.")
-                elif cuentas_nc or otros != 0:
-                    st.warning(f"⚠️ **Flujo calculado correctamente**, pero requiere clasificación de cuentas. ({len(cuentas_nc)} cuentas pendientes, ${abs(otros):,.0f} sin clasificar)")
+                # === ESTADOS DEL FLUJO (EXPLÍCITOS) ===
+                ef_ini = conciliacion.get("efectivo_inicial", 0)
+                ef_fin = conciliacion.get("efectivo_final", 0)
+                variacion = conciliacion.get("variacion_efectivo", 0)
                 
-                # Alertas adicionales de validación
+                # Verificar consistencia de conciliación
+                diferencia_conciliacion = abs((ef_ini + variacion) - ef_fin)
+                conciliacion_ok = diferencia_conciliacion < 1000  # Tolerancia $1000
+                
+                # Calcular % sin clasificar
+                total_flujo_abs = abs(op) + abs(inv) + abs(fin) + abs(otros)
+                pct_sin_clasificar = (abs(otros) / total_flujo_abs * 100) if total_flujo_abs > 0 else 0
+                
+                # Determinar estado
+                if otros == 0 and not cuentas_nc and conciliacion_ok:
+                    # 🟢 COMPLETO
+                    st.markdown("""
+                    <div style="background: linear-gradient(90deg, #27ae6033, transparent); 
+                                padding: 15px 20px; border-radius: 10px; border-left: 4px solid #27ae60;">
+                        <span style="font-size: 1.3em;">🟢</span>
+                        <span style="color: #27ae60; font-weight: bold; font-size: 1.1em; margin-left: 10px;">
+                            Flujo completo y clasificado
+                        </span>
+                        <span style="color: #a0aec0; margin-left: 15px;">
+                            Todas las cuentas están correctamente clasificadas
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif not conciliacion_ok:
+                    # 🔴 INCONSISTENTE
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(90deg, #e74c3c33, transparent); 
+                                padding: 15px 20px; border-radius: 10px; border-left: 4px solid #e74c3c;">
+                        <span style="font-size: 1.3em;">🔴</span>
+                        <span style="color: #e74c3c; font-weight: bold; font-size: 1.1em; margin-left: 10px;">
+                            Flujo inconsistente
+                        </span>
+                        <span style="color: #a0aec0; margin-left: 15px;">
+                            La conciliación no cuadra (diferencia: ${diferencia_conciliacion:,.0f})
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # 🟡 PENDIENTE
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(90deg, #f39c1233, transparent); 
+                                padding: 15px 20px; border-radius: 10px; border-left: 4px solid #f39c12;">
+                        <span style="font-size: 1.3em;">🟡</span>
+                        <span style="color: #f39c12; font-weight: bold; font-size: 1.1em; margin-left: 10px;">
+                            Flujo calculado, pendiente de clasificación
+                        </span>
+                        <span style="color: #a0aec0; margin-left: 15px;">
+                            {len(cuentas_nc)} cuentas · ${abs(otros):,.0f} ({pct_sin_clasificar:.1f}% del flujo)
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Botón accionable
+                    if st.button("🔍 Revisar cuentas pendientes", type="primary", key="btn_revisar_estado"):
+                        st.session_state['mostrar_editor_expandido'] = True
+                        st.session_state['scroll_to_editor'] = True
+                
+                # Alertas adicionales de validación (info de signos, etc.)
                 if validacion:
-                    for err in validacion.get("errores", []):
-                        st.error(f"🚫 {err.get('mensaje', '')}")
                     for info in validacion.get("info", []):
                         st.info(f"ℹ️ {info.get('mensaje', '')}")
                 
@@ -1390,7 +1443,7 @@ if datos:
                             
                             for i, cuenta in enumerate(sorted(cuentas_actividad, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:15]):
                                 codigo = cuenta.get('codigo', '')
-                                nombre = cuenta.get('nombre', '')[:30]
+                                nombre = cuenta.get('nombre', '')[:25]
                                 monto_c = cuenta.get('monto', 0)
                                 cat_display = cuenta.get('categoria_display', '')
                                 pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
@@ -1398,7 +1451,7 @@ if datos:
                                 monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
                                 monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
                                 
-                                col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns([1, 2, 1, 0.8, 1])
+                                col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns([0.8, 1.8, 1, 0.6, 0.8, 0.5])
                                 with col_c1:
                                     st.code(codigo, language=None)
                                 with col_c2:
@@ -1409,6 +1462,11 @@ if datos:
                                     st.caption(f"{pct:.1f}%")
                                 with col_c5:
                                     st.caption(f"📁 {cat_display}")
+                                with col_c6:
+                                    if st.button("✏️", key=f"edit_{act_key}_{codigo}", help=f"Reasignar {codigo}"):
+                                        st.session_state['cuenta_a_editar'] = codigo
+                                        st.session_state['mostrar_editor_expandido'] = True
+                                        st.rerun()
                             
                             if len(cuentas_actividad) > 15:
                                 st.caption(f"... y {len(cuentas_actividad) - 15} cuentas más")
@@ -1435,27 +1493,45 @@ if datos:
                 
                 # === DESGLOSE DE EFECTIVO ===
                 if cuentas_efectivo_det:
-                    with st.expander("🏦 Desglose de Cuentas de Efectivo", expanded=False):
-                        st.markdown("**Cuentas que componen el efectivo inicial y final:**")
+                    with st.expander(f"🏦 Composición del Efectivo ({len(cuentas_efectivo_det)} cuentas)", expanded=False):
+                        col_ef1, col_ef2 = st.columns(2)
+                        with col_ef1:
+                            st.metric("Efectivo Inicial", fmt_flujo(ef_ini))
+                        with col_ef2:
+                            st.metric("Efectivo Final", fmt_flujo(ef_fin))
+                        
+                        st.markdown("---")
+                        st.markdown("**Cuentas que componen efectivo y equivalentes:**")
                         
                         for cuenta_ef in cuentas_efectivo_det:
-                            tipo_badge = "🏧" if cuenta_ef.get('tipo') == 'efectivo' else "💳"
+                            tipo = cuenta_ef.get('tipo', 'efectivo')
+                            tipo_badge = "🏧 Efectivo" if tipo == 'efectivo' else "💳 Equivalente"
+                            tipo_color = "#3498db" if tipo == 'efectivo' else "#9b59b6"
+                            
                             st.markdown(f"""
-                            <div style="display: flex; gap: 15px; padding: 8px; background: #1a1a2e; border-radius: 5px; margin: 5px 0;">
-                                <span style="font-family: monospace; color: #f39c12;">{cuenta_ef.get('codigo', '')}</span>
-                                <span style="flex-grow: 1; color: #a0aec0;">{cuenta_ef.get('nombre', '')[:40]}</span>
-                                <span>{tipo_badge} {cuenta_ef.get('tipo', 'efectivo').title()}</span>
+                            <div style="display: flex; align-items: center; gap: 12px; padding: 10px; background: #1a1a2e; border-radius: 6px; margin: 6px 0; border-left: 3px solid {tipo_color};">
+                                <span style="font-family: monospace; color: #f39c12; min-width: 80px;">{cuenta_ef.get('codigo', '')}</span>
+                                <span style="flex-grow: 1; color: #e0e0e0;">{cuenta_ef.get('nombre', '')[:45]}</span>
+                                <span style="color: {tipo_color}; font-size: 0.85em;">{tipo_badge}</span>
                             </div>
                             """, unsafe_allow_html=True)
+                        
+                        st.caption("💡 Las cuentas de efectivo se definen en la configuración del mapeo.")
                 
                 st.divider()
                 
                 # === ADVERTENCIAS DE ACTIVIDADES ===
-                # Punto 3: Advertencia si IN o FI = 0
+                # Mensajes informativos si IN o FI = 0
                 if inv == 0:
-                    st.info("ℹ️ No se detectaron flujos de **inversión** en el período. Verifica la clasificación si esto no refleja la realidad del negocio.")
+                    if cuentas_nc:
+                        st.info(f"ℹ️ No se detectaron flujos de **inversión**. Existen {len(cuentas_nc)} cuentas sin clasificar que podrían corresponder a esta actividad.")
+                    else:
+                        st.info("ℹ️ No se detectaron movimientos clasificados como **inversión** en este período.")
                 if fin == 0:
-                    st.info("ℹ️ No se detectaron flujos de **financiamiento** en el período. Verifica la clasificación si esto no refleja la realidad del negocio.")
+                    if cuentas_nc:
+                        st.info(f"ℹ️ No se detectaron flujos de **financiamiento**. Existen {len(cuentas_nc)} cuentas sin clasificar que podrían corresponder a esta actividad.")
+                    else:
+                        st.info("ℹ️ No se detectaron movimientos clasificados como **financiamiento** en este período.")
                 
                 # === CONCILIACIÓN ===
                 st.markdown("### 📑 Conciliación de Efectivo")
