@@ -84,7 +84,7 @@ st.markdown('<p class="main-header">🏭 Rio Futuro Dashboards</p>', unsafe_allo
 
 # === AUTENTICACIÓN ===
 from shared.auth import verificar_autenticacion, iniciar_sesion, cerrar_sesion, obtener_info_sesion
-from shared.cookies import save_session_to_storage, clear_session_from_storage
+from shared.cookies import save_session_multi_method, clear_session_multi_method
 
 # Verificar si hay sesión activa (revisa session_state y query params)
 is_authenticated = verificar_autenticacion()
@@ -116,8 +116,8 @@ if not is_authenticated:
                             uid = data.get("uid")
                             
                             if token:
-                                # PRIMERO: Guardar token en query params (ANTES del rerun)
-                                st.query_params["session"] = token
+                                # Guardar token en TODOS los métodos (Query Params + LocalStorage + Cookies)
+                                save_session_multi_method(token)
                                 
                                 # Iniciar sesión en session_state
                                 iniciar_sesion(token, email, uid)
@@ -164,9 +164,8 @@ else:
             st.sidebar.caption(f"⏱️ Sesión: {time_remaining}")
     
     if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-        # Limpiar query params explícitamente
-        if "session" in st.query_params:
-            del st.query_params["session"]
+        # Limpiar TODOS los métodos de almacenamiento
+        clear_session_multi_method()
         cerrar_sesion()
         st.rerun()
     
