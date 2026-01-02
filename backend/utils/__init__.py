@@ -5,7 +5,10 @@ Centraliza funciones comunes para evitar duplicación de código.
 from typing import Dict, List, Any, Union
 
 # Importar submódulos para acceso vía backend.utils.pdf_generator
-from . import pdf_generator
+try:
+    from . import pdf_generator
+except ImportError:
+    pdf_generator = None  # fpdf no instalado
 
 # Exportar funciones principales para usar con: from backend.utils import clean_record
 __all__ = [
