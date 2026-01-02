@@ -44,16 +44,16 @@ def generate_commercial_pdf(df: pd.DataFrame, kpis: dict, filters: dict, currenc
         
         prefix = "$" if metric_type == "Ventas ($)" else ""
         m_label = currency if metric_type == "Ventas ($)" else "Kilos"
-        val_fmt = ":,.2f" if currency == "USD" and metric_type == "Ventas ($)" else ":,.0f"
+        val_fmt = ",.2f" if currency == "USD" and metric_type == "Ventas ($)" else ",.0f"
         
         pdf.cell(60, 8, f"Total Ventas ({m_label}):", 0, 0)
-        pdf.cell(0, 8, f"{prefix}{kpis.get('total_ventas', 0){val_fmt}}", 0, 1)
+        pdf.cell(0, 8, f"{prefix}{kpis.get('total_ventas', 0):{val_fmt}}", 0, 1)
         
         pdf.cell(60, 8, f"Total Kilos:", 0, 0)
-        pdf.cell(0, 8, f"{kpis.get('total_kilos', 0):,.0f} kg", 0, 1)
+        pdf.cell(0, 8, f"{kpis.get('total_kilos', 0):{val_fmt}} kg", 0, 1)
         
         pdf.cell(60, 8, f"Comprometido ({m_label}):", 0, 0)
-        pdf.cell(0, 8, f"{prefix}{kpis.get('total_comprometido', 0){val_fmt}}", 0, 1)
+        pdf.cell(0, 8, f"{prefix}{kpis.get('total_comprometido', 0):{val_fmt}}", 0, 1)
         pdf.ln(10)
 
         # 3. Detalles (Tabla simplificada)
@@ -75,7 +75,7 @@ def generate_commercial_pdf(df: pd.DataFrame, kpis: dict, filters: dict, currenc
                 pdf.cell(40, 8, str(row['programa']), 1, 0)
                 pdf.cell(40, 8, str(row['especie']), 1, 0)
                 pdf.cell(35, 8, f"{row['kilos']:,.0f}", 1, 0, 'R')
-                pdf.cell(40, 8, f"{prefix}{row['monto']{val_fmt}}", 1, 1, 'R')
+                pdf.cell(40, 8, f"{prefix}{row['monto']:{val_fmt}}", 1, 1, 'R')
 
         else:
             pdf.cell(0, 10, "No hay datos para mostrar con los filtros seleccionados.", 0, 1)
