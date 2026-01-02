@@ -1159,35 +1159,9 @@ if datos:
                     mediante archivo de configuración.
                     """)
 
-        st.divider()
-
-        # === EVOLUCIÓN MENSUAL ===
-        if datos_mensuales:
-            st.subheader("📈 Evolución Mensual")
-
-            # Convertir a DataFrame
-            df_evol = pd.DataFrame(datos_mensuales).T
-            df_evol.index.name = "Mes"
-            df_evol = df_evol.reset_index()
-
-            # Gráfico de líneas
-            col_graf1, col_graf2 = st.columns(2)
-            with col_graf1:
-                st.line_chart(df_evol.set_index("Mes")[["1 - INGRESOS", "2 - COSTOS"]])
-            with col_graf2:
-                st.line_chart(df_evol.set_index("Mes")[["6 - GAV", "4 - GASTOS DIRECTOS"]])
-
-        # === INFO ADICIONAL ===
-        with st.expander("ℹ️ Información del reporte"):
-            col_info1, col_info2 = st.columns(2)
-            with col_info1:
-                st.write(f"**Total movimientos procesados:** {datos.get('total_movimientos', 0):,}")
-                st.write(f"**Período:** {fecha_inicio} a {fecha_fin}")
-            with col_info2:
-                st.write(f"**Centro de costo:** {centro_seleccionado}")
-                st.write(f"**Año presupuesto:** {año_seleccionado}")
-                if ppto and "error" not in ppto:
-                    st.write(f"**Registros PPTO:** {ppto.get('total_registros', 'N/A')}")
+        # === INFO ADICIONAL (solo para tabs de Estado de Resultado, no Flujo de Caja) ===
+        # Movido dentro de cada tab correspondiente
 
 else:
     st.warning("No se pudieron obtener datos del Estado de Resultado.")
+
