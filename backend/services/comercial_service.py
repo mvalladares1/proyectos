@@ -411,6 +411,7 @@ class ComercialService:
                 "total_ventas": float(total_ventas),
                 "total_kilos": float(total_kilos),
                 "total_comprometido": float(df_filtered[df_filtered['tipo'] == 'Comprometido']['monto'].sum()),
+                "total_comprometido_kilos": float(df_filtered[df_filtered['tipo'] == 'Comprometido']['kilos'].sum()),
                 "kpi_label": kpi_label,
                 "has_filters": has_time_filter or bool(sel_anios)
             }
