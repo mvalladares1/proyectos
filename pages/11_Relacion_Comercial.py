@@ -596,37 +596,50 @@ with chart_col2:
             st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False}, key="chart_programa")
 
 # --- TABLE SECTION (Full Width) ---
-st.markdown(f'<p class="section-header">VOLUMEN TOTAL (FACTURADO + COMPROMETIDO) ({metric_label.upper()})</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="section-header">VOLUMEN TOTAL (FACTURADO Y COMPROMETIDO SEPARADOS) ({metric_label.upper()})</p>', unsafe_allow_html=True)
 if not df_raw.empty:
     df_table = df_raw[df_raw['tipo'].isin(['Factura', 'Nota de Crédito', 'Comprometido'])].copy()
     if not df_table.empty:
-        pivot_base = df_table.pivot_table(index=['programa', 'manejo'], columns='especie', values=metric_key, aggfunc='sum', fill_value=0)
+        # Categorizar como Facturado o Comprometido
+        df_table['estado'] = df_table['tipo'].apply(lambda x: 'Facturado' if 'Factura' in x or 'Nota' in x else 'Comprometido')
+        
+        pivot_base = df_table.pivot_table(index=['programa', 'manejo', 'estado'], columns='especie', values=metric_key, aggfunc='sum', fill_value=0)
         
         final_rows = []
         all_specs = pivot_base.columns.tolist()
         
-        programas_orden = [p for p in ["Granel", "Retail", "Subproducto"] if p in df_table['programa'].unique()]
-        for p in df_table['programa'].unique():
-            if p not in programas_orden: programas_orden.append(p)
+        programas_orden = ["Granel", "Retail", "Subproducto"]
+        available_progs = df_table['programa'].unique()
+        programas_final = [p for p in programas_orden if p in available_progs]
+        for p in available_progs:
+            if p not in programas_final: programas_final.append(p)
 
-        for prog in programas_orden:
+        for prog in programas_final:
             if prog in pivot_base.index.get_level_values(0):
                 prog_data = pivot_base.loc[prog]
                 prog_sub = prog_data.sum(axis=0)
+                
+                # Header del Programa
                 row_h = {'Etiqueta': f"<b>{prog}</b>", '_row_type': 'subtotal'}
                 for s in all_specs: row_h[s] = prog_sub[s]
                 row_h['Total'] = sum(prog_sub)
                 final_rows.append(row_h)
                 
-                for mane in prog_data.index:
-                    row_d = {'Etiqueta': f"{mane}", '_row_type': 'detail'}
-                    for s in all_specs: row_d[s] = prog_data.loc[mane, s]
-                    row_d['Total'] = sum(prog_data.loc[mane])
-                    final_rows.append(row_d)
+                # Detalles por Manejo y Estado
+                manejos = prog_data.index.get_level_values(0).unique()
+                for mane in manejos:
+                    mane_data = prog_data.loc[mane]
+                    for estado in ["Facturado", "Comprometido"]:
+                        if estado in mane_data.index:
+                            row_d = {'Etiqueta': f"{mane} ({estado})", '_row_type': 'detail'}
+                            for s in all_specs: row_d[s] = mane_data.loc[estado, s]
+                            row_d['Total'] = sum(mane_data.loc[estado])
+                            final_rows.append(row_d)
         
         grand_row = {'Etiqueta': '<b>TOTAL</b>', '_row_type': 'total'}
-        for s in all_specs: grand_row[s] = pivot_base.sum()[s]
-        grand_row['Total'] = pivot_base.sum().sum()
+        grand_total_data = pivot_base.sum()
+        for s in all_specs: grand_row[s] = grand_total_data[s]
+        grand_row['Total'] = grand_total_data.sum()
         final_rows.append(grand_row)
         
         # Generate custom HTML with row classes
