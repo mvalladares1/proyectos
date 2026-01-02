@@ -153,3 +153,30 @@ async def get_estructura():
         "estructura": ESTRUCTURA_FLUJO,
         "version": "NIIF IAS 7 - Método Directo"
     }
+
+
+@router.get("/diagnostico")
+async def get_diagnostico(
+    fecha_inicio: str,
+    fecha_fin: str,
+    username: str,
+    password: str,
+    company_id: Optional[int] = None
+):
+    """
+    Obtiene diagnóstico de cuentas no clasificadas para ajustar el mapeo.
+    
+    Retorna las cuentas que generan "Otros no clasificados" con su código,
+    nombre y monto total para facilitar la clasificación manual.
+    """
+    try:
+        service = FlujoCajaService(username=username, password=password)
+        diagnostico = service.get_diagnostico_no_clasificados(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            company_id=company_id
+        )
+        return diagnostico
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
