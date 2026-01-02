@@ -649,6 +649,18 @@ class FlujoCajaService:
         # 6. Construir resultado usando el catálogo oficial
         resultado["catalogo"] = self.get_catalogo_conceptos()  # Para UI reference
         
+        # Helper para calcular montos de Headers/Totales recursivamente o por hijos
+        def calcular_monto_nodo(nodo_id):
+            monto_total = 0.0
+            # Buscar todos los LINEA que empiezan con este prefijo (jerarquía)
+            prefix = nodo_id + "."
+            for c_id, monto in montos_por_concepto.items():
+                if c_id == nodo_id or c_id.startswith(prefix):
+                    if c_id == self.CATEGORIA_NEUTRAL:
+                        continue
+                    monto_total += monto
+            return monto_total
+
         # Agrupar conceptos por actividad
         conceptos_por_actividad = {"OPERACION": [], "INVERSION": [], "FINANCIAMIENTO": [], "CONCILIACION": []}
         subtotales = {"OPERACION": 0.0, "INVERSION": 0.0, "FINANCIAMIENTO": 0.0}
@@ -658,61 +670,54 @@ class FlujoCajaService:
             c_tipo = concepto.get("tipo")
             c_actividad = concepto.get("actividad")
             
+            # Monto para este nodo
             if c_tipo == "LINEA":
-                monto = montos_por_concepto.get(c_id, 0.0)
-                
-                # Obtener cuentas de este concepto desde tracking
-                cuentas_concepto = []
-                if c_id in cuentas_por_concepto:
-                    cuentas_concepto = sorted(
-                        [{"codigo": k, **v} for k, v in cuentas_por_concepto[c_id].items()],
-                        key=lambda x: abs(x.get('monto', 0)),
-                        reverse=True
-                    )
-                
-                concepto_resultado = {
-                    "id": c_id,
-                    "nombre": concepto.get("nombre"),
-                    "tipo": c_tipo,
-                    "nivel": concepto.get("nivel", 3),
-                    "monto": round(monto, 0),
-                    "signo": concepto.get("signo", 1),
-                    "cuentas": cuentas_concepto
-                }
-                
-                if c_actividad in subtotales:
-                    conceptos_por_actividad[c_actividad].append(concepto_resultado)
-                    subtotales[c_actividad] += monto
+                monto_nodo = montos_por_concepto.get(c_id, 0.0)
+            else:
+                monto_nodo = calcular_monto_nodo(c_id)
             
-            elif c_tipo in ("HEADER", "TOTAL"):
-                # Headers y totales se calculan
-                concepto_resultado = {
-                    "id": c_id,
-                    "nombre": concepto.get("nombre"),
-                    "tipo": c_tipo,
-                    "nivel": concepto.get("nivel", 1),
-                    "monto": None,  # Se calcula después
-                    "calculo": concepto.get("calculo")
-                }
-                if c_actividad in conceptos_por_actividad:
-                    conceptos_por_actividad[c_actividad].append(concepto_resultado)
+            # Obtener cuentas de este concepto desde tracking (solo para LINEA)
+            cuentas_concepto = []
+            if c_tipo == "LINEA" and c_id in cuentas_por_concepto:
+                cuentas_concepto = sorted(
+                    [{"codigo": k, **v} for k, v in cuentas_por_concepto[c_id].items()],
+                    key=lambda x: abs(x.get('monto', 0)),
+                    reverse=True
+                )
+            
+            concepto_resultado = {
+                "id": c_id,
+                "nombre": concepto.get("nombre"),
+                "tipo": c_tipo,
+                "nivel": concepto.get("nivel", 3),
+                "monto": round(monto_nodo, 0),
+                "signo": concepto.get("signo", 1),
+                "cuentas": cuentas_concepto,
+                "calculo": concepto.get("calculo")
+            }
+            
+            if c_actividad in conceptos_por_actividad:
+                conceptos_por_actividad[c_actividad].append(concepto_resultado)
+                # Subtotales de actividad se basan en LINEAs (ya que HEADERS duplicarían)
+                if c_tipo == "LINEA" and c_actividad in subtotales:
+                    subtotales[c_actividad] += monto_nodo
         
         # Construir actividades con la estructura esperada por el frontend
         resultado["actividades"] = {
             "OPERACION": {
-                "nombre": "Flujos de efectivo procedentes (utilizados) en actividades de operación",
+                "nombre": "1. Flujos de efectivo procedentes (utilizados) en actividades de operación",
                 "subtotal": round(subtotales["OPERACION"], 0),
                 "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de operación",
                 "conceptos": conceptos_por_actividad["OPERACION"]
             },
             "INVERSION": {
-                "nombre": "Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
+                "nombre": "2. Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
                 "subtotal": round(subtotales["INVERSION"], 0),
                 "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de inversión",
                 "conceptos": conceptos_por_actividad["INVERSION"]
             },
             "FINANCIAMIENTO": {
-                "nombre": "Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
+                "nombre": "3. Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
                 "subtotal": round(subtotales["FINANCIAMIENTO"], 0),
                 "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de financiamiento",
                 "conceptos": conceptos_por_actividad["FINANCIAMIENTO"]
@@ -764,6 +769,10 @@ class FlujoCajaService:
             )[:30]  # Top 30 por concepto
             drill_down[concepto_id] = cuentas_lista
         resultado["drill_down"] = drill_down
+
+        # Agregar historial de cambios para el editor
+        mapeo_raw = self._cargar_mapeo()
+        resultado["historial_mapeo"] = mapeo_raw.get("historial_cambios", [])[-30:] # Últimos 30
         
         # DRILL-DOWN: Detalle de cuentas de efectivo (para efectivo inicial/final)
         cuentas_efectivo_info = []
