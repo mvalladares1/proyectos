@@ -1017,22 +1017,119 @@ if datos:
                     periodo_opciones,
                     key="flujo_periodo_sel"
                 )
-
-            # ... (fechas calc) ...
-
-            # ... (inputs fecha) ...
+            
+            # Calcular fechas según selección
+            hoy = datetime.now()
+            
+            if periodo_sel == "Mes actual":
+                flujo_fecha_ini = hoy.replace(day=1)
+                ultimo_dia = monthrange(hoy.year, hoy.month)[1]
+                flujo_fecha_fin = hoy.replace(day=ultimo_dia)
+            elif periodo_sel == "Mes anterior":
+                primer_dia_actual = hoy.replace(day=1)
+                ultimo_dia_anterior = primer_dia_actual - timedelta(days=1)
+                flujo_fecha_ini = ultimo_dia_anterior.replace(day=1)
+                flujo_fecha_fin = ultimo_dia_anterior
+            elif periodo_sel == "Último trimestre":
+                flujo_fecha_fin = hoy
+                flujo_fecha_ini = hoy - timedelta(days=90)
+            elif periodo_sel == "Año actual":
+                flujo_fecha_ini = datetime(hoy.year, 1, 1)
+                flujo_fecha_fin = hoy
+            else:  # Personalizado
+                flujo_fecha_ini = hoy.replace(day=1)
+                flujo_fecha_fin = hoy
+            
+            with col_desde:
+                flujo_f_inicio = st.date_input(
+                    "Desde",
+                    value=flujo_fecha_ini,
+                    format="DD/MM/YYYY",
+                    key="flujo_fecha_inicio",
+                    disabled=periodo_sel != "Personalizado"
+                )
+            
+            with col_hasta:
+                flujo_f_fin = st.date_input(
+                    "Hasta",
+                    value=flujo_fecha_fin,
+                    format="DD/MM/YYYY",
+                    key="flujo_fecha_fin",
+                    disabled=periodo_sel != "Personalizado"
+                )
             
             with col_modo:
                 st.caption("Modo de Visualización")
                 modo_ver = st.radio("Modo", ["Real", "Proyectado", "Consolidado"], 
                                    horizontal=True, label_visibility="collapsed", key="modo_ver_radio")
             
-            # ... (cache key logic) ...
-
-            # ... (button) ...
-
-            # ... (load data) ...
-
+            # Usar fechas seleccionadas o calculadas
+            if periodo_sel == "Personalizado":
+                flujo_inicio_str = flujo_f_inicio.strftime("%Y-%m-%d")
+                flujo_fin_str = flujo_f_fin.strftime("%Y-%m-%d")
+            else:
+                flujo_inicio_str = flujo_fecha_ini.strftime("%Y-%m-%d")
+                flujo_fin_str = flujo_fecha_fin.strftime("%Y-%m-%d")
+            
+            # Cache key con fechas del flujo
+            flujo_cache_key = f"flujo_{flujo_inicio_str}_{flujo_fin_str}"
+            
+            st.markdown("---")
+            
+            def cargar_flujo_click():
+                """Callback que se ejecuta al hacer click en el botón"""
+                # Forzar limpieza de cache para este periodo
+                if flujo_cache_key in st.session_state:
+                    del st.session_state[flujo_cache_key]
+                st.session_state['flujo_loading'] = True
+                st.session_state['flujo_clicked'] = True
+            
+            col_btn, col_info = st.columns([1, 2])
+            with col_btn:
+                # Botón con callback
+                st.button(
+                    "🔄 Generar Flujo de Caja", 
+                    type="primary", 
+                    use_container_width=True,
+                    key="btn_flujo_caja",
+                    on_click=cargar_flujo_click
+                )
+            with col_info:
+                st.info(f"📅 Período: {flujo_inicio_str} a {flujo_fin_str}")
+                # Debug info
+                if flujo_cache_key in st.session_state:
+                    data_debug = st.session_state[flujo_cache_key]
+                    if isinstance(data_debug, dict) and "meta" in data_debug:
+                        st.caption(f"Backend v{data_debug['meta'].get('version')} ({data_debug['meta'].get('mode')})")
+                    else:
+                        st.caption("Backend: vLegacy (Sin metadatos)")
+            
+            # Cargar datos si se hizo click (flag en session_state)
+            if st.session_state.get('flujo_clicked'):
+                st.session_state['flujo_clicked'] = False  # Reset flag
+                with st.spinner("Generando Estado de Flujo de Efectivo..."):
+                    try:
+                        resp = requests.get(
+                            f"{FLUJO_CAJA_URL}/",
+                            params={
+                                "fecha_inicio": flujo_inicio_str,
+                                "fecha_fin": flujo_fin_str,
+                                "username": username,
+                                "password": password
+                            },
+                            timeout=120
+                        )
+                        if resp.status_code == 200:
+                            st.session_state[flujo_cache_key] = resp.json()
+                        else:
+                            st.error(f"Error {resp.status_code}: {resp.text}")
+                    except Exception as e:
+                        st.error(f"Error al conectar con API: {e}")
+                st.session_state['flujo_loading'] = False
+            
+            # Mostrar datos si existen en cache
+            flujo_data = st.session_state.get(flujo_cache_key)
+            
             if flujo_data and "error" not in flujo_data:
                 import altair as alt
                 import copy
