@@ -1453,6 +1453,9 @@ if datos:
                 # === ESTADO DE FLUJO DE EFECTIVO OFICIAL ===
                 st.markdown("### 📋 Estado de Flujo de Efectivo (NIIF IAS 7)")
                 
+                # Datos adicionales para secciones posteriores
+                cuentas_efectivo_det = flujo_data.get("cuentas_efectivo_detalle", [])
+                
                 # Colores por actividad
                 colores_actividad = {
                     "OPERACION": "#2ecc71",
