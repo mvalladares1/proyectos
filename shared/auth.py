@@ -17,10 +17,8 @@ TOKEN_KEY = "session_token"
 def _get_token_from_cookies() -> Optional[str]:
     """Obtiene el token de las cookies del navegador."""
     try:
-        from shared.cookies import get_token_from_cookies, inject_localstorage_recovery
-        # Inyectar script de recuperación de LocalStorage
-        inject_localstorage_recovery()
-        return get_token_from_cookies()
+        from shared.cookies import get_token_from_browser_cookies
+        return get_token_from_browser_cookies()
     except:
         return None
 
@@ -28,18 +26,39 @@ def _get_token_from_cookies() -> Optional[str]:
 def _get_stored_token() -> Optional[str]:
     """
     Obtiene el token almacenado.
-    Primero intenta session_state, luego cookies del navegador.
+    Primero intenta session_state, luego query params, luego cookies.
+    Si encuentra token en cookies pero no en query params, restaura los query params.
     """
     # 1. Intentar session_state (más rápido)
     token = st.session_state.get(TOKEN_KEY)
     if token:
+        # Asegurar que query params tiene el token
+        if not st.query_params.get("session"):
+            try:
+                st.query_params["session"] = token
+            except:
+                pass
         return token
     
-    # 2. Intentar cookies del navegador (para recuperación al recargar)
+    # 2. Intentar query params
+    try:
+        token = st.query_params.get("session")
+        if token:
+            st.session_state[TOKEN_KEY] = token
+            return token
+    except:
+        pass
+    
+    # 3. Intentar cookies del navegador (para recuperación al recargar)
     token = _get_token_from_cookies()
     if token:
-        # Almacenar en session_state para futuras consultas
+        # Almacenar en session_state
         st.session_state[TOKEN_KEY] = token
+        # Restaurar query params
+        try:
+            st.query_params["session"] = token
+        except:
+            pass
         return token
     
     return None
