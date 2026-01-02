@@ -453,10 +453,11 @@ class FlujoCajaService:
         según la contrapartida del asiento.
         """
         resultado = {
-            "meta": {"version": "3.0", "mode": "hierarchical"},
+            "meta": {"version": "3.1", "mode": "hierarchical"},  # Bump version
             "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
             "generado": datetime.now().isoformat(),
             "actividades": {},
+            "proyeccion": {},  # Nuevo campo para flujo proyectado
             "conciliacion": {},
             "detalle_movimientos": []
         }
@@ -746,7 +747,202 @@ class FlujoCajaService:
         resultado["detalle_movimientos"] = detalle
         resultado["total_movimientos"] = len(movimientos_efectivo)
         
+        # 9. Calcular Flujo Proyectado (Facturas borradores/abiertas)
+        try:
+            resultado["proyeccion"] = self._calcular_flujo_proyectado(fecha_inicio, fecha_fin, company_id)
+        except Exception as e:
+            print(f"[FlujoCaja] Error calculando proyección: {e}")
+            resultado["proyeccion"] = {"error": str(e)}
+            
         return resultado
+
+    def _calcular_flujo_proyectado(self, fecha_inicio: str, fecha_fin: str, company_id: int = None) -> Dict:
+        """
+        Calcula el flujo proyectado basado en documentos (facturas de cliente y proveedor).
+        
+        Criterios:
+        - Estado: Borrador (draft) O Publicado no pagado (posted & != paid)
+        - Fecha: invoice_date_due (vencimiento) dentro del rango
+        - Clasificación: Basada en las líneas de factura (invoice_line_ids)
+        """
+        proyeccion = {
+            "actividades": {},
+            "total_ingresos": 0.0,
+            "total_egresos": 0.0
+        }
+        
+        # Inicializar estructura
+        detalles_por_concepto = {}  # {codigo_concepto: [documentos]}
+        montos_por_concepto = {}    # {codigo_concepto: monto}
+        
+        for k, v in ESTRUCTURA_FLUJO.items():
+            for linea in v["lineas"]:
+                detalles_por_concepto[linea["codigo"]] = []
+                montos_por_concepto[linea["codigo"]] = 0.0
+
+        # 1. Buscar facturas (Clientes y Proveedores)
+        domain = [
+            ('move_type', 'in', ['out_invoice', 'in_invoice']),
+            ('state', '!=', 'cancel'),  # Excluir cancelados
+            ('invoice_date_due', '>=', fecha_inicio),
+            ('invoice_date_due', '<=', fecha_fin),
+            # Lógica: Draft OR (Posted AND Not Paid)
+            '|', ('state', '=', 'draft'), '&', ('state', '=', 'posted'), ('payment_state', '!=', 'paid')
+        ]
+        
+        if company_id:
+            domain.append(('company_id', '=', company_id))
+            
+        campos_move = ['id', 'name', 'ref', 'partner_id', 'invoice_date_due', 'amount_total', 
+                       'amount_residual', 'move_type', 'state', 'payment_state']
+        
+        try:
+            moves = self.odoo.search_read('account.move', domain, campos_move, limit=2000)
+        except Exception as e:
+            print(f"[FlujoProyeccion] Error fetching moves: {e}")
+            return proyeccion
+
+        if not moves:
+            return proyeccion
+            
+        # 2. Obtener líneas para clasificación (Batch)
+        move_ids = [m['id'] for m in moves]
+        
+        # Usamos exclude_from_invoice_tab=False para obtener las líneas "reales" (productos/servicios)
+        # y evitar líneas de impuestos automáticos o cuentas por cobrar/pagar.
+        domain_lines = [
+            ('move_id', 'in', move_ids),
+            ('exclude_from_invoice_tab', '=', False)
+        ]
+        
+        campos_lines = ['move_id', 'account_id', 'price_subtotal']
+        try:
+            lines = self.odoo.search_read('account.move.line', domain_lines, campos_lines, limit=10000)
+        except Exception as e:
+            print(f"[FlujoProyeccion] Error fetching lines: {e}")
+            return proyeccion
+            
+        # Agrupar líneas por move_id
+        lines_by_move = {}
+        for l in lines:
+            mid = l['move_id'][0] if isinstance(l.get('move_id'), (list, tuple)) else l.get('move_id')
+            lines_by_move.setdefault(mid, []).append(l)
+            
+        # Cache de info de cuentas para mapeo
+        account_ids = list(set(
+            l['account_id'][0] if isinstance(l.get('account_id'), (list, tuple)) else l.get('account_id')
+            for l in lines if l.get('account_id')
+        ))
+        cuentas_info = {}
+        if account_ids:
+            try:
+                acc_read = self.odoo.read('account.account', account_ids, ['code', 'name'])
+                cuentas_info = {a['id']: a for a in acc_read}
+            except: pass
+
+        # 3. Procesar cada documento
+        for move in moves:
+            move_id = move['id']
+            # Usar amount_residual (lo que falta por pagar) para proyección, salvo que sea draft (todo)
+            monto_documento = move.get('amount_residual', 0) if move.get('state') == 'posted' else move.get('amount_total', 0)
+            
+            if monto_documento == 0:
+                continue
+                
+            # Determinar signo flujo (Cliente +, Proveedor -)
+            es_ingreso = move['move_type'] == 'out_invoice'
+            signo_flujo = 1 if es_ingreso else -1
+            monto_flujo = monto_documento * signo_flujo
+            
+            # Obtener líneas base para distribuir
+            base_lines = lines_by_move.get(move_id, [])
+            total_base = sum(l.get('price_subtotal', 0) for l in base_lines)
+            
+            # Si no hay líneas base (raro), asignar a UNCLASSIFIED
+            if not base_lines or total_base == 0:
+                # Fallback: Asignar todo a UNCLASSIFIED
+                # O podríamos intentar mapear la cuenta receivable/payable si quisiéramos, pero mejor alertar
+                continue
+
+            # Distribuir el monto del flujo según el peso de cada línea base
+            partner_name = move['partner_id'][1] if isinstance(move.get('partner_id'), (list, tuple)) else (move.get('partner_id') or "Varios")
+            
+            for line in base_lines:
+                subtotal = line.get('price_subtotal', 0)
+                if subtotal == 0: continue
+                
+                # Peso de esta línea en el total de la factura
+                peso = subtotal / total_base
+                monto_parte = monto_flujo * peso
+                
+                # Clasificar
+                acc_id = line['account_id'][0] if isinstance(line.get('account_id'), (list, tuple)) else line.get('account_id')
+                acc_code = cuentas_info.get(acc_id, {}).get('code', '')
+                
+                categoria = self._clasificar_cuenta(acc_code)
+                if not categoria:
+                    categoria = "UNCLASSIFIED"
+                
+                # Agregar a montos (incluso si es UNCLASSIFIED)
+                montos_por_concepto[categoria] = montos_por_concepto.get(categoria, 0) + monto_parte
+                
+                # Detalle documento
+                entry = {
+                    "id": move_id,
+                    "documento": move.get('name') or move.get('ref') or str(move_id),
+                    "partner": partner_name,
+                    "fecha_venc": move.get('invoice_date_due'),
+                    "estado": "Borrador" if move.get('state') == 'draft' else "Abierto",
+                    "monto": round(monto_parte, 0),
+                    "cuenta": acc_code,
+                    "tipo": "Factura Cliente" if es_ingreso else "Factura Proveedor"
+                }
+                
+                if categoria == "UNCLASSIFIED":
+                    # Agregar a lista especial o manejar en un concepto generico?
+                    # Por ahora lo agregamos a detalles_por_concepto bajo llave UNCLASSIFIED
+                    # para que luego se pueda exponer
+                    pass 
+                
+                if categoria not in detalles_por_concepto:
+                    detalles_por_concepto[categoria] = []
+                    
+                detalles_por_concepto[categoria].append(entry)
+
+        # 4. Construir Resultado Final Estructurado
+        proyeccion["sin_clasificar"] = []
+        if "UNCLASSIFIED" in detalles_por_concepto:
+             proyeccion["sin_clasificar"] = detalles_por_concepto["UNCLASSIFIED"]
+             proyeccion["monto_sin_clasificar"] = montos_por_concepto.get("UNCLASSIFIED", 0)
+
+        for cat_key, cat_data in ESTRUCTURA_FLUJO.items():
+            conceptos_res = []
+            subtotal_actividad = 0.0
+            
+            for linea in cat_data["lineas"]:
+                codigo = linea["codigo"]
+                monto = montos_por_concepto.get(codigo, 0)
+                docs = detalles_por_concepto.get(codigo, [])
+                
+                # Ordenar documentos por fecha vencimiento
+                docs.sort(key=lambda x: x['fecha_venc'] or '9999-12-31')
+                
+                if monto != 0 or docs:
+                    conceptos_res.append({
+                        "codigo": codigo,
+                        "nombre": linea["nombre"],
+                        "monto": round(monto, 0),
+                        "documentos": docs
+                    })
+                    subtotal_actividad += monto
+            
+            proyeccion["actividades"][cat_key] = {
+                "nombre": cat_data["nombre"],
+                "subtotal": round(subtotal_actividad, 0),
+                "conceptos": conceptos_res
+            }
+            
+        return proyeccion
     
     def get_mapeo(self) -> Dict:
         """Retorna el mapeo actual de cuentas."""

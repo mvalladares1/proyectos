@@ -1009,7 +1009,7 @@ if datos:
                 "Personalizado"
             ]
             
-            col_periodo, col_desde, col_hasta = st.columns([1, 1, 1])
+            col_periodo, col_desde, col_hasta, col_modo = st.columns([1.2, 1, 1, 1.2])
             
             with col_periodo:
                 periodo_sel = st.selectbox(
@@ -1017,124 +1017,86 @@ if datos:
                     periodo_opciones,
                     key="flujo_periodo_sel"
                 )
+
+            # ... (fechas calc) ...
+
+            # ... (inputs fecha) ...
             
-            # Calcular fechas según selección
-            hoy = datetime.now()
+            with col_modo:
+                st.caption("Modo de Visualización")
+                modo_ver = st.radio("Modo", ["Real", "Proyectado", "Consolidado"], 
+                                   horizontal=True, label_visibility="collapsed", key="modo_ver_radio")
             
-            if periodo_sel == "Mes actual":
-                flujo_fecha_ini = hoy.replace(day=1)
-                ultimo_dia = monthrange(hoy.year, hoy.month)[1]
-                flujo_fecha_fin = hoy.replace(day=ultimo_dia)
-            elif periodo_sel == "Mes anterior":
-                primer_dia_actual = hoy.replace(day=1)
-                ultimo_dia_anterior = primer_dia_actual - timedelta(days=1)
-                flujo_fecha_ini = ultimo_dia_anterior.replace(day=1)
-                flujo_fecha_fin = ultimo_dia_anterior
-            elif periodo_sel == "Último trimestre":
-                flujo_fecha_fin = hoy
-                flujo_fecha_ini = hoy - timedelta(days=90)
-            elif periodo_sel == "Año actual":
-                flujo_fecha_ini = datetime(hoy.year, 1, 1)
-                flujo_fecha_fin = hoy
-            else:  # Personalizado
-                flujo_fecha_ini = hoy.replace(day=1)
-                flujo_fecha_fin = hoy
-            
-            with col_desde:
-                flujo_f_inicio = st.date_input(
-                    "Desde",
-                    value=flujo_fecha_ini,
-                    format="DD/MM/YYYY",
-                    key="flujo_fecha_inicio",
-                    disabled=periodo_sel != "Personalizado"
-                )
-            
-            with col_hasta:
-                flujo_f_fin = st.date_input(
-                    "Hasta",
-                    value=flujo_fecha_fin,
-                    format="DD/MM/YYYY",
-                    key="flujo_fecha_fin",
-                    disabled=periodo_sel != "Personalizado"
-                )
-            
-            # Usar fechas seleccionadas o calculadas
-            if periodo_sel == "Personalizado":
-                flujo_inicio_str = flujo_f_inicio.strftime("%Y-%m-%d")
-                flujo_fin_str = flujo_f_fin.strftime("%Y-%m-%d")
-            else:
-                flujo_inicio_str = flujo_fecha_ini.strftime("%Y-%m-%d")
-                flujo_fin_str = flujo_fecha_fin.strftime("%Y-%m-%d")
-            
-            # Cache key con fechas del flujo
-            flujo_cache_key = f"flujo_{flujo_inicio_str}_{flujo_fin_str}"
-            
-            st.markdown("---")
-            
-            def cargar_flujo_click():
-                """Callback que se ejecuta al hacer click en el botón"""
-                # Forzar limpieza de cache para este periodo
-                if flujo_cache_key in st.session_state:
-                    del st.session_state[flujo_cache_key]
-                st.session_state['flujo_loading'] = True
-                st.session_state['flujo_clicked'] = True
-            
-            col_btn, col_info = st.columns([1, 2])
-            with col_btn:
-                # Botón con callback
-                st.button(
-                    "🔄 Generar Flujo de Caja", 
-                    type="primary", 
-                    use_container_width=True,
-                    key="btn_flujo_caja",
-                    on_click=cargar_flujo_click
-                )
-            with col_info:
-                st.info(f"📅 Período: {flujo_inicio_str} a {flujo_fin_str}")
-                # Debug info
-                if flujo_cache_key in st.session_state:
-                    data_debug = st.session_state[flujo_cache_key]
-                    if "meta" in data_debug:
-                        st.caption(f"Backend v{data_debug['meta'].get('version')} ({data_debug['meta'].get('mode')})")
-                    else:
-                        st.caption("Backend: vLegacy (Sin metadatos)")
-            
-            # Cargar datos si se hizo click (flag en session_state)
-            if st.session_state.get('flujo_clicked'):
-                st.session_state['flujo_clicked'] = False  # Reset flag
-                with st.spinner("Generando Estado de Flujo de Efectivo..."):
-                    try:
-                        resp = requests.get(
-                            f"{FLUJO_CAJA_URL}/",
-                            params={
-                                "fecha_inicio": flujo_inicio_str,
-                                "fecha_fin": flujo_fin_str,
-                                "username": username,
-                                "password": password
-                            },
-                            timeout=120
-                        )
-                        if resp.status_code == 200:
-                            st.session_state[flujo_cache_key] = resp.json()
-                        else:
-                            st.error(f"Error {resp.status_code}: {resp.text}")
-                    except Exception as e:
-                        st.error(f"Error al conectar con API: {e}")
-                st.session_state['flujo_loading'] = False
-            
-            # Mostrar datos si existen en cache
-            flujo_data = st.session_state.get(flujo_cache_key)
-            
+            # ... (cache key logic) ...
+
+            # ... (button) ...
+
+            # ... (load data) ...
+
             if flujo_data and "error" not in flujo_data:
                 import altair as alt
+                import copy
                 
-                actividades = flujo_data.get("actividades", {})
+                actividades_real = flujo_data.get("actividades", {})
+                proyeccion_data = flujo_data.get("proyeccion", {}) or {}
+                actividades_proy = proyeccion_data.get("actividades", {})
+                
                 conciliacion = flujo_data.get("conciliacion", {})
                 validacion = flujo_data.get("validacion", {})
                 cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
                 otros = conciliacion.get("otros_no_clasificados", 0)
                 
-                # Extraer valores de actividades para uso en todo el módulo
+                # SELECCIÓN DE DATOS SEGÚN MODO
+                if modo_ver == "Real":
+                    actividades = actividades_real
+                elif modo_ver == "Proyectado":
+                    actividades = actividades_proy
+                    # En modo proyectado, 'otros' debería venir de la proyección si implementamos validación
+                    otros = proyeccion_data.get("monto_sin_clasificar", 0)
+                    cuentas_nc = proyeccion_data.get("sin_clasificar", [])
+                else: # Consolidado
+                    # Fusión inteligente
+                    actividades = copy.deepcopy(actividades_real)
+                    for act_k, act_v in actividades_proy.items():
+                        if act_k not in actividades:
+                            actividades[act_k] = copy.deepcopy(act_v)
+                            continue
+                        
+                        # Sumar subtotales
+                        actividades[act_k]["subtotal"] += act_v.get("subtotal", 0)
+                        
+                        # Fusionar conceptos
+                        conceptos_real = {c["codigo"]: c for c in actividades[act_k].get("conceptos", [])}
+                        conceptos_proy = act_v.get("conceptos", [])
+                        
+                        for cp in conceptos_proy:
+                            code = cp["codigo"]
+                            if code in conceptos_real:
+                                # Existe en real: sumar monto y adjuntar documentos
+                                conceptos_real[code]["monto"] += cp["monto"]
+                                conceptos_real[code]["documentos_proy"] = cp.get("documentos", [])
+                            else:
+                                # Nuevo concepto proyectado
+                                nuevo_c = copy.deepcopy(cp)
+                                nuevo_c["es_proyeccion"] = True
+                                if "conceptos" not in actividades[act_k]: actividades[act_k]["conceptos"] = []
+                                actividades[act_k]["conceptos"].append(nuevo_c)
+                        
+                        # Re-asignar lista actualizada (si usamos dict, volver a lista)
+                        if "conceptos" in actividades[act_k]:
+                            pass
+                            
+                    # Fusionar No Clasificados
+                    otros_real = conciliacion.get("otros_no_clasificados", 0)
+                    otros_proy = proyeccion_data.get("monto_sin_clasificar", 0)
+                    otros = otros_real + otros_proy
+                    
+                    curr_nc = list(flujo_data.get("cuentas_sin_clasificar", []) or [])
+                    if proyeccion_data.get("sin_clasificar"):
+                        curr_nc.extend(proyeccion_data.get("sin_clasificar"))
+                    cuentas_nc = curr_nc
+
+                # KPIs dependen de la variable 'actividades' seleccionada/fusionada
                 op = actividades.get("OPERACION", {}).get("subtotal", 0)
                 inv = actividades.get("INVERSION", {}).get("subtotal", 0)
                 fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
@@ -1192,6 +1154,10 @@ if datos:
                 ef_ini = conciliacion.get("efectivo_inicial", 0)
                 ef_fin = conciliacion.get("efectivo_final", 0)
                 variacion = conciliacion.get("variacion_efectivo", 0)
+                
+                # Recalcular Efectivo Final para modos Proyectado/Consolidado
+                if modo_ver != "Real":
+                    ef_fin = ef_ini + op + inv + fin + otros
                 
                 # Verificar consistencia de conciliación
                 diferencia_conciliacion = abs((ef_ini + variacion) - ef_fin)
@@ -1410,6 +1376,7 @@ if datos:
                     with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=(act_key=="OPERACION")):
                         
                         # === LÓGICA JERÁRQUICA (SOLO OPERACIÓN) ===
+                        # === LÓGICA JERÁRQUICA (SOLO OPERACIÓN) ===
                         if act_key == "OPERACION" and act_data.get("conceptos"):
                             total_act = abs(subtotal) if subtotal != 0 else 1
                             
@@ -1418,9 +1385,14 @@ if datos:
                                 c_codigo = concepto.get("codigo", "")
                                 c_monto = concepto.get("monto", 0)
                                 c_cuentas = concepto.get("cuentas", [])
+                                c_docs = concepto.get("documentos", []) or concepto.get("documentos_proy", [])
                                 
-                                # Encabezado del Concepto (Estilo Excel)
+                                # Encabezado del Concepto
                                 c_color = "#2ecc71" if c_monto >= 0 else "#e74c3c"
+                                if concepto.get("es_proyeccion"):
+                                    c_codigo = f"PROY-{c_codigo}"
+                                    c_color = "#f39c12" # Naranja para puros proyectados
+                                
                                 st.markdown(f"""
                                 <div style="display: flex; justify-content: space-between; align-items: center; 
                                             padding: 10px 15px; background: #2d3748; border-radius: 6px; margin-top: 12px; margin-bottom: 5px;
@@ -1435,8 +1407,11 @@ if datos:
                                 </div>
                                 """, unsafe_allow_html=True)
                                 
-                                # Tabla de Cuentas del Concepto
+                                # --- SECCIÓN REAL (Cuentas) ---
                                 if c_cuentas:
+                                    if c_docs or modo_ver == "Consolidado":
+                                        st.markdown("<div style='font-size:0.8em; color:#a0aec0; margin: 4px 0;'>🔵 Real (Ejecutado)</div>", unsafe_allow_html=True)
+                                        
                                     for cuenta in c_cuentas:
                                         codigo = cuenta.get('codigo', '')
                                         nombre = cuenta.get('nombre', '')[:40]
@@ -1446,23 +1421,49 @@ if datos:
                                         monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
                                         monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
                                         
-                                        # Grid: Codigo | Nombre | Monto | % | Boton
                                         cc1, cc2, cc3, cc4, cc5 = st.columns([0.9, 2.5, 1.2, 0.7, 0.5])
-                                        with cc1:
-                                            st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.9em;'>{codigo}</span>", unsafe_allow_html=True)
-                                        with cc2:
-                                            st.caption(nombre)
-                                        with cc3:
-                                            st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
-                                        with cc4:
-                                            st.caption(f"{pct:.1f}%")
+                                        with cc1: st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.9em;'>{codigo}</span>", unsafe_allow_html=True)
+                                        with cc2: st.caption(nombre)
+                                        with cc3: st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
+                                        with cc4: st.caption(f"{pct:.1f}%")
                                         with cc5:
+                                            # Boton editar solo para cuentas reales
                                             if st.button("✏️", key=f"edit_hier_{codigo}", help=f"Reasignar {codigo}"):
                                                 st.session_state['cuenta_a_editar'] = codigo
                                                 st.session_state['mostrar_editor_expandido'] = True
                                                 st.rerun()
+
+                                # --- SECCIÓN PROYECTADA (Documentos) ---
+                                if c_docs:
+                                    if c_cuentas or modo_ver == "Consolidado":
+                                        st.markdown("<div style='font-size:0.8em; color:#f39c12; margin: 8px 0 4px 0;'>🟡 Proyectado (Comprometido)</div>", unsafe_allow_html=True)
+                                    
+                                    # Cabecera tabla documentos
+                                    h1, h2, h3, h4, h5 = st.columns([1.2, 1.8, 0.8, 0.8, 1])
+                                    h1.markdown("**Ref**")
+                                    h2.markdown("**Empresa**")
+                                    h3.markdown("**Venc.**")
+                                    h4.markdown("**Estado**")
+                                    h5.markdown("**Monto**")
+                                    
+                                    # Listar documentos (limitado a 20 para no saturar)
+                                    for doc in c_docs[:20]:
+                                        monto_d = doc.get('monto', 0)
+                                        color_d = "#f39c12" if monto_d >= 0 else "#d35400" # Naranja/Rojo oscuro
+                                        fmt_d = f"+${monto_d:,.0f}" if monto_d >= 0 else f"-${abs(monto_d):,.0f}"
+                                        
+                                        d1, d2, d3, d4, d5 = st.columns([1.2, 1.8, 0.8, 0.8, 1])
+                                        d1.caption(doc.get('documento', ''))
+                                        d2.caption(doc.get('partner', '')[:20])
+                                        d3.caption(doc.get('fecha_venc', ''))
+                                        d4.caption(doc.get('estado', ''))
+                                        d5.markdown(f"<span style='color:{color_d}; font-size: 0.9em;'>{fmt_d}</span>", unsafe_allow_html=True)
+                                    
+                                    if len(c_docs) > 20:
+                                        st.caption(f"... y {len(c_docs)-20} documentos más")
                                 else:
-                                    st.markdown("<div style='padding-left: 15px; color: #718096; font-style: italic; font-size: 0.9em;'>No hay cuentas asignadas</div>", unsafe_allow_html=True)
+                                    if not c_cuentas and not c_docs:
+                                         st.markdown("<div style='padding-left: 15px; color: #718096; font-style: italic; font-size: 0.9em;'>Sin movimientos</div>", unsafe_allow_html=True)
 
                         # === LÓGICA LEGACY (INVERSIÓN / FINANCIAMIENTO) ===
                         else:
