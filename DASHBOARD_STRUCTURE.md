@@ -424,11 +424,182 @@ sudo systemctl restart rio-futuro-api rio-futuro-web nginx
 
 ---
 
-## 11. TODOs / WIP
+## 11. Infraestructura del Servidor VPS
 
-- [ ] **Persistencia de sesión**: `st.query_params` no persiste en recarga de Streamlit
-- [ ] Investigar alternativas: proxy con nginx para cookies, o iframe approach
+> **Estado:** Producción funcional y estable  
+> **Última limpieza:** 2 de Enero 2026
+
+### 11.1 Visión General
+
+Este servidor aloja tres capas bien separadas:
+
+| Capa | Descripción |
+|------|-------------|
+| **NGINX** | Reverse proxy y frontend HTTP (puerto 80) |
+| **FastAPI** | API de datos Python (127.0.0.1:8000) |
+| **Laravel** | Sistema de cargas / logística |
+
+Todo corre sobre **Debian**, gestionado con **systemd** y puertos internos aislados.
+
+### 11.2 Arquitectura Final
+
+```
+Internet
+   |
+   v
+[ NGINX :80 ]
+   |
+   ├── /cargas        ──▶ Laravel (PHP-FPM)
+   ├── /api/v1/*      ──▶ FastAPI (127.0.0.1:8000)
+   └── /dashboards/*  ──▶ Streamlit (127.0.0.1:8501)
+```
+
+### 11.3 Servicios Activos
+
+#### FastAPI – Rio Backend
+
+| Propiedad | Valor |
+|-----------|-------|
+| Servicio systemd | `rio-backend.service` |
+| Usuario | `debian` |
+| Puerto interno | `127.0.0.1:8000` |
+| Arranque automático | ✅ |
+
+**Archivo de servicio:** `/etc/systemd/system/rio-backend.service`
+
+```ini
+[Unit]
+Description=Rio Futuro Dashboards Backend (FastAPI)
+After=network.target
+
+[Service]
+User=debian
+Group=debian
+WorkingDirectory=/home/debian/rio-futuro-dashboards/app
+Environment="PATH=/home/debian/rio-futuro-dashboards/app/venv/bin"
+ExecStart=/home/debian/rio-futuro-dashboards/app/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Healthcheck:**
+```
+GET /api/v1
+→ {"status": "ok", "service": "rio-futuro-backend", "env": "production"}
+```
+
+#### Laravel – Log System / Cargas
+
+| Propiedad | Valor |
+|-----------|-------|
+| Root | `/home/debian/log-system/public` |
+| Backend | PHP 8.4 + PHP-FPM |
+| Ruta pública | `/cargas` |
+
+### 11.4 Configuración NGINX
+
+**📍 Sitios habilitados:** `/etc/nginx/sites-enabled/`
+
+| Archivo | Servicio |
+|---------|----------|
+| `log-system.conf` | Laravel `/cargas` |
+| `rio-futuro-dashboards.conf` | API FastAPI + Streamlit |
+
+**Reglas relevantes:**
+
+```nginx
+# FastAPI
+location /api/v1/ {
+    proxy_pass http://127.0.0.1:8000/api/v1/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+
+# Laravel
+location /cargas {
+    try_files $uri /index.php?$query_string;
+}
+```
+
+### 11.5 Estructura de Directorios (Servidor)
+
+```
+📍 /home/debian/
+
+rio-futuro-dashboards/
+├── app/
+│   ├── backend/
+│   │   ├── main.py
+│   │   ├── routers/
+│   │   ├── services/
+│   │   └── utils/
+│   ├── venv/
+│   ├── pages/           (Streamlit)
+│   ├── shared/
+│   └── requirements.txt
+
+log-system/
+├── app/
+├── public/
+├── routes/
+└── vendor/
+```
+
+**🧹 Directorios eliminados (limpieza):**
+- `dashboards_streamlit/`
+- `integra_reporteria/`
+- `graphhopper/`
+- `gravity/`
+- `apps/`
+- `dashboards/`
+
+### 11.6 Firewall (UFW)
+
+| Puerto | Uso |
+|--------|-----|
+| 22 | SSH |
+| 80 | HTTP |
+| 443 | HTTPS (preparado) |
+
+Todo lo demás cerrado.
+
+### 11.7 Docker
+
+- Docker instalado ✅
+- Sin contenedores corriendo
+- Listo para uso futuro
+
+### 11.8 Decisiones Técnicas
+
+| Decisión | Justificación |
+|----------|---------------|
+| FastAPI nunca en puerto 80 | NGINX es único punto de entrada |
+| systemd único gestor | Nada "levantado a mano" en producción |
+| Healthcheck implementado | Antes de escalar |
+| Puertos internos aislados | Seguridad |
+
+### 11.9 Estado Final
+
+| Componente | Estado |
+|------------|--------|
+| NGINX | ✅ OK |
+| FastAPI | ✅ OK |
+| Laravel | ✅ OK |
+| systemd | ✅ OK |
+| Firewall | ✅ OK |
+| Swagger | ✅ OK |
+| Healthcheck | ✅ OK |
 
 ---
 
-*Documento actualizado el 31 de Diciembre 2024*
+## 12. TODOs / WIP
+
+- [x] **Persistencia de sesión**: Implementado con Query Params + Cookies
+- [ ] Investigar Streamlit en producción vía NGINX (decisión pendiente)
+
+---
+
+*Documento actualizado el 2 de Enero 2026*
