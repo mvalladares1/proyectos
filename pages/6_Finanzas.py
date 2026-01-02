@@ -1397,87 +1397,128 @@ if datos:
                     subtotal = act_data.get("subtotal", 0)
                     subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
                     
-                    with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=False):
-                        # Tabla de líneas NIIF
-                        filas = []
-                        for linea in lineas:
-                            monto = linea.get("monto", 0)
-                            if monto != 0:
-                                filas.append({
-                                    "Concepto": linea.get("nombre", ""),
-                                    "Monto": monto
-                                })
+                    with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=(act_key=="OPERACION")):
                         
-                        if filas:
-                            df_act = pd.DataFrame(filas)
-                            
-                            def style_monto(val):
-                                color = "#2ecc71" if val >= 0 else "#e74c3c"
-                                return f"color: {color}; font-weight: bold;"
-                            
-                            styled_df = df_act.style.format({"Monto": "${:,.0f}"}).applymap(
-                                style_monto, subset=["Monto"]
-                            )
-                            
-                            st.dataframe(
-                                styled_df,
-                                use_container_width=True,
-                                hide_index=True,
-                                height=min(200, 50 + len(filas) * 35)
-                            )
-                        
-                        # DRILL-DOWN: Cuentas que componen esta actividad
-                        # Agregar cuentas de categorías que corresponden a esta actividad
-                        cuentas_actividad = []
-                        prefijo_buscar = act_key[:2]  # OP, IN, FI
-                        for cat_code, cat_cuentas in drill_down_data.items():
-                            if cat_code.startswith(prefijo_buscar):
-                                for cuenta in cat_cuentas:
-                                    cuenta['categoria_display'] = cat_code
-                                    cuentas_actividad.append(cuenta)
-                        
-                        st.markdown("---")
-                        if cuentas_actividad:
-                            st.markdown(f"**🔍 Composición contable ({len(cuentas_actividad)} cuentas)**")
-                            
+                        # === LÓGICA JERÁRQUICA (SOLO OPERACIÓN) ===
+                        if act_key == "OPERACION" and act_data.get("conceptos"):
                             total_act = abs(subtotal) if subtotal != 0 else 1
                             
-                            for i, cuenta in enumerate(sorted(cuentas_actividad, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:15]):
-                                codigo = cuenta.get('codigo', '')
-                                nombre = cuenta.get('nombre', '')[:25]
-                                monto_c = cuenta.get('monto', 0)
-                                cat_display = cuenta.get('categoria_display', '')
-                                pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
+                            for concepto in act_data["conceptos"]:
+                                c_nombre = concepto.get("nombre", "")
+                                c_codigo = concepto.get("codigo", "")
+                                c_monto = concepto.get("monto", 0)
+                                c_cuentas = concepto.get("cuentas", [])
                                 
-                                monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
-                                monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
+                                # Encabezado del Concepto (Estilo Excel)
+                                c_color = "#2ecc71" if c_monto >= 0 else "#e74c3c"
+                                st.markdown(f"""
+                                <div style="display: flex; justify-content: space-between; align-items: center; 
+                                            padding: 10px 15px; background: #2d3748; border-radius: 6px; margin-top: 12px; margin-bottom: 5px;
+                                            border-left: 4px solid {act_color};">
+                                    <div style="flex-grow: 1;">
+                                        <div style="font-size: 0.8em; color: #a0aec0;">{c_codigo}</div>
+                                        <div style="font-weight: 600; font-size: 1em;">{c_nombre}</div>
+                                    </div>
+                                    <div style="color: {c_color}; font-weight: bold; font-family: monospace; font-size: 1.1em;">
+                                        {fmt_flujo(c_monto)}
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
                                 
-                                col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns([0.8, 1.8, 1, 0.6, 0.8, 0.5])
-                                with col_c1:
-                                    st.code(codigo, language=None)
-                                with col_c2:
-                                    st.caption(nombre)
-                                with col_c3:
-                                    st.markdown(f"<span style='color:{monto_color};'>{monto_display}</span>", unsafe_allow_html=True)
-                                with col_c4:
-                                    st.caption(f"{pct:.1f}%")
-                                with col_c5:
-                                    st.caption(f"📁 {cat_display}")
-                                with col_c6:
-                                    if st.button("✏️", key=f"edit_{act_key}_{codigo}", help=f"Reasignar {codigo}"):
-                                        st.session_state['cuenta_a_editar'] = codigo
-                                        st.session_state['mostrar_editor_expandido'] = True
-                                        st.rerun()
-                            
-                            if len(cuentas_actividad) > 15:
-                                st.caption(f"... y {len(cuentas_actividad) - 15} cuentas más")
+                                # Tabla de Cuentas del Concepto
+                                if c_cuentas:
+                                    for cuenta in c_cuentas:
+                                        codigo = cuenta.get('codigo', '')
+                                        nombre = cuenta.get('nombre', '')[:40]
+                                        monto_c = cuenta.get('monto', 0)
+                                        pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
+                                        
+                                        monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
+                                        monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
+                                        
+                                        # Grid: Codigo | Nombre | Monto | % | Boton
+                                        cc1, cc2, cc3, cc4, cc5 = st.columns([0.9, 2.5, 1.2, 0.7, 0.5])
+                                        with cc1:
+                                            st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.9em;'>{codigo}</span>", unsafe_allow_html=True)
+                                        with cc2:
+                                            st.caption(nombre)
+                                        with cc3:
+                                            st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
+                                        with cc4:
+                                            st.caption(f"{pct:.1f}%")
+                                        with cc5:
+                                            if st.button("✏️", key=f"edit_hier_{codigo}", help=f"Reasignar {codigo}"):
+                                                st.session_state['cuenta_a_editar'] = codigo
+                                                st.session_state['mostrar_editor_expandido'] = True
+                                                st.rerun()
+                                else:
+                                    st.markdown("<div style='padding-left: 15px; color: #718096; font-style: italic; font-size: 0.9em;'>No hay cuentas asignadas</div>", unsafe_allow_html=True)
+
+                        # === LÓGICA LEGACY (INVERSIÓN / FINANCIAMIENTO) ===
                         else:
-                            # Debug: mostrar qué categorías existen
-                            cats_disponibles = list(drill_down_data.keys()) if drill_down_data else []
-                            if cats_disponibles:
-                                st.caption(f"ℹ️ Categorías disponibles: {', '.join(cats_disponibles)}")
+                            # Tabla de líneas NIIF (Resumen)
+                            filas = []
+                            for linea in lineas:
+                                monto = linea.get("monto", 0)
+                                if monto != 0:
+                                    filas.append({
+                                        "Concepto": linea.get("nombre", ""),
+                                        "Monto": monto
+                                    })
+                            
+                            if filas:
+                                df_act = pd.DataFrame(filas)
+                                def style_monto(val):
+                                    color = "#2ecc71" if val >= 0 else "#e74c3c"
+                                    return f"color: {color}; font-weight: bold;"
+                                
+                                styled_df = df_act.style.format({"Monto": "${:,.0f}"}).applymap(
+                                    style_monto, subset=["Monto"]
+                                )
+                                st.dataframe(styled_df, use_container_width=True, hide_index=True, height=min(200, 50 + len(filas) * 35))
+                            
+                            # DRILL-DOWN LEGACY
+                            cuentas_actividad = []
+                            prefijo_buscar = act_key[:2]
+                            for cat_code, cat_cuentas in drill_down_data.items():
+                                if cat_code.startswith(prefijo_buscar):
+                                    for cuenta in cat_cuentas:
+                                        cuenta['categoria_display'] = cat_code
+                                        cuentas_actividad.append(cuenta)
+                            
+                            st.markdown("---")
+                            if cuentas_actividad:
+                                st.markdown(f"**🔍 Composición contable ({len(cuentas_actividad)} cuentas)**")
+                                total_act = abs(subtotal) if subtotal != 0 else 1
+                                for i, cuenta in enumerate(sorted(cuentas_actividad, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:15]):
+                                    codigo = cuenta.get('codigo', '')
+                                    nombre = cuenta.get('nombre', '')[:25]
+                                    monto_c = cuenta.get('monto', 0)
+                                    cat_display = cuenta.get('categoria_display', '')
+                                    pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
+                                    
+                                    monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
+                                    monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
+                                    
+                                    col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns([0.8, 1.8, 1, 0.6, 0.8, 0.5])
+                                    with col_c1: st.code(codigo, language=None)
+                                    with col_c2: st.caption(nombre)
+                                    with col_c3: st.markdown(f"<span style='color:{monto_color};'>{monto_display}</span>", unsafe_allow_html=True)
+                                    with col_c4: st.caption(f"{pct:.1f}%")
+                                    with col_c5: st.caption(f"📁 {cat_display}")
+                                    with col_c6:
+                                        if st.button("✏️", key=f"edit_{act_key}_{codigo}", help=f"Reasignar {codigo}"):
+                                            st.session_state['cuenta_a_editar'] = codigo
+                                            st.session_state['mostrar_editor_expandido'] = True
+                                            st.rerun()
+                                if len(cuentas_actividad) > 15:
+                                    st.caption(f"... y {len(cuentas_actividad) - 15} cuentas más")
                             else:
-                                st.caption("ℹ️ Sin datos de composición. Regenera el flujo.")
+                                cats_disponibles = list(drill_down_data.keys()) if drill_down_data else []
+                                if cats_disponibles:
+                                    st.caption(f"ℹ️ Categorías disponibles: {', '.join(cats_disponibles)}")
+                                else:
+                                    st.caption("ℹ️ Sin datos de composición para esta actividad.")
                         
                         # Subtotal
                         subtotal_color = "#2ecc71" if subtotal >= 0 else "#e74c3c"
