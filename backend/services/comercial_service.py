@@ -328,19 +328,29 @@ class ComercialService:
                         'ref_code': ref_code  # Código SII (1, 2, 3)
                     })
 
-                # Procesar Pedidos
+                # Procesar Pedidos (Solo lo PENDIENTE de facturar)
                 for line in results_sale:
+                    qty_ordered = line.get('product_uom_qty', 0)
+                    qty_invoiced = line.get('qty_invoiced', 0)
+                    qty_pending = max(0, qty_ordered - qty_invoiced)
+                    
+                    if qty_pending <= 0:
+                        continue # Ya se facturó todo, no es comprometido
+                        
                     s_id = line['order_id'][0]
                     s_data = sale_map.get(s_id, {})
-                    qty_ordered = line['product_uom_qty']
                     
-                    # Usar el monto total del pedido (sin restar lo facturado)
-                    raw_monto_full = line['price_subtotal']
+                    # Calcular monto proporcional a lo pendiente
+                    raw_monto_full = line.get('price_subtotal', 0)
+                    if qty_ordered > 0:
+                        monto_pending = (raw_monto_full / qty_ordered) * qty_pending
+                    else:
+                        monto_pending = 0
                     
                     if s_data.get('currency_name') == "USD":
-                        monto = raw_monto_full / usd_rate if usd_rate != 0 else raw_monto_full
+                        monto = monto_pending / usd_rate if usd_rate != 0 else monto_pending
                     else:
-                        monto = raw_monto_full
+                        monto = monto_pending
                     
                     fecha_order = s_data.get('fecha', str(datetime.datetime.now()))[:10]
                     anio = int(fecha_order[:4])
@@ -349,7 +359,6 @@ class ComercialService:
                     prod_id = line['product_id'][0]
                     especie, manejo, variedad, temporada, programa = self._classify_product(prod_id, line['product_id'][1], product_map, variety_map, anio)
 
-                    # Excluir servicios (no son productos físicos)
                     if especie == "SERVICIOS":
                         continue
 
@@ -360,10 +369,10 @@ class ComercialService:
                         'variedad': variedad, 'temporada': temporada, 'incoterm': s_data.get('incoterm', "N/A"),
                         'pais': partner_map.get(line['order_partner_id'][0], {}).get('pais', "Descon.") if line['order_partner_id'] else "Descon.",
                         'categoria_cliente': partner_map.get(line['order_partner_id'][0], {}).get('categoria', "S/C") if line['order_partner_id'] else "S/C",
-                        'kilos': qty_ordered, 'monto': monto, 'date': fecha_order,
+                        'kilos': qty_pending, 'monto': monto, 'date': fecha_order,
                         'documento': line['order_id'][1] if line.get('order_id') else 'S/N',
-                        'doc_origen': '',  # Pedidos no tienen documento origen
-                        'ref_code': ''  # Pedidos no tienen código SII
+                        'doc_origen': '',
+                        'ref_code': ''
                     })
 
         except Exception as e:
