@@ -336,13 +336,17 @@ with st.form("filtros_form"):
     with f4: s_cliente = st.multiselect("Cliente", options=filter_options.get('cliente', []), placeholder="ELEGIR")
     with f5: s_especie = st.multiselect("Tipo Fruta", options=filter_options.get('especie', []), placeholder="ELEGIR")
     
-    col_met, col_btn = st.columns([2, 1])
+    col_met, col_cur, col_btn = st.columns([1.5, 1, 1])
     with col_met: 
         metric_type = st.radio("Ver Datos por:", ["Kilos", "Ventas ($)"], horizontal=True)
-        metric_key = 'kilos' if metric_type == "Kilos" else 'monto'
-        metric_label = "Kilos" if metric_type == "Kilos" else "CLP"
-        val_format = ",.0f" if metric_type == "Kilos" else ",.0f"
-        prefix = "" if metric_type == "Kilos" else "$"
+    with col_cur:
+        currency = st.radio("Moneda:", ["CLP", "USD"], horizontal=True, disabled=(metric_type == "Kilos"))
+        
+    metric_key = 'kilos' if metric_type == "Kilos" else 'monto'
+    metric_label = "Kilos" if metric_type == "Kilos" else currency
+    val_format = ",.0f" if metric_type == "Kilos" else (",.2f" if currency == "USD" else ",.0f")
+    prefix = "" if metric_type == "Kilos" else "$"
+    
     with col_btn: 
         st.write(" ") # Spacer
         submitted = st.form_submit_button("APLICAR FILTROS", use_container_width=True)
@@ -360,12 +364,13 @@ if submitted:
     st.session_state.applied_filters = new_f
 
 # --- Caching PDF generation ---
-def get_pdf_bytes(df, kpis, filters):
-    return generate_commercial_pdf(df, kpis, filters)
+def get_pdf_bytes(df, kpis, filters, currency, metric_type):
+    return generate_commercial_pdf(df, kpis, filters, currency, metric_type)
 
 # --- Data Fetching ---
 data = comercial_service.get_relacion_comercial_data(filters=st.session_state.applied_filters)
 df_raw = pd.DataFrame(data.get('raw_data', []))
+usd_rate = data.get('usd_rate', 1.0)
 kpis_data = data.get('kpis', {
     "total_ventas": 0,
     "total_kilos": 0,
@@ -373,6 +378,13 @@ kpis_data = data.get('kpis', {
     "kpi_label": "Total Ventas",
     "has_filters": False
 })
+
+# --- Currency Transformation ---
+if metric_type == "Ventas ($)" and currency == "USD" and not df_raw.empty:
+    df_raw['monto'] = df_raw['monto'] * usd_rate
+    kpis_data['total_ventas'] *= usd_rate
+    kpis_data['total_comprometido'] *= usd_rate
+
 
 # --- Dashboard Header ---
 head_col1, head_col2 = st.columns([3, 1])
@@ -384,7 +396,7 @@ with head_col1:
         if not df_raw.empty:
             try:
                 # Generar PDF (usando la función con caché)
-                pdf_bytes = get_pdf_bytes(df_raw, kpis_data, st.session_state.applied_filters)
+                pdf_bytes = get_pdf_bytes(df_raw, kpis_data, st.session_state.applied_filters, currency, metric_type)
                 
                 st.download_button(
                     label="📄 DESCARGAR INFORME PDF",
@@ -398,7 +410,7 @@ with head_col1:
 
 # --- KPI Section (Matching Image) ---
 def fmt_kpi(val):
-    return f"${val:,.0f}"
+    return f"{prefix}{val:{val_format}}"
 
 def fmt_kilos(val):
     return f"{val:,.0f}"
@@ -407,7 +419,7 @@ st.markdown(f"""
 <div class="kpi-container">
     <div class="kpi-card">
         <div class="kpi-value">{fmt_kpi(kpis_data['total_ventas'])}</div>
-        <div class="kpi-label">{kpis_data.get('kpi_label', 'Total Ventas')} (CLP)</div>
+        <div class="kpi-label">{kpis_data.get('kpi_label', 'Total Ventas')} ({metric_label})</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-value">{fmt_kilos(kpis_data['total_kilos'])}</div>
@@ -415,7 +427,7 @@ st.markdown(f"""
     </div>
     <div class="kpi-card">
         <div class="kpi-value">{fmt_kpi(kpis_data['total_comprometido'])}</div>
-        <div class="kpi-label">Total Comprometido (CLP)</div>
+        <div class="kpi-label">Total Comprometido ({metric_label})</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -458,7 +470,7 @@ with chart_col1:
                            color_discrete_map=BAR_COLORS_PROGRAMA,
                            text=metric_key)
             fig_m.update_traces(
-                texttemplate='<b>%{text:,.0f}</b>', 
+                texttemplate=f'<b>%{{text:{val_format}}}</b>', 
                 textposition='outside', 
                 textfont=dict(size=11, color="#333", family="Inter"),
                 marker=dict(
@@ -529,7 +541,7 @@ with chart_col2:
                            color_discrete_map=BAR_COLORS_MANEJO,
                            text=metric_key)
             fig_p.update_traces(
-                texttemplate='<b>%{text:,.0f}</b>', 
+                texttemplate=f'<b>%{{text:{val_format}}}</b>', 
                 textposition='outside', 
                 textfont=dict(size=11, color="#333", family="Inter"),
                 marker=dict(
@@ -669,7 +681,7 @@ with pie_col1:
                 height=350, 
                 paper_bgcolor='rgba(0,0,0,0)',
                 annotations=[dict(
-                    text=f'<b>{prefix}{total_conv:,.0f}</b><br><span style="font-size:10px">Total</span>',
+                    text=f'<b>{prefix}{total_conv:{val_format}}</b><br><span style="font-size:10px">Total</span>',
                     x=0.5, y=0.5, font_size=14, showarrow=False,
                     font=dict(color='#1b4f72')
                 )]
@@ -681,7 +693,7 @@ with pie_col1:
                 textfont=dict(color="#333", size=11),
                 marker=dict(line=dict(color='#ffffff', width=2)),
                 pull=[0.05 if i == 0 else 0 for i in range(len(df_pie1))],  # Resaltar el mayor
-                hovertemplate='<b>%{label}</b><br>Valor: ' + prefix + '%{value:,.0f}<br>Porcentaje: %{percent:.1%}<extra></extra>'
+                hovertemplate='<b>%{label}</b><br>Valor: ' + prefix + f'%{{value:{val_format}}}<br>Porcentaje: %{{percent:.1%}}<extra></extra>'
             )
             st.plotly_chart(fig_pie1, use_container_width=True, config={'displayModeBar': False}, key="pie_convencional")
             
@@ -694,7 +706,7 @@ with pie_col1:
                 <div style="display:flex; justify-content:space-between; padding:5px 10px; 
                             border-bottom:1px solid #eee; font-size:0.85rem;">
                     <span style="color:{color}; font-weight:600;">● {row['especie']}</span>
-                    <span style="color:#333;">{prefix}{row[metric_key]:,.0f}</span>
+                    <span style="color:#333;">{prefix}{row[metric_key]:{val_format}}</span>
                 </div>
                 ''', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -721,7 +733,7 @@ with pie_col2:
                 height=350, 
                 paper_bgcolor='rgba(0,0,0,0)',
                 annotations=[dict(
-                    text=f'<b>{prefix}{total_org:,.0f}</b><br><span style="font-size:10px">Total</span>',
+                    text=f'<b>{prefix}{total_org:{val_format}}</b><br><span style="font-size:10px">Total</span>',
                     x=0.5, y=0.5, font_size=14, showarrow=False,
                     font=dict(color='#155724')
                 )]
@@ -733,7 +745,7 @@ with pie_col2:
                 textfont=dict(color="#333", size=11),
                 marker=dict(line=dict(color='#ffffff', width=2)),
                 pull=[0.05 if i == 0 else 0 for i in range(len(df_pie2))],
-                hovertemplate='<b>%{label}</b><br>Valor: ' + prefix + '%{value:,.0f}<br>Porcentaje: %{percent:.1%}<extra></extra>'
+                hovertemplate='<b>%{label}</b><br>Valor: ' + prefix + f'%{{value:{val_format}}}<br>Porcentaje: %{{percent:.1%}}<extra></extra>'
             )
             st.plotly_chart(fig_pie2, use_container_width=True, config={'displayModeBar': False}, key="pie_organico")
             
