@@ -406,6 +406,7 @@ class ComercialService:
 
         return {
             "raw_data": df_filtered.to_dict('records'),
+            "usd_rate": usd_rate,
             "kpis": {
                 "total_ventas": float(total_ventas),
                 "total_kilos": float(total_kilos),

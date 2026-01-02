@@ -14,7 +14,7 @@ class PDF(FPDF):
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, 'Página ' + str(self.page_no()) + '/{nb}', 0, 0, 'C')
 
-def generate_commercial_pdf(df: pd.DataFrame, kpis: dict, filters: dict) -> bytes:
+def generate_commercial_pdf(df: pd.DataFrame, kpis: dict, filters: dict, currency: str = "CLP", metric_type: str = "Ventas ($)") -> bytes:
     """
     Genera un archivo PDF con el informe comercial.
     """
@@ -42,37 +42,40 @@ def generate_commercial_pdf(df: pd.DataFrame, kpis: dict, filters: dict) -> byte
         pdf.cell(0, 10, 'Resumen General:', 0, 1)
         pdf.set_font('Arial', '', 10)
         
-        pdf.cell(50, 8, f"Total Ventas (CLP):", 0, 0)
-        pdf.cell(0, 8, f"${kpis.get('total_ventas', 0):,.0f}", 0, 1)
+        prefix = "$" if metric_type == "Ventas ($)" else ""
+        m_label = currency if metric_type == "Ventas ($)" else "Kilos"
+        val_fmt = ":,.2f" if currency == "USD" and metric_type == "Ventas ($)" else ":,.0f"
         
-        pdf.cell(50, 8, f"Total Kilos:", 0, 0)
+        pdf.cell(60, 8, f"Total Ventas ({m_label}):", 0, 0)
+        pdf.cell(0, 8, f"{prefix}{kpis.get('total_ventas', 0){val_fmt}}", 0, 1)
+        
+        pdf.cell(60, 8, f"Total Kilos:", 0, 0)
         pdf.cell(0, 8, f"{kpis.get('total_kilos', 0):,.0f} kg", 0, 1)
         
-        pdf.cell(50, 8, f"Comprometido (CLP):", 0, 0)
-        pdf.cell(0, 8, f"${kpis.get('total_comprometido', 0):,.0f}", 0, 1)
+        pdf.cell(60, 8, f"Comprometido ({m_label}):", 0, 0)
+        pdf.cell(0, 8, f"{prefix}{kpis.get('total_comprometido', 0){val_fmt}}", 0, 1)
         pdf.ln(10)
 
         # 3. Detalles (Tabla simplificada)
-        # Agrupar por Programa y Especie para no listar todas las facturas
         if not df.empty:
             df_g = df.groupby(['programa', 'especie'])[['kilos', 'monto']].sum().reset_index()
             
             pdf.set_font('Arial', 'B', 11)
-            pdf.cell(0, 10, 'Detalle por Programa y Especie:', 0, 1)
+            pdf.cell(0, 10, f'Detalle por Programa y Especie ({m_label}):', 0, 1)
             
             # Header Tabla
             pdf.set_font('Arial', 'B', 9)
             pdf.cell(40, 8, "Programa", 1, 0, 'C')
             pdf.cell(40, 8, "Especie", 1, 0, 'C')
             pdf.cell(35, 8, "Kilos", 1, 0, 'C')
-            pdf.cell(40, 8, "Monto (CLP)", 1, 1, 'C')
+            pdf.cell(40, 8, f"Monto ({m_label})", 1, 1, 'C')
             
             pdf.set_font('Arial', '', 9)
             for _, row in df_g.iterrows():
                 pdf.cell(40, 8, str(row['programa']), 1, 0)
                 pdf.cell(40, 8, str(row['especie']), 1, 0)
                 pdf.cell(35, 8, f"{row['kilos']:,.0f}", 1, 0, 'R')
-                pdf.cell(40, 8, f"${row['monto']:,.0f}", 1, 1, 'R')
+                pdf.cell(40, 8, f"{prefix}{row['monto']{val_fmt}}", 1, 1, 'R')
 
         else:
             pdf.cell(0, 10, "No hay datos para mostrar con los filtros seleccionados.", 0, 1)
