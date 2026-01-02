@@ -322,9 +322,21 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# --- Filters Section (Always Visible) ---
+# --- View Settings (Outside form for reactivity) ---
 filter_options = comercial_service.get_filter_values()
 
+col_met, col_cur, _ = st.columns([1.5, 1, 2])
+with col_met: 
+    metric_type = st.radio("Ver Datos por:", ["Kilos", "Ventas ($)"], horizontal=True)
+with col_cur:
+    currency = st.radio("Moneda:", ["CLP", "USD"], horizontal=True, disabled=(metric_type == "Kilos"))
+    
+metric_key = 'kilos' if metric_type == "Kilos" else 'monto'
+metric_label = "Kilos" if metric_type == "Kilos" else currency
+val_format = ",.0f" if metric_type == "Kilos" else (",.2f" if currency == "USD" else ",.0f")
+prefix = "" if metric_type == "Kilos" else "$"
+
+# --- Data Filters (Inside form for batch update) ---
 with st.form("filtros_form"):
     f1, f2, f3, f4, f5 = st.columns(5)
     with f1: s_anio = st.multiselect("Año", options=filter_options.get('anio', []), placeholder="ELEGIR")
@@ -336,20 +348,8 @@ with st.form("filtros_form"):
     with f4: s_cliente = st.multiselect("Cliente", options=filter_options.get('cliente', []), placeholder="ELEGIR")
     with f5: s_especie = st.multiselect("Tipo Fruta", options=filter_options.get('especie', []), placeholder="ELEGIR")
     
-    col_met, col_cur, col_btn = st.columns([1.5, 1, 1])
-    with col_met: 
-        metric_type = st.radio("Ver Datos por:", ["Kilos", "Ventas ($)"], horizontal=True)
-    with col_cur:
-        currency = st.radio("Moneda:", ["CLP", "USD"], horizontal=True, disabled=(metric_type == "Kilos"))
-        
-    metric_key = 'kilos' if metric_type == "Kilos" else 'monto'
-    metric_label = "Kilos" if metric_type == "Kilos" else currency
-    val_format = ",.0f" if metric_type == "Kilos" else (",.2f" if currency == "USD" else ",.0f")
-    prefix = "" if metric_type == "Kilos" else "$"
-    
-    with col_btn: 
-        st.write(" ") # Spacer
-        submitted = st.form_submit_button("APLICAR FILTROS", use_container_width=True)
+    st.write(" ") # Spacer
+    submitted = st.form_submit_button("APLICAR FILTROS DE DATOS", use_container_width=True)
 
 if 'applied_filters' not in st.session_state:
     st.session_state.applied_filters = {}
