@@ -1073,6 +1073,9 @@ if datos:
             
             def cargar_flujo_click():
                 """Callback que se ejecuta al hacer click en el botón"""
+                # Forzar limpieza de cache para este periodo
+                if flujo_cache_key in st.session_state:
+                    del st.session_state[flujo_cache_key]
                 st.session_state['flujo_loading'] = True
                 st.session_state['flujo_clicked'] = True
             
@@ -1088,6 +1091,13 @@ if datos:
                 )
             with col_info:
                 st.info(f"📅 Período: {flujo_inicio_str} a {flujo_fin_str}")
+                # Debug info
+                if flujo_cache_key in st.session_state:
+                    data_debug = st.session_state[flujo_cache_key]
+                    if "meta" in data_debug:
+                        st.caption(f"Backend v{data_debug['meta'].get('version')} ({data_debug['meta'].get('mode')})")
+                    else:
+                        st.caption("Backend: vLegacy (Sin metadatos)")
             
             # Cargar datos si se hizo click (flag en session_state)
             if st.session_state.get('flujo_clicked'):
