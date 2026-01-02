@@ -258,12 +258,14 @@ class ComercialService:
                     
                     # Aplicar Reglas de Negocio
                     if doc_key in docs_anulados:
-                        # Documento anulado o NC que anula -> 0 kilos
+                        # Documento anulado o NC que anula -> 0 kilos y 0 monto
                         qty = 0
+                        monto_clp = 0
                     elif is_refund:
-                        # NC que no es código 1 -> 0 kilos
+                        # NC que no es código 1 -> 0 kilos y 0 monto
                         if ref_code != '1':
                             qty = 0
+                            monto_clp = 0
                         else:
                             # NC código 1 que NO está en el set (raro) -> mantener signo
                             qty = -raw_qty if qty > 0 else qty

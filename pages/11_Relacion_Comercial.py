@@ -670,7 +670,7 @@ PIE_COLORS = {
 with pie_col1:
     st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">DISTRIBUCIÓN CONVENCIONAL ({metric_label})</p>', unsafe_allow_html=True)
     
-    df_c = df_raw[(df_raw['manejo'] == 'Convencional') & (df_raw['tipo'].isin(['Factura', 'Nota de Crédito', 'Comprometido']))] if not df_raw.empty else pd.DataFrame()
+    df_c = df_raw[(df_raw['manejo'] == 'Convencional') & (df_raw['tipo'].isin(['Factura', 'Nota de Crédito']))] if not df_raw.empty else pd.DataFrame()
     if not df_c.empty:
         df_pie1 = df_c.groupby('especie')[metric_key].sum().reset_index()
         df_pie1 = df_pie1[df_pie1[metric_key] > 0].sort_values(metric_key, ascending=False)
@@ -723,7 +723,7 @@ with pie_col1:
 with pie_col2:
     st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">DISTRIBUCIÓN ORGÁNICO ({metric_label})</p>', unsafe_allow_html=True)
     
-    df_o = df_raw[(df_raw['manejo'] == 'Orgánico') & (df_raw['tipo'].isin(['Factura', 'Nota de Crédito', 'Comprometido']))] if not df_raw.empty else pd.DataFrame()
+    df_o = df_raw[(df_raw['manejo'] == 'Orgánico') & (df_raw['tipo'].isin(['Factura', 'Nota de Crédito']))] if not df_raw.empty else pd.DataFrame()
     if not df_o.empty:
         df_pie2 = df_o.groupby('especie')[metric_key].sum().reset_index()
         df_pie2 = df_pie2[df_pie2[metric_key] > 0].sort_values(metric_key, ascending=False)
