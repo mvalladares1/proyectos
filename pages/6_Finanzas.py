@@ -1375,14 +1375,15 @@ if datos:
                         # DRILL-DOWN: Cuentas que componen esta actividad
                         # Agregar cuentas de categorías que corresponden a esta actividad
                         cuentas_actividad = []
+                        prefijo_buscar = act_key[:2]  # OP, IN, FI
                         for cat_code, cat_cuentas in drill_down_data.items():
-                            if cat_code.startswith(act_key[:2]):  # OP, IN, FI
+                            if cat_code.startswith(prefijo_buscar):
                                 for cuenta in cat_cuentas:
                                     cuenta['categoria_display'] = cat_code
                                     cuentas_actividad.append(cuenta)
                         
+                        st.markdown("---")
                         if cuentas_actividad:
-                            st.markdown("---")
                             st.markdown(f"**🔍 Composición contable ({len(cuentas_actividad)} cuentas)**")
                             
                             total_act = abs(subtotal) if subtotal != 0 else 1
@@ -1411,6 +1412,13 @@ if datos:
                             
                             if len(cuentas_actividad) > 15:
                                 st.caption(f"... y {len(cuentas_actividad) - 15} cuentas más")
+                        else:
+                            # Debug: mostrar qué categorías existen
+                            cats_disponibles = list(drill_down_data.keys()) if drill_down_data else []
+                            if cats_disponibles:
+                                st.caption(f"ℹ️ Categorías disponibles: {', '.join(cats_disponibles)}")
+                            else:
+                                st.caption("ℹ️ Sin datos de composición. Regenera el flujo.")
                         
                         # Subtotal
                         subtotal_color = "#2ecc71" if subtotal >= 0 else "#e74c3c"
