@@ -1121,20 +1121,71 @@ if datos:
                 actividades = flujo_data.get("actividades", {})
                 conciliacion = flujo_data.get("conciliacion", {})
                 validacion = flujo_data.get("validacion", {})
+                cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
+                otros = conciliacion.get("otros_no_clasificados", 0)
                 
-                # === ALERTAS DE VALIDACIÓN ===
+                # Función para sugerir categoría basada en nombre de cuenta
+                def sugerir_categoria(nombre: str, monto: float) -> tuple:
+                    """Sugiere categoría basada en heurísticas de nombre. Retorna (codigo, razon)."""
+                    nombre_upper = nombre.upper() if nombre else ""
+                    
+                    # NEUTRAL: Cuentas transitorias/internas
+                    if any(kw in nombre_upper for kw in ["TRANSITORIA", "INTERCUENTA", "PUENTE", "TRANSFERENCIA"]):
+                        return ("NEUTRAL", "Cuenta transitoria/interna")
+                    
+                    # FX_EFFECT: Diferencia tipo cambio
+                    if any(kw in nombre_upper for kw in ["TIPO DE CAMBIO", "DIFERENCIA CAMBIO", "AJUSTE CAMBIARIO"]):
+                        return ("FX_EFFECT", "Diferencia tipo de cambio")
+                    
+                    # OP01: Cobros por ventas
+                    if any(kw in nombre_upper for kw in ["FACTURAS POR COBRAR", "CLIENTES", "CUENTAS POR COBRAR", "VENTAS"]):
+                        return ("OP01", "Cobros por ventas")
+                    
+                    # OP02: Pagos a proveedores
+                    if any(kw in nombre_upper for kw in ["PROVEEDORES", "CUENTAS POR PAGAR", "ACREEDORES", "ADUANA", "COSTOS"]):
+                        return ("OP02", "Pagos a proveedores")
+                    
+                    # OP03: Pagos a empleados
+                    if any(kw in nombre_upper for kw in ["REMUNERACION", "SUELDO", "SALARIO", "HONORARIO", "EMPLEADO"]):
+                        return ("OP03", "Pagos a empleados")
+                    
+                    # OP04/OP05: Intereses
+                    if "INTERES" in nombre_upper:
+                        if monto >= 0:
+                            return ("OP05", "Intereses recibidos")
+                        else:
+                            return ("OP04", "Intereses pagados")
+                    
+                    # OP06: Impuestos
+                    if any(kw in nombre_upper for kw in ["IMPUESTO", "IVA", "PPM", "RENTA"]):
+                        return ("OP06", "Impuestos")
+                    
+                    # IN03: PPE
+                    if any(kw in nombre_upper for kw in ["PROPIEDAD", "PLANTA", "EQUIPO", "MAQUINARIA", "VEHICULO"]):
+                        return ("IN03", "Compra PPE")
+                    
+                    # FI01/FI04: Préstamos
+                    if any(kw in nombre_upper for kw in ["PRESTAMO", "CREDITO", "DEUDA"]):
+                        if monto >= 0:
+                            return ("FI01", "Préstamos recibidos")
+                        else:
+                            return ("FI04", "Pagos préstamos")
+                    
+                    return (None, None)
+                
+                # === BANNER DE VALIDACIÓN PRINCIPAL ===
+                # Punto 1: Solo verde si otros==0 Y no hay cuentas sin clasificar
+                if otros == 0 and not cuentas_nc:
+                    st.success("✅ **Flujo validado correctamente.** Todas las cuentas están clasificadas.")
+                elif cuentas_nc or otros != 0:
+                    st.warning(f"⚠️ **Flujo calculado correctamente**, pero requiere clasificación de cuentas. ({len(cuentas_nc)} cuentas pendientes, ${abs(otros):,.0f} sin clasificar)")
+                
+                # Alertas adicionales de validación
                 if validacion:
-                    errores = validacion.get("errores", [])
-                    alertas = validacion.get("alertas", [])
-                    
-                    for err in errores:
-                        st.error(f"🚫 **Error:** {err.get('mensaje', '')}")
-                    
-                    for alerta in alertas:
-                        st.warning(f"⚠️ {alerta.get('mensaje', '')}")
-                    
-                    if validacion.get("valido") and not alertas:
-                        st.success("✅ Flujo validado correctamente")
+                    for err in validacion.get("errores", []):
+                        st.error(f"🚫 {err.get('mensaje', '')}")
+                    for info in validacion.get("info", []):
+                        st.info(f"ℹ️ {info.get('mensaje', '')}")
                 
                 # Función para formatear montos
                 def fmt_flujo(valor):
@@ -1439,33 +1490,65 @@ if datos:
                         # Calcular total para porcentaje
                         total_flujo = abs(op) + abs(inv) + abs(fin) + abs(otros)
                         
+                        # Invertir categorias_options para buscar por código
+                        codigo_to_option = {v: k for k, v in categorias_options.items() if v}
+                        
                         # Tabla de cuentas con selector
                         for i, cuenta in enumerate(cuentas_nc[:25]):
                             codigo = cuenta.get('codigo', '')
-                            nombre = cuenta.get('nombre', '')[:35]
+                            nombre_completo = cuenta.get('nombre', '')
+                            nombre = nombre_completo[:35]
                             monto = cuenta.get('monto', 0)
                             porcentaje = (abs(monto) / total_flujo * 100) if total_flujo > 0 else 0
                             
-                            # Punto 4: Normalizar signos (positivo=entrada verde, negativo=salida roja)
+                            # Obtener sugerencia automática
+                            sugerencia_codigo, sugerencia_razon = sugerir_categoria(nombre_completo, monto)
+                            
+                            # Signos normalizados
                             monto_color = "#2ecc71" if monto >= 0 else "#e74c3c"
                             monto_display = f"+${monto:,.0f}" if monto >= 0 else f"-${abs(monto):,.0f}"
+                            
+                            # % con tooltip si > 100
+                            if porcentaje > 100:
+                                pct_display = f"{porcentaje:.1f}% ℹ️"
+                                pct_help = "El % puede superar 100% cuando hay flujos compensatorios"
+                            else:
+                                pct_display = f"{porcentaje:.1f}%"
+                                pct_help = None
                             
                             col1, col2, col3, col4, col5 = st.columns([1, 2, 1.2, 0.8, 2.5])
                             
                             with col1:
                                 st.code(codigo, language=None)
                             with col2:
-                                st.caption(nombre)
+                                # Mostrar sugerencia si existe
+                                if sugerencia_codigo:
+                                    st.caption(f"{nombre}")
+                                    st.markdown(f"<small style='color:#3498db;'>💡 Sugerido: <b>{sugerencia_codigo}</b></small>", unsafe_allow_html=True)
+                                else:
+                                    st.caption(nombre)
                             with col3:
                                 st.markdown(f"<span style='color:{monto_color};font-weight:bold;'>{monto_display}</span>", unsafe_allow_html=True)
                             with col4:
-                                st.caption(f"{porcentaje:.1f}%")
+                                if pct_help:
+                                    st.caption(pct_display, help=pct_help)
+                                else:
+                                    st.caption(pct_display)
                             with col5:
                                 col_sel, col_btn = st.columns([3, 1])
                                 with col_sel:
+                                    # Pre-seleccionar sugerencia si existe
+                                    default_idx = 0
+                                    if sugerencia_codigo and sugerencia_codigo in codigo_to_option:
+                                        option_label = codigo_to_option[sugerencia_codigo]
+                                        options_list = list(categorias_options.keys())
+                                        if option_label in options_list:
+                                            default_idx = options_list.index(option_label)
+                                    
                                     categoria_sel = st.selectbox(
                                         "Cat",
                                         options=list(categorias_options.keys()),
+                                        index=default_idx,
                                         key=f"cat_{codigo}",
                                         label_visibility="collapsed"
                                     )
@@ -1478,7 +1561,7 @@ if datos:
                                                     params={
                                                         "codigo": codigo,
                                                         "categoria": categorias_options[categoria_sel],
-                                                        "nombre": nombre,
+                                                        "nombre": nombre_completo,
                                                         "username": username,
                                                         "password": password,
                                                         "impacto_estimado": monto
@@ -1498,7 +1581,7 @@ if datos:
                             st.info(f"Mostrando 25 de {len(cuentas_nc)} cuentas. Las de mayor impacto primero.")
                         
                         st.markdown("---")
-                        st.caption("💡 **Tip:** Después de clasificar, haz click en 'Generar Flujo de Caja' para ver los cambios reflejados.")
+                        st.caption("💡 **Tip:** Las sugerencias de categoría son orientativas. Confirma cada una antes de guardar.")
                     
                     else:
                         # Punto 2: Solo mostrar success si REALMENTE todo está OK
