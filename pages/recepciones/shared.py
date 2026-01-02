@@ -183,7 +183,13 @@ import json as _json
 def get_exclusiones():
     """Carga lista de IDs de recepciones excluidas de valorización."""
     try:
-        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared", "exclusiones.json")
+        # Path: pages/recepciones/shared.py -> project_root/shared/exclusiones.json
+        # __file__ = pages/recepciones/shared.py
+        # dirname = pages/recepciones
+        # dirname(dirname) = pages
+        # dirname(dirname(dirname)) = project_root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        path = os.path.join(project_root, "shared", "exclusiones.json")
         if os.path.exists(path):
             with open(path, 'r') as f:
                 return _json.load(f).get("recepciones", [])

@@ -994,146 +994,144 @@ if datos:
             # URL del API
             FLUJO_CAJA_URL = f"{API_BASE_URL}/api/v1/flujo-caja"
             
-            # Botón para cargar flujo de caja
-            col_btn, col_info = st.columns([1, 3])
-            with col_btn:
-                cargar_flujo = st.button("🔄 Generar Flujo de Caja", type="primary", use_container_width=True)
-            with col_info:
-                st.info(f"📅 Período: {fecha_inicio} a {fecha_fin}")
+            # Usar form para evitar rerun que cambia de tab
+            with st.form(key="flujo_caja_form"):
+                col_btn, col_info = st.columns([1, 3])
+                with col_btn:
+                    cargar_flujo = st.form_submit_button("🔄 Generar Flujo de Caja", type="primary", use_container_width=True)
+                with col_info:
+                    st.info(f"📅 Período: {fecha_inicio} a {fecha_fin}")
             
             # Cargar datos si se presiona el botón o si ya hay datos en cache
             flujo_cache_key = f"flujo_{fecha_inicio}_{fecha_fin}"
             
-            if cargar_flujo or flujo_cache_key in st.session_state:
-                if cargar_flujo:
-                    with st.spinner("Generando Estado de Flujo de Efectivo..."):
-                        try:
-                            resp = requests.get(
-                                f"{FLUJO_CAJA_URL}/",
-                                params={
-                                    "fecha_inicio": fecha_inicio,
-                                    "fecha_fin": fecha_fin,
-                                    "username": username,
-                                    "password": password
-                                },
-                                timeout=120
-                            )
-                            if resp.status_code == 200:
-                                st.session_state[flujo_cache_key] = resp.json()
-                            else:
-                                st.error(f"Error {resp.status_code}: {resp.text}")
-                        except Exception as e:
-                            st.error(f"Error al conectar con API: {e}")
-                
-                flujo_data = st.session_state.get(flujo_cache_key)
-                
-                if flujo_data and "error" not in flujo_data:
-                    actividades = flujo_data.get("actividades", {})
-                    conciliacion = flujo_data.get("conciliacion", {})
-                    
-                    # Función para formatear montos
-                    def fmt_flujo(valor):
-                        if valor >= 0:
-                            return f"${valor:,.0f}"
+            if cargar_flujo:
+                # Marcar que estamos en el tab de flujo
+                st.session_state['active_tab_flujo'] = True
+                with st.spinner("Generando Estado de Flujo de Efectivo..."):
+                    try:
+                        resp = requests.get(
+                            f"{FLUJO_CAJA_URL}/",
+                            params={
+                                "fecha_inicio": fecha_inicio,
+                                "fecha_fin": fecha_fin,
+                                "username": username,
+                                "password": password
+                            },
+                            timeout=120
+                        )
+                        if resp.status_code == 200:
+                            st.session_state[flujo_cache_key] = resp.json()
                         else:
-                            return f"-${abs(valor):,.0f}"
-                    
-                    # === KPIs RESUMEN ===
-                    kpi_cols = st.columns(5)
-                    with kpi_cols[0]:
-                        op = actividades.get("OPERACION", {}).get("subtotal", 0)
-                        st.metric("Flujo Operación", fmt_flujo(op))
-                    with kpi_cols[1]:
-                        inv = actividades.get("INVERSION", {}).get("subtotal", 0)
-                        st.metric("Flujo Inversión", fmt_flujo(inv))
-                    with kpi_cols[2]:
-                        fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
-                        st.metric("Flujo Financiamiento", fmt_flujo(fin))
-                    with kpi_cols[3]:
-                        st.metric("Efectivo Inicial", fmt_flujo(conciliacion.get("efectivo_inicial", 0)))
-                    with kpi_cols[4]:
-                        st.metric("Efectivo Final", fmt_flujo(conciliacion.get("efectivo_final", 0)))
-                    
-                    st.divider()
-                    
-                    # === DETALLE POR ACTIVIDAD ===
-                    for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
-                        act_data = actividades.get(act_key, {})
-                        act_nombre = act_data.get("nombre", act_key)
-                        lineas = act_data.get("lineas", [])
-                        subtotal = act_data.get("subtotal", 0)
-                        subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
-                        
-                        with st.expander(f"📊 {act_nombre}", expanded=True):
-                            # Crear DataFrame para las líneas
-                            filas = []
-                            for linea in lineas:
-                                monto = linea.get("monto", 0)
-                                if monto != 0:  # Solo mostrar líneas con movimiento
-                                    filas.append({
-                                        "Concepto": linea.get("nombre", ""),
-                                        "Monto": monto
-                                    })
-                            
-                            if filas:
-                                df_act = pd.DataFrame(filas)
-                                st.dataframe(
-                                    df_act.style.format({"Monto": "${:,.0f}"}),
-                                    use_container_width=True,
-                                    hide_index=True
-                                )
-                            else:
-                                st.info("Sin movimientos en este período")
-                            
-                            # Subtotal
-                            st.markdown(f"**{subtotal_nombre}:** {fmt_flujo(subtotal)}")
-                    
-                    st.divider()
-                    
-                    # === CONCILIACIÓN ===
-                    st.subheader("📋 Conciliación")
-                    
-                    concil_data = [
-                        {"Concepto": "Incremento neto (disminución) en efectivo", "Monto": conciliacion.get("incremento_neto", 0)},
-                        {"Concepto": "Efectos de variación en tasa de cambio", "Monto": conciliacion.get("efecto_tipo_cambio", 0)},
-                        {"Concepto": "Variación neta de efectivo", "Monto": conciliacion.get("variacion_efectivo", 0)},
-                        {"Concepto": "Efectivo al principio del período", "Monto": conciliacion.get("efectivo_inicial", 0)},
-                        {"Concepto": "Efectivo al final del período", "Monto": conciliacion.get("efectivo_final", 0)},
-                    ]
-                    
-                    # Agregar otros no clasificados si hay
-                    otros = conciliacion.get("otros_no_clasificados", 0)
-                    if otros != 0:
-                        concil_data.insert(2, {"Concepto": "⚠️ Otros no clasificados", "Monto": otros})
-                    
-                    df_concil = pd.DataFrame(concil_data)
-                    
-                    # Resaltar últimas filas
-                    def highlight_total(row):
-                        if "al final" in row["Concepto"].lower():
-                            return ["background-color: #2d3748; font-weight: bold"] * len(row)
-                        return [""] * len(row)
-                    
-                    st.dataframe(
-                        df_concil.style
-                        .format({"Monto": "${:,.0f}"})
-                        .apply(highlight_total, axis=1),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                    
-                    # === INFO ADICIONAL ===
-                    with st.expander("ℹ️ Información del Estado de Flujo"):
-                        st.write(f"**Total movimientos analizados:** {flujo_data.get('total_movimientos', 0):,}")
-                        st.write(f"**Período:** {flujo_data.get('periodo', {}).get('inicio', '')} a {flujo_data.get('periodo', {}).get('fin', '')}")
-                        st.write(f"**Generado:** {flujo_data.get('generado', '')[:19]}")
-                        
-                        if otros != 0:
-                            st.warning(f"⚠️ Hay ${abs(otros):,.0f} en movimientos no clasificados. Revisar mapeo de cuentas.")
+                            st.error(f"Error {resp.status_code}: {resp.text}")
+                    except Exception as e:
+                        st.error(f"Error al conectar con API: {e}")
+            
+            # Mostrar datos si existen en cache
+            flujo_data = st.session_state.get(flujo_cache_key)
+            
+            if flujo_data and "error" not in flujo_data:
+                actividades = flujo_data.get("actividades", {})
+                conciliacion = flujo_data.get("conciliacion", {})
                 
-                elif flujo_data and "error" in flujo_data:
-                    st.error(f"Error: {flujo_data['error']}")
-            else:
+                # Función para formatear montos
+                def fmt_flujo(valor):
+                    if valor >= 0:
+                        return f"${valor:,.0f}"
+                    else:
+                        return f"-${abs(valor):,.0f}"
+                
+                # === KPIs RESUMEN ===
+                kpi_cols = st.columns(5)
+                with kpi_cols[0]:
+                    op = actividades.get("OPERACION", {}).get("subtotal", 0)
+                    st.metric("Flujo Operación", fmt_flujo(op))
+                with kpi_cols[1]:
+                    inv = actividades.get("INVERSION", {}).get("subtotal", 0)
+                    st.metric("Flujo Inversión", fmt_flujo(inv))
+                with kpi_cols[2]:
+                    fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
+                    st.metric("Flujo Financiamiento", fmt_flujo(fin))
+                with kpi_cols[3]:
+                    st.metric("Efectivo Inicial", fmt_flujo(conciliacion.get("efectivo_inicial", 0)))
+                with kpi_cols[4]:
+                    st.metric("Efectivo Final", fmt_flujo(conciliacion.get("efectivo_final", 0)))
+                
+                st.divider()
+                
+                # === DETALLE POR ACTIVIDAD ===
+                for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+                    act_data = actividades.get(act_key, {})
+                    act_nombre = act_data.get("nombre", act_key)
+                    lineas = act_data.get("lineas", [])
+                    subtotal = act_data.get("subtotal", 0)
+                    subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
+                    
+                    with st.expander(f"📊 {act_nombre}", expanded=True):
+                        filas = []
+                        for linea in lineas:
+                            monto = linea.get("monto", 0)
+                            if monto != 0:
+                                filas.append({
+                                    "Concepto": linea.get("nombre", ""),
+                                    "Monto": monto
+                                })
+                        
+                        if filas:
+                            df_act = pd.DataFrame(filas)
+                            st.dataframe(
+                                df_act.style.format({"Monto": "${:,.0f}"}),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            st.info("Sin movimientos en este período")
+                        
+                        st.markdown(f"**{subtotal_nombre}:** {fmt_flujo(subtotal)}")
+                
+                st.divider()
+                
+                # === CONCILIACIÓN ===
+                st.subheader("📋 Conciliación")
+                
+                otros = conciliacion.get("otros_no_clasificados", 0)
+                concil_data = [
+                    {"Concepto": "Incremento neto (disminución) en efectivo", "Monto": conciliacion.get("incremento_neto", 0)},
+                    {"Concepto": "Efectos de variación en tasa de cambio", "Monto": conciliacion.get("efecto_tipo_cambio", 0)},
+                    {"Concepto": "Variación neta de efectivo", "Monto": conciliacion.get("variacion_efectivo", 0)},
+                    {"Concepto": "Efectivo al principio del período", "Monto": conciliacion.get("efectivo_inicial", 0)},
+                    {"Concepto": "Efectivo al final del período", "Monto": conciliacion.get("efectivo_final", 0)},
+                ]
+                
+                if otros != 0:
+                    concil_data.insert(2, {"Concepto": "⚠️ Otros no clasificados", "Monto": otros})
+                
+                df_concil = pd.DataFrame(concil_data)
+                
+                def highlight_total(row):
+                    if "al final" in row["Concepto"].lower():
+                        return ["background-color: #2d3748; font-weight: bold"] * len(row)
+                    return [""] * len(row)
+                
+                st.dataframe(
+                    df_concil.style
+                    .format({"Monto": "${:,.0f}"})
+                    .apply(highlight_total, axis=1),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Info adicional
+                with st.expander("ℹ️ Información del Estado de Flujo"):
+                    st.write(f"**Total movimientos analizados:** {flujo_data.get('total_movimientos', 0):,}")
+                    st.write(f"**Período:** {flujo_data.get('periodo', {}).get('inicio', '')} a {flujo_data.get('periodo', {}).get('fin', '')}")
+                    if otros != 0:
+                        st.warning(f"⚠️ Hay ${abs(otros):,.0f} en movimientos no clasificados. Revisar mapeo de cuentas.")
+            
+            elif flujo_data and "error" in flujo_data:
+                st.error(f"Error: {flujo_data['error']}")
+            
+            elif not flujo_data:
                 st.info("Haz clic en **Generar Flujo de Caja** para calcular el estado de flujo de efectivo.")
                 
                 with st.expander("ℹ️ ¿Cómo funciona?"):
@@ -1152,15 +1150,7 @@ if datos:
                     
                     El flujo se construye analizando los movimientos reales en cuentas de efectivo
                     y clasificando según la contrapartida del asiento contable.
-                    
-                    ### Configuración
-                    
-                    El mapeo de cuentas contables a categorías de flujo se puede ajustar
-                    mediante archivo de configuración.
                     """)
-
-        # === INFO ADICIONAL (solo para tabs de Estado de Resultado, no Flujo de Caja) ===
-        # Movido dentro de cada tab correspondiente
 
 else:
     st.warning("No se pudieron obtener datos del Estado de Resultado.")
