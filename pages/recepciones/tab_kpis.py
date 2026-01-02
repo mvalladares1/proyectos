@@ -14,28 +14,35 @@ from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL
 
 def render(username: str, password: str):
     """Renderiza el contenido del tab KPIs y Calidad."""
-    # Filtros
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
-    with col2:
-        fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
+    
+    # Usar form para evitar re-renders al cambiar filtros
+    with st.form(key="form_filtros_recepciones"):
+        # Filtros
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
+        with col2:
+            fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
 
-    # Checkbox para filtrar solo recepciones en estado "hecho"
-    solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
-                              help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
+        # Checkbox para filtrar solo recepciones en estado "hecho"
+        solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
+                                  help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
 
-    # Checkboxes para filtrar por origen (RFP / VILKÚN)
-    st.markdown("**Origen de recepciones:**")
-    col_orig1, col_orig2 = st.columns(2)
-    with col_orig1:
-        check_rfp = st.checkbox("🏭 RFP (Rio Futuro Procesos)", value=True, key="check_rfp",
-                                help="Recepciones de la planta Rio Futuro Procesos")
-    with col_orig2:
-        check_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="check_vilkun",
-                                   help="Recepciones de la planta Vilkún")
+        # Checkboxes para filtrar por origen (RFP / VILKÚN)
+        st.markdown("**Origen de recepciones:**")
+        col_orig1, col_orig2 = st.columns(2)
+        with col_orig1:
+            check_rfp = st.checkbox("🏭 RFP (Rio Futuro Procesos)", value=True, key="check_rfp",
+                                    help="Recepciones de la planta Rio Futuro Procesos")
+        with col_orig2:
+            check_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="check_vilkun",
+                                       help="Recepciones de la planta Vilkún")
 
-    if st.button("Consultar Recepciones", key="btn_consultar_recepcion"):
+        # Botón de consulta (form_submit_button no permite clicks múltiples durante carga)
+        consultar = st.form_submit_button("🔍 Consultar Recepciones", type="primary", use_container_width=True)
+
+    # Procesar solo al hacer submit
+    if consultar:
         # Construir lista de orígenes según checkboxes
         origen_list = []
         if check_rfp:
@@ -59,29 +66,28 @@ def render(username: str, password: str):
             }
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
 
-            # Debug removido - ya no mostrar mensaje de consultando origen
-
-            try:
-                resp = requests.get(api_url, params=params, timeout=60)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    df = pd.DataFrame(data)
-                    if not df.empty:
-                        st.session_state.df_recepcion = df
-                        st.session_state.idx_recepcion = None
-                        st.success(f"✅ Se encontraron {len(df)} recepciones para origen: {origen_list}")
+            with st.spinner("Cargando recepciones..."):
+                try:
+                    resp = requests.get(api_url, params=params, timeout=60)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        df = pd.DataFrame(data)
+                        if not df.empty:
+                            st.session_state.df_recepcion = df
+                            st.session_state.idx_recepcion = None
+                            st.success(f"✅ Se encontraron {len(df)} recepciones para origen: {origen_list}")
+                        else:
+                            st.session_state.df_recepcion = None
+                            st.session_state.idx_recepcion = None
+                            st.warning(f"No se encontraron recepciones para origen: {origen_list} en el rango de fechas seleccionado.")
                     else:
+                        st.error(f"Error: {resp.status_code} - {resp.text}")
                         st.session_state.df_recepcion = None
                         st.session_state.idx_recepcion = None
-                        st.warning(f"No se encontraron recepciones para origen: {origen_list} en el rango de fechas seleccionado.")
-                else:
-                    st.error(f"Error: {resp.status_code} - {resp.text}")
-                    st.session_state.df_recepcion = None
-                    st.session_state.idx_recepcion = None
-            except requests.exceptions.ConnectionError:
-                st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+                except requests.exceptions.ConnectionError:
+                    st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
 
     # Mostrar tabla y detalle si hay datos
