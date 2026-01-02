@@ -1221,24 +1221,27 @@ if datos:
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    # 🟡 PENDIENTE
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(90deg, #f39c1233, transparent); 
-                                padding: 15px 20px; border-radius: 10px; border-left: 4px solid #f39c12;">
-                        <span style="font-size: 1.3em;">🟡</span>
-                        <span style="color: #f39c12; font-weight: bold; font-size: 1.1em; margin-left: 10px;">
-                            Flujo calculado, pendiente de clasificación
-                        </span>
-                        <span style="color: #a0aec0; margin-left: 15px;">
-                            {len(cuentas_nc)} cuentas · ${abs(otros):,.0f} ({pct_sin_clasificar:.1f}% del flujo)
-                        </span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Botón accionable
-                    if st.button("🔍 Revisar cuentas pendientes", type="primary", key="btn_revisar_estado"):
-                        st.session_state['mostrar_editor_expandido'] = True
-                        st.session_state['scroll_to_editor'] = True
+                    # 🟡 PENDIENTE - Banner con botón integrado
+                    col_estado, col_btn = st.columns([4, 1])
+                    with col_estado:
+                        st.markdown(f"""
+                        <div style="background: linear-gradient(90deg, #f39c1233, transparent); 
+                                    padding: 15px 20px; border-radius: 10px; border-left: 4px solid #f39c12;">
+                            <span style="font-size: 1.3em;">🟡</span>
+                            <span style="color: #f39c12; font-weight: bold; font-size: 1.1em; margin-left: 10px;">
+                                Flujo calculado, pendiente de clasificación
+                            </span>
+                            <span style="color: #a0aec0; margin-left: 15px;">
+                                {len(cuentas_nc)} cuentas · ${abs(otros):,.0f} ({pct_sin_clasificar:.1f}% del flujo)
+                            </span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_btn:
+                        st.markdown("<div style='padding-top: 8px;'>", unsafe_allow_html=True)
+                        if st.button("🔍 Revisar", type="primary", key="btn_revisar_estado"):
+                            st.session_state['mostrar_editor_expandido'] = True
+                            st.session_state['scroll_to_editor'] = True
+                        st.markdown("</div>", unsafe_allow_html=True)
                 
                 # Alertas adicionales de validación (info de signos, etc.)
                 if validacion:
@@ -1638,7 +1641,86 @@ if datos:
                         # Invertir categorias_options para buscar por código
                         codigo_to_option = {v: k for k, v in categorias_options.items() if v}
                         
-                        # Tabla de cuentas con selector
+                        # === MODO EDICIÓN DE CUENTA ESPECÍFICA ===
+                        cuenta_editar_codigo = st.session_state.get('cuenta_a_editar')
+                        
+                        if cuenta_editar_codigo:
+                            st.info(f"✏️ Editando clasificación para cuenta **{cuenta_editar_codigo}**")
+                            
+                            # Buscar datos de la cuenta
+                            datos_cuenta = None
+                            
+                            # 1. Buscar en sin clasificar
+                            for c in cuentas_nc:
+                                if c.get('codigo') == cuenta_editar_codigo:
+                                    datos_cuenta = c
+                                    break
+                            
+                            # 2. Buscar en drill-down (ya clasificadas)
+                            if not datos_cuenta:
+                                drill_down_d = flujo_data.get("drill_down", {})
+                                for cat, cuentas in drill_down_d.items():
+                                    for c in cuentas:
+                                        if c.get('codigo') == cuenta_editar_codigo:
+                                            datos_cuenta = c
+                                            datos_cuenta['categoria_actual'] = cat
+                                            break
+                                    if datos_cuenta: break
+                            
+                            if datos_cuenta:
+                                with st.container():
+                                    st.markdown(f"""<div style="background: #2c3e50; padding: 15px; border-radius: 8px; border: 1px solid #3498db; margin-bottom: 20px;">""", unsafe_allow_html=True)
+                                    col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 1, 2])
+                                    
+                                    with col_e1:
+                                        st.code(cuenta_editar_codigo, language=None)
+                                    with col_e2:
+                                        st.markdown(f"**{datos_cuenta.get('nombre', '')}**")
+                                        if 'categoria_actual' in datos_cuenta:
+                                            st.caption(f"Actual: {datos_cuenta['categoria_actual']}")
+                                    with col_e3:
+                                        monto_e = datos_cuenta.get('monto', 0)
+                                        color_e = "#2ecc71" if monto_e >= 0 else "#e74c3c"
+                                        st.markdown(f"<span style='color:{color_e};font-weight:bold;'>${monto_e:,.0f}</span>", unsafe_allow_html=True)
+                                    
+                                    with col_e4:
+                                        # Determinar índice default
+                                        cat_actual = datos_cuenta.get('categoria', '') or datos_cuenta.get('categoria_actual', '')
+                                        idx_def = 0
+                                        if cat_actual and cat_actual in codigo_to_option:
+                                            lbl = codigo_to_option[cat_actual]
+                                            if lbl in categorias_options:
+                                                idx_def = list(categorias_options.keys()).index(lbl)
+                                        
+                                        nueva_cat = st.selectbox(
+                                            "Asignar Categoría",
+                                            options=list(categorias_options.keys()),
+                                            index=idx_def,
+                                            key=f"edit_sel_{cuenta_editar_codigo}",
+                                            label_visibility="collapsed"
+                                        )
+                                        
+                                        col_btn_save, col_btn_cancel = st.columns(2)
+                                        with col_btn_save:
+                                            if st.button("💾 Guardar", key="save_edit_single", type="primary"):
+                                                if nueva_cat and categorias_options[nueva_cat]:
+                                                    cat_code = categorias_options[nueva_cat]
+                                                    if guardar_mapeo(cuenta_editar_codigo, cat_code, "Manual (Reasignación)"):
+                                                        st.success(f"Guardado {cat_code}")
+                                                        del st.session_state['cuenta_a_editar']
+                                                        st.rerun()
+                                        with col_btn_cancel:
+                                            if st.button("❌ Cancelar", key="cancel_edit_single"):
+                                                del st.session_state['cuenta_a_editar']
+                                                st.rerun()
+                                    st.markdown("</div>", unsafe_allow_html=True)
+                            else:
+                                st.warning(f"No se encontraron datos para la cuenta {cuenta_editar_codigo}")
+                                if st.button("Volver"):
+                                    del st.session_state['cuenta_a_editar']
+                                    st.rerun()
+                        
+                        # Tabla de cuentas con selector (Lista regular)
                         for i, cuenta in enumerate(cuentas_nc[:25]):
                             codigo = cuenta.get('codigo', '')
                             nombre_completo = cuenta.get('nombre', '')
