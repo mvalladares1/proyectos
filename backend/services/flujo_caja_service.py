@@ -627,25 +627,55 @@ class FlujoCajaService:
                 })
         
         # 6. Estructurar resultado
+        # 6. Estructurar resultado
         for cat_key, cat_data in ESTRUCTURA_FLUJO.items():
             lineas_resultado = []
+            conceptos_resultado = []
             subtotal = 0.0
             
             for linea in cat_data["lineas"]:
-                monto = flujos_por_linea.get(linea["codigo"], 0)
+                codigo = linea["codigo"]
+                monto = flujos_por_linea.get(codigo, 0)
                 subtotal += monto
+                
+                # Info básica de línea
                 lineas_resultado.append({
-                    "codigo": linea["codigo"],
+                    "codigo": codigo,
                     "nombre": linea["nombre"],
                     "monto": round(monto, 0)
                 })
+                
+                # OPERACION: Construir jerarquía completa (Concepto -> Cuentas)
+                if cat_key == "OPERACION":
+                    cuentas_concepto = []
+                    # Obtener cuentas de esta categoría desde el tracking
+                    if codigo in cuentas_por_categoria:
+                        cuentas_concepto = sorted(
+                            [{"codigo": k, **v} for k, v in cuentas_por_categoria[codigo].items()],
+                            key=lambda x: abs(x.get('monto', 0)),
+                            reverse=True
+                        )
+                    
+                    conceptos_resultado.append({
+                        "codigo": codigo,
+                        "nombre": linea["nombre"],
+                        "monto": round(monto, 0),
+                        "signo": linea.get("signo", 1),
+                        "cuentas": cuentas_concepto
+                    })
             
-            resultado["actividades"][cat_key] = {
+            act_result = {
                 "nombre": cat_data["nombre"],
                 "lineas": lineas_resultado,
                 "subtotal": round(subtotal, 0),
                 "subtotal_nombre": cat_data["subtotal"]
             }
+            
+            # Adjuntar jerarquía para Operación
+            if cat_key == "OPERACION":
+                act_result["conceptos"] = conceptos_resultado
+                
+            resultado["actividades"][cat_key] = act_result
         
         # 7. Conciliación
         flujo_operacion = resultado["actividades"]["OPERACION"]["subtotal"]
