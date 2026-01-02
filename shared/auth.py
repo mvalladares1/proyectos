@@ -17,7 +17,9 @@ TOKEN_KEY = "session_token"
 def _get_token_from_cookies() -> Optional[str]:
     """Obtiene el token de las cookies del navegador."""
     try:
-        from shared.cookies import get_token_from_cookies
+        from shared.cookies import get_token_from_cookies, inject_localstorage_recovery
+        # Inyectar script de recuperación de LocalStorage
+        inject_localstorage_recovery()
         return get_token_from_cookies()
     except:
         return None

@@ -1,6 +1,6 @@
 """
-Módulo de manejo de cookies para Streamlit.
-Usa extra-streamlit-components para cookies reales del navegador.
+Módulo de manejo de cookies y persistencia de sesión para Streamlit.
+Sistema multi-capa: Query Params → LocalStorage → Cookies
 """
 import streamlit as st
 from typing import Optional
@@ -14,7 +14,10 @@ except ImportError:
     stx = None
 
 COOKIE_NAME = "rf_session"
+LOCALSTORAGE_KEY = "rf_session_token"
 
+
+# ============ COOKIE MANAGER ============
 
 def get_cookie_manager():
     """Obtiene o crea el CookieManager singleton."""
@@ -25,40 +28,95 @@ def get_cookie_manager():
     return stx.CookieManager(key="rf_cookies")
 
 
-def get_token_from_cookies() -> Optional[str]:
-    """Obtiene el token de la cookie del navegador."""
-    # Primero intentar query params (es síncrono y confiable)
+# ============ QUERY PARAMS ============
+
+def get_token_from_query_params() -> Optional[str]:
+    """Obtiene el token de los query params."""
     try:
-        token = st.query_params.get("session")
-        if token:
-            return token
+        return st.query_params.get("session")
+    except:
+        return None
+
+
+def save_token_to_query_params(token: str):
+    """Guarda el token en query params."""
+    try:
+        st.query_params["session"] = token
     except:
         pass
-    
-    # Luego intentar cookies
+
+
+def clear_token_from_query_params():
+    """Limpia el token de query params."""
+    try:
+        if "session" in st.query_params:
+            del st.query_params["session"]
+    except:
+        pass
+
+
+# ============ LOCALSTORAGE (JavaScript) ============
+
+def inject_localstorage_recovery():
+    """
+    Inyecta script para recuperar token de LocalStorage.
+    Si el token existe en LocalStorage pero no en URL, lo añade y recarga.
+    """
+    st.markdown(f"""
+    <script>
+        (function() {{
+            const token = localStorage.getItem('{LOCALSTORAGE_KEY}');
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasSessionParam = urlParams.has('session');
+            
+            // Si hay token en LocalStorage pero no en URL, añadirlo
+            if (token && !hasSessionParam) {{
+                urlParams.set('session', token);
+                const newUrl = window.location.pathname + '?' + urlParams.toString();
+                window.history.replaceState({{}}, '', newUrl);
+                window.location.reload();
+            }}
+        }})();
+    </script>
+    """, unsafe_allow_html=True)
+
+
+def save_token_to_localstorage(token: str):
+    """Guarda token en LocalStorage vía JavaScript."""
+    st.markdown(f"""
+    <script>
+        localStorage.setItem('{LOCALSTORAGE_KEY}', '{token}');
+    </script>
+    """, unsafe_allow_html=True)
+
+
+def clear_token_from_localstorage():
+    """Limpia token de LocalStorage."""
+    st.markdown(f"""
+    <script>
+        localStorage.removeItem('{LOCALSTORAGE_KEY}');
+    </script>
+    """, unsafe_allow_html=True)
+
+
+# ============ COOKIES ============
+
+def get_token_from_browser_cookies() -> Optional[str]:
+    """Obtiene el token de las cookies del navegador."""
     if COOKIES_AVAILABLE:
         try:
             manager = get_cookie_manager()
             if manager:
-                # get_all() es más confiable que get()
                 all_cookies = manager.get_all()
                 if all_cookies and COOKIE_NAME in all_cookies:
                     return all_cookies[COOKIE_NAME]
         except:
             pass
-    
     return None
 
 
-def save_token_to_cookies(token: str):
-    """Guarda el token en una cookie del navegador Y en query params."""
-    # Guardar en query params (es más confiable para persistencia)
-    try:
-        st.query_params["session"] = token
-    except:
-        pass
-    
-    # También guardar en cookies si está disponible
+def save_token_to_browser_cookies(token: str):
+    """Guarda el token en cookies del navegador."""
     if COOKIES_AVAILABLE:
         try:
             manager = get_cookie_manager()
@@ -68,16 +126,8 @@ def save_token_to_cookies(token: str):
             pass
 
 
-def clear_token_from_cookies():
-    """Elimina el token de las cookies y query params."""
-    # Limpiar query params
-    try:
-        if "session" in st.query_params:
-            del st.query_params["session"]
-    except:
-        pass
-    
-    # Limpiar cookies
+def clear_token_from_browser_cookies():
+    """Limpia el token de cookies del navegador."""
     if COOKIES_AVAILABLE:
         try:
             manager = get_cookie_manager()
@@ -87,7 +137,71 @@ def clear_token_from_cookies():
             pass
 
 
-# Funciones de compatibilidad con el código existente
+# ============ FUNCIONES MULTI-MÉTODO ============
+
+def get_token_from_cookies() -> Optional[str]:
+    """
+    Obtiene el token intentando múltiples fuentes en orden de prioridad:
+    1. Query Params (más confiable en Streamlit)
+    2. Cookies del navegador (fallback)
+    
+    Nota: LocalStorage se maneja via JavaScript que añade a query params.
+    """
+    # 1. Query Params
+    token = get_token_from_query_params()
+    if token:
+        return token
+    
+    # 2. Cookies
+    token = get_token_from_browser_cookies()
+    if token:
+        # Si lo recuperamos de cookies, guardarlo en query params también
+        save_token_to_query_params(token)
+        return token
+    
+    return None
+
+
+def save_session_multi_method(token: str):
+    """
+    Guarda sesión en todos los métodos disponibles para máxima persistencia.
+    """
+    # 1. Query Params (prioritario - Streamlit lo lee síncronamente)
+    save_token_to_query_params(token)
+    
+    # 2. LocalStorage (persiste entre pestañas y recargas)
+    save_token_to_localstorage(token)
+    
+    # 3. Cookies
+    save_token_to_browser_cookies(token)
+
+
+def clear_session_multi_method():
+    """
+    Limpia sesión de todos los métodos de almacenamiento.
+    """
+    # Query params
+    clear_token_from_query_params()
+    
+    # LocalStorage
+    clear_token_from_localstorage()
+    
+    # Cookies
+    clear_token_from_browser_cookies()
+
+
+# ============ ALIAS DE COMPATIBILIDAD ============
+
+def save_token_to_cookies(token: str):
+    """Alias para guardar token (compatibilidad)."""
+    save_session_multi_method(token)
+
+
+def clear_token_from_cookies():
+    """Alias para limpiar (compatibilidad)."""
+    clear_session_multi_method()
+
+
 def get_token_from_url() -> Optional[str]:
     """Alias para compatibilidad."""
     return get_token_from_cookies()
@@ -95,24 +209,24 @@ def get_token_from_url() -> Optional[str]:
 
 def save_token_to_url(token: str):
     """Alias para compatibilidad."""
-    save_token_to_cookies(token)
+    save_session_multi_method(token)
 
 
 def clear_token_from_url():
     """Alias para compatibilidad."""
-    clear_token_from_cookies()
+    clear_session_multi_method()
 
 
 def inject_session_recovery_script(cookie_name: str = "session_token"):
-    """No-op - las cookies se leen automáticamente."""
-    pass
+    """Inyecta script de recuperación de LocalStorage."""
+    inject_localstorage_recovery()
 
 
 def save_session_to_storage(token: str, cookie_name: str = "session_token"):
-    """Guarda el token en cookie y query params."""
-    save_token_to_cookies(token)
+    """Guarda el token en todos los métodos."""
+    save_session_multi_method(token)
 
 
 def clear_session_from_storage(cookie_name: str = "session_token"):
-    """Limpia el token de cookies y query params."""
-    clear_token_from_cookies()
+    """Limpia el token de todos los métodos."""
+    clear_session_multi_method()
