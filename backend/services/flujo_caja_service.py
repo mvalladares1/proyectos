@@ -386,3 +386,184 @@ class FlujoCajaService:
             return cuentas
         except:
             return []
+    
+    def get_diagnostico_no_clasificados(self, fecha_inicio: str, fecha_fin: str,
+                                         company_id: int = None) -> Dict:
+        """
+        Obtiene diagnóstico detallado de cuentas que generan movimientos no clasificados.
+        
+        Retorna lista de cuentas con sus códigos, nombres y montos para facilitar
+        la actualización del mapeo.
+        """
+        resultado = {
+            "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+            "total_no_clasificado": 0,
+            "cuentas_no_clasificadas": [],
+            "sugerencias_mapeo": {}
+        }
+        
+        # Obtener cuentas de efectivo
+        cuentas_efectivo_ids = self._get_cuentas_efectivo()
+        if not cuentas_efectivo_ids:
+            resultado["error"] = "No se encontraron cuentas de efectivo"
+            return resultado
+        
+        # Obtener movimientos del período
+        domain = [
+            ['account_id', 'in', cuentas_efectivo_ids],
+            ['parent_state', '=', 'posted'],
+            ['date', '>=', fecha_inicio],
+            ['date', '<=', fecha_fin]
+        ]
+        if company_id:
+            domain.append(['company_id', '=', company_id])
+        
+        try:
+            movimientos = self.odoo.search_read(
+                'account.move.line',
+                domain,
+                ['id', 'move_id', 'balance'],
+                limit=50000
+            )
+        except Exception as e:
+            resultado["error"] = f"Error obteniendo movimientos: {e}"
+            return resultado
+        
+        # Obtener asientos
+        asientos_ids = list(set(
+            m['move_id'][0] if isinstance(m.get('move_id'), (list, tuple)) else m.get('move_id')
+            for m in movimientos if m.get('move_id')
+        ))
+        
+        # Obtener todas las líneas de contrapartida
+        contrapartidas_por_asiento = {}
+        if asientos_ids:
+            try:
+                todas_lineas = self.odoo.search_read(
+                    'account.move.line',
+                    [['move_id', 'in', asientos_ids]],
+                    ['id', 'move_id', 'account_id', 'balance'],
+                    limit=100000
+                )
+                for linea in todas_lineas:
+                    move_id = linea['move_id'][0] if isinstance(linea.get('move_id'), (list, tuple)) else linea.get('move_id')
+                    if move_id not in contrapartidas_por_asiento:
+                        contrapartidas_por_asiento[move_id] = []
+                    contrapartidas_por_asiento[move_id].append(linea)
+            except:
+                pass
+        
+        # Obtener info de cuentas
+        cuenta_ids_all = list(set(
+            l['account_id'][0] if isinstance(l.get('account_id'), (list, tuple)) else l.get('account_id')
+            for lineas in contrapartidas_por_asiento.values() for l in lineas if l.get('account_id')
+        ))
+        
+        cuentas_info = {}
+        if cuenta_ids_all:
+            try:
+                cuentas = self.odoo.read('account.account', cuenta_ids_all, ['id', 'code', 'name'])
+                cuentas_info = {c['id']: c for c in cuentas}
+            except:
+                pass
+        
+        # Analizar movimientos no clasificados
+        no_clasificados = {}  # {codigo: {nombre, monto_total, cantidad}}
+        
+        for mov in movimientos:
+            move_id = mov['move_id'][0] if isinstance(mov.get('move_id'), (list, tuple)) else mov.get('move_id')
+            monto = mov.get('balance', 0)
+            
+            lineas_asiento = contrapartidas_por_asiento.get(move_id, [])
+            
+            for linea in lineas_asiento:
+                linea_account_id = linea['account_id'][0] if isinstance(linea.get('account_id'), (list, tuple)) else linea.get('account_id')
+                
+                # Solo contrapartidas (no cuentas de efectivo)
+                if linea_account_id in cuentas_efectivo_ids:
+                    continue
+                
+                cuenta = cuentas_info.get(linea_account_id, {})
+                codigo = cuenta.get('code', 'SIN_CODIGO')
+                nombre = cuenta.get('name', 'Sin nombre')
+                
+                # Verificar si está clasificada
+                clasificacion = self._clasificar_cuenta(codigo)
+                
+                if not clasificacion:
+                    # Es no clasificada
+                    if codigo not in no_clasificados:
+                        no_clasificados[codigo] = {
+                            'codigo': codigo,
+                            'nombre': nombre,
+                            'monto_total': 0,
+                            'cantidad_movimientos': 0
+                        }
+                    no_clasificados[codigo]['monto_total'] += monto
+                    no_clasificados[codigo]['cantidad_movimientos'] += 1
+        
+        # Ordenar por monto (valor absoluto)
+        lista_ordenada = sorted(
+            no_clasificados.values(),
+            key=lambda x: abs(x['monto_total']),
+            reverse=True
+        )
+        
+        resultado["cuentas_no_clasificadas"] = lista_ordenada
+        resultado["total_no_clasificado"] = sum(c['monto_total'] for c in lista_ordenada)
+        resultado["cantidad_cuentas"] = len(lista_ordenada)
+        
+        # Generar sugerencias de mapeo basadas en prefijos
+        sugerencias = {}
+        for cuenta in lista_ordenada[:20]:  # Top 20
+            codigo = cuenta['codigo']
+            prefijo = codigo[:3] if len(codigo) >= 3 else codigo
+            
+            # Sugerir categoría basada en prefijo típico chileno
+            if prefijo.startswith('1'):
+                if prefijo in ['110', '111']:
+                    categoria = "Efectivo (ya debería estar)"
+                elif prefijo.startswith('12'):
+                    categoria = "IN03 - PPE o activo fijo"
+                elif prefijo.startswith('13') or prefijo.startswith('14'):
+                    categoria = "IN01/IN02 - Inversiones"
+                else:
+                    categoria = "Verificar - Activo"
+            elif prefijo.startswith('2'):
+                if prefijo in ['210', '211', '212']:
+                    categoria = "OP02 - Proveedores"
+                elif prefijo in ['215', '216', '217']:
+                    categoria = "OP03 - Remuneraciones o OP06 - Impuestos"
+                elif prefijo.startswith('22') or prefijo.startswith('23'):
+                    categoria = "FI01/FI02 - Préstamos"
+                else:
+                    categoria = "Verificar - Pasivo"
+            elif prefijo.startswith('3'):
+                categoria = "FI07 - Patrimonio/Dividendos"
+            elif prefijo.startswith('4'):
+                categoria = "OP01 - Ingresos" if prefijo in ['410', '411', '412'] else "OP05 - Otros ingresos"
+            elif prefijo.startswith('5'):
+                categoria = "OP02 - Costos/Gastos operacionales"
+            elif prefijo.startswith('6'):
+                if prefijo in ['620', '621', '622', '623']:
+                    categoria = "OP03 - Remuneraciones"
+                elif prefijo in ['650', '651']:
+                    categoria = "OP04 - Intereses pagados"
+                elif prefijo in ['640', '641']:
+                    categoria = "OP06 - Impuestos"
+                else:
+                    categoria = "OP07 - Otros gastos operacionales"
+            else:
+                categoria = "Verificar - Categoría desconocida"
+            
+            sugerencias[codigo] = {
+                'nombre': cuenta['nombre'],
+                'monto': cuenta['monto_total'],
+                'sugerencia': categoria,
+                'prefijo': prefijo
+            }
+        
+        resultado["sugerencias_mapeo"] = sugerencias
+        
+        return resultado
+

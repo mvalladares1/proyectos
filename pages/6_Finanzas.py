@@ -994,15 +994,89 @@ if datos:
             # URL del API
             FLUJO_CAJA_URL = f"{API_BASE_URL}/api/v1/flujo-caja"
             
-            # Usar callback para evitar que el rerun cambie de tab
-            flujo_cache_key = f"flujo_{fecha_inicio}_{fecha_fin}"
+            # === SELECTORES DE PERÍODO ===
+            st.markdown("#### 📅 Seleccionar Período")
+            
+            from datetime import datetime, timedelta
+            from calendar import monthrange
+            
+            # Opciones de período predefinidas
+            periodo_opciones = [
+                "Mes actual",
+                "Mes anterior", 
+                "Último trimestre",
+                "Año actual",
+                "Personalizado"
+            ]
+            
+            col_periodo, col_desde, col_hasta = st.columns([1, 1, 1])
+            
+            with col_periodo:
+                periodo_sel = st.selectbox(
+                    "Período",
+                    periodo_opciones,
+                    key="flujo_periodo_sel"
+                )
+            
+            # Calcular fechas según selección
+            hoy = datetime.now()
+            
+            if periodo_sel == "Mes actual":
+                flujo_fecha_ini = hoy.replace(day=1)
+                ultimo_dia = monthrange(hoy.year, hoy.month)[1]
+                flujo_fecha_fin = hoy.replace(day=ultimo_dia)
+            elif periodo_sel == "Mes anterior":
+                primer_dia_actual = hoy.replace(day=1)
+                ultimo_dia_anterior = primer_dia_actual - timedelta(days=1)
+                flujo_fecha_ini = ultimo_dia_anterior.replace(day=1)
+                flujo_fecha_fin = ultimo_dia_anterior
+            elif periodo_sel == "Último trimestre":
+                flujo_fecha_fin = hoy
+                flujo_fecha_ini = hoy - timedelta(days=90)
+            elif periodo_sel == "Año actual":
+                flujo_fecha_ini = datetime(hoy.year, 1, 1)
+                flujo_fecha_fin = hoy
+            else:  # Personalizado
+                flujo_fecha_ini = hoy.replace(day=1)
+                flujo_fecha_fin = hoy
+            
+            with col_desde:
+                flujo_f_inicio = st.date_input(
+                    "Desde",
+                    value=flujo_fecha_ini,
+                    format="DD/MM/YYYY",
+                    key="flujo_fecha_inicio",
+                    disabled=periodo_sel != "Personalizado"
+                )
+            
+            with col_hasta:
+                flujo_f_fin = st.date_input(
+                    "Hasta",
+                    value=flujo_fecha_fin,
+                    format="DD/MM/YYYY",
+                    key="flujo_fecha_fin",
+                    disabled=periodo_sel != "Personalizado"
+                )
+            
+            # Usar fechas seleccionadas o calculadas
+            if periodo_sel == "Personalizado":
+                flujo_inicio_str = flujo_f_inicio.strftime("%Y-%m-%d")
+                flujo_fin_str = flujo_f_fin.strftime("%Y-%m-%d")
+            else:
+                flujo_inicio_str = flujo_fecha_ini.strftime("%Y-%m-%d")
+                flujo_fin_str = flujo_fecha_fin.strftime("%Y-%m-%d")
+            
+            # Cache key con fechas del flujo
+            flujo_cache_key = f"flujo_{flujo_inicio_str}_{flujo_fin_str}"
+            
+            st.markdown("---")
             
             def cargar_flujo_click():
                 """Callback que se ejecuta al hacer click en el botón"""
                 st.session_state['flujo_loading'] = True
                 st.session_state['flujo_clicked'] = True
             
-            col_btn, col_info = st.columns([1, 3])
+            col_btn, col_info = st.columns([1, 2])
             with col_btn:
                 # Botón con callback
                 st.button(
@@ -1013,7 +1087,7 @@ if datos:
                     on_click=cargar_flujo_click
                 )
             with col_info:
-                st.info(f"📅 Período: {fecha_inicio} a {fecha_fin}")
+                st.info(f"📅 Período: {flujo_inicio_str} a {flujo_fin_str}")
             
             # Cargar datos si se hizo click (flag en session_state)
             if st.session_state.get('flujo_clicked'):
@@ -1023,8 +1097,8 @@ if datos:
                         resp = requests.get(
                             f"{FLUJO_CAJA_URL}/",
                             params={
-                                "fecha_inicio": fecha_inicio,
-                                "fecha_fin": fecha_fin,
+                                "fecha_inicio": flujo_inicio_str,
+                                "fecha_fin": flujo_fin_str,
                                 "username": username,
                                 "password": password
                             },
@@ -1042,6 +1116,8 @@ if datos:
             flujo_data = st.session_state.get(flujo_cache_key)
             
             if flujo_data and "error" not in flujo_data:
+                import altair as alt
+                
                 actividades = flujo_data.get("actividades", {})
                 conciliacion = flujo_data.get("conciliacion", {})
                 
@@ -1052,33 +1128,146 @@ if datos:
                     else:
                         return f"-${abs(valor):,.0f}"
                 
-                # === KPIs RESUMEN ===
-                kpi_cols = st.columns(5)
-                with kpi_cols[0]:
-                    op = actividades.get("OPERACION", {}).get("subtotal", 0)
-                    st.metric("Flujo Operación", fmt_flujo(op))
-                with kpi_cols[1]:
-                    inv = actividades.get("INVERSION", {}).get("subtotal", 0)
-                    st.metric("Flujo Inversión", fmt_flujo(inv))
-                with kpi_cols[2]:
-                    fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
-                    st.metric("Flujo Financiamiento", fmt_flujo(fin))
-                with kpi_cols[3]:
-                    st.metric("Efectivo Inicial", fmt_flujo(conciliacion.get("efectivo_inicial", 0)))
-                with kpi_cols[4]:
-                    st.metric("Efectivo Final", fmt_flujo(conciliacion.get("efectivo_final", 0)))
+                # === KPIs CON ESTILOS PREMIUM ===
+                st.markdown("""
+                <style>
+                    .kpi-card {
+                        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                        border-radius: 12px;
+                        padding: 20px;
+                        margin: 5px;
+                        border-left: 4px solid;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                    }
+                    .kpi-operacion { border-color: #2ecc71; }
+                    .kpi-inversion { border-color: #3498db; }
+                    .kpi-financ { border-color: #9b59b6; }
+                    .kpi-inicial { border-color: #f39c12; }
+                    .kpi-final { border-color: #1abc9c; }
+                    .kpi-label { color: #a0aec0; font-size: 0.85em; margin-bottom: 5px; }
+                    .kpi-value { color: #ffffff; font-size: 1.6em; font-weight: bold; }
+                    .kpi-positive { color: #2ecc71; }
+                    .kpi-negative { color: #e74c3c; }
+                    .kpi-neutral { color: #f39c12; }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                op = actividades.get("OPERACION", {}).get("subtotal", 0)
+                inv = actividades.get("INVERSION", {}).get("subtotal", 0)
+                fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
+                ef_ini = conciliacion.get("efectivo_inicial", 0)
+                ef_fin = conciliacion.get("efectivo_final", 0)
+                otros = conciliacion.get("otros_no_clasificados", 0)
+                
+                # KPIs en grid
+                col1, col2, col3, col4, col5 = st.columns(5)
+                
+                with col1:
+                    color_op = "kpi-positive" if op >= 0 else "kpi-negative"
+                    st.markdown(f"""
+                    <div class="kpi-card kpi-operacion">
+                        <div class="kpi-label">📈 Flujo Operación</div>
+                        <div class="kpi-value {color_op}">{fmt_flujo(op)}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    color_inv = "kpi-positive" if inv >= 0 else "kpi-negative"
+                    st.markdown(f"""
+                    <div class="kpi-card kpi-inversion">
+                        <div class="kpi-label">🏭 Flujo Inversión</div>
+                        <div class="kpi-value {color_inv}">{fmt_flujo(inv)}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col3:
+                    color_fin = "kpi-positive" if fin >= 0 else "kpi-negative"
+                    st.markdown(f"""
+                    <div class="kpi-card kpi-financ">
+                        <div class="kpi-label">💳 Flujo Financiamiento</div>
+                        <div class="kpi-value {color_fin}">{fmt_flujo(fin)}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col4:
+                    st.markdown(f"""
+                    <div class="kpi-card kpi-inicial">
+                        <div class="kpi-label">🏦 Efectivo Inicial</div>
+                        <div class="kpi-value kpi-neutral">{fmt_flujo(ef_ini)}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col5:
+                    color_final = "kpi-positive" if ef_fin >= ef_ini else "kpi-negative"
+                    st.markdown(f"""
+                    <div class="kpi-card kpi-final">
+                        <div class="kpi-label">💰 Efectivo Final</div>
+                        <div class="kpi-value {color_final}">{fmt_flujo(ef_fin)}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # === GRÁFICO WATERFALL ===
+                st.markdown("### 📊 Flujo de Efectivo - Visualización")
+                
+                waterfall_data = [
+                    {"Concepto": "Efectivo Inicial", "Monto": ef_ini, "Tipo": "Inicial"},
+                    {"Concepto": "Operación", "Monto": op, "Tipo": "Operación"},
+                    {"Concepto": "Inversión", "Monto": inv, "Tipo": "Inversión"},
+                    {"Concepto": "Financiamiento", "Monto": fin, "Tipo": "Financiamiento"},
+                ]
+                if otros != 0:
+                    waterfall_data.append({"Concepto": "No Clasificados", "Monto": otros, "Tipo": "Otros"})
+                waterfall_data.append({"Concepto": "Efectivo Final", "Monto": ef_fin, "Tipo": "Final"})
+                
+                df_waterfall = pd.DataFrame(waterfall_data)
+                
+                # Determinar color
+                def get_color(tipo, monto):
+                    if tipo in ["Inicial", "Final"]:
+                        return "#3498db"
+                    if tipo == "Otros":
+                        return "#e74c3c"
+                    return "#2ecc71" if monto >= 0 else "#e74c3c"
+                
+                df_waterfall["Color"] = df_waterfall.apply(
+                    lambda x: get_color(x["Tipo"], x["Monto"]), axis=1
+                )
+                
+                chart_waterfall = alt.Chart(df_waterfall).mark_bar(
+                    cornerRadiusTopLeft=4,
+                    cornerRadiusTopRight=4
+                ).encode(
+                    x=alt.X("Concepto:N", sort=None, title=None),
+                    y=alt.Y("Monto:Q", title="Monto ($)", axis=alt.Axis(format="$,.0f")),
+                    color=alt.Color("Color:N", scale=None),
+                    tooltip=[
+                        alt.Tooltip("Concepto:N", title="Categoría"),
+                        alt.Tooltip("Monto:Q", title="Monto", format="$,.0f")
+                    ]
+                ).properties(
+                    height=300
+                ).configure_axis(
+                    labelFontSize=11,
+                    titleFontSize=12
+                )
+                
+                st.altair_chart(chart_waterfall, use_container_width=True)
                 
                 st.divider()
                 
                 # === DETALLE POR ACTIVIDAD ===
-                for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+                st.markdown("### 📋 Detalle por Actividad")
+                
+                for act_key, act_color in [("OPERACION", "#2ecc71"), ("INVERSION", "#3498db"), ("FINANCIAMIENTO", "#9b59b6")]:
                     act_data = actividades.get(act_key, {})
                     act_nombre = act_data.get("nombre", act_key)
                     lineas = act_data.get("lineas", [])
                     subtotal = act_data.get("subtotal", 0)
                     subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
                     
-                    with st.expander(f"📊 {act_nombre}", expanded=True):
+                    with st.expander(f"📊 {act_nombre}", expanded=act_key=="OPERACION"):
                         filas = []
                         for linea in lineas:
                             monto = linea.get("monto", 0)
@@ -1090,54 +1279,141 @@ if datos:
                         
                         if filas:
                             df_act = pd.DataFrame(filas)
+                            
+                            # Tabla con estilos
+                            def style_monto(val):
+                                color = "#2ecc71" if val >= 0 else "#e74c3c"
+                                return f"color: {color}; font-weight: bold;"
+                            
+                            styled_df = df_act.style.format({"Monto": "${:,.0f}"}).applymap(
+                                style_monto, subset=["Monto"]
+                            )
+                            
                             st.dataframe(
-                                df_act.style.format({"Monto": "${:,.0f}"}),
+                                styled_df,
                                 use_container_width=True,
-                                hide_index=True
+                                hide_index=True,
+                                height=min(300, 50 + len(filas) * 35)
                             )
                         else:
                             st.info("Sin movimientos en este período")
                         
-                        st.markdown(f"**{subtotal_nombre}:** {fmt_flujo(subtotal)}")
+                        # Subtotal con estilo
+                        subtotal_color = "#2ecc71" if subtotal >= 0 else "#e74c3c"
+                        st.markdown(f"""
+                        <div style="background: linear-gradient(90deg, {act_color}22, transparent); 
+                                    padding: 12px 15px; border-radius: 8px; margin-top: 10px;
+                                    border-left: 3px solid {act_color};">
+                            <span style="color: #a0aec0;">{subtotal_nombre}:</span>
+                            <span style="color: {subtotal_color}; font-size: 1.2em; font-weight: bold; margin-left: 10px;">
+                                {fmt_flujo(subtotal)}
+                            </span>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 st.divider()
                 
                 # === CONCILIACIÓN ===
-                st.subheader("📋 Conciliación")
+                st.markdown("### 📑 Conciliación de Efectivo")
                 
-                otros = conciliacion.get("otros_no_clasificados", 0)
                 concil_data = [
                     {"Concepto": "Incremento neto (disminución) en efectivo", "Monto": conciliacion.get("incremento_neto", 0)},
                     {"Concepto": "Efectos de variación en tasa de cambio", "Monto": conciliacion.get("efecto_tipo_cambio", 0)},
-                    {"Concepto": "Variación neta de efectivo", "Monto": conciliacion.get("variacion_efectivo", 0)},
-                    {"Concepto": "Efectivo al principio del período", "Monto": conciliacion.get("efectivo_inicial", 0)},
-                    {"Concepto": "Efectivo al final del período", "Monto": conciliacion.get("efectivo_final", 0)},
                 ]
                 
                 if otros != 0:
-                    concil_data.insert(2, {"Concepto": "⚠️ Otros no clasificados", "Monto": otros})
+                    concil_data.append({"Concepto": "⚠️ Otros no clasificados", "Monto": otros})
+                
+                concil_data.extend([
+                    {"Concepto": "Variación neta de efectivo", "Monto": conciliacion.get("variacion_efectivo", 0)},
+                    {"Concepto": "Efectivo al principio del período", "Monto": conciliacion.get("efectivo_inicial", 0)},
+                    {"Concepto": "💰 Efectivo al final del período", "Monto": conciliacion.get("efectivo_final", 0)},
+                ])
                 
                 df_concil = pd.DataFrame(concil_data)
                 
-                def highlight_total(row):
+                def highlight_rows(row):
                     if "al final" in row["Concepto"].lower():
-                        return ["background-color: #2d3748; font-weight: bold"] * len(row)
-                    return [""] * len(row)
+                        return ["background: linear-gradient(90deg, #1abc9c33, transparent); font-weight: bold;"] * 2
+                    elif "no clasificados" in row["Concepto"].lower():
+                        return ["background: linear-gradient(90deg, #e74c3c22, transparent); color: #e74c3c;"] * 2
+                    return [""] * 2
                 
                 st.dataframe(
                     df_concil.style
                     .format({"Monto": "${:,.0f}"})
-                    .apply(highlight_total, axis=1),
+                    .apply(highlight_rows, axis=1),
                     use_container_width=True,
                     hide_index=True
                 )
                 
+                # === PANEL DE DIAGNÓSTICO ===
+                if otros != 0:
+                    st.markdown("---")
+                    st.markdown("### 🔍 Diagnóstico de Cuentas No Clasificadas")
+                    
+                    st.warning(f"⚠️ Hay **${abs(otros):,.0f}** en movimientos sin clasificar. Usa el diagnóstico para identificar las cuentas.")
+                    
+                    if st.button("🔬 Ejecutar Diagnóstico", key="btn_diagnostico"):
+                        with st.spinner("Analizando cuentas no clasificadas..."):
+                            try:
+                                diag_resp = requests.get(
+                                    f"{FLUJO_CAJA_URL}/diagnostico",
+                                    params={
+                                        "fecha_inicio": flujo_inicio_str,
+                                        "fecha_fin": flujo_fin_str,
+                                        "username": username,
+                                        "password": password
+                                    },
+                                    timeout=60
+                                )
+                                if diag_resp.status_code == 200:
+                                    diag_data = diag_resp.json()
+                                    st.session_state['flujo_diagnostico'] = diag_data
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                    
+                    # Mostrar diagnóstico si existe
+                    diag_data = st.session_state.get('flujo_diagnostico')
+                    if diag_data:
+                        cuentas_nc = diag_data.get("cuentas_no_clasificadas", [])
+                        sugerencias = diag_data.get("sugerencias_mapeo", {})
+                        
+                        st.markdown(f"**Total no clasificado:** {fmt_flujo(diag_data.get('total_no_clasificado', 0))}")
+                        st.markdown(f"**Cuentas afectadas:** {diag_data.get('cantidad_cuentas', 0)}")
+                        
+                        if cuentas_nc:
+                            # Tabla de diagnóstico
+                            diag_rows = []
+                            for cuenta in cuentas_nc[:15]:
+                                codigo = cuenta.get('codigo', '')
+                                sug = sugerencias.get(codigo, {})
+                                diag_rows.append({
+                                    "Código": codigo,
+                                    "Nombre": cuenta.get('nombre', '')[:50],
+                                    "Monto": cuenta.get('monto_total', 0),
+                                    "Movs": cuenta.get('cantidad_movimientos', 0),
+                                    "Sugerencia": sug.get('sugerencia', 'Sin sugerencia')
+                                })
+                            
+                            df_diag = pd.DataFrame(diag_rows)
+                            st.dataframe(
+                                df_diag.style.format({"Monto": "${:,.0f}"}),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                            
+                            st.info("💡 Para reducir 'No clasificados', agrega los prefijos de estas cuentas al mapeo en `backend/data/mapeo_flujo_caja.json`")
+                
                 # Info adicional
-                with st.expander("ℹ️ Información del Estado de Flujo"):
-                    st.write(f"**Total movimientos analizados:** {flujo_data.get('total_movimientos', 0):,}")
-                    st.write(f"**Período:** {flujo_data.get('periodo', {}).get('inicio', '')} a {flujo_data.get('periodo', {}).get('fin', '')}")
-                    if otros != 0:
-                        st.warning(f"⚠️ Hay ${abs(otros):,.0f} en movimientos no clasificados. Revisar mapeo de cuentas.")
+                with st.expander("ℹ️ Información del Reporte"):
+                    col_info1, col_info2 = st.columns(2)
+                    with col_info1:
+                        st.write(f"**Movimientos analizados:** {flujo_data.get('total_movimientos', 0):,}")
+                        st.write(f"**Período:** {flujo_data.get('periodo', {}).get('inicio', '')} a {flujo_data.get('periodo', {}).get('fin', '')}")
+                    with col_info2:
+                        st.write(f"**Generado:** {flujo_data.get('generado', '')[:19]}")
+                        st.write(f"**Norma:** NIIF IAS 7 - Método Directo")
             
             elif flujo_data and "error" in flujo_data:
                 st.error(f"Error: {flujo_data['error']}")
