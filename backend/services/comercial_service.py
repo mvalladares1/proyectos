@@ -302,7 +302,11 @@ class ComercialService:
                         else:
                             especie = "Arándano" # Default fallback
                             
-                        manejo = "Convencional"
+                        if any(x in desc for x in ["ORG", "ORGANIC", "ORGÁNICO"]):
+                            manejo = "Orgánico"
+                        else:
+                            manejo = "Convencional"
+                            
                         variedad = "S/V"
                         temporada = f"{anio}-{anio+1}"
                         programa = "Granel"  # Default para exportación legacy
@@ -461,6 +465,10 @@ class ComercialService:
 
         # 2. Manejo
         manejo = p.get('x_studio_categora_tipo_de_manejo') or "Convencional"
+        if any(x in search_text for x in ["ORG", "ORGANIC", "ORGÁNICO"]):
+            manejo = "Orgánico"
+        elif any(x in search_text for x in ["CONV", "CONVENCIONAL"]):
+            manejo = "Convencional"
         
         # 3. Variedad
         variedad_ids = p.get('x_studio_categora_variedad', [])
