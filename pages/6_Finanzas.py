@@ -1706,7 +1706,7 @@ if datos:
                             "🟣 3.1.3 - Pagos de préstamos a entidades relacionadas": "3.1.3",
                             "🟣 3.1.4 - Pagos de pasivos por arrendamientos financieros": "3.1.4",
                             "🟣 3.1.5 - Dividendos pagados": "3.1.5",
-                            "🟡 3.2.3 - Efectos de la variación en la tasa de cambio": "3.2.3",
+                            "🟣 3.2.3 - Efectos de la variación en la tasa de cambio": "3.2.3",
                             "⚪ NEUTRAL - Transferencias internas (no impacta flujo)": "NEUTRAL"
                         }
                         

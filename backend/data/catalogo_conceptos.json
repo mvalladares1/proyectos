@@ -219,7 +219,7 @@
             "nombre": "Incremento neto (disminución) en el efectivo y equivalentes al efectivo, antes del efecto de los cambios en la tasa de cambio",
             "tipo": "TOTAL",
             "nivel": 2,
-            "actividad": "CONCILIACION",
+            "actividad": "FINANCIAMIENTO",
             "calculo": "1+2.6+3.2"
         },
         {
@@ -228,14 +228,14 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": 1,
-            "actividad": "CONCILIACION"
+            "actividad": "FINANCIAMIENTO"
         },
         {
             "id": "3.2.4",
             "nombre": "Incremento (disminución) neto de efectivo y equivalentes al efectivo",
             "tipo": "TOTAL",
             "nivel": 2,
-            "actividad": "CONCILIACION",
+            "actividad": "FINANCIAMIENTO",
             "calculo": "3.2.2+3.2.3"
         },
         {
@@ -243,14 +243,14 @@
             "nombre": "Efectivo y equivalentes al efectivo al principio del periodo",
             "tipo": "TOTAL",
             "nivel": 2,
-            "actividad": "CONCILIACION"
+            "actividad": "FINANCIAMIENTO"
         },
         {
             "id": "3.2.6",
             "nombre": "Efectivo y equivalentes al efectivo al final del periodo",
             "tipo": "TOTAL",
             "nivel": 2,
-            "actividad": "CONCILIACION",
+            "actividad": "FINANCIAMIENTO",
             "calculo": "3.2.5+3.2.4"
         }
     ],
