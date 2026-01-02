@@ -4,6 +4,20 @@ Centraliza funciones comunes para evitar duplicación de código.
 """
 from typing import Dict, List, Any, Union
 
+# Importar submódulos para acceso vía backend.utils.pdf_generator
+from . import pdf_generator
+
+# Exportar funciones principales para usar con: from backend.utils import clean_record
+__all__ = [
+    'clean_record',
+    'clean_records', 
+    'get_name_from_relation',
+    'get_id_from_relation',
+    'get_state_display',
+    'MRP_STATE_DISPLAY',
+    'pdf_generator',
+]
+
 
 def clean_record(record: Dict) -> Dict:
     """
