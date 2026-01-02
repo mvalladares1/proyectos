@@ -1328,6 +1328,13 @@ if datos:
                 
                 st.divider()
                 
+                # === ADVERTENCIAS DE ACTIVIDADES ===
+                # Punto 3: Advertencia si IN o FI = 0
+                if inv == 0:
+                    st.info("ℹ️ No se detectaron flujos de **inversión** en el período. Verifica la clasificación si esto no refleja la realidad del negocio.")
+                if fin == 0:
+                    st.info("ℹ️ No se detectaron flujos de **financiamiento** en el período. Verifica la clasificación si esto no refleja la realidad del negocio.")
+                
                 # === CONCILIACIÓN ===
                 st.markdown("### 📑 Conciliación de Efectivo")
                 
@@ -1336,8 +1343,9 @@ if datos:
                     {"Concepto": "Efectos de variación en tasa de cambio", "Monto": conciliacion.get("efecto_tipo_cambio", 0)},
                 ]
                 
+                # Punto 1: Otros no clasificados es ACCIONABLE
                 if otros != 0:
-                    concil_data.append({"Concepto": "⚠️ Otros no clasificados", "Monto": otros})
+                    concil_data.append({"Concepto": "⚠️ Otros no clasificados (click para revisar)", "Monto": otros})
                 
                 concil_data.extend([
                     {"Concepto": "Variación neta de efectivo", "Monto": conciliacion.get("variacion_efectivo", 0)},
@@ -1351,7 +1359,7 @@ if datos:
                     if "al final" in row["Concepto"].lower():
                         return ["background: linear-gradient(90deg, #1abc9c33, transparent); font-weight: bold;"] * 2
                     elif "no clasificados" in row["Concepto"].lower():
-                        return ["background: linear-gradient(90deg, #e74c3c22, transparent); color: #e74c3c;"] * 2
+                        return ["background: linear-gradient(90deg, #e74c3c22, transparent); color: #e74c3c; cursor: pointer;"] * 2
                     return [""] * 2
                 
                 st.dataframe(
@@ -1362,93 +1370,142 @@ if datos:
                     hide_index=True
                 )
                 
+                # Punto 5: Botón de acción directa desde conciliación
+                if otros != 0:
+                    cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
+                    col_action1, col_action2 = st.columns([2, 3])
+                    with col_action1:
+                        if st.button("🔍 Revisar cuentas no clasificadas", type="primary", key="btn_revisar_nc"):
+                            st.session_state['mostrar_editor_expandido'] = True
+                    with col_action2:
+                        st.caption(f"${abs(otros):,.0f} en {len(cuentas_nc)} cuentas requieren clasificación")
+                
                 # === EDITOR DE MAPEO ===
                 st.markdown("---")
-                st.markdown("### 📝 Editor de Mapeo de Cuentas")
                 
-                # Obtener cuentas sin clasificar del flujo
-                cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
+                # Determinar si expandir editor automáticamente
+                expandir_editor = st.session_state.get('mostrar_editor_expandido', False) or otros != 0
                 
-                if cuentas_nc:
-                    st.warning(f"⚠️ **{len(cuentas_nc)} cuentas** sin clasificar. Asigna una categoría a cada cuenta para mejorar la precisión del flujo.")
+                with st.expander("📝 Editor de Mapeo de Cuentas", expanded=expandir_editor):
+                    # Obtener cuentas sin clasificar del flujo
+                    cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
                     
-                    # Categorías disponibles
-                    categorias_options = {
-                        "--- Seleccionar ---": "",
-                        "🟢 OP01 - Cobros por ventas": "OP01",
-                        "🟢 OP02 - Pagos a proveedores": "OP02",
-                        "🟢 OP03 - Pagos a empleados": "OP03",
-                        "🟢 OP04 - Intereses pagados": "OP04",
-                        "🟢 OP05 - Intereses recibidos": "OP05",
-                        "🟢 OP06 - Impuestos": "OP06",
-                        "🟢 OP07 - Otros operacionales": "OP07",
-                        "🔵 IN01 - Control subsidiarias": "IN01",
-                        "🔵 IN02 - Participaciones no control.": "IN02",
-                        "🔵 IN03 - Compra PPE": "IN03",
-                        "🔵 IN04 - Compra intangibles": "IN04",
-                        "🔵 IN05 - Dividendos recibidos": "IN05",
-                        "🔵 IN06 - Venta PPE": "IN06",
-                        "🟣 FI01 - Préstamos LP recibidos": "FI01",
-                        "🟣 FI02 - Préstamos CP recibidos": "FI02",
-                        "🟣 FI03 - Préstamos relacionadas": "FI03",
-                        "🟣 FI04 - Pagos préstamos": "FI04",
-                        "🟣 FI05 - Pagos relacionadas": "FI05",
-                        "🟣 FI06 - Pagos leasing": "FI06",
-                        "🟣 FI07 - Dividendos pagados": "FI07",
-                        "⚪ NEUTRAL - Transf. internas": "NEUTRAL",
-                        "🟡 FX_EFFECT - Dif. tipo cambio": "FX_EFFECT"
-                    }
-                    
-                    # Tabla de cuentas con selector
-                    for i, cuenta in enumerate(cuentas_nc[:20]):
-                        codigo = cuenta.get('codigo', '')
-                        nombre = cuenta.get('nombre', '')[:40]
-                        monto = cuenta.get('monto', 0)
+                    # Punto 2: Mensaje correcto del editor
+                    if cuentas_nc or otros != 0:
+                        # HAY PROBLEMAS: mostrar warning, no success
+                        if cuentas_nc:
+                            st.error(f"🚨 **{len(cuentas_nc)} cuentas** generan ${abs(otros):,.0f} en 'Otros no clasificados'. Asigna categorías para corregir.")
+                        else:
+                            st.warning(f"⚠️ Existen ${abs(otros):,.0f} en movimientos no conciliados. Revisa las cuentas a continuación.")
                         
-                        col1, col2, col3, col4 = st.columns([1.5, 2.5, 1.5, 2])
+                        # Categorías disponibles
+                        categorias_options = {
+                            "--- Seleccionar ---": "",
+                            "🟢 OP01 - Cobros por ventas": "OP01",
+                            "🟢 OP02 - Pagos a proveedores": "OP02",
+                            "🟢 OP03 - Pagos a empleados": "OP03",
+                            "🟢 OP04 - Intereses pagados": "OP04",
+                            "🟢 OP05 - Intereses recibidos": "OP05",
+                            "🟢 OP06 - Impuestos": "OP06",
+                            "🟢 OP07 - Otros operacionales": "OP07",
+                            "🔵 IN01 - Control subsidiarias": "IN01",
+                            "🔵 IN02 - Participaciones no control.": "IN02",
+                            "🔵 IN03 - Compra PPE": "IN03",
+                            "🔵 IN04 - Compra intangibles": "IN04",
+                            "🔵 IN05 - Dividendos recibidos": "IN05",
+                            "🔵 IN06 - Venta PPE": "IN06",
+                            "🟣 FI01 - Préstamos LP recibidos": "FI01",
+                            "🟣 FI02 - Préstamos CP recibidos": "FI02",
+                            "🟣 FI03 - Préstamos relacionadas": "FI03",
+                            "🟣 FI04 - Pagos préstamos": "FI04",
+                            "🟣 FI05 - Pagos relacionadas": "FI05",
+                            "🟣 FI06 - Pagos leasing": "FI06",
+                            "🟣 FI07 - Dividendos pagados": "FI07",
+                            "⚪ NEUTRAL - Transf. internas": "NEUTRAL",
+                            "🟡 FX_EFFECT - Dif. tipo cambio": "FX_EFFECT"
+                        }
                         
-                        with col1:
-                            st.code(codigo)
-                        with col2:
-                            st.caption(nombre)
-                        with col3:
-                            color = "#2ecc71" if monto >= 0 else "#e74c3c"
-                            st.markdown(f"<span style='color:{color};font-weight:bold;'>{fmt_flujo(monto)}</span>", unsafe_allow_html=True)
-                        with col4:
-                            categoria_sel = st.selectbox(
-                                "Cat",
-                                options=list(categorias_options.keys()),
-                                key=f"cat_{codigo}",
-                                label_visibility="collapsed"
-                            )
+                        # Encabezado de tabla
+                        st.markdown("""
+                        <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 2fr; gap: 10px; padding: 10px; background: #1a1a2e; border-radius: 8px; margin-bottom: 10px;">
+                            <div style="color: #a0aec0; font-weight: bold;">Código</div>
+                            <div style="color: #a0aec0; font-weight: bold;">Nombre</div>
+                            <div style="color: #a0aec0; font-weight: bold;">Monto</div>
+                            <div style="color: #a0aec0; font-weight: bold;">% Flujo</div>
+                            <div style="color: #a0aec0; font-weight: bold;">Categoría</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Calcular total para porcentaje
+                        total_flujo = abs(op) + abs(inv) + abs(fin) + abs(otros)
+                        
+                        # Tabla de cuentas con selector
+                        for i, cuenta in enumerate(cuentas_nc[:25]):
+                            codigo = cuenta.get('codigo', '')
+                            nombre = cuenta.get('nombre', '')[:35]
+                            monto = cuenta.get('monto', 0)
+                            porcentaje = (abs(monto) / total_flujo * 100) if total_flujo > 0 else 0
                             
-                            # Guardar si se selecciona categoría
-                            if categorias_options[categoria_sel]:
-                                if st.button("💾", key=f"save_{codigo}", help="Guardar"):
-                                    try:
-                                        save_resp = requests.post(
-                                            f"{FLUJO_CAJA_URL}/mapeo-cuenta",
-                                            params={
-                                                "codigo": codigo,
-                                                "categoria": categorias_options[categoria_sel],
-                                                "nombre": nombre,
-                                                "username": username,
-                                                "password": password
-                                            },
-                                            timeout=10
-                                        )
-                                        if save_resp.status_code == 200:
-                                            st.success(f"✓ {codigo} → {categorias_options[categoria_sel]}")
-                                            st.rerun()
-                                        else:
-                                            st.error(f"Error: {save_resp.text}")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
+                            # Punto 4: Normalizar signos (positivo=entrada verde, negativo=salida roja)
+                            monto_color = "#2ecc71" if monto >= 0 else "#e74c3c"
+                            monto_display = f"+${monto:,.0f}" if monto >= 0 else f"-${abs(monto):,.0f}"
+                            
+                            col1, col2, col3, col4, col5 = st.columns([1, 2, 1.2, 0.8, 2.5])
+                            
+                            with col1:
+                                st.code(codigo, language=None)
+                            with col2:
+                                st.caption(nombre)
+                            with col3:
+                                st.markdown(f"<span style='color:{monto_color};font-weight:bold;'>{monto_display}</span>", unsafe_allow_html=True)
+                            with col4:
+                                st.caption(f"{porcentaje:.1f}%")
+                            with col5:
+                                col_sel, col_btn = st.columns([3, 1])
+                                with col_sel:
+                                    categoria_sel = st.selectbox(
+                                        "Cat",
+                                        options=list(categorias_options.keys()),
+                                        key=f"cat_{codigo}",
+                                        label_visibility="collapsed"
+                                    )
+                                with col_btn:
+                                    if categorias_options.get(categoria_sel):
+                                        if st.button("💾", key=f"save_{codigo}", help=f"Guardar {codigo}"):
+                                            try:
+                                                save_resp = requests.post(
+                                                    f"{FLUJO_CAJA_URL}/mapeo-cuenta",
+                                                    params={
+                                                        "codigo": codigo,
+                                                        "categoria": categorias_options[categoria_sel],
+                                                        "nombre": nombre,
+                                                        "username": username,
+                                                        "password": password,
+                                                        "impacto_estimado": monto
+                                                    },
+                                                    timeout=10
+                                                )
+                                                if save_resp.status_code == 200:
+                                                    st.success(f"✓ {codigo} → {categorias_options[categoria_sel]}")
+                                                    st.session_state['mostrar_editor_expandido'] = False
+                                                    st.rerun()
+                                                else:
+                                                    st.error(f"Error")
+                                            except Exception as e:
+                                                st.error(f"Error: {e}")
+                        
+                        if len(cuentas_nc) > 25:
+                            st.info(f"Mostrando 25 de {len(cuentas_nc)} cuentas. Las de mayor impacto primero.")
+                        
+                        st.markdown("---")
+                        st.caption("💡 **Tip:** Después de clasificar, haz click en 'Generar Flujo de Caja' para ver los cambios reflejados.")
                     
-                    if len(cuentas_nc) > 20:
-                        st.info(f"Mostrando 20 de {len(cuentas_nc)} cuentas. Las más impactantes primero.")
-                else:
-                    st.success("✅ Todas las cuentas están clasificadas correctamente.")
+                    else:
+                        # Punto 2: Solo mostrar success si REALMENTE todo está OK
+                        if otros == 0:
+                            st.success("✅ Todas las cuentas están clasificadas correctamente. El flujo está completo.")
+                        else:
+                            st.warning(f"⚠️ Hay ${abs(otros):,.0f} en 'Otros no clasificados' pero no se encontraron cuentas pendientes. Revisa el mapeo.")
                 
                 # Info adicional
                 with st.expander("ℹ️ Información del Reporte"):
