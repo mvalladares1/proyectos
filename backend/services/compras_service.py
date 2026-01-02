@@ -619,24 +619,26 @@ class ComprasService:
                     print(f"[DEBUG RESULTADO] Partner {pid}: {oc_name} = ${data['monto_pendiente']:,.0f}")
         
         # === 4. STOCK.PICKING EN TODOS LOS ESTADOS EXCEPTO BORRADOR/CANCELADO ===
-        # Recepciones pendientes de facturar (incluir assigned, waiting, confirmed, done)
+        # Solo considerar recepciones con quantity_done > 0 (algo realmente recibido)
+        # NO contar la demanda como compromiso si no hay nada hecho
         recepciones_preparadas_by_partner = {}
         
         try:
             if oc_ids:
-                # Buscar pickings de compra en todos los estados excepto borrador y cancelado
+                # Buscar pickings de compra en estado 'done' (ya procesados)
+                # No incluir assigned/waiting porque aún no hay recepción real
                 pickings = self.odoo.search_read(
                     'stock.picking',
                     [
                         ['purchase_id', 'in', oc_ids],
-                        ['state', 'not in', ['draft', 'cancel']],  # Incluir assigned, waiting, confirmed, done
+                        ['state', '=', 'done'],  # Solo pickings completados
                         ['picking_type_code', '=', 'incoming']  # Solo recepciones
                     ],
                     ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids', 'state'],
                     limit=1000
                 )
                 
-                print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings (estados: assigned, waiting, confirmed, done)")
+                print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings completados (estado: done)")
                 
                 if pickings:
                     picking_ids = [p['id'] for p in pickings]
@@ -650,19 +652,17 @@ class ComprasService:
                         limit=5000
                     )
                     
-                    # Procesar cada move y calcular el valor pendiente
+                    # Procesar cada move y calcular el valor RECIBIDO (no pendiente)
                     for move in moves:
-                        qty_demand = float(move.get('product_uom_qty') or 0)
                         qty_done = float(move.get('quantity_done') or 0)
                         price_unit = float(move.get('price_unit') or 0)
                         
-                        # Solo considerar si hay demanda sin completar
-                        qty_pendiente = qty_demand - qty_done
-                        if qty_pendiente <= 0:
+                        # SOLO considerar si hay cantidad HECHA (realmente recibida)
+                        if qty_done <= 0:
                             continue
                         
-                        # Calcular monto pendiente
-                        monto_pendiente = qty_pendiente * price_unit
+                        # Calcular monto de lo recibido
+                        monto_recibido = qty_done * price_unit
                         
                         # Obtener info del picking
                         picking_info = move.get('picking_id')
@@ -702,16 +702,17 @@ class ComprasService:
                                     'lineas_count': 0
                                 }
                             
-                            recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_pendiente
+                            recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_recibido
                             recepciones_preparadas_by_partner[pid][picking_name]['lineas_count'] += 1
                     
                     # DEBUG
                     for pid, pickings_dict in recepciones_preparadas_by_partner.items():
                         for pick_name, data in pickings_dict.items():
-                            print(f"[DEBUG PREPARADO] Partner {pid}: {pick_name} = ${data['monto_pendiente']:,.0f}")
+                            print(f"[DEBUG RECEP DONE] Partner {pid}: {pick_name} = ${data['monto_pendiente']:,.0f}")
         except Exception as e:
-            print(f"[ERROR PICKINGS] Error al obtener pickings preparados: {e}")
-            # Continuar sin pickings preparados, no bloquear la carga
+            print(f"[ERROR PICKINGS] Error al obtener pickings: {e}")
+            # Continuar sin pickings, no bloquear la carga
+
 
         
         # === PROCESAR CADA PARTNER ===
@@ -876,7 +877,7 @@ class ComprasService:
                     'estado': 'Recepcionado sin facturar'
                 })
             
-            # Preparar detalle de recepciones PREPARADAS (afectan línea)
+            # Preparar detalle de recepciones HECHAS sin facturar (picking state=done)
             for pick_name, pick_data in preparadas_partner.items():
                 pick_monto_original = float(pick_data.get('monto_pendiente') or 0)
                 pick_monto = pick_monto_original
@@ -891,7 +892,7 @@ class ComprasService:
                     pick_monto = CurrencyService.convert_usd_to_clp(pick_monto_original)
                 
                 detalle_facturas.append({
-                    'tipo': 'Recep. Preparada',
+                    'tipo': 'Recep. Hecha',
                     'numero': pick_data.get('name', ''),
                     'picking_id': pick_data.get('picking_id'),  # Para enlace Odoo
                     'oc_id': pick_data.get('oc_id'),  # Para enlace Odoo  
@@ -903,7 +904,7 @@ class ComprasService:
                     'fecha': str(pick_data.get('date') or '')[:10],
                     'fecha_vencimiento': '',
                     'origen': pick_data.get('oc_name', ''),
-                    'estado': 'Preparado (pendiente recepción)'
+                    'estado': 'Hecho (pendiente factura)'
                 })
             
             # Preparar detalle de OCs sin factura (TENTATIVAS) - solo informativo
