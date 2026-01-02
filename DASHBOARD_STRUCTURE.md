@@ -595,10 +595,268 @@ Todo lo demás cerrado.
 
 ---
 
-## 12. TODOs / WIP
+## 12. Registro de Cambios en Producción (2 Enero 2026)
 
-- [x] **Persistencia de sesión**: Implementado con Query Params + Cookies
-- [ ] Investigar Streamlit en producción vía NGINX (decisión pendiente)
+> **Objetivo:** Documentar exactamente qué se modificó, por qué, y cómo quedó funcionando.
+
+---
+
+### 12.1 Limpieza Inicial de Nginx
+
+**Antes:**
+- Existían múltiples archivos en `/etc/nginx/sites-enabled/`:
+  - `log-system.conf`
+  - `rio-futuro-dashboards.conf`
+  - `default`
+- Varios `server {}` bloques escuchando en puerto 80 con `default_server`
+- Conflictos de configuración causaban errores al recargar Nginx
+
+**Acción realizada:**
+```bash
+sudo rm /etc/nginx/sites-enabled/log-system.conf
+sudo rm /etc/nginx/sites-enabled/default
+```
+
+**Resultado:**
+- Nginx quedó con un único virtual host activo
+- Configuración consolidada en: `/etc/nginx/sites-available/riofuturoprocesos.com`
+
+---
+
+### 12.2 Nueva Estructura de Virtual Host
+
+**Antes:**
+- Configuraciones fragmentadas entre múltiples archivos
+- Sin redirección HTTP → HTTPS
+- Rutas inconsistentes
+
+**Acción realizada:**
+Creación de `/etc/nginx/sites-available/riofuturoprocesos.com`:
+
+```nginx
+# Redirección HTTP → HTTPS
+server {
+    listen 80;
+    server_name riofuturoprocesos.com www.riofuturoprocesos.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS principal
+server {
+    listen 443 ssl http2;
+    server_name riofuturoprocesos.com www.riofuturoprocesos.com;
+
+    ssl_certificate /etc/nginx/ssl/cloudflare-origin.crt;
+    ssl_certificate_key /etc/nginx/ssl/cloudflare-origin.key;
+
+    # Laravel - Sistema de Cargas
+    location /cargas {
+        alias /home/debian/log-system/public;
+        try_files $uri $uri/ @cargas;
+        location ~ \.php$ {
+            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+            include fastcgi_params;
+        }
+    }
+
+    # FastAPI
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Streamlit Dashboards
+    location /dashboards/ {
+        proxy_pass http://127.0.0.1:8501/dashboards/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+
+    # Reportería
+    location /reporteria/ {
+        proxy_pass http://127.0.0.1:8503/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+**Resultado:**
+- Rutas unificadas por contexto
+- WebSocket habilitado para Streamlit
+- SSL configurado correctamente
+
+---
+
+### 12.3 Integración con Cloudflare
+
+**Antes:**
+- DNS apuntaba directamente a IP del servidor
+- Sin CDN ni protección DDoS
+- Certificados Let's Encrypt autogestionados
+
+**Acción realizada:**
+1. Migración de DNS a Cloudflare
+2. Activación de proxy (orange cloud) para:
+   - `riofuturoprocesos.com`
+   - `www.riofuturoprocesos.com`
+3. Configuración de SSL/TLS mode: **Full (strict)**
+
+**Resultado:**
+- Tráfico pasa por Cloudflare antes de llegar al servidor
+- Protección DDoS activa
+- Certificado edge manejado por Cloudflare
+
+---
+
+### 12.4 Certificados SSL (Cloudflare Origin Certificate)
+
+**Antes:**
+- Certificados Let's Encrypt con renovación manual
+- Error 521 al acceder vía Cloudflare
+
+**Acción realizada:**
+
+1. Generación de Origin Certificate en Cloudflare Dashboard:
+   - Hostnames: `riofuturoprocesos.com`, `*.riofuturoprocesos.com`
+   - Validez: 15 años
+
+2. Instalación en servidor:
+```bash
+sudo mkdir -p /etc/nginx/ssl
+sudo nano /etc/nginx/ssl/cloudflare-origin.crt   # Pegar certificado
+sudo nano /etc/nginx/ssl/cloudflare-origin.key   # Pegar clave privada
+sudo chmod 600 /etc/nginx/ssl/cloudflare-origin.key
+```
+
+3. Verificación de coincidencia:
+```bash
+openssl x509 -noout -modulus -in /etc/nginx/ssl/cloudflare-origin.crt | md5sum
+openssl rsa -noout -modulus -in /etc/nginx/ssl/cloudflare-origin.key | md5sum
+# Ambos MD5 deben coincidir
+```
+
+**Resultado:**
+- Certificados Origin instalados correctamente
+- Comunicación Cloudflare ↔ Servidor cifrada
+
+---
+
+### 12.5 Corrección de Error 521
+
+**Síntoma:**
+- Error 521 (Web server is down) al acceder a `https://riofuturoprocesos.com`
+
+**Causa raíz:**
+- Certificado `.crt` mal pegado (faltaba contenido)
+- Nginx fallaba silenciosamente al cargar SSL
+
+**Diagnóstico:**
+```bash
+sudo nginx -t
+# nginx: [emerg] cannot load certificate "/etc/nginx/ssl/cloudflare-origin.crt": 
+#        PEM_read_bio_X509_AUX() failed
+```
+
+**Corrección:**
+1. Re-copiar certificado completo desde Cloudflare Dashboard
+2. Verificar que archivo termina con `-----END CERTIFICATE-----`
+3. Recargar Nginx:
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Resultado:**
+- `nginx -t` exitoso
+- HTTPS funcional vía Cloudflare
+
+---
+
+### 12.6 Servicios Backend
+
+**Puertos internos (solo localhost):**
+
+| Puerto | Servicio | Gestión |
+|--------|----------|---------|
+| 8000 | FastAPI (Uvicorn) | systemd: `rio-backend.service` |
+| 8501 | Streamlit Dashboards | systemd: `rio-futuro-web.service` |
+| 8503 | Reportería | (pendiente systemd) |
+
+**Nginx expone únicamente:**
+- Puerto 80 (redirección a 443)
+- Puerto 443 (HTTPS)
+
+**Verificación:**
+```bash
+sudo lsof -i :8000  # FastAPI corriendo
+sudo lsof -i :8501  # Streamlit corriendo
+sudo lsof -i :80    # Nginx
+sudo lsof -i :443   # Nginx
+```
+
+---
+
+### 12.7 Estado Final Validado
+
+**Pruebas realizadas:**
+
+```bash
+# Sintaxis Nginx
+sudo nginx -t
+# nginx: configuration file /etc/nginx/nginx.conf test is successful
+
+# HTTP → HTTPS redirect
+curl -I http://riofuturoprocesos.com
+# HTTP/1.1 301 Moved Permanently
+# Location: https://riofuturoprocesos.com/
+
+# HTTPS funcional
+curl -I https://riofuturoprocesos.com
+# HTTP/2 200
+
+# API healthcheck
+curl https://riofuturoprocesos.com/api/v1/
+# {"status":"ok","service":"rio-futuro-backend","env":"production"}
+```
+
+**Estado de componentes:**
+
+| Componente | Estado | Verificación |
+|------------|--------|--------------|
+| Nginx | ✅ OK | `nginx -t` exitoso |
+| SSL/TLS | ✅ OK | Certificado válido |
+| Cloudflare | ✅ OK | Full (strict) activo |
+| FastAPI | ✅ OK | Healthcheck responde |
+| Laravel | ✅ OK | `/cargas` accesible |
+| Streamlit | ✅ OK | `/dashboards` accesible |
+
+---
+
+### 12.8 Archivos de Configuración Finales
+
+| Archivo | Propósito |
+|---------|-----------|
+| `/etc/nginx/sites-available/riofuturoprocesos.com` | Virtual host principal |
+| `/etc/nginx/sites-enabled/riofuturoprocesos.com` | Symlink activo |
+| `/etc/nginx/ssl/cloudflare-origin.crt` | Certificado Origin |
+| `/etc/nginx/ssl/cloudflare-origin.key` | Clave privada |
+| `/etc/systemd/system/rio-backend.service` | FastAPI service |
+| `/etc/systemd/system/rio-futuro-web.service` | Streamlit service |
+
+---
+
+## 13. TODOs Pendientes
+
+- [ ] Crear servicio systemd para Reportería (puerto 8503)
+- [ ] Configurar renovación automática de Origin Certificate (15 años)
+- [ ] Agregar monitoring con uptime checks
 
 ---
 
