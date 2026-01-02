@@ -1,8 +1,11 @@
 """
 Módulo de manejo de cookies y persistencia de sesión para Streamlit.
 Sistema multi-capa: Query Params → LocalStorage → Cookies
+
+Usa st.components.v1.html para ejecutar JavaScript (funciona correctamente).
 """
 import streamlit as st
+import streamlit.components.v1 as components
 from typing import Optional
 
 # Importar CookieManager de extra-streamlit-components
@@ -55,48 +58,57 @@ def clear_token_from_query_params():
         pass
 
 
-# ============ LOCALSTORAGE (JavaScript) ============
+# ============ LOCALSTORAGE (JavaScript via components.html) ============
 
 def inject_localstorage_recovery():
     """
     Inyecta script para recuperar token de LocalStorage.
     Si el token existe en LocalStorage pero no en URL, lo añade y recarga.
+    
+    Usa st.components.v1.html que SÍ ejecuta JavaScript correctamente.
     """
-    st.markdown(f"""
+    # Solo inyectar si no hay session en query params
+    if get_token_from_query_params():
+        return  # Ya hay token en URL, no hacer nada
+    
+    # Script que recupera de LocalStorage y redirige si encuentra token
+    js_code = f"""
     <script>
         (function() {{
             const token = localStorage.getItem('{LOCALSTORAGE_KEY}');
-            const urlParams = new URLSearchParams(window.location.search);
-            const hasSessionParam = urlParams.has('session');
-            
-            // Si hay token en LocalStorage pero no en URL, añadirlo
-            if (token && !hasSessionParam) {{
-                urlParams.set('session', token);
-                const newUrl = window.location.pathname + '?' + urlParams.toString();
-                window.history.replaceState({{}}, '', newUrl);
-                window.location.reload();
+            if (token) {{
+                const urlParams = new URLSearchParams(window.location.search);
+                if (!urlParams.has('session')) {{
+                    urlParams.set('session', token);
+                    const newUrl = window.location.pathname + '?' + urlParams.toString();
+                    window.location.replace(newUrl);
+                }}
             }}
         }})();
     </script>
-    """, unsafe_allow_html=True)
+    """
+    # height=0 para que sea invisible
+    components.html(js_code, height=0)
 
 
 def save_token_to_localstorage(token: str):
     """Guarda token en LocalStorage vía JavaScript."""
-    st.markdown(f"""
+    js_code = f"""
     <script>
         localStorage.setItem('{LOCALSTORAGE_KEY}', '{token}');
     </script>
-    """, unsafe_allow_html=True)
+    """
+    components.html(js_code, height=0)
 
 
 def clear_token_from_localstorage():
     """Limpia token de LocalStorage."""
-    st.markdown(f"""
+    js_code = f"""
     <script>
         localStorage.removeItem('{LOCALSTORAGE_KEY}');
     </script>
-    """, unsafe_allow_html=True)
+    """
+    components.html(js_code, height=0)
 
 
 # ============ COOKIES ============
