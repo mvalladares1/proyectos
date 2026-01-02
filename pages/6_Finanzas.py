@@ -1475,89 +1475,106 @@ if datos:
                     with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=(act_key=="OPERACION")):
                         total_act = abs(subtotal) if subtotal != 0 else 1
                         
-                        for concepto in conceptos:
+                            for concepto in conceptos:
                                 c_nombre = concepto.get("nombre", "")
-                                c_id = concepto.get("id") or concepto.get("codigo", "")  # New format uses 'id'
+                                c_id = concepto.get("id") or concepto.get("codigo", "")
                                 c_monto = concepto.get("monto", 0) or 0
                                 c_cuentas = concepto.get("cuentas", [])
                                 c_docs = concepto.get("documentos", []) or concepto.get("documentos_proy", [])
                                 c_tipo = concepto.get("tipo", "LINEA")
+                                c_nivel = concepto.get("nivel", 3)
                                 
-                                # Skip HEADERs (they are structural, no data)
-                                if c_tipo == "HEADER":
-                                    continue
+                                # Styling based on Level & Type
+                                indent = (c_nivel - 1) * 20
+                                font_weight = "bold" if c_tipo in ("HEADER", "TOTAL") else "normal"
+                                font_size = "1.1em" if c_nivel == 1 else "1em"
+                                bg_color = "#2d3748" if c_tipo == "LINEA" else "transparent"
+                                border_l = f"4px solid {act_color}" if c_tipo != "LINEA" else "none"
                                 
-                                # Encabezado del Concepto
-                                c_color = "#2ecc71" if c_monto >= 0 else "#e74c3c"
-                                if concepto.get("es_proyeccion"):
-                                    c_id = f"PROY-{c_id}"
-                                    c_color = "#f39c12" # Naranja para puros proyectados
-                                
-                                st.markdown(f"""
-                                <div style="display: flex; justify-content: space-between; align-items: center; 
-                                            padding: 10px 15px; background: #2d3748; border-radius: 6px; margin-top: 12px; margin-bottom: 5px;
-                                            border-left: 4px solid {act_color};">
-                                    <div style="flex-grow: 1;">
-                                        <div style="font-size: 0.8em; color: #a0aec0;">{c_id}</div>
-                                        <div style="font-weight: 600; font-size: 1em;">{c_nombre}</div>
-                                    </div>
-                                    <div style="color: {c_color}; font-weight: bold; font-family: monospace; font-size: 1.1em;">
-                                        {fmt_flujo(c_monto)}
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                                # --- SECCIÓN REAL (Cuentas) ---
-                                if c_cuentas:
-                                    if c_docs or modo_ver == "Consolidado":
-                                        st.markdown("<div style='font-size:0.8em; color:#a0aec0; margin: 4px 0;'>🔵 Real (Ejecutado)</div>", unsafe_allow_html=True)
-                                        
-                                    for cuenta in c_cuentas:
-                                        codigo = cuenta.get('codigo', '')
-                                        nombre = cuenta.get('nombre', '')[:40]
-                                        monto_c = cuenta.get('monto', 0)
-                                        pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
-                                        
-                                        monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
-                                        monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
-                                        
-                                        cc1, cc2, cc3, cc4, cc5 = st.columns([0.9, 2.5, 1.2, 0.7, 0.5])
-                                        with cc1: st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.9em;'>{codigo}</span>", unsafe_allow_html=True)
-                                        with cc2: st.caption(nombre)
-                                        with cc3: st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
-                                        with cc4: st.caption(f"{pct:.1f}%")
-                                        with cc5:
-                                            # Boton editar solo para cuentas reales
-                                            if st.button("✏️", key=f"edit_hier_{codigo}", help=f"Reasignar {codigo}"):
-                                                st.session_state['cuenta_a_editar'] = codigo
-                                                st.session_state['mostrar_editor_expandido'] = True
-                                                st.rerun()
+                                # Color del monto
+                                c_color = "#ffffff"
+                                if c_monto > 0: c_color = "#2ecc71"
+                                elif c_monto < 0: c_color = "#e74c3c"
+                                if concepto.get("es_proyeccion"): c_color = "#f39c12"
 
-                                # --- SECCIÓN PROYECTADA (Documentos) ---
-                                if c_docs:
-                                    if c_cuentas or modo_ver == "Consolidado":
-                                        st.markdown("<div style='font-size:0.8em; color:#f39c12; margin: 8px 0 4px 0;'>🟡 Proyectado (Comprometido)</div>", unsafe_allow_html=True)
-                                    
-                                    # Cabecera tabla documentos
-                                    h1, h2, h3, h4, h5 = st.columns([1.2, 1.8, 0.8, 0.8, 1])
-                                    h1.markdown("**Ref**")
-                                    h2.markdown("**Empresa**")
-                                    h3.markdown("**Venc.**")
-                                    h4.markdown("**Estado**")
-                                    h5.markdown("**Monto**")
-                                    
-                                    # Listar documentos (limitado a 20 para no saturar)
-                                    for doc in c_docs[:20]:
-                                        monto_d = doc.get('monto', 0)
-                                        color_d = "#f39c12" if monto_d >= 0 else "#d35400" # Naranja/Rojo oscuro
-                                        fmt_d = f"+${monto_d:,.0f}" if monto_d >= 0 else f"-${abs(monto_d):,.0f}"
-                                        
-                                        d1, d2, d3, d4, d5 = st.columns([1.2, 1.8, 0.8, 0.8, 1])
-                                        d1.caption(doc.get('documento', ''))
-                                        d2.caption(doc.get('partner', '')[:20])
-                                        d3.caption(doc.get('fecha_venc', ''))
-                                        d4.caption(doc.get('estado', ''))
-                                        d5.markdown(f"<span style='color:{color_d}; font-size: 0.9em;'>{fmt_d}</span>", unsafe_allow_html=True)
+                                # RENDERIZADO DEL NODO
+                                if c_tipo in ("HEADER", "TOTAL") and c_monto == 0 and c_nivel > 1:
+                                    # Omitir headers vacíos si no son nivel 1
+                                    pass
+                                else:
+                                    st.markdown(f"""
+                                    <div style="display: flex; justify-content: space-between; align-items: center; 
+                                                padding: 8px 15px; margin-left: {indent}px; border-radius: 6px; 
+                                                margin-top: {6 if c_nivel==1 else 2}px; border-left: {border_l};
+                                                background: {bg_color if c_tipo == "LINEA" else "transparent"};">
+                                        <div style="flex-grow: 1;">
+                                            <div style="font-size: 0.75em; color: #a0aec0;">{c_id}</div>
+                                            <div style="font-weight: {font_weight}; font-size: {font_size};">{c_nombre}</div>
+                                        </div>
+                                        <div style="color: {c_color}; font-weight: bold; font-family: monospace; font-size: 1.1em;">
+                                            {fmt_flujo(c_monto) if c_monto != 0 or c_tipo != "HEADER" else ""}
+                                        </div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                
+                                # --- DRILL-DOWN (Solo para LINEAS con movimientos) ---
+                                if c_tipo == "LINEA" and (c_cuentas or c_docs):
+                                    with st.expander(f"🔍 Ver composición de {c_id}", expanded=False):
+                                        # --- SECCIÓN REAL (Cuentas) ---
+                                        if c_cuentas:
+                                            # Cabecera tabla cuentas
+                                            st.markdown(f"<div style='font-size:0.85em; color:#a0aec0; margin-bottom: 5px; font-weight: bold;'>📊 Composición contable ({c_id})</div>", unsafe_allow_html=True)
+                                            h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.9, 2.3, 1.2, 0.7, 0.5])
+                                            h_c1.caption("**Código**")
+                                            h_c2.caption("**Nombre**")
+                                            h_c3.caption("**Monto**")
+                                            h_c4.caption("**% Línea**")
+                                            h_c5.caption("**Edit**")
+                                            
+                                            divisor = abs(c_monto) if c_monto != 0 else 1
+                                            
+                                            for cuenta in c_cuentas:
+                                                codigo = cuenta.get('codigo', '')
+                                                nombre = cuenta.get('nombre', '')[:40]
+                                                monto_c = cuenta.get('monto', 0)
+                                                pct = abs(monto_c) / divisor * 100
+                                                
+                                                monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
+                                                monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
+                                                
+                                                cc1, cc2, cc3, cc4, cc5 = st.columns([0.9, 2.3, 1.2, 0.7, 0.5])
+                                                with cc1: st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.85em;'>{codigo}</span>", unsafe_allow_html=True)
+                                                with cc2: st.caption(nombre)
+                                                with cc3: st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
+                                                with cc4: st.caption(f"{pct:.1f}%")
+                                                with cc5:
+                                                    if st.button("✏️", key=f"edit_hier_{codigo}", help=f"Reasignar {codigo}"):
+                                                        st.session_state['cuenta_a_editar'] = codigo
+                                                        st.session_state['mostrar_editor_expandido'] = True
+                                                        st.rerun()
+
+                                        # --- SECCIÓN PROYECTADA (Documentos) ---
+                                        if c_docs:
+                                            st.markdown(f"<div style='font-size:0.85em; color:#f39c12; margin: 10px 0 5px 0; font-weight: bold;'>🟡 Detalles Proyectados ({c_id})</div>", unsafe_allow_html=True)
+                                            # Cabecera tabla documentos
+                                            h1, h2, h3, h4, h5 = st.columns([1.2, 1.8, 0.8, 0.8, 1])
+                                            h1.caption("**Ref**")
+                                            h2.caption("**Empresa**")
+                                            h3.caption("**Venc.**")
+                                            h4.caption("**Estado**")
+                                            h5.caption("**Monto**")
+                                            
+                                            for doc in c_docs[:20]:
+                                                monto_d = doc.get('monto', 0)
+                                                color_d = "#f39c12" if monto_d >= 0 else "#d35400"
+                                                fmt_d = f"+${monto_d:,.0f}" if monto_d >= 0 else f"-${abs(monto_d):,.0f}"
+                                                
+                                                d1, d2, d3, d4, d5 = st.columns([1.2, 1.8, 0.8, 0.8, 1])
+                                                d1.caption(doc.get('documento', ''))
+                                                d2.caption(doc.get('partner', '')[:20])
+                                                d3.caption(doc.get('fecha_venc', ''))
+                                                d4.caption(doc.get('estado', ''))
+                                                d5.markdown(f"<span style='color:{color_d}; font-size: 0.9em;'>{fmt_d}</span>", unsafe_allow_html=True)
                                     
                                     if len(c_docs) > 20:
                                         st.caption(f"... y {len(c_docs)-20} documentos más")
