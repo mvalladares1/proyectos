@@ -556,6 +556,18 @@ class FlujoCajaService:
         detalle = []
         cuentas_sin_clasificar = {}  # Para tracking de cuentas UNCLASSIFIED
         
+        # DRILL-DOWN: Tracking de cuentas por categoría
+        cuentas_por_categoria = {}  # {categoria: {codigo: {nombre, monto, cantidad}}}
+        
+        def agregar_cuenta_categoria(cat: str, codigo: str, nombre: str, monto: float):
+            """Helper para agregar cuenta a tracking de categoría."""
+            if cat not in cuentas_por_categoria:
+                cuentas_por_categoria[cat] = {}
+            if codigo not in cuentas_por_categoria[cat]:
+                cuentas_por_categoria[cat][codigo] = {'nombre': nombre, 'monto': 0, 'cantidad': 0}
+            cuentas_por_categoria[cat][codigo]['monto'] += monto
+            cuentas_por_categoria[cat][codigo]['cantidad'] += 1
+        
         for mov in movimientos_efectivo:
             move_id = mov['move_id'][0] if isinstance(mov.get('move_id'), (list, tuple)) else mov.get('move_id')
             monto = mov.get('balance', 0)  # Positivo = entrada, negativo = salida
@@ -564,6 +576,7 @@ class FlujoCajaService:
             lineas_asiento = contrapartidas.get(move_id, [])
             contrapartida_cuenta = None
             codigo_cuenta = ''
+            nombre_cuenta = ''
             
             # Tomar la primera contrapartida (ya está filtrada)
             if lineas_asiento:
@@ -571,6 +584,7 @@ class FlujoCajaService:
                 linea_account_id = linea['account_id'][0] if isinstance(linea.get('account_id'), (list, tuple)) else linea.get('account_id')
                 contrapartida_cuenta = cuentas_info.get(linea_account_id, {})
                 codigo_cuenta = contrapartida_cuenta.get('code', '')
+                nombre_cuenta = contrapartida_cuenta.get('name', '')
             
             # Clasificar según la contrapartida (clasificación explícita)
             clasificacion = self._clasificar_cuenta(codigo_cuenta) if codigo_cuenta else self.CATEGORIA_UNCLASSIFIED
@@ -579,12 +593,15 @@ class FlujoCajaService:
             if clasificacion == self.CATEGORIA_NEUTRAL:
                 # Transferencias internas: NO impactan el flujo
                 flujos_por_linea[self.CATEGORIA_NEUTRAL] += monto
+                agregar_cuenta_categoria(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, monto)
             elif clasificacion == self.CATEGORIA_FX_EFFECT:
                 # Diferencia de tipo de cambio: línea separada en conciliación
                 flujos_por_linea[self.CATEGORIA_FX_EFFECT] += monto
+                agregar_cuenta_categoria(self.CATEGORIA_FX_EFFECT, codigo_cuenta, nombre_cuenta, monto)
             elif clasificacion == self.CATEGORIA_UNCLASSIFIED:
                 # Sin clasificar: acumular para diagnóstico
                 flujos_por_linea[self.CATEGORIA_UNCLASSIFIED] += monto
+                agregar_cuenta_categoria(self.CATEGORIA_UNCLASSIFIED, codigo_cuenta, nombre_cuenta, monto)
                 # Trackear cuenta para diagnóstico
                 if codigo_cuenta:
                     if codigo_cuenta not in cuentas_sin_clasificar:
@@ -597,6 +614,7 @@ class FlujoCajaService:
             else:
                 # Categoría normal (OPxx, INxx, FIxx)
                 flujos_por_linea[clasificacion] = flujos_por_linea.get(clasificacion, 0) + monto
+                agregar_cuenta_categoria(clasificacion, codigo_cuenta, nombre_cuenta, monto)
             
             # Guardar detalle (limitado para performance)
             if len(detalle) < 100:
@@ -660,6 +678,30 @@ class FlujoCajaService:
             key=lambda x: abs(x.get('monto', 0)),
             reverse=True
         )[:50]  # Top 50
+        
+        # DRILL-DOWN: Agregar cuentas por categoría para inspección
+        drill_down = {}
+        for categoria, cuentas in cuentas_por_categoria.items():
+            cuentas_lista = sorted(
+                [{"codigo": k, "categoria": categoria, **v} for k, v in cuentas.items()],
+                key=lambda x: abs(x.get('monto', 0)),
+                reverse=True
+            )[:30]  # Top 30 por categoría
+            drill_down[categoria] = cuentas_lista
+        resultado["drill_down"] = drill_down
+        
+        # DRILL-DOWN: Detalle de cuentas de efectivo (para efectivo inicial/final)
+        cuentas_efectivo_info = []
+        for cid in cuentas_efectivo_ids:
+            if cid in cuentas_info:
+                c = cuentas_info[cid]
+                cuentas_efectivo_info.append({
+                    "id": cid,
+                    "codigo": c.get('code', ''),
+                    "nombre": c.get('name', ''),
+                    "tipo": "efectivo" if any(c.get('code', '').startswith(p) for p in ["1101", "1102"]) else "equivalente"
+                })
+        resultado["cuentas_efectivo_detalle"] = cuentas_efectivo_info
         
         # 8. Validaciones
         validacion = self.validar_flujo(

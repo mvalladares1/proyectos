@@ -1323,8 +1323,18 @@ if datos:
                 
                 st.divider()
                 
-                # === DETALLE POR ACTIVIDAD ===
+                # === DETALLE POR ACTIVIDAD CON DRILL-DOWN ===
                 st.markdown("### 📋 Detalle por Actividad")
+                
+                drill_down_data = flujo_data.get("drill_down", {})
+                cuentas_efectivo_det = flujo_data.get("cuentas_efectivo_detalle", [])
+                
+                # Mapeo de prefijos a actividad
+                prefijo_actividad = {
+                    "OP": ("OPERACION", "#2ecc71"),
+                    "IN": ("INVERSION", "#3498db"),
+                    "FI": ("FINANCIAMIENTO", "#9b59b6")
+                }
                 
                 for act_key, act_color in [("OPERACION", "#2ecc71"), ("INVERSION", "#3498db"), ("FINANCIAMIENTO", "#9b59b6")]:
                     act_data = actividades.get(act_key, {})
@@ -1333,7 +1343,8 @@ if datos:
                     subtotal = act_data.get("subtotal", 0)
                     subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
                     
-                    with st.expander(f"📊 {act_nombre}", expanded=act_key=="OPERACION"):
+                    with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=False):
+                        # Tabla de líneas NIIF
                         filas = []
                         for linea in lineas:
                             monto = linea.get("monto", 0)
@@ -1346,7 +1357,6 @@ if datos:
                         if filas:
                             df_act = pd.DataFrame(filas)
                             
-                            # Tabla con estilos
                             def style_monto(val):
                                 color = "#2ecc71" if val >= 0 else "#e74c3c"
                                 return f"color: {color}; font-weight: bold;"
@@ -1359,12 +1369,50 @@ if datos:
                                 styled_df,
                                 use_container_width=True,
                                 hide_index=True,
-                                height=min(300, 50 + len(filas) * 35)
+                                height=min(200, 50 + len(filas) * 35)
                             )
-                        else:
-                            st.info("Sin movimientos en este período")
                         
-                        # Subtotal con estilo
+                        # DRILL-DOWN: Cuentas que componen esta actividad
+                        # Agregar cuentas de categorías que corresponden a esta actividad
+                        cuentas_actividad = []
+                        for cat_code, cat_cuentas in drill_down_data.items():
+                            if cat_code.startswith(act_key[:2]):  # OP, IN, FI
+                                for cuenta in cat_cuentas:
+                                    cuenta['categoria_display'] = cat_code
+                                    cuentas_actividad.append(cuenta)
+                        
+                        if cuentas_actividad:
+                            st.markdown("---")
+                            st.markdown(f"**🔍 Composición contable ({len(cuentas_actividad)} cuentas)**")
+                            
+                            total_act = abs(subtotal) if subtotal != 0 else 1
+                            
+                            for i, cuenta in enumerate(sorted(cuentas_actividad, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:15]):
+                                codigo = cuenta.get('codigo', '')
+                                nombre = cuenta.get('nombre', '')[:30]
+                                monto_c = cuenta.get('monto', 0)
+                                cat_display = cuenta.get('categoria_display', '')
+                                pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
+                                
+                                monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
+                                monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
+                                
+                                col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns([1, 2, 1, 0.8, 1])
+                                with col_c1:
+                                    st.code(codigo, language=None)
+                                with col_c2:
+                                    st.caption(nombre)
+                                with col_c3:
+                                    st.markdown(f"<span style='color:{monto_color};'>{monto_display}</span>", unsafe_allow_html=True)
+                                with col_c4:
+                                    st.caption(f"{pct:.1f}%")
+                                with col_c5:
+                                    st.caption(f"📁 {cat_display}")
+                            
+                            if len(cuentas_actividad) > 15:
+                                st.caption(f"... y {len(cuentas_actividad) - 15} cuentas más")
+                        
+                        # Subtotal
                         subtotal_color = "#2ecc71" if subtotal >= 0 else "#e74c3c"
                         st.markdown(f"""
                         <div style="background: linear-gradient(90deg, {act_color}22, transparent); 
@@ -1376,6 +1424,21 @@ if datos:
                             </span>
                         </div>
                         """, unsafe_allow_html=True)
+                
+                # === DESGLOSE DE EFECTIVO ===
+                if cuentas_efectivo_det:
+                    with st.expander("🏦 Desglose de Cuentas de Efectivo", expanded=False):
+                        st.markdown("**Cuentas que componen el efectivo inicial y final:**")
+                        
+                        for cuenta_ef in cuentas_efectivo_det:
+                            tipo_badge = "🏧" if cuenta_ef.get('tipo') == 'efectivo' else "💳"
+                            st.markdown(f"""
+                            <div style="display: flex; gap: 15px; padding: 8px; background: #1a1a2e; border-radius: 5px; margin: 5px 0;">
+                                <span style="font-family: monospace; color: #f39c12;">{cuenta_ef.get('codigo', '')}</span>
+                                <span style="flex-grow: 1; color: #a0aec0;">{cuenta_ef.get('nombre', '')[:40]}</span>
+                                <span>{tipo_badge} {cuenta_ef.get('tipo', 'efectivo').title()}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
                 
                 st.divider()
                 
