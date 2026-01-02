@@ -96,7 +96,7 @@ class ComercialService:
                 ]
                 
                 # Campos mínimos necesarios
-                fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state', 'move_name', 'credit']
+                fields_inv = ['product_id', 'partner_id', 'date', 'quantity', 'move_id', 'balance', 'parent_state', 'move_name', 'credit', 'name']
                 results_inv = self.odoo.search_read('account.move.line', domain_inv, fields_inv, limit=50000, order='date desc')
                 
                 # Consulta 2: Líneas SIN producto pero con cuenta de ingresos (facturas antiguas 2023)
@@ -285,12 +285,25 @@ class ComercialService:
                         prod_id = line['product_id'][0]
                         especie, manejo, variedad, temporada, programa = self._classify_product(prod_id, line['product_id'][1], product_map, variety_map, anio)
                     else:
-                        # Líneas legacy (2023) sin producto - asignar valores por defecto
-                        especie = "Arándano"  # Default más común para exportación
+                        # Líneas legacy (2023) sin producto - intentar clasificar por descripción
+                        desc = str(line.get('name', '')).upper()
+                        if any(x in desc for x in ["FB ", "FB-", " FB", "FRAMBUESA", "RASPBERRY", "RASPBERRIES"]):
+                            especie = "Frambuesa"
+                        elif any(x in desc for x in ["AR ", "AR-", " AR", "ARÁNDANO", "BLUEBERRY", "BLUEBERRIES"]):
+                            especie = "Arándano"
+                        elif any(x in desc for x in ["CE ", "CE-", " CE", "CEREZA", "CHERRY", "CHERRIES"]):
+                            especie = "Cereza"
+                        elif any(x in desc for x in ["MORA", "BLACKBERRY", "BLACKBERRIES"]):
+                            especie = "Mora"
+                        elif any(x in desc for x in ["FRUTILLA", "STRAWBERRY", "STRAWBERRIES"]):
+                            especie = "Frutilla"
+                        else:
+                            especie = "Arándano" # Default fallback
+                            
                         manejo = "Convencional"
                         variedad = "S/V"
                         temporada = f"{anio}-{anio+1}"
-                        programa = "Granel"  # Default para exportación
+                        programa = "Granel"  # Default para exportación legacy
 
                     # Excluir servicios (no son productos físicos)
                     if especie == "SERVICIOS":
