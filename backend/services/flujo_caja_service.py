@@ -769,6 +769,10 @@ class FlujoCajaService:
             )[:30]  # Top 30 por concepto
             drill_down[concepto_id] = cuentas_lista
         resultado["drill_down"] = drill_down
+
+        # Agregar historial de cambios para el editor
+        mapeo_raw = self._cargar_mapeo()
+        resultado["historial_mapeo"] = mapeo_raw.get("historial_cambios", [])[-30:] # Últimos 30
         
         # DRILL-DOWN: Detalle de cuentas de efectivo (para efectivo inicial/final)
         cuentas_efectivo_info = []

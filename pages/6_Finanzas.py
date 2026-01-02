@@ -1524,30 +1524,32 @@ if datos:
                                         if c_cuentas:
                                             # Cabecera tabla cuentas
                                             st.markdown(f"<div style='font-size:0.85em; color:#a0aec0; margin-bottom: 5px; font-weight: bold;'>📊 Composición contable ({c_id})</div>", unsafe_allow_html=True)
-                                            h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.9, 2.3, 1.2, 0.7, 0.5])
+                                            h_c1, h_c2, h_c3, h_c4, h_c5, h_c6 = st.columns([0.8, 1.8, 1.0, 0.6, 0.8, 0.4])
                                             h_c1.caption("**Código**")
                                             h_c2.caption("**Nombre**")
                                             h_c3.caption("**Monto**")
                                             h_c4.caption("**% Línea**")
-                                            h_c5.caption("**Edit**")
+                                            h_c5.caption("**Etiqueta**")
+                                            h_c6.caption("**Edit**")
                                             
                                             divisor = abs(c_monto) if c_monto != 0 else 1
                                             
                                             for cuenta in c_cuentas:
                                                 codigo = cuenta.get('codigo', '')
-                                                nombre = cuenta.get('nombre', '')[:40]
+                                                nombre = cuenta.get('nombre', '')[:35]
                                                 monto_c = cuenta.get('monto', 0)
                                                 pct = abs(monto_c) / divisor * 100
                                                 
                                                 monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
                                                 monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
                                                 
-                                                cc1, cc2, cc3, cc4, cc5 = st.columns([0.9, 2.3, 1.2, 0.7, 0.5])
-                                                with cc1: st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.85em;'>{codigo}</span>", unsafe_allow_html=True)
+                                                cc1, cc2, cc3, cc4, cc5, cc6 = st.columns([0.8, 1.8, 1.0, 0.6, 0.8, 0.4])
+                                                with cc1: st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.8em;'>{codigo}</span>", unsafe_allow_html=True)
                                                 with cc2: st.caption(nombre)
-                                                with cc3: st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
+                                                with cc3: st.markdown(f"<span style='color:{monto_color}; font-size: 0.85em;'>{monto_display}</span>", unsafe_allow_html=True)
                                                 with cc4: st.caption(f"{pct:.1f}%")
-                                                with cc5:
+                                                with cc5: st.markdown(f"<span style='background:#1a202c; color:#3498db; padding:2px 6px; border-radius:4px; font-size:0.8em;'>{c_id}</span>", unsafe_allow_html=True)
+                                                with cc6:
                                                     if st.button("✏️", key=f"edit_hier_{codigo}", help=f"Reasignar {codigo}"):
                                                         st.session_state['cuenta_a_editar'] = codigo
                                                         st.session_state['mostrar_editor_expandido'] = True
@@ -1808,10 +1810,28 @@ if datos:
                                             if st.button("💾 Guardar", key="save_edit_single", type="primary"):
                                                 if nueva_cat and categorias_options[nueva_cat]:
                                                     cat_code = categorias_options[nueva_cat]
-                                                    if guardar_mapeo(cuenta_editar_codigo, cat_code, "Manual (Reasignación)"):
-                                                        st.success(f"Guardado {cat_code}")
-                                                        del st.session_state['cuenta_a_editar']
-                                                        st.rerun()
+                                                    try:
+                                                        save_resp = requests.post(
+                                                            f"{FLUJO_CAJA_URL}/mapeo-cuenta",
+                                                            params={
+                                                                "codigo": cuenta_editar_codigo,
+                                                                "categoria": cat_code,
+                                                                "nombre": datos_cuenta.get('nombre', ''),
+                                                                "username": username,
+                                                                "password": password,
+                                                                "impacto_estimado": monto_e
+                                                            },
+                                                            timeout=10
+                                                        )
+                                                        if save_resp.status_code == 200:
+                                                            st.success(f"✓ Guardado!")
+                                                            st.session_state['mostrar_editor_expandido'] = False
+                                                            del st.session_state['cuenta_a_editar']
+                                                            st.rerun()
+                                                        else:
+                                                            st.error(f"Error al guardar")
+                                                    except Exception as e:
+                                                        st.error(f"Error: {e}")
                                         with col_btn_cancel:
                                             if st.button("❌ Cancelar", key="cancel_edit_single"):
                                                 del st.session_state['cuenta_a_editar']
@@ -1909,6 +1929,17 @@ if datos:
                         
                         if len(cuentas_nc) > 25:
                             st.info(f"Mostrando 25 de {len(cuentas_nc)} cuentas. Las de mayor impacto primero.")
+                        
+                        # --- HISTORIAL DE CAMBIOS ---
+                        historial = flujo_data.get("historial_mapeo", [])
+                        if historial:
+                            with st.expander("📋 Historial de Cambios (Audit Trail)", expanded=False):
+                                df_hist = pd.DataFrame(historial).sort_values("fecha", ascending=False)
+                                st.dataframe(
+                                    df_hist[["fecha", "usuario", "cuenta", "nombre_cuenta", "concepto_anterior", "concepto_nuevo"]],
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
                         
                         st.markdown("---")
                         st.caption("💡 **Tip:** Las sugerencias de categoría son orientativas. Confirma cada una antes de guardar.")
