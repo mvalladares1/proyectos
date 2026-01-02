@@ -994,20 +994,30 @@ if datos:
             # URL del API
             FLUJO_CAJA_URL = f"{API_BASE_URL}/api/v1/flujo-caja"
             
-            # Usar form para evitar rerun que cambia de tab
-            with st.form(key="flujo_caja_form"):
-                col_btn, col_info = st.columns([1, 3])
-                with col_btn:
-                    cargar_flujo = st.form_submit_button("🔄 Generar Flujo de Caja", type="primary", use_container_width=True)
-                with col_info:
-                    st.info(f"📅 Período: {fecha_inicio} a {fecha_fin}")
-            
-            # Cargar datos si se presiona el botón o si ya hay datos en cache
+            # Usar callback para evitar que el rerun cambie de tab
             flujo_cache_key = f"flujo_{fecha_inicio}_{fecha_fin}"
             
-            if cargar_flujo:
-                # Marcar que estamos en el tab de flujo
-                st.session_state['active_tab_flujo'] = True
+            def cargar_flujo_click():
+                """Callback que se ejecuta al hacer click en el botón"""
+                st.session_state['flujo_loading'] = True
+                st.session_state['flujo_clicked'] = True
+            
+            col_btn, col_info = st.columns([1, 3])
+            with col_btn:
+                # Botón con callback
+                st.button(
+                    "🔄 Generar Flujo de Caja", 
+                    type="primary", 
+                    use_container_width=True,
+                    key="btn_flujo_caja",
+                    on_click=cargar_flujo_click
+                )
+            with col_info:
+                st.info(f"📅 Período: {fecha_inicio} a {fecha_fin}")
+            
+            # Cargar datos si se hizo click (flag en session_state)
+            if st.session_state.get('flujo_clicked'):
+                st.session_state['flujo_clicked'] = False  # Reset flag
                 with st.spinner("Generando Estado de Flujo de Efectivo..."):
                     try:
                         resp = requests.get(
@@ -1026,6 +1036,7 @@ if datos:
                             st.error(f"Error {resp.status_code}: {resp.text}")
                     except Exception as e:
                         st.error(f"Error al conectar con API: {e}")
+                st.session_state['flujo_loading'] = False
             
             # Mostrar datos si existen en cache
             flujo_data = st.session_state.get(flujo_cache_key)
