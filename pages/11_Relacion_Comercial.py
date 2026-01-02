@@ -329,7 +329,7 @@ col_met, col_cur, _ = st.columns([1.5, 1, 2])
 with col_met: 
     metric_type = st.radio("Ver Datos por:", ["Kilos", "Ventas ($)"], horizontal=True)
 with col_cur:
-    currency = st.radio("Moneda:", ["CLP", "USD"], horizontal=True, disabled=(metric_type == "Kilos"))
+    currency = st.radio("Moneda:", ["CLP", "USD"], horizontal=True)
     
 metric_key = 'kilos' if metric_type == "Kilos" else 'monto'
 metric_label = "Kilos" if metric_type == "Kilos" else currency
@@ -380,7 +380,8 @@ kpis_data = data.get('kpis', {
 })
 
 # --- Currency Transformation ---
-if metric_type == "Ventas ($)" and currency == "USD" and not df_raw.empty:
+# We always transform monomerary values if USD is selected, regardless of what the charts show
+if currency == "USD" and not df_raw.empty:
     df_raw['monto'] = df_raw['monto'] * usd_rate
     kpis_data['total_ventas'] *= usd_rate
     kpis_data['total_comprometido'] *= usd_rate
@@ -408,26 +409,32 @@ with head_col1:
             except Exception as e:
                 st.error(f"Error al generar PDF: {e}")
 
-# --- KPI Section (Matching Image) ---
-def fmt_kpi(val):
-    return f"{prefix}{val:{val_format}}"
+# --- KPI Section ---
+def fmt_moneda(val):
+    fmt = ",.2f" if currency == "USD" else ",.0f"
+    pref = "$"
+    return f"{pref}{val:{fmt}}"
 
 def fmt_kilos(val):
-    return f"{val:,.0f}"
+    return f"{val:,.0f} KG"
 
 st.markdown(f"""
 <div class="kpi-container">
     <div class="kpi-card">
-        <div class="kpi-value">{fmt_kpi(kpis_data['total_ventas'])}</div>
-        <div class="kpi-label">{kpis_data.get('kpi_label', 'Total Ventas')} ({metric_label})</div>
+        <div class="kpi-value">{fmt_moneda(kpis_data['total_ventas'])}</div>
+        <div class="kpi-label">Total Ventas ({currency})</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-value">{fmt_kilos(kpis_data['total_kilos'])}</div>
-        <div class="kpi-label">{kpis_data.get('kpi_label', 'Total Ventas')} (KG)</div>
+        <div class="kpi-label">Total Ventas (KG)</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-value">{fmt_kpi(kpis_data['total_comprometido'])}</div>
-        <div class="kpi-label">Total Comprometido ({metric_label})</div>
+        <div class="kpi-value">{fmt_moneda(kpis_data['total_comprometido'])}</div>
+        <div class="kpi-label">Comprometido ({currency})</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{fmt_kilos(kpis_data.get('total_comprometido_kilos', 0))}</div>
+        <div class="kpi-label">Comprometido (KG)</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
