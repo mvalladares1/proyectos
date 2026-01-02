@@ -58,17 +58,26 @@ ESTRUCTURA_FLUJO = {
 class FlujoCajaService:
     """Servicio para generar Estado de Flujo de Efectivo NIIF IAS 7."""
     
+    # Categorías técnicas especiales
+    CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
+    CATEGORIA_FX_EFFECT = "FX_EFFECT"   # Diferencia tipo de cambio
+    CATEGORIA_UNCLASSIFIED = "UNCLASSIFIED"  # Sin clasificar
+    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self.mapeo_cuentas = self._cargar_mapeo()
         self._cache_cuentas_efectivo = None
     
+    def _get_mapeo_path(self) -> str:
+        """Retorna la ruta al archivo de mapeo."""
+        return os.path.join(
+            os.path.dirname(__file__), 
+            '..', 'data', 'mapeo_cuentas.json'
+        )
+    
     def _cargar_mapeo(self) -> Dict:
         """Carga el mapeo de cuentas desde archivo JSON."""
-        mapeo_path = os.path.join(
-            os.path.dirname(__file__), 
-            '..', 'data', 'mapeo_flujo_caja.json'
-        )
+        mapeo_path = self._get_mapeo_path()
         try:
             if os.path.exists(mapeo_path):
                 with open(mapeo_path, 'r', encoding='utf-8') as f:
@@ -79,43 +88,110 @@ class FlujoCajaService:
         return self._mapeo_default()
     
     def _mapeo_default(self) -> Dict:
-        """Retorna mapeo por defecto basado en plan de cuentas típico chileno."""
+        """Retorna mapeo por defecto (estructura vacía para forzar clasificación explícita)."""
         return {
-            # Cuentas de efectivo y equivalentes (códigos que empiezan con 110, 111)
+            "version": "2.0",
             "cuentas_efectivo": {
                 "prefijos": ["110", "111", "1101", "1102", "1103"],
                 "codigos_especificos": []
             },
-            # Mapeo de cuentas a líneas del flujo
-            "mapeo_lineas": {
-                # Operación
-                "OP01": {"prefijos": ["410", "411", "412"], "descripcion": "Ingresos por ventas"},
-                "OP02": {"prefijos": ["510", "511", "512", "210", "211"], "descripcion": "Pagos a proveedores"},
-                "OP03": {"prefijos": ["620", "621", "622", "623", "215"], "descripcion": "Remuneraciones"},
-                "OP04": {"prefijos": ["650", "651"], "descripcion": "Intereses pagados"},
-                "OP05": {"prefijos": ["420", "421"], "descripcion": "Intereses recibidos"},
-                "OP06": {"prefijos": ["640", "641", "216"], "descripcion": "Impuestos"},
-                "OP07": {"prefijos": [], "descripcion": "Otros operacionales"},
-                # Inversión
-                "IN03": {"prefijos": ["123", "124", "125"], "descripcion": "PPE"},
-                "IN04": {"prefijos": ["126", "127"], "descripcion": "Intangibles"},
-                "IN05": {"prefijos": ["422"], "descripcion": "Dividendos recibidos"},
-                "IN06": {"prefijos": ["430"], "descripcion": "Venta activos"},
-                # Financiamiento
-                "FI01": {"prefijos": ["230", "231"], "descripcion": "Préstamos LP"},
-                "FI02": {"prefijos": ["220", "221"], "descripcion": "Préstamos CP"},
-                "FI03": {"prefijos": ["232", "233"], "descripcion": "Préstamos relacionadas"},
-                "FI04": {"prefijos": ["230", "231"], "descripcion": "Pago préstamos"},
-                "FI07": {"prefijos": ["310", "311"], "descripcion": "Dividendos pagados"},
-            }
+            "categorias": {},
+            "mapeo_cuentas": {}
         }
     
+    def _clasificar_cuenta_explicita(self, codigo_cuenta: str) -> str:
+        """
+        Clasifica una cuenta usando mapeo explícito por código.
+        Retorna la categoría o UNCLASSIFIED si no está mapeada.
+        """
+        mapeo = self.mapeo_cuentas.get("mapeo_cuentas", {})
+        
+        # Buscar por código exacto
+        if codigo_cuenta in mapeo:
+            cuenta_info = mapeo[codigo_cuenta]
+            if isinstance(cuenta_info, dict):
+                return cuenta_info.get("categoria", self.CATEGORIA_UNCLASSIFIED)
+            elif isinstance(cuenta_info, str):
+                return cuenta_info
+        
+        return self.CATEGORIA_UNCLASSIFIED
+    
+    def guardar_mapeo_cuenta(self, codigo: str, categoria: str, nombre: str = "", 
+                                usuario: str = "system", impacto_estimado: float = None) -> bool:
+        """Guarda o actualiza el mapeo de una cuenta individual con audit trail."""
+        mapeo_path = self._get_mapeo_path()
+        try:
+            # Cargar mapeo actual
+            mapeo = self._cargar_mapeo()
+            
+            # Obtener categoría anterior para audit
+            categoria_anterior = None
+            if "mapeo_cuentas" in mapeo and codigo in mapeo["mapeo_cuentas"]:
+                cuenta_ant = mapeo["mapeo_cuentas"][codigo]
+                if isinstance(cuenta_ant, dict):
+                    categoria_anterior = cuenta_ant.get("categoria")
+                elif isinstance(cuenta_ant, str):
+                    categoria_anterior = cuenta_ant
+            
+            # Actualizar cuenta
+            if "mapeo_cuentas" not in mapeo:
+                mapeo["mapeo_cuentas"] = {}
+            
+            mapeo["mapeo_cuentas"][codigo] = {
+                "categoria": categoria,
+                "nombre": nombre,
+                "fecha_asignacion": datetime.now().isoformat(),
+                "usuario": usuario
+            }
+            
+            # Agregar a historial de cambios (audit trail)
+            if "historial_cambios" not in mapeo:
+                mapeo["historial_cambios"] = []
+            
+            mapeo["historial_cambios"].append({
+                "fecha": datetime.now().isoformat(),
+                "usuario": usuario,
+                "accion": "actualizar" if categoria_anterior else "crear",
+                "cuenta": codigo,
+                "nombre_cuenta": nombre,
+                "categoria_anterior": categoria_anterior,
+                "categoria_nueva": categoria,
+                "impacto_estimado": impacto_estimado  # Informativo
+            })
+            
+            # Limitar historial a últimos 500 cambios
+            if len(mapeo["historial_cambios"]) > 500:
+                mapeo["historial_cambios"] = mapeo["historial_cambios"][-500:]
+            
+            # Guardar
+            with open(mapeo_path, 'w', encoding='utf-8') as f:
+                json.dump(mapeo, f, indent=2, ensure_ascii=False)
+            
+            # Actualizar cache
+            self.mapeo_cuentas = mapeo
+            return True
+        except Exception as e:
+            print(f"[FlujoCaja] Error guardando mapeo cuenta: {e}")
+            return False
+    
+    def eliminar_mapeo_cuenta(self, codigo: str) -> bool:
+        """Elimina el mapeo de una cuenta."""
+        mapeo_path = self._get_mapeo_path()
+        try:
+            mapeo = self._cargar_mapeo()
+            if codigo in mapeo.get("mapeo_cuentas", {}):
+                del mapeo["mapeo_cuentas"][codigo]
+                with open(mapeo_path, 'w', encoding='utf-8') as f:
+                    json.dump(mapeo, f, indent=2, ensure_ascii=False)
+                self.mapeo_cuentas = mapeo
+            return True
+        except Exception as e:
+            print(f"[FlujoCaja] Error eliminando mapeo: {e}")
+            return False
+    
     def guardar_mapeo(self, mapeo: Dict) -> bool:
-        """Guarda el mapeo de cuentas en archivo JSON."""
-        mapeo_path = os.path.join(
-            os.path.dirname(__file__), 
-            '..', 'data', 'mapeo_flujo_caja.json'
-        )
+        """Guarda el mapeo completo en archivo JSON."""
+        mapeo_path = self._get_mapeo_path()
         try:
             os.makedirs(os.path.dirname(mapeo_path), exist_ok=True)
             with open(mapeo_path, 'w', encoding='utf-8') as f:
@@ -126,69 +202,247 @@ class FlujoCajaService:
             print(f"[FlujoCaja] Error guardando mapeo: {e}")
             return False
     
+    def get_configuracion(self) -> Dict:
+        """Retorna la configuración del mapeo."""
+        return self.mapeo_cuentas.get("configuracion", {
+            "modo_estricto": False,
+            "bloquear_si_no_clasificado": False,
+            "umbral_alerta_no_clasificado": 0.05
+        })
+    
+    def validar_flujo(self, flujos_por_linea: Dict, 
+                      efectivo_inicial: float, efectivo_final_calculado: float,
+                      flujos_por_actividad: Dict = None,
+                      efectivo_final_real: float = None) -> Dict:
+        """
+        Valida el flujo según reglas financieras (v2.2).
+        
+        Validaciones:
+        1. NEUTRAL debe ser ~0
+        2. UNCLASSIFIED por actividad (umbrales separados)
+        3. Signo esperado (alertas informativas, no errores)
+        4. Reconciliación
+        """
+        config = self.get_configuracion()
+        categorias = self.mapeo_cuentas.get("categorias", {})
+        alertas = []
+        errores = []
+        info = []  # Alertas informativas (signo)
+        
+        neutral = flujos_por_linea.get(self.CATEGORIA_NEUTRAL, 0)
+        sin_clasificar = flujos_por_linea.get(self.CATEGORIA_UNCLASSIFIED, 0)
+        
+        # 1. Validar NEUTRAL (~0)
+        if abs(neutral) > 1000:
+            alertas.append({
+                "tipo": "NEUTRAL_NO_CERO",
+                "mensaje": f"NEUTRAL debería ser ~$0, pero es ${neutral:,.0f}",
+                "impacto": neutral
+            })
+        
+        # 2. Validar UNCLASSIFIED por actividad
+        umbrales = config.get("umbrales_unclassified", {
+            "operacion": 0.05, "inversion": 0.10, "financiamiento": 0.10
+        })
+        
+        if flujos_por_actividad and sin_clasificar != 0:
+            # Calcular proporción por actividad (simplificado: usamos total)
+            for act_key, umbral in [
+                ("OPERACION", umbrales.get("operacion", 0.05)),
+                ("INVERSION", umbrales.get("inversion", 0.10)),
+                ("FINANCIAMIENTO", umbrales.get("financiamiento", 0.10))
+            ]:
+                act_total = abs(flujos_por_actividad.get(act_key, {}).get("subtotal", 0))
+                if act_total > 0:
+                    # Proporción de sin_clasificar vs total de la actividad
+                    proporcion = abs(sin_clasificar) / (act_total + abs(sin_clasificar))
+                    if proporcion > umbral:
+                        alertas.append({
+                            "tipo": f"UNCLASSIFIED_{act_key}",
+                            "mensaje": f"{proporcion*100:.1f}% sin clasificar afecta {act_key}",
+                            "umbral": umbral,
+                            "proporcion": proporcion
+                        })
+                        break  # Una alerta es suficiente
+        elif sin_clasificar != 0:
+            # Fallback: validación global
+            total_flujos = sum(abs(v) for k, v in flujos_por_linea.items() if k != self.CATEGORIA_NEUTRAL)
+            if total_flujos > 0:
+                proporcion = abs(sin_clasificar) / total_flujos
+                if proporcion > 0.05:
+                    nivel = "error" if config.get("modo_estricto") else "warning"
+                    msg = {
+                        "tipo": "UNCLASSIFIED_ALTO",
+                        "mensaje": f"{proporcion*100:.1f}% sin clasificar (${abs(sin_clasificar):,.0f})",
+                        "impacto": sin_clasificar
+                    }
+                    (errores if nivel == "error" else alertas).append(msg)
+        
+        # 3. Validar signo esperado (INFORMATIVO, no bloqueante)
+        if config.get("alertar_signo_inesperado", True):
+            for codigo, monto in flujos_por_linea.items():
+                if monto == 0 or codigo in [self.CATEGORIA_NEUTRAL, self.CATEGORIA_UNCLASSIFIED, self.CATEGORIA_FX_EFFECT]:
+                    continue
+                cat_info = categorias.get(codigo, {})
+                signo_esperado = cat_info.get("signo_esperado", "variable")
+                
+                if signo_esperado == "positivo" and monto < 0:
+                    info.append({
+                        "tipo": "SIGNO_INESPERADO",
+                        "mensaje": f"{codigo} es negativo (${monto:,.0f}), se esperaba positivo",
+                        "codigo": codigo
+                    })
+                elif signo_esperado == "negativo" and monto > 0:
+                    info.append({
+                        "tipo": "SIGNO_INESPERADO",
+                        "mensaje": f"{codigo} es positivo (${monto:,.0f}), se esperaba negativo",
+                        "codigo": codigo
+                    })
+        
+        # 4. Reconciliación
+        if efectivo_final_real is not None:
+            diferencia = efectivo_final_calculado - efectivo_final_real
+            if abs(diferencia) > 100:
+                alertas.append({
+                    "tipo": "RECONCILIACION_DIFERENCIA",
+                    "mensaje": f"Diferencia de ${diferencia:,.0f} entre calculado y real",
+                    "diferencia": diferencia
+                })
+        
+        es_valido = len(errores) == 0
+        bloquear = config.get("bloquear_si_no_clasificado", False) and not es_valido
+        
+        return {
+            "valido": es_valido,
+            "bloquear_visualizacion": bloquear,
+            "alertas": alertas,
+            "errores": errores,
+            "info": info,
+            "modo_estricto": config.get("modo_estricto", False)
+        }
+    
     def _get_cuentas_efectivo(self) -> List[int]:
-        """Obtiene IDs de cuentas clasificadas como efectivo y equivalentes."""
+        """
+        Obtiene IDs de cuentas de efectivo y equivalentes.
+        
+        Lógica de override: codigos_excluir > codigos_incluir > prefijos
+        """
         if self._cache_cuentas_efectivo:
             return self._cache_cuentas_efectivo
         
-        # Buscar cuentas que coincidan con prefijos de efectivo
-        prefijos = self.mapeo_cuentas.get("cuentas_efectivo", {}).get("prefijos", ["110", "111"])
+        cuentas_efectivo_config = self.mapeo_cuentas.get("cuentas_efectivo", {})
         
-        # Construir dominio OR para todos los prefijos
-        domain = ['|'] * (len(prefijos) - 1) if len(prefijos) > 1 else []
-        for prefijo in prefijos:
+        # Recopilar todos los prefijos, incluir y excluir de ambos tipos
+        all_prefijos = []
+        all_incluir = []
+        all_excluir = []
+        
+        for tipo in ["efectivo", "equivalentes"]:
+            tipo_config = cuentas_efectivo_config.get(tipo, {})
+            all_prefijos.extend(tipo_config.get("prefijos", []))
+            all_incluir.extend(tipo_config.get("codigos_incluir", []))
+            all_excluir.extend(tipo_config.get("codigos_excluir", []))
+        
+        # Fallback para estructura anterior
+        if not all_prefijos and "prefijos" in cuentas_efectivo_config:
+            all_prefijos = cuentas_efectivo_config.get("prefijos", ["110", "111"])
+        
+        if not all_prefijos:
+            all_prefijos = ["110", "111"]
+        
+        # Construir dominio OR para prefijos
+        domain = ['|'] * (len(all_prefijos) - 1) if len(all_prefijos) > 1 else []
+        for prefijo in all_prefijos:
             domain.append(['code', '=like', f'{prefijo}%'])
-        
-        if not domain:
-            domain = [['code', '=like', '110%']]
         
         try:
             cuentas = self.odoo.search_read(
                 'account.account',
                 domain,
                 ['id', 'code', 'name'],
-                limit=100
+                limit=200
             )
-            self._cache_cuentas_efectivo = [c['id'] for c in cuentas]
+            
+            # Aplicar lógica de override: excluir > incluir > prefijos
+            resultado_ids = []
+            codigos_encontrados = set()
+            
+            for c in cuentas:
+                codigo = c.get('code', '')
+                # Excluir tiene prioridad máxima
+                if codigo in all_excluir:
+                    continue
+                resultado_ids.append(c['id'])
+                codigos_encontrados.add(codigo)
+            
+            # Agregar codigos_incluir que no fueron encontrados por prefijo
+            # (necesitan búsqueda adicional)
+            codigos_faltantes = [c for c in all_incluir if c not in codigos_encontrados]
+            if codigos_faltantes:
+                try:
+                    cuentas_extra = self.odoo.search_read(
+                        'account.account',
+                        [['code', 'in', codigos_faltantes]],
+                        ['id', 'code'],
+                        limit=50
+                    )
+                    for c in cuentas_extra:
+                        if c.get('code') not in all_excluir:
+                            resultado_ids.append(c['id'])
+                except:
+                    pass
+            
+            self._cache_cuentas_efectivo = resultado_ids
             return self._cache_cuentas_efectivo
         except Exception as e:
             print(f"[FlujoCaja] Error obteniendo cuentas efectivo: {e}")
             return []
     
-    def _clasificar_cuenta(self, codigo_cuenta: str) -> Optional[str]:
-        """Clasifica una cuenta según el mapeo y retorna el código de línea."""
-        mapeo_lineas = self.mapeo_cuentas.get("mapeo_lineas", {})
-        
-        for linea_codigo, config in mapeo_lineas.items():
-            prefijos = config.get("prefijos", [])
-            for prefijo in prefijos:
-                if codigo_cuenta.startswith(prefijo):
-                    return linea_codigo
-        
-        return None
+    def _clasificar_cuenta(self, codigo_cuenta: str) -> str:
+        """
+        Clasifica una cuenta usando mapeo explícito por código.
+        Prioriza mapeo explícito, retorna UNCLASSIFIED si no está mapeada.
+        """
+        return self._clasificar_cuenta_explicita(codigo_cuenta)
     
     def _get_saldo_efectivo(self, fecha: str, cuentas_efectivo_ids: List[int]) -> float:
-        """Calcula el saldo de efectivo a una fecha dada."""
+        """Calcula el saldo de efectivo a una fecha dada usando agregación."""
         if not cuentas_efectivo_ids:
             return 0.0
         
         try:
-            # Buscar todos los movimientos hasta la fecha
-            moves = self.odoo.search_read(
-                'account.move.line',
-                [
+            # OPTIMIZADO: Usar read_group para agregar en servidor en vez de traer todas las líneas
+            result = self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'account.move.line', 'read_group',
+                [[
                     ['account_id', 'in', cuentas_efectivo_ids],
                     ['parent_state', '=', 'posted'],
                     ['date', '<=', fecha]
-                ],
-                ['balance'],
-                limit=50000
+                ]],
+                {'fields': ['balance:sum'], 'groupby': [], 'lazy': False}
             )
             
-            return sum(m.get('balance', 0) for m in moves)
-        except Exception as e:
-            print(f"[FlujoCaja] Error calculando saldo efectivo: {e}")
+            if result and len(result) > 0:
+                return result[0].get('balance', 0) or 0.0
             return 0.0
+        except Exception as e:
+            # Fallback al método anterior si read_group no está disponible
+            print(f"[FlujoCaja] read_group failed, using fallback: {e}")
+            try:
+                moves = self.odoo.search_read(
+                    'account.move.line',
+                    [
+                        ['account_id', 'in', cuentas_efectivo_ids],
+                        ['parent_state', '=', 'posted'],
+                        ['date', '<=', fecha]
+                    ],
+                    ['balance'],
+                    limit=50000
+                )
+                return sum(m.get('balance', 0) for m in moves)
+            except:
+                return 0.0
     
     def get_flujo_efectivo(self, fecha_inicio: str, fecha_fin: str, 
                            company_id: int = None) -> Dict:
@@ -247,27 +501,33 @@ class FlujoCajaService:
             for m in movimientos_efectivo if m.get('move_id')
         ))
         
-        # Obtener todas las líneas de los asientos para identificar contrapartidas
+        # OPTIMIZADO: Obtener solo líneas de contrapartida (NO cuentas de efectivo)
+        # Esto reduce significativamente la cantidad de datos transferidos
         contrapartidas = {}
         if asientos_ids:
             try:
-                todas_lineas = self.odoo.search_read(
+                # Filtrar las cuentas de efectivo directamente en la consulta
+                domain = [
+                    ['move_id', 'in', asientos_ids],
+                    ['account_id', 'not in', cuentas_efectivo_ids]  # Solo contrapartidas
+                ]
+                
+                # OPTIMIZADO: Solo campos necesarios para clasificación
+                lineas_contrapartida = self.odoo.search_read(
                     'account.move.line',
-                    [['move_id', 'in', asientos_ids]],
-                    ['id', 'move_id', 'account_id', 'debit', 'credit', 'balance'],
+                    domain,
+                    ['move_id', 'account_id'],  # Solo lo mínimo necesario
                     limit=100000
                 )
                 
-                # Agrupar por asiento
-                for linea in todas_lineas:
+                # Agrupar por asiento (más eficiente con dict.setdefault)
+                for linea in lineas_contrapartida:
                     move_id = linea['move_id'][0] if isinstance(linea.get('move_id'), (list, tuple)) else linea.get('move_id')
-                    if move_id not in contrapartidas:
-                        contrapartidas[move_id] = []
-                    contrapartidas[move_id].append(linea)
+                    contrapartidas.setdefault(move_id, []).append(linea)
             except Exception as e:
                 print(f"[FlujoCaja] Error obteniendo contrapartidas: {e}")
         
-        # Obtener info de cuentas para clasificación
+        # OPTIMIZADO: Obtener info de cuentas - solo las de contrapartidas
         cuentas_info = {}
         cuenta_ids_all = list(set(
             l['account_id'][0] if isinstance(l.get('account_id'), (list, tuple)) else l.get('account_id')
@@ -276,7 +536,8 @@ class FlujoCajaService:
         
         if cuenta_ids_all:
             try:
-                cuentas = self.odoo.read('account.account', cuenta_ids_all, ['id', 'code', 'name'])
+                # OPTIMIZADO: Solo code (para clasificación) y name (para display)
+                cuentas = self.odoo.read('account.account', cuenta_ids_all, ['code', 'name'])
                 cuentas_info = {c['id']: c for c in cuentas}
             except:
                 pass
@@ -287,45 +548,65 @@ class FlujoCajaService:
             for cat in ESTRUCTURA_FLUJO.values() 
             for linea in cat["lineas"]
         }
-        flujos_por_linea["OTROS"] = 0.0  # Para movimientos no clasificados
+        # Categorías técnicas
+        flujos_por_linea[self.CATEGORIA_NEUTRAL] = 0.0       # No impacta flujo
+        flujos_por_linea[self.CATEGORIA_FX_EFFECT] = 0.0     # Diferencia TC
+        flujos_por_linea[self.CATEGORIA_UNCLASSIFIED] = 0.0  # Sin clasificar
         
         detalle = []
+        cuentas_sin_clasificar = {}  # Para tracking de cuentas UNCLASSIFIED
         
         for mov in movimientos_efectivo:
             move_id = mov['move_id'][0] if isinstance(mov.get('move_id'), (list, tuple)) else mov.get('move_id')
-            account_id = mov['account_id'][0] if isinstance(mov.get('account_id'), (list, tuple)) else mov.get('account_id')
             monto = mov.get('balance', 0)  # Positivo = entrada, negativo = salida
             
-            # Buscar contrapartida (línea con signo opuesto en el mismo asiento)
+            # OPTIMIZADO: Las contrapartidas ya están filtradas (no incluyen cuentas de efectivo)
             lineas_asiento = contrapartidas.get(move_id, [])
             contrapartida_cuenta = None
+            codigo_cuenta = ''
             
-            for linea in lineas_asiento:
+            # Tomar la primera contrapartida (ya está filtrada)
+            if lineas_asiento:
+                linea = lineas_asiento[0]
                 linea_account_id = linea['account_id'][0] if isinstance(linea.get('account_id'), (list, tuple)) else linea.get('account_id')
-                # La contrapartida es la cuenta que NO es de efectivo
-                if linea_account_id not in cuentas_efectivo_ids:
-                    contrapartida_cuenta = cuentas_info.get(linea_account_id, {})
-                    break
-            
-            # Clasificar según la contrapartida
-            codigo_linea = "OTROS"
-            if contrapartida_cuenta:
+                contrapartida_cuenta = cuentas_info.get(linea_account_id, {})
                 codigo_cuenta = contrapartida_cuenta.get('code', '')
-                clasificacion = self._clasificar_cuenta(codigo_cuenta)
-                if clasificacion:
-                    codigo_linea = clasificacion
             
-            # Acumular
-            flujos_por_linea[codigo_linea] = flujos_por_linea.get(codigo_linea, 0) + monto
+            # Clasificar según la contrapartida (clasificación explícita)
+            clasificacion = self._clasificar_cuenta(codigo_cuenta) if codigo_cuenta else self.CATEGORIA_UNCLASSIFIED
             
-            # Guardar detalle
-            detalle.append({
-                "fecha": mov.get('date'),
-                "descripcion": mov.get('name') or mov.get('ref') or '',
-                "monto": monto,
-                "clasificacion": codigo_linea,
-                "contrapartida": contrapartida_cuenta.get('name', '') if contrapartida_cuenta else ''
-            })
+            # Manejar categorías especiales
+            if clasificacion == self.CATEGORIA_NEUTRAL:
+                # Transferencias internas: NO impactan el flujo
+                flujos_por_linea[self.CATEGORIA_NEUTRAL] += monto
+            elif clasificacion == self.CATEGORIA_FX_EFFECT:
+                # Diferencia de tipo de cambio: línea separada en conciliación
+                flujos_por_linea[self.CATEGORIA_FX_EFFECT] += monto
+            elif clasificacion == self.CATEGORIA_UNCLASSIFIED:
+                # Sin clasificar: acumular para diagnóstico
+                flujos_por_linea[self.CATEGORIA_UNCLASSIFIED] += monto
+                # Trackear cuenta para diagnóstico
+                if codigo_cuenta:
+                    if codigo_cuenta not in cuentas_sin_clasificar:
+                        cuentas_sin_clasificar[codigo_cuenta] = {
+                            'nombre': contrapartida_cuenta.get('name', ''),
+                            'monto': 0, 'cantidad': 0
+                        }
+                    cuentas_sin_clasificar[codigo_cuenta]['monto'] += monto
+                    cuentas_sin_clasificar[codigo_cuenta]['cantidad'] += 1
+            else:
+                # Categoría normal (OPxx, INxx, FIxx)
+                flujos_por_linea[clasificacion] = flujos_por_linea.get(clasificacion, 0) + monto
+            
+            # Guardar detalle (limitado para performance)
+            if len(detalle) < 100:
+                detalle.append({
+                    "fecha": mov.get('date'),
+                    "descripcion": mov.get('name') or mov.get('ref') or '',
+                    "monto": monto,
+                    "clasificacion": clasificacion,
+                    "contrapartida": contrapartida_cuenta.get('name', '') if contrapartida_cuenta else ''
+                })
         
         # 6. Estructurar resultado
         for cat_key, cat_data in ESTRUCTURA_FLUJO.items():
@@ -352,22 +633,45 @@ class FlujoCajaService:
         flujo_operacion = resultado["actividades"]["OPERACION"]["subtotal"]
         flujo_inversion = resultado["actividades"]["INVERSION"]["subtotal"]
         flujo_financiamiento = resultado["actividades"]["FINANCIAMIENTO"]["subtotal"]
-        otros = flujos_por_linea.get("OTROS", 0)
         
-        variacion_neta = flujo_operacion + flujo_inversion + flujo_financiamiento + otros
-        efectivo_final = efectivo_inicial + variacion_neta
+        # Categorías técnicas
+        efecto_tc = flujos_por_linea.get(self.CATEGORIA_FX_EFFECT, 0)
+        sin_clasificar = flujos_por_linea.get(self.CATEGORIA_UNCLASSIFIED, 0)
+        neutral = flujos_por_linea.get(self.CATEGORIA_NEUTRAL, 0)  # NO se suma
+        
+        # Variación neta: NO incluye NEUTRAL (transferencias internas)
+        variacion_neta = flujo_operacion + flujo_inversion + flujo_financiamiento + sin_clasificar
+        efectivo_final_calculado = efectivo_inicial + variacion_neta + efecto_tc
         
         resultado["conciliacion"] = {
             "incremento_neto": round(variacion_neta, 0),
-            "efecto_tipo_cambio": 0,  # TODO: Implementar si hay multimoneda
-            "variacion_efectivo": round(variacion_neta, 0),
+            "efecto_tipo_cambio": round(efecto_tc, 0),  # Ahora funcional
+            "variacion_efectivo": round(variacion_neta + efecto_tc, 0),
             "efectivo_inicial": round(efectivo_inicial, 0),
-            "efectivo_final": round(efectivo_final, 0),
-            "otros_no_clasificados": round(otros, 0)
+            "efectivo_final": round(efectivo_final_calculado, 0),
+            "sin_clasificar": round(sin_clasificar, 0),
+            "neutral": round(neutral, 0),  # Para debug
+            "otros_no_clasificados": round(sin_clasificar, 0)  # Legacy compatibility
         }
         
-        resultado["detalle_movimientos"] = detalle[:100]  # Limitar detalle
-        resultado["total_movimientos"] = len(detalle)
+        # Agregar info de cuentas sin clasificar para el editor
+        resultado["cuentas_sin_clasificar"] = sorted(
+            [{"codigo": k, **v} for k, v in cuentas_sin_clasificar.items()],
+            key=lambda x: abs(x.get('monto', 0)),
+            reverse=True
+        )[:50]  # Top 50
+        
+        # 8. Validaciones
+        validacion = self.validar_flujo(
+            flujos_por_linea, 
+            efectivo_inicial, 
+            efectivo_final_calculado,
+            flujos_por_actividad=resultado["actividades"]
+        )
+        resultado["validacion"] = validacion
+        
+        resultado["detalle_movimientos"] = detalle
+        resultado["total_movimientos"] = len(movimientos_efectivo)
         
         return resultado
     

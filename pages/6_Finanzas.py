@@ -1120,6 +1120,21 @@ if datos:
                 
                 actividades = flujo_data.get("actividades", {})
                 conciliacion = flujo_data.get("conciliacion", {})
+                validacion = flujo_data.get("validacion", {})
+                
+                # === ALERTAS DE VALIDACIÓN ===
+                if validacion:
+                    errores = validacion.get("errores", [])
+                    alertas = validacion.get("alertas", [])
+                    
+                    for err in errores:
+                        st.error(f"🚫 **Error:** {err.get('mensaje', '')}")
+                    
+                    for alerta in alertas:
+                        st.warning(f"⚠️ {alerta.get('mensaje', '')}")
+                    
+                    if validacion.get("valido") and not alertas:
+                        st.success("✅ Flujo validado correctamente")
                 
                 # Función para formatear montos
                 def fmt_flujo(valor):
@@ -1347,63 +1362,93 @@ if datos:
                     hide_index=True
                 )
                 
-                # === PANEL DE DIAGNÓSTICO ===
-                if otros != 0:
-                    st.markdown("---")
-                    st.markdown("### 🔍 Diagnóstico de Cuentas No Clasificadas")
+                # === EDITOR DE MAPEO ===
+                st.markdown("---")
+                st.markdown("### 📝 Editor de Mapeo de Cuentas")
+                
+                # Obtener cuentas sin clasificar del flujo
+                cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
+                
+                if cuentas_nc:
+                    st.warning(f"⚠️ **{len(cuentas_nc)} cuentas** sin clasificar. Asigna una categoría a cada cuenta para mejorar la precisión del flujo.")
                     
-                    st.warning(f"⚠️ Hay **${abs(otros):,.0f}** en movimientos sin clasificar. Usa el diagnóstico para identificar las cuentas.")
+                    # Categorías disponibles
+                    categorias_options = {
+                        "--- Seleccionar ---": "",
+                        "🟢 OP01 - Cobros por ventas": "OP01",
+                        "🟢 OP02 - Pagos a proveedores": "OP02",
+                        "🟢 OP03 - Pagos a empleados": "OP03",
+                        "🟢 OP04 - Intereses pagados": "OP04",
+                        "🟢 OP05 - Intereses recibidos": "OP05",
+                        "🟢 OP06 - Impuestos": "OP06",
+                        "🟢 OP07 - Otros operacionales": "OP07",
+                        "🔵 IN01 - Control subsidiarias": "IN01",
+                        "🔵 IN02 - Participaciones no control.": "IN02",
+                        "🔵 IN03 - Compra PPE": "IN03",
+                        "🔵 IN04 - Compra intangibles": "IN04",
+                        "🔵 IN05 - Dividendos recibidos": "IN05",
+                        "🔵 IN06 - Venta PPE": "IN06",
+                        "🟣 FI01 - Préstamos LP recibidos": "FI01",
+                        "🟣 FI02 - Préstamos CP recibidos": "FI02",
+                        "🟣 FI03 - Préstamos relacionadas": "FI03",
+                        "🟣 FI04 - Pagos préstamos": "FI04",
+                        "🟣 FI05 - Pagos relacionadas": "FI05",
+                        "🟣 FI06 - Pagos leasing": "FI06",
+                        "🟣 FI07 - Dividendos pagados": "FI07",
+                        "⚪ NEUTRAL - Transf. internas": "NEUTRAL",
+                        "🟡 FX_EFFECT - Dif. tipo cambio": "FX_EFFECT"
+                    }
                     
-                    if st.button("🔬 Ejecutar Diagnóstico", key="btn_diagnostico"):
-                        with st.spinner("Analizando cuentas no clasificadas..."):
-                            try:
-                                diag_resp = requests.get(
-                                    f"{FLUJO_CAJA_URL}/diagnostico",
-                                    params={
-                                        "fecha_inicio": flujo_inicio_str,
-                                        "fecha_fin": flujo_fin_str,
-                                        "username": username,
-                                        "password": password
-                                    },
-                                    timeout=60
-                                )
-                                if diag_resp.status_code == 200:
-                                    diag_data = diag_resp.json()
-                                    st.session_state['flujo_diagnostico'] = diag_data
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                    
-                    # Mostrar diagnóstico si existe
-                    diag_data = st.session_state.get('flujo_diagnostico')
-                    if diag_data:
-                        cuentas_nc = diag_data.get("cuentas_no_clasificadas", [])
-                        sugerencias = diag_data.get("sugerencias_mapeo", {})
+                    # Tabla de cuentas con selector
+                    for i, cuenta in enumerate(cuentas_nc[:20]):
+                        codigo = cuenta.get('codigo', '')
+                        nombre = cuenta.get('nombre', '')[:40]
+                        monto = cuenta.get('monto', 0)
                         
-                        st.markdown(f"**Total no clasificado:** {fmt_flujo(diag_data.get('total_no_clasificado', 0))}")
-                        st.markdown(f"**Cuentas afectadas:** {diag_data.get('cantidad_cuentas', 0)}")
+                        col1, col2, col3, col4 = st.columns([1.5, 2.5, 1.5, 2])
                         
-                        if cuentas_nc:
-                            # Tabla de diagnóstico
-                            diag_rows = []
-                            for cuenta in cuentas_nc[:15]:
-                                codigo = cuenta.get('codigo', '')
-                                sug = sugerencias.get(codigo, {})
-                                diag_rows.append({
-                                    "Código": codigo,
-                                    "Nombre": cuenta.get('nombre', '')[:50],
-                                    "Monto": cuenta.get('monto_total', 0),
-                                    "Movs": cuenta.get('cantidad_movimientos', 0),
-                                    "Sugerencia": sug.get('sugerencia', 'Sin sugerencia')
-                                })
-                            
-                            df_diag = pd.DataFrame(diag_rows)
-                            st.dataframe(
-                                df_diag.style.format({"Monto": "${:,.0f}"}),
-                                use_container_width=True,
-                                hide_index=True
+                        with col1:
+                            st.code(codigo)
+                        with col2:
+                            st.caption(nombre)
+                        with col3:
+                            color = "#2ecc71" if monto >= 0 else "#e74c3c"
+                            st.markdown(f"<span style='color:{color};font-weight:bold;'>{fmt_flujo(monto)}</span>", unsafe_allow_html=True)
+                        with col4:
+                            categoria_sel = st.selectbox(
+                                "Cat",
+                                options=list(categorias_options.keys()),
+                                key=f"cat_{codigo}",
+                                label_visibility="collapsed"
                             )
                             
-                            st.info("💡 Para reducir 'No clasificados', agrega los prefijos de estas cuentas al mapeo en `backend/data/mapeo_flujo_caja.json`")
+                            # Guardar si se selecciona categoría
+                            if categorias_options[categoria_sel]:
+                                if st.button("💾", key=f"save_{codigo}", help="Guardar"):
+                                    try:
+                                        save_resp = requests.post(
+                                            f"{FLUJO_CAJA_URL}/mapeo-cuenta",
+                                            params={
+                                                "codigo": codigo,
+                                                "categoria": categorias_options[categoria_sel],
+                                                "nombre": nombre,
+                                                "username": username,
+                                                "password": password
+                                            },
+                                            timeout=10
+                                        )
+                                        if save_resp.status_code == 200:
+                                            st.success(f"✓ {codigo} → {categorias_options[categoria_sel]}")
+                                            st.rerun()
+                                        else:
+                                            st.error(f"Error: {save_resp.text}")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+                    
+                    if len(cuentas_nc) > 20:
+                        st.info(f"Mostrando 20 de {len(cuentas_nc)} cuentas. Las más impactantes primero.")
+                else:
+                    st.success("✅ Todas las cuentas están clasificadas correctamente.")
                 
                 # Info adicional
                 with st.expander("ℹ️ Información del Reporte"):

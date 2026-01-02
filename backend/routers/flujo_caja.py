@@ -180,3 +180,102 @@ async def get_diagnostico(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.post("/mapeo-cuenta")
+async def guardar_mapeo_cuenta(
+    codigo: str,
+    categoria: str,
+    nombre: str = "",
+    username: str = "",
+    password: str = ""
+):
+    """
+    Guarda o actualiza el mapeo de una cuenta individual.
+    
+    Args:
+        codigo: Código de la cuenta contable
+        categoria: Categoría de flujo (OP01, IN03, FI01, NEUTRAL, FX_EFFECT, etc.)
+        nombre: Nombre descriptivo de la cuenta
+    """
+    # Validar categoría
+    categorias_validas = [
+        "OP01", "OP02", "OP03", "OP04", "OP05", "OP06", "OP07",
+        "IN01", "IN02", "IN03", "IN04", "IN05", "IN06",
+        "FI01", "FI02", "FI03", "FI04", "FI05", "FI06", "FI07",
+        "NEUTRAL", "FX_EFFECT"
+    ]
+    if categoria not in categorias_validas:
+        raise HTTPException(status_code=400, detail=f"Categoría inválida. Válidas: {categorias_validas}")
+    
+    try:
+        service = FlujoCajaService(username=username, password=password)
+        if service.guardar_mapeo_cuenta(codigo, categoria, nombre):
+            return {
+                "status": "ok",
+                "message": f"Cuenta {codigo} mapeada a {categoria}",
+                "cuenta": {"codigo": codigo, "categoria": categoria, "nombre": nombre}
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Error guardando mapeo")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/mapeo-cuenta/{codigo}")
+async def eliminar_mapeo_cuenta(
+    codigo: str,
+    username: str = "",
+    password: str = ""
+):
+    """
+    Elimina el mapeo de una cuenta.
+    """
+    try:
+        service = FlujoCajaService(username=username, password=password)
+        if service.eliminar_mapeo_cuenta(codigo):
+            return {"status": "ok", "message": f"Mapeo de cuenta {codigo} eliminado"}
+        else:
+            raise HTTPException(status_code=500, detail="Error eliminando mapeo")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/categorias")
+async def get_categorias():
+    """
+    Retorna las categorías disponibles para clasificar cuentas.
+    """
+    return {
+        "operacion": [
+            {"codigo": "OP01", "nombre": "Cobros procedentes de las ventas de bienes y prestación de servicios"},
+            {"codigo": "OP02", "nombre": "Pagos a proveedores por el suministro de bienes y servicios"},
+            {"codigo": "OP03", "nombre": "Pagos a y por cuenta de los empleados"},
+            {"codigo": "OP04", "nombre": "Intereses pagados"},
+            {"codigo": "OP05", "nombre": "Intereses recibidos"},
+            {"codigo": "OP06", "nombre": "Impuestos a las ganancias reembolsados (pagados)"},
+            {"codigo": "OP07", "nombre": "Otras entradas (salidas) de efectivo operativas"}
+        ],
+        "inversion": [
+            {"codigo": "IN01", "nombre": "Flujos para obtener el control de subsidiarias"},
+            {"codigo": "IN02", "nombre": "Flujos en compra de participaciones no controladoras"},
+            {"codigo": "IN03", "nombre": "Compras de propiedades, planta y equipo"},
+            {"codigo": "IN04", "nombre": "Compras de activos intangibles"},
+            {"codigo": "IN05", "nombre": "Dividendos recibidos"},
+            {"codigo": "IN06", "nombre": "Ventas de propiedades, planta y equipo"}
+        ],
+        "financiamiento": [
+            {"codigo": "FI01", "nombre": "Importes procedentes de préstamos de largo plazo"},
+            {"codigo": "FI02", "nombre": "Importes procedentes de préstamos de corto plazo"},
+            {"codigo": "FI03", "nombre": "Préstamos de entidades relacionadas"},
+            {"codigo": "FI04", "nombre": "Pagos de préstamos"},
+            {"codigo": "FI05", "nombre": "Pagos de préstamos a entidades relacionadas"},
+            {"codigo": "FI06", "nombre": "Pagos de pasivos por arrendamientos financieros"},
+            {"codigo": "FI07", "nombre": "Dividendos pagados"}
+        ],
+        "tecnicas": [
+            {"codigo": "NEUTRAL", "nombre": "Transferencias internas (no impacta flujo)"},
+            {"codigo": "FX_EFFECT", "nombre": "Diferencias de tipo de cambio sobre efectivo"}
+        ]
+    }
