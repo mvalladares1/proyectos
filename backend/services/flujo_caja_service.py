@@ -453,6 +453,7 @@ class FlujoCajaService:
         según la contrapartida del asiento.
         """
         resultado = {
+            "meta": {"version": "3.0", "mode": "hierarchical"},
             "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
             "generado": datetime.now().isoformat(),
             "actividades": {},
