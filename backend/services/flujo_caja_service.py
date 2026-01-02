@@ -3,6 +3,7 @@ Servicio de Flujo de Caja - Estado de Flujo de Efectivo NIIF IAS 7 (Método Dire
 
 Este servicio genera el Estado de Flujo de Efectivo obteniendo datos desde Odoo.
 El flujo se construye exclusivamente desde movimientos que afectan cuentas de efectivo.
+Usa el catálogo oficial de conceptos NIIF para clasificación.
 """
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
@@ -12,61 +13,30 @@ import os
 from shared.odoo_client import OdooClient
 
 
-# Estructura del Estado de Flujo de Efectivo según NIIF IAS 7
-ESTRUCTURA_FLUJO = {
-    "OPERACION": {
-        "nombre": "ACTIVIDADES DE OPERACIÓN",
-        "lineas": [
-            {"codigo": "OP01", "nombre": "Cobros procedentes de las ventas de bienes y prestación de servicios", "signo": 1},
-            {"codigo": "OP02", "nombre": "Pagos a proveedores por el suministro de bienes y servicios", "signo": -1},
-            {"codigo": "OP03", "nombre": "Pagos a y por cuenta de los empleados", "signo": -1},
-            {"codigo": "OP04", "nombre": "Intereses pagados", "signo": -1},
-            {"codigo": "OP05", "nombre": "Intereses recibidos", "signo": 1},
-            {"codigo": "OP06", "nombre": "Impuestos a las ganancias reembolsados (pagados)", "signo": -1},
-            {"codigo": "OP07", "nombre": "Otras entradas (salidas) de efectivo", "signo": 1},
-        ],
-        "subtotal": "Flujos de efectivo netos procedentes de (utilizados en) actividades de operación"
-    },
-    "INVERSION": {
-        "nombre": "ACTIVIDADES DE INVERSIÓN",
-        "lineas": [
-            {"codigo": "IN01", "nombre": "Flujos de efectivo utilizados para obtener el control de subsidiarias u otros negocios", "signo": -1},
-            {"codigo": "IN02", "nombre": "Flujos de efectivo utilizados en la compra de participaciones no controladoras", "signo": -1},
-            {"codigo": "IN03", "nombre": "Compras de propiedades, planta y equipo", "signo": -1},
-            {"codigo": "IN04", "nombre": "Compras de activos intangibles", "signo": -1},
-            {"codigo": "IN05", "nombre": "Dividendos recibidos", "signo": 1},
-            {"codigo": "IN06", "nombre": "Ventas de propiedades, planta y equipo", "signo": 1},
-        ],
-        "subtotal": "Flujos de efectivo netos procedentes de (utilizados en) actividades de inversión"
-    },
-    "FINANCIAMIENTO": {
-        "nombre": "ACTIVIDADES DE FINANCIAMIENTO",
-        "lineas": [
-            {"codigo": "FI01", "nombre": "Importes procedentes de préstamos de largo plazo", "signo": 1},
-            {"codigo": "FI02", "nombre": "Importes procedentes de préstamos de corto plazo", "signo": 1},
-            {"codigo": "FI03", "nombre": "Préstamos de entidades relacionadas", "signo": 1},
-            {"codigo": "FI04", "nombre": "Pagos de préstamos", "signo": -1},
-            {"codigo": "FI05", "nombre": "Pagos de préstamos a entidades relacionadas", "signo": -1},
-            {"codigo": "FI06", "nombre": "Pagos de pasivos por arrendamientos financieros", "signo": -1},
-            {"codigo": "FI07", "nombre": "Dividendos pagados", "signo": -1},
-        ],
-        "subtotal": "Flujos de efectivo netos procedentes de (utilizados en) actividades de financiamiento"
-    }
-}
+# Concepto fallback para cuentas sin mapear
+CONCEPTO_FALLBACK = "1.2.6"  # Otras entradas (salidas) de efectivo
 
 
 class FlujoCajaService:
     """Servicio para generar Estado de Flujo de Efectivo NIIF IAS 7."""
     
-    # Categorías técnicas especiales
+    # Categorías técnicas especiales (no se muestran en UI pero se procesan internamente)
     CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
-    CATEGORIA_FX_EFFECT = "FX_EFFECT"   # Diferencia tipo de cambio
-    CATEGORIA_UNCLASSIFIED = "UNCLASSIFIED"  # Sin clasificar
+    CATEGORIA_PENDIENTE = "PENDIENTE"   # Sin clasificar (va a 1.2.6 + lista pendientes)
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
+        self.catalogo = self._cargar_catalogo()
         self.mapeo_cuentas = self._cargar_mapeo()
         self._cache_cuentas_efectivo = None
+        self._migracion_codigos = self.catalogo.get("migracion_codigos", {})
+    
+    def _get_catalogo_path(self) -> str:
+        """Retorna la ruta al archivo de catálogo."""
+        return os.path.join(
+            os.path.dirname(__file__), 
+            '..', 'data', 'catalogo_conceptos.json'
+        )
     
     def _get_mapeo_path(self) -> str:
         """Retorna la ruta al archivo de mapeo."""
@@ -74,6 +44,17 @@ class FlujoCajaService:
             os.path.dirname(__file__), 
             '..', 'data', 'mapeo_cuentas.json'
         )
+    
+    def _cargar_catalogo(self) -> Dict:
+        """Carga el catálogo oficial de conceptos NIIF."""
+        catalogo_path = self._get_catalogo_path()
+        try:
+            if os.path.exists(catalogo_path):
+                with open(catalogo_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[FlujoCaja] Error cargando catálogo: {e}")
+        return {"conceptos": [], "migracion_codigos": {}}
     
     def _cargar_mapeo(self) -> Dict:
         """Carga el mapeo de cuentas desde archivo JSON."""
@@ -90,19 +71,40 @@ class FlujoCajaService:
     def _mapeo_default(self) -> Dict:
         """Retorna mapeo por defecto (estructura vacía para forzar clasificación explícita)."""
         return {
-            "version": "2.0",
+            "version": "3.0",
             "cuentas_efectivo": {
-                "prefijos": ["110", "111", "1101", "1102", "1103"],
-                "codigos_especificos": []
+                "efectivo": {"prefijos": ["110", "111"], "codigos_incluir": [], "codigos_excluir": []},
+                "equivalentes": {"prefijos": [], "codigos_incluir": [], "codigos_excluir": []}
             },
-            "categorias": {},
-            "mapeo_cuentas": {}
+            "mapeo_cuentas": {},
+            "configuracion": {
+                "modo_estricto": False,
+                "bloquear_si_no_clasificado": False
+            }
         }
     
-    def _clasificar_cuenta_explicita(self, codigo_cuenta: str) -> str:
+    def get_catalogo_conceptos(self) -> List[Dict]:
+        """Retorna la lista de conceptos del catálogo oficial."""
+        return self.catalogo.get("conceptos", [])
+    
+    def get_concepto_por_id(self, concepto_id: str) -> Optional[Dict]:
+        """Busca un concepto por su ID."""
+        for c in self.catalogo.get("conceptos", []):
+            if c.get("id") == concepto_id:
+                return c
+        return None
+    
+    def _migrar_codigo_antiguo(self, codigo_antiguo: str) -> str:
+        """Convierte códigos antiguos (OP01, IN01) a nuevos (1.1.1, 2.1)."""
+        return self._migracion_codigos.get(codigo_antiguo, codigo_antiguo)
+    
+    def _clasificar_cuenta_explicita(self, codigo_cuenta: str) -> Tuple[str, bool]:
         """
         Clasifica una cuenta usando mapeo explícito por código.
-        Retorna la categoría o UNCLASSIFIED si no está mapeada.
+        Retorna (concepto_id, es_pendiente).
+        - Si está mapeada: retorna el concepto_id oficial (ej: "1.2.1")
+        - Si tiene código antiguo: migra a nuevo (OP01 → 1.1.1)
+        - Si no está mapeada: retorna CONCEPTO_FALLBACK y es_pendiente=True
         """
         mapeo = self.mapeo_cuentas.get("mapeo_cuentas", {})
         
@@ -110,13 +112,34 @@ class FlujoCajaService:
         if codigo_cuenta in mapeo:
             cuenta_info = mapeo[codigo_cuenta]
             if isinstance(cuenta_info, dict):
-                return cuenta_info.get("categoria", self.CATEGORIA_UNCLASSIFIED)
+                # Nuevo formato: {"concepto_id": "1.2.1"}
+                concepto_id = cuenta_info.get("concepto_id")
+                if concepto_id:
+                    return (concepto_id, False)
+                
+                # Formato antiguo: {"categoria": "OP02"}
+                categoria = cuenta_info.get("categoria")
+                if categoria:
+                    # Migrar código antiguo a nuevo
+                    nuevo_id = self._migrar_codigo_antiguo(categoria)
+                    return (nuevo_id, False)
             elif isinstance(cuenta_info, str):
-                return cuenta_info
+                # Formato legacy simple: "OP01"
+                nuevo_id = self._migrar_codigo_antiguo(cuenta_info)
+                return (nuevo_id, False)
         
-        return self.CATEGORIA_UNCLASSIFIED
+        # No mapeada → fallback + marcar como pendiente
+        return (CONCEPTO_FALLBACK, True)
     
-    def guardar_mapeo_cuenta(self, codigo: str, categoria: str, nombre: str = "", 
+    def _clasificar_cuenta(self, codigo_cuenta: str) -> Tuple[str, bool]:
+        """
+        Clasifica una cuenta usando mapeo explícito.
+        Wrapper que mantiene compatibilidad.
+        Retorna (concepto_id, es_pendiente).
+        """
+        return self._clasificar_cuenta_explicita(codigo_cuenta)
+    
+    def guardar_mapeo_cuenta(self, codigo: str, concepto_id: str, nombre: str = "", 
                                 usuario: str = "system", impacto_estimado: float = None) -> bool:
         """Guarda o actualiza el mapeo de una cuenta individual con audit trail."""
         mapeo_path = self._get_mapeo_path()
@@ -124,21 +147,21 @@ class FlujoCajaService:
             # Cargar mapeo actual
             mapeo = self._cargar_mapeo()
             
-            # Obtener categoría anterior para audit
-            categoria_anterior = None
+            # Obtener concepto_id anterior para audit
+            concepto_anterior = None
             if "mapeo_cuentas" in mapeo and codigo in mapeo["mapeo_cuentas"]:
                 cuenta_ant = mapeo["mapeo_cuentas"][codigo]
                 if isinstance(cuenta_ant, dict):
-                    categoria_anterior = cuenta_ant.get("categoria")
+                    concepto_anterior = cuenta_ant.get("concepto_id") or cuenta_ant.get("categoria")
                 elif isinstance(cuenta_ant, str):
-                    categoria_anterior = cuenta_ant
+                    concepto_anterior = cuenta_ant
             
-            # Actualizar cuenta
+            # Actualizar cuenta con nuevo formato
             if "mapeo_cuentas" not in mapeo:
                 mapeo["mapeo_cuentas"] = {}
             
             mapeo["mapeo_cuentas"][codigo] = {
-                "categoria": categoria,
+                "concepto_id": concepto_id,  # Nuevo formato oficial
                 "nombre": nombre,
                 "fecha_asignacion": datetime.now().isoformat(),
                 "usuario": usuario
@@ -151,12 +174,12 @@ class FlujoCajaService:
             mapeo["historial_cambios"].append({
                 "fecha": datetime.now().isoformat(),
                 "usuario": usuario,
-                "accion": "actualizar" if categoria_anterior else "crear",
+                "accion": "actualizar" if concepto_anterior else "crear",
                 "cuenta": codigo,
                 "nombre_cuenta": nombre,
-                "categoria_anterior": categoria_anterior,
-                "categoria_nueva": categoria,
-                "impacto_estimado": impacto_estimado  # Informativo
+                "concepto_anterior": concepto_anterior,
+                "concepto_nuevo": concepto_id,
+                "impacto_estimado": impacto_estimado
             })
             
             # Limitar historial a últimos 500 cambios
@@ -544,31 +567,28 @@ class FlujoCajaService:
             except:
                 pass
         
-        # 5. Clasificar cada movimiento
-        flujos_por_linea = {
-            linea["codigo"]: 0.0 
-            for cat in ESTRUCTURA_FLUJO.values() 
-            for linea in cat["lineas"]
-        }
-        # Categorías técnicas
-        flujos_por_linea[self.CATEGORIA_NEUTRAL] = 0.0       # No impacta flujo
-        flujos_por_linea[self.CATEGORIA_FX_EFFECT] = 0.0     # Diferencia TC
-        flujos_por_linea[self.CATEGORIA_UNCLASSIFIED] = 0.0  # Sin clasificar
+        # 5. Clasificar cada movimiento usando el catálogo oficial
+        # Inicializar montos por concepto_id del catálogo
+        montos_por_concepto = {}
+        for c in self.catalogo.get("conceptos", []):
+            if c.get("tipo") == "LINEA":
+                montos_por_concepto[c["id"]] = 0.0
+        montos_por_concepto[self.CATEGORIA_NEUTRAL] = 0.0  # Técnico: no impacta flujo
         
         detalle = []
-        cuentas_sin_clasificar = {}  # Para tracking de cuentas UNCLASSIFIED
+        cuentas_pendientes = {}  # Cuentas sin mapear (van a 1.2.6 + lista pendientes)
         
-        # DRILL-DOWN: Tracking de cuentas por categoría
-        cuentas_por_categoria = {}  # {categoria: {codigo: {nombre, monto, cantidad}}}
+        # DRILL-DOWN: Tracking de cuentas por concepto_id
+        cuentas_por_concepto = {}  # {concepto_id: {codigo: {nombre, monto, cantidad}}}
         
-        def agregar_cuenta_categoria(cat: str, codigo: str, nombre: str, monto: float):
-            """Helper para agregar cuenta a tracking de categoría."""
-            if cat not in cuentas_por_categoria:
-                cuentas_por_categoria[cat] = {}
-            if codigo not in cuentas_por_categoria[cat]:
-                cuentas_por_categoria[cat][codigo] = {'nombre': nombre, 'monto': 0, 'cantidad': 0}
-            cuentas_por_categoria[cat][codigo]['monto'] += monto
-            cuentas_por_categoria[cat][codigo]['cantidad'] += 1
+        def agregar_cuenta_concepto(concepto_id: str, codigo: str, nombre: str, monto: float, es_pendiente: bool = False):
+            """Helper para agregar cuenta a tracking de concepto."""
+            if concepto_id not in cuentas_por_concepto:
+                cuentas_por_concepto[concepto_id] = {}
+            if codigo not in cuentas_por_concepto[concepto_id]:
+                cuentas_por_concepto[concepto_id][codigo] = {'nombre': nombre, 'monto': 0, 'cantidad': 0, 'pendiente': es_pendiente}
+            cuentas_por_concepto[concepto_id][codigo]['monto'] += monto
+            cuentas_por_concepto[concepto_id][codigo]['cantidad'] += 1
         
         for mov in movimientos_efectivo:
             move_id = mov['move_id'][0] if isinstance(mov.get('move_id'), (list, tuple)) else mov.get('move_id')
@@ -588,35 +608,32 @@ class FlujoCajaService:
                 codigo_cuenta = contrapartida_cuenta.get('code', '')
                 nombre_cuenta = contrapartida_cuenta.get('name', '')
             
-            # Clasificar según la contrapartida (clasificación explícita)
-            clasificacion = self._clasificar_cuenta(codigo_cuenta) if codigo_cuenta else self.CATEGORIA_UNCLASSIFIED
+            # Clasificar según la contrapartida usando nuevo formato
+            if codigo_cuenta:
+                concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
+            else:
+                concepto_id, es_pendiente = CONCEPTO_FALLBACK, True
             
-            # Manejar categorías especiales
-            if clasificacion == self.CATEGORIA_NEUTRAL:
-                # Transferencias internas: NO impactan el flujo
-                flujos_por_linea[self.CATEGORIA_NEUTRAL] += monto
-                agregar_cuenta_categoria(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, monto)
-            elif clasificacion == self.CATEGORIA_FX_EFFECT:
-                # Diferencia de tipo de cambio: línea separada en conciliación
-                flujos_por_linea[self.CATEGORIA_FX_EFFECT] += monto
-                agregar_cuenta_categoria(self.CATEGORIA_FX_EFFECT, codigo_cuenta, nombre_cuenta, monto)
-            elif clasificacion == self.CATEGORIA_UNCLASSIFIED:
-                # Sin clasificar: acumular para diagnóstico
-                flujos_por_linea[self.CATEGORIA_UNCLASSIFIED] += monto
-                agregar_cuenta_categoria(self.CATEGORIA_UNCLASSIFIED, codigo_cuenta, nombre_cuenta, monto)
-                # Trackear cuenta para diagnóstico
-                if codigo_cuenta:
-                    if codigo_cuenta not in cuentas_sin_clasificar:
-                        cuentas_sin_clasificar[codigo_cuenta] = {
-                            'nombre': contrapartida_cuenta.get('name', ''),
+            # Manejar categoría NEUTRAL (transferencias internas)
+            if concepto_id == self.CATEGORIA_NEUTRAL:
+                montos_por_concepto[self.CATEGORIA_NEUTRAL] += monto
+                agregar_cuenta_concepto(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, monto)
+            else:
+                # Sumar al concepto correspondiente
+                if concepto_id not in montos_por_concepto:
+                    montos_por_concepto[concepto_id] = 0.0
+                montos_por_concepto[concepto_id] += monto
+                agregar_cuenta_concepto(concepto_id, codigo_cuenta, nombre_cuenta, monto, es_pendiente)
+                
+                # Trackear cuentas pendientes de mapeo
+                if es_pendiente and codigo_cuenta:
+                    if codigo_cuenta not in cuentas_pendientes:
+                        cuentas_pendientes[codigo_cuenta] = {
+                            'nombre': nombre_cuenta,
                             'monto': 0, 'cantidad': 0
                         }
-                    cuentas_sin_clasificar[codigo_cuenta]['monto'] += monto
-                    cuentas_sin_clasificar[codigo_cuenta]['cantidad'] += 1
-            else:
-                # Categoría normal (OPxx, INxx, FIxx)
-                flujos_por_linea[clasificacion] = flujos_por_linea.get(clasificacion, 0) + monto
-                agregar_cuenta_categoria(clasificacion, codigo_cuenta, nombre_cuenta, monto)
+                    cuentas_pendientes[codigo_cuenta]['monto'] += monto
+                    cuentas_pendientes[codigo_cuenta]['cantidad'] += 1
             
             # Guardar detalle (limitado para performance)
             if len(detalle) < 100:
@@ -629,97 +646,123 @@ class FlujoCajaService:
                 })
         
         # 6. Estructurar resultado
-        # 6. Estructurar resultado
-        for cat_key, cat_data in ESTRUCTURA_FLUJO.items():
-            lineas_resultado = []
-            conceptos_resultado = []
-            subtotal = 0.0
+        # 6. Construir resultado usando el catálogo oficial
+        resultado["catalogo"] = self.get_catalogo_conceptos()  # Para UI reference
+        
+        # Agrupar conceptos por actividad
+        conceptos_por_actividad = {"OPERACION": [], "INVERSION": [], "FINANCIAMIENTO": [], "CONCILIACION": []}
+        subtotales = {"OPERACION": 0.0, "INVERSION": 0.0, "FINANCIAMIENTO": 0.0}
+        
+        for concepto in self.catalogo.get("conceptos", []):
+            c_id = concepto.get("id")
+            c_tipo = concepto.get("tipo")
+            c_actividad = concepto.get("actividad")
             
-            for linea in cat_data["lineas"]:
-                codigo = linea["codigo"]
-                monto = flujos_por_linea.get(codigo, 0)
-                subtotal += monto
+            if c_tipo == "LINEA":
+                monto = montos_por_concepto.get(c_id, 0.0)
                 
-                # Info básica de línea
-                lineas_resultado.append({
-                    "codigo": codigo,
-                    "nombre": linea["nombre"],
-                    "monto": round(monto, 0)
-                })
+                # Obtener cuentas de este concepto desde tracking
+                cuentas_concepto = []
+                if c_id in cuentas_por_concepto:
+                    cuentas_concepto = sorted(
+                        [{"codigo": k, **v} for k, v in cuentas_por_concepto[c_id].items()],
+                        key=lambda x: abs(x.get('monto', 0)),
+                        reverse=True
+                    )
                 
-                # OPERACION: Construir jerarquía completa (Concepto -> Cuentas)
-                if cat_key == "OPERACION":
-                    cuentas_concepto = []
-                    # Obtener cuentas de esta categoría desde el tracking
-                    if codigo in cuentas_por_categoria:
-                        cuentas_concepto = sorted(
-                            [{"codigo": k, **v} for k, v in cuentas_por_categoria[codigo].items()],
-                            key=lambda x: abs(x.get('monto', 0)),
-                            reverse=True
-                        )
-                    
-                    conceptos_resultado.append({
-                        "codigo": codigo,
-                        "nombre": linea["nombre"],
-                        "monto": round(monto, 0),
-                        "signo": linea.get("signo", 1),
-                        "cuentas": cuentas_concepto
-                    })
+                concepto_resultado = {
+                    "id": c_id,
+                    "nombre": concepto.get("nombre"),
+                    "tipo": c_tipo,
+                    "nivel": concepto.get("nivel", 3),
+                    "monto": round(monto, 0),
+                    "signo": concepto.get("signo", 1),
+                    "cuentas": cuentas_concepto
+                }
+                
+                if c_actividad in subtotales:
+                    conceptos_por_actividad[c_actividad].append(concepto_resultado)
+                    subtotales[c_actividad] += monto
             
-            act_result = {
-                "nombre": cat_data["nombre"],
-                "lineas": lineas_resultado,
-                "subtotal": round(subtotal, 0),
-                "subtotal_nombre": cat_data["subtotal"]
+            elif c_tipo in ("HEADER", "TOTAL"):
+                # Headers y totales se calculan
+                concepto_resultado = {
+                    "id": c_id,
+                    "nombre": concepto.get("nombre"),
+                    "tipo": c_tipo,
+                    "nivel": concepto.get("nivel", 1),
+                    "monto": None,  # Se calcula después
+                    "calculo": concepto.get("calculo")
+                }
+                if c_actividad in conceptos_por_actividad:
+                    conceptos_por_actividad[c_actividad].append(concepto_resultado)
+        
+        # Construir actividades con la estructura esperada por el frontend
+        resultado["actividades"] = {
+            "OPERACION": {
+                "nombre": "Flujos de efectivo procedentes (utilizados) en actividades de operación",
+                "subtotal": round(subtotales["OPERACION"], 0),
+                "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de operación",
+                "conceptos": conceptos_por_actividad["OPERACION"]
+            },
+            "INVERSION": {
+                "nombre": "Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
+                "subtotal": round(subtotales["INVERSION"], 0),
+                "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de inversión",
+                "conceptos": conceptos_por_actividad["INVERSION"]
+            },
+            "FINANCIAMIENTO": {
+                "nombre": "Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
+                "subtotal": round(subtotales["FINANCIAMIENTO"], 0),
+                "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de financiamiento",
+                "conceptos": conceptos_por_actividad["FINANCIAMIENTO"]
             }
-            
-            # Adjuntar jerarquía para Operación
-            if cat_key == "OPERACION":
-                act_result["conceptos"] = conceptos_resultado
-                
-            resultado["actividades"][cat_key] = act_result
+        }
         
         # 7. Conciliación
-        flujo_operacion = resultado["actividades"]["OPERACION"]["subtotal"]
-        flujo_inversion = resultado["actividades"]["INVERSION"]["subtotal"]
-        flujo_financiamiento = resultado["actividades"]["FINANCIAMIENTO"]["subtotal"]
+        flujo_operacion = subtotales["OPERACION"]
+        flujo_inversion = subtotales["INVERSION"]
+        flujo_financiamiento = subtotales["FINANCIAMIENTO"]
         
-        # Categorías técnicas
-        efecto_tc = flujos_por_linea.get(self.CATEGORIA_FX_EFFECT, 0)
-        sin_clasificar = flujos_por_linea.get(self.CATEGORIA_UNCLASSIFIED, 0)
-        neutral = flujos_por_linea.get(self.CATEGORIA_NEUTRAL, 0)  # NO se suma
+        # Montos técnicos/especiales
+        efecto_tc = montos_por_concepto.get("3.2.3", 0)  # Efectos variación TC
+        neutral = montos_por_concepto.get(self.CATEGORIA_NEUTRAL, 0)  # NO se suma
         
-        # Variación neta: NO incluye NEUTRAL (transferencias internas)
-        variacion_neta = flujo_operacion + flujo_inversion + flujo_financiamiento + sin_clasificar
+        # Monto de cuentas pendientes de mapeo (ya está en 1.2.6)
+        monto_pendientes = sum(c.get('monto', 0) for c in cuentas_pendientes.values())
+        
+        # Variación neta
+        variacion_neta = flujo_operacion + flujo_inversion + flujo_financiamiento
         efectivo_final_calculado = efectivo_inicial + variacion_neta + efecto_tc
         
         resultado["conciliacion"] = {
             "incremento_neto": round(variacion_neta, 0),
-            "efecto_tipo_cambio": round(efecto_tc, 0),  # Ahora funcional
+            "efecto_tipo_cambio": round(efecto_tc, 0),
             "variacion_efectivo": round(variacion_neta + efecto_tc, 0),
             "efectivo_inicial": round(efectivo_inicial, 0),
             "efectivo_final": round(efectivo_final_calculado, 0),
-            "sin_clasificar": round(sin_clasificar, 0),
-            "neutral": round(neutral, 0),  # Para debug
-            "otros_no_clasificados": round(sin_clasificar, 0)  # Legacy compatibility
+            "monto_pendientes": round(monto_pendientes, 0),
+            "neutral": round(neutral, 0),
+            "otros_no_clasificados": round(monto_pendientes, 0)  # Legacy compatibility
         }
         
-        # Agregar info de cuentas sin clasificar para el editor
-        resultado["cuentas_sin_clasificar"] = sorted(
-            [{"codigo": k, **v} for k, v in cuentas_sin_clasificar.items()],
+        # Agregar lista de cuentas pendientes de mapeo para el editor
+        resultado["cuentas_pendientes"] = sorted(
+            [{"codigo": k, **v} for k, v in cuentas_pendientes.items()],
             key=lambda x: abs(x.get('monto', 0)),
             reverse=True
         )[:50]  # Top 50
+        resultado["cuentas_sin_clasificar"] = resultado["cuentas_pendientes"]  # Legacy
         
-        # DRILL-DOWN: Agregar cuentas por categoría para inspección
+        # DRILL-DOWN: Cuentas por concepto para inspección
         drill_down = {}
-        for categoria, cuentas in cuentas_por_categoria.items():
+        for concepto_id, cuentas in cuentas_por_concepto.items():
             cuentas_lista = sorted(
-                [{"codigo": k, "categoria": categoria, **v} for k, v in cuentas.items()],
+                [{"codigo": k, "concepto_id": concepto_id, **v} for k, v in cuentas.items()],
                 key=lambda x: abs(x.get('monto', 0)),
                 reverse=True
-            )[:30]  # Top 30 por categoría
-            drill_down[categoria] = cuentas_lista
+            )[:30]  # Top 30 por concepto
+            drill_down[concepto_id] = cuentas_lista
         resultado["drill_down"] = drill_down
         
         # DRILL-DOWN: Detalle de cuentas de efectivo (para efectivo inicial/final)

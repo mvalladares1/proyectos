@@ -1479,15 +1479,20 @@ if datos:
                             
                             for concepto in act_data["conceptos"]:
                                 c_nombre = concepto.get("nombre", "")
-                                c_codigo = concepto.get("codigo", "")
-                                c_monto = concepto.get("monto", 0)
+                                c_id = concepto.get("id") or concepto.get("codigo", "")  # New format uses 'id'
+                                c_monto = concepto.get("monto", 0) or 0
                                 c_cuentas = concepto.get("cuentas", [])
                                 c_docs = concepto.get("documentos", []) or concepto.get("documentos_proy", [])
+                                c_tipo = concepto.get("tipo", "LINEA")
+                                
+                                # Skip HEADERs (they are structural, no data)
+                                if c_tipo == "HEADER":
+                                    continue
                                 
                                 # Encabezado del Concepto
                                 c_color = "#2ecc71" if c_monto >= 0 else "#e74c3c"
                                 if concepto.get("es_proyeccion"):
-                                    c_codigo = f"PROY-{c_codigo}"
+                                    c_id = f"PROY-{c_id}"
                                     c_color = "#f39c12" # Naranja para puros proyectados
                                 
                                 st.markdown(f"""
@@ -1495,7 +1500,7 @@ if datos:
                                             padding: 10px 15px; background: #2d3748; border-radius: 6px; margin-top: 12px; margin-bottom: 5px;
                                             border-left: 4px solid {act_color};">
                                     <div style="flex-grow: 1;">
-                                        <div style="font-size: 0.8em; color: #a0aec0;">{c_codigo}</div>
+                                        <div style="font-size: 0.8em; color: #a0aec0;">{c_id}</div>
                                         <div style="font-weight: 600; font-size: 1em;">{c_nombre}</div>
                                     </div>
                                     <div style="color: {c_color}; font-weight: bold; font-family: monospace; font-size: 1.1em;">
