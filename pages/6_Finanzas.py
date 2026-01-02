@@ -1124,6 +1124,11 @@ if datos:
                 cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
                 otros = conciliacion.get("otros_no_clasificados", 0)
                 
+                # Extraer valores de actividades para uso en todo el módulo
+                op = actividades.get("OPERACION", {}).get("subtotal", 0)
+                inv = actividades.get("INVERSION", {}).get("subtotal", 0)
+                fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
+                
                 # Función para sugerir categoría basada en nombre de cuenta
                 def sugerir_categoria(nombre: str, monto: float) -> tuple:
                     """Sugiere categoría basada en heurísticas de nombre. Retorna (codigo, razon)."""
@@ -1270,13 +1275,6 @@ if datos:
                     .kpi-neutral { color: #f39c12; }
                 </style>
                 """, unsafe_allow_html=True)
-                
-                op = actividades.get("OPERACION", {}).get("subtotal", 0)
-                inv = actividades.get("INVERSION", {}).get("subtotal", 0)
-                fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
-                ef_ini = conciliacion.get("efectivo_inicial", 0)
-                ef_fin = conciliacion.get("efectivo_final", 0)
-                otros = conciliacion.get("otros_no_clasificados", 0)
                 
                 # KPIs en grid
                 col1, col2, col3, col4, col5 = st.columns(5)
