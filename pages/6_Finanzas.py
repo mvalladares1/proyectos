@@ -1450,34 +1450,29 @@ if datos:
                 
                 st.divider()
                 
-                # === DETALLE POR ACTIVIDAD CON DRILL-DOWN ===
-                st.markdown("### 📋 Detalle por Actividad")
+                # === ESTADO DE FLUJO DE EFECTIVO OFICIAL ===
+                st.markdown("### 📋 Estado de Flujo de Efectivo (NIIF IAS 7)")
                 
-                drill_down_data = flujo_data.get("drill_down", {})
-                cuentas_efectivo_det = flujo_data.get("cuentas_efectivo_detalle", [])
-                
-                # Mapeo de prefijos a actividad
-                prefijo_actividad = {
-                    "OP": ("OPERACION", "#2ecc71"),
-                    "IN": ("INVERSION", "#3498db"),
-                    "FI": ("FINANCIAMIENTO", "#9b59b6")
+                # Colores por actividad
+                colores_actividad = {
+                    "OPERACION": "#2ecc71",
+                    "INVERSION": "#3498db", 
+                    "FINANCIAMIENTO": "#9b59b6",
+                    "CONCILIACION": "#f39c12"
                 }
                 
-                for act_key, act_color in [("OPERACION", "#2ecc71"), ("INVERSION", "#3498db"), ("FINANCIAMIENTO", "#9b59b6")]:
+                # Renderizar cada actividad con sus conceptos
+                for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
                     act_data = actividades.get(act_key, {})
                     act_nombre = act_data.get("nombre", act_key)
-                    lineas = act_data.get("lineas", [])
                     subtotal = act_data.get("subtotal", 0)
-                    subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
+                    act_color = colores_actividad.get(act_key, "#718096")
+                    conceptos = act_data.get("conceptos", [])
                     
                     with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=(act_key=="OPERACION")):
+                        total_act = abs(subtotal) if subtotal != 0 else 1
                         
-                        # === LÓGICA JERÁRQUICA (SOLO OPERACIÓN) ===
-                        # === LÓGICA JERÁRQUICA (SOLO OPERACIÓN) ===
-                        if act_key == "OPERACION" and act_data.get("conceptos"):
-                            total_act = abs(subtotal) if subtotal != 0 else 1
-                            
-                            for concepto in act_data["conceptos"]:
+                        for concepto in conceptos:
                                 c_nombre = concepto.get("nombre", "")
                                 c_id = concepto.get("id") or concepto.get("codigo", "")  # New format uses 'id'
                                 c_monto = concepto.get("monto", 0) or 0
@@ -1566,74 +1561,9 @@ if datos:
                                 else:
                                     if not c_cuentas and not c_docs:
                                          st.markdown("<div style='padding-left: 15px; color: #718096; font-style: italic; font-size: 0.9em;'>Sin movimientos</div>", unsafe_allow_html=True)
-
-                        # === LÓGICA LEGACY (INVERSIÓN / FINANCIAMIENTO) ===
-                        else:
-                            # Tabla de líneas NIIF (Resumen)
-                            filas = []
-                            for linea in lineas:
-                                monto = linea.get("monto", 0)
-                                if monto != 0:
-                                    filas.append({
-                                        "Concepto": linea.get("nombre", ""),
-                                        "Monto": monto
-                                    })
-                            
-                            if filas:
-                                df_act = pd.DataFrame(filas)
-                                def style_monto(val):
-                                    color = "#2ecc71" if val >= 0 else "#e74c3c"
-                                    return f"color: {color}; font-weight: bold;"
-                                
-                                styled_df = df_act.style.format({"Monto": "${:,.0f}"}).applymap(
-                                    style_monto, subset=["Monto"]
-                                )
-                                st.dataframe(styled_df, use_container_width=True, hide_index=True, height=min(200, 50 + len(filas) * 35))
-                            
-                            # DRILL-DOWN LEGACY
-                            cuentas_actividad = []
-                            prefijo_buscar = act_key[:2]
-                            for cat_code, cat_cuentas in drill_down_data.items():
-                                if cat_code.startswith(prefijo_buscar):
-                                    for cuenta in cat_cuentas:
-                                        cuenta['categoria_display'] = cat_code
-                                        cuentas_actividad.append(cuenta)
-                            
-                            st.markdown("---")
-                            if cuentas_actividad:
-                                st.markdown(f"**🔍 Composición contable ({len(cuentas_actividad)} cuentas)**")
-                                total_act = abs(subtotal) if subtotal != 0 else 1
-                                for i, cuenta in enumerate(sorted(cuentas_actividad, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:15]):
-                                    codigo = cuenta.get('codigo', '')
-                                    nombre = cuenta.get('nombre', '')[:25]
-                                    monto_c = cuenta.get('monto', 0)
-                                    cat_display = cuenta.get('categoria_display', '')
-                                    pct = abs(monto_c) / total_act * 100 if total_act > 0 else 0
-                                    
-                                    monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
-                                    monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
-                                    
-                                    col_c1, col_c2, col_c3, col_c4, col_c5, col_c6 = st.columns([0.8, 1.8, 1, 0.6, 0.8, 0.5])
-                                    with col_c1: st.code(codigo, language=None)
-                                    with col_c2: st.caption(nombre)
-                                    with col_c3: st.markdown(f"<span style='color:{monto_color};'>{monto_display}</span>", unsafe_allow_html=True)
-                                    with col_c4: st.caption(f"{pct:.1f}%")
-                                    with col_c5: st.caption(f"📁 {cat_display}")
-                                    with col_c6:
-                                        if st.button("✏️", key=f"edit_{act_key}_{codigo}", help=f"Reasignar {codigo}"):
-                                            st.session_state['cuenta_a_editar'] = codigo
-                                            st.session_state['mostrar_editor_expandido'] = True
-                                            st.rerun()
-                                if len(cuentas_actividad) > 15:
-                                    st.caption(f"... y {len(cuentas_actividad) - 15} cuentas más")
-                            else:
-                                cats_disponibles = list(drill_down_data.keys()) if drill_down_data else []
-                                if cats_disponibles:
-                                    st.caption(f"ℹ️ Categorías disponibles: {', '.join(cats_disponibles)}")
-                                else:
-                                    st.caption("ℹ️ Sin datos de composición para esta actividad.")
                         
-                        # Subtotal
+                        # Subtotal de la actividad
+                        subtotal_nombre = act_data.get("subtotal_nombre", "Subtotal")
                         subtotal_color = "#2ecc71" if subtotal >= 0 else "#e74c3c"
                         st.markdown(f"""
                         <div style="background: linear-gradient(90deg, {act_color}22, transparent); 
@@ -1751,31 +1681,30 @@ if datos:
                         else:
                             st.warning(f"⚠️ Existen ${abs(otros):,.0f} en movimientos no conciliados. Revisa las cuentas a continuación.")
                         
-                        # Categorías disponibles
+                        # Categorías oficiales NIIF (del catálogo)
                         categorias_options = {
                             "--- Seleccionar ---": "",
-                            "🟢 OP01 - Cobros por ventas": "OP01",
-                            "🟢 OP02 - Pagos a proveedores": "OP02",
-                            "🟢 OP03 - Pagos a empleados": "OP03",
-                            "🟢 OP04 - Intereses pagados": "OP04",
-                            "🟢 OP05 - Intereses recibidos": "OP05",
-                            "🟢 OP06 - Impuestos": "OP06",
-                            "🟢 OP07 - Otros operacionales": "OP07",
-                            "🔵 IN01 - Control subsidiarias": "IN01",
-                            "🔵 IN02 - Participaciones no control.": "IN02",
-                            "🔵 IN03 - Compra PPE": "IN03",
-                            "🔵 IN04 - Compra intangibles": "IN04",
-                            "🔵 IN05 - Dividendos recibidos": "IN05",
-                            "🔵 IN06 - Venta PPE": "IN06",
-                            "🟣 FI01 - Préstamos LP recibidos": "FI01",
-                            "🟣 FI02 - Préstamos CP recibidos": "FI02",
-                            "🟣 FI03 - Préstamos relacionadas": "FI03",
-                            "🟣 FI04 - Pagos préstamos": "FI04",
-                            "🟣 FI05 - Pagos relacionadas": "FI05",
-                            "🟣 FI06 - Pagos leasing": "FI06",
-                            "🟣 FI07 - Dividendos pagados": "FI07",
-                            "⚪ NEUTRAL - Transf. internas": "NEUTRAL",
-                            "🟡 FX_EFFECT - Dif. tipo cambio": "FX_EFFECT"
+                            "🟢 1.1.1 - Cobros procedentes de las ventas de bienes y prestación de servicios": "1.1.1",
+                            "🟢 1.2.1 - Pagos a proveedores por el suministro de bienes y servicios": "1.2.1",
+                            "🟢 1.2.2 - Pagos a y por cuenta de los empleados": "1.2.2",
+                            "🟢 1.2.3 - Intereses pagados": "1.2.3",
+                            "🟢 1.2.4 - Intereses recibidos": "1.2.4",
+                            "🟢 1.2.5 - Impuestos a las ganancias reembolsados (pagados)": "1.2.5",
+                            "🟢 1.2.6 - Otras entradas (salidas) de efectivo": "1.2.6",
+                            "🔵 2.1 - Flujos para obtener control de subsidiarias": "2.1",
+                            "🔵 2.2 - Compra de participaciones no controladoras": "2.2",
+                            "🔵 2.3 - Compras de propiedades, planta y equipo": "2.3",
+                            "🔵 2.4 - Compras de activos intangibles": "2.4",
+                            "🔵 2.5 - Dividendos recibidos": "2.5",
+                            "🟣 3.0.1 - Importes procedentes de préstamos de largo plazo": "3.0.1",
+                            "🟣 3.0.2 - Importes procedentes de préstamos de corto plazo": "3.0.2",
+                            "🟣 3.1.1 - Préstamos de entidades relacionadas": "3.1.1",
+                            "🟣 3.1.2 - Pagos de préstamos": "3.1.2",
+                            "🟣 3.1.3 - Pagos de préstamos a entidades relacionadas": "3.1.3",
+                            "🟣 3.1.4 - Pagos de pasivos por arrendamientos financieros": "3.1.4",
+                            "🟣 3.1.5 - Dividendos pagados": "3.1.5",
+                            "🟡 3.2.3 - Efectos de la variación en la tasa de cambio": "3.2.3",
+                            "⚪ NEUTRAL - Transferencias internas (no impacta flujo)": "NEUTRAL"
                         }
                         
                         # Encabezado de tabla
