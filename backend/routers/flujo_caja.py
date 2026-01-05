@@ -187,7 +187,8 @@ async def guardar_mapeo_cuenta(
     categoria: str,
     nombre: str = "",
     username: str = "",
-    password: str = ""
+    password: str = "",
+    impacto_estimado: float = None
 ):
     """
     Guarda o actualiza el mapeo de una cuenta individual.
@@ -196,20 +197,28 @@ async def guardar_mapeo_cuenta(
         codigo: Código de la cuenta contable
         categoria: Categoría de flujo (OP01, IN03, FI01, NEUTRAL, FX_EFFECT, etc.)
         nombre: Nombre descriptivo de la cuenta
+        impacto_estimado: Monto estimado del impacto de esta cuenta
     """
-    # Validar categoría
+    # Validar categoría - Aceptar códigos legacy (OP01) Y nuevos IAS 7 (1.1.1)
     categorias_validas = [
+        # Códigos IAS 7 nuevos (FASE 1)
+        "1.1.1", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5", "1.2.6",
+        "2.1", "2.2", "2.3", "2.4", "2.5",
+        "3.0.1", "3.0.2", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.2.3",
+        "4.2",
+        # Códigos legacy (retrocompatibilidad)
         "OP01", "OP02", "OP03", "OP04", "OP05", "OP06", "OP07",
         "IN01", "IN02", "IN03", "IN04", "IN05", "IN06",
         "FI01", "FI02", "FI03", "FI04", "FI05", "FI06", "FI07",
+        # Técnicos
         "NEUTRAL", "FX_EFFECT"
     ]
     if categoria not in categorias_validas:
-        raise HTTPException(status_code=400, detail=f"Categoría inválida. Válidas: {categorias_validas}")
+        raise HTTPException(status_code=400, detail=f"Categoría inválida: {categoria}")
     
     try:
         service = FlujoCajaService(username=username, password=password)
-        if service.guardar_mapeo_cuenta(codigo, categoria, nombre):
+        if service.guardar_mapeo_cuenta(codigo, categoria, nombre, impacto_estimado=impacto_estimado):
             return {
                 "status": "ok",
                 "message": f"Cuenta {codigo} mapeada a {categoria}",
