@@ -84,6 +84,11 @@ class RecepcionesGestionService:
             - 'Con QC Pendiente': Tiene QC pero está pendiente
             - 'QC Fallido': El QC falló
             - 'Sin QC': No tiene control de calidad asociado
+            
+        Lógica:
+            - qc_fail=True → QC Fallido
+            - qc_todo=True → Con QC Pendiente (hay tareas pendientes)
+            - qc_todo=False y qc_fail=False → Con QC Aprobado (completado sin fallos)
         """
         if not has_qc:
             return 'Sin QC'
@@ -94,11 +99,9 @@ class RecepcionesGestionService:
         if qc_todo:
             return 'Con QC Pendiente'
         
-        # Si tiene calificación final, está completo
-        if calific_final and calific_final.strip():
-            return 'Con QC Aprobado'
-        
-        return 'Con QC Pendiente'
+        # Si qc_todo=False y qc_fail=False, el QC está aprobado/completado
+        # La calificación final es opcional pero si existe es confirmación adicional
+        return 'Con QC Aprobado'
     
     # ============================================================
     #                    DATOS PRINCIPALES
