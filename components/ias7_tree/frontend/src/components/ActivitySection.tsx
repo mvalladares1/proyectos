@@ -20,8 +20,10 @@ const ActivitySection: React.FC<ActivitySectionProps> = ({
     const { key, nombre, subtotal, subtotal_nombre, conceptos, color } = actividad;
     const subtotalColor = getMontoColor(subtotal);
 
-    // Sort conceptos by order
-    const sortedConceptos = [...conceptos].sort((a, b) => (a.order || 0) - (b.order || 0));
+    // Sort conceptos by order and filter out Level 1 (Activity Root) to avoid duplication with Header
+    const sortedConceptos = [...conceptos]
+        .filter(c => c.nivel > 1)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
 
     return (
         <div className="ias7-activity" style={{ borderLeft: `3px solid ${color}` }}>
