@@ -958,16 +958,26 @@ class FlujoCajaService:
         resultado["historial_mapeo"] = mapeo_raw.get("historial_cambios", [])[-30:] # Últimos 30
         
         # DRILL-DOWN: Detalle de cuentas de efectivo (para efectivo inicial/final)
+        # Necesitamos volver a buscar la info de estas cuentas ya que eliminamos la carga masiva anterior
         cuentas_efectivo_info = []
-        for cid in cuentas_efectivo_ids:
-            if cid in cuentas_info:
-                c = cuentas_info[cid]
-                cuentas_efectivo_info.append({
-                    "id": cid,
-                    "codigo": c.get('code', ''),
-                    "nombre": c.get('name', ''),
-                    "tipo": "efectivo" if any(c.get('code', '').startswith(p) for p in ["1101", "1102"]) else "equivalente"
-                })
+        if cuentas_efectivo_ids:
+            try:
+                # Buscar info de cuentas de efectivo
+                ce_read = self.odoo.read('account.account', cuentas_efectivo_ids, ['code', 'name'])
+                ce_map = {c['id']: c for c in ce_read}
+                
+                for cid in cuentas_efectivo_ids:
+                    if cid in ce_map:
+                        c = ce_map[cid]
+                        cuentas_efectivo_info.append({
+                            "id": cid,
+                            "codigo": c.get('code', ''),
+                            "nombre": c.get('name', ''),
+                            "tipo": "efectivo" if any(c.get('code', '').startswith(p) for p in ["1101", "1102"]) else "equivalente"
+                        })
+            except Exception as e:
+                print(f"[FlujoCaja] Error recuperando info cuentas efectivo: {e}")
+        
         resultado["cuentas_efectivo_detalle"] = cuentas_efectivo_info
         
         # 8. Validaciones
