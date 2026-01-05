@@ -11,6 +11,10 @@
   padding-bottom: 0px;
 }
 
+.ias7-tree * {
+  box-sizing: border-box;
+}
+
 /* --- VIEWPORT (INTERNAL SCROLL) --- */
 .ias7-viewport {
   width: 100%;
@@ -121,8 +125,11 @@
   grid-template-columns: minmax(40px, auto) 1fr 150px 40px;
   align-items: center;
   padding: 8px 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.02);
   transition: background-color 0.1s;
+  column-gap: 12px;
+  /* Explicit gap between columns */
 }
 
 .ias7-grid-row:hover {
@@ -187,7 +194,9 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-right: 8px;
+  justify-content: flex-end;
+  padding-right: 0px;
+  /* Gap handled by grid column-gap */
 }
 
 .ias7-node__id {

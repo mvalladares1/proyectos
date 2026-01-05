@@ -15,7 +15,11 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
     const [expanded, setExpanded] = useState(false);
 
     React.useEffect(() => {
-        if (expanded) setTimeout(() => Streamlit.setFrameHeight(), 50);
+        if (expanded) {
+            // Multiple attempts to ensure height catches up
+            setTimeout(() => Streamlit.setFrameHeight(), 100);
+            setTimeout(() => Streamlit.setFrameHeight(), 300);
+        }
     }, [expanded]);
 
     const { id, nombre, tipo, nivel, monto_real, monto_proyectado, cuentas, documentos } = node;
@@ -79,7 +83,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
 
                 {/* COL 3: Name */}
                 <div className="ias7-node__nombre" title={`${id} - ${nombre}`}>
-                    <span style={{ opacity: 0.7, marginRight: 8, fontSize: '0.9em' }}>{icon}</span>
+                    {/* Fixed width container for alignment */}
+                    <span style={{
+                        display: 'inline-flex',
+                        justifyContent: 'center',
+                        width: '24px',
+                        marginRight: '8px',
+                        opacity: 0.7
+                    }}>
+                        {icon}
+                    </span>
                     {nombre}
                 </div>
 
