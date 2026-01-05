@@ -14,6 +14,10 @@ interface TreeNodeProps {
 const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
     const [expanded, setExpanded] = useState(false);
 
+    React.useEffect(() => {
+        if (expanded) setTimeout(() => Streamlit.setFrameHeight(), 50);
+    }, [expanded]);
+
     const { id, nombre, tipo, nivel, monto_real, monto_proyectado, cuentas, documentos } = node;
 
     // Calculate display amount based on mode

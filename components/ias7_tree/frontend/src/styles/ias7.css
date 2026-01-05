@@ -47,6 +47,11 @@
   color: #1a1a2e;
 }
 
+.ias7-tree--light .ias7-action-btn {
+  color: #333;
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
 /* --- ACTIVITY SECTION --- */
 .ias7-activity {
   background: #0e1117;
@@ -85,6 +90,10 @@
 
 .ias7-activity__icon {
   font-size: 1.2em;
+  min-width: 30px;
+  /* Prevent shrinking/overlap */
+  display: inline-flex;
+  justify-content: center;
 }
 
 .ias7-activity__toggle {
@@ -427,10 +436,35 @@
   padding-right: 10px;
 }
 
-.ias7-monto-label {
-  display: block;
-  font-size: 0.6em;
-  color: #718096;
-  margin-bottom: 2px;
-  text-transform: uppercase;
+/* --- ACTIONS --- */
+.ias7-node__actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0.7;
+  /* Always visible but dim */
+  transition: opacity 0.2s;
+}
+
+.ias7-grid-row:hover .ias7-node__actions {
+  opacity: 1;
+}
+
+.ias7-action-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  font-size: 1.1em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #e0e0e0;
+  transition: all 0.2s;
+  outline: none;
+  line-height: 1;
+}
+
+.ias7-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.05);
 }

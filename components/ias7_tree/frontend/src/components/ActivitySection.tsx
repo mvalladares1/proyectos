@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Streamlit } from "streamlit-component-lib";
 import { IAS7Activity, ViewMode } from '../types/ias7';
 import TreeNode from './TreeNode';
 import MontoDisplay from './MontoDisplay';
@@ -16,6 +17,11 @@ const ActivitySection: React.FC<ActivitySectionProps> = ({
     defaultExpanded = false
 }) => {
     const [expanded, setExpanded] = useState(defaultExpanded);
+
+    React.useEffect(() => {
+        // Force frame height update when expansion changes
+        setTimeout(() => Streamlit.setFrameHeight(), 50);
+    }, [expanded]);
 
     const { key, nombre, subtotal, subtotal_nombre, conceptos, color } = actividad;
     const subtotalColor = getMontoColor(subtotal);
