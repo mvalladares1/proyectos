@@ -85,31 +85,40 @@ class RecepcionesGestionService:
             - 'QC Fallido': El QC falló
             - 'Sin QC': No tiene control de calidad asociado
             
-        Lógica:
-            1. Si qc_state == 'pass' → Con QC Aprobado (prioridad alta)
-            2. Si qc_state == 'fail' → QC Fallido
-            3. Si qc_state == 'none' o no hay qc_state:
-               - qc_fail=True → QC Fallido
-               - qc_todo=True → Con QC Pendiente
-               - qc_todo=False y qc_fail=False → Con QC Aprobado
+        Lógica mejorada:
+            1. Si qc_state == 'pass' → Con QC Aprobado
+            2. Si tiene calific_final numérica → Con QC Aprobado (QC completado)
+            3. Si qc_state == 'fail' → QC Fallido
+            4. Si qc_fail=True → QC Fallido
+            5. Si qc_todo=True → Con QC Pendiente
+            6. Si qc_todo=False y qc_fail=False → Con QC Aprobado
         """
         if not has_qc:
             return 'Sin QC'
         
-        # Prioridad 1: Estado explícito del quality.check
+        # Prioridad 1: Estado explícito 'pass' del quality.check
         if qc_state == 'pass':
             return 'Con QC Aprobado'
-        if qc_state == 'fail':
+        
+        # Prioridad 2: Si tiene calificación final numérica, el QC fue completado
+        if calific_final:
+            calific_str = str(calific_final).strip()
+            # Si es un número (ej: "85.60", "88.00"), el QC está aprobado
+            try:
+                float(calific_str)
+                return 'Con QC Aprobado'
+            except (ValueError, TypeError):
+                pass
+        
+        # Prioridad 3: Estados de fallo
+        if qc_state == 'fail' or qc_fail:
             return 'QC Fallido'
         
-        # Prioridad 2: Flags del picking
-        if qc_fail:
-            return 'QC Fallido'
-        
+        # Prioridad 4: QC pendiente
         if qc_todo:
             return 'Con QC Pendiente'
         
-        # Si qc_todo=False y qc_fail=False, el QC está aprobado/completado
+        # Por defecto, si qc_todo=False y qc_fail=False, considerarlo aprobado
         return 'Con QC Aprobado'
     
     # ============================================================
@@ -165,7 +174,7 @@ class RecepcionesGestionService:
                     [['id', 'in', list(all_check_ids)]],
                     ['id', 'picking_id', 'x_studio_tipo_de_fruta', 
                      'x_studio_calific_final', 'x_studio_jefe_de_calidad_y_aseguramiento_',
-                     'quality_state'],  # Agregar quality_state (none/pass/fail)
+                     'quality_state', 'state'],  # Agregar quality_state y state (none/pass/fail)
                     limit=1000
                 )
                 for c in checks:
@@ -260,7 +269,8 @@ class RecepcionesGestionService:
             calific_final = qc_info.get('x_studio_calific_final', '') or ''
             tipo_fruta = qc_info.get('x_studio_tipo_de_fruta', '') or ''
             jefe_calidad = qc_info.get('x_studio_jefe_de_calidad_y_aseguramiento_', '') or ''
-            qc_state = qc_info.get('quality_state', '') or ''  # none/pass/fail
+            # Buscar el estado del QC en ambos campos posibles
+            qc_state = qc_info.get('quality_state') or qc_info.get('state') or ''
             
             # Calcular estados
             validation_status = self.compute_validation_status(picking_state)
