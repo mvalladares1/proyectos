@@ -397,6 +397,35 @@ class FlujoCajaService:
         except Exception as e:
             print(f"[FlujoCaja] Error guardando mapeo: {e}")
             return False
+
+    def reset_mapeo(self) -> bool:
+        """
+        Resetea COMPLETAMENTE el mapeo de cuentas (excepto configuración técnica).
+        Usado para empezar desde cero.
+        """
+        try:
+            mapeo_actual = self._cargar_mapeo()
+            # Restaurar a default pero manteniendo ciertas configuraciones si existen?
+            # El usuario pidió "desde 0", así que volvemos a la estructura por defecto.
+            nuevo_mapeo = self._mapeo_default()
+            
+            # (Opcional) Guardar backup antes de borrar?
+            # No solicitado, pero buena práctica. Por ahora solo reseteamos.
+            
+            # Mantener configuración si existe, solo borrar mapeos de cuentas
+            if "configuracion" in mapeo_actual:
+                 nuevo_mapeo["configuracion"] = mapeo_actual["configuracion"]
+            
+            if "cuentas_efectivo" in mapeo_actual:
+                 # Mantener cuentas de efectivo sería útil para no reconfigurar todo lo técnico
+                 # Pero si quieren "desde 0", asumiremos solo borrar clasificaciones del mapeo
+                 nuevo_mapeo["cuentas_efectivo"] = mapeo_actual["cuentas_efectivo"]
+
+            return self.guardar_mapeo(nuevo_mapeo)
+        except Exception as e:
+             print(f"[FlujoCaja] Error reseteando mapeo: {e}")
+             return False
+
     
     def get_configuracion(self) -> Dict:
         """Retorna la configuración del mapeo."""
@@ -669,7 +698,7 @@ class FlujoCajaService:
         fecha_anterior = (fecha_inicio_dt - timedelta(days=1)).strftime('%Y-%m-%d')
         efectivo_inicial = self._get_saldo_efectivo(fecha_anterior, cuentas_efectivo_ids)
         
-        # 3. Obtener todos los movimientos de efectivo del período
+        # 3. Obtener IDs de movimientos de efectivo (para filtrar contrapartidas)
         domain = [
             ['account_id', 'in', cuentas_efectivo_ids],
             ['parent_state', '=', 'posted'],
@@ -680,143 +709,124 @@ class FlujoCajaService:
             domain.append(['company_id', '=', company_id])
         
         try:
+            # OPTIMIZACION: Solo traemos IDs, no objetos completos
             movimientos_efectivo = self.odoo.search_read(
                 'account.move.line',
                 domain,
-                ['id', 'move_id', 'account_id', 'debit', 'credit', 'balance', 
-                 'date', 'name', 'ref', 'partner_id'],
-                limit=50000,
-                order='date asc'
+                ['move_id', 'date', 'name', 'ref', 'balance', 'account_id', 'partner_id'], # Traemos data para detalle sample
+                limit=50000, # Aumentado limit ya que es ligero
+                order='date desc' # Descendente para obtener los últimos movimientos para detalle
             )
         except Exception as e:
             resultado["error"] = f"Error obteniendo movimientos: {e}"
             return resultado
-        
-        # 4. Para cada movimiento, obtener contrapartida y clasificar
-        # Agrupar por asiento (move_id)
+            
+        # Extraer IDs de asientos (move_id) únicos
         asientos_ids = list(set(
             m['move_id'][0] if isinstance(m.get('move_id'), (list, tuple)) else m.get('move_id')
             for m in movimientos_efectivo if m.get('move_id')
         ))
         
-        # OPTIMIZADO: Obtener solo líneas de contrapartida (NO cuentas de efectivo)
-        # Esto reduce significativamente la cantidad de datos transferidos
-        contrapartidas = {}
-        if asientos_ids:
-            try:
-                # Filtrar las cuentas de efectivo directamente en la consulta
-                domain = [
-                    ['move_id', 'in', asientos_ids],
-                    ['account_id', 'not in', cuentas_efectivo_ids]  # Solo contrapartidas
-                ]
-                
-                # OPTIMIZADO: Solo campos necesarios para clasificación
-                lineas_contrapartida = self.odoo.search_read(
-                    'account.move.line',
-                    domain,
-                    ['move_id', 'account_id'],  # Solo lo mínimo necesario
-                    limit=100000
-                )
-                
-                # Agrupar por asiento (más eficiente con dict.setdefault)
-                for linea in lineas_contrapartida:
-                    move_id = linea['move_id'][0] if isinstance(linea.get('move_id'), (list, tuple)) else linea.get('move_id')
-                    contrapartidas.setdefault(move_id, []).append(linea)
-            except Exception as e:
-                print(f"[FlujoCaja] Error obteniendo contrapartidas: {e}")
-        
-        # OPTIMIZADO: Obtener info de cuentas - solo las de contrapartidas
-        cuentas_info = {}
-        cuenta_ids_all = list(set(
-            l['account_id'][0] if isinstance(l.get('account_id'), (list, tuple)) else l.get('account_id')
-            for lineas in contrapartidas.values() for l in lineas if l.get('account_id')
-        ))
-        
-        if cuenta_ids_all:
-            try:
-                # OPTIMIZADO: Solo code (para clasificación) y name (para display)
-                cuentas = self.odoo.read('account.account', cuenta_ids_all, ['code', 'name'])
-                cuentas_info = {c['id']: c for c in cuentas}
-            except:
-                pass
-        
-        # 5. Clasificar cada movimiento usando el catálogo oficial
-        # Inicializar montos por concepto_id del catálogo
+        # 4. AGREGACIÓN SERVER-SIDE: Obtener saldo por cuenta de contrapartida
+        # En lugar de traer cada línea, pedimos a Odoo que sume por cuenta
         montos_por_concepto = {}
+        # Inicializar
         for c in self.catalogo.get("conceptos", []):
             if c.get("tipo") == "LINEA":
                 montos_por_concepto[c["id"]] = 0.0
-        montos_por_concepto[self.CATEGORIA_NEUTRAL] = 0.0  # Técnico: no impacta flujo
+        montos_por_concepto[self.CATEGORIA_NEUTRAL] = 0.0
         
-        detalle = []
-        cuentas_pendientes = {}  # Cuentas sin mapear (van a 1.2.6 + lista pendientes)
+        cuentas_pendientes = {}
+        cuentas_por_concepto = {} 
         
-        # DRILL-DOWN: Tracking de cuentas por concepto_id
-        cuentas_por_concepto = {}  # {concepto_id: {codigo: {nombre, monto, cantidad}}}
-        
-        def agregar_cuenta_concepto(concepto_id: str, codigo: str, nombre: str, monto: float, es_pendiente: bool = False):
+        def agregar_cuenta_concepto(concepto_id: str, codigo: str, nombre: str, monto: float, es_pendiente: bool = False, cantidad: int = 1):
             """Helper para agregar cuenta a tracking de concepto."""
             if concepto_id not in cuentas_por_concepto:
                 cuentas_por_concepto[concepto_id] = {}
             if codigo not in cuentas_por_concepto[concepto_id]:
                 cuentas_por_concepto[concepto_id][codigo] = {'nombre': nombre, 'monto': 0, 'cantidad': 0, 'pendiente': es_pendiente}
             cuentas_por_concepto[concepto_id][codigo]['monto'] += monto
-            cuentas_por_concepto[concepto_id][codigo]['cantidad'] += 1
-        
-        for mov in movimientos_efectivo:
-            move_id = mov['move_id'][0] if isinstance(mov.get('move_id'), (list, tuple)) else mov.get('move_id')
-            monto = mov.get('balance', 0)  # Positivo = entrada, negativo = salida
+            cuentas_por_concepto[concepto_id][codigo]['cantidad'] += cantidad
+
+        # Procesar en chunks de 5000 asientos para no romper URL limit
+        chunk_size = 5000
+        for i in range(0, len(asientos_ids), chunk_size):
+            chunk_asientos = asientos_ids[i:i + chunk_size]
             
-            # OPTIMIZADO: Las contrapartidas ya están filtradas (no incluyen cuentas de efectivo)
-            lineas_asiento = contrapartidas.get(move_id, [])
-            contrapartida_cuenta = None
-            codigo_cuenta = ''
-            nombre_cuenta = ''
-            
-            # Tomar la primera contrapartida (ya está filtrada)
-            if lineas_asiento:
-                linea = lineas_asiento[0]
-                linea_account_id = linea['account_id'][0] if isinstance(linea.get('account_id'), (list, tuple)) else linea.get('account_id')
-                contrapartida_cuenta = cuentas_info.get(linea_account_id, {})
-                codigo_cuenta = contrapartida_cuenta.get('code', '')
-                nombre_cuenta = contrapartida_cuenta.get('name', '')
-            
-            # Clasificar según la contrapartida usando nuevo formato
-            if codigo_cuenta:
-                concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
-            else:
-                concepto_id, es_pendiente = CONCEPTO_FALLBACK, True
-            
-            # Manejar categoría NEUTRAL (transferencias internas)
-            if concepto_id == self.CATEGORIA_NEUTRAL:
-                montos_por_concepto[self.CATEGORIA_NEUTRAL] += monto
-                agregar_cuenta_concepto(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, monto)
-            else:
-                # Sumar al concepto correspondiente
-                if concepto_id not in montos_por_concepto:
-                    montos_por_concepto[concepto_id] = 0.0
-                montos_por_concepto[concepto_id] += monto
-                agregar_cuenta_concepto(concepto_id, codigo_cuenta, nombre_cuenta, monto, es_pendiente)
+            try:
+                # read_group: Sumar balance agrupado por account_id
+                # Filtro: Pertenecen a los asientos de caja, PERO NO son cuentas de caja
+                grupos = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'account.move.line', 'read_group',
+                    [[
+                        ['move_id', 'in', chunk_asientos],
+                        ['account_id', 'not in', cuentas_efectivo_ids]
+                    ]],
+                    {'fields': ['balance', 'account_id'], 'groupby': ['account_id'], 'lazy': False}
+                )
                 
-                # Trackear cuentas pendientes de mapeo
-                if es_pendiente and codigo_cuenta:
-                    if codigo_cuenta not in cuentas_pendientes:
-                        cuentas_pendientes[codigo_cuenta] = {
-                            'nombre': nombre_cuenta,
-                            'monto': 0, 'cantidad': 0
-                        }
-                    cuentas_pendientes[codigo_cuenta]['monto'] += monto
-                    cuentas_pendientes[codigo_cuenta]['cantidad'] += 1
-            
-            # Guardar detalle (limitado para performance)
-            if len(detalle) < 100:
-                detalle.append({
-                    "fecha": mov.get('date'),
-                    "descripcion": mov.get('name') or mov.get('ref') or '',
-                    "monto": monto,
-                    "clasificacion": concepto_id,
-                    "contrapartida": contrapartida_cuenta.get('name', '') if contrapartida_cuenta else ''
-                })
+                # Procesar grupos agregados
+                for grupo in grupos:
+                    # account_id viene como [id, "Code Name"] o [id, "Name"] dependiendo configuración
+                    # Necesitamos el ID para buscar code/name limpios si es necesario, 
+                    # pero read_group a veces devuelve tuple.
+                    acc_data = grupo.get('account_id')
+                    balance = grupo.get('balance', 0)
+                    count = grupo.get('__count', 1)
+                    
+                    if not acc_data:
+                        continue
+                        
+                    acc_id = acc_data[0]
+                    acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
+                    
+                    # Intentar extraer código del display (usualmente "110101 Caja")
+                    # Si no, buscar en un cache o mapa
+                    codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
+                    nombre_cuenta = ' '.join(acc_display.split(' ')[1:]) if ' ' in acc_display else acc_display
+                    
+                    # Clasificar
+                    # NOTA: Para mayor precisión, podríamos cachear todos los accounts IDs -> Codes antes
+                    # Pero extraer del display name es usualmente seguro en Odoo estándar.
+                    # Si falla, el fallback es UNCLASSIFIED
+                    
+                    concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
+                    
+                    # NEUTRAL
+                    if concepto_id == self.CATEGORIA_NEUTRAL:
+                        montos_por_concepto[self.CATEGORIA_NEUTRAL] += balance
+                        agregar_cuenta_concepto(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, balance, cantidad=count)
+                    else:
+                        if concepto_id not in montos_por_concepto:
+                            montos_por_concepto[concepto_id] = 0.0
+                        montos_por_concepto[concepto_id] += balance
+                        agregar_cuenta_concepto(concepto_id, codigo_cuenta, nombre_cuenta, balance, es_pendiente, cantidad=count)
+                    
+                    # Track pendientes
+                    if es_pendiente and codigo_cuenta:
+                        if codigo_cuenta not in cuentas_pendientes:
+                            cuentas_pendientes[codigo_cuenta] = {'nombre': nombre_cuenta, 'monto': 0, 'cantidad': 0}
+                        cuentas_pendientes[codigo_cuenta]['monto'] += balance
+                        cuentas_pendientes[codigo_cuenta]['cantidad'] += count
+
+            except Exception as e:
+                print(f"[FlujoCaja] Error en chunk aggregation: {e}")
+        
+        # 5. Generar detalle de últimos movimientos (Muestra)
+        # Usamos los movimientos fetching al principio (ya ordenados desc por fecha)
+        detalle = []
+        for mov in movimientos_efectivo[:100]: # Top 100
+             # Nota: Esto es una simplificación. Muestra el movimiento de CAJA, no la contrapartida exacta.
+             # Para el usuario es suficiente ver "Pago Factura X - $5000".
+             monto = mov.get('balance', 0)
+             detalle.append({
+                "fecha": mov.get('date'),
+                "descripcion": mov.get('name') or mov.get('ref') or '',
+                "monto": monto,
+                "clasificacion": "Ver desglose", # No calculamos línea por línea para ahorrar
+                "contrapartida": mov.get('partner_id')[1] if mov.get('partner_id') else "Varios"
+            })
         
         # 6. Estructurar resultado
         # 6. Construir resultado usando el catálogo oficial
@@ -1006,20 +1016,32 @@ class FlujoCajaService:
                 montos_por_concepto[linea["codigo"]] = 0.0
 
         # 1. Buscar facturas (Clientes y Proveedores)
-        domain = [
+        # Lógica mejorada para proyeccion de borradores:
+        # - Si tiene fecha vencimiento (invoice_date_due), usarla.
+        # - Si es borrador, a veces no tiene vencimiento, usar invoice_date o date.
+        
+        # Filtro base: Tipos y Estado
+        domain_base = [
             ('move_type', 'in', ['out_invoice', 'in_invoice']),
-            ('state', '!=', 'cancel'),  # Excluir cancelados
-            ('invoice_date_due', '>=', fecha_inicio),
-            ('invoice_date_due', '<=', fecha_fin),
-            # Lógica: Draft OR (Posted AND Not Paid)
+            ('state', '!=', 'cancel'),
             '|', ('state', '=', 'draft'), '&', ('state', '=', 'posted'), ('payment_state', '!=', 'paid')
         ]
         
         if company_id:
-            domain.append(('company_id', '=', company_id))
+            domain_base.append(('company_id', '=', company_id))
+            
+        # Filtro fecha: O vencimiento en rango O (si no hay vencimiento) fecha en rango
+        # Odoo domains use Polish Notation (prefix)
+        # OR( AND(inv_due >= start, inv_due <= end), AND(inv_due=False, inv_date >= start, inv_date <= end) )
+        
+        domain = domain_base + [
+            '|',
+                '&', ('invoice_date_due', '>=', fecha_inicio), ('invoice_date_due', '<=', fecha_fin),
+                '&', '&', ('invoice_date_due', '=', False), ('invoice_date', '>=', fecha_inicio), ('invoice_date', '<=', fecha_fin)
+        ]
             
         campos_move = ['id', 'name', 'ref', 'partner_id', 'invoice_date', 'invoice_date_due', 'amount_total', 
-                       'amount_residual', 'move_type', 'state', 'payment_state']
+                       'amount_residual', 'move_type', 'state', 'payment_state', 'date']
         
         try:
             moves = self.odoo.search_read('account.move', domain, campos_move, limit=2000)
@@ -1180,8 +1202,8 @@ class FlujoCajaService:
                 monto = montos_por_concepto.get(codigo, 0)
                 docs = detalles_por_concepto.get(codigo, [])
                 
-                # Ordenar documentos por fecha vencimiento
-                docs.sort(key=lambda x: x['fecha_venc'] or '9999-12-31')
+                # Ordenar documentos por fecha vencimiento (o emision como fallback)
+                docs.sort(key=lambda x: x['fecha_venc'] or x['fecha_emision'] or '9999-12-31')
                 
                 if monto != 0 or docs:
                     conceptos_res.append({

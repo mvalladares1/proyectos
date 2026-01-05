@@ -150,19 +150,28 @@ def fetch_flujo_caja(fecha_inicio, fecha_fin, _username, _password):
 def guardar_mapeo_cuenta(codigo, categoria, nombre, username, password, impacto=None):
     """Guarda el mapeo de una cuenta a una categoría IAS 7."""
     try:
-        final_categoria = categoria if categoria != "UNCLASSIFIED" else None
-        resp = requests.post(
-            f"{FLUJO_CAJA_URL}/mapeo-cuenta",
-            params={
-                "codigo": codigo,
-                "categoria": final_categoria,
-                "nombre": nombre,
-                "username": username,
-                "password": password,
-                "impacto_estimado": impacto
-            },
-            timeout=10
-        )
+        # Si es UNCLASSIFIED, eliminamos el mapeo usando DELETE
+        if categoria == "UNCLASSIFIED" or categoria is None:
+            resp = requests.delete(
+                f"{FLUJO_CAJA_URL}/mapeo-cuenta/{codigo}",
+                params={"username": username, "password": password},
+                timeout=10
+            )
+        else:
+            # Si tiene categoría, usamos POST para guardar/actualizar
+            resp = requests.post(
+                f"{FLUJO_CAJA_URL}/mapeo-cuenta",
+                params={
+                    "codigo": codigo,
+                    "categoria": categoria,
+                    "nombre": nombre,
+                    "username": username,
+                    "password": password,
+                    "impacto_estimado": impacto
+                },
+                timeout=10
+            )
+            
         if resp.status_code == 200:
             return True, None
         else:
@@ -170,6 +179,27 @@ def guardar_mapeo_cuenta(codigo, categoria, nombre, username, password, impacto=
                 detail = resp.json().get('detail', resp.text[:100])
             except:
                 detail = resp.text[:100]
+            return False, f"Error {resp.status_code}: {detail}"
+    except Exception as e:
+        return False, f"Error conexión: {e}"
+
+def reset_mapeo_completo(username, password):
+    """
+    Llama al endpoint DELETE /mapeo/all para resetear la configuración.
+    """
+    try:
+        resp = requests.delete(
+            f"{FLUJO_CAJA_URL}/mapeo/all",
+            params={"username": username, "password": password},
+            timeout=20
+        )
+        if resp.status_code == 200:
+            return True, None
+        else:
+            try:
+                detail = resp.json().get('detail', resp.text)
+            except:
+                detail = resp.text
             return False, f"Error {resp.status_code}: {detail}"
     except Exception as e:
         return False, f"Error conexión: {e}"

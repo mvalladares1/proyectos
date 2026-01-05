@@ -232,6 +232,24 @@ async def guardar_mapeo_cuenta(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/mapeo/all")
+async def reset_mapeo_completo(
+    username: str = "",
+    password: str = ""
+):
+    """
+    ⚠️ PELIGRO: Resetea COMPLETAMENTE todo el mapeo de cuentas.
+    Requiere confirmación explícita desde frontend.
+    """
+    try:
+        service = FlujoCajaService(username=username, password=password)
+        if service.reset_mapeo():
+            return {"status": "ok", "message": "Mapeo reseteado completamente"}
+        else:
+            raise HTTPException(status_code=500, detail="Error reseteando mapeo")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/mapeo-cuenta/{codigo}")
 async def eliminar_mapeo_cuenta(
     codigo: str,

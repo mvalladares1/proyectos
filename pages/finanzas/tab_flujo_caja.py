@@ -384,3 +384,32 @@ def render(username: str, password: str):
                         cols_hist = ["fecha", "usuario", "cuenta", "concepto_anterior", "concepto_nuevo"]
                         st.dataframe(df_hist[[c for c in cols_hist if c in df_hist.columns]],
                                    use_container_width=True, hide_index=True)
+
+        # === ZONA DE PELIGRO (ADMIN) ===
+        # Mostrar solo si el usuario es admin o está autorizado. 
+        # IMPORTANTE: Reemplazar lista con usuarios reales autorizados.
+        AUTHORIZED_RESET_USERS = ["admin", "mvalladares", "miguel", username] # Permisivo por solicitud del usuario "mi usuario"
+        
+        if username in AUTHORIZED_RESET_USERS:
+            st.divider()
+            with st.expander("⚠️ ZONA DE PELIGRO (Admin)", expanded=False):
+                st.error("Estas acciones son destructivas y no se pueden deshacer.")
+                
+                col_danger, col_confirm = st.columns([3, 1])
+                with col_danger:
+                    st.markdown("**RESETEO TOTAL DE MAPEO**")
+                    st.caption("Elimina TODAS las clasificaciones manuales de cuentas. Vuelve al estado inicial.")
+                
+                with col_confirm:
+                    if st.checkbox("Confirmar Reseteo", key="confirm_reset_all"):
+                        from .shared import reset_mapeo_completo
+                        if st.button("🧨 BORRAR TODO", type="primary", key="btn_reset_all"):
+                             ok_reset, msg_reset = reset_mapeo_completo(username, password)
+                             if ok_reset:
+                                 st.toast("Mapeo reseteado correctamente.", icon="🧹")
+                                 st.success("Mapeo reseteado. Recarga la página.")
+                                 if flujo_cache_key in st.session_state:
+                                     del st.session_state[flujo_cache_key]
+                                 st.rerun()
+                             else:
+                                 st.error(f"Error: {msg_reset}")
