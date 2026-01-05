@@ -217,7 +217,51 @@ def render(username: str, password: str):
             props = transform_backend_to_component(flujo_data, modo=modo_ver.lower())
             
             # Renderizar el componente React
-            ias7_tree(**props)
+            event = ias7_tree(**props)
+            
+            # === MANEJO DE EVENTOS (Frontend -> Backend) ===
+            if event and isinstance(event, dict) and event.get("action") == "EDIT_NODE":
+                payload = event.get("payload", {})
+                node_id = payload.get("id")
+                node_name = payload.get("nombre")
+                
+                # Mostrar interfaz de edición
+                st.divider()
+                st.markdown(f"### ✏️ Editando: {node_name} ({node_id})")
+                
+                # Buscar cuentas asociadas a este concepto
+                cuentas_asociadas = []
+                for cta_list in drill_down.values():
+                    for cta in cta_list:
+                        if cta.get("concepto_id") == node_id:
+                            cuentas_asociadas.append(cta)
+                
+                if not cuentas_asociadas:
+                    st.info("No hay cuentas contables mapeadas directamente a este concepto.")
+                else:
+                    st.write(f"Se encontraron {len(cuentas_asociadas)} cuentas asociadas:")
+                    
+                    for cta in cuentas_asociadas:
+                         with st.expander(f"{cta['codigo']} - {cta['nombre']} (${cta['monto']:,.0f})"):
+                            # Mover cuenta form
+                            categorias = build_ias7_categories_dropdown()
+                            new_cat = st.selectbox("Cambiar Clasificación", list(categorias.keys()), 
+                                                 key=f"reclass_{cta['codigo']}")
+                            
+                            if st.button("Guardar Cambio", key=f"btn_save_{cta['codigo']}"):
+                                save_ok, save_msg = guardar_mapeo_cuenta(
+                                    cta['codigo'], categorias[new_cat], cta['nombre'],
+                                    username, password, cta['monto']
+                                )
+                                if save_ok:
+                                    st.success(f"Cuenta {cta['codigo']} reclasificada correctamente.")
+                                    # Limpiar caché para refrescar
+                                    if flujo_cache_key in st.session_state:
+                                        del st.session_state[flujo_cache_key]
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error al guardar: {save_msg}")
+
         except ImportError as e:
             st.warning(f"Componente React no disponible: {e}. Usando renderizado alternativo.")
             # Fallback: usar render directo sin HTML problemático

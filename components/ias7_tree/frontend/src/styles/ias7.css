@@ -427,13 +427,18 @@
 
 /* --- DUAL COLUMN MODE --- */
 .ias7-grid-row--dual {
-  /* Dual Mode: + Projected Column */
-  grid-template-columns: minmax(40px, auto) 1fr 130px 130px 40px;
+  /* Dual Mode: + Projected Column 
+     Increased widths to 150px to prevent overlap
+  */
+  grid-template-columns: minmax(40px, auto) 1fr 150px 150px 40px;
 }
 
 .ias7-grid-row--dual .ias7-node__monto {
   text-align: right;
-  padding-right: 10px;
+  padding-right: 15px;
+  /* More padding */
+  white-space: nowrap;
+  /* Prevent wrapping */
 }
 
 /* --- ACTIONS --- */

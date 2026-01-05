@@ -51,7 +51,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
     let icon = '';
     if (isHeader) icon = '📁';
     else if (isTotal) icon = 'Σ';
-    else if (tipo === 'LINEA') icon = '▸';
+    // else if (tipo === 'LINEA') icon = '▸';  <-- Removed to prevent double arrows
 
     // Dual Mode Logic
     const isConsolidado = modo === 'consolidado';
