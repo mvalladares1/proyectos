@@ -75,7 +75,7 @@ class RecepcionesGestionService:
         return status_map.get(picking_state, 'Desconocido')
     
     def compute_qc_status(self, has_qc: bool, qc_todo: bool, qc_fail: bool, 
-                          calific_final: str = None) -> str:
+                          calific_final: str = None, qc_state: str = None) -> str:
         """
         Calcula el estado del control de calidad.
         
@@ -86,13 +86,23 @@ class RecepcionesGestionService:
             - 'Sin QC': No tiene control de calidad asociado
             
         Lógica:
-            - qc_fail=True → QC Fallido
-            - qc_todo=True → Con QC Pendiente (hay tareas pendientes)
-            - qc_todo=False y qc_fail=False → Con QC Aprobado (completado sin fallos)
+            1. Si qc_state == 'pass' → Con QC Aprobado (prioridad alta)
+            2. Si qc_state == 'fail' → QC Fallido
+            3. Si qc_state == 'none' o no hay qc_state:
+               - qc_fail=True → QC Fallido
+               - qc_todo=True → Con QC Pendiente
+               - qc_todo=False y qc_fail=False → Con QC Aprobado
         """
         if not has_qc:
             return 'Sin QC'
         
+        # Prioridad 1: Estado explícito del quality.check
+        if qc_state == 'pass':
+            return 'Con QC Aprobado'
+        if qc_state == 'fail':
+            return 'QC Fallido'
+        
+        # Prioridad 2: Flags del picking
         if qc_fail:
             return 'QC Fallido'
         
@@ -100,7 +110,6 @@ class RecepcionesGestionService:
             return 'Con QC Pendiente'
         
         # Si qc_todo=False y qc_fail=False, el QC está aprobado/completado
-        # La calificación final es opcional pero si existe es confirmación adicional
         return 'Con QC Aprobado'
     
     # ============================================================
@@ -155,7 +164,8 @@ class RecepcionesGestionService:
                     'quality.check',
                     [['id', 'in', list(all_check_ids)]],
                     ['id', 'picking_id', 'x_studio_tipo_de_fruta', 
-                     'x_studio_calific_final', 'x_studio_jefe_de_calidad_y_aseguramiento_'],
+                     'x_studio_calific_final', 'x_studio_jefe_de_calidad_y_aseguramiento_',
+                     'quality_state'],  # Agregar quality_state (none/pass/fail)
                     limit=1000
                 )
                 for c in checks:
@@ -250,10 +260,11 @@ class RecepcionesGestionService:
             calific_final = qc_info.get('x_studio_calific_final', '') or ''
             tipo_fruta = qc_info.get('x_studio_tipo_de_fruta', '') or ''
             jefe_calidad = qc_info.get('x_studio_jefe_de_calidad_y_aseguramiento_', '') or ''
+            qc_state = qc_info.get('quality_state', '') or ''  # none/pass/fail
             
             # Calcular estados
             validation_status = self.compute_validation_status(picking_state)
-            qc_status = self.compute_qc_status(has_qc, qc_todo, qc_fail, calific_final)
+            qc_status = self.compute_qc_status(has_qc, qc_todo, qc_fail, calific_final, qc_state)
             
             # Usuarios pendientes (de actividades)
             pending_users = set()
