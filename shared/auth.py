@@ -211,6 +211,12 @@ def cerrar_sesion():
     # Limpiar session_state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    
+    # Limpiar query params de la URL (session_key, etc.)
+    try:
+        st.query_params.clear()
+    except:
+        pass  # Fallback para versiones antiguas de Streamlit
 
 
 def mostrar_login_requerido():
