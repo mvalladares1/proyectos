@@ -71,6 +71,7 @@ class FlujoCajaService:
         self.odoo = OdooClient(username=username, password=password)
         self.catalogo = self._cargar_catalogo()
         self.mapeo_cuentas = self._cargar_mapeo()
+        self.cuentas_monitoreadas = self._cargar_cuentas_monitoreadas()
         self._cache_cuentas_efectivo = None
         self._migracion_codigos = self.catalogo.get("migracion_codigos", {})
     
@@ -87,6 +88,24 @@ class FlujoCajaService:
             os.path.dirname(__file__), 
             '..', 'data', 'mapeo_cuentas.json'
         )
+    
+    def _get_cuentas_monitoreadas_path(self) -> str:
+        """Retorna la ruta al archivo de cuentas monitoreadas."""
+        return os.path.join(
+            os.path.dirname(__file__), 
+            '..', 'data', 'cuentas_monitoreadas.json'
+        )
+    
+    def _cargar_cuentas_monitoreadas(self) -> Dict:
+        """Carga la configuración de cuentas monitoreadas (estáticas)."""
+        path = self._get_cuentas_monitoreadas_path()
+        try:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[FlujoCaja] Error cargando cuentas monitoreadas: {e}")
+        return {"cuentas_efectivo": {"codigos": [], "prefijos": ["110", "111"]}, "cuentas_contrapartida": {"codigos": []}}
     
     def _cargar_catalogo(self) -> Dict:
         """Carga el catálogo oficial de conceptos NIIF."""

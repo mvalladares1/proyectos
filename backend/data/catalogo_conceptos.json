@@ -170,6 +170,16 @@
             "order": 17
         },
         {
+            "id": "2.6",
+            "nombre": "Otros flujos de efectivo procedentes de (utilizados en) actividades de inversión",
+            "tipo": "LINEA",
+            "nivel": 2,
+            "signo": 1,
+            "actividad": "INVERSION",
+            "parent": "2",
+            "order": 17
+        },
+        {
             "id": "2.T",
             "nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de inversión",
             "tipo": "TOTAL",
@@ -177,7 +187,7 @@
             "actividad": "INVERSION",
             "parent": "2",
             "order": 18,
-            "calculo": "SUM(2.1:2.5)"
+            "calculo": "SUM(2.1:2.6)"
         },
         {
             "id": "3",
@@ -209,6 +219,16 @@
             "order": 21
         },
         {
+            "id": "3.1",
+            "nombre": "Total importes procedentes de préstamos",
+            "tipo": "TOTAL",
+            "nivel": 2,
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 22,
+            "calculo": "SUM(3.0.1:3.0.2)"
+        },
+        {
             "id": "3.1.1",
             "nombre": "Préstamos de entidades relacionadas",
             "tipo": "LINEA",
@@ -216,7 +236,7 @@
             "signo": 1,
             "actividad": "FINANCIAMIENTO",
             "parent": "3",
-            "order": 22
+            "order": 23
         },
         {
             "id": "3.1.2",

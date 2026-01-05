@@ -1,0 +1,109 @@
+{
+    "version": "1.0",
+    "descripcion": "Lista de cuentas contables a monitorear para el flujo de caja (editable manualmente)",
+    "notas": "Agregar o eliminar códigos de cuenta según necesidad. El sistema buscará movimientos en estas cuentas.",
+    "cuentas_efectivo": {
+        "descripcion": "Cuentas que representan dinero disponible (Caja, Bancos)",
+        "codigos": [
+            "11010101",
+            "11010102",
+            "11010103",
+            "11010201",
+            "11010202",
+            "11010301",
+            "11010302",
+            "11010303"
+        ],
+        "prefijos": [
+            "110",
+            "111"
+        ]
+    },
+    "cuentas_contrapartida": {
+        "descripcion": "Cuentas de contrapartida a clasificar en IAS 7 (Proveedores, Préstamos, etc.)",
+        "codigos": [
+            "21010101",
+            "21010102",
+            "21010103",
+            "21010201",
+            "21010204",
+            "21010202",
+            "21010213",
+            "21010223",
+            "21030201",
+            "21030211",
+            "22010101",
+            "22010202",
+            "22010204",
+            "22020101",
+            "82010101",
+            "82010102"
+        ]
+    },
+    "mapeo_sugerido": {
+        "21010101": {
+            "categoria": "3.0.2",
+            "nombre": "Préstamo CP Banco 1"
+        },
+        "21010102": {
+            "categoria": "3.0.2",
+            "nombre": "Préstamo CP Banco 2"
+        },
+        "21010103": {
+            "categoria": "3.0.2",
+            "nombre": "Préstamo CP Banco 3"
+        },
+        "21010201": {
+            "categoria": "3.1.4",
+            "nombre": "Leasing 1"
+        },
+        "21010202": {
+            "categoria": "3.1.4",
+            "nombre": "Leasing 2"
+        },
+        "21010204": {
+            "categoria": "3.1.4",
+            "nombre": "Leasing 3"
+        },
+        "21010213": {
+            "categoria": "3.0.1",
+            "nombre": "Préstamo LP Banco"
+        },
+        "21010223": {
+            "categoria": "3.0.1",
+            "nombre": "Préstamo LP Banco 2"
+        },
+        "21030201": {
+            "categoria": "3.1.1",
+            "nombre": "Préstamo Empresa Relacionada 1"
+        },
+        "21030211": {
+            "categoria": "3.1.1",
+            "nombre": "Préstamo Empresa Relacionada 2"
+        },
+        "22010101": {
+            "categoria": "3.0.1",
+            "nombre": "Préstamo LP Largo Plazo"
+        },
+        "22010202": {
+            "categoria": "3.1.4",
+            "nombre": "Leasing LP 1"
+        },
+        "22010204": {
+            "categoria": "3.1.4",
+            "nombre": "Leasing LP 2"
+        },
+        "22020101": {
+            "categoria": "3.1.1",
+            "nombre": "Préstamo Relacionada LP"
+        },
+        "82010101": {
+            "categoria": "3.0.2",
+            "nombre": "Intereses Préstamos CP"
+        },
+        "82010102": {
+            "categoria": "3.1.4",
+            "nombre": "Intereses Leasing"
+        }
+    }
+}
