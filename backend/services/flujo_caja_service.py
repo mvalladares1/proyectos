@@ -946,7 +946,7 @@ class FlujoCajaService:
         
         # 8. Validaciones
         validacion = self.validar_flujo(
-            flujos_por_linea, 
+            montos_por_concepto, 
             efectivo_inicial, 
             efectivo_final_calculado,
             flujos_por_actividad=resultado["actividades"]
