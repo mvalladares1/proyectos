@@ -1,5 +1,4 @@
 """
-"""
 Tab: Mensualizado - Control Presupuestario con detalle mes a mes.
 """
 import streamlit as st

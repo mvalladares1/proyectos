@@ -8,7 +8,8 @@ import requests
 import altair as alt
 from datetime import datetime
 
-from .shared import API_URL, fmt_numero, fmt_moneda, fmt_fecha\nfrom .shared import fetch_lineas_credito_resumen, fetch_lineas_credito
+from .shared import API_URL, fmt_numero, fmt_moneda, fmt_fecha
+from .shared import fetch_lineas_credito_resumen, fetch_lineas_credito
 
 
 def render(username: str, password: str):

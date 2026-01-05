@@ -113,20 +113,28 @@ def render(username: str, password: str):
         else:
             st.session_state.recep_curva_loading = True
             try:
+                # Progress bar personalizado
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
                 st.session_state.curva_plantas_usadas = plantas_list.copy()
 
-                with st.spinner("Cargando datos proyectados y del sistema..."):
+                status_text.text("⏳ Fase 1/4: Conectando con API...")
+                progress_bar.progress(25)
+                
                 # 1. Obtener TODAS las proyecciones del Excel (sin filtro de especie)
                 params_proy = {"planta": plantas_list}
                 # NO agregamos filtro de especie aquí - se aplica dinámicamente después
 
+                status_text.text("⏳ Fase 2/4: Consultando proyecciones...")
+                progress_bar.progress(50)
+                
                 try:
                     resp_proy = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado", 
                                             params=params_proy, timeout=60)
                     if resp_proy.status_code == 200:
                         proyecciones = resp_proy.json()
                         st.session_state.curva_proyecciones_raw = proyecciones
-                        st.success(f"✅ Datos cargados: {len(proyecciones)} semanas de proyección")
                     else:
                         st.error(f"Error al cargar proyecciones: {resp_proy.status_code}")
                         st.session_state.curva_proyecciones_raw = None
@@ -134,6 +142,9 @@ def render(username: str, password: str):
                     st.error(f"Error de conexión: {e}")
                     st.session_state.curva_proyecciones_raw = None
 
+                status_text.text("⏳ Fase 3/4: Consultando recepciones...")
+                progress_bar.progress(75)
+                
                 # 2. Obtener TODAS las recepciones del sistema (sin filtro de especie)
                 params_sist = {
                     "username": username,

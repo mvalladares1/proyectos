@@ -226,48 +226,61 @@ def _fragment_config(username: str, password: str):
         else:
             st.caption("No hay exclusiones")
     
-    with tabA:, disabled=st.session_state.permisos_buscar_loading):
-            try:
-                st.session_state.permisos_buscar_loading = True
-                resp = httpx.get(f"{API_URL}/api/v1/recepciones-mp/", params={
-                    "username": username, "password": password,
-                    "fecha_inicio": st.session_state.excl_date_from.isoformat(),
-                    "fecha_fin": st.session_state.excl_date_to.isoformat()
-                })
-                if resp.status_code == 200:
-                    st.session_state.r_list_excl = resp.json()
-                    st.toast("✅ Recepciones cargadas")
-                else:
-                    st.error("Error al buscar recepciones")
-            except Exception as e:
-                st.error(f"Error al buscar recepciones: {str(e)}")
-            finally:
-                st.session_state.permisos_buscar_loading = False
-                st.rerun(_date_to.isoformat()
-                })
-                if resp.status_code == 200:
-                    st.session_state.r_list_excl = resp.json()
-            except:
-                st.error("Error al buscar recepciones"), disabled=st.session_state.permisos_excluir_loading):
+    with tabA:
+        st.markdown("#### Buscar Recepciones")
+        
+        # Inicializar fechas
+        if "excl_date_from" not in st.session_state:
+            st.session_state.excl_date_from = datetime.now().date() - timedelta(days=7)
+        if "excl_date_to" not in st.session_state:
+            st.session_state.excl_date_to = datetime.now().date()
+        
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c1:
+            st.session_state.excl_date_from = st.date_input("Desde", st.session_state.excl_date_from)
+        with c2:
+            st.session_state.excl_date_to = st.date_input("Hasta", st.session_state.excl_date_to)
+        with c3:
+            st.write("")
+            if st.button("🔍 Buscar Recepciones", disabled=st.session_state.permisos_buscar_loading):
                 try:
-                    st.session_state.permisos_excluir_loading = True
-                    current_excl = exclusiones["recepciones"]
-                    for s in st.session_state.excl_multiselect:
-                        alb = s.split("|")[0].strip()
-                        if alb not in current_excl:
-                            current_excl.append(alb)
-                    with open(exclusions_file, 'w') as f:
-                        json.dump(exclusiones, f)
-                    st.toast("✅ Exclusiones guardadas")
-                    if "r_list_excl" in st.session_state:
-                        del st.session_state.r_list_excl
+                    st.session_state.permisos_buscar_loading = True
+                    resp = httpx.get(f"{API_URL}/api/v1/recepciones-mp/", params={
+                        "username": username, "password": password,
+                        "fecha_inicio": st.session_state.excl_date_from.isoformat(),
+                        "fecha_fin": st.session_state.excl_date_to.isoformat()
+                    })
+                    if resp.status_code == 200:
+                        st.session_state.r_list_excl = resp.json()
+                        st.toast("✅ Recepciones cargadas")
+                    else:
+                        st.error("Error al buscar recepciones")
+                except Exception as e:
+                    st.error(f"Error al buscar recepciones: {str(e)}")
                 finally:
-                    st.session_state.permisos_excluir_loading = False
-                        if alb not in current_excl:
-                        current_excl.append(alb)
-                with open(exclusions_file, 'w') as f:
-                    json.dump(exclusiones, f)
-                st.toast("✅ Exclusiones guardadas")
-                if "r_list_excl" in st.session_state:
-                    del st.session_state.r_list_excl
-                st.rerun()
+                    st.session_state.permisos_buscar_loading = False
+                    st.rerun()
+        
+        # Mostrar multiselect si hay recepciones
+        if "r_list_excl" in st.session_state and st.session_state.r_list_excl:
+            options = [f"{r['name']} | {r.get('partner_name', 'N/A')}" for r in st.session_state.r_list_excl]
+            selected = st.multiselect("Seleccionar recepciones a excluir", options, key="excl_multiselect")
+            
+            if selected:
+                if st.button("✅ Confirmar Exclusión", type="primary", disabled=st.session_state.permisos_excluir_loading):
+                    try:
+                        st.session_state.permisos_excluir_loading = True
+                        current_excl = exclusiones["recepciones"]
+                        for s in selected:
+                            alb = s.split("|")[0].strip()
+                            if alb not in current_excl:
+                                current_excl.append(alb)
+                        with open(exclusions_file, 'w') as f:
+                            json.dump(exclusiones, f)
+                        st.toast("✅ Exclusiones guardadas")
+                        if "r_list_excl" in st.session_state:
+                            del st.session_state.r_list_excl
+                    finally:
+                        st.session_state.permisos_excluir_loading = False
+                        st.rerun()
+

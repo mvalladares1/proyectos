@@ -105,41 +105,41 @@ def render(username: str, password: str, camaras_data_all: list):
         if selected_camara:
             camara_detail = next((c for c in camaras_data_tab if c["name"] == selected_camara), None)
             if camara_detail and camara_detail["stock_data"]:
-            stock_items = [
-                {"Tipo Fruta - Manejo": k, "Stock (kg)": round(v, 2)}
-                for k, v in camara_detail["stock_data"].items()
-            ]
-            df_stock = pd.DataFrame(stock_items).sort_values("Stock (kg)", ascending=False)
-            
-            # Asignar color según manejo
-            def get_color(tipo_manejo):
-                if "Orgánico" in tipo_manejo:
-                    return "#28a745"  # Verde para orgánico
-                else:
-                    return "#007bff"  # Azul para convencional
-            
-            df_stock["Color"] = df_stock["Tipo Fruta - Manejo"].apply(get_color)
-            
-            fig = px.bar(
-                df_stock,
-                x="Tipo Fruta - Manejo",
-                y="Stock (kg)",
-                color="Tipo Fruta - Manejo",
-                color_discrete_map={k: get_color(k) for k in df_stock["Tipo Fruta - Manejo"].unique()}
-            )
-            fig.update_layout(
-                showlegend=False,
-                height=400,
-                xaxis_title="",
-                yaxis_title="Stock (kg)",
-                xaxis_tickangle=-45
-            )
-            fig.update_traces(
-                hovertemplate="<b>%{x}</b><br>Stock: %{y:,.2f} kg<extra></extra>"
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
+                stock_items = [
+                    {"Tipo Fruta - Manejo": k, "Stock (kg)": round(v, 2)}
+                    for k, v in camara_detail["stock_data"].items()
+                ]
+                df_stock = pd.DataFrame(stock_items).sort_values("Stock (kg)", ascending=False)
+                
+                # Asignar color según manejo
+                def get_color(tipo_manejo):
+                    if "Orgánico" in tipo_manejo:
+                        return "#28a745"  # Verde para orgánico
+                    else:
+                        return "#007bff"  # Azul para convencional
+                
+                df_stock["Color"] = df_stock["Tipo Fruta - Manejo"].apply(get_color)
+                
+                fig = px.bar(
+                    df_stock,
+                    x="Tipo Fruta - Manejo",
+                    y="Stock (kg)",
+                    color="Tipo Fruta - Manejo",
+                    color_discrete_map={k: get_color(k) for k in df_stock["Tipo Fruta - Manejo"].unique()}
+                )
+                fig.update_layout(
+                    showlegend=False,
+                    height=400,
+                    xaxis_title="",
+                    yaxis_title="Stock (kg)",
+                    xaxis_tickangle=-45
+                )
+                fig.update_traces(
+                    hovertemplate="<b>%{x}</b><br>Stock: %{y:,.2f} kg<extra></extra>"
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
                 # Tabla debajo del gráfico con formato chileno
                 df_stock_display = df_stock[["Tipo Fruta - Manejo", "Stock (kg)"]].copy()
                 df_stock_display["Stock (kg)"] = df_stock_display["Stock (kg)"].apply(lambda x: fmt_numero(x, 2))
