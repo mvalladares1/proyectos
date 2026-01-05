@@ -1,5 +1,5 @@
 {
-    "version": "3.0",
+    "version": "4.0",
     "descripcion": "Catálogo oficial de conceptos NIIF IAS 7 - Estado de Flujo de Efectivo (Método Directo)",
     "conceptos": [
         {
@@ -7,14 +7,18 @@
             "nombre": "Flujos de efectivo procedentes (utilizados) en actividades de operación",
             "tipo": "HEADER",
             "nivel": 1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": null,
+            "order": 1
         },
         {
             "id": "1.1",
             "nombre": "Clases de cobros por actividades de operación",
             "tipo": "HEADER",
             "nivel": 2,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1",
+            "order": 2
         },
         {
             "id": "1.1.1",
@@ -22,14 +26,18 @@
             "tipo": "LINEA",
             "nivel": 3,
             "signo": 1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1.1",
+            "order": 3
         },
         {
             "id": "1.2",
             "nombre": "Clases de pagos",
             "tipo": "HEADER",
             "nivel": 2,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1",
+            "order": 4
         },
         {
             "id": "1.2.1",
@@ -37,7 +45,9 @@
             "tipo": "LINEA",
             "nivel": 3,
             "signo": -1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1.2",
+            "order": 5
         },
         {
             "id": "1.2.2",
@@ -45,7 +55,9 @@
             "tipo": "LINEA",
             "nivel": 3,
             "signo": -1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1.2",
+            "order": 6
         },
         {
             "id": "1.2.3",
@@ -53,7 +65,9 @@
             "tipo": "LINEA",
             "nivel": 3,
             "signo": -1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1.2",
+            "order": 7
         },
         {
             "id": "1.2.4",
@@ -61,7 +75,9 @@
             "tipo": "LINEA",
             "nivel": 3,
             "signo": 1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1.2",
+            "order": 8
         },
         {
             "id": "1.2.5",
@@ -69,7 +85,9 @@
             "tipo": "LINEA",
             "nivel": 3,
             "signo": -1,
-            "actividad": "OPERACION"
+            "actividad": "OPERACION",
+            "parent": "1.2",
+            "order": 9
         },
         {
             "id": "1.2.6",
@@ -78,14 +96,28 @@
             "nivel": 3,
             "signo": 1,
             "actividad": "OPERACION",
+            "parent": "1.2",
+            "order": 10,
             "es_fallback": true
+        },
+        {
+            "id": "1.T",
+            "nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de operación",
+            "tipo": "TOTAL",
+            "nivel": 1,
+            "actividad": "OPERACION",
+            "parent": "1",
+            "order": 11,
+            "calculo": "SUM(1.1.1:1.2.6)"
         },
         {
             "id": "2",
             "nombre": "Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
             "tipo": "HEADER",
             "nivel": 1,
-            "actividad": "INVERSION"
+            "actividad": "INVERSION",
+            "parent": null,
+            "order": 12
         },
         {
             "id": "2.1",
@@ -93,7 +125,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "INVERSION"
+            "actividad": "INVERSION",
+            "parent": "2",
+            "order": 13
         },
         {
             "id": "2.2",
@@ -101,7 +135,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "INVERSION"
+            "actividad": "INVERSION",
+            "parent": "2",
+            "order": 14
         },
         {
             "id": "2.3",
@@ -109,7 +145,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "INVERSION"
+            "actividad": "INVERSION",
+            "parent": "2",
+            "order": 15
         },
         {
             "id": "2.4",
@@ -117,7 +155,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "INVERSION"
+            "actividad": "INVERSION",
+            "parent": "2",
+            "order": 16
         },
         {
             "id": "2.5",
@@ -125,14 +165,18 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": 1,
-            "actividad": "INVERSION"
+            "actividad": "INVERSION",
+            "parent": "2",
+            "order": 17
         },
         {
-            "id": "2.6",
+            "id": "2.T",
             "nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de inversión",
             "tipo": "TOTAL",
-            "nivel": 2,
+            "nivel": 1,
             "actividad": "INVERSION",
+            "parent": "2",
+            "order": 18,
             "calculo": "SUM(2.1:2.5)"
         },
         {
@@ -140,7 +184,9 @@
             "nombre": "Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
             "tipo": "HEADER",
             "nivel": 1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": null,
+            "order": 19
         },
         {
             "id": "3.0.1",
@@ -148,7 +194,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": 1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 20
         },
         {
             "id": "3.0.2",
@@ -156,15 +204,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": 1,
-            "actividad": "FINANCIAMIENTO"
-        },
-        {
-            "id": "3.1",
-            "nombre": "Total importes procedentes de préstamos",
-            "tipo": "TOTAL",
-            "nivel": 2,
             "actividad": "FINANCIAMIENTO",
-            "calculo": "SUM(3.0.1:3.0.2)"
+            "parent": "3",
+            "order": 21
         },
         {
             "id": "3.1.1",
@@ -172,7 +214,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": 1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 22
         },
         {
             "id": "3.1.2",
@@ -180,7 +224,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 23
         },
         {
             "id": "3.1.3",
@@ -188,7 +234,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 24
         },
         {
             "id": "3.1.4",
@@ -196,7 +244,9 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 25
         },
         {
             "id": "3.1.5",
@@ -204,54 +254,68 @@
             "tipo": "LINEA",
             "nivel": 2,
             "signo": -1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 26
         },
         {
-            "id": "3.2",
+            "id": "3.T",
             "nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de financiamiento",
             "tipo": "TOTAL",
-            "nivel": 2,
+            "nivel": 1,
             "actividad": "FINANCIAMIENTO",
+            "parent": "3",
+            "order": 27,
             "calculo": "SUM(3.0.1:3.1.5)"
         },
         {
-            "id": "3.2.2",
-            "nombre": "Incremento neto (disminución) en el efectivo y equivalentes al efectivo, antes del efecto de los cambios en la tasa de cambio",
+            "id": "4.1",
+            "nombre": "Incremento neto (disminución) en el efectivo, antes del efecto de los cambios en la tasa de cambio",
             "tipo": "TOTAL",
-            "nivel": 2,
-            "actividad": "FINANCIAMIENTO",
-            "calculo": "1+2.6+3.2"
+            "nivel": 1,
+            "actividad": "CONCILIACION",
+            "parent": null,
+            "order": 28,
+            "calculo": "1.T+2.T+3.T"
         },
         {
-            "id": "3.2.3",
+            "id": "4.2",
             "nombre": "Efectos de la variación en la tasa de cambio sobre el efectivo y equivalentes al efectivo",
             "tipo": "LINEA",
-            "nivel": 2,
+            "nivel": 1,
             "signo": 1,
-            "actividad": "FINANCIAMIENTO"
+            "actividad": "CONCILIACION",
+            "parent": null,
+            "order": 29
         },
         {
-            "id": "3.2.4",
+            "id": "4.3",
             "nombre": "Incremento (disminución) neto de efectivo y equivalentes al efectivo",
             "tipo": "TOTAL",
-            "nivel": 2,
-            "actividad": "FINANCIAMIENTO",
-            "calculo": "3.2.2+3.2.3"
+            "nivel": 1,
+            "actividad": "CONCILIACION",
+            "parent": null,
+            "order": 30,
+            "calculo": "4.1+4.2"
         },
         {
-            "id": "3.2.5",
+            "id": "4.4",
             "nombre": "Efectivo y equivalentes al efectivo al principio del periodo",
-            "tipo": "TOTAL",
-            "nivel": 2,
-            "actividad": "FINANCIAMIENTO"
+            "tipo": "DATA",
+            "nivel": 1,
+            "actividad": "CONCILIACION",
+            "parent": null,
+            "order": 31
         },
         {
-            "id": "3.2.6",
+            "id": "4.5",
             "nombre": "Efectivo y equivalentes al efectivo al final del periodo",
             "tipo": "TOTAL",
-            "nivel": 2,
-            "actividad": "FINANCIAMIENTO",
-            "calculo": "3.2.5+3.2.4"
+            "nivel": 1,
+            "actividad": "CONCILIACION",
+            "parent": null,
+            "order": 32,
+            "calculo": "4.4+4.3"
         }
     ],
     "migracion_codigos": {
@@ -267,7 +331,7 @@
         "IN03": "2.3",
         "IN04": "2.4",
         "IN05": "2.5",
-        "IN06": "2.6",
+        "IN06": "2.T",
         "FI01": "3.0.1",
         "FI02": "3.0.2",
         "FI03": "3.1.1",
@@ -276,6 +340,6 @@
         "FI06": "3.1.4",
         "FI07": "3.1.5",
         "NEUTRAL": "NEUTRAL",
-        "FX_EFFECT": "3.2.3"
+        "FX_EFFECT": "4.2"
     }
 }

@@ -94,6 +94,135 @@ class FlujoCajaService:
                 return c
         return None
     
+    def build_ias7_catalog_operation(self) -> List[Dict]:
+        """
+        Retorna solo los conceptos de OPERACION ordenados por 'order'.
+        Útil para renderizar el árbol de títulos IAS 7.
+        """
+        conceptos = self.catalogo.get("conceptos", [])
+        operacion = [c for c in conceptos if c.get("actividad") == "OPERACION"]
+        return sorted(operacion, key=lambda x: x.get("order", 999))
+    
+    def build_ias7_catalog_by_activity(self, actividad: str = None) -> List[Dict]:
+        """
+        Retorna conceptos filtrados por actividad ordenados por 'order'.
+        Si actividad es None, retorna TODO el catálogo ordenado.
+        """
+        conceptos = self.catalogo.get("conceptos", [])
+        if actividad:
+            filtered = [c for c in conceptos if c.get("actividad") == actividad.upper()]
+        else:
+            filtered = conceptos
+        return sorted(filtered, key=lambda x: x.get("order", 999))
+    
+    def aggregate_by_ias7(self, montos_por_linea: Dict[str, float], 
+                          proyeccion_por_linea: Dict[str, float] = None,
+                          modo: str = "consolidado") -> List[Dict]:
+        """
+        Motor de agregación IAS 7.
+        
+        Toma montos de LINEAs y calcula HEADERs/TOTALs automáticamente.
+        
+        Args:
+            montos_por_linea: {concepto_id: monto_real} ej: {"1.1.1": 1000000, "1.2.1": -500000}
+            proyeccion_por_linea: {concepto_id: monto_proyectado} (opcional)
+            modo: "real" | "proyectado" | "consolidado"
+        
+        Returns:
+            Lista de nodos con: id, nombre, tipo, nivel, monto_real, monto_proyectado, monto_display
+        """
+        proyeccion_por_linea = proyeccion_por_linea or {}
+        conceptos = self.catalogo.get("conceptos", [])
+        sorted_conceptos = sorted(conceptos, key=lambda x: x.get("order", 999))
+        
+        resultado = []
+        
+        for concepto in sorted_conceptos:
+            c_id = concepto.get("id")
+            c_tipo = concepto.get("tipo")
+            
+            if c_tipo == "LINEA":
+                # Montos directos
+                monto_real = montos_por_linea.get(c_id, 0.0)
+                monto_proy = proyeccion_por_linea.get(c_id, 0.0)
+            elif c_tipo in ("HEADER", "TOTAL"):
+                # Sumar hijos (nodos cuyo parent == este ID o que empiezan con este prefijo)
+                monto_real = self._sumar_hijos(c_id, montos_por_linea, conceptos)
+                monto_proy = self._sumar_hijos(c_id, proyeccion_por_linea, conceptos)
+            else:
+                # DATA u otros
+                monto_real = montos_por_linea.get(c_id, 0.0)
+                monto_proy = proyeccion_por_linea.get(c_id, 0.0)
+            
+            # Determinar monto a mostrar según modo
+            if modo == "real":
+                monto_display = monto_real
+            elif modo == "proyectado":
+                monto_display = monto_proy
+            else:  # consolidado
+                monto_display = monto_real + monto_proy
+            
+            resultado.append({
+                "id": c_id,
+                "nombre": concepto.get("nombre"),
+                "tipo": c_tipo,
+                "nivel": concepto.get("nivel", 3),
+                "parent": concepto.get("parent"),
+                "order": concepto.get("order"),
+                "signo": concepto.get("signo", 1),
+                "actividad": concepto.get("actividad"),
+                "monto_real": round(monto_real, 0),
+                "monto_proyectado": round(monto_proy, 0),
+                "monto_display": round(monto_display, 0)
+            })
+        
+        return resultado
+    
+    def _sumar_hijos(self, parent_id: str, montos: Dict[str, float], conceptos: List[Dict]) -> float:
+        """
+        Suma los montos de todos los hijos directos e indirectos de un nodo.
+        Solo suma LINEAs para evitar doble conteo.
+        """
+        total = 0.0
+        prefix = parent_id + "."
+        
+        for concepto in conceptos:
+            c_id = concepto.get("id", "")
+            c_tipo = concepto.get("tipo", "")
+            
+            # Solo sumar LINEAs que son hijos (directos o indirectos)
+            if c_tipo == "LINEA":
+                if c_id.startswith(prefix) or concepto.get("parent") == parent_id:
+                    total += montos.get(c_id, 0.0)
+        
+        return total
+    
+    def get_categorias_ias7_dropdown(self) -> List[Dict]:
+        """
+        Retorna las categorías para el dropdown del editor.
+        Formato: {"label": "1.1.1 - Cobros procedentes...", "value": "1.1.1"}
+        Solo incluye LINEAs (donde se pueden mapear cuentas).
+        """
+        conceptos = self.catalogo.get("conceptos", [])
+        lineas = [c for c in conceptos if c.get("tipo") == "LINEA"]
+        sorted_lineas = sorted(lineas, key=lambda x: x.get("order", 999))
+        
+        resultado = []
+        for c in sorted_lineas:
+            actividad = c.get("actividad", "")
+            # Emoji por actividad
+            emoji = {"OPERACION": "🟢", "INVERSION": "🔵", "FINANCIAMIENTO": "🟣", "CONCILIACION": "⚪"}.get(actividad, "⚪")
+            
+            resultado.append({
+                "label": f"{emoji} {c['id']} - {c['nombre'][:60]}",
+                "value": c['id']
+            })
+        
+        # Agregar NEUTRAL al final
+        resultado.append({"label": "⚪ NEUTRAL - Transferencias internas (no impacta flujo)", "value": "NEUTRAL"})
+        
+        return resultado
+    
     def _migrar_codigo_antiguo(self, codigo_antiguo: str) -> str:
         """Convierte códigos antiguos (OP01, IN01) a nuevos (1.1.1, 2.1)."""
         return self._migracion_codigos.get(codigo_antiguo, codigo_antiguo)
