@@ -51,6 +51,7 @@ class FlujoCajaService:
     # Categorías técnicas especiales (no se muestran en UI pero se procesan internamente)
     CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
     CATEGORIA_PENDIENTE = "PENDIENTE"   # Sin clasificar (va a 1.2.6 + lista pendientes)
+    CATEGORIA_UNCLASSIFIED = "1.2.6"    # Otras entradas (salidas) de efectivo - fallback
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
