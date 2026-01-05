@@ -786,6 +786,10 @@ class FlujoCajaService:
                 )
                 
                 # Procesar grupos agregados
+                # Obtener lista de cuentas monitoreadas (si existe)
+                cuentas_contrapartida_monitoreadas = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
+                filtrar_por_monitoreadas = len(cuentas_contrapartida_monitoreadas) > 0
+                
                 for grupo in grupos:
                     # account_id viene como [id, "Code Name"] o [id, "Name"] dependiendo configuración
                     # Necesitamos el ID para buscar code/name limpios si es necesario, 
@@ -804,6 +808,10 @@ class FlujoCajaService:
                     # Si no, buscar en un cache o mapa
                     codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
                     nombre_cuenta = ' '.join(acc_display.split(' ')[1:]) if ' ' in acc_display else acc_display
+                    
+                    # FILTRO: Si hay lista de cuentas monitoreadas, SOLO procesar esas
+                    if filtrar_por_monitoreadas and codigo_cuenta not in cuentas_contrapartida_monitoreadas:
+                        continue  # Ignorar esta cuenta, no está en la lista monitoreada
                     
                     # Clasificar
                     # NOTA: Para mayor precisión, podríamos cachear todos los accounts IDs -> Codes antes
