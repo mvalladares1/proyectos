@@ -10,8 +10,13 @@ from datetime import datetime, timedelta
 from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL
 
 
+@st.fragment
 def render(username: str, password: str):
-    """Renderiza el contenido del tab Curva de Abastecimiento."""
+    """
+    Renderiza el contenido del tab Curva de Abastecimiento.
+    Fragment independiente para evitar re-renders al cambiar de tab.
+    Mantiene button blocking para evitar múltiples consultas.
+    """
     st.subheader("📈 Curva de Abastecimiento")
     st.caption("Comparación entre kilogramos proyectados (Excel) vs recepcionados (Sistema)")
 
@@ -95,7 +100,7 @@ def render(username: str, password: str):
     st.markdown("---")
 
     # Botón para cargar curva (carga TODOS los datos, sin filtro de especie)
-    if st.button("📊 Cargar Curva de Abastecimiento", key="btn_curva", type="primary"):
+    if st.button("📊 Cargar Curva de Abastecimiento", key="btn_curva", type="primary", disabled=st.session_state.recep_curva_loading):
         # Construir lista de plantas
         plantas_list = []
         if curva_rfp:
@@ -106,9 +111,11 @@ def render(username: str, password: str):
         if not plantas_list:
             st.warning("Debes seleccionar al menos una planta (RFP o VILKÚN)")
         else:
-            st.session_state.curva_plantas_usadas = plantas_list.copy()
+            st.session_state.recep_curva_loading = True
+            try:
+                st.session_state.curva_plantas_usadas = plantas_list.copy()
 
-            with st.spinner("Cargando datos proyectados y del sistema..."):
+                with st.spinner("Cargando datos proyectados y del sistema..."):
                 # 1. Obtener TODAS las proyecciones del Excel (sin filtro de especie)
                 params_proy = {"planta": plantas_list}
                 # NO agregamos filtro de especie aquí - se aplica dinámicamente después
@@ -148,6 +155,13 @@ def render(username: str, password: str):
                 except Exception as e:
                     st.error(f"Error de conexión al sistema: {e}")
                     st.session_state.curva_sistema_raw = None
+                
+                status_text.text("✅ Fase 4/4: Completado")
+                progress_bar.progress(100)
+                st.toast("✅ Curva de abastecimiento cargada")
+            finally:
+                st.session_state.recep_curva_loading = False
+                st.rerun()
 
     # ============ MOSTRAR CURVA CON FILTRO DINÁMICO ============
     # Cargar proyecciones dinámicamente basado en filtro de especies actual

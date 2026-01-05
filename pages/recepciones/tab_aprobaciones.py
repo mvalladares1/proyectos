@@ -13,8 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from backend.services.aprobaciones_service import get_aprobaciones, save_aprobaciones, remove_aprobaciones
 
 
-def render(username: str, password: str):
-    """Renderiza el contenido del tab Aprobaciones MP."""
+
+@st.fragment
+def _fragment_main_aprobaciones(username: str, password: str):
+    """Fragment principal: Aprobaciones de precios."""
     st.markdown("### 📥 Aprobaciones de Precios MP")
     st.markdown("Valida masivamente los precios de recepción comparándolos con el presupuesto.")
 
@@ -46,9 +48,18 @@ def render(username: str, password: str):
     estado_filtro = st.radio("Estado", ["Pendientes", "Aprobadas", "Todas"], horizontal=True, key="estado_filtro_aprob")
 
     # Botón de carga
-    if st.button("🔄 Cargar Recepciones", type="primary", use_container_width=True):
-        with st.spinner("Cargando datos..."):
+    if st.button("🔄 Cargar Recepciones", type="primary", use_container_width=True, disabled=st.session_state.recep_aprob_cargar_loading):
+        st.session_state.recep_aprob_cargar_loading = True
+        try:
+            # Progress bar personalizado
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
             try:
+                # Fase 1: Conexión
+                status_text.text("⏳ Fase 1/4: Conectando con Odoo...")
+                progress_bar.progress(25)
+                
                 params = {
                     "username": username,
                     "password": password,
@@ -57,10 +68,19 @@ def render(username: str, password: str):
                     "origen": None,
                     "estados": ["assigned", "done"] # Mostrar 'Preparado' y 'Hecho'
                 }
+                
+                # Fase 2: Consulta recepciones
+                status_text.text("⏳ Fase 2/4: Consultando recepciones...")
+                progress_bar.progress(50)
                 resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
 
                 if resp.status_code == 200:
                     st.session_state.aprob_data = resp.json()
+                    
+                    # Fase 3: Carga presupuesto
+                    status_text.text("⏳ Fase 3/4: Cargando presupuestos...")
+                    progress_bar.progress(75)
+                    
                     # Cargar PPTO General
                     try:
                         resp_ppto = requests.get(
@@ -89,11 +109,21 @@ def render(username: str, password: str):
                     except:
                         pass
 
-                    st.success(f"✅ Cargadas {len(st.session_state.aprob_data)} recepciones")
+                    # Fase 4: Completado
+                    status_text.text("✅ Fase 4/4: Completado")
+                    progress_bar.progress(100)
+                    st.toast(f"✅ Cargadas {len(st.session_state.aprob_data)} recepciones", icon="✅")
                 else:
+                    progress_bar.empty()
+                    status_text.empty()
                     st.error(f"Error: {resp.text}")
             except Exception as e:
+                progress_bar.empty()
+                status_text.empty()
                 st.error(f"Error: {e}")
+        finally:
+            st.session_state.recep_aprob_cargar_loading = False
+            st.rerun()
 
     # --- MOSTRAR DATOS SI EXISTEN ---
     if st.session_state.aprob_data:
@@ -319,38 +349,39 @@ def render(username: str, password: str):
             # --- BOTONES DE ACCIÓN --- (Habilitado para todos los usuarios autenticados)
             col_a, col_b = st.columns([1, 1])
             with col_a:
-                if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True):
-                    ids_names = seleccionados["_id"].unique().tolist()
-                    picking_ids = [int(pid) for pid in seleccionados["_picking_id"].unique().tolist() if pid]
+                if st.button("✅ Aprobar Seleccionadas", type="primary", use_container_width=True, disabled=st.session_state.recep_aprob_aprobar_loading):
+                    st.session_state.recep_aprob_aprobar_loading = True
+                    try:
+                        ids_names = seleccionados["_id"].unique().tolist()
+                        picking_ids = [int(pid) for pid in seleccionados["_picking_id"].unique().tolist() if pid]
 
-                    if picking_ids:
-                        with st.spinner("Validando en Odoo..."):
-                            try:
-                                resp_val = requests.post(
-                                    f"{API_URL}/api/v1/recepciones-mp/validate",
-                                    params={"username": username, "password": password},
-                                    json=picking_ids,
-                                    timeout=60
-                                )
-                                if resp_val.status_code == 200:
-                                    res_json = resp_val.json()
-                                    if res_json.get("success"):
-                                        save_aprobaciones(ids_names)
-                                        st.success(f"✅ {len(picking_ids)} recepciones validadas correctamente.")
-                                        st.rerun()
+                        if picking_ids:
+                            with st.spinner("Validando en Odoo..."):
+                                try:
+                                    resp_val = requests.post(
+                                        f"{API_URL}/api/v1/recepciones-mp/validate",
+                                        params={"username": username, "password": password},
+                                        json=picking_ids,
+                                        timeout=60
+                                    )
+                                    if resp_val.status_code == 200:
+                                        res_json = resp_val.json()
+                                        if res_json.get("success"):
+                                            save_aprobaciones(ids_names)
+                                            st.toast(f"✅ {len(picking_ids)} recepciones validadas correctamente")
+                                        else:
+                                            # Mostrar lista de errores si existen
+                                            errores_msg = "\n".join(res_json.get("errores", []))
+                                            st.error(f"Error al validar algunas recepciones:\n{errores_msg}")
                                     else:
-                                        # Mostrar lista de errores si existen
-                                        errores_msg = "\n".join(res_json.get("errores", []))
-                                        st.error(f"Error al validar algunas recepciones:\n{errores_msg}")
-                                        # Aún así recargar por si algunas sí se validaron
-                                        if res_json.get("validados"):
-                                            st.rerun()
-                                else:
-                                    st.error(f"Error en el servidor: {resp_val.text}")
-                            except Exception as e:
-                                st.error(f"Error al conectar con la API: {e}")
-                    else:
-                        st.warning("Selecciona al menos una recepción con ID válido.")
+                                        st.error(f"Error en el servidor: {resp_val.text}")
+                                except Exception as e:
+                                    st.error(f"Error al conectar con la API: {e}")
+                        else:
+                            st.warning("Selecciona al menos una recepción con ID válido.")
+                    finally:
+                        st.session_state.recep_aprob_aprobar_loading = False
+                        st.rerun()
             with col_b:
                 if estado_filtro != "Pendientes":
                     if st.button("↩️ Quitar Aprobación", use_container_width=True):
@@ -363,6 +394,11 @@ def render(username: str, password: str):
             st.info("No hay datos con los filtros seleccionados.")
     else:
         st.info("👆 Selecciona un rango de fechas y presiona **Cargar Recepciones**")
+
+
+@st.fragment
+def _fragment_pdf_reports(username: str, password: str):
+    """Fragment secundario: Reportes PDF."""
 
     # ========== SECCIÓN INDEPENDIENTE: REPORTE PDF PARA PRODUCTORES ==========
     st.markdown("---")
@@ -379,8 +415,16 @@ def render(username: str, password: str):
 
         estado_rep = st.radio("Estado de Recepción", ["Hechas", "Todas"], horizontal=True, key="estado_rep")
 
-        if st.button("🔄 Cargar Productores", type="secondary", use_container_width=True):
-            with st.spinner("Cargando datos..."):
+        if st.button("🔄 Cargar Productores", type="secondary", use_container_width=True, disabled=st.session_state.recep_aprob_productores_loading):
+            st.session_state.recep_aprob_productores_loading = True
+            try:
+                # Progress bar personalizado
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                status_text.text("⏳ Fase 1/4: Conectando con API...")
+                progress_bar.progress(25)
+                
                 try:
                     params_rep = {
                         "username": username,
@@ -389,9 +433,16 @@ def render(username: str, password: str):
                         "fecha_fin": fecha_fin_rep.strftime("%Y-%m-%d"),
                         "origen": None
                     }
+                    
+                    status_text.text("⏳ Fase 2/4: Consultando recepciones...")
+                    progress_bar.progress(50)
+                    
                     resp_rep = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params_rep, timeout=60)
 
                     if resp_rep.status_code == 200:
+                        status_text.text("⏳ Fase 3/4: Procesando datos...")
+                        progress_bar.progress(75)
+                        
                         recepciones_rep = resp_rep.json()
 
                         # Filtrar por estado si es necesario
@@ -399,11 +450,21 @@ def render(username: str, password: str):
                             recepciones_rep = [r for r in recepciones_rep if r.get('state') == 'done']
 
                         st.session_state.reporte_recepciones = recepciones_rep
-                        st.success(f"✅ Cargadas {len(recepciones_rep)} recepciones")
+                        
+                        status_text.text("✅ Fase 4/4: Completado")
+                        progress_bar.progress(100)
+                        st.toast(f"✅ Cargadas {len(recepciones_rep)} recepciones")
                     else:
+                        progress_bar.empty()
+                        status_text.empty()
                         st.error(f"Error: {resp_rep.text}")
                 except Exception as e:
+                    progress_bar.empty()
+                    status_text.empty()
                     st.error(f"Error: {e}")
+            finally:
+                st.session_state.recep_aprob_productores_loading = False
+                st.rerun()
 
         # Si hay datos cargados para reporte
         if 'reporte_recepciones' in st.session_state and st.session_state.reporte_recepciones:
@@ -535,3 +596,9 @@ def render(username: str, password: str):
                         st.warning("No hay recepciones para este productor.")
             else:
                 st.info("No hay productores en el rango de fechas seleccionado.")
+
+
+def render(username: str, password: str):
+    """Renderiza el contenido del tab Aprobaciones MP (Orquestador de fragments)."""
+    _fragment_main_aprobaciones(username, password)
+    _fragment_pdf_reports(username, password)

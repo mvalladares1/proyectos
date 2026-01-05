@@ -13,14 +13,16 @@ router = APIRouter(prefix="/api/v1/bandejas", tags=["bandejas"])
 async def get_movimientos_entrada(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
-    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)")
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    offset: int = Query(0, ge=0, description="Número de registros a omitir"),
+    limit: int = Query(5000, ge=1, le=10000, description="Máximo de registros a retornar")
 ):
     """
     Obtiene los movimientos de entrada de bandejas (recepción de productores).
     """
     try:
         service = BandejasService(username=username, password=password)
-        data = service.get_movimientos_entrada(fecha_desde=fecha_desde)
+        data = service.get_movimientos_entrada(fecha_desde=fecha_desde, offset=offset, limit=limit)
         return {"data": data.to_dict(orient='records') if not data.empty else []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -30,14 +32,16 @@ async def get_movimientos_entrada(
 async def get_movimientos_salida(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
-    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)")
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    offset: int = Query(0, ge=0, description="Número de registros a omitir"),
+    limit: int = Query(5000, ge=1, le=10000, description="Máximo de registros a retornar")
 ):
     """
     Obtiene los movimientos de salida de bandejas (despacho a productores).
     """
     try:
         service = BandejasService(username=username, password=password)
-        data = service.get_movimientos_salida(fecha_desde=fecha_desde)
+        data = service.get_movimientos_salida(fecha_desde=fecha_desde, offset=offset, limit=limit)
         return {"data": data.to_dict(orient='records') if not data.empty else []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -12,36 +12,36 @@ from datetime import datetime, timedelta
 from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL
 
 
+@st.fragment
 def render(username: str, password: str):
-    """Renderiza el contenido del tab KPIs y Calidad."""
+    """
+    Renderiza el contenido del tab KPIs y Calidad.
+    Fragment independiente para evitar re-renders al cambiar de tab.
+    """
     
-    # Usar form para evitar re-renders al cambiar filtros
-    with st.form(key="form_filtros_recepciones"):
-        # Filtros
-        col1, col2 = st.columns(2)
-        with col1:
-            fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
-        with col2:
-            fecha_fin = st.date_input("Fecha fin", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
-
-        # Checkbox para filtrar solo recepciones en estado "hecho"
+    # Filtros (Directos, sin form)
+    # Checkbox para filtrar solo recepciones en estado "hecho"
+    with st.expander("⚙️ Configuración de Filtros", expanded=False):
         solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
-                                  help="Activa para ver solo recepciones completadas/validadas. Desactiva para ver todas las recepciones (en proceso, borrador, etc.)")
-
+                                help="Activa para ver solo recepciones completadas/validadas.")
+        
         # Checkboxes para filtrar por origen (RFP / VILKÚN)
         st.markdown("**Origen de recepciones:**")
-        col_orig1, col_orig2 = st.columns(2)
+        col_orig1, col_orig2, col_dummy = st.columns([1, 1, 2])
         with col_orig1:
-            check_rfp = st.checkbox("🏭 RFP (Rio Futuro Procesos)", value=True, key="check_rfp",
-                                    help="Recepciones de la planta Rio Futuro Procesos")
+            check_rfp = st.checkbox("🏭 RFP", value=True, key="check_rfp")
         with col_orig2:
-            check_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="check_vilkun",
-                                       help="Recepciones de la planta Vilkún")
+            check_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="check_vilkun")
 
-        # Botón de consulta (form_submit_button no permite clicks múltiples durante carga)
-        consultar = st.form_submit_button("🔍 Consultar Recepciones", type="primary", use_container_width=True)
+    # Fechas (arriba para acceso rápido)
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input("Desde", datetime.now() - timedelta(days=7), key="fecha_inicio_recepcion", format="DD/MM/YYYY")
+    with col2:
+        fecha_fin = st.date_input("Hasta", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
 
-    # Procesar solo al hacer submit
+    # LÓGICA DE CARGA AUTOMÁTICA
+    consultar = True # Siempre consultar si los filtros cambian (Streamlit rerun)
     if consultar:
         # Construir lista de orígenes según checkboxes
         origen_list = []
@@ -67,8 +67,28 @@ def render(username: str, password: str):
                 "origen": origen_list
             }
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
-
-            with st.spinner("Cargando recepciones..."):
+            
+            # SKELETON LOADER
+            skeleton = st.empty()
+            with skeleton.container():
+                st.markdown("""
+                <div style="animation: pulse 1.5s infinite;">
+                    <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                        <div style="flex: 1; height: 120px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                        <div style="flex: 1; height: 120px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                        <div style="flex: 1; height: 120px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                    </div>
+                     <div style="display: flex; gap: 20px;">
+                        <div style="flex: 2; height: 300px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                        <div style="flex: 1; height: 300px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                    </div>
+                </div>
+                <style>
+                    @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 0.3; } 100% { opacity: 0.6; } }
+                </style>
+                """, unsafe_allow_html=True)
+            
+            # with st.spinner("Cargando recepciones..."): (Reemplazado por Skeleton)
                 try:
                     resp = requests.get(api_url, params=params, timeout=60)
                     if resp.status_code == 200:
@@ -90,6 +110,8 @@ def render(username: str, password: str):
                     st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+                finally:
+                    skeleton.empty()
 
 
     # Mostrar tabla y detalle si hay datos
@@ -353,7 +375,7 @@ def render(username: str, password: str):
                     'tipo': 'fruta',
                     'Descripción': tipo,
                     'Kg': tipo_kg,
-                    'Kg Proy': kg_proy_tipo,
+                    'PPTO Kg': kg_proy_tipo,
                     'Costo Total': tipo_costo,
                     'Costo/Kg': tipo_costo_prom,
                     'Precio Proy': precio_proy_tipo,
@@ -404,7 +426,7 @@ def render(username: str, password: str):
                         'tipo': 'manejo',
                         'Descripción': f"    → {manejo}",
                         'Kg': kg,
-                        'Kg Proy': kg_proy_manejo,
+                        'PPTO Kg': kg_proy_manejo,
                         'Costo Total': costo,
                         'Costo/Kg': costo_prom,
                         'Precio Proy': precio_proy_manejo,
@@ -418,7 +440,7 @@ def render(username: str, password: str):
                 'tipo': 'total',
                 'Descripción': 'TOTAL GENERAL',
                 'Kg': total_kg_tabla,
-                'Kg Proy': total_kg_proy,
+                'PPTO Kg': total_kg_proy,
                 'Costo Total': total_costo_tabla,
                 'Costo/Kg': None,
                 'Precio Proy': None,
@@ -460,7 +482,24 @@ def render(username: str, password: str):
             # Formatear para mostrar (formato chileno: punto miles, coma decimal)
             df_display = df_resumen.copy()
             df_display['Kg'] = df_display['Kg'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) else "—")
-            df_display['Kg Proy'] = df_display['Kg Proy'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) and x > 0 else "—")
+            df_display['PPTO Kg'] = df_display['PPTO Kg'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) and x > 0 else "—")
+            
+            # Calcular % Cumplimiento (Kg / PPTO Kg * 100)
+            def calcular_cumplimiento(row):
+                kg_real = row.get('Kg', 0) or 0
+                if isinstance(kg_real, str): # Check if already formatted
+                    return None
+                kg_proy = row.get('PPTO Kg', 0) or 0
+                if isinstance(kg_proy, str): # Check if already formatted
+                    return None
+                if kg_proy > 0:
+                    return (kg_real / kg_proy) * 100
+                return None
+            
+            # Calcular antes del formateo de Kg
+            df_resumen['% Cumpl_Num'] = df_resumen.apply(calcular_cumplimiento, axis=1)
+            df_display['% Cumpl'] = df_resumen['% Cumpl_Num'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
+            
             df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: fmt_dinero(x) if pd.notna(x) else "—")
             df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
             df_display['Precio Proy'] = df_display['Precio Proy'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
@@ -469,7 +508,7 @@ def render(username: str, password: str):
             df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
 
             # Mostrar usando columnas estilizadas
-            df_show = df_display[['Descripción', 'Kg', 'Kg Proy', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% Desv', '% IQF', '% Block']]
+            df_show = df_display[['Descripción', 'Kg', 'PPTO Kg', '% Cumpl', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% Desv', '% IQF', '% Block']]
 
             # Usar st.dataframe con column_config para mejor visualización
             st.dataframe(
@@ -479,7 +518,8 @@ def render(username: str, password: str):
                 column_config={
                     'Descripción': st.column_config.TextColumn('Tipo / Manejo', width='large'),
                     'Kg': st.column_config.TextColumn('Kg', width='small'),
-                    'Kg Proy': st.column_config.TextColumn('Kg Proy', width='small'),
+                    'PPTO Kg': st.column_config.TextColumn('PPTO Kg', width='small'),
+                    '% Cumpl': st.column_config.TextColumn('% Cumpl', width='small'),
                     'Costo Total': st.column_config.TextColumn('Costo Total', width='medium'),
                     'Costo/Kg': st.column_config.TextColumn('$/Kg', width='small'),
                     'Precio Proy': st.column_config.TextColumn('PPTO', width='small'),

@@ -136,6 +136,11 @@ def init_session_state():
         'aprob_ppto': {},
         'aprob_ppto_detalle': {},
         'origen_filtro_usado': [],
+        'recep_gestion_loading': False,
+        'recep_curva_loading': False,
+        'recep_aprob_cargar_loading': False,
+        'recep_aprob_aprobar_loading': False,
+        'recep_aprob_productores_loading': False,
     }
     for key, default in defaults.items():
         if key not in st.session_state:

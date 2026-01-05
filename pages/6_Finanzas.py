@@ -171,36 +171,54 @@ if datos:
             if not _perm_agrupado:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                tab_agrupado.render(datos_mensuales, ppto_mensual, meses_seleccionados, meses_opciones, año_seleccionado)
+                @st.fragment
+                def _frag_agrupado():
+                    tab_agrupado.render(datos_mensuales, ppto_mensual, meses_seleccionados, meses_opciones, año_seleccionado)
+                _frag_agrupado()
         
         with tab_mensualizado_ui:
             if not _perm_mensualizado:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                tab_mensualizado.render(datos_mensuales, ppto_mensual, meses_seleccionados, meses_opciones, año_seleccionado)
+                @st.fragment
+                def _frag_mensualizado():
+                    tab_mensualizado.render(datos_mensuales, ppto_mensual, meses_seleccionados, meses_opciones, año_seleccionado)
+                _frag_mensualizado()
         
         with tab_ytd_ui:
             if not _perm_ytd:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                tab_ytd.render(resultados, ppto_ytd, estructura)
+                @st.fragment
+                def _frag_ytd():
+                    tab_ytd.render(resultados, ppto_ytd, estructura)
+                _frag_ytd()
         
         with tab_cg_ui:
             if not _perm_cg:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                tab_cg.render(estructura, fecha_inicio, fecha_fin, centro_seleccionado)
+                @st.fragment
+                def _frag_cg():
+                    tab_cg.render(estructura, fecha_inicio, fecha_fin, centro_seleccionado)
+                _frag_cg()
         
         with tab_detalle_ui:
             if not _perm_detalle:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                tab_detalle.render(estructura, ppto_ytd)
+                @st.fragment
+                def _frag_detalle():
+                    tab_detalle.render(estructura, ppto_ytd)
+                _frag_detalle()
         
         with tab_flujo_ui:
             if not _perm_flujo:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                tab_flujo_caja.render(username, password)
+                @st.fragment
+                def _frag_flujo():
+                    tab_flujo_caja.render(username, password)
+                _frag_flujo()
 else:
     st.info("Selecciona los filtros y haz clic en 'Actualizar datos' para cargar información.")

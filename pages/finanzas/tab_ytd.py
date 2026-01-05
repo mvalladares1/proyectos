@@ -5,9 +5,11 @@ import streamlit as st
 import pandas as pd
 
 
+@st.fragment
 def render(resultados: dict, ppto_ytd: dict, estructura: dict):
     """
     Renderiza el tab YTD con métricas principales y tabla de Estado de Resultados.
+    Fragment independiente para evitar re-renders al cambiar de tab.
     
     Args:
         resultados: Dict con resultados reales (ingresos, costos, etc.)

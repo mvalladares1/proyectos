@@ -6,9 +6,11 @@ import pandas as pd
 import plotly.express as px
 
 
+@st.fragment
 def render(estructura: dict, fecha_inicio: str, fecha_fin: str, centro_seleccionado: str):
     """
     Renderiza el tab CG con análisis detallado por cuenta contable.
+    Fragment independiente para evitar re-renders al cambiar de tab.
     
     Args:
         estructura: Dict con estructura detallada de cuentas

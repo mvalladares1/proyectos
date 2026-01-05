@@ -69,6 +69,7 @@ def init_session_state():
         'finanzas_flujo_clicked': False,
         'finanzas_mostrar_editor': False,
         'finanzas_cuenta_a_editar': None,
+        'finanzas_flujo_loading': False,
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -126,8 +127,9 @@ def fetch_presupuesto(año, centro=None):
         return {"error": str(e)}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_flujo_caja(fecha_inicio, fecha_fin, _username, _password):
-    """Obtiene flujo de caja (sin caché para datos frescos al regenerar)."""
+    """Obtiene flujo de caja con caché de 5 minutos."""
     try:
         resp = requests.get(
             f"{FLUJO_CAJA_URL}/",

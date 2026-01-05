@@ -1,10 +1,12 @@
 """
 Servicio de Rendimiento Productivo.
 Incluye funciones para trazabilidad inversa Y datos dashboard para Producción.
+OPTIMIZADO: Incluye caché para reducir llamadas repetidas a Odoo.
 """
 from typing import Optional, Dict, List
 from datetime import datetime
 from shared.odoo_client import OdooClient
+from backend.cache import get_cache
 
 
 class RendimientoService:
@@ -25,6 +27,7 @@ class RendimientoService:
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
+        self._cache = get_cache()
     
     # ===========================================
     # FUNCIONES AUXILIARES
@@ -467,7 +470,19 @@ class RendimientoService:
         """
         Obtiene todos los datos del dashboard en una sola llamada.
         Usado por el módulo de Producción para mostrar KPIs y consolidados.
+        OPTIMIZADO: Incluye caché de 3 minutos para reducir llamadas repetidas.
         """
+        # Intentar obtener del caché
+        cache_key = self._cache._make_key(
+            "dashboard_completo",
+            fecha_inicio, fecha_fin, solo_terminadas
+        )
+        
+        cached_data = self._cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
+        # No está en caché, calcular...
         # 1. Obtener todas las MOs del período
         mos = self.get_mos_por_periodo(fecha_inicio, fecha_fin, solo_terminadas)
         
@@ -771,9 +786,14 @@ class RendimientoService:
         # MOs ordenadas
         mos_resultado.sort(key=lambda x: x['fecha'], reverse=True)
         
-        return {
+        result = {
             'overview': overview,
             'consolidado': consolidado,
             'salas': resultado_salas,
             'mos': mos_resultado
         }
+        
+        # Guardar en caché con TTL de 180 segundos (3 minutos)
+        self._cache.set(cache_key, result, ttl=180)
+        
+        return result

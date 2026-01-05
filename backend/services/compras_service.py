@@ -1,7 +1,7 @@
 """
 Servicio de Compras - Gestión de Órdenes de Compra (PO)
 Estados de aprobación y recepción.
-Optimizado con caché en memoria.
+OPTIMIZADO: Usa OdooCache para reducir llamadas repetidas.
 """
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
@@ -10,6 +10,7 @@ import time
 
 from shared.odoo_client import OdooClient
 from backend.services.currency_service import CurrencyService
+from backend.cache import get_cache
 
 
 def clean_record(rec: Dict) -> Dict:
@@ -29,25 +30,9 @@ def clean_record(rec: Dict) -> Dict:
 class ComprasService:
     """Servicio para gestión de Órdenes de Compra."""
     
-    # Caché en memoria (simple, se reinicia con el servicio)
-    _cache = {}
-    _cache_ttl = 300  # 5 minutos
-    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
-    
-    def _get_cache_key(self, prefix: str, *args) -> str:
-        return f"{prefix}:{':'.join(str(a) for a in args)}"
-    
-    def _get_cached(self, key: str) -> Optional[any]:
-        if key in self._cache:
-            data, timestamp = self._cache[key]
-            if time.time() - timestamp < self._cache_ttl:
-                return data
-            del self._cache[key]
-        return None
-    
-    def _set_cached(self, key: str, data: any):
+        self._cache = get_cache()
         self._cache[key] = (data, time.time())
     
     # ============================================================
@@ -152,8 +137,18 @@ class ComprasService:
                            search_text: str = None) -> List[Dict]:
         """
         Obtiene las órdenes de compra con estados calculados.
-        Optimizado: Trae datos en batches y procesa en memoria.
+        Optimizado: Trae datos en batches y procesa en memoria + caché de 3 min.
         """
+        # Intentar obtener del caché
+        cache_key = self._cache._make_key(
+            "ordenes_compra",
+            fecha_inicio, fecha_fin, status_filter or "", receive_filter or "", search_text or ""
+        )
+        cached_data = self._cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
+        # No está en caché, calcular...
         # Dominio base - incluir todos los estados excepto cancelado
         domain = [
             ['state', 'not in', ['cancel']],  # Excluir solo cancelados
@@ -393,18 +388,23 @@ class ComprasService:
                 'lineas': lines_by_po.get(po_id, [])
             })
         
+        # Guardar en caché con TTL de 180 segundos (3 minutos)
+        self._cache.set(cache_key, result, ttl=180)
+        
         return result
     
     def get_overview(self, fecha_inicio: str, fecha_fin: str) -> Dict:
         """
         KPIs consolidados de compras.
+        OPTIMIZADO: Usa caché de 3 minutos.
         """
-        # Usar caché para overview
-        cache_key = self._get_cache_key('overview', fecha_inicio, fecha_fin)
-        cached = self._get_cached(cache_key)
-        if cached:
-            return cached
+        # Intentar obtener del caché
+        cache_key = self._cache._make_key('overview', fecha_inicio, fecha_fin)
+        cached_data = self._cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
         
+        # No está en caché, calcular...
         # Obtener todas las POs sin filtros
         ordenes = self.get_ordenes_compra(fecha_inicio, fecha_fin)
         
@@ -444,7 +444,9 @@ class ComprasService:
             'pct_recepcionadas': round(recepcionada / (total_pos - no_aplica) * 100, 1) if (total_pos - no_aplica) > 0 else 0
         }
         
-        self._set_cached(cache_key, result)
+        # Guardar en caché con TTL de 180 segundos (3 minutos)
+        self._cache.set(cache_key, result, ttl=180)
+        
         return result
     
     # ============================================================
@@ -454,6 +456,7 @@ class ComprasService:
     def get_lineas_credito(self, fecha_desde: str = None) -> List[Dict]:
         """
         Obtiene proveedores con línea de crédito activa y calcula uso.
+        OPTIMIZADO: Incluye caché de 3 minutos.
         
         Args:
             fecha_desde: Fecha desde la cual calcular uso (YYYY-MM-DD). Si es None, no filtra.
@@ -470,6 +473,13 @@ class ComprasService:
         3. OCs tentativas (informativo): OCs confirmadas sin factura asociada
            (no afecta disponibilidad, solo referencia)
         """
+        # Intentar obtener del caché
+        cache_key = self._cache._make_key("lineas_credito", fecha_desde or "all")
+        cached_data = self._cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
+        # No está en caché, calcular...
         # Buscar partners con línea de crédito activa
         partners = self.odoo.search_read(
             'res.partner',
@@ -980,6 +990,10 @@ class ComprasService:
         
         # Ordenar por % uso descendente (más críticos primero)
         result.sort(key=lambda x: x['pct_uso'], reverse=True)
+        
+        # Guardar en caché con TTL de 180 segundos (3 minutos)
+        self._cache.set(cache_key, result, ttl=180)
+        
         return result
     
     def get_lineas_credito_resumen(self, fecha_desde: str = None) -> Dict:

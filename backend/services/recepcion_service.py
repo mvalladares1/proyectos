@@ -1,6 +1,6 @@
 """
 Servicio para consultar recepciones de materia prima (MP) desde Odoo
-OPTIMIZADO: Usa batch queries para eliminar problema N+1
+OPTIMIZADO: Usa batch queries para eliminar problema N+1 + Caché de 5 minutos
 Migrado desde recepcion/backend/recepcion_service.py
 """
 from typing import List, Dict, Any, Optional
@@ -20,6 +20,7 @@ def _normalize_categoria(cat: str) -> str:
 def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None, solo_hechas: bool = True, origen: Optional[List[str]] = None, estados: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Obtiene recepciones de materia prima con datos de calidad.
+    OPTIMIZADO: Incluye caché de 5 minutos para reducir llamadas repetidas.
     
     OPTIMIZADO: Reduce de ~5 llamadas por recepción a ~6 llamadas totales:
     1. stock.picking (recepciones)
@@ -37,6 +38,19 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     """
     client = OdooClient(username=username, password=password)
     cache = get_cache()
+    
+    # Intentar obtener del caché
+    cache_key = cache._make_key(
+        "recepciones_mp",
+        fecha_inicio, fecha_fin, productor_id or 0,
+        solo_hechas, tuple(origen or []), tuple(estados or [])
+    )
+    
+    cached_data = cache.get(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    # No está en caché, calcular...
     
     # Mapeo de origen a picking_type_id
     ORIGEN_PICKING_MAP = {
@@ -567,6 +581,9 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             "productos": productos,
             "lineas_analisis": calidad_data.get("lineas_analisis", [])
         })
+    
+    # Guardar en caché con TTL de 300 segundos (5 minutos)
+    cache.set(cache_key, resultado, ttl=300)
     
     return resultado
 

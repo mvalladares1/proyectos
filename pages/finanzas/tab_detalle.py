@@ -6,9 +6,11 @@ import pandas as pd
 from .shared import fmt_monto, fmt_pct
 
 
+@st.fragment
 def render(estructura: dict, ppto_ytd: dict):
     """
     Renderiza el tab Detalle con vista jerárquica desplegable.
+    Fragment independiente para evitar re-renders al cambiar de tab.
     
     Args:
         estructura: Dict con estructura detallada de cuentas

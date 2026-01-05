@@ -1,14 +1,17 @@
 """
+"""
 Tab: Mensualizado - Control Presupuestario con detalle mes a mes.
 """
 import streamlit as st
 import pandas as pd
 
 
+@st.fragment
 def render(datos_mensuales: dict, ppto_mensual: dict, meses_seleccionados: list,
            meses_opciones: dict, año_seleccionado: int):
     """
     Renderiza el tab Mensualizado con vista de Reales, PPTO y Variaciones por mes.
+    Fragment independiente para evitar re-renders al cambiar de tab.
     
     Args:
         datos_mensuales: Dict con datos reales mensuales {YYYY-MM: {categoria: valor}}

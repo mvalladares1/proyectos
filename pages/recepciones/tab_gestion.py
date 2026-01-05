@@ -10,8 +10,13 @@ from datetime import datetime, timedelta
 from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL, get_validation_icon, get_qc_icon, fetch_gestion_data, fetch_gestion_overview
 
 
+@st.fragment
 def render(username: str, password: str):
-    """Renderiza el contenido del tab Gestión de Recepciones."""
+    """
+    Renderiza el contenido del tab Gestión de Recepciones.
+    Fragment independiente para evitar re-renders al cambiar de tab.
+    Mantiene button blocking para evitar múltiples consultas.
+    """
     st.subheader("📋 Gestión de Recepciones MP")
     st.caption("Monitoreo de estados de validación y control de calidad")
 
@@ -26,33 +31,68 @@ def render(username: str, password: str):
     with col4:
         qc_filter = st.selectbox("Control Calidad", ["Todos", "Con QC Aprobado", "Con QC Pendiente", "Sin QC", "QC Fallido"], key="gestion_qc")
     with col5:
-        search_text = st.text_input("Buscar Albarán", placeholder="Ej: WH/IN/00123", key="gestion_search")
+        # Inicializar debounce state
+        if 'gestion_search_debounce' not in st.session_state:
+            st.session_state.gestion_search_debounce = ""
+        
+        search_text = st.text_input(
+            "Buscar Albarán", 
+            placeholder="Ej: WH/IN/00123", 
+            key="gestion_search",
+            help="🕒 Presiona Enter o haz clic en Consultar para buscar"
+        )
 
-    # Botón de consulta con limpiar caché
+    # Botones de acción
     col_btn1, col_btn2 = st.columns([1, 4])
-    with col_btn1:
-        consultar = st.button("🔄 Consultar", type="primary", key="btn_gestion")
     with col_btn2:
         if st.button("🗑️ Limpiar caché", key="btn_clear_cache"):
             fetch_gestion_data.clear()
             fetch_gestion_overview.clear()
-            st.success("Caché limpiado")
+            st.toast("✅ Caché limpiado")
+            st.rerun()
 
     # Cargar datos usando caché
     fecha_inicio_str = fecha_inicio_g.strftime("%Y-%m-%d")
     fecha_fin_str = fecha_fin_g.strftime("%Y-%m-%d")
 
-    if consultar or st.session_state.get('gestion_loaded'):
+    # SIEMPRE CARGAR (Auto-refresh)
+    # Controlar si es carga inicial o refresco
+    if True:
         st.session_state.gestion_loaded = True
+        st.session_state.recep_gestion_loading = True
+        
+        try:
+            # SKELETON LOADER
+            skeleton = st.empty()
+            with skeleton.container():
+                st.markdown("""
+                <div style="animation: pulse 1.5s infinite;">
+                    <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                        <div style="flex: 1; height: 100px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                        <div style="flex: 1; height: 100px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                        <div style="flex: 1; height: 100px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                        <div style="flex: 1; height: 100px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                    </div>
+                     <div style="height: 400px; background-color: #f0f2f6; border-radius: 12px;"></div>
+                </div>
+                <style>@keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 0.3; } 100% { opacity: 0.6; } }</style>
+                """, unsafe_allow_html=True)
+            
+            # with st.spinner("Cargando datos..."):
+                # Usar funciones con caché (automáticamente devuelve caché si existe)
+                overview = fetch_gestion_overview(username, password, fecha_inicio_str, fecha_fin_str)
+                data_gestion = fetch_gestion_data(username, password, fecha_inicio_str, fecha_fin_str, 
+                                                  status_filter, qc_filter, search_text if search_text else None)
 
-        with st.spinner("Cargando datos..."):
-            # Usar funciones con caché (automáticamente devuelve caché si existe)
-            overview = fetch_gestion_overview(username, password, fecha_inicio_str, fecha_fin_str)
-            data_gestion = fetch_gestion_data(username, password, fecha_inicio_str, fecha_fin_str, 
-                                              status_filter, qc_filter, search_text if search_text else None)
-
-            st.session_state.gestion_overview = overview
-            st.session_state.gestion_data = data_gestion
+                st.session_state.gestion_overview = overview
+                st.session_state.gestion_data = data_gestion
+                
+                if not st.session_state.get('gestion_loaded_initial'):
+                    st.session_state.gestion_loaded_initial = True
+                    # st.toast("✅ Datos actualizados") 
+        finally:
+            skeleton.empty()
+            st.session_state.recep_gestion_loading = False
 
     overview = st.session_state.gestion_overview
     data_gestion = st.session_state.gestion_data

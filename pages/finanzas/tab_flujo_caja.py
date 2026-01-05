@@ -14,9 +14,12 @@ from .shared import (
 )
 
 
+@st.fragment
 def render(username: str, password: str):
     """
     Renderiza el tab Flujo de Caja con método directo NIIF IAS 7.
+    Fragment independiente para evitar re-renders al cambiar de tab.
+    Mantiene progress bar personalizado de 5 fases.
     
     Args:
         username: Usuario para API
@@ -93,7 +96,8 @@ def render(username: str, password: str):
     col_btn, col_info = st.columns([1, 2])
     with col_btn:
         st.button("🔄 Generar Flujo de Caja", type="primary", use_container_width=True,
-                 key="finanzas_btn_flujo", on_click=cargar_flujo_click)
+                 key="finanzas_btn_flujo", on_click=cargar_flujo_click, 
+                 disabled=st.session_state.finanzas_flujo_loading)
     with col_info:
         st.info(f"📅 Período: {flujo_inicio_str} a {flujo_fin_str}")
     
@@ -101,8 +105,21 @@ def render(username: str, password: str):
     if st.session_state.get('finanzas_flujo_clicked') or flujo_cache_key in st.session_state:
         
         if flujo_cache_key not in st.session_state:
-            with st.spinner("Consultando movimientos de efectivo..."):
-                try:
+            st.session_state.finanzas_flujo_loading = True
+            try:
+                # Progress bar personalizado para carga de 120s
+                progress_placeholder = st.empty()
+                
+                with progress_placeholder.container():
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    status_text.text("🔗 Estableciendo conexión con Odoo...")
+                    progress_bar.progress(10)
+                    
+                    status_text.text("📊 Consultando movimientos de efectivo...")
+                    progress_bar.progress(30)
+                    
                     resp = requests.get(
                         f"{FLUJO_CAJA_URL}/",
                         params={
@@ -113,14 +130,34 @@ def render(username: str, password: str):
                         },
                         timeout=120
                     )
+                    
+                    status_text.text("⚙️ Procesando clasificación IAS 7...")
+                    progress_bar.progress(70)
+                    
                     if resp.status_code == 200:
                         st.session_state[flujo_cache_key] = resp.json()
+                        
+                        status_text.text("🏗️ Construyendo estructura de flujo...")
+                        progress_bar.progress(90)
+                        
+                        progress_bar.progress(100)
+                        status_text.text("✅ Flujo de caja generado correctamente")
+                        
+                        progress_placeholder.empty()
+                        st.toast("✅ Flujo de caja generado", icon="✅")
                     else:
+                        progress_placeholder.empty()
                         st.error(f"Error {resp.status_code}: {resp.text}")
+                        st.toast(f"❌ Error {resp.status_code}", icon="❌")
                         return
-                except Exception as e:
-                    st.error(f"Error de conexión: {e}")
-                    return
+            except Exception as e:
+                progress_placeholder.empty()
+                st.error(f"Error de conexión: {e}")
+                st.toast(f"❌ Error: {str(e)[:100]}", icon="❌")
+                return
+            finally:
+                st.session_state.finanzas_flujo_loading = False
+                st.rerun()
         
         flujo_data = st.session_state.get(flujo_cache_key, {})
         

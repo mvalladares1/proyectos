@@ -26,25 +26,34 @@ class BandejasService:
         """Obtiene los IDs de productos de la categoría bandejas."""
         return self.odoo.search('product.product', [['categ_id', '=', self.CATEG_ID]])
     
-    def get_movimientos_entrada(self, fecha_desde: Optional[str] = None) -> pd.DataFrame:
+    def get_movimientos_entrada(self, fecha_desde: Optional[str] = None, offset: int = 0, limit: int = 5000) -> pd.DataFrame:
         """
         Obtiene los movimientos de entrada de bandejas (recepción de productores).
         Basado en stock.move con filtros específicos.
+        OPTIMIZADO: Límite reducido a 5,000 y fecha por defecto de 6 meses.
+        
+        Args:
+            fecha_desde: Fecha desde (YYYY-MM-DD)
+            offset: Número de registros a omitir
+            limit: Máximo de registros a retornar
         """
         product_ids = self._get_product_ids()
         if not product_ids:
             return pd.DataFrame()
         
+        # Si no se especifica fecha, usar últimos 6 meses por defecto
+        if not fecha_desde:
+            from datetime import datetime, timedelta
+            fecha_desde = (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')
+        
         domain = [
             ['product_id', 'in', product_ids],
-            ['state', 'in', ['done', 'assigned']]
+            ['state', 'in', ['done', 'assigned']],
+            ['date', '>=', fecha_desde]  # Siempre filtrar por fecha
         ]
         
-        if fecha_desde:
-            domain.append(['date', '>=', fecha_desde])
-        
-        # Buscar movimientos
-        move_ids = self.odoo.search('stock.move', domain, limit=20000, order='date desc')
+        # Buscar movimientos con límite y offset parametrizables
+        move_ids = self.odoo.search('stock.move', domain, limit=limit, offset=offset, order='date desc')
         moves = self.odoo.read('stock.move', move_ids, 
                               ['date', 'picking_id', 'product_id', 'product_uom_qty', 'quantity_done', 'state'])
         
@@ -108,21 +117,25 @@ class BandejasService:
         """
         Obtiene los movimientos de salida de bandejas (despacho a productores).
         Filtrado por picking_type_id = 2 (RF/OUT - Expediciones).
+        OPTIMIZADO: Límite reducido a 5,000 y fecha por defecto de 6 meses.
         """
         product_ids = self._get_product_ids()
         if not product_ids:
             return pd.DataFrame()
         
+        # Si no se especifica fecha, usar últimos 6 meses por defecto
+        if not fecha_desde:
+            from datetime import datetime, timedelta
+            fecha_desde = (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')
+        
         domain = [
             ['picking_type_id', '=', 2],  # Expediciones
             ['product_id', 'in', product_ids],
-            ['state', 'in', ['done', 'assigned']]
+            ['state', 'in', ['done', 'assigned']],
+            ['date', '>=', fecha_desde]  # Siempre filtrar por fecha
         ]
         
-        if fecha_desde:
-            domain.append(['date', '>=', fecha_desde])
-        
-        move_ids = self.odoo.search('stock.move', domain, limit=20000, order='date desc')
+        move_ids = self.odoo.search('stock.move', domain, limit=limit, offset=offset, order='date desc')
         moves = self.odoo.read('stock.move', move_ids,
                               ['date', 'picking_id', 'product_id', 'product_uom_qty', 'quantity_done', 'state'])
         

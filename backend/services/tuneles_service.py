@@ -119,86 +119,92 @@ class TunelesService:
         codigos_encontrados = set(packages_map.keys())
         codigos_no_encontrados = set(codigos_pallets) - codigos_encontrados
         
-        # Agregar resultados de no encontrados
-        for codigo in codigos_no_encontrados:
-            # --- BÚSQUEDA EN RECEPCIONES PENDIENTES ---
-            reception_info = None
-            try:
-                # PASO 1: Buscar el package por nombre para obtener su ID
-                pkg_search = self.odoo.search_read(
-                    'stock.quant.package', 
-                    [('name', '=', codigo)], 
-                    ['id'],
-                    limit=1
+        # === OPTIMIZACIÓN: Buscar recepciones pendientes en BATCH para pallets no encontrados ===
+        reception_info_map = {}
+        
+        if codigos_no_encontrados:
+            # LLAMADA BATCH: Buscar todos los packages por nombre
+            packages_pendientes = self.odoo.search_read(
+                'stock.quant.package',
+                [('name', 'in', list(codigos_no_encontrados))],
+                ['id', 'name']
+            )
+            
+            if packages_pendientes:
+                pkg_ids_pendientes = [p['id'] for p in packages_pendientes]
+                pkg_name_to_id = {p['name']: p['id'] for p in packages_pendientes}
+                
+                # LLAMADA BATCH: Buscar todos los move_lines de estos packages
+                move_lines_batch = self.odoo.search_read(
+                    'stock.move.line',
+                    [
+                        '|',
+                        ('result_package_id', 'in', pkg_ids_pendientes),
+                        ('package_id', 'in', pkg_ids_pendientes),
+                        ('picking_id', '!=', False)
+                    ],
+                    ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty', 'result_package_id', 'package_id'],
+                    limit=100,
+                    order='id desc'
                 )
                 
-                move_lines = []
-                if pkg_search:
-                    pkg_id = pkg_search[0]['id']
-                    
-                    # PASO 2: Buscar move_lines que usen este package como destino
-                    # SIN filtro de estado de move_line - buscamos todo
-                    move_lines = self.odoo.search_read(
-                        'stock.move.line', 
-                        [
-                            ('result_package_id', '=', pkg_id),
-                            ('picking_id', '!=', False)
-                        ], 
-                        ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty'],
-                        limit=5,
-                        order='id desc'
-                    )
-                    
-                    # Si no hay como destino, buscar como origen
-                    if not move_lines:
-                        move_lines = self.odoo.search_read(
-                            'stock.move.line', 
-                            [
-                                ('package_id', '=', pkg_id),
-                                ('picking_id', '!=', False)
-                            ], 
-                            ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty'],
-                            limit=5,
-                            order='id desc'
-                        )
+                # Obtener picking_ids únicos
+                picking_ids_batch = list(set([ml['picking_id'][0] for ml in move_lines_batch if ml.get('picking_id')]))
                 
-                # PASO 3: Filtrar para obtener picking que NO esté done/cancel
-                for ml in move_lines:
+                # LLAMADA BATCH: Obtener estado de todos los pickings de una vez
+                pickings_batch = {}
+                if picking_ids_batch:
+                    pickings_data = self.odoo.search_read(
+                        'stock.picking',
+                        [('id', 'in', picking_ids_batch)],
+                        ['id', 'state'],
+                        limit=100
+                    )
+                    pickings_batch = {p['id']: p['state'] for p in pickings_data}
+                
+                # Procesar move_lines y asociar a packages
+                for ml in move_lines_batch:
+                    # Determinar qué package se está usando
+                    pkg_id = None
+                    if ml.get('result_package_id'):
+                        pkg_id = ml['result_package_id'][0]
+                    elif ml.get('package_id'):
+                        pkg_id = ml['package_id'][0]
+                    
+                    if not pkg_id:
+                        continue
+                    
+                    # Buscar el código del pallet
+                    pkg_code = next((name for name, pid in pkg_name_to_id.items() if pid == pkg_id), None)
+                    if not pkg_code:
+                        continue
+                    
+                    # Verificar estado del picking
                     picking_id = ml['picking_id'][0]
                     picking_name = ml['picking_id'][1]
+                    picking_state = pickings_batch.get(picking_id)
                     
-                    # Obtener estado del picking
-                    picking = self.odoo.search_read(
-                        'stock.picking', 
-                        [('id', '=', picking_id)], 
-                        ['state'],
-                        limit=1
-                    )
-                    
-                    if picking and picking[0]['state'] not in ['done', 'cancel']:
-                        state = picking[0]['state']
-                        
-                        # Generar URL de Odoo (usar env var)
-                        base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
-                        odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
-                        
-                        # Obtener Kg: usar qty_done si existe, sino reserved_uom_qty
-                        kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
-                        
-                        reception_info = {
-                            'found_in_reception': True,
-                            'picking_name': picking_name,
-                            'picking_id': picking_id,
-                            'state': state,
-                            'odoo_url': odoo_url,
-                            'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
-                            'kg': kg, 
-                            'product_id': ml['product_id'][0] if ml['product_id'] else None
-                        }
-                        break  # Encontramos uno válido, salimos del loop
-                        
-            except Exception as e:
-                print(f"Error buscando recepción para {codigo}: {e}")
+                    if picking_state and picking_state not in ['done', 'cancel']:
+                        # Solo guardar si aún no tenemos info para este pallet
+                        if pkg_code not in reception_info_map:
+                            base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
+                            odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
+                            kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
+                            
+                            reception_info_map[pkg_code] = {
+                                'found_in_reception': True,
+                                'picking_name': picking_name,
+                                'picking_id': picking_id,
+                                'state': picking_state,
+                                'odoo_url': odoo_url,
+                                'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
+                                'kg': kg,
+                                'product_id': ml['product_id'][0] if ml['product_id'] else None
+                            }
+        
+        # Agregar resultados de no encontrados
+        for codigo in codigos_no_encontrados:
+            reception_info = reception_info_map.get(codigo)
 
             if reception_info:
                 resultados.append({
@@ -238,62 +244,82 @@ class TunelesService:
                 quants_por_package[pkg_id] = []
             quants_por_package[pkg_id].append(quant)
         
+        # === OPTIMIZACIÓN BATCH: Buscar recepciones pendientes para packages sin stock ===
+        packages_sin_stock = [packages_map[codigo] for codigo in codigos_encontrados 
+                             if not quants_por_package.get(packages_map[codigo]['id'])]
+        
+        reception_info_sin_stock = {}
+        if packages_sin_stock:
+            pkg_ids_sin_stock = [p['id'] for p in packages_sin_stock]
+            pkg_id_to_name = {p['id']: p['name'] for p in packages_sin_stock}
+            
+            # LLAMADA BATCH: Buscar move_lines
+            move_lines_sin_stock = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ('result_package_id', 'in', pkg_ids_sin_stock),
+                    ('picking_id', '!=', False)
+                ],
+                ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty', 'lot_id', 'result_package_id'],
+                limit=100,
+                order='id desc'
+            )
+            
+            # Obtener picking_ids
+            picking_ids_sin_stock = list(set([ml['picking_id'][0] for ml in move_lines_sin_stock if ml.get('picking_id')]))
+            
+            # LLAMADA BATCH: Estado de pickings
+            pickings_sin_stock = {}
+            if picking_ids_sin_stock:
+                pickings_data = self.odoo.search_read(
+                    'stock.picking',
+                    [('id', 'in', picking_ids_sin_stock)],
+                    ['id', 'state']
+                )
+                pickings_sin_stock = {p['id']: p['state'] for p in pickings_data}
+            
+            # Procesar y asociar
+            for ml in move_lines_sin_stock:
+                pkg_id = ml['result_package_id'][0] if ml.get('result_package_id') else None
+                if not pkg_id or pkg_id not in pkg_id_to_name:
+                    continue
+                
+                codigo = pkg_id_to_name[pkg_id]
+                if codigo in reception_info_sin_stock:
+                    continue  # Ya tenemos info
+                
+                picking_id = ml['picking_id'][0]
+                picking_name = ml['picking_id'][1]
+                picking_state = pickings_sin_stock.get(picking_id)
+                
+                if picking_state and picking_state not in ['done', 'cancel']:
+                    base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
+                    odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
+                    kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
+                    lot_id = ml['lot_id'][0] if ml.get('lot_id') else None
+                    lot_name = ml['lot_id'][1] if ml.get('lot_id') else None
+                    
+                    reception_info_sin_stock[codigo] = {
+                        'found_in_reception': True,
+                        'picking_name': picking_name,
+                        'picking_id': picking_id,
+                        'state': picking_state,
+                        'odoo_url': odoo_url,
+                        'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
+                        'kg': kg,
+                        'product_id': ml['product_id'][0] if ml['product_id'] else None,
+                        'lot_id': lot_id,
+                        'lot_name': lot_name
+                    }
+        
         # Procesar cada package encontrado
         for codigo in codigos_encontrados:
             package = packages_map[codigo]
             pkg_quants = quants_por_package.get(package['id'], [])
             
             if not pkg_quants:
-                # Package existe pero sin stock - BUSCAR EN RECEPCIONES PENDIENTES
-                reception_info = None
-                try:
-                    move_lines = self.odoo.search_read(
-                        'stock.move.line', 
-                        [
-                            ('result_package_id', '=', package['id']),
-                            ('picking_id', '!=', False)
-                        ], 
-                        ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty', 'lot_id'],
-                        limit=5,
-                        order='id desc'
-                    )
-                    
-                    for ml in move_lines:
-                        picking_id = ml['picking_id'][0]
-                        picking_name = ml['picking_id'][1]
-                        
-                        picking = self.odoo.search_read(
-                            'stock.picking', 
-                            [('id', '=', picking_id)], 
-                            ['state'],
-                            limit=1
-                        )
-                        
-                        if picking and picking[0]['state'] not in ['done', 'cancel']:
-                            state = picking[0]['state']
-                            base_url = os.environ.get('ODOO_URL', 'https://riofuturo.odoo.com')
-                            odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
-                            kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
-                            
-                            # Extraer info del lote
-                            lot_id = ml['lot_id'][0] if ml.get('lot_id') else None
-                            lot_name = ml['lot_id'][1] if ml.get('lot_id') else None
-                            
-                            reception_info = {
-                                'found_in_reception': True,
-                                'picking_name': picking_name,
-                                'picking_id': picking_id,
-                                'state': state,
-                                'odoo_url': odoo_url,
-                                'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
-                                'kg': kg,
-                                'product_id': ml['product_id'][0] if ml['product_id'] else None,
-                                'lot_id': lot_id,
-                                'lot_name': lot_name
-                            }
-                            break
-                except Exception as e:
-                    print(f"Error buscando recepción para {codigo}: {e}")
+                # Package existe pero sin stock - usar info precargada
+                reception_info = reception_info_sin_stock.get(codigo)
                 
                 if reception_info:
                     resultados.append({

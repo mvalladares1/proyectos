@@ -60,7 +60,10 @@ tab_kpis_ui, tab_gestion_ui, tab_curva_ui, tab_aprobaciones_ui = st.tabs([
 # =====================================================
 with tab_kpis_ui:
     if _perm_kpis:
-        tab_kpis.render(username, password)
+        @st.fragment
+        def _frag_kpis():
+            tab_kpis.render(username, password)
+        _frag_kpis()
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'KPIs y Calidad'. Contacta al administrador.")
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
@@ -70,7 +73,10 @@ with tab_kpis_ui:
 # =====================================================
 with tab_gestion_ui:
     if _perm_gestion:
-        tab_gestion.render(username, password)
+        @st.fragment
+        def _frag_gestion():
+            tab_gestion.render(username, password)
+        _frag_gestion()
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Gestión de Recepciones'. Contacta al administrador.")
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
@@ -80,7 +86,10 @@ with tab_gestion_ui:
 # =====================================================
 with tab_curva_ui:
     if _perm_curva:
-        tab_curva.render(username, password)
+        @st.fragment
+        def _frag_curva():
+            tab_curva.render(username, password)
+        _frag_curva()
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Curva de Abastecimiento'. Contacta al administrador.")
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
