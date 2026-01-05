@@ -1621,6 +1621,16 @@ if datos:
                     for info in validacion.get("info", []):
                         st.info(f"ℹ️ {info.get('mensaje', '')}")
                 
+                # ⚠️ WARNING: Documentos sin etiquetas (OBLIGATORIO según IAS 7)
+                proy_warnings = proyeccion_data.get("warnings", [])
+                for warn in proy_warnings:
+                    if warn.get("tipo") == "SIN_ETIQUETAS":
+                        with st.expander(f"⚠️ {warn.get('mensaje', 'Documentos sin etiquetas')}", expanded=False):
+                            st.warning("Los documentos sin etiquetas no pueden agruparse correctamente. Agrega etiquetas en Odoo para mejorar la auditoría.")
+                            docs_list = warn.get("documentos", [])
+                            for doc in docs_list[:10]:
+                                st.caption(f"• {doc.get('documento', '')} - {doc.get('partner', '')} - ${doc.get('monto', 0):,.0f}")
+                
                 # Función para formatear montos
                 def fmt_flujo(valor):
                     if valor >= 0:

@@ -16,6 +16,34 @@ from shared.odoo_client import OdooClient
 # Concepto fallback para cuentas sin mapear
 CONCEPTO_FALLBACK = "1.2.6"  # Otras entradas (salidas) de efectivo
 
+# Estructura IAS 7 para Actividades - FUENTE DE VERDAD
+# Solo Operación por ahora (FASE 1)
+ESTRUCTURA_FLUJO = {
+    "OPERACION": {
+        "nombre": "1. Flujos de efectivo procedentes (utilizados) en actividades de operación",
+        "lineas": [
+            {"codigo": "1.1.1", "nombre": "Cobros procedentes de las ventas de bienes y prestación de servicios", "signo": 1},
+            {"codigo": "1.2.1", "nombre": "Pagos a proveedores por el suministro de bienes y servicios", "signo": -1},
+            {"codigo": "1.2.2", "nombre": "Pagos a y por cuenta de los empleados", "signo": -1},
+            {"codigo": "1.2.3", "nombre": "Intereses pagados", "signo": -1},
+            {"codigo": "1.2.4", "nombre": "Intereses recibidos", "signo": 1},
+            {"codigo": "1.2.5", "nombre": "Impuestos a las ganancias reembolsados (pagados)", "signo": -1},
+            {"codigo": "1.2.6", "nombre": "Otras entradas (salidas) de efectivo", "signo": 1}
+        ],
+        "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de operación"
+    },
+    "INVERSION": {
+        "nombre": "2. Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
+        "lineas": [],
+        "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de inversión"
+    },
+    "FINANCIAMIENTO": {
+        "nombre": "3. Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
+        "lineas": [],
+        "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de financiamiento"
+    }
+}
+
 
 class FlujoCajaService:
     """Servicio para generar Estado de Flujo de Efectivo NIIF IAS 7."""
@@ -974,7 +1002,7 @@ class FlujoCajaService:
         if company_id:
             domain.append(('company_id', '=', company_id))
             
-        campos_move = ['id', 'name', 'ref', 'partner_id', 'invoice_date_due', 'amount_total', 
+        campos_move = ['id', 'name', 'ref', 'partner_id', 'invoice_date', 'invoice_date_due', 'amount_total', 
                        'amount_residual', 'move_type', 'state', 'payment_state']
         
         try:
@@ -996,7 +1024,7 @@ class FlujoCajaService:
             ('exclude_from_invoice_tab', '=', False)
         ]
         
-        campos_lines = ['move_id', 'account_id', 'price_subtotal']
+        campos_lines = ['move_id', 'account_id', 'price_subtotal', 'analytic_tag_ids', 'name']
         try:
             lines = self.odoo.search_read('account.move.line', domain_lines, campos_lines, limit=10000)
         except Exception as e:
@@ -1020,6 +1048,23 @@ class FlujoCajaService:
                 acc_read = self.odoo.read('account.account', account_ids, ['code', 'name'])
                 cuentas_info = {a['id']: a for a in acc_read}
             except: pass
+        
+        # Cache de etiquetas analíticas (OBLIGATORIO para proyección)
+        tag_ids = list(set(
+            tag_id
+            for l in lines
+            for tag_id in (l.get('analytic_tag_ids') or [])
+        ))
+        tags_info = {}
+        if tag_ids:
+            try:
+                tags_read = self.odoo.read('account.analytic.tag', tag_ids, ['id', 'name'])
+                tags_info = {t['id']: t.get('name', '') for t in tags_read}
+            except Exception as e:
+                print(f"[FlujoProyeccion] Error fetching tags: {e}")
+        
+        # Contadores para warnings
+        docs_sin_etiqueta = []  # Lista de documentos sin etiquetas
 
         # 3. Procesar cada documento
         for move in moves:
@@ -1067,23 +1112,37 @@ class FlujoCajaService:
                 # Agregar a montos (incluso si es UNCLASSIFIED)
                 montos_por_concepto[categoria] = montos_por_concepto.get(categoria, 0) + monto_parte
                 
-                # Detalle documento
+                # Resolver etiquetas de la línea
+                line_tag_ids = line.get('analytic_tag_ids') or []
+                etiquetas_nombres = [tags_info.get(tid, f"Tag_{tid}") for tid in line_tag_ids]
+                sin_etiqueta = len(line_tag_ids) == 0
+                
+                # Detalle documento (ENRIQUECIDO con etiquetas)
                 entry = {
                     "id": move_id,
                     "documento": move.get('name') or move.get('ref') or str(move_id),
                     "partner": partner_name,
+                    "fecha_emision": move.get('invoice_date'),  # Fecha emisión
                     "fecha_venc": move.get('invoice_date_due'),
                     "estado": "Borrador" if move.get('state') == 'draft' else "Abierto",
                     "monto": round(monto_parte, 0),
                     "cuenta": acc_code,
-                    "tipo": "Factura Cliente" if es_ingreso else "Factura Proveedor"
+                    "cuenta_nombre": cuentas_info.get(acc_id, {}).get('name', ''),
+                    "tipo": "Factura Cliente" if es_ingreso else "Factura Proveedor",
+                    "linea_nombre": line.get('name', ''),  # Descripción de la línea
+                    "etiquetas": etiquetas_nombres,  # OBLIGATORIO - Lista de etiquetas
+                    "sin_etiqueta": sin_etiqueta  # Warning flag
                 }
                 
-                if categoria == "UNCLASSIFIED":
-                    # Agregar a lista especial o manejar en un concepto generico?
-                    # Por ahora lo agregamos a detalles_por_concepto bajo llave UNCLASSIFIED
-                    # para que luego se pueda exponer
-                    pass 
+                # Rastrear documentos sin etiquetas para warning
+                if sin_etiqueta:
+                    if move_id not in [d['id'] for d in docs_sin_etiqueta]:
+                        docs_sin_etiqueta.append({
+                            "id": move_id,
+                            "documento": entry["documento"],
+                            "partner": partner_name,
+                            "monto": round(monto_flujo, 0)
+                        })
                 
                 if categoria not in detalles_por_concepto:
                     detalles_por_concepto[categoria] = []
@@ -1120,8 +1179,18 @@ class FlujoCajaService:
             proyeccion["actividades"][cat_key] = {
                 "nombre": cat_data["nombre"],
                 "subtotal": round(subtotal_actividad, 0),
+                "subtotal_nombre": cat_data.get("subtotal_nombre", "Subtotal"),
                 "conceptos": conceptos_res
             }
+        
+        # WARNING: Documentos sin etiquetas (visible en frontend)
+        if docs_sin_etiqueta:
+            proyeccion["warnings"] = proyeccion.get("warnings", [])
+            proyeccion["warnings"].append({
+                "tipo": "SIN_ETIQUETAS",
+                "mensaje": f"{len(docs_sin_etiqueta)} documento(s) no tienen etiquetas definidas",
+                "documentos": docs_sin_etiqueta[:20]  # Limitar a 20 para frontend
+            })
             
         return proyeccion
     
