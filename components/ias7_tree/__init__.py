@@ -91,17 +91,15 @@ def ias7_tree(
 def transform_backend_to_component(flujo_data: dict, modo: str = "consolidado") -> dict:
     """
     Transforma la respuesta del backend al formato esperado por el componente.
-    
-    Args:
-        flujo_data: Respuesta del endpoint /api/v1/flujo-caja/
-        modo: Modo de visualización
-        
-    Returns:
-        Dict con estructura para ias7_tree()
+    Mergea flujo Real (actividades) y Proyectado (proyeccion).
     """
-    actividades_raw = flujo_data.get("actividades", {})
+    actividades_real = flujo_data.get("actividades", {})
+    proyeccion_data = flujo_data.get("proyeccion", {})
+    actividades_proy = proyeccion_data.get("actividades", {})
+    
     conciliacion = flujo_data.get("conciliacion", {})
-    drill_down = flujo_data.get("drill_down", {})
+    # drill_down contiene el desglose de cuentas REALES
+    drill_down_real = flujo_data.get("drill_down", {})
     
     # Colores por actividad
     colores = {
@@ -110,29 +108,102 @@ def transform_backend_to_component(flujo_data: dict, modo: str = "consolidado") 
         "FINANCIAMIENTO": "#9b59b6"
     }
     
-    actividades = []
+    actividades_output = []
+    
+    # Iteramos las 3 actividades principales
     for key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
-        if key in actividades_raw:
-            act = actividades_raw[key]
+        # Datos Real
+        act_real = actividades_real.get(key, {})
+        conceptos_real = act_real.get("conceptos", [])
+        
+        # Datos Proyectado
+        act_proy = actividades_proy.get(key, {})
+        conceptos_proy = act_proy.get("conceptos", [])
+        
+        # Mapeo por ID para mergear
+        # {codigo: {real: node, proy: node}}
+        nodes_map = {}
+        
+        # 1. Procesar Real
+        for c in conceptos_real:
+            c_id = c.get("id") or c.get("codigo")
+            if c_id:
+                nodes_map.setdefault(c_id, {})["real"] = c
+                
+        # 2. Procesar Proyectado
+        for c in conceptos_proy:
+            c_id = c.get("codigo")
+            if c_id:
+                nodes_map.setdefault(c_id, {})["proy"] = c
+                
+        # 3. Construir lista unificada de conceptos
+        conceptos_merged = []
+        subtotal_real = act_real.get("subtotal", 0)
+        subtotal_proy = act_proy.get("subtotal", 0)
+        
+        # Usamos el orden definido en ESTRUCTURA_FLUJO (que backend ya debería respetar)
+        # O ordenamos por código
+        all_ids = sorted(nodes_map.keys())
+        
+        for c_id in all_ids:
+            data = nodes_map[c_id]
+            node_real = data.get("real", {})
+            node_proy = data.get("proy", {})
             
-            # Enriquecer conceptos con drill-down
-            conceptos = act.get("conceptos", [])
-            for concepto in conceptos:
-                c_id = concepto.get("id")
-                if c_id and c_id in drill_down:
-                    concepto["cuentas"] = drill_down[c_id]
+            # Base info (preferir Real, luego Proy - nombre debería ser igual)
+            nombre = node_real.get("nombre") or node_proy.get("nombre") or "Sin Nombre"
+            nivel = node_real.get("nivel", 3) # Default level 3
+            tipo = node_real.get("tipo", "LINEA")
             
-            actividades.append({
-                "key": key,
-                "nombre": act.get("nombre", key),
-                "subtotal": act.get("subtotal", 0),
-                "subtotal_nombre": act.get("subtotal_nombre", f"Subtotal {key}"),
-                "conceptos": conceptos,
-                "color": colores.get(key, "#718096")
+            # Montos
+            monto_r = node_real.get("monto", 0)
+            monto_p = node_proy.get("monto", 0)
+            
+            # Drill-down: Cuentas (Real) y Documentos (Proyectado)
+            cuentas = []
+            if c_id in drill_down_real:
+                cuentas = drill_down_real[c_id]
+                
+            documentos = node_proy.get("documentos", [])
+            
+            # Warning flag: si hay documentos sin etiqueta
+            has_warning = False
+            if documentos:
+                has_warning = any(d.get("sin_etiqueta", False) for d in documentos)
+            
+            # Monto Display según modo (aunque el frontend también puede calcularlo)
+            monto_disp = 0
+            if modo == "real":
+                monto_disp = monto_r
+            elif modo == "proyectado":
+                monto_disp = monto_p
+            else:
+                monto_disp = monto_r + monto_p
+
+            conceptos_merged.append({
+                "id": c_id,
+                "nombre": nombre,
+                "tipo": tipo,
+                "nivel": nivel,
+                "monto_real": monto_r,
+                "monto_proyectado": monto_p,
+                "monto_display": monto_disp,
+                "cuentas": cuentas,
+                "documentos": documentos,
+                "has_warning": has_warning
             })
+            
+        actividades_output.append({
+            "key": key,
+            "nombre": act_real.get("nombre") or act_proy.get("nombre") or key,
+            "subtotal": subtotal_real + subtotal_proy if modo == "consolidado" else (subtotal_real if modo == "real" else subtotal_proy),
+            "subtotal_nombre": act_real.get("subtotal_nombre") or f"Flujos netos {key}",
+            "conceptos": conceptos_merged,
+            "color": colores.get(key, "#718096")
+        })
     
     return {
-        "actividades": actividades,
+        "actividades": actividades_output,
         "modo": modo,
         "efectivo_inicial": conciliacion.get("efectivo_inicial", 0),
         "efectivo_final": conciliacion.get("efectivo_final", 0),

@@ -23,52 +23,66 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
     const indent = getIndent(nivel);
     const hasDrilldown = (cuentas && cuentas.length > 0) || (documentos && documentos.length > 0);
     const isClickable = tipo === 'LINEA' && hasDrilldown;
+    const isHeader = tipo === 'HEADER';
+    const isTotal = tipo === 'TOTAL';
 
-    // Determine styles based on type
-    let nodeClass = 'ias7-node';
-    if (tipo === 'HEADER') {
-        nodeClass += ` ias7-node--header ias7-node--level-${nivel}`;
-    } else if (tipo === 'LINEA') {
-        nodeClass += ' ias7-node--linea';
-    } else if (tipo === 'TOTAL') {
-        nodeClass += ' ias7-node--total';
+    // Base classes
+    let nodeClass = 'ias7-grid-row';
+    if (isHeader) nodeClass += ' ias7-node--header';
+    if (isTotal) nodeClass += ' ias7-node--total';
+    if (tipo === 'LINEA') nodeClass += ' ias7-node--linea';
+
+    // Styles for borders/colors
+    const rowStyle: React.CSSProperties = {};
+    if (isHeader && nivel === 1) {
+        rowStyle.borderLeft = `4px solid ${activityColor}`;
+    }
+    if (isTotal) {
+        rowStyle.color = activityColor;
     }
 
-    // Border left for headers
-    const borderStyle = tipo === 'HEADER' || tipo === 'TOTAL'
-        ? { borderLeft: `4px solid ${activityColor}` }
-        : {};
-
-    // Background for totals
-    const bgStyle = tipo === 'TOTAL'
-        ? { background: `${activityColor}15` }
-        : {};
-
-    // Should show amount?
-    const showMonto = tipo === 'TOTAL' || (tipo === 'LINEA' && monto !== 0);
+    // Icons
+    const icon = isHeader ? '📂' : isTotal ? 'Σ' : '📄';
 
     return (
         <>
             <div
                 className={nodeClass}
-                style={{ marginLeft: `${indent}px`, ...borderStyle, ...bgStyle }}
+                style={rowStyle}
                 onClick={() => isClickable && setExpanded(!expanded)}
                 role={isClickable ? 'button' : undefined}
             >
-                <div className="ias7-node__left">
+                {/* COL 1: Indent & Expand Marker */}
+                <div className="ias7-node__indent-marker" style={{ paddingLeft: `${indent}px` }}>
                     {isClickable && (
                         <span className={`ias7-expand-icon ${expanded ? 'ias7-expand-icon--expanded' : ''}`}>
                             ▶
                         </span>
                     )}
-                    <span className="ias7-node__id">{id}</span>
-                    <span className="ias7-node__nombre">{nombre}</span>
                 </div>
-                {showMonto && <MontoDisplay valor={monto} showZero={tipo === 'TOTAL'} />}
+
+                {/* COL 2: ID Code */}
+                <div className="ias7-node__id">
+                    {id}
+                </div>
+
+                {/* COL 3: Name */}
+                <div className="ias7-node__nombre" title={nombre}>
+                    {isHeader && <span style={{ opacity: 0.5, marginRight: 6 }}>{icon}</span>}
+                    {nombre}
+                </div>
+
+                {/* COL 4: Amount */}
+                <div className="ias7-node__monto">
+                    {(isTotal || (tipo === 'LINEA' && monto !== 0)) && (
+                        <MontoDisplay valor={monto} showZero={isTotal} />
+                    )}
+                </div>
             </div>
 
+            {/* Drilldown Content (Full Width or indented) */}
             {expanded && hasDrilldown && (
-                <div className="ias7-drilldown" style={{ marginLeft: `${indent + 30}px` }}>
+                <div className="ias7-drilldown" style={{ marginLeft: '40px', gridColumn: '1 / -1' }}>
                     {cuentas && cuentas.length > 0 && (
                         <CompositionTable cuentas={cuentas} subtotal={monto} conceptoId={id} />
                     )}

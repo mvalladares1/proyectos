@@ -31,12 +31,16 @@ const ActivitySection: React.FC<ActivitySectionProps> = ({
                 style={{ borderBottom: expanded ? `1px solid ${color}33` : 'none' }}
             >
                 <div className="ias7-activity__title" style={{ color }}>
-                    📊 {nombre}
+                    {/* Icon based on activity key? or just graph chart */}
+                    <span className="ias7-activity__icon">📊</span>
+                    {nombre}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <MontoDisplay valor={subtotal} showZero />
-                    <span className="ias7-activity__toggle">
-                        {expanded ? '▼' : '▶'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '1.1em' }}>
+                        <MontoDisplay valor={subtotal} showZero />
+                    </div>
+                    <span className={`ias7-activity__toggle`} style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                        ▼
                     </span>
                 </div>
             </div>
@@ -56,19 +60,22 @@ const ActivitySection: React.FC<ActivitySectionProps> = ({
                         />
                     ))}
 
-                    {/* Subtotal bar */}
-                    <div
-                        className="ias7-subtotal"
-                        style={{
-                            background: `linear-gradient(90deg, ${color}22, transparent)`,
-                            borderLeft: `3px solid ${color}`
+                    {/* Subtotal as a TreeNode for grid alignment */}
+                    <TreeNode
+                        node={{
+                            id: '',
+                            nombre: subtotal_nombre || 'Total',
+                            tipo: 'TOTAL',
+                            nivel: 0,
+                            monto_real: modo === 'proyectado' ? 0 : subtotal,
+                            monto_proyectado: modo === 'real' ? 0 : subtotal,
+                            // If we are in mixed mode, we'd need separate subtotals or handle it in TreeNode calculation
+                            // For simplicty assume subtotal here matches the mode sum
+                            monto_display: subtotal
                         }}
-                    >
-                        <span className="ias7-subtotal__label">{subtotal_nombre}:</span>
-                        <span className="ias7-subtotal__value" style={{ color: subtotalColor }}>
-                            <MontoDisplay valor={subtotal} showZero />
-                        </span>
-                    </div>
+                        modo={modo}
+                        activityColor={color}
+                    />
                 </div>
             )}
         </div>

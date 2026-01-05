@@ -6,10 +6,12 @@
  * Format number as CLP currency with sign
  */
 export function formatMonto(valor: number): string {
-    if (valor >= 0) {
-        return `$${valor.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
+    if (valor > 0) {
+        return `+$${valor.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
+    } else if (valor < 0) {
+        return `-$${Math.abs(valor).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
     }
-    return `-$${Math.abs(valor).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
+    return `$${valor.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
 }
 
 /**

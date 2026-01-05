@@ -1,8 +1,13 @@
-/* IAS7 Tree Component Styles */
+/* IAS7 Tree Component Styles - Phase 1 Overhaul */
 
 .ias7-tree {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  /* Espaciado entre actividades */
+  padding-bottom: 40px;
 }
 
 .ias7-tree--dark {
@@ -14,98 +19,159 @@
   color: #1a1a2e;
 }
 
-/* Activity Section */
+/* --- ACTIVITY SECTION --- */
 .ias7-activity {
-  margin-bottom: 16px;
+  background: #0e1117;
   border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .ias7-activity__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 16px 20px;
   cursor: pointer;
+  background: #131720;
+  position: sticky;
+  /* Sticky Header */
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   transition: background-color 0.2s;
 }
 
 .ias7-activity__header:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: #1a1f2b;
 }
 
 .ias7-activity__title {
   font-weight: 600;
   font-size: 1.1em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ias7-activity__icon {
+  font-size: 1.2em;
 }
 
 .ias7-activity__toggle {
-  font-size: 0.9em;
-  opacity: 0.7;
+  opacity: 0.5;
+  transition: transform 0.2s;
 }
 
 .ias7-activity__content {
-  padding: 0 8px 8px 8px;
+  padding: 8px 0;
 }
 
-/* Tree Node */
-.ias7-node {
-  display: flex;
-  justify-content: space-between;
+/* --- TREE GRID LAYOUT --- */
+/* Definimos una Grid para alineación estricta */
+.ias7-grid-row {
+  display: grid;
+  /* 
+     Col 1: Indent/Expand (50px min)
+     Col 2: ID (80px)
+     Col 3: Nombre (Flex)
+     Col 4: Monto Real (140px) 
+     Col 5: Monto Proyectado (Optional - future)
+  */
+  grid-template-columns: minmax(40px, auto) 90px 1fr 150px;
   align-items: center;
-  padding: 10px 15px;
-  border-radius: 6px;
-  margin-top: 3px;
-  transition: background-color 0.15s;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  transition: background-color 0.1s;
 }
 
+.ias7-grid-row:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* --- NODE TYPES --- */
+
+/* HEADER (Nivel 1, 2 sin monto o con hijos) */
 .ias7-node--header {
-  font-weight: bold;
-  font-size: 1.1em;
-  background: transparent;
+  font-weight: 600;
+  color: #a0aec0;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.ias7-node--header.ias7-node--level-1 {
-  font-size: 1.15em;
-  margin-top: 8px;
+.ias7-node--header .ias7-node__nombre {
+  color: #fff;
+  font-size: 1.05em;
 }
 
+/* LINEA (Items contables) */
 .ias7-node--linea {
-  background: #1a1a2e;
+  font-size: 0.95em;
+  cursor: pointer;
 }
 
 .ias7-node--linea:hover {
-  background: #252545;
+  background-color: rgba(52, 152, 219, 0.1) !important;
+  /* Azul sutil al hover */
 }
 
+/* TOTAL */
 .ias7-node--total {
-  font-weight: bold;
-  font-size: 1.1em;
+  font-weight: 700;
+  background-color: rgba(255, 255, 255, 0.03);
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
+
+.ias7-node--total .ias7-node__nombre {
+  text-transform: uppercase;
+  font-size: 0.9em;
+  letter-spacing: 0.05em;
+}
+
+/* --- CELLS & CONTENT --- */
 
 .ias7-node__left {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-grow: 1;
+}
+
+.ias7-node__indent-marker {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
 }
 
 .ias7-node__id {
-  font-family: monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.8em;
   color: #718096;
+  opacity: 0.8;
 }
 
 .ias7-node__nombre {
-  color: #e0e0e0;
+  color: #cbd5e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 16px;
 }
 
 .ias7-node__monto {
-  font-weight: bold;
-  font-family: monospace;
-  font-size: 1.1em;
-  min-width: 120px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: 600;
+  font-size: 1em;
   text-align: right;
+  letter-spacing: -0.5px;
 }
 
 .ias7-node__monto--positive {
