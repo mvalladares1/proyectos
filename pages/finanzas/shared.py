@@ -162,7 +162,6 @@ def guardar_mapeo_cuenta(codigo, categoria, nombre, username, password, impacto=
                 "impacto_estimado": impacto
             },
             timeout=10
-            timeout=10
         )
         if resp.status_code == 200:
             return True, None

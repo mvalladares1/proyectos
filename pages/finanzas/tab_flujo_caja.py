@@ -308,9 +308,23 @@ def render(username: str, password: str):
                 categorias = build_ias7_categories_dropdown()
                 codigo_to_option = {v: k for k, v in categorias.items() if v}
                 
-                total_nc = sum(abs(c.get('monto', 0)) for c in cuentas_nc)
+                # Buscador
+                search_term = st.text_input("🔍 Buscar cuenta (código o nombre)", "", key="search_unclf").lower()
+
+                filtered_nc = []
+                for c in cuentas_nc:
+                    if search_term and (search_term in c.get('codigo', '').lower() or search_term in c.get('nombre', '').lower()):
+                         filtered_nc.append(c)
+                    elif not search_term:
+                         filtered_nc.append(c)
                 
-                for cuenta in sorted(cuentas_nc, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:25]:
+                total_nc = sum(abs(c.get('monto', 0)) for c in filtered_nc)
+                
+                # Mostrar todas si hay búsqueda, o top 25 si no
+                limit = None if search_term else 25
+                accounts_to_show = sorted(filtered_nc, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:limit]
+                
+                for cuenta in accounts_to_show:
                     codigo = cuenta.get('codigo', '')
                     nombre = cuenta.get('nombre', '')
                     monto = cuenta.get('monto', 0)
