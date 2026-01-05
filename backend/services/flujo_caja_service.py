@@ -790,6 +790,9 @@ class FlujoCajaService:
                 cuentas_contrapartida_monitoreadas = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
                 filtrar_por_monitoreadas = len(cuentas_contrapartida_monitoreadas) > 0
                 
+                # DEBUG: Log para verificar que el filtro está activo
+                print(f"[FlujoCaja] Filtro activado: {filtrar_por_monitoreadas}, cuentas: {cuentas_contrapartida_monitoreadas[:5]}... (total: {len(cuentas_contrapartida_monitoreadas)})")
+                
                 for grupo in grupos:
                     # account_id viene como [id, "Code Name"] o [id, "Name"] dependiendo configuración
                     # Necesitamos el ID para buscar code/name limpios si es necesario, 

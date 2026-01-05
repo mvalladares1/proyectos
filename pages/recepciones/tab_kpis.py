@@ -55,6 +55,8 @@ def render(username: str, password: str):
         else:
             # Guardar filtros usados en session_state
             st.session_state.origen_filtro_usado = origen_list.copy()
+            st.session_state.fecha_inicio_filtro = fecha_inicio
+            st.session_state.fecha_fin_filtro = fecha_fin
 
             params = {
                 "username": username,
@@ -197,6 +199,52 @@ def render(username: str, password: str):
         except Exception as e:
             print(f"Error obteniendo precios proyectados: {e}")
 
+        # Obtener kg proyectados por especie_manejo para el rango de fechas filtrado
+        kg_proyectados_por_especie = {}
+        try:
+            # Obtener fechas del filtro
+            fecha_inicio_filtro = st.session_state.get('fecha_inicio_filtro')
+            fecha_fin_filtro = st.session_state.get('fecha_fin_filtro')
+            
+            if fecha_inicio_filtro and fecha_fin_filtro:
+                # Calcular las semanas ISO dentro del rango de fechas
+                from datetime import date
+                if isinstance(fecha_inicio_filtro, date):
+                    fecha_ini = fecha_inicio_filtro
+                else:
+                    fecha_ini = datetime.strptime(str(fecha_inicio_filtro), '%Y-%m-%d').date()
+                if isinstance(fecha_fin_filtro, date):
+                    fecha_f = fecha_fin_filtro
+                else:
+                    fecha_f = datetime.strptime(str(fecha_fin_filtro), '%Y-%m-%d').date()
+                
+                # Obtener semanas únicas en el rango
+                semanas_en_rango = set()
+                current = fecha_ini
+                while current <= fecha_f:
+                    semanas_en_rango.add(current.isocalendar()[1])
+                    current += timedelta(days=1)
+                
+                # Obtener datos detallados de kg por especie desde los precios
+                # (aprovechamos que get_precios_por_especie retorna kg_total por especie)
+                resp_kg_especie = requests.get(
+                    f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios",
+                    params={"planta": plantas_filtro if plantas_filtro else None},
+                    timeout=30
+                )
+                if resp_kg_especie.status_code == 200:
+                    for item in resp_kg_especie.json():
+                        especie = item.get('especie', '')
+                        kg_total = item.get('kg_total', 0)
+                        # Estos son kg proyectados total de toda la temporada
+                        # Proporcionamos por semanas filtradas (aproximación lineal)
+                        total_semanas_temporada = 23  # S47-S52 (6) + S1-S17 (17) = 23 semanas
+                        semanas_filtradas = len(semanas_en_rango)
+                        kg_proporcion = (kg_total / total_semanas_temporada) * semanas_filtradas if total_semanas_temporada > 0 else 0
+                        kg_proyectados_por_especie[especie] = kg_proporcion
+        except Exception as e:
+            print(f"Error obteniendo kg proyectados: {e}")
+
         # Agrupar por Tipo Fruta → Manejo
         def _normalize_cat(c):
             if not c:
@@ -293,11 +341,19 @@ def render(username: str, password: str):
                 # Fila de Tipo Fruta (totalizador)
                 # Buscar precio proyectado para este tipo de fruta
                 precio_proy_tipo = precios_proyectados.get(tipo, 0)
+                
+                # Calcular kg proyectados totales para este tipo de fruta (sumando todos los manejos)
+                kg_proy_tipo = 0
+                for m in agrup[tipo].keys():
+                    m_norm = 'Orgánico' if 'org' in m.lower() else 'Convencional'
+                    especie_m = f"{tipo} {m_norm}"
+                    kg_proy_tipo += kg_proyectados_por_especie.get(especie_m, 0)
 
                 tabla_rows.append({
                     'tipo': 'fruta',
                     'Descripción': tipo,
                     'Kg': tipo_kg,
+                    'Kg Proy': kg_proy_tipo,
                     'Costo Total': tipo_costo,
                     'Costo/Kg': tipo_costo_prom,
                     'Precio Proy': precio_proy_tipo,
@@ -316,14 +372,26 @@ def render(username: str, password: str):
 
                     costo = v['costo']
                     costo_prom = costo / kg if kg > 0 else 0
-                    prom_iqf = sum(v['iqf_vals']) / len(v['iqf_vals']) if v['iqf_vals'] else 0
-                    prom_block = sum(v['block_vals']) / len(v['block_vals']) if v['block_vals'] else 0
+                    
+                    # Normalizar IQF/Block para que sumen 100%
+                    total_iqf_sum = sum(v['iqf_vals']) if v['iqf_vals'] else 0
+                    total_block_sum = sum(v['block_vals']) if v['block_vals'] else 0
+                    total_calidad = total_iqf_sum + total_block_sum
+                    if total_calidad > 0:
+                        prom_iqf = (total_iqf_sum / total_calidad) * 100
+                        prom_block = (total_block_sum / total_calidad) * 100
+                    else:
+                        prom_iqf = 0
+                        prom_block = 0
 
                     # Buscar precio proyectado para la combinación tipo + manejo
                     # Formato del Excel: "Arándano Orgánico" o "Frambuesa Convencional"
                     manejo_norm = 'Orgánico' if 'org' in manejo.lower() else 'Convencional'
                     especie_manejo = f"{tipo} {manejo_norm}"
                     precio_proy_manejo = precios_proyectados.get(especie_manejo, precios_proyectados.get(tipo, 0))
+                    
+                    # Obtener kg proyectados para este especie_manejo
+                    kg_proy_manejo = kg_proyectados_por_especie.get(especie_manejo, 0)
 
                     if 'orgánico' in manejo.lower() or 'organico' in manejo.lower():
                         icono = '🌱'
@@ -336,6 +404,7 @@ def render(username: str, password: str):
                         'tipo': 'manejo',
                         'Descripción': f"    → {manejo}",
                         'Kg': kg,
+                        'Kg Proy': kg_proy_manejo,
                         'Costo Total': costo,
                         'Costo/Kg': costo_prom,
                         'Precio Proy': precio_proy_manejo,
@@ -344,10 +413,12 @@ def render(username: str, password: str):
                     })
 
             # Fila total
+            total_kg_proy = sum(kg_proyectados_por_especie.values())
             tabla_rows.append({
                 'tipo': 'total',
                 'Descripción': 'TOTAL GENERAL',
                 'Kg': total_kg_tabla,
+                'Kg Proy': total_kg_proy,
                 'Costo Total': total_costo_tabla,
                 'Costo/Kg': None,
                 'Precio Proy': None,
@@ -389,6 +460,7 @@ def render(username: str, password: str):
             # Formatear para mostrar (formato chileno: punto miles, coma decimal)
             df_display = df_resumen.copy()
             df_display['Kg'] = df_display['Kg'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) else "—")
+            df_display['Kg Proy'] = df_display['Kg Proy'].apply(lambda x: fmt_numero(x, 0) if pd.notna(x) and x > 0 else "—")
             df_display['Costo Total'] = df_display['Costo Total'].apply(lambda x: fmt_dinero(x) if pd.notna(x) else "—")
             df_display['Costo/Kg'] = df_display['Costo/Kg'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
             df_display['Precio Proy'] = df_display['Precio Proy'].apply(lambda x: fmt_dinero(x) if pd.notna(x) and x > 0 else "—")
@@ -397,7 +469,7 @@ def render(username: str, password: str):
             df_display['% Block'] = df_display['% Block'].apply(lambda x: f"{fmt_numero(x, 1)}%" if pd.notna(x) and x > 0 else "—")
 
             # Mostrar usando columnas estilizadas
-            df_show = df_display[['Descripción', 'Kg', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% Desv', '% IQF', '% Block']]
+            df_show = df_display[['Descripción', 'Kg', 'Kg Proy', 'Costo Total', 'Costo/Kg', 'Precio Proy', '% Desv', '% IQF', '% Block']]
 
             # Usar st.dataframe con column_config para mejor visualización
             st.dataframe(
@@ -407,6 +479,7 @@ def render(username: str, password: str):
                 column_config={
                     'Descripción': st.column_config.TextColumn('Tipo / Manejo', width='large'),
                     'Kg': st.column_config.TextColumn('Kg', width='small'),
+                    'Kg Proy': st.column_config.TextColumn('Kg Proy', width='small'),
                     'Costo Total': st.column_config.TextColumn('Costo Total', width='medium'),
                     'Costo/Kg': st.column_config.TextColumn('$/Kg', width='small'),
                     'Precio Proy': st.column_config.TextColumn('PPTO', width='small'),
@@ -645,7 +718,26 @@ def render(username: str, password: str):
 
         # Si ambas plantas están seleccionadas, mostrar un gráfico por cada una
         if len(origen_filtro_usado) == 2 and 'origen' in df_filtrada.columns:
-            # Gráfico para RFP
+            # =================================================================
+            #  GRÁFICO CONSOLIDADO (RFP + VILKÚN)
+            # =================================================================
+            st.subheader("📊 CONSOLIDADO - Kg recepcionados por día (RFP + VILKÚN)")
+            chart_consolidado = crear_grafico_planta(df_filtrada, 'CONSOLIDADO', '#8e44ad')
+            st.altair_chart(chart_consolidado, use_container_width=True)
+            # Calcular total consolidado excluyendo bandejas
+            total_consolidado = 0.0
+            for _, row in df_filtrada.iterrows():
+                for p in row.get('productos', []) or []:
+                    cat = (p.get('Categoria') or '').strip().upper()
+                    if 'BANDEJ' not in cat:
+                        total_consolidado += p.get('Kg Hechos', 0) or 0
+            st.caption(f"**Total Consolidado:** {fmt_numero(total_consolidado, 0)} Kg")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            #  GRÁFICO RFP
+            # =================================================================
             st.subheader("🏭 RFP - Kg recepcionados por día (por Tipo de Fruta)")
             df_rfp = df_filtrada[df_filtrada['origen'] == 'RFP']
             if not df_rfp.empty:
