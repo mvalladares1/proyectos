@@ -18,20 +18,25 @@ const IAS7Tree: React.FC<IAS7TreeProps> = (props) => {
         cuentas_sin_clasificar = 0
     } = props;
 
+    const containerHeight = props.height ? `${props.height}px` : '600px';
+
     return (
         <div className={`ias7-tree ias7-tree--${theme}`}>
-            {/* Render each activity */}
-            {actividades.map((actividad, index) => (
-                <ActivitySection
-                    key={actividad.key}
-                    actividad={{
-                        ...actividad,
-                        color: actividad.color || ACTIVITY_COLORS[actividad.key] || '#718096'
-                    }}
-                    modo={modo}
-                    defaultExpanded={index === 0} // First activity expanded by default
-                />
-            ))}
+            {/* Internal Scroll Viewport */}
+            <div className="ias7-viewport" style={{ height: containerHeight, overflowY: 'auto' }}>
+                {/* Render each activity */}
+                {actividades.map((actividad, index) => (
+                    <ActivitySection
+                        key={actividad.key}
+                        actividad={{
+                            ...actividad,
+                            color: actividad.color || ACTIVITY_COLORS[actividad.key] || '#718096'
+                        }}
+                        modo={modo}
+                        defaultExpanded={index === 0} // First activity expanded by default
+                    />
+                ))}
+            </div>
         </div>
     );
 };

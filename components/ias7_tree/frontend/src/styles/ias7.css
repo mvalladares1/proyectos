@@ -7,7 +7,35 @@
   flex-direction: column;
   gap: 24px;
   /* Espaciado entre actividades */
-  padding-bottom: 40px;
+  /* Espaciado entre actividades */
+  padding-bottom: 0px;
+}
+
+/* --- VIEWPORT (INTERNAL SCROLL) --- */
+.ias7-viewport {
+  width: 100%;
+  /* Height is set inline by React, default 600px */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  /* Space for scrollbar */
+
+  /* Scrollbar Styling */
+  scrollbar-width: thin;
+  scrollbar-color: #4a5568 #1a202c;
+}
+
+.ias7-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ias7-viewport::-webkit-scrollbar-track {
+  background: #1a202c;
+}
+
+.ias7-viewport::-webkit-scrollbar-thumb {
+  background-color: #4a5568;
+  border-radius: 6px;
 }
 
 .ias7-tree--dark {
@@ -76,10 +104,12 @@
      Col 1: Indent/Expand (50px min)
      Col 2: ID (80px)
      Col 3: Nombre (Flex)
+     Col 2: ID (80px)
+     Col 3: Nombre (Flex)
      Col 4: Monto Real (140px) 
-     Col 5: Monto Proyectado (Optional - future)
+     Col 5: Acciones (40px)
   */
-  grid-template-columns: minmax(40px, auto) 90px 1fr 150px;
+  grid-template-columns: minmax(40px, auto) 90px 1fr 150px 40px;
   align-items: center;
   padding: 8px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.02);
@@ -318,14 +348,16 @@
   padding: 10px;
   position: absolute;
   z-index: 100;
-  bottom: 125%; /* Position above */
+  bottom: 125%;
+  /* Position above */
   left: 50%;
-  transform: translateX(-50%); 
+  transform: translateX(-50%);
   opacity: 0;
   transition: opacity 0.3s;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  pointer-events: none; /* Prevent hovering the tooltip itself blocking mouse */
+  pointer-events: none;
+  /* Prevent hovering the tooltip itself blocking mouse */
 }
 
 .ias7-tooltip-wrapper:hover .ias7-tooltip-content {
@@ -386,18 +418,19 @@
 
 /* --- DUAL COLUMN MODE --- */
 .ias7-grid-row--dual {
-  grid-template-columns: minmax(40px, auto) 90px 1fr 130px 130px;
+  /* Dual Mode: + Projected Column */
+  grid-template-columns: minmax(40px, auto) 90px 1fr 130px 130px 40px;
 }
 
 .ias7-grid-row--dual .ias7-node__monto {
-    text-align: right;
-    padding-right: 10px;
+  text-align: right;
+  padding-right: 10px;
 }
 
 .ias7-monto-label {
-    display: block;
-    font-size: 0.6em;
-    color: #718096;
-    margin-bottom: 2px;
-    text-transform: uppercase;
+  display: block;
+  font-size: 0.6em;
+  color: #718096;
+  margin-bottom: 2px;
+  text-transform: uppercase;
 }

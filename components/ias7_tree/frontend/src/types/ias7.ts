@@ -72,6 +72,7 @@ export interface IAS7TreeProps {
     variacion_neta: number;
     cuentas_sin_clasificar?: number;
     theme?: 'dark' | 'light';
+    height?: number;
 }
 
 /**

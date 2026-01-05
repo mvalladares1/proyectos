@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Streamlit } from "streamlit-component-lib";
 import { IAS7Node, ViewMode } from '../types/ias7';
 import { getIndent, formatMonto, formatPct, getMontoColor } from '../utils/formatters';
 import MontoDisplay from './MontoDisplay';
@@ -78,7 +79,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
 
                 {/* COL 4 (Real in Dual) or Main Amount */}
                 <div className="ias7-node__monto">
-                    {/* Header for column if it's the Total line or Header? No, kept simple for now */}
+                    {/* Header for column if it's the Total line or Header? */}
                     {isConsolidado && isHeader && <span className="ias7-monto-label">Real</span>}
 
                     {(isTotal || (tipo === 'LINEA')) && (
@@ -120,6 +121,25 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
                         )}
                     </div>
                 )}
+
+                {/* COL 6: Actions (Edit) */}
+                <div className="ias7-node__actions">
+                    {tipo === 'LINEA' && (
+                        <button
+                            className="ias7-action-btn"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                Streamlit.setComponentValue({
+                                    action: "EDIT_NODE",
+                                    payload: { id, nombre, monto_real }
+                                });
+                            }}
+                            title="Editar Mapeo"
+                        >
+                            ✏️
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Drilldown Content (Full Width or indented) */}
