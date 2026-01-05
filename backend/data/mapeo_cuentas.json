@@ -1,154 +1,188 @@
 {
-    "version": "2.2",
-    "descripcion": "Mapeo de cuentas contables a categorías de flujo de caja",
-    "configuracion": {
-        "modo_estricto": false,
-        "bloquear_si_no_clasificado": false,
-        "umbrales_unclassified": {
-            "operacion": 0.05,
-            "inversion": 0.10,
-            "financiamiento": 0.10
-        },
-        "alertar_signo_inesperado": true
+  "version": "2.2",
+  "descripcion": "Mapeo de cuentas contables a categorías de flujo de caja",
+  "configuracion": {
+    "modo_estricto": false,
+    "bloquear_si_no_clasificado": false,
+    "umbrales_unclassified": {
+      "operacion": 0.05,
+      "inversion": 0.1,
+      "financiamiento": 0.1
     },
-    "cuentas_efectivo": {
-        "efectivo": {
-            "prefijos": [
-                "1101",
-                "1102"
-            ],
-            "codigos_incluir": [],
-            "codigos_excluir": [],
-            "descripcion": "Efectivo en caja y bancos"
-        },
-        "equivalentes": {
-            "prefijos": [
-                "1103",
-                "1104",
-                "1105"
-            ],
-            "codigos_incluir": [],
-            "codigos_excluir": [],
-            "descripcion": "Equivalentes de efectivo (depósitos a plazo < 90 días)"
-        }
+    "alertar_signo_inesperado": true
+  },
+  "cuentas_efectivo": {
+    "efectivo": {
+      "prefijos": [
+        "1101",
+        "1102"
+      ],
+      "codigos_incluir": [],
+      "codigos_excluir": [],
+      "descripcion": "Efectivo en caja y bancos"
     },
-    "categorias": {
-        "OP01": {
-            "nombre": "Cobros procedentes de las ventas",
-            "tipo": "OPERACION",
-            "signo_esperado": "positivo"
-        },
-        "OP02": {
-            "nombre": "Pagos a proveedores",
-            "tipo": "OPERACION",
-            "signo_esperado": "negativo"
-        },
-        "OP03": {
-            "nombre": "Pagos a empleados",
-            "tipo": "OPERACION",
-            "signo_esperado": "negativo"
-        },
-        "OP04": {
-            "nombre": "Intereses pagados",
-            "tipo": "OPERACION",
-            "signo_esperado": "negativo"
-        },
-        "OP05": {
-            "nombre": "Intereses recibidos",
-            "tipo": "OPERACION",
-            "signo_esperado": "positivo"
-        },
-        "OP06": {
-            "nombre": "Impuestos",
-            "tipo": "OPERACION",
-            "signo_esperado": "variable"
-        },
-        "OP07": {
-            "nombre": "Otros operacionales",
-            "tipo": "OPERACION",
-            "signo_esperado": "variable"
-        },
-        "IN01": {
-            "nombre": "Control subsidiarias",
-            "tipo": "INVERSION",
-            "signo_esperado": "negativo"
-        },
-        "IN02": {
-            "nombre": "Participaciones no controladoras",
-            "tipo": "INVERSION",
-            "signo_esperado": "negativo"
-        },
-        "IN03": {
-            "nombre": "Compras PPE",
-            "tipo": "INVERSION",
-            "signo_esperado": "negativo"
-        },
-        "IN04": {
-            "nombre": "Compras intangibles",
-            "tipo": "INVERSION",
-            "signo_esperado": "negativo"
-        },
-        "IN05": {
-            "nombre": "Dividendos recibidos",
-            "tipo": "INVERSION",
-            "signo_esperado": "positivo"
-        },
-        "IN06": {
-            "nombre": "Ventas PPE",
-            "tipo": "INVERSION",
-            "signo_esperado": "positivo"
-        },
-        "FI01": {
-            "nombre": "Préstamos LP recibidos",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "positivo"
-        },
-        "FI02": {
-            "nombre": "Préstamos CP recibidos",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "positivo"
-        },
-        "FI03": {
-            "nombre": "Préstamos relacionadas",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "variable"
-        },
-        "FI04": {
-            "nombre": "Pagos préstamos",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "negativo"
-        },
-        "FI05": {
-            "nombre": "Pagos relacionadas",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "negativo"
-        },
-        "FI06": {
-            "nombre": "Pagos leasing",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "negativo"
-        },
-        "FI07": {
-            "nombre": "Dividendos pagados",
-            "tipo": "FINANCIAMIENTO",
-            "signo_esperado": "negativo"
-        },
-        "NEUTRAL": {
-            "nombre": "Transferencias internas",
-            "tipo": "TECNICA",
-            "signo_esperado": "cero_neto"
-        },
-        "FX_EFFECT": {
-            "nombre": "Diferencias tipo cambio",
-            "tipo": "TECNICA",
-            "signo_esperado": "variable"
-        },
-        "UNCLASSIFIED": {
-            "nombre": "Sin clasificar",
-            "tipo": "ERROR",
-            "signo_esperado": "variable"
-        }
+    "equivalentes": {
+      "prefijos": [
+        "1103",
+        "1104",
+        "1105"
+      ],
+      "codigos_incluir": [],
+      "codigos_excluir": [],
+      "descripcion": "Equivalentes de efectivo (depósitos a plazo < 90 días)"
+    }
+  },
+  "categorias": {
+    "OP01": {
+      "nombre": "Cobros procedentes de las ventas",
+      "tipo": "OPERACION",
+      "signo_esperado": "positivo"
     },
-    "mapeo_cuentas": {},
-    "historial_cambios": []
+    "OP02": {
+      "nombre": "Pagos a proveedores",
+      "tipo": "OPERACION",
+      "signo_esperado": "negativo"
+    },
+    "OP03": {
+      "nombre": "Pagos a empleados",
+      "tipo": "OPERACION",
+      "signo_esperado": "negativo"
+    },
+    "OP04": {
+      "nombre": "Intereses pagados",
+      "tipo": "OPERACION",
+      "signo_esperado": "negativo"
+    },
+    "OP05": {
+      "nombre": "Intereses recibidos",
+      "tipo": "OPERACION",
+      "signo_esperado": "positivo"
+    },
+    "OP06": {
+      "nombre": "Impuestos",
+      "tipo": "OPERACION",
+      "signo_esperado": "variable"
+    },
+    "OP07": {
+      "nombre": "Otros operacionales",
+      "tipo": "OPERACION",
+      "signo_esperado": "variable"
+    },
+    "IN01": {
+      "nombre": "Control subsidiarias",
+      "tipo": "INVERSION",
+      "signo_esperado": "negativo"
+    },
+    "IN02": {
+      "nombre": "Participaciones no controladoras",
+      "tipo": "INVERSION",
+      "signo_esperado": "negativo"
+    },
+    "IN03": {
+      "nombre": "Compras PPE",
+      "tipo": "INVERSION",
+      "signo_esperado": "negativo"
+    },
+    "IN04": {
+      "nombre": "Compras intangibles",
+      "tipo": "INVERSION",
+      "signo_esperado": "negativo"
+    },
+    "IN05": {
+      "nombre": "Dividendos recibidos",
+      "tipo": "INVERSION",
+      "signo_esperado": "positivo"
+    },
+    "IN06": {
+      "nombre": "Ventas PPE",
+      "tipo": "INVERSION",
+      "signo_esperado": "positivo"
+    },
+    "FI01": {
+      "nombre": "Préstamos LP recibidos",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "positivo"
+    },
+    "FI02": {
+      "nombre": "Préstamos CP recibidos",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "positivo"
+    },
+    "FI03": {
+      "nombre": "Préstamos relacionadas",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "variable"
+    },
+    "FI04": {
+      "nombre": "Pagos préstamos",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "negativo"
+    },
+    "FI05": {
+      "nombre": "Pagos relacionadas",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "negativo"
+    },
+    "FI06": {
+      "nombre": "Pagos leasing",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "negativo"
+    },
+    "FI07": {
+      "nombre": "Dividendos pagados",
+      "tipo": "FINANCIAMIENTO",
+      "signo_esperado": "negativo"
+    },
+    "NEUTRAL": {
+      "nombre": "Transferencias internas",
+      "tipo": "TECNICA",
+      "signo_esperado": "cero_neto"
+    },
+    "FX_EFFECT": {
+      "nombre": "Diferencias tipo cambio",
+      "tipo": "TECNICA",
+      "signo_esperado": "variable"
+    },
+    "UNCLASSIFIED": {
+      "nombre": "Sin clasificar",
+      "tipo": "ERROR",
+      "signo_esperado": "variable"
+    }
+  },
+  "mapeo_cuentas": {
+    "21020101": {
+      "categoria": "OP02",
+      "nombre": "PROVEEDORES POR PAGAR",
+      "fecha_asignacion": "2026-01-02T18:44:05.999510",
+      "usuario": "system"
+    },
+    "0011110": {
+      "categoria": "NEUTRAL",
+      "nombre": "BANCOS CUENTA TRANSITORIA",
+      "fecha_asignacion": "2026-01-05T03:39:36.925088",
+      "usuario": "system"
+    }
+  },
+  "historial_cambios": [
+    {
+      "fecha": "2026-01-02T18:44:05.999525",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "21020101",
+      "nombre_cuenta": "PROVEEDORES POR PAGAR",
+      "categoria_anterior": null,
+      "categoria_nueva": "OP02",
+      "impacto_estimado": null
+    },
+    {
+      "fecha": "2026-01-05T03:39:36.925107",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "0011110",
+      "nombre_cuenta": "BANCOS CUENTA TRANSITORIA",
+      "categoria_anterior": null,
+      "categoria_nueva": "NEUTRAL",
+      "impacto_estimado": null
+    }
+  ]
 }

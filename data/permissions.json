@@ -5,17 +5,15 @@
     "bandejas": [],
     "stock": [],
     "containers": [],
-    "trazabilidad": [
-      "jvidaurre@riofuturo.cl",
-      "frios@riofuturo.cl"
-    ],
     "relacion_comercial": [
       "fhorst@riofuturo.cl",
       "vdominguez@riofuturo.cl",
-      "vpa@riofuturo.cl"
+      "vpa@riofuturo.cl",
+      "mjaramillo@riofuturo.cl"
     ],
     "finanzas": [
-      "jvidaurre@riofuturo.cl"
+      "jvidaurre@riofuturo.cl",
+      "fhorst@riofuturo.cl"
     ],
     "compras": [
       "jbrandt@riofuturo.cl",
@@ -24,9 +22,25 @@
     "permisos": [
       "mvalladares@riofuturo.cl"
     ],
-    "automatizaciones": []
+    "automatizaciones": [],
+    "rendimiento": []
   },
   "admins": [
     "mvalladares@riofuturo.cl"
-  ]
+  ],
+  "pages": {
+    "recepciones.aprobaciones_mp": [
+      "ctapia@riofuturo.cl",
+      "asesorias@riofuturo.cl"
+    ],
+    "recepciones.curva_abastecimiento": [
+      "fbravo@riofuturo.cl",
+      "jvidaurre@riofuturo.cl",
+      "msepulveda@riofuturo.cl"
+    ]
+  },
+  "maintenance": {
+    "enabled": true,
+    "message": "El sistema está siendo ajustado en este momento."
+  }
 }

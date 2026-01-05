@@ -52,6 +52,7 @@ class FlujoCajaService:
     CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
     CATEGORIA_PENDIENTE = "PENDIENTE"   # Sin clasificar (va a 1.2.6 + lista pendientes)
     CATEGORIA_UNCLASSIFIED = "1.2.6"    # Otras entradas (salidas) de efectivo - fallback
+    CATEGORIA_FX_EFFECT = "4.2"         # Efectos variación tipo de cambio
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
