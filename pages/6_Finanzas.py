@@ -24,6 +24,306 @@ if not tiene_acceso_dashboard("finanzas"):
 API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 ESTADO_RESULTADO_URL = f"{API_BASE_URL}/api/v1/estado-resultado"
 PRESUPUESTO_URL = f"{API_BASE_URL}/api/v1/presupuesto"
+FLUJO_CAJA_URL = f"{API_BASE_URL}/api/v1/flujo-caja"
+
+
+# ==================== IAS 7 HELPER FUNCTIONS ====================
+
+def build_ias7_categories_dropdown():
+    """
+    Retorna las categorías IAS 7 para el dropdown del editor de mapeo.
+    Formato: {"label": "value"}
+    """
+    return {
+        "--- Seleccionar ---": "",
+        "🟢 1.1.1 - Cobros procedentes de las ventas de bienes y prestación de servicios": "1.1.1",
+        "🟢 1.2.1 - Pagos a proveedores por el suministro de bienes y servicios": "1.2.1",
+        "🟢 1.2.2 - Pagos a y por cuenta de los empleados": "1.2.2",
+        "🟢 1.2.3 - Intereses pagados": "1.2.3",
+        "🟢 1.2.4 - Intereses recibidos": "1.2.4",
+        "🟢 1.2.5 - Impuestos a las ganancias reembolsados (pagados)": "1.2.5",
+        "🟢 1.2.6 - Otras entradas (salidas) de efectivo": "1.2.6",
+        "🔵 2.1 - Flujos para obtener control de subsidiarias": "2.1",
+        "🔵 2.2 - Compra de participaciones no controladoras": "2.2",
+        "🔵 2.3 - Compras de propiedades, planta y equipo": "2.3",
+        "🔵 2.4 - Compras de activos intangibles": "2.4",
+        "🔵 2.5 - Dividendos recibidos": "2.5",
+        "🟣 3.0.1 - Importes procedentes de préstamos de largo plazo": "3.0.1",
+        "🟣 3.0.2 - Importes procedentes de préstamos de corto plazo": "3.0.2",
+        "🟣 3.1.1 - Préstamos de entidades relacionadas": "3.1.1",
+        "🟣 3.1.2 - Pagos de préstamos": "3.1.2",
+        "🟣 3.1.3 - Pagos de préstamos a entidades relacionadas": "3.1.3",
+        "🟣 3.1.4 - Pagos de pasivos por arrendamientos financieros": "3.1.4",
+        "🟣 3.1.5 - Dividendos pagados": "3.1.5",
+        "⚪ 4.2 - Efectos variación tasa de cambio": "4.2",
+        "⚪ NEUTRAL - Transferencias internas (no impacta flujo)": "NEUTRAL"
+    }
+
+
+def render_ias7_tree_node(node, cuentas_por_concepto, docs_por_concepto, fmt_flujo, act_color="#2ecc71"):
+    """
+    Renderiza un nodo del árbol IAS 7 con su composición de cuentas y documentos.
+    
+    Args:
+        node: Dict con {id, nombre, tipo, nivel, monto_real, monto_proyectado, monto_display, ...}
+        cuentas_por_concepto: Dict {concepto_id: [{codigo, nombre, monto, ...}, ...]}
+        docs_por_concepto: Dict {concepto_id: [{documento, partner, fecha_venc, monto, ...}, ...]}
+        fmt_flujo: Función para formatear montos
+        act_color: Color de la actividad para bordes
+    """
+    c_id = node.get("id", "")
+    c_nombre = node.get("nombre", "")
+    c_tipo = node.get("tipo", "LINEA")
+    c_nivel = node.get("nivel", 3)
+    monto_real = node.get("monto_real", 0)
+    monto_proy = node.get("monto_proyectado", 0)
+    monto = node.get("monto_display", monto_real + monto_proy)
+    
+    # Estilos por tipo y nivel
+    indent = (c_nivel - 1) * 25
+    if c_tipo == "HEADER":
+        font_weight = "bold"
+        font_size = "1.15em" if c_nivel == 1 else "1.05em"
+        bg_color = "transparent"
+        border_l = f"4px solid {act_color}"
+    elif c_tipo == "TOTAL":
+        font_weight = "bold"
+        font_size = "1.1em"
+        bg_color = f"{act_color}15"
+        border_l = f"4px solid {act_color}"
+    else:  # LINEA
+        font_weight = "normal"
+        font_size = "1em"
+        bg_color = "#1a1a2e"
+        border_l = "none"
+    
+    # Color del monto
+    if monto > 0:
+        monto_color = "#2ecc71"
+    elif monto < 0:
+        monto_color = "#e74c3c"
+    else:
+        monto_color = "#718096"
+    
+    # Indicadores adicionales
+    has_cuentas = c_id in cuentas_por_concepto and len(cuentas_por_concepto[c_id]) > 0
+    has_docs = c_id in docs_por_concepto and len(docs_por_concepto[c_id]) > 0
+    
+    # Renderizar el nodo principal
+    if c_tipo in ("HEADER", "TOTAL") or monto != 0 or has_cuentas or has_docs:
+        st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; align-items: center; 
+                    padding: 10px 15px; margin-left: {indent}px; border-radius: 6px; 
+                    margin-top: {8 if c_nivel == 1 else 3}px; border-left: {border_l};
+                    background: {bg_color};">
+            <div style="flex-grow: 1;">
+                <span style="font-family: monospace; color: #718096; font-size: 0.8em; margin-right: 8px;">{c_id}</span>
+                <span style="font-weight: {font_weight}; font-size: {font_size}; color: #e0e0e0;">{c_nombre}</span>
+            </div>
+            <div style="text-align: right; min-width: 120px;">
+                <span style="color: {monto_color}; font-weight: bold; font-family: monospace; font-size: 1.1em;">
+                    {fmt_flujo(monto) if monto != 0 or c_tipo == "TOTAL" else ""}
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Drill-down para LINEAs con composición
+        if c_tipo == "LINEA" and (has_cuentas or has_docs):
+            with st.expander(f"🔍 Ver composición de {c_id}", expanded=False):
+                # Sección: Composición contable (Real)
+                if has_cuentas:
+                    render_account_composition(c_id, cuentas_por_concepto[c_id], monto_real, fmt_flujo)
+                
+                # Sección: Documentos proyectados
+                if has_docs:
+                    render_document_details(c_id, docs_por_concepto[c_id], fmt_flujo)
+
+
+def render_account_composition(concepto_id, cuentas, subtotal, fmt_flujo):
+    """
+    Renderiza la tabla de composición por cuentas contables.
+    """
+    st.markdown(f"<div style='font-size:0.85em; color:#a0aec0; margin-bottom: 6px; font-weight: bold;'>📊 Composición contable ({concepto_id})</div>", unsafe_allow_html=True)
+    
+    # Cabecera
+    h_c1, h_c2, h_c3, h_c4 = st.columns([1, 2.5, 1.2, 0.8])
+    h_c1.caption("**Código**")
+    h_c2.caption("**Nombre**")
+    h_c3.caption("**Monto**")
+    h_c4.caption("**% Línea**")
+    
+    divisor = abs(subtotal) if subtotal != 0 else 1
+    
+    for cuenta in cuentas[:15]:  # Limitar a 15 cuentas
+        codigo = cuenta.get('codigo', '')
+        nombre = cuenta.get('nombre', '')[:40]
+        monto_c = cuenta.get('monto', 0)
+        pct = abs(monto_c) / divisor * 100 if divisor != 1 else 0
+        
+        monto_color = "#2ecc71" if monto_c >= 0 else "#e74c3c"
+        monto_display = f"+${monto_c:,.0f}" if monto_c >= 0 else f"-${abs(monto_c):,.0f}"
+        
+        cc1, cc2, cc3, cc4 = st.columns([1, 2.5, 1.2, 0.8])
+        with cc1:
+            st.markdown(f"<span style='color: #718096; font-family: monospace; font-size: 0.85em;'>{codigo}</span>", unsafe_allow_html=True)
+        with cc2:
+            st.caption(nombre)
+        with cc3:
+            st.markdown(f"<span style='color:{monto_color}; font-size: 0.9em;'>{monto_display}</span>", unsafe_allow_html=True)
+        with cc4:
+            st.caption(f"{pct:.1f}%")
+    
+    if len(cuentas) > 15:
+        st.caption(f"... y {len(cuentas) - 15} cuentas más")
+
+
+def render_document_details(concepto_id, documentos, fmt_flujo):
+    """
+    Renderiza la tabla de documentos proyectados (facturas borradores/abiertas).
+    """
+    st.markdown(f"<div style='font-size:0.85em; color:#f39c12; margin: 12px 0 6px 0; font-weight: bold;'>🟡 Detalles Proyectados ({concepto_id})</div>", unsafe_allow_html=True)
+    
+    # Cabecera
+    h1, h2, h3, h4, h5, h6 = st.columns([1.2, 1.8, 0.8, 0.8, 0.8, 1])
+    h1.caption("**Documento**")
+    h2.caption("**Partner**")
+    h3.caption("**Venc.**")
+    h4.caption("**Estado**")
+    h5.caption("**Etiqueta**")
+    h6.caption("**Monto**")
+    
+    for doc in documentos[:20]:
+        monto_d = doc.get('monto', 0)
+        color_d = "#f39c12" if monto_d >= 0 else "#d35400"
+        fmt_d = f"+${monto_d:,.0f}" if monto_d >= 0 else f"-${abs(monto_d):,.0f}"
+        
+        etiquetas = doc.get('etiquetas', [])
+        etiqueta_str = ", ".join(etiquetas[:2]) if etiquetas else doc.get('cuenta', '')[:10]
+        
+        d1, d2, d3, d4, d5, d6 = st.columns([1.2, 1.8, 0.8, 0.8, 0.8, 1])
+        d1.caption(doc.get('documento', '')[:15])
+        d2.caption(doc.get('partner', '')[:20])
+        d3.caption(doc.get('fecha_venc', '')[:10] if doc.get('fecha_venc') else '')
+        d4.caption(doc.get('estado', ''))
+        d5.caption(etiqueta_str[:12])
+        d6.markdown(f"<span style='color:{color_d}; font-size: 0.9em;'>{fmt_d}</span>", unsafe_allow_html=True)
+    
+    if len(documentos) > 20:
+        st.caption(f"... y {len(documentos) - 20} documentos más")
+
+
+def render_ias7_tree_activity(actividad_data, cuentas_por_concepto, docs_por_concepto, fmt_flujo, actividad_key, color):
+    """
+    Renderiza una actividad completa (Operación, Inversión o Financiamiento) como árbol IAS 7.
+    """
+    act_nombre = actividad_data.get("nombre", actividad_key)
+    subtotal = actividad_data.get("subtotal", 0)
+    conceptos = actividad_data.get("conceptos", [])
+    
+    subtotal_color = "#2ecc71" if subtotal >= 0 else "#e74c3c"
+    
+    with st.expander(f"📊 {act_nombre} ({fmt_flujo(subtotal)})", expanded=(actividad_key == "OPERACION")):
+        # Renderizar cada concepto en orden
+        for concepto in sorted(conceptos, key=lambda x: x.get("order", x.get("id", ""))):
+            render_ias7_tree_node(
+                node={
+                    "id": concepto.get("id") or concepto.get("codigo"),
+                    "nombre": concepto.get("nombre"),
+                    "tipo": concepto.get("tipo", "LINEA"),
+                    "nivel": concepto.get("nivel", 3),
+                    "monto_real": concepto.get("monto", 0),
+                    "monto_proyectado": concepto.get("monto_proyectado", 0),
+                    "monto_display": concepto.get("monto", 0),
+                },
+                cuentas_por_concepto=cuentas_por_concepto,
+                docs_por_concepto=docs_por_concepto,
+                fmt_flujo=fmt_flujo,
+                act_color=color
+            )
+        
+        # Subtotal de la actividad
+        subtotal_nombre = actividad_data.get("subtotal_nombre", "Subtotal")
+        st.markdown(f"""
+        <div style="background: linear-gradient(90deg, {color}22, transparent); 
+                    padding: 12px 15px; border-radius: 8px; margin-top: 10px;
+                    border-left: 3px solid {color};">
+            <span style="color: #a0aec0;">{subtotal_nombre}:</span>
+            <span style="color: {subtotal_color}; font-size: 1.2em; font-weight: bold; margin-left: 10px;">
+                {fmt_flujo(subtotal)}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def sugerir_categoria(nombre_cuenta: str, monto: float) -> tuple:
+    """
+    Sugiere una categoría IAS 7 basada en el nombre de la cuenta y el monto.
+    Retorna (codigo_sugerido, razon) o (None, None) si no hay sugerencia.
+    """
+    nombre_lower = nombre_cuenta.lower()
+    
+    # Operación - Cobros
+    if any(kw in nombre_lower for kw in ['venta', 'ingreso', 'cliente', 'revenue', 'ventas']):
+        if monto >= 0:
+            return ("1.1.1", "Contiene palabras clave de ventas/ingresos")
+    
+    # Operación - Pagos proveedores
+    if any(kw in nombre_lower for kw in ['proveedor', 'compra', 'supplier', 'vendor', 'mercaderia']):
+        return ("1.2.1", "Contiene palabras clave de proveedores")
+    
+    # Operación - Empleados
+    if any(kw in nombre_lower for kw in ['sueldo', 'salario', 'remuner', 'personal', 'empleado', 'planilla', 'afp', 'isapre', 'fonasa']):
+        return ("1.2.2", "Contiene palabras clave de empleados/remuneraciones")
+    
+    # Operación - Intereses
+    if any(kw in nombre_lower for kw in ['interes', 'interest']):
+        if monto >= 0:
+            return ("1.2.4", "Intereses recibidos")
+        else:
+            return ("1.2.3", "Intereses pagados")
+    
+    # Operación - Impuestos
+    if any(kw in nombre_lower for kw in ['impuesto', 'iva', 'ppm', 'renta', 'tax']):
+        return ("1.2.5", "Contiene palabras clave de impuestos")
+    
+    # Inversión - Activos fijos
+    if any(kw in nombre_lower for kw in ['activo fijo', 'propiedad', 'equipo', 'maquinaria', 'vehiculo', 'fixed asset']):
+        return ("2.3", "Contiene palabras clave de activos fijos")
+    
+    # Inversión - Intangibles
+    if any(kw in nombre_lower for kw in ['intangible', 'software', 'licencia', 'patente']):
+        return ("2.4", "Contiene palabras clave de intangibles")
+    
+    # Financiamiento - Préstamos
+    if any(kw in nombre_lower for kw in ['prestamo', 'credito', 'loan', 'bank', 'banco']):
+        if monto >= 0:
+            return ("3.0.1", "Préstamo recibido")
+        else:
+            return ("3.1.2", "Pago de préstamo")
+    
+    # Financiamiento - Dividendos
+    if any(kw in nombre_lower for kw in ['dividendo', 'dividend']):
+        if monto >= 0:
+            return ("2.5", "Dividendo recibido")
+        else:
+            return ("3.1.5", "Dividendo pagado")
+    
+    # Financiamiento - Relacionadas
+    if any(kw in nombre_lower for kw in ['relacionada', 'related party', 'matriz', 'filial']):
+        if monto >= 0:
+            return ("3.1.1", "Préstamo de relacionada")
+        else:
+            return ("3.1.3", "Pago a relacionada")
+    
+    # Neutral - Transferencias
+    if any(kw in nombre_lower for kw in ['transferencia', 'traspaso', 'transfer']):
+        return ("NEUTRAL", "Posible transferencia interna")
+    
+    return (None, None)
+
+
+# ==================== END IAS 7 HELPERS ====================
 
 # Obtener credenciales del usuario logueado
 username, password = get_credenciales()
@@ -1703,31 +2003,8 @@ if datos:
                         else:
                             st.warning(f"⚠️ Existen ${abs(otros):,.0f} en movimientos no conciliados. Revisa las cuentas a continuación.")
                         
-                        # Categorías oficiales NIIF (del catálogo)
-                        categorias_options = {
-                            "--- Seleccionar ---": "",
-                            "🟢 1.1.1 - Cobros procedentes de las ventas de bienes y prestación de servicios": "1.1.1",
-                            "🟢 1.2.1 - Pagos a proveedores por el suministro de bienes y servicios": "1.2.1",
-                            "🟢 1.2.2 - Pagos a y por cuenta de los empleados": "1.2.2",
-                            "🟢 1.2.3 - Intereses pagados": "1.2.3",
-                            "🟢 1.2.4 - Intereses recibidos": "1.2.4",
-                            "🟢 1.2.5 - Impuestos a las ganancias reembolsados (pagados)": "1.2.5",
-                            "🟢 1.2.6 - Otras entradas (salidas) de efectivo": "1.2.6",
-                            "🔵 2.1 - Flujos para obtener control de subsidiarias": "2.1",
-                            "🔵 2.2 - Compra de participaciones no controladoras": "2.2",
-                            "🔵 2.3 - Compras de propiedades, planta y equipo": "2.3",
-                            "🔵 2.4 - Compras de activos intangibles": "2.4",
-                            "🔵 2.5 - Dividendos recibidos": "2.5",
-                            "🟣 3.0.1 - Importes procedentes de préstamos de largo plazo": "3.0.1",
-                            "🟣 3.0.2 - Importes procedentes de préstamos de corto plazo": "3.0.2",
-                            "🟣 3.1.1 - Préstamos de entidades relacionadas": "3.1.1",
-                            "🟣 3.1.2 - Pagos de préstamos": "3.1.2",
-                            "🟣 3.1.3 - Pagos de préstamos a entidades relacionadas": "3.1.3",
-                            "🟣 3.1.4 - Pagos de pasivos por arrendamientos financieros": "3.1.4",
-                            "🟣 3.1.5 - Dividendos pagados": "3.1.5",
-                            "🟣 3.2.3 - Efectos de la variación en la tasa de cambio": "3.2.3",
-                            "⚪ NEUTRAL - Transferencias internas (no impacta flujo)": "NEUTRAL"
-                        }
+                        # Categorías oficiales NIIF IAS 7 (desde función helper)
+                        categorias_options = build_ias7_categories_dropdown()
                         
                         # Encabezado de tabla
                         st.markdown("""
