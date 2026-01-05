@@ -44,6 +44,19 @@ ESTRUCTURA_FLUJO = {
     }
 }
 
+# Mapeo OBLIGATORIO de cuentas de financiamiento (Parametrización Fija)
+CUENTAS_FIJAS_FINANCIAMIENTO = {
+    # 3.0.2 Importes procedentes de préstamos de corto plazo
+    "21010101": "3.0.2", "21010102": "3.0.2", "21010103": "3.0.2", "82010101": "3.0.2",
+    # 3.0.1 Importes procedentes de préstamos de largo plazo
+    "21010213": "3.0.1", "21010223": "3.0.1", "22010101": "3.0.1",
+    # 3.1.1 Préstamos de entidades relacionadas
+    "21030201": "3.1.1", "21030211": "3.1.1", "22020101": "3.1.1",
+    # 3.1.4 Pagos de pasivos por arrendamientos financieros
+    "21010201": "3.1.4", "21010202": "3.1.4", "21010204": "3.1.4",
+    "22010202": "3.1.4", "22010204": "3.1.4", "82010102": "3.1.4"
+}
+
 
 class FlujoCajaService:
     """Servicio para generar Estado de Flujo de Efectivo NIIF IAS 7."""
@@ -261,13 +274,14 @@ class FlujoCajaService:
         """
         Clasifica una cuenta usando mapeo explícito por código.
         Retorna (concepto_id, es_pendiente).
-        - Si está mapeada: retorna el concepto_id oficial (ej: "1.2.1")
-        - Si tiene código antiguo: migra a nuevo (OP01 → 1.1.1)
-        - Si no está mapeada: retorna CONCEPTO_FALLBACK y es_pendiente=True
         """
+        # 1. Chequear mapeo OBLIGATORIO (Financiamiento)
+        if codigo_cuenta in CUENTAS_FIJAS_FINANCIAMIENTO:
+            return (CUENTAS_FIJAS_FINANCIAMIENTO[codigo_cuenta], False)
+
         mapeo = self.mapeo_cuentas.get("mapeo_cuentas", {})
         
-        # Buscar por código exacto
+        # Search exact code
         if codigo_cuenta in mapeo:
             cuenta_info = mapeo[codigo_cuenta]
             if isinstance(cuenta_info, dict):

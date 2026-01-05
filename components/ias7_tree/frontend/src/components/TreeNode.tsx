@@ -42,8 +42,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
         rowStyle.color = activityColor;
     }
 
-    // Icons
-    const icon = isHeader ? '📂' : isTotal ? 'Σ' : '📄';
+    // Icons (Master Spec)
+    // Activity handles its own icon in ActivitySection. Here we handle Header/Total/Line
+    let icon = '';
+    if (isHeader) icon = '📁';
+    else if (isTotal) icon = 'Σ';
+    else if (tipo === 'LINEA') icon = '▸';
 
     // Dual Mode Logic
     const isConsolidado = modo === 'consolidado';
@@ -66,14 +70,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
                     )}
                 </div>
 
-                {/* COL 2: ID Code */}
-                <div className="ias7-node__id">
-                    {id}
-                </div>
+                {/* COL 2: ID Code (Hidden per UX Master Spec, moved to tooltip) */}
+                {/* Removed visible div, ID is used in key/logic but not shown */}
 
                 {/* COL 3: Name */}
-                <div className="ias7-node__nombre" title={nombre}>
-                    {isHeader && <span style={{ opacity: 0.5, marginRight: 6 }}>{icon}</span>}
+                <div className="ias7-node__nombre" title={`${id} - ${nombre}`}>
+                    <span style={{ opacity: 0.7, marginRight: 8, fontSize: '0.9em' }}>{icon}</span>
                     {nombre}
                 </div>
 

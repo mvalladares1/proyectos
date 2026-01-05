@@ -1,4 +1,5 @@
 import React from 'react';
+import { Streamlit } from "streamlit-component-lib";
 import { IAS7TreeProps, ACTIVITY_COLORS } from './types/ias7';
 import ActivitySection from './components/ActivitySection';
 import './styles/ias7.css';
@@ -18,12 +19,15 @@ const IAS7Tree: React.FC<IAS7TreeProps> = (props) => {
         cuentas_sin_clasificar = 0
     } = props;
 
-    const containerHeight = props.height ? `${props.height}px` : '600px';
+    // Dynamic height adjustment (No scroll interno, full page scroll)
+    React.useEffect(() => {
+        Streamlit.setFrameHeight();
+    });
 
     return (
         <div className={`ias7-tree ias7-tree--${theme}`}>
-            {/* Internal Scroll Viewport */}
-            <div className="ias7-viewport" style={{ height: containerHeight, overflowY: 'auto' }}>
+            {/* Dynamic Viewport (No fixed height) */}
+            <div className="ias7-viewport" style={{ height: 'auto', overflow: 'visible' }}>
                 {/* Render each activity */}
                 {actividades.map((actividad, index) => (
                     <ActivitySection

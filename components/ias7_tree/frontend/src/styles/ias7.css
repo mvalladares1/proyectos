@@ -14,8 +14,8 @@
 /* --- VIEWPORT (INTERNAL SCROLL) --- */
 .ias7-viewport {
   width: 100%;
-  /* Height is set inline by React, default 600px */
-  overflow-y: auto;
+  /* Height is set inline by React */
+  overflow-y: visible;
   overflow-x: hidden;
   padding-right: 4px;
   /* Space for scrollbar */
@@ -109,7 +109,7 @@
      Col 4: Monto Real (140px) 
      Col 5: Acciones (40px)
   */
-  grid-template-columns: minmax(40px, auto) 90px 1fr 150px 40px;
+  grid-template-columns: minmax(40px, auto) 1fr 150px 40px;
   align-items: center;
   padding: 8px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.02);
@@ -419,7 +419,7 @@
 /* --- DUAL COLUMN MODE --- */
 .ias7-grid-row--dual {
   /* Dual Mode: + Projected Column */
-  grid-template-columns: minmax(40px, auto) 90px 1fr 130px 130px 40px;
+  grid-template-columns: minmax(40px, auto) 1fr 130px 130px 40px;
 }
 
 .ias7-grid-row--dual .ias7-node__monto {
