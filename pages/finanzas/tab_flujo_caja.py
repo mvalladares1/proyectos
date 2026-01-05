@@ -130,17 +130,28 @@ def render(username: str, password: str):
         
         # Extraer datos
         actividades = flujo_data.get("actividades", {})
+        
+        # Obtener estructura de proyección (puede venir como 'proyeccion' -> 'actividades' o 'actividades_proy' legacy)
+        proyeccion_data = flujo_data.get("proyeccion", {})
+        actividades_proy_raw = proyeccion_data.get("actividades", {}) if proyeccion_data else flujo_data.get("actividades_proy", {})
+        
         if modo_ver == "Proyectado":
-            actividades = flujo_data.get("actividades_proy", actividades)
+            actividades = actividades_proy_raw
         elif modo_ver == "Consolidado":
-            actividades_real = flujo_data.get("actividades", {})
-            actividades_proy = flujo_data.get("actividades_proy", {})
+            # Deep merge de real + proyectado
+            # Nota: Esto modifica 'actividades' in-place si no tenemos cuidado, mejor copiar
+            import copy
+            actividades_real = copy.deepcopy(flujo_data.get("actividades", {}))
+            
             for key in actividades_real:
-                if key in actividades_proy:
+                if key in actividades_proy_raw:
+                    # Sumar subtotales
                     actividades_real[key]["subtotal"] = (
                         actividades_real[key].get("subtotal", 0) +
-                        actividades_proy[key].get("subtotal", 0)
+                        actividades_proy_raw[key].get("subtotal", 0)
                     )
+                    # Sumar conceptos individuales si es necesario para el árbol
+                    # (El componente React lo maneja si se le pasan ambos, pero aquí estamos fusionando para métricas)
             actividades = actividades_real
         
         conciliacion = flujo_data.get("conciliacion", {})
