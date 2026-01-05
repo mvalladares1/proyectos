@@ -73,6 +73,7 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "ytd", "name": "YTD (Acumulado)"},
         {"slug": "cg", "name": "CG"},
         {"slug": "detalle", "name": "Detalle"},
+        {"slug": "flujo_caja", "name": "Flujo de Caja"},
     ],
     "compras": [
         {"slug": "ordenes", "name": "Órdenes de Compra"},
