@@ -63,6 +63,7 @@ def render(username: str, password: str):
             status_text.text("✅ Fase 4/4: Completado")
             progress_bar.progress(100)
             st.toast("✅ Datos cargados correctamente", icon="✅")
+            st.rerun()
         except Exception as e:
             progress_bar.empty()
             status_text.empty()
@@ -70,7 +71,6 @@ def render(username: str, password: str):
             st.toast(f"❌ Error al cargar datos: {str(e)[:100]}", icon="❌")
         finally:
             st.session_state.compras_loading = False
-            st.rerun()
     
     data = st.session_state.get('compras_data')
     ordenes = st.session_state.get('compras_ordenes')

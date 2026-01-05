@@ -79,6 +79,9 @@ def render(username: str, password: str):
                         st.success(f"{len(results)} órdenes encontradas")
                     else:
                         st.info("No se encontraron órdenes en el rango solicitado")
+                    
+                    # Force UI update
+                    st.rerun()
                 except Exception as error:
                     st.error(f"Error al buscar órdenes: {error}")
                 finally:
