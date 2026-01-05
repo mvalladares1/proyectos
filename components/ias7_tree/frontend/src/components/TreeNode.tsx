@@ -44,6 +44,10 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
     // Icons
     const icon = isHeader ? '📂' : isTotal ? 'Σ' : '📄';
 
+    // Dual Mode Logic
+    const isConsolidado = modo === 'consolidado';
+    if (isConsolidado) nodeClass += ' ias7-grid-row--dual';
+
     return (
         <>
             <div
@@ -72,12 +76,50 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, modo, activityColor }) => {
                     {nombre}
                 </div>
 
-                {/* COL 4: Amount */}
+                {/* COL 4 (Real in Dual) or Main Amount */}
                 <div className="ias7-node__monto">
-                    {(isTotal || (tipo === 'LINEA' && monto !== 0)) && (
-                        <MontoDisplay valor={monto} showZero={isTotal} />
+                    {/* Header for column if it's the Total line or Header? No, kept simple for now */}
+                    {isConsolidado && isHeader && <span className="ias7-monto-label">Real</span>}
+
+                    {(isTotal || (tipo === 'LINEA')) && (
+                        isConsolidado ? (
+                            <MontoDisplay valor={monto_real} showZero={isTotal} />
+                        ) : (
+                            // Single Mode (Sum or Specific) - WITH PARETO TOOLTIP
+                            <div className="ias7-tooltip-wrapper">
+                                <MontoDisplay valor={monto} showZero={isTotal} />
+                                {tipo === 'LINEA' && cuentas && cuentas.length > 0 && (
+                                    <div className="ias7-tooltip-content">
+                                        <div className="ias7-tooltip-header">Top Contribuyentes</div>
+                                        {cuentas
+                                            .sort((a, b) => Math.abs(b.monto) - Math.abs(a.monto))
+                                            .slice(0, 3)
+                                            .map((cta, idx) => (
+                                                <div key={idx} className="ias7-tooltip-item">
+                                                    <div className="ias7-tooltip-name">{cta.nombre.substring(0, 25)}...</div>
+                                                    <div className="ias7-tooltip-val">{formatMonto(cta.monto)}</div>
+                                                </div>
+                                            ))
+                                        }
+                                        {cuentas.length > 3 && (
+                                            <div className="ias7-tooltip-more">... y {cuentas.length - 3} más</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )
                     )}
                 </div>
+
+                {/* COL 5: Projected (Only in Dual) */}
+                {isConsolidado && (
+                    <div className="ias7-node__monto">
+                        {isHeader && <span className="ias7-monto-label">Proyectado</span>}
+                        {(isTotal || tipo === 'LINEA') && (
+                            <MontoDisplay valor={monto_proyectado} showZero={isTotal} />
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Drilldown Content (Full Width or indented) */}
