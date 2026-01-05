@@ -207,7 +207,7 @@ def render(username: str, password: str):
         st.divider()
         
         # === ESTADO DE FLUJO OFICIAL (React Component) ===
-        st.markdown("### 📋 Estado de Flujo de Efectivo (NIIF IAS 7)")
+        # st.markdown("### 📋 Estado de Flujo de Efectivo (NIIF IAS 7)")
         
         # Importar y usar el nuevo componente React
         try:
