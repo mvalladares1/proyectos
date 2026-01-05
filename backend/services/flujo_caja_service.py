@@ -798,7 +798,7 @@ class FlujoCajaService:
                     "fecha": mov.get('date'),
                     "descripcion": mov.get('name') or mov.get('ref') or '',
                     "monto": monto,
-                    "clasificacion": clasificacion,
+                    "clasificacion": concepto_id,
                     "contrapartida": contrapartida_cuenta.get('name', '') if contrapartida_cuenta else ''
                 })
         
