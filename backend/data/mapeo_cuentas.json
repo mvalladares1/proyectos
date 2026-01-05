@@ -161,6 +161,36 @@
       "nombre": "BANCOS CUENTA TRANSITORIA",
       "fecha_asignacion": "2026-01-05T03:39:36.925088",
       "usuario": "system"
+    },
+    "21020107": {
+      "concepto_id": "2.4",
+      "nombre": "FACTURAS POR RECIBIR PRODUCTORES",
+      "fecha_asignacion": "2026-01-05T11:57:00.617726",
+      "usuario": "system"
+    },
+    "52020114": {
+      "concepto_id": "3.1.5",
+      "nombre": "INSUMOS DE PALETIZACION",
+      "fecha_asignacion": "2026-01-05T11:57:34.610628",
+      "usuario": "system"
+    },
+    "81010302": {
+      "concepto_id": "4.2",
+      "nombre": "PÉRDIDA POR DIFERENCIA DE TIPO DE CAMBIO",
+      "fecha_asignacion": "2026-01-05T11:57:41.641593",
+      "usuario": "system"
+    },
+    "10000021": {
+      "concepto_id": "NEUTRAL",
+      "nombre": "TRANSFERENCIAS INTERCUENTAS",
+      "fecha_asignacion": "2026-01-05T11:57:45.715729",
+      "usuario": "system"
+    },
+    "21020103": {
+      "concepto_id": "1.2.1",
+      "nombre": "CUENTAS POR PAGAR PRODUCTORES",
+      "fecha_asignacion": "2026-01-05T11:57:49.471136",
+      "usuario": "system"
     }
   },
   "historial_cambios": [
@@ -183,6 +213,56 @@
       "categoria_anterior": null,
       "categoria_nueva": "NEUTRAL",
       "impacto_estimado": null
+    },
+    {
+      "fecha": "2026-01-05T11:57:00.617744",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "21020107",
+      "nombre_cuenta": "FACTURAS POR RECIBIR PRODUCTORES",
+      "concepto_anterior": null,
+      "concepto_nuevo": "2.4",
+      "impacto_estimado": 488896406.0
+    },
+    {
+      "fecha": "2026-01-05T11:57:34.610646",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "52020114",
+      "nombre_cuenta": "INSUMOS DE PALETIZACION",
+      "concepto_anterior": null,
+      "concepto_nuevo": "3.1.5",
+      "impacto_estimado": -77625.0
+    },
+    {
+      "fecha": "2026-01-05T11:57:41.641611",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "81010302",
+      "nombre_cuenta": "PÉRDIDA POR DIFERENCIA DE TIPO DE CAMBIO",
+      "concepto_anterior": null,
+      "concepto_nuevo": "4.2",
+      "impacto_estimado": -7807758.0
+    },
+    {
+      "fecha": "2026-01-05T11:57:45.715745",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "10000021",
+      "nombre_cuenta": "TRANSFERENCIAS INTERCUENTAS",
+      "concepto_anterior": null,
+      "concepto_nuevo": "NEUTRAL",
+      "impacto_estimado": 242900000.0
+    },
+    {
+      "fecha": "2026-01-05T11:57:49.471161",
+      "usuario": "system",
+      "accion": "crear",
+      "cuenta": "21020103",
+      "nombre_cuenta": "CUENTAS POR PAGAR PRODUCTORES",
+      "concepto_anterior": null,
+      "concepto_nuevo": "1.2.1",
+      "impacto_estimado": -600705441.0
     }
   ]
 }

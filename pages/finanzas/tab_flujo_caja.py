@@ -206,21 +206,33 @@ def render(username: str, password: str):
         
         st.divider()
         
-        # === ESTADO DE FLUJO OFICIAL ===
+        # === ESTADO DE FLUJO OFICIAL (React Component) ===
         st.markdown("### 📋 Estado de Flujo de Efectivo (NIIF IAS 7)")
         
-        colores = {"OPERACION": "#2ecc71", "INVERSION": "#3498db", "FINANCIAMIENTO": "#9b59b6"}
-        
-        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
-            act_data = actividades.get(act_key, {})
-            if act_data:
-                render_ias7_tree_activity(
-                    actividad_data=act_data,
-                    cuentas_por_concepto=drill_down,
-                    docs_por_concepto={},
-                    actividad_key=act_key,
-                    color=colores.get(act_key, "#718096")
-                )
+        # Importar y usar el nuevo componente React
+        try:
+            from components.ias7_tree import ias7_tree, transform_backend_to_component
+            
+            # Transformar datos al formato del componente
+            props = transform_backend_to_component(flujo_data, modo=modo_ver.lower())
+            
+            # Renderizar el componente React
+            ias7_tree(**props)
+        except ImportError as e:
+            st.warning(f"Componente React no disponible: {e}. Usando renderizado alternativo.")
+            # Fallback: usar render directo sin HTML problemático
+            from .shared import render_ias7_tree_activity
+            colores = {"OPERACION": "#2ecc71", "INVERSION": "#3498db", "FINANCIAMIENTO": "#9b59b6"}
+            for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+                act_data = actividades.get(act_key, {})
+                if act_data:
+                    render_ias7_tree_activity(
+                        actividad_data=act_data,
+                        cuentas_por_concepto=drill_down,
+                        docs_por_concepto={},
+                        actividad_key=act_key,
+                        color=colores.get(act_key, "#718096")
+                    )
         
         st.divider()
         

@@ -1537,5 +1537,50 @@
     "last_activity": "2026-01-05T11:53:05.117189",
     "expires_at": "2026-01-05T19:53:05.117189",
     "encrypted_password": "V1VRUgUCBFZTVlYABQFTUgIFUFNVXAEBAg9RDVYPBVZWAVNWAlRSBg=="
+  },
+  "dab2a24cbf60dd1947067ee72f0e113a": {
+    "session_id": "dab2a24cbf60dd1947067ee72f0e113a",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-05T11:56:21.641296",
+    "last_activity": "2026-01-05T12:17:30.891251",
+    "expires_at": "2026-01-05T19:56:21.641296",
+    "encrypted_password": "UQdUUAFRCg1WV1cKUlMHVlYEAwUCUQICU11WXlEJWgFQU1ZUBgdcXQ=="
+  },
+  "a9d233a53defcb98a0647238a14b65c3": {
+    "session_id": "a9d233a53defcb98a0647238a14b65c3",
+    "username": "jvidaurre@riofuturo.cl",
+    "uid": 2,
+    "created_at": "2026-01-05T12:03:17.767796",
+    "last_activity": "2026-01-05T12:26:56.176341",
+    "expires_at": "2026-01-05T20:03:17.767796",
+    "encrypted_password": "BFcBBAELAFEAAFIGAFVWCVECVA0EAlEHBQ0AVl4HUgUHAAcHVlEFAw=="
+  },
+  "ed4b8136c4cabf04e8b62ae70fa6ef86": {
+    "session_id": "ed4b8136c4cabf04e8b62ae70fa6ef86",
+    "username": "asanchez@riofuturo.cl",
+    "uid": 160,
+    "created_at": "2026-01-05T12:13:02.441131",
+    "last_activity": "2026-01-05T12:15:49.326219",
+    "expires_at": "2026-01-05T20:13:02.441131",
+    "encrypted_password": "CQJaAQ0EBQUCCQAHDFELDA0GUVkGAlFWDwFSW1QEAgMAUFxTVA0IUg=="
+  },
+  "ff1edd4232064154e9643881772d030c": {
+    "session_id": "ff1edd4232064154e9643881772d030c",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-05T12:18:05.786248",
+    "last_activity": "2026-01-05T12:28:22.174854",
+    "expires_at": "2026-01-05T20:18:05.786248",
+    "encrypted_password": "AgwNU11WXAhTBApRUgAHA1JSAwAECwFcA1IOUQxSV1EEW1YEUgNaCQ=="
+  },
+  "78c7aa828a7fe666e5b2fbd9c350c830": {
+    "session_id": "78c7aa828a7fe666e5b2fbd9c350c830",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-05T12:18:53.775451",
+    "last_activity": "2026-01-05T12:26:09.996402",
+    "expires_at": "2026-01-05T20:18:53.775451",
+    "encrypted_password": "VAQDDgdUCgBWBwZXVlcABQgPBQNQUVBVBAtRAFsJUVVVUAEKAAJcUA=="
   }
 }
