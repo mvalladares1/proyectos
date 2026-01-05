@@ -1,0 +1,237 @@
+/* IAS7 Tree Component Styles */
+
+.ias7-tree {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #e0e0e0;
+}
+
+.ias7-tree--dark {
+  background-color: transparent;
+}
+
+.ias7-tree--light {
+  background-color: #ffffff;
+  color: #1a1a2e;
+}
+
+/* Activity Section */
+.ias7-activity {
+  margin-bottom: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ias7-activity__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.ias7-activity__header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.ias7-activity__title {
+  font-weight: 600;
+  font-size: 1.1em;
+}
+
+.ias7-activity__toggle {
+  font-size: 0.9em;
+  opacity: 0.7;
+}
+
+.ias7-activity__content {
+  padding: 0 8px 8px 8px;
+}
+
+/* Tree Node */
+.ias7-node {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-top: 3px;
+  transition: background-color 0.15s;
+}
+
+.ias7-node--header {
+  font-weight: bold;
+  font-size: 1.1em;
+  background: transparent;
+}
+
+.ias7-node--header.ias7-node--level-1 {
+  font-size: 1.15em;
+  margin-top: 8px;
+}
+
+.ias7-node--linea {
+  background: #1a1a2e;
+}
+
+.ias7-node--linea:hover {
+  background: #252545;
+}
+
+.ias7-node--total {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.ias7-node__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.ias7-node__id {
+  font-family: monospace;
+  font-size: 0.8em;
+  color: #718096;
+}
+
+.ias7-node__nombre {
+  color: #e0e0e0;
+}
+
+.ias7-node__monto {
+  font-weight: bold;
+  font-family: monospace;
+  font-size: 1.1em;
+  min-width: 120px;
+  text-align: right;
+}
+
+.ias7-node__monto--positive {
+  color: #2ecc71;
+}
+
+.ias7-node__monto--negative {
+  color: #e74c3c;
+}
+
+.ias7-node__monto--zero {
+  color: #718096;
+}
+
+/* Drill-down */
+.ias7-drilldown {
+  margin-left: 30px;
+  margin-top: 8px;
+  padding: 12px;
+  background: #12121f;
+  border-radius: 6px;
+  border-left: 2px solid #3498db;
+}
+
+.ias7-drilldown__title {
+  font-size: 0.85em;
+  color: #a0aec0;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+/* Composition Table */
+.ias7-table {
+  width: 100%;
+  font-size: 0.9em;
+}
+
+.ias7-table__header {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px solid #333;
+  color: #718096;
+  font-size: 0.85em;
+}
+
+.ias7-table__row {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px solid #222;
+}
+
+.ias7-table__row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ias7-table__col {
+  flex: 1;
+}
+
+.ias7-table__col--codigo {
+  flex: 0.8;
+  font-family: monospace;
+  color: #718096;
+}
+
+.ias7-table__col--nombre {
+  flex: 2.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ias7-table__col--monto {
+  flex: 1.2;
+  text-align: right;
+}
+
+.ias7-table__col--pct {
+  flex: 0.6;
+  text-align: right;
+  color: #718096;
+}
+
+/* Subtotal */
+.ias7-subtotal {
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ias7-subtotal__label {
+  color: #a0aec0;
+}
+
+.ias7-subtotal__value {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+/* Warning badge */
+.ias7-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f39c1233;
+  color: #f39c12;
+  font-size: 0.75em;
+  font-weight: 500;
+}
+
+/* Expand icon */
+.ias7-expand-icon {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.ias7-expand-icon:hover {
+  opacity: 1;
+}
+
+.ias7-expand-icon--expanded {
+  transform: rotate(90deg);
+}

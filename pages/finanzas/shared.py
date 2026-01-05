@@ -202,6 +202,7 @@ def build_ias7_categories_dropdown():
         "🟣 3.1.3 - Pagos de préstamos a entidades relacionadas": "3.1.3",
         "🟣 3.1.4 - Pagos de pasivos por arrendamientos financieros": "3.1.4",
         "🟣 3.1.5 - Dividendos pagados": "3.1.5",
+        "🟣 3.2.3 - Otros flujos de financiamiento": "3.2.3",
         "⚪ 4.2 - Efectos variación tasa de cambio": "4.2",
         "⚪ NEUTRAL - Transferencias internas (no impacta flujo)": "NEUTRAL"
     }
@@ -321,9 +322,8 @@ def render_ias7_tree_node(node, cuentas_por_concepto, docs_por_concepto, act_col
                 <span style="font-family: monospace; color: #718096; font-size: 0.8em; margin-right: 8px;">{c_id}</span>
                 <span style="font-weight: {font_weight}; font-size: {font_size}; color: #e0e0e0;">{c_nombre}</span>
             </div>
-            <div style="text-align: right; min-width: 120px;">
                 <span style="color: {monto_color}; font-weight: bold; font-family: monospace; font-size: 1.1em;">
-                    {fmt_flujo(monto) if monto != 0 or c_tipo == "TOTAL" else ""}
+                    {fmt_flujo(monto) if (c_tipo == "TOTAL" or (c_tipo == "LINEA" and monto != 0)) else ""}
                 </span>
             </div>
         </div>
