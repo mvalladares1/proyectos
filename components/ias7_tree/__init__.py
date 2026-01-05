@@ -16,7 +16,9 @@ import os
 import streamlit.components.v1 as components
 
 # Determine if we're in development or production mode
-_RELEASE = os.getenv("IAS7_RELEASE", "false").lower() == "true"
+# Force RELEASE to true to avoid any env var confusion
+_RELEASE = True 
+# _RELEASE = os.getenv("IAS7_RELEASE", "false").lower() == "true"
 
 # Get the component path
 _component_path = os.path.join(os.path.dirname(__file__), "frontend", "build")

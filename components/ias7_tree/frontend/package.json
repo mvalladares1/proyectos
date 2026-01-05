@@ -1,6 +1,6 @@
 {
     "name": "ias7-tree",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "IAS 7 Cash Flow Tree Component for Streamlit",
     "main": "build/index.js",
     "scripts": {
