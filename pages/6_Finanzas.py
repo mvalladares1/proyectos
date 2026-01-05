@@ -5,10 +5,17 @@ Módulo modularizado según MODULARIZATION_GUIDE.md
 import streamlit as st
 from datetime import datetime
 import requests
+import sys
+import os
 
+# Añadir el directorio raíz al path para imports de shared/auth
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.auth import proteger_modulo, tiene_acceso_dashboard, get_credenciales, tiene_acceso_pagina
 
-# Importar módulos locales
+# Añadir el directorio pages al path para imports de finanzas
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Importar módulos de tabs
 from finanzas import shared
 from finanzas import tab_agrupado
 from finanzas import tab_mensualizado
