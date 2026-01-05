@@ -183,7 +183,6 @@ def build_ias7_categories_dropdown():
     Formato: {"label": "value"}
     """
     return {
-    return {
         "--- Seleccionar ---": "",
         "❌ Dejar Sin Clasificar (Limpiar)": "UNCLASSIFIED",
         "🟢 1.1.1 - Cobros procedentes de las ventas de bienes y prestación de servicios": "1.1.1",
