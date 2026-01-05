@@ -2210,9 +2210,14 @@ if datos:
                                                     st.session_state['mostrar_editor_expandido'] = False
                                                     st.rerun()
                                                 else:
-                                                    st.error(f"Error")
+                                                    # Mostrar detalles del error
+                                                    try:
+                                                        err_detail = save_resp.json().get('detail', save_resp.text[:100])
+                                                    except:
+                                                        err_detail = save_resp.text[:100]
+                                                    st.error(f"Error {save_resp.status_code}: {err_detail}")
                                             except Exception as e:
-                                                st.error(f"Error: {e}")
+                                                st.error(f"Error conexión: {e}")
                         
                         if len(cuentas_nc) > 25:
                             st.info(f"Mostrando 25 de {len(cuentas_nc)} cuentas. Las de mayor impacto primero.")
