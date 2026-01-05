@@ -150,16 +150,18 @@ def fetch_flujo_caja(fecha_inicio, fecha_fin, _username, _password):
 def guardar_mapeo_cuenta(codigo, categoria, nombre, username, password, impacto=None):
     """Guarda el mapeo de una cuenta a una categoría IAS 7."""
     try:
+        final_categoria = categoria if categoria != "UNCLASSIFIED" else None
         resp = requests.post(
             f"{FLUJO_CAJA_URL}/mapeo-cuenta",
             params={
                 "codigo": codigo,
-                "categoria": categoria,
+                "categoria": final_categoria,
                 "nombre": nombre,
                 "username": username,
                 "password": password,
                 "impacto_estimado": impacto
             },
+            timeout=10
             timeout=10
         )
         if resp.status_code == 200:
@@ -182,7 +184,9 @@ def build_ias7_categories_dropdown():
     Formato: {"label": "value"}
     """
     return {
+    return {
         "--- Seleccionar ---": "",
+        "❌ Dejar Sin Clasificar (Limpiar)": "UNCLASSIFIED",
         "🟢 1.1.1 - Cobros procedentes de las ventas de bienes y prestación de servicios": "1.1.1",
         "🟢 1.2.1 - Pagos a proveedores por el suministro de bienes y servicios": "1.2.1",
         "🟢 1.2.2 - Pagos a y por cuenta de los empleados": "1.2.2",
