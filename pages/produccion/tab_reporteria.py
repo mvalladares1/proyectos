@@ -128,9 +128,10 @@ def render(username: str, password: str):
             progress_placeholder.empty()
             
             if st.session_state.prod_dashboard_data:
+                st.session_state.prod_reporteria_error = None
                 st.toast("✅ Datos de reportería cargados", icon="✅")
             else:
-                st.warning("No se pudieron cargar los datos.")
+                st.session_state.prod_reporteria_error = "❌ No se pudieron cargar los datos. Revisa la conexión o intenta nuevamente."
             st.rerun()
         except Exception as e:
             progress_placeholder.empty()
