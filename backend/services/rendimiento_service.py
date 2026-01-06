@@ -549,6 +549,7 @@ class RendimientoService:
                 # FILTRAR kg_pt: Excluir subproductos intermedios
                 # Los productos intermedios son:
                 # - [1.x] PROCESO/TÚNEL (Congelado)
+                # - [2.x] PROCESO PSP (Proceso)
                 # - [3] Proceso de Vaciado (Vaciado)
                 kg_pt = 0.0
                 kg_pt_debug = []  # Debug temporal
@@ -563,6 +564,11 @@ class RendimientoService:
                     # [1.x] productos de congelado que contengan PROCESO/TÚNEL
                     if product_name.startswith('[1.') or product_name.startswith('[1,'):
                         if 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper:
+                            is_intermediate = True
+                    
+                    # [2.x] PROCESO PSP
+                    if product_name.startswith('[2.') or product_name.startswith('[2,'):
+                        if 'PROCESO' in product_upper and 'PSP' in product_upper:
                             is_intermediate = True
                     
                     # [3] Proceso de Vaciado
