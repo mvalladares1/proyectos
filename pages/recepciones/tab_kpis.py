@@ -56,6 +56,7 @@ def render(username: str, password: str):
             st.session_state.origen_filtro_usado = origen_list.copy()
             st.session_state.fecha_inicio_filtro = fecha_inicio
             st.session_state.fecha_fin_filtro = fecha_fin
+            st.session_state.solo_hechas_filtro = solo_hechas
 
             params = {
                 "username": username,
@@ -64,6 +65,10 @@ def render(username: str, password: str):
                 "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
                 "solo_hechas": solo_hechas,
             }
+            
+            # Guardar params en session_state para usar en reportes
+            st.session_state.kpis_params = params.copy()
+            st.session_state.kpis_origen_list = origen_list.copy()
             
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
             
@@ -214,11 +219,15 @@ def render(username: str, password: str):
             if st.session_state.get('origen_filtro_usado'):
                 plantas_filtro = st.session_state.origen_filtro_usado
 
-            resp_precios = requests.get(
-                f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios",
-                params={"planta": plantas_filtro if plantas_filtro else None, "especie": None},
-                timeout=30
-            )
+            # Construir URL con múltiples parámetros planta
+            from urllib.parse import urlencode
+            url_precios = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios"
+            if plantas_filtro:
+                query_string = ""
+                for planta in plantas_filtro:
+                    query_string += f"&planta={planta}" if query_string else f"planta={planta}"
+                url_precios += f"?{query_string}"
+            resp_precios = requests.get(url_precios, timeout=30)
             if resp_precios.status_code == 200:
                 for item in resp_precios.json():
                     especie = item.get('especie', '')
@@ -255,11 +264,14 @@ def render(username: str, password: str):
                 
                 # Obtener datos detallados de kg por especie desde los precios
                 # (aprovechamos que get_precios_por_especie retorna kg_total por especie)
-                resp_kg_especie = requests.get(
-                    f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios",
-                    params={"planta": plantas_filtro if plantas_filtro else None},
-                    timeout=30
-                )
+                # Construir URL con múltiples parámetros planta
+                url_kg_especie = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios"
+                if plantas_filtro:
+                    query_string_kg = ""
+                    for planta in plantas_filtro:
+                        query_string_kg += f"&planta={planta}" if query_string_kg else f"planta={planta}"
+                    url_kg_especie += f"?{query_string_kg}"
+                resp_kg_especie = requests.get(url_kg_especie, timeout=30)
                 if resp_kg_especie.status_code == 200:
                     for item in resp_kg_especie.json():
                         especie = item.get('especie', '')
@@ -547,14 +559,20 @@ def render(username: str, password: str):
         # --- Botones de descarga de informe PDF ---
         st.markdown("---")
         st.subheader("📥 Descargar Informe de Recepciones")
+        
+        # Usar params guardados si existen, sino crear params básicos
+        if 'kpis_params' in st.session_state and st.session_state.kpis_params:
+            params = st.session_state.kpis_params.copy()
+        else:
+            params = {
+                'username': username,
+                'password': password,
+                'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
+                'fecha_fin': fecha_fin.strftime('%Y-%m-%d'),
+                'solo_hechas': solo_hechas
+            }
+        
         informe_cols = st.columns([1,1,1])
-        params = {
-            'username': username,
-            'password': password,
-            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
-            'fecha_fin': fecha_fin.strftime('%Y-%m-%d'),
-            'solo_hechas': solo_hechas
-        }
         # Botón 1: semana seleccionada
         with informe_cols[0]:
             if st.button("Descargar informe (Semana seleccionada)"):

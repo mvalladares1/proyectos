@@ -123,15 +123,19 @@ def render(username: str, password: str):
                 progress_bar.progress(25)
                 
                 # 1. Obtener TODAS las proyecciones del Excel (sin filtro de especie)
-                params_proy = {"planta": plantas_list}
-                # NO agregamos filtro de especie aquí - se aplica dinámicamente después
+                # Construir URL con múltiples parámetros planta
+                from urllib.parse import urlencode
+                params_proy = {}
+                query_string_proy = urlencode(params_proy)
+                for planta in plantas_list:
+                    query_string_proy += f"&planta={planta}" if query_string_proy else f"planta={planta}"
 
                 status_text.text("⏳ Fase 2/4: Consultando proyecciones...")
                 progress_bar.progress(50)
                 
                 try:
-                    resp_proy = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado", 
-                                            params=params_proy, timeout=60)
+                    url_proy = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado?{query_string_proy}"
+                    resp_proy = requests.get(url_proy, timeout=60)
                     if resp_proy.status_code == 200:
                         proyecciones = resp_proy.json()
                         st.session_state.curva_proyecciones_raw = proyecciones
@@ -151,12 +155,16 @@ def render(username: str, password: str):
                     "password": password,
                     "fecha_inicio": curva_fecha_inicio.strftime("%Y-%m-%d"),
                     "fecha_fin": curva_fecha_fin.strftime("%Y-%m-%d"),
-                    "solo_hechas": curva_solo_hechas,
-                    "origen": plantas_list
+                    "solo_hechas": curva_solo_hechas
                 }
+                # Construir URL con múltiples parámetros origen
+                query_string_sist = urlencode(params_sist)
+                for origen in plantas_list:
+                    query_string_sist += f"&origen={origen}"
+                
                 try:
-                    resp_sist = requests.get(f"{API_URL}/api/v1/recepciones-mp/", 
-                                            params=params_sist, timeout=120)
+                    url_sist = f"{API_URL}/api/v1/recepciones-mp/?{query_string_sist}"
+                    resp_sist = requests.get(url_sist, timeout=120)
                     if resp_sist.status_code == 200:
                         recepciones_sist = resp_sist.json()
                         st.session_state.curva_sistema_raw = recepciones_sist
@@ -180,13 +188,18 @@ def render(username: str, password: str):
         plantas_usadas = st.session_state.curva_plantas_usadas
 
         # Cargar proyecciones dinámicamente según filtro actual de especies
-        params_proy = {"planta": plantas_usadas}
+        from urllib.parse import urlencode
+        params_proy = {}
+        query_string_proy = ""
+        for planta in plantas_usadas:
+            query_string_proy += f"&planta={planta}" if query_string_proy else f"planta={planta}"
         if especies_filtro:
-            params_proy["especie"] = especies_filtro
+            for especie in especies_filtro:
+                query_string_proy += f"&especie={especie}"
 
         try:
-            resp_proy = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado", 
-                                    params=params_proy, timeout=30)
+            url_proy = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado?{query_string_proy}"
+            resp_proy = requests.get(url_proy, timeout=30)
             if resp_proy.status_code == 200:
                 proyecciones = resp_proy.json()
             else:
@@ -680,11 +693,15 @@ def render(username: str, password: str):
                         # Calcular gasto proyectado desde proyecciones raw si existe
                         # Intentar obtener proyecciones con gasto del backend
                         try:
-                            params_gasto = {"planta": plantas_usadas}
+                            from urllib.parse import urlencode
+                            query_string_gasto = ""
+                            for planta in plantas_usadas:
+                                query_string_gasto += f"&planta={planta}" if query_string_gasto else f"planta={planta}"
                             if especies_filtro:
-                                params_gasto["especie"] = especies_filtro
-                            resp_gasto = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado", 
-                                                    params=params_gasto, timeout=30)
+                                for especie in especies_filtro:
+                                    query_string_gasto += f"&especie={especie}"
+                            url_gasto = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado?{query_string_gasto}"
+                            resp_gasto = requests.get(url_gasto, timeout=30)
                             if resp_gasto.status_code == 200:
                                 proyecciones_gasto = resp_gasto.json()
                                 df_proy_gasto = pd.DataFrame(proyecciones_gasto)
