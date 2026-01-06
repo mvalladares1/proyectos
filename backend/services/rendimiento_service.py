@@ -549,16 +549,32 @@ class RendimientoService:
                 # FILTRAR kg_pt: Excluir subproductos intermedios
                 # Los productos intermedios tienen código [1.x] y contienen "PROCESO" o "TÚNEL"
                 kg_pt = 0.0
+                kg_pt_debug = []  # Debug temporal
                 for p in produccion:
                     product_name = p.get('product_name', '')
                     product_upper = product_name.upper()
+                    qty = p.get('qty_done', 0) or 0
                     
                     # Excluir productos intermedios [1.x] PROCESO/TÚNEL
+                    is_intermediate = False
                     if product_name.startswith('[1.') or product_name.startswith('[1,'):
                         if 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper:
-                            continue
+                            is_intermediate = True
                     
-                    kg_pt += p.get('qty_done', 0) or 0
+                    kg_pt_debug.append(f"{product_name[:50]}: {qty} kg ({'EXCLUIDO' if is_intermediate else 'INCLUIDO'})")
+                    
+                    if not is_intermediate:
+                        kg_pt += qty
+                
+                # Debug: imprimir para primera MO
+                if mo.get('name', '').endswith('/00104'):
+                    print(f"\n{'='*80}")
+                    print(f"DEBUG MO: {mo.get('name')}")
+                    print(f"Producción:")
+                    for line in kg_pt_debug:
+                        print(f"  - {line}")
+                    print(f"kg_pt FINAL: {kg_pt}")
+                    print(f"{'='*80}\n")
                 
                 costo_elec = costos_op.get('costo_electricidad', 0)
                 

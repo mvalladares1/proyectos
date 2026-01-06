@@ -162,11 +162,47 @@ def transform_backend_to_component(flujo_data: dict, modo: str = "consolidado") 
             monto_p = node_proy.get("monto", 0)
             
             # Drill-down: Cuentas (Real) y Documentos (Proyectado)
-            cuentas = []
-            if c_id in drill_down_real:
-                cuentas = drill_down_real[c_id]
-                
             documentos = node_proy.get("documentos", [])
+            
+            # Para cuentas, usamos drill_down_real para modo real,
+            # pero para proyectado, agregamos desde documentos
+            cuentas = []
+            if modo == "real" and c_id in drill_down_real:
+                cuentas = drill_down_real[c_id]
+            elif modo in ["proyectado", "consolidado"] and documentos:
+                # Agregar montos por cuenta desde documentos
+                cuentas_agrupadas = {}
+                for doc in documentos:
+                    cuenta_codigo = doc.get("cuenta", "")
+                    cuenta_nombre = doc.get("cuenta_nombre", "") or cuenta_codigo
+                    monto = doc.get("monto", 0)
+                    
+                    if cuenta_codigo:
+                        if cuenta_codigo not in cuentas_agrupadas:
+                            cuentas_agrupadas[cuenta_codigo] = {
+                                "codigo": cuenta_codigo,
+                                "nombre": cuenta_nombre,
+                                "monto": 0
+                            }
+                        cuentas_agrupadas[cuenta_codigo]["monto"] += monto
+                
+                cuentas = list(cuentas_agrupadas.values())
+                
+                # Si es consolidado, también incluir las cuentas reales
+                if modo == "consolidado" and c_id in drill_down_real:
+                    # Merge cuentas reales con las de proyección
+                    for cr in drill_down_real[c_id]:
+                        codigo_r = cr.get("codigo")
+                        if codigo_r and codigo_r not in cuentas_agrupadas:
+                            cuentas.append(cr)
+                        elif codigo_r:
+                            # Sumar al existente
+                            for c in cuentas:
+                                if c.get("codigo") == codigo_r:
+                                    c["monto"] += cr.get("monto", 0)
+                                    break
+            elif c_id in drill_down_real:
+                cuentas = drill_down_real[c_id]
             
             # Warning flag: si hay documentos sin etiqueta
             has_warning = False
