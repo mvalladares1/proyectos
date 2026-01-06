@@ -398,18 +398,39 @@ def render(username: str, password: str):
                     "password": password,
                     "fecha_inicio": fecha_inicio_anterior.strftime("%Y-%m-%d"),
                     "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d %H:%M:%S"),
-                    "solo_hechas": "true"
+                    "solo_hechas": True  # Boolean correcto, no string
                 }
                 query_string_ant = urlencode(params_anterior)
                 url_anterior = f"{API_URL}/api/v1/recepciones-mp/?{query_string_ant}"
                 
+                print(f"[DEBUG] Consultando año anterior: {url_anterior}")
                 resp_anterior = requests.get(url_anterior, timeout=60)
+                print(f"[DEBUG] Respuesta año anterior: status={resp_anterior.status_code}")
 
                 if resp_anterior.status_code == 200:
-                    recepciones_anterior = resp_anterior.json()
-
+                    try:
+                        recepciones_anterior = resp_anterior.json()
+                        
+                        # VALIDACIÓN: Asegurar que es una lista
+                        if not isinstance(recepciones_anterior, list):
+                            st.error(f"⚠️ Formato inválido de respuesta del año anterior: se esperaba lista, se recibió {type(recepciones_anterior)}")
+                            print(f"[ERROR] Respuesta año anterior no es lista: {type(recepciones_anterior)}")
+                            recepciones_anterior = []
+                        
+                        print(f"[DEBUG] Recepciones año anterior cargadas: {len(recepciones_anterior)}")
+                        
+                    except Exception as json_error:
+                        st.error(f"❌ Error al parsear JSON del año anterior: {json_error}")
+                        print(f"[ERROR] JSON parse error: {json_error}")
+                        print(f"[ERROR] Respuesta cruda (primeros 500 chars): {resp_anterior.text[:500]}")
+                        recepciones_anterior = []
 
                     for rec in recepciones_anterior:
+                        # VALIDACIÓN: Asegurar que cada registro es un diccionario
+                        if not isinstance(rec, dict):
+                            print(f"[WARNING] Registro no es diccionario, saltando: {type(rec)}")
+                            continue
+                            
                         # Filtrar recepciones sin tipo_fruta (igual que año actual y KPIs)
                         tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
                         # Si no hay tipo_fruta en recepción, intentar obtener del primer producto válido
@@ -488,9 +509,19 @@ def render(username: str, password: str):
 
 
                 else:
-                    st.warning(f"Error al cargar año anterior: código {resp_anterior.status_code}")
+                    st.error(f"❌ Error al cargar año anterior: código {resp_anterior.status_code}")
+                    try:
+                        error_detail = resp_anterior.json()
+                        st.error(f"Detalle del error: {error_detail}")
+                        print(f"[ERROR] Detalle completo: {error_detail}")
+                    except:
+                        st.error(f"Respuesta del servidor: {resp_anterior.text[:500]}")
+                        print(f"[ERROR] Respuesta cruda: {resp_anterior.text}")
             except Exception as e:
-                st.warning(f"Error de conexión al cargar año anterior: {e}")
+                st.error(f"❌ Error de conexión al cargar año anterior: {e}")
+                print(f"[ERROR] Exception completa: {e}")
+                import traceback
+                print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
 
             # Agregar columna de año anterior al df_chart
 

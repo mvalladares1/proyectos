@@ -70,6 +70,8 @@ def init_session_state():
         'finanzas_mostrar_editor': False,
         'finanzas_cuenta_a_editar': None,
         'finanzas_flujo_loading': False,
+        'finanzas_data_loaded': False,
+        'finanzas_loading': False,
     }
     for key, default in defaults.items():
         if key not in st.session_state:

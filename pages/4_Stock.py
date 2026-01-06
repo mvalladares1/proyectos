@@ -91,9 +91,23 @@ with st.expander("⚙️ Configurar Capacidades", expanded=False):
 
 st.markdown("---")
 
+# === BOTÓN DE CARGA ===
+col_carga1, col_carga2 = st.columns([1, 4])
+with col_carga1:
+    btn_cargar_stock = st.button("🔍 Cargar Stock", type="primary", key="btn_cargar_stock", disabled=st.session_state.get('stock_loading', False))
+
+if not btn_cargar_stock and not st.session_state.get('stock_data_loaded', False):
+    st.info("📋 Haz clic en 'Cargar Stock' para consultar información de cámaras en el rango seleccionado")
+    st.stop()
+
 # === CARGA GLOBAL DE CÁMARAS ===
-with st.spinner("Cargando datos de cámaras..."):
-    camaras_data_all = shared.fetch_camaras(username, password, fecha_desde_stock, fecha_hasta_stock)
+st.session_state.stock_loading = True
+try:
+    with st.spinner("Cargando datos de cámaras..."):
+        camaras_data_all = shared.fetch_camaras(username, password, fecha_desde_stock, fecha_hasta_stock)
+    st.session_state.stock_data_loaded = True
+finally:
+    st.session_state.stock_loading = False
 
 # Determinar si mostrar todas o solo principales
 if st.session_state.get("mostrar_todas_camaras", False):

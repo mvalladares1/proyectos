@@ -79,9 +79,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         "VILKUN": 217
     }
     
-    # DEBUG: Log the origen parameter received
-    print(f"[DEBUG recepcion_service] origen recibido: {origen}, tipo: {type(origen)}")
-    
     # Determinar picking_type_ids a consultar
     if origen and len(origen) > 0:
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
@@ -144,6 +141,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     moves_by_picking = {}
     all_product_ids = set()
     for m in moves:
+        # VALIDACIÓN: Asegurar que m es un diccionario
+        if not isinstance(m, dict):
+            print(f"[WARNING] Movimiento no es diccionario, saltando: {type(m)}")
+            continue
+            
         pid = m.get("picking_id")
         if pid:
             picking_id = pid[0] if isinstance(pid, (list, tuple)) else pid
@@ -260,6 +262,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         )
         
         for c in checks:
+            # VALIDACIÓN: Asegurar que c es un diccionario
+            if not isinstance(c, dict):
+                print(f"[WARNING] Check no es diccionario, saltando: {type(c)}")
+                continue
+                
             checks_map[c["id"]] = c
             picking = c.get("picking_id")
             if picking:

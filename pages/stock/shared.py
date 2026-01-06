@@ -184,6 +184,8 @@ def init_session_state():
         'capacidades_config': get_capacidades_default(),
         'stock_pallets_loading': False,
         'stock_lotes_loading': False,
+        'stock_data_loaded': False,
+        'stock_loading': False,
     }
     for key, default in defaults.items():
         if key not in st.session_state:

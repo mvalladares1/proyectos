@@ -20,14 +20,31 @@ from backend.services.report_service import generate_bandejas_report_pdf
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard de Bandejas."""
     
+    # ==================== BOTÓN DE CARGA ====================
+    st.markdown("### 🔄 Cargar Datos")
+    col_info, col_btn = st.columns([3, 1])
+    with col_info:
+        st.info("💡 Haz clic en 'Cargar Datos' para consultar información de Odoo")
+    with col_btn:
+        btn_cargar_bandejas = st.button("📊 Cargar Datos", type="primary", key="btn_cargar_bandejas", disabled=st.session_state.get('bandejas_loading', False))
+    
+    if not btn_cargar_bandejas and not st.session_state.get('bandejas_data_loaded', False):
+        st.info("📋 Esperando que presiones 'Cargar Datos' para consultar información...")
+        return
+    
     # ==================== CARGAR DATOS ====================
+    st.session_state.bandejas_loading = True
     try:
         with st.spinner("Cargando datos de Odoo..."):
             df_in = load_in_data(username, password)
             df_out = load_out_data(username, password)
+        st.session_state.bandejas_data_loaded = True
     except Exception as e:
         st.error(f"Error al conectar con Odoo: {e}")
+        st.session_state.bandejas_loading = False
         st.stop()
+    finally:
+        st.session_state.bandejas_loading = False
 
     if df_in.empty and df_out.empty:
         st.warning("No se encontraron movimientos para 'Bandeja'.")

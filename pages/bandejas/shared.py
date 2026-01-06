@@ -244,6 +244,8 @@ def init_session_state():
         'bandejas_df_in': None,
         'bandejas_df_out': None,
         'bandejas_df_stock': None,
+        'bandejas_data_loaded': False,
+        'bandejas_loading': False,
     }
     for key, default in defaults.items():
         if key not in st.session_state:

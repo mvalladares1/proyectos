@@ -132,19 +132,35 @@ if st.sidebar.button("🔄 Actualizar datos"):
             del st.session_state[key]
     st.rerun()
 
-# === OBTENER DATOS ===
+# === BOTÓN DE CARGA ===
+st.markdown("### 🔄 Consultar Información")
+col_btn_fin1, col_btn_fin2 = st.columns([1, 4])
+with col_btn_fin1:
+    btn_cargar_finanzas = st.button("📊 Consultar Datos", type="primary", key="btn_cargar_finanzas", disabled=st.session_state.get('finanzas_loading', False))
+
 cache_key = f"finanzas_{año_seleccionado}_{fecha_inicio}_{fecha_fin}_{centro_seleccionado}"
 
-if "finanzas_cache_key" not in st.session_state or st.session_state.finanzas_cache_key != cache_key:
+# === OBTENER DATOS ===
+if (btn_cargar_finanzas or st.session_state.get('finanzas_data_loaded', False)) and \
+   ("finanzas_cache_key" not in st.session_state or st.session_state.finanzas_cache_key != cache_key or btn_cargar_finanzas):
     st.session_state.finanzas_cache_key = cache_key
-    with st.spinner("Cargando datos..."):
-        st.session_state.finanzas_eerr_datos = shared.fetch_estado_resultado(
-            fecha_inicio, fecha_fin, opciones_centros.get(centro_seleccionado),
-            username, password
-        )
-        st.session_state.finanzas_eerr_ppto = shared.fetch_presupuesto(
-            año_seleccionado, opciones_centros.get(centro_seleccionado)
-        )
+    st.session_state.finanzas_loading = True
+    try:
+        with st.spinner("Cargando datos financieros..."):
+            st.session_state.finanzas_eerr_datos = shared.fetch_estado_resultado(
+                fecha_inicio, fecha_fin, opciones_centros.get(centro_seleccionado),
+                username, password
+            )
+            st.session_state.finanzas_eerr_ppto = shared.fetch_presupuesto(
+                año_seleccionado, opciones_centros.get(centro_seleccionado)
+            )
+        st.session_state.finanzas_data_loaded = True
+    finally:
+        st.session_state.finanzas_loading = False
+
+if not st.session_state.get('finanzas_data_loaded', False):
+    st.info("📋 Haz clic en 'Consultar Datos' para ver información financiera del período seleccionado")
+    st.stop()
 
 datos = st.session_state.get('finanzas_eerr_datos')
 ppto = st.session_state.get('finanzas_eerr_ppto', {})

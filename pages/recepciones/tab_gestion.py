@@ -43,7 +43,9 @@ def render(username: str, password: str):
         )
 
     # Botones de acción
-    col_btn1, col_btn2 = st.columns([1, 4])
+    col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1, 3.5])
+    with col_btn1:
+        btn_consultar = st.button("🔍 Consultar Datos", type="primary", key="btn_consultar_gestion", disabled=st.session_state.get('recep_gestion_loading', False))
     with col_btn2:
         if st.button("🗑️ Limpiar caché", key="btn_clear_cache"):
             fetch_gestion_data.clear()
@@ -51,13 +53,12 @@ def render(username: str, password: str):
             st.toast("✅ Caché limpiado")
             st.rerun()
 
-    # Cargar datos usando caché
+    # Cargar datos solo cuando el usuario haga clic en consultar
     fecha_inicio_str = fecha_inicio_g.strftime("%Y-%m-%d")
     fecha_fin_str = fecha_fin_g.strftime("%Y-%m-%d")
 
-    # SIEMPRE CARGAR (Auto-refresh)
-    # Controlar si es carga inicial o refresco
-    if True:
+    # CARGAR SOLO CUANDO SE PRESIONA BOTÓN
+    if btn_consultar or st.session_state.get('gestion_loaded', False):
         st.session_state.gestion_loaded = True
         st.session_state.recep_gestion_loading = True
         
