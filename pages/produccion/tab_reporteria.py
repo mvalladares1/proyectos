@@ -167,9 +167,6 @@ def render(username: str, password: str):
         _render_kpis_tabs(data, mos)
         st.markdown("---")
         
-        if consolidado:
-            _render_resumen_fruta_manejo(consolidado)
-        
         if salas:
             _render_salas(salas)
         
