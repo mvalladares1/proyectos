@@ -88,30 +88,29 @@ def render(username: str, password: str):
                 </style>
                 """, unsafe_allow_html=True)
             
-            # with st.spinner("Cargando recepciones..."): (Reemplazado por Skeleton)
-                try:
-                    resp = requests.get(api_url, params=params, timeout=60)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        df = pd.DataFrame(data)
-                        if not df.empty:
-                            st.session_state.df_recepcion = df
-                            st.session_state.idx_recepcion = None
-                            st.success(f"✅ Se encontraron {len(df)} recepciones para origen: {origen_list}")
-                        else:
-                            st.session_state.df_recepcion = None
-                            st.session_state.idx_recepcion = None
-                            st.warning(f"No se encontraron recepciones para origen: {origen_list} en el rango de fechas seleccionado.")
+            try:
+                resp = requests.get(api_url, params=params, timeout=60)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    df = pd.DataFrame(data)
+                    if not df.empty:
+                        st.session_state.df_recepcion = df
+                        st.session_state.idx_recepcion = None
+                        st.success(f"✅ Se encontraron {len(df)} recepciones para origen: {origen_list}")
                     else:
-                        st.error(f"Error: {resp.status_code} - {resp.text}")
                         st.session_state.df_recepcion = None
                         st.session_state.idx_recepcion = None
-                except requests.exceptions.ConnectionError:
-                    st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-                finally:
-                    skeleton.empty()
+                        st.warning(f"No se encontraron recepciones para origen: {origen_list} en el rango de fechas seleccionado.")
+                else:
+                    st.error(f"Error: {resp.status_code} - {resp.text}")
+                    st.session_state.df_recepcion = None
+                    st.session_state.idx_recepcion = None
+            except requests.exceptions.ConnectionError:
+                st.error("No se puede conectar al servidor API. Verificar que el backend esté corriendo.")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+            finally:
+                skeleton.empty()
 
 
     # Mostrar tabla y detalle si hay datos
