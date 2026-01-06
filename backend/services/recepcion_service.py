@@ -198,7 +198,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             else:
                 print(f"[ERROR CRÍTICO] Caché de productos corrupto: se esperaba dict, se recibió {type(cached)}")
                 print(f"[ERROR] Limpiando caché corrupto para key: {cache_key}")
-                cache.delete(cache_key)
+                cache.invalidate(cache_key)  # Método correcto es invalidate(), no delete()
                 cached = None  # Forzar recarga desde Odoo
         
         if not cached:
