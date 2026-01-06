@@ -24,16 +24,19 @@ def grafico_congelado_semanal(mos_data: list):
     salas_encontradas = set()
     
     for mo in mos_data:
-        sala = mo.get('sala_proceso', '').strip()
-        salas_encontradas.add(sala)
+        sala = mo.get('sala', '').strip()
+        sala_tipo = mo.get('sala_tipo', '').strip()
+        salas_encontradas.add(f"{sala} ({sala_tipo})")
         
-        # Verificar si es un túnel (búsqueda flexible)
+        # Filtrar solo CONGELADO o si tiene "tunel" en el nombre
         sala_lower = sala.lower()
-        if not ('tunel' in sala_lower or 'túnel' in sala_lower):
+        es_congelado = sala_tipo == 'CONGELADO' or 'tunel' in sala_lower or 'túnel' in sala_lower
+        
+        if not es_congelado:
             continue
         
         # Obtener fecha
-        fecha_str = mo.get('fecha_inicio') or mo.get('fecha_fin') or mo.get('fecha_planificada')
+        fecha_str = mo.get('fecha') or mo.get('fecha_inicio') or mo.get('fecha_fin')
         if not fecha_str:
             continue
         
@@ -154,15 +157,15 @@ def grafico_vaciado_por_sala(mos_data: list):
     salas_encontradas = set()
     
     for mo in mos_data:
-        sala_completa = mo.get('sala_proceso', '').strip()
-        salas_encontradas.add(sala_completa)
+        sala_completa = mo.get('sala', '').strip()
+        sala_tipo = mo.get('sala_tipo', '').strip()
+        salas_encontradas.add(f"{sala_completa} ({sala_tipo})")
         
-        # Excluir túneles (búsqueda flexible)
+        # Filtrar solo PROCESO o excluir CONGELADO
         sala_lower = sala_completa.lower()
-        if 'tunel' in sala_lower or 'túnel' in sala_lower:
-            continue
+        es_proceso = sala_tipo == 'PROCESO' or (sala_tipo != 'CONGELADO' and 'tunel' not in sala_lower and 'túnel' not in sala_lower)
         
-        if not sala_completa or sala_completa == 'SIN SALA':
+        if not es_proceso or not sala_completa or sala_completa == 'SIN SALA':
             continue
         
         # Extraer sala y línea
@@ -176,7 +179,7 @@ def grafico_vaciado_por_sala(mos_data: list):
             linea = 'Principal'
         
         # Obtener fecha
-        fecha_str = mo.get('fecha_inicio') or mo.get('fecha_fin') or mo.get('fecha_planificada')
+        fecha_str = mo.get('fecha') or mo.get('fecha_inicio') or mo.get('fecha_fin')
         if not fecha_str:
             continue
         
