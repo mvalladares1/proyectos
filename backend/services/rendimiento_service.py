@@ -546,13 +546,18 @@ class RendimientoService:
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 
-                # FILTRAR kg_pt: Excluir subproductos intermedios (con "PROCESO" o "TÚNEL" en nombre)
+                # FILTRAR kg_pt: Excluir subproductos intermedios
+                # Los productos intermedios tienen código [1.x] y contienen "PROCESO" o "TÚNEL"
                 kg_pt = 0.0
                 for p in produccion:
-                    product_name = p.get('product_name', '').upper()
-                    # Excluir si es subproducto intermedio
-                    if 'PROCESO' in product_name or 'TUNEL' in product_name or 'TÚNEL' in product_name:
-                        continue
+                    product_name = p.get('product_name', '')
+                    product_upper = product_name.upper()
+                    
+                    # Excluir productos intermedios [1.x] PROCESO/TÚNEL
+                    if product_name.startswith('[1.') or product_name.startswith('[1,'):
+                        if 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper:
+                            continue
+                    
                     kg_pt += p.get('qty_done', 0) or 0
                 
                 costo_elec = costos_op.get('costo_electricidad', 0)
