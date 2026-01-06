@@ -1126,23 +1126,17 @@ class FlujoCajaService:
         if company_id:
             domain_base.append(('company_id', '=', company_id))
             
-        # Filtro fecha: O vencimiento en rango O (si no hay vencimiento o es borrador) fecha factura/contable en rango
+        # Filtro fecha: Incluir documentos donde CUALQUIERA de estas fechas esté en rango:
+        # - x_studio_fecha_de_pago (fecha acordada de pago)
+        # - invoice_date_due (vencimiento estándar)
+        # - invoice_date (fecha de factura - para borradores sin vencimiento)
         # Odoo domains use Polish Notation (prefix)
-        # OR( 
-        #   AND(inv_due >= start, inv_due <= end), 
-        #   AND(inv_due=False, OR(  # Fallback si no hay due date
-        #       AND(inv_date >= start, inv_date <= end),
-        #       AND(date >= start, date <= end)
-        #   ))
-        # )
         
         domain = domain_base + [
-            '|',
+            '|', '|',
+                '&', ('x_studio_fecha_de_pago', '>=', fecha_inicio), ('x_studio_fecha_de_pago', '<=', fecha_fin),
                 '&', ('invoice_date_due', '>=', fecha_inicio), ('invoice_date_due', '<=', fecha_fin),
-                '&', ('invoice_date_due', '=', False),
-                    '|',
-                        '&', ('invoice_date', '>=', fecha_inicio), ('invoice_date', '<=', fecha_fin),
-                        '&', ('date', '>=', fecha_inicio), ('date', '<=', fecha_fin)
+                '&', ('invoice_date', '>=', fecha_inicio), ('invoice_date', '<=', fecha_fin)
         ]
             
         campos_move = ['id', 'name', 'ref', 'partner_id', 'invoice_date', 'invoice_date_due', 'amount_total', 
@@ -1171,11 +1165,11 @@ class FlujoCajaService:
         # 2. Obtener líneas para clasificación (Batch)
         move_ids = [m['id'] for m in moves]
         
-        # Usamos exclude_from_invoice_tab=False para obtener las líneas "reales" (productos/servicios)
-        # y evitar líneas de impuestos automáticos o cuentas por cobrar/pagar.
+        # Filtrar por display_type para obtener las líneas "reales" (productos/servicios)
+        # y evitar líneas de impuestos automáticos, secciones o notas.
         domain_lines = [
             ('move_id', 'in', move_ids),
-            ('exclude_from_invoice_tab', '=', False)
+            ('display_type', 'not in', ['line_section', 'line_note'])
         ]
         
         campos_lines = ['move_id', 'account_id', 'price_subtotal', 'analytic_tag_ids', 'name']
