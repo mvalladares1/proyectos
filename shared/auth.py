@@ -315,6 +315,12 @@ def tiene_acceso_pagina(modulo: str, pagina: str) -> bool:
     
     Returns:
         True si tiene acceso, False si no
+        
+    Lógica:
+    - Admins: acceso total
+    - Si el módulo no está en allowed_pages: acceso denegado (usuario no tiene módulo asignado)
+    - Si el módulo está pero module_pages está vacío: acceso total al módulo (sin restricciones de páginas)
+    - Si el módulo está y module_pages tiene contenido: solo permite las páginas listadas
     """
     # Admins tienen acceso a todo
     if st.session_state.get('is_admin', False):
@@ -326,11 +332,23 @@ def tiene_acceso_pagina(modulo: str, pagina: str) -> bool:
     
     # Verificar acceso
     allowed_pages = st.session_state.get('allowed_pages', {})
+    
+    # Si allowed_pages está completamente vacío, permitir (problema de carga)
+    if not allowed_pages:
+        return True
+    
+    # Si el módulo no está en allowed_pages, denegar (usuario no tiene módulo)
+    if modulo not in allowed_pages:
+        return False
+    
     module_pages = allowed_pages.get(modulo, [])
     
-    # Si la lista está vacía, permitir (público)
-    # Si tiene páginas, verificar que la página esté incluida
-    return pagina in module_pages if module_pages else True
+    # Si module_pages está vacío, significa sin restricciones → permitir todo
+    if not module_pages:
+        return True
+    
+    # Si tiene páginas, verificar que la página esté en la lista
+    return pagina in module_pages
 
 
 def filtrar_tabs_permitidos(modulo: str, tabs_config: List[Dict[str, str]]) -> tuple:

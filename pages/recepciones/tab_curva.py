@@ -352,6 +352,7 @@ def render(username: str, password: str):
 
                 if any(s >= 47 for s in semanas_proyeccion):
                     # FECHAS FIJAS para Año Anterior: Temporada 2024-2025
+                    # (Temporada actual es 2025-2026)
                     # Desde 01-Nov-2024 hasta 30-Abr-2025
                     fecha_inicio_anterior = datetime(2024, 11, 1)
                     fecha_fin_anterior = datetime(2025, 4, 30, 23, 59, 59)
@@ -461,9 +462,9 @@ def render(username: str, password: str):
 
 
                 else:
-                    pass  # Error silenciado
+                    st.warning(f"Error al cargar año anterior: código {resp_anterior.status_code}")
             except Exception as e:
-                pass  # Error silenciado
+                st.warning(f"Error de conexión al cargar año anterior: {e}")
 
             # Agregar columna de año anterior al df_chart
 
