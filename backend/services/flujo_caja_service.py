@@ -39,7 +39,12 @@ ESTRUCTURA_FLUJO = {
     },
     "FINANCIAMIENTO": {
         "nombre": "3. Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
-        "lineas": [],
+        "lineas": [
+            {"codigo": "3.0.1", "nombre": "Importes procedentes de préstamos de largo plazo", "signo": 1},
+            {"codigo": "3.0.2", "nombre": "Importes procedentes de préstamos de corto plazo", "signo": 1},
+            {"codigo": "3.1.1", "nombre": "Préstamos de entidades relacionadas", "signo": 1},
+            {"codigo": "3.1.4", "nombre": "Pagos de pasivos por arrendamientos financieros", "signo": -1}
+        ],
         "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de financiamiento"
     }
 }

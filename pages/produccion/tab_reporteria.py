@@ -217,6 +217,11 @@ def _render_kpis_tabs(data, mos=None):
         
         _fragment_kpis_proceso()
         
+        # === RESUMEN POR FRUTA Y MANEJO ===
+        if consolidado:
+            st.markdown("---")
+            _render_resumen_fruta_manejo(consolidado)
+        
         # === GRÁFICO SEMANAL DE PROCESO/VACIADO POR SALA ===
         if mos:
             st.markdown("---")
