@@ -64,9 +64,13 @@ def grafico_congelado_semanal(mos_data: list):
         semana_label = f"S{iso_week:02d}"
         
         # Obtener kg procesados (salida)
+        # EXCLUIR subproductos intermedios (PROCESO/TUNEL en nombre)
+        product_upper = product_name.upper()
+        es_subproducto = 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper
+        
         kg_pt = mo.get('kg_pt', 0) or 0
         
-        if kg_pt > 0:
+        if kg_pt > 0 and not es_subproducto:
             if tunel_nombre not in datos_por_tunel:
                 datos_por_tunel[tunel_nombre] = []
             
@@ -205,10 +209,14 @@ def grafico_vaciado_por_sala(mos_data: list):
         semana_label = f"S{iso_week:02d}"
         
         # Obtener kg procesados y rendimiento
+        # EXCLUIR subproductos intermedios (PROCESO/TUNEL en nombre)
+        product_upper = product_name.upper()
+        es_subproducto = 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper
+        
         kg_pt = mo.get('kg_pt', 0) or 0
         rendimiento = mo.get('rendimiento', 0) or 0
         
-        if kg_pt > 0:
+        if kg_pt > 0 and not es_subproducto:
             if sala not in datos_por_sala:
                 datos_por_sala[sala] = []
             

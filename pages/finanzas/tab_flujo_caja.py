@@ -315,13 +315,23 @@ def render(username: str, password: str):
             # Fallback: usar render directo sin HTML problemático
             from .shared import render_ias7_tree_activity
             colores = {"OPERACION": "#2ecc71", "INVERSION": "#3498db", "FINANCIAMIENTO": "#9b59b6"}
+            
+            # Construir docs_por_concepto desde los conceptos de actividades
+            docs_por_concepto = {}
+            for act_key, act_data in actividades.items():
+                for concepto in act_data.get("conceptos", []):
+                    codigo = concepto.get("codigo") or concepto.get("id")
+                    docs = concepto.get("documentos", [])
+                    if docs and codigo:
+                        docs_por_concepto[codigo] = docs
+            
             for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
                 act_data = actividades.get(act_key, {})
                 if act_data:
                     render_ias7_tree_activity(
                         actividad_data=act_data,
                         cuentas_por_concepto=drill_down,
-                        docs_por_concepto={},
+                        docs_por_concepto=docs_por_concepto,
                         actividad_key=act_key,
                         color=colores.get(act_key, "#718096")
                     )
