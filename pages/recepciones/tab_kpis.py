@@ -145,31 +145,31 @@ def render(username: str, password: str):
 
             # recorrer todas las recepciones y sus productos
             for _, row in df.iterrows():
-            # Asegurarnos que solo consideramos recepciones que sean fruta
-            tipo_fruta_row = (row.get('tipo_fruta') or "").strip()
-            if not tipo_fruta_row:
-                continue
+                # Asegurarnos que solo consideramos recepciones que sean fruta
+                tipo_fruta_row = (row.get('tipo_fruta') or "").strip()
+                if not tipo_fruta_row:
+                    continue
 
-            # Verificar si esta recepción está excluida de valorización
-            recep_id = row.get('id') or row.get('picking_id')
-            recep_name = row.get('albaran', '')
-            excluir_costo = recep_id in exclusiones_ids or recep_name in exclusiones_ids
-            if excluir_costo:
-                recepciones_excluidas += 1
+                # Verificar si esta recepción está excluida de valorización
+                recep_id = row.get('id') or row.get('picking_id')
+                recep_name = row.get('albaran', '')
+                excluir_costo = recep_id in exclusiones_ids or recep_name in exclusiones_ids
+                if excluir_costo:
+                    recepciones_excluidas += 1
 
-            if 'productos' in row and isinstance(row['productos'], list):
-                for p in row['productos']:
-                    kg = p.get('Kg Hechos', 0) or 0
-                    costo = p.get('Costo Total', 0) or 0
-                    categoria = (p.get('Categoria') or "").strip().upper()
-                    # detectar variantes que contengan 'BANDEJ' (Bandeja/Bandejas)
-                    if 'BANDEJ' in categoria:
-                        total_bandejas += kg
-                    else:
-                        total_kg_mp += kg
-                        # Solo sumar costo si NO está excluida
-                        if not excluir_costo:
-                            total_costo_mp += costo
+                if 'productos' in row and isinstance(row['productos'], list):
+                    for p in row['productos']:
+                        kg = p.get('Kg Hechos', 0) or 0
+                        costo = p.get('Costo Total', 0) or 0
+                        categoria = (p.get('Categoria') or "").strip().upper()
+                        # detectar variantes que contengan 'BANDEJ' (Bandeja/Bandejas)
+                        if 'BANDEJ' in categoria:
+                            total_bandejas += kg
+                        else:
+                            total_kg_mp += kg
+                            # Solo sumar costo si NO está excluida
+                            if not excluir_costo:
+                                total_costo_mp += costo
 
             # Calcular métricas y promedios existentes
             # Nota: eliminamos 'Total Kg Recepcionados (global)'.
