@@ -270,11 +270,15 @@ class RendimientoService:
                 prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod
                 prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
                 
-                if not self._is_excluded_consumo(prod_name):
+                # Obtener especie y manejo reales desde product.template
+                prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
+                especie = prod_info['tipo_fruta']
+                manejo = prod_info['manejo']
+                
+                # Solo incluir productos con especie Y manejo válidos (no insumos)
+                # Esto excluye automáticamente cajas, bolsas, electricidad, etc.
+                if especie != 'Otro' and manejo != 'Otro':
                     lot = ml.get('lot_id')
-                    
-                    # Obtener especie y manejo reales desde product.template
-                    prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
                     
                     result[mo_id].append({
                         'product_id': prod_id,
@@ -282,8 +286,8 @@ class RendimientoService:
                         'lot_id': lot[0] if isinstance(lot, (list, tuple)) and lot else None,
                         'lot_name': lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else None,
                         'qty_done': ml.get('qty_done', 0) or 0,
-                        'especie': prod_info['tipo_fruta'],
-                        'manejo': prod_info['manejo']
+                        'especie': especie,
+                        'manejo': manejo
                     })
         
         return result
