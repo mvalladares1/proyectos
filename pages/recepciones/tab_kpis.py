@@ -40,9 +40,8 @@ def render(username: str, password: str):
     with col2:
         fecha_fin = st.date_input("Hasta", datetime.now(), key="fecha_fin_recepcion", format="DD/MM/YYYY")
 
-    # LÓGICA DE CARGA AUTOMÁTICA
-    consultar = True # Siempre consultar si los filtros cambian (Streamlit rerun)
-    if consultar:
+    # Botón manual para consultar
+    if st.button("🔄 Consultar Recepciones", type="primary", key="btn_consultar_recepciones"):
         # Construir lista de orígenes según checkboxes
         origen_list = []
         if check_rfp:
@@ -64,8 +63,14 @@ def render(username: str, password: str):
                 "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
                 "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
                 "solo_hechas": solo_hechas,
-                "origen": origen_list
             }
+            
+            # Convertir origen_list a string separado por comas para query params
+            if len(origen_list) == 1:
+                params["origen"] = origen_list[0]
+            else:
+                params["origen"] = ",".join(origen_list)
+            
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
             
             # SKELETON LOADER
@@ -721,15 +726,15 @@ def render(username: str, password: str):
                         # Construir parámetros pasando las listas de filtros
                         params_excel = {**params, 'include_prev_week': False, 'include_month_accum': False}
 
-                        # Pasar filtros como listas
+                        # Convertir listas a strings separados por comas para query params
                         if tipo_fruta_filtro:
-                            params_excel['tipo_fruta'] = tipo_fruta_filtro
+                            params_excel['tipo_fruta'] = ",".join(tipo_fruta_filtro) if isinstance(tipo_fruta_filtro, list) else tipo_fruta_filtro
                         if clasif_filtro:
-                            params_excel['clasificacion'] = clasif_filtro
+                            params_excel['clasificacion'] = ",".join(clasif_filtro) if isinstance(clasif_filtro, list) else clasif_filtro
                         if manejo_filtro:
-                            params_excel['manejo'] = manejo_filtro
+                            params_excel['manejo'] = ",".join(manejo_filtro) if isinstance(manejo_filtro, list) else manejo_filtro
                         if productor_filtro:
-                            params_excel['productor'] = productor_filtro
+                            params_excel['productor'] = ",".join(productor_filtro) if isinstance(productor_filtro, list) else productor_filtro
 
                         resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params=params_excel, timeout=180)
 
