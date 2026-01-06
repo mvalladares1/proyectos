@@ -50,24 +50,22 @@ def render(username: str, password: str):
     if 'pallets_list' not in st.session_state:
         st.session_state.pallets_list = []
     
-    # Ingreso múltiple de pallets
-    # Inicializar valor en session_state si no existe
-    if 'pallets_input_value' not in st.session_state:
-        st.session_state.pallets_input_value = ""
+    # Función callback para convertir a mayúsculas
+    def _convert_to_uppercase():
+        if 'pallets_multiple_input' in st.session_state:
+            st.session_state.pallets_multiple_input = st.session_state.pallets_multiple_input.upper()
     
+    # Ingreso múltiple de pallets
     pallets_textarea = st.text_area(
         "Ingresa los códigos de pallet (uno por línea)",
         placeholder="PAC0002683\nPAC0006041\nPAC0005928",
         height=200,
         key="pallets_multiple_input",
-        value=st.session_state.pallets_input_value.upper()
+        on_change=_convert_to_uppercase
     )
     
-    # Actualizar el valor en mayúsculas
-    st.session_state.pallets_input_value = pallets_textarea
-    
     if st.button("➕ Agregar Todos", use_container_width=True, type="primary"):
-        _procesar_pallets(username, password, pallets_textarea, buscar_ubicacion_auto)
+        _procesar_pallets(username, password, pallets_textarea.upper(), buscar_ubicacion_auto)
     
     st.divider()
     

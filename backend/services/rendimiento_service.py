@@ -192,6 +192,61 @@ class RendimientoService:
             limit=5000
         )
         
+        # Obtener info de productos (especie y manejo desde product.template)
+        product_ids_set = set()
+        for ml in move_lines or []:
+            prod = ml.get('product_id')
+            if prod:
+                pid = prod[0] if isinstance(prod, (list, tuple)) else prod
+                product_ids_set.add(pid)
+        
+        # Obtener product.product para sacar product_tmpl_id
+        product_info_map = {}
+        if product_ids_set:
+            products = self.odoo.search_read(
+                'product.product',
+                [['id', 'in', list(product_ids_set)]],
+                ['id', 'product_tmpl_id'],
+                limit=5000
+            )
+            
+            # Obtener templates con manejo y tipo de fruta
+            template_ids = set()
+            for p in products:
+                tmpl = p.get('product_tmpl_id')
+                if tmpl:
+                    tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
+                    template_ids.add(tmpl_id)
+            
+            template_map = {}
+            if template_ids:
+                templates = self.odoo.read(
+                    'product.template',
+                    list(template_ids),
+                    ['id', 'x_studio_categora_tipo_de_manejo', 'x_studio_sub_categora']
+                )
+                for t in templates:
+                    manejo = t.get('x_studio_categora_tipo_de_manejo', '')
+                    if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                        manejo = manejo[1]
+                    
+                    tipo_fruta = t.get('x_studio_sub_categora', '')
+                    if isinstance(tipo_fruta, (list, tuple)) and len(tipo_fruta) > 1:
+                        tipo_fruta = tipo_fruta[1]
+                    
+                    template_map[t['id']] = {
+                        'manejo': manejo or 'Otro',
+                        'tipo_fruta': tipo_fruta or 'Otro'
+                    }
+            
+            # Mapear product_id -> especie/manejo
+            for p in products:
+                pid = p.get('id')
+                tmpl = p.get('product_tmpl_id')
+                tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl if tmpl else None
+                tmpl_data = template_map.get(tmpl_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
+                product_info_map[pid] = tmpl_data
+        
         # Crear mapa move_id -> mo_id
         move_to_mo = {}
         for mo in mos:
@@ -212,18 +267,23 @@ class RendimientoService:
             
             if mo_id is not None:
                 prod = ml.get('product_id')
+                prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod
                 prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
                 
                 if not self._is_excluded_consumo(prod_name):
                     lot = ml.get('lot_id')
+                    
+                    # Obtener especie y manejo reales desde product.template
+                    prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
+                    
                     result[mo_id].append({
-                        'product_id': prod[0] if isinstance(prod, (list, tuple)) else prod,
+                        'product_id': prod_id,
                         'product_name': prod_name,
                         'lot_id': lot[0] if isinstance(lot, (list, tuple)) and lot else None,
                         'lot_name': lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else None,
                         'qty_done': ml.get('qty_done', 0) or 0,
-                        'especie': self._extract_fruit_type(prod_name),
-                        'manejo': self._extract_handling(prod_name)
+                        'especie': prod_info['tipo_fruta'],
+                        'manejo': prod_info['manejo']
                     })
         
         return result
@@ -249,6 +309,61 @@ class RendimientoService:
             limit=5000
         )
         
+        # Obtener info de productos (especie y manejo desde product.template)
+        product_ids_set = set()
+        for ml in move_lines or []:
+            prod = ml.get('product_id')
+            if prod:
+                pid = prod[0] if isinstance(prod, (list, tuple)) else prod
+                product_ids_set.add(pid)
+        
+        # Obtener product.product para sacar product_tmpl_id
+        product_info_map = {}
+        if product_ids_set:
+            products = self.odoo.search_read(
+                'product.product',
+                [['id', 'in', list(product_ids_set)]],
+                ['id', 'product_tmpl_id'],
+                limit=5000
+            )
+            
+            # Obtener templates con manejo y tipo de fruta
+            template_ids = set()
+            for p in products:
+                tmpl = p.get('product_tmpl_id')
+                if tmpl:
+                    tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
+                    template_ids.add(tmpl_id)
+            
+            template_map = {}
+            if template_ids:
+                templates = self.odoo.read(
+                    'product.template',
+                    list(template_ids),
+                    ['id', 'x_studio_categora_tipo_de_manejo', 'x_studio_sub_categora']
+                )
+                for t in templates:
+                    manejo = t.get('x_studio_categora_tipo_de_manejo', '')
+                    if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                        manejo = manejo[1]
+                    
+                    tipo_fruta = t.get('x_studio_sub_categora', '')
+                    if isinstance(tipo_fruta, (list, tuple)) and len(tipo_fruta) > 1:
+                        tipo_fruta = tipo_fruta[1]
+                    
+                    template_map[t['id']] = {
+                        'manejo': manejo or 'Otro',
+                        'tipo_fruta': tipo_fruta or 'Otro'
+                    }
+            
+            # Mapear product_id -> especie/manejo
+            for p in products:
+                pid = p.get('id')
+                tmpl = p.get('product_tmpl_id')
+                tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl if tmpl else None
+                tmpl_data = template_map.get(tmpl_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
+                product_info_map[pid] = tmpl_data
+        
         # Crear mapa move_id -> mo_id
         move_to_mo = {}
         for mo in mos:
@@ -269,15 +384,21 @@ class RendimientoService:
             
             if mo_id is not None:
                 prod = ml.get('product_id')
+                prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod
                 prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
                 lot = ml.get('lot_id')
                 
+                # Obtener especie y manejo reales desde product.template
+                prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
+                
                 result[mo_id].append({
-                    'product_id': prod[0] if isinstance(prod, (list, tuple)) else prod,
+                    'product_id': prod_id,
                     'product_name': prod_name,
                     'lot_id': lot[0] if isinstance(lot, (list, tuple)) and lot else None,
                     'lot_name': lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else None,
-                    'qty_done': ml.get('qty_done', 0) or 0
+                    'qty_done': ml.get('qty_done', 0) or 0,
+                    'especie': prod_info['tipo_fruta'],
+                    'manejo': prod_info['manejo']
                 })
         
         return result
@@ -546,17 +667,23 @@ class RendimientoService:
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 
-                # FILTRAR kg_pt: Excluir subproductos intermedios
+                # FILTRAR kg_pt: Excluir subproductos intermedios E INSUMOS
                 # Los productos intermedios son:
                 # - [1.x] PROCESO/TÚNEL (Congelado)
                 # - [2.x] PROCESO PSP (Proceso)
                 # - [3] Proceso de Vaciado (Vaciado)
+                # - [4] Proceso Retail
+                # Además, solo contar productos que tengan especie y manejo válidos desde product.template
                 kg_pt = 0.0
                 kg_pt_debug = []  # Debug temporal
                 for p in produccion:
                     product_name = p.get('product_name', '')
                     product_upper = product_name.upper()
                     qty = p.get('qty_done', 0) or 0
+                    
+                    # Obtener especie y manejo REALES desde product.template
+                    especie = p.get('especie', 'Otro')
+                    manejo = p.get('manejo', 'Otro')
                     
                     # Excluir productos intermedios
                     is_intermediate = False
@@ -575,9 +702,19 @@ class RendimientoService:
                     if product_name.startswith('[3]') and 'PROCESO' in product_upper and 'VACIADO' in product_upper:
                         is_intermediate = True
                     
-                    kg_pt_debug.append(f"{product_name[:50]}: {qty} kg ({'EXCLUIDO' if is_intermediate else 'INCLUIDO'})")
+                    # [4] Proceso Retail
+                    if product_name.startswith('[4]') and 'PROCESO' in product_upper and 'RETAIL' in product_upper:
+                        is_intermediate = True
                     
-                    if not is_intermediate:
+                    # Verificar que el producto tenga especie y manejo válidos (no insumos)
+                    is_valid_product = especie != 'Otro' and manejo != 'Otro'
+                    
+                    if is_intermediate:
+                        kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (EXCLUIDO - intermedio)")
+                    elif not is_valid_product:
+                        kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (EXCLUIDO - insumo: {especie}/{manejo})")
+                    else:
+                        kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (INCLUIDO - {especie}/{manejo})")
                         kg_pt += qty
                 
                 # Debug: imprimir para órdenes específicas
