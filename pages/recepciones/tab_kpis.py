@@ -65,12 +65,6 @@ def render(username: str, password: str):
                 "solo_hechas": solo_hechas,
             }
             
-            # Convertir origen_list a string separado por comas para query params
-            if len(origen_list) == 1:
-                params["origen"] = origen_list[0]
-            else:
-                params["origen"] = ",".join(origen_list)
-            
             api_url = f"{API_URL}/api/v1/recepciones-mp/"
             
             # SKELETON LOADER
@@ -94,7 +88,15 @@ def render(username: str, password: str):
                 """, unsafe_allow_html=True)
             
             try:
-                resp = requests.get(api_url, params=params, timeout=60)
+                # Construir URL con múltiples parámetros origen si es necesario
+                from urllib.parse import urlencode
+                query_string = urlencode(params)
+                # Agregar cada origen como parámetro separado
+                for orig in origen_list:
+                    query_string += f"&origen={orig}"
+                
+                full_url = f"{api_url}?{query_string}"
+                resp = requests.get(full_url, timeout=60)
                 if resp.status_code == 200:
                     data = resp.json()
                     df = pd.DataFrame(data)
