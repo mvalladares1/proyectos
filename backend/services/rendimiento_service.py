@@ -161,7 +161,7 @@ class RendimientoService:
             'mrp.production',
             domain,
             ['id', 'name', 'product_id', 'state', 'date_planned_start', 'date_finished',
-             'x_studio_sala_de_vaciado', 'x_studio_dotacin', 'x_studio_horas_hombre_efec',
+             'x_studio_sala_de_proceso', 'x_studio_dotacin', 'x_studio_hh_efectiva',
              'x_studio_kghora_efectiva', 'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso',
              'move_raw_ids', 'move_finished_ids', 'move_byproduct_ids'],
             limit=500,
@@ -559,11 +559,11 @@ class RendimientoService:
                 if isinstance(prod, (list, tuple)) and len(prod) > 1:
                     product_name = prod[1]
                 
-                sala_raw = mo.get('x_studio_sala_de_vaciado') or ''
+                sala_raw = mo.get('x_studio_sala_de_proceso') or ''
                 sala, sala_tipo = self._classify_sala(sala_raw, product_name)
                 
                 # HH
-                hh = mo.get('x_studio_horas_hombre_efec') or 0
+                hh = mo.get('x_studio_hh_efectiva') or 0
                 if isinstance(hh, (int, float)):
                     total_hh += hh
                 
