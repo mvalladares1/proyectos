@@ -63,11 +63,19 @@ def grafico_congelado_semanal(mos_data: list):
     
     if not datos_grafico:
         st.warning(f"No se encontraron datos de túneles de congelado en el período seleccionado")
-        with st.expander("🔍 Debug: Ver salas encontradas en los datos"):
+        with st.expander("🔍 Debug: Ver datos disponibles"):
+            st.write(f"**Total de MOs recibidos:** {len(mos_data)}")
             salas_unicas = sorted(list(salas_encontradas))
-            st.write(f"Total de salas diferentes: {len(salas_unicas)}")
+            st.write(f"**Total de salas diferentes:** {len(salas_unicas)}")
+            st.write("**Salas encontradas:**")
             for sala in salas_unicas:
-                st.write(f"- {sala}")
+                st.write(f"- '{sala}'")
+            
+            if mos_data:
+                st.write("---")
+                st.write("**Primer MO de ejemplo:**")
+                primer_mo = mos_data[0]
+                st.json(primer_mo)
         return
     
     # Crear DataFrame
@@ -202,11 +210,19 @@ def grafico_vaciado_por_sala(mos_data: list):
     
     if not datos_grafico:
         st.warning(f"No se encontraron datos de proceso/vaciado en el período seleccionado")
-        with st.expander("🔍 Debug: Ver salas encontradas en los datos"):
+        with st.expander("🔍 Debug: Ver datos disponibles"):
+            st.write(f"**Total de MOs recibidos:** {len(mos_data)}")
             salas_unicas = sorted(list(salas_encontradas))
-            st.write(f"Total de salas diferentes: {len(salas_unicas)}")
+            st.write(f"**Total de salas diferentes:** {len(salas_unicas)}")
+            st.write("**Salas encontradas:**")
             for sala in salas_unicas:
-                st.write(f"- {sala}")
+                st.write(f"- '{sala}'")
+            
+            if mos_data:
+                st.write("---")
+                st.write("**Primer MO de ejemplo:**")
+                primer_mo = mos_data[0]
+                st.json(primer_mo)
         return
     
     # Crear DataFrame
