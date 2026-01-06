@@ -19,22 +19,17 @@ def grafico_congelado_semanal(mos_data: list):
         st.info("No hay datos de congelado disponibles")
         return
     
-    # Filtrar solo túneles de congelado
-    tuneles_congelado = [
-        "Tunel - Estatico 1",
-        "Tunel - Estatico 2", 
-        "Tunel - Estatico 3",
-        "Tunel - Estatico VLK",
-        "Tunel Continuo"
-    ]
-    
     # Preparar datos
     datos_grafico = []
+    salas_encontradas = set()
+    
     for mo in mos_data:
         sala = mo.get('sala_proceso', '').strip()
+        salas_encontradas.add(sala)
         
-        # Verificar si es un túnel de congelado
-        if not any(tunel in sala for tunel in tuneles_congelado):
+        # Verificar si es un túnel (búsqueda flexible)
+        sala_lower = sala.lower()
+        if not ('tunel' in sala_lower or 'túnel' in sala_lower):
             continue
         
         # Obtener fecha
@@ -67,7 +62,12 @@ def grafico_congelado_semanal(mos_data: list):
             })
     
     if not datos_grafico:
-        st.info("No se encontraron datos de congelado en el período seleccionado")
+        st.warning(f"No se encontraron datos de túneles de congelado en el período seleccionado")
+        with st.expander("🔍 Debug: Ver salas encontradas en los datos"):
+            salas_unicas = sorted(list(salas_encontradas))
+            st.write(f"Total de salas diferentes: {len(salas_unicas)}")
+            for sala in salas_unicas:
+                st.write(f"- {sala}")
         return
     
     # Crear DataFrame
@@ -141,22 +141,17 @@ def grafico_vaciado_por_sala(mos_data: list):
         st.info("No hay datos de proceso disponibles")
         return
     
-    # Filtrar solo salas de proceso (excluir túneles)
-    tuneles_excluir = [
-        "Tunel - Estatico 1",
-        "Tunel - Estatico 2", 
-        "Tunel - Estatico 3",
-        "Tunel - Estatico VLK",
-        "Tunel Continuo"
-    ]
-    
     # Preparar datos
     datos_grafico = []
+    salas_encontradas = set()
+    
     for mo in mos_data:
         sala_completa = mo.get('sala_proceso', '').strip()
+        salas_encontradas.add(sala_completa)
         
-        # Excluir túneles
-        if any(tunel in sala_completa for tunel in tuneles_excluir):
+        # Excluir túneles (búsqueda flexible)
+        sala_lower = sala_completa.lower()
+        if 'tunel' in sala_lower or 'túnel' in sala_lower:
             continue
         
         if not sala_completa or sala_completa == 'SIN SALA':
@@ -206,7 +201,12 @@ def grafico_vaciado_por_sala(mos_data: list):
             })
     
     if not datos_grafico:
-        st.info("No se encontraron datos de proceso en el período seleccionado")
+        st.warning(f"No se encontraron datos de proceso/vaciado en el período seleccionado")
+        with st.expander("🔍 Debug: Ver salas encontradas en los datos"):
+            salas_unicas = sorted(list(salas_encontradas))
+            st.write(f"Total de salas diferentes: {len(salas_unicas)}")
+            for sala in salas_unicas:
+                st.write(f"- {sala}")
         return
     
     # Crear DataFrame
