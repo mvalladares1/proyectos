@@ -712,7 +712,11 @@ def render(username: str, password: str):
         # Botón extra: descargar Excel DETALLADO (una fila por producto) desde el backend
         det_col1, det_col2 = st.columns([1,3])
         with det_col1:
-            if st.button("Descargar Excel Detallado (Por Producto)"):
+            # Inicializar estado
+            if 'excel_detallado_data' not in st.session_state:
+                st.session_state.excel_detallado_data = None
+            
+            if st.button("📊 Generar Excel Detallado", type="primary", key="btn_generar_excel_det"):
                 try:
                     with st.spinner("Generando Excel detallado en el servidor..."):
                         # Construir parámetros pasando las listas de filtros
@@ -733,11 +737,30 @@ def render(username: str, password: str):
                     if resp.status_code == 200:
                         xlsx_bytes = resp.content
                         fname = f"recepciones_detalle_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
-                        st.download_button("Descargar Excel (Detallado)", xlsx_bytes, file_name=fname, mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                        # Guardar en session_state
+                        st.session_state.excel_detallado_data = (xlsx_bytes, fname)
+                        st.success("✅ Excel generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
+                        st.rerun()
                     else:
                         st.error(f"Error al generar Excel detallado: {resp.status_code} - {resp.text}")
                 except Exception as e:
                     st.error(f"Error al solicitar Excel detallado: {e}")
+        
+        with det_col2:
+            # Mostrar botón de descarga si hay datos disponibles
+            if st.session_state.excel_detallado_data:
+                xlsx_bytes, fname = st.session_state.excel_detallado_data
+                st.download_button(
+                    "📥 Descargar Excel (Detallado - Por Producto)", 
+                    xlsx_bytes, 
+                    file_name=fname, 
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    key="btn_download_excel_det"
+                )
+                # Botón para limpiar
+                if st.button("🗑️ Limpiar", key="btn_clear_excel_det"):
+                    st.session_state.excel_detallado_data = None
+                    st.rerun()
 
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
