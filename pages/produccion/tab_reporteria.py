@@ -693,7 +693,7 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
     
     with col_exp1:
         csv = df_export.to_csv(index=False).encode('utf-8')
-        st.download_button("📄 Descargar CSV", csv, "produccion_fabricaciones.csv", "text/csv", key="download_csv_prod")
+        st.download_button("📄 Descargar CSV", csv, "produccion_fabricaciones.csv", "text/csv", key=f"download_csv_prod{key_suffix}")
     
     with col_exp2:
         try:
@@ -704,13 +704,13 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
                 "📊 Descargar Excel", excel_buffer,
                 "produccion_fabricaciones.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_excel_prod"
+                key=f"download_excel_prod{key_suffix}"
             )
         except Exception as e:
             st.warning(f"No se pudo generar Excel: {e}")
     
     with col_exp3:
-        if st.button("📕 Generar Informe PDF", key="btn_pdf_prod", type="secondary"):
+        if st.button("📕 Generar Informe PDF", key=f"btn_pdf_prod{key_suffix}", type="secondary"):
             fi = fecha_inicio_rep.strftime("%Y-%m-%d")
             ff = fecha_fin_rep.strftime("%Y-%m-%d")
             try:
@@ -723,7 +723,7 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
                 if resp.status_code == 200:
                     pdf_bytes = resp.content
                     fname = f"produccion_{fi}_a_{ff}.pdf".replace('/', '-')
-                    st.download_button("⬇️ Descargar PDF", data=pdf_bytes, file_name=fname, mime='application/pdf', key="download_pdf_prod")
+                    st.download_button("⬇️ Descargar PDF", data=pdf_bytes, file_name=fname, mime='application/pdf', key=f"download_pdf_prod{key_suffix}")
                     st.success("PDF generado correctamente")
                 else:
                     st.error(f"Error al generar PDF: {resp.status_code}")
