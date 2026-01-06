@@ -32,7 +32,7 @@ def debug_fabricacion():
         return models.execute_kw(ODOO_DB, uid, api_key, model, 'search_read', [domain], {'fields': fields, 'limit': limit})
     
     # Fabricación a analizar
-    mo_name = "RF/MO/CongTE1/00104"
+    mo_name = "WH/RF/MO/00812"
     
     print("\n" + "="*80)
     print(f"🔍 ANALIZANDO FABRICACIÓN: {mo_name}")

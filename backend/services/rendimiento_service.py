@@ -547,7 +547,9 @@ class RendimientoService:
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 
                 # FILTRAR kg_pt: Excluir subproductos intermedios
-                # Los productos intermedios tienen código [1.x] y contienen "PROCESO" o "TÚNEL"
+                # Los productos intermedios son:
+                # - [1.x] PROCESO/TÚNEL (Congelado)
+                # - [3] Proceso de Vaciado (Vaciado)
                 kg_pt = 0.0
                 kg_pt_debug = []  # Debug temporal
                 for p in produccion:
@@ -555,19 +557,25 @@ class RendimientoService:
                     product_upper = product_name.upper()
                     qty = p.get('qty_done', 0) or 0
                     
-                    # Excluir productos intermedios [1.x] PROCESO/TÚNEL
+                    # Excluir productos intermedios
                     is_intermediate = False
+                    
+                    # [1.x] productos de congelado que contengan PROCESO/TÚNEL
                     if product_name.startswith('[1.') or product_name.startswith('[1,'):
                         if 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper:
                             is_intermediate = True
+                    
+                    # [3] Proceso de Vaciado
+                    if product_name.startswith('[3]') and 'PROCESO' in product_upper and 'VACIADO' in product_upper:
+                        is_intermediate = True
                     
                     kg_pt_debug.append(f"{product_name[:50]}: {qty} kg ({'EXCLUIDO' if is_intermediate else 'INCLUIDO'})")
                     
                     if not is_intermediate:
                         kg_pt += qty
                 
-                # Debug: imprimir para primera MO
-                if mo.get('name', '').endswith('/00104'):
+                # Debug: imprimir para órdenes específicas
+                if mo.get('name', '').endswith('/00104') or mo.get('name', '') == 'WH/RF/MO/00812':
                     print(f"\n{'='*80}")
                     print(f"DEBUG MO: {mo.get('name')}")
                     print(f"Producción:")
