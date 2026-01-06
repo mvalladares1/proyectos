@@ -19,6 +19,13 @@ def render(username: str, password: str):
     """Renderiza el contenido del tab Reportería General."""
     st.subheader("📊 Reportería General de Producción")
     
+    # KPIs rápidos
+    if "prod_reporteria_error" not in st.session_state:
+        st.session_state.prod_reporteria_error = None
+
+    if st.session_state.prod_reporteria_error:
+        st.error(st.session_state.prod_reporteria_error)
+        
     # --- Selector de Período ---
     st.markdown("#### 📅 Seleccionar Período")
     
@@ -86,6 +93,7 @@ def render(username: str, password: str):
     
     if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria", disabled=st.session_state.prod_reporteria_loading):
         st.session_state.prod_reporteria_loading = True
+        st.session_state.prod_reporteria_error = None
         try:
             # Progress bar personalizado
             progress_placeholder = st.empty()
@@ -123,13 +131,14 @@ def render(username: str, password: str):
                 st.toast("✅ Datos de reportería cargados", icon="✅")
             else:
                 st.warning("No se pudieron cargar los datos.")
+            st.rerun()
         except Exception as e:
             progress_placeholder.empty()
-            st.error(f"Error al cargar reportería: {str(e)}")
+            st.session_state.prod_reporteria_error = f"Error al cargar reportería: {str(e)}"
+            st.error(st.session_state.prod_reporteria_error)
             st.toast(f"❌ Error: {str(e)[:100]}", icon="❌")
         finally:
             st.session_state.prod_reporteria_loading = False
-            st.rerun()
     
     # Extraer datos
     dashboard = st.session_state.get('prod_dashboard_data')
