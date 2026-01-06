@@ -78,22 +78,26 @@ def render(username: str, password: str, camaras_data: list):
             # Limpiar skeleton
             skeleton.empty()
             
-            if pallets_data:
-                # st.toast no es necesario en cada refresco automático, puede ser molesto
-                # st.toast(f"✅ {fmt_numero(len(pallets_data))} registros encontrados", icon="✅")
-                pass
+            # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
+            content_placeholder = st.container()
             
-            if pallets_data:
-                st.toast(f"✅ {fmt_numero(len(pallets_data))} registros encontrados", icon="✅")
-            
-                # Métricas
-                total_qty = sum(p.get("quantity", 0) for p in pallets_data)
-                avg_age = sum(p.get("days_old", 0) for p in pallets_data) / len(pallets_data) if pallets_data else 0
+            with content_placeholder:
+                if pallets_data:
+                    # st.toast no es necesario en cada refresco automático, puede ser molesto
+                    # st.toast(f"✅ {fmt_numero(len(pallets_data))} registros encontrados", icon="✅")
+                    pass
                 
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total Registros", fmt_numero(len(pallets_data)))
-                col2.metric("Stock Total (kg)", fmt_numero(total_qty, 2))
-                col3.metric("Antigüedad Promedio", f"{fmt_numero(avg_age, 0)} días")
+                if pallets_data:
+                    st.toast(f"✅ {fmt_numero(len(pallets_data))} registros encontrados", icon="✅")
+                
+                    # Métricas
+                    total_qty = sum(p.get("quantity", 0) for p in pallets_data)
+                    avg_age = sum(p.get("days_old", 0) for p in pallets_data) / len(pallets_data) if pallets_data else 0
+                    
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Total Registros", fmt_numero(len(pallets_data)))
+                    col2.metric("Stock Total (kg)", fmt_numero(total_qty, 2))
+                    col3.metric("Antigüedad Promedio", f"{fmt_numero(avg_age, 0)} días")
                 
                 st.divider()
                 

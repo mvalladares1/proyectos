@@ -61,22 +61,26 @@ def render(username: str, password: str):
         st.session_state["containers_data"] = containers
         st.session_state["load_containers"] = False
         
-        # Eliminar skeleton
+        # LIMPIAR SKELETON antes de mostrar contenido
         skeleton.empty()
     
-    containers = st.session_state.get("containers_data", [])
+    # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
+    content_placeholder = st.container()
     
-    if not containers:
-        st.info("📦 No hay containers con fabricaciones vinculadas. Haz clic en 'Cargar Containers' para buscar.")
-        return
-    
-    # KPIs
-    _render_kpis(containers)
-    
-    st.divider()
-    
-    # Gráfico y Top 5
-    _render_charts(containers)
+    with content_placeholder:
+        containers = st.session_state.get("containers_data", [])
+        
+        if not containers:
+            st.info("📦 No hay containers con fabricaciones vinculadas. Haz clic en 'Cargar Containers' para buscar.")
+            return
+        
+        # KPIs
+        _render_kpis(containers)
+        
+        st.divider()
+        
+        # Gráfico y Top 5
+        _render_charts(containers)
     
     st.divider()
     

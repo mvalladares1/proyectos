@@ -100,10 +100,14 @@ def render(username: str, password: str):
             st.cache_data.clear()
             st.rerun()
 
-    # Tabla de órdenes
-    if st.session_state["production_ofs"]:
-        df = pd.DataFrame(st.session_state["production_ofs"])
-        st.subheader("📋 Tabla de órdenes encontradas")
+    # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
+    content_placeholder = st.container()
+
+    with content_placeholder:
+        # Tabla de órdenes
+        if st.session_state["production_ofs"]:
+            df = pd.DataFrame(st.session_state["production_ofs"])
+            st.subheader("📋 Tabla de órdenes encontradas")
         
         if not df.empty:
             display_cols = [col for col in [

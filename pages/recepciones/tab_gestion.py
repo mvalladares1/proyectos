@@ -95,12 +95,16 @@ def render(username: str, password: str):
             skeleton.empty()
             st.session_state.recep_gestion_loading = False
 
-    overview = st.session_state.gestion_overview
-    data_gestion = st.session_state.gestion_data
+    # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
+    content_placeholder = st.container()
 
-    if overview:
-        # KPIs
-        st.markdown("### 📊 Resumen")
+    with content_placeholder:
+        overview = st.session_state.gestion_overview
+        data_gestion = st.session_state.gestion_data
+
+        if overview:
+            # KPIs
+            st.markdown("### 📊 Resumen")
         kpi_cols = st.columns(6)
         with kpi_cols[0]:
             st.metric("Total Recepciones", overview['total_recepciones'])

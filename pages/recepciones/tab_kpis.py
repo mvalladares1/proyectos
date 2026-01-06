@@ -124,16 +124,19 @@ def render(username: str, password: str):
             finally:
                 skeleton.empty()
 
+    # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
+    content_placeholder = st.container()
 
     # Mostrar tabla y detalle si hay datos
-    df = st.session_state.df_recepcion
-    if df is not None:
-        # --- Cargar exclusiones de valorización usando función centralizada ---
-        from .shared import get_exclusiones
-        exclusiones_ids = get_exclusiones()
+    with content_placeholder:
+        df = st.session_state.df_recepcion
+        if df is not None:
+            # --- Cargar exclusiones de valorización usando función centralizada ---
+            from .shared import get_exclusiones
+            exclusiones_ids = get_exclusiones()
 
-        # --- KPIs Consolidados ---
-        st.subheader("📊 KPIs Consolidados")
+            # --- KPIs Consolidados ---
+            st.subheader("📊 KPIs Consolidados")
         # Calcular Totales separando por categoría de producto (BANDEJAS)
         total_kg_mp = 0.0
         total_costo_mp = 0.0
