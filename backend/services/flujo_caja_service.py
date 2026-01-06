@@ -843,6 +843,66 @@ class FlujoCajaService:
             except Exception as e:
                 print(f"[FlujoCaja] Error en chunk aggregation: {e}")
         
+        # 4b. INYECTAR CUENTAS MONITOREADAS CON SALDO 0 (Si no tuvieron movimientos)
+        # El usuario quiere ver las cuentas configuradas explícitamente incluso si son 0.
+        try:
+            cuentas_monitoreadas_codigos = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
+            mapeo_sugerido = self.cuentas_monitoreadas.get("mapeo_sugerido", {})
+            
+            # Recopilar cuentas ya procesadas (en movimientos)
+            cuentas_procesadas = set()
+            for c_counts in cuentas_por_concepto.values():
+                cuentas_procesadas.update(c_counts.keys())
+            
+            # Identificar faltantes
+            cuentas_faltantes = [c for c in cuentas_monitoreadas_codigos if c not in cuentas_procesadas]
+            
+            if cuentas_faltantes:
+                # Obtener nombres reales de Odoo para las faltantes (mejor que usar solo código)
+                cuentas_info_extra = {}
+                try:
+                    accs = self.odoo.search_read(
+                        'account.account', 
+                        [['code', 'in', cuentas_faltantes]], 
+                        ['code', 'name']
+                    )
+                    cuentas_info_extra = {a['code']: a['name'] for a in accs}
+                except:
+                    pass
+                
+                for codigo in cuentas_faltantes:
+                    # Usar nombre de mapa sugerido o de Odoo o genérico
+                    nombre = ""
+                    if codigo in mapeo_sugerido:
+                        nombre = mapeo_sugerido[codigo].get("nombre", "")
+                    
+                    if not nombre and codigo in cuentas_info_extra:
+                        nombre = cuentas_info_extra[codigo]
+                        
+                    if not nombre:
+                        nombre = f"Cuenta {codigo}"
+                        
+                    # Clasificar
+                    concepto_id, es_pendiente = self._clasificar_cuenta(codigo)
+                    
+                    if concepto_id == self.CATEGORIA_NEUTRAL:
+                         # Neutrales 0 no suelen interesarnos, pero las agregamos igual si el usuario las pide
+                        if self.CATEGORIA_NEUTRAL not in cuentas_por_concepto:
+                            cuentas_por_concepto[self.CATEGORIA_NEUTRAL] = {}
+                        cuentas_por_concepto[self.CATEGORIA_NEUTRAL][codigo] = {'nombre': nombre, 'monto': 0.0, 'cantidad': 0, 'pendiente': False}
+                    else:
+                        if concepto_id not in cuentas_por_concepto:
+                             cuentas_por_concepto[concepto_id] = {}
+                        cuentas_por_concepto[concepto_id][codigo] = {
+                            'nombre': nombre, 
+                            'monto': 0.0, 
+                            'cantidad': 0, 
+                            'pendiente': es_pendiente
+                        }
+                        # No sumamos a montos_por_concepto porque es 0
+        except Exception as e:
+            print(f"[FlujoCaja] Error inyectando cuentas 0: {e}")
+        
         # 5. Generar detalle de últimos movimientos (Muestra)
         # Usamos los movimientos fetching al principio (ya ordenados desc por fecha)
         detalle = []
