@@ -64,15 +64,21 @@ def _fragment_main_aprobaciones(username: str, password: str):
                     "username": username,
                     "password": password,
                     "fecha_inicio": fecha_inicio_aprob.strftime("%Y-%m-%d"),
-                    "fecha_fin": fecha_fin_aprob.strftime("%Y-%m-%d"),
-                    "origen": None,
-                    "estados": ["assigned", "done"] # Mostrar 'Preparado' y 'Hecho'
+                    "fecha_fin": fecha_fin_aprob.strftime("%Y-%m-%d")
                 }
+                
+                # Construir URL con múltiples parámetros estados
+                from urllib.parse import urlencode
+                query_string_aprob = urlencode(params)
+                for estado in ["assigned", "done"]:
+                    query_string_aprob += f"&estados={estado}"
+                
+                url_aprob = f"{API_URL}/api/v1/recepciones-mp/?{query_string_aprob}"
                 
                 # Fase 2: Consulta recepciones
                 status_text.text("⏳ Fase 2/4: Consultando recepciones...")
                 progress_bar.progress(50)
-                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/", params=params, timeout=60)
+                resp = requests.get(url_aprob, timeout=60)
 
                 if resp.status_code == 200:
                     st.session_state.aprob_data = resp.json()
@@ -430,8 +436,7 @@ def _fragment_pdf_reports(username: str, password: str):
                         "username": username,
                         "password": password,
                         "fecha_inicio": fecha_ini_rep.strftime("%Y-%m-%d"),
-                        "fecha_fin": fecha_fin_rep.strftime("%Y-%m-%d"),
-                        "origen": None
+                        "fecha_fin": fecha_fin_rep.strftime("%Y-%m-%d")
                     }
                     
                     status_text.text("⏳ Fase 2/4: Consultando recepciones...")

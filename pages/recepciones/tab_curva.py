@@ -392,19 +392,18 @@ def render(username: str, password: str):
 
                 # Llamar a la API para obtener datos del año anterior SIN filtros de planta
                 # IMPORTANTE: Incluir username y password que son requeridos por el endpoint
+                from urllib.parse import urlencode
                 params_anterior = {
                     "username": username,
                     "password": password,
                     "fecha_inicio": fecha_inicio_anterior.strftime("%Y-%m-%d"),
                     "fecha_fin": fecha_fin_anterior.strftime("%Y-%m-%d %H:%M:%S"),
-                    "solo_hechas": True
+                    "solo_hechas": "true"
                 }
-                # DEBUG removed
-                resp_anterior = requests.get(
-                    f"{API_URL}/api/v1/recepciones-mp/",
-                    params=params_anterior,
-                    timeout=60
-                )
+                query_string_ant = urlencode(params_anterior)
+                url_anterior = f"{API_URL}/api/v1/recepciones-mp/?{query_string_ant}"
+                
+                resp_anterior = requests.get(url_anterior, timeout=60)
 
                 if resp_anterior.status_code == 200:
                     recepciones_anterior = resp_anterior.json()
