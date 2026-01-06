@@ -490,6 +490,9 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
     
     df_mos_original = pd.DataFrame(mos)
     
+    # Crear sufijo único para las claves según el tipo de filtro
+    key_suffix = f"_{tipo_filtro}" if tipo_filtro else "_global"
+    
     with st.expander("🔍 Filtros de Fabricaciones", expanded=True):
         st.markdown("**🎯 Filtro Principal:**")
         filter_tipo_col = st.columns([2, 1, 1])
@@ -499,7 +502,7 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
                 tipo_labels = {'PROCESO': '🏭 Proceso (Vaciado)', 'CONGELADO': '❄️ Congelado (Túneles)', 'SIN_SALA': '⚠️ Sin Sala'}
                 tipos_display = [tipo_labels.get(t, t) for t in tipos_unicos]
                 tipo_sel_display = st.multiselect(
-                    "📌 Tipo de Operación", tipos_display, key="filtro_tipo_detalle",
+                    "📌 Tipo de Operación", tipos_display, key=f"filtro_tipo_detalle{key_suffix}",
                     help="Filtra entre Proceso (Vaciado) vs Congelado (Túneles)"
                 )
                 tipo_reverse = {v: k for k, v in tipo_labels.items()}
@@ -512,25 +515,25 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
         
         filter_cols = st.columns(5)
         with filter_cols[0]:
-            of_buscar = st.text_input("🔎 Buscar OF", "", key="filtro_of_detalle", placeholder="Ej: WH/MO/00123")
+            of_buscar = st.text_input("🔎 Buscar OF", "", key=f"filtro_of_detalle{key_suffix}", placeholder="Ej: WH/MO/00123")
         with filter_cols[1]:
             productos_unicos = sorted(df_mos_original['product_name'].dropna().unique().tolist())
-            productos_sel = st.multiselect("📦 Producto", productos_unicos, key="filtro_producto_detalle")
+            productos_sel = st.multiselect("📦 Producto", productos_unicos, key=f"filtro_producto_detalle{key_suffix}")
         with filter_cols[2]:
             if 'especie' in df_mos_original.columns:
                 especies_unicas = sorted(df_mos_original['especie'].dropna().unique().tolist())
-                especies_sel = st.multiselect("🍓 Especie", especies_unicas, key="filtro_especie_detalle")
+                especies_sel = st.multiselect("🍓 Especie", especies_unicas, key=f"filtro_especie_detalle{key_suffix}")
             else:
                 especies_sel = []
         with filter_cols[3]:
             if 'manejo' in df_mos_original.columns:
                 manejos_unicos = sorted(df_mos_original['manejo'].dropna().unique().tolist())
-                manejos_sel = st.multiselect("🏷️ Manejo", manejos_unicos, key="filtro_manejo_detalle")
+                manejos_sel = st.multiselect("🏷️ Manejo", manejos_unicos, key=f"filtro_manejo_detalle{key_suffix}")
             else:
                 manejos_sel = []
         with filter_cols[4]:
             salas_unicas = sorted(df_mos_original['sala'].dropna().unique().tolist())
-            salas_sel = st.multiselect("🏭 Sala", salas_unicas, key="filtro_sala_detalle")
+            salas_sel = st.multiselect("🏭 Sala", salas_unicas, key=f"filtro_sala_detalle{key_suffix}")
     
     # Aplicar filtros
     df_mos = df_mos_original.copy()
