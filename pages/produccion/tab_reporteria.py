@@ -164,7 +164,7 @@ def render(username: str, password: str):
     
     if data:
         st.markdown("---")
-        _render_kpis_tabs(data, mos)
+        _render_kpis_tabs(data, mos, consolidado)
         st.markdown("---")
         
         if salas:
@@ -180,7 +180,7 @@ def render(username: str, password: str):
         _render_info_ayuda()
 
 
-def _render_kpis_tabs(data, mos=None):
+def _render_kpis_tabs(data, mos=None, consolidado=None):
     """Renderiza los sub-tabs de KPIs: Proceso, Congelado, Global."""
     vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)", "📊 Global"])
     
