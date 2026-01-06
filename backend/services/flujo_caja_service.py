@@ -1279,7 +1279,7 @@ class FlujoCajaService:
                 acc_id = line['account_id'][0] if isinstance(line.get('account_id'), (list, tuple)) else line.get('account_id')
                 acc_code = cuentas_info.get(acc_id, {}).get('code', '')
                 
-                categoria = self._clasificar_cuenta(acc_code)
+                categoria, _ = self._clasificar_cuenta(acc_code)
                 if not categoria:
                     categoria = "UNCLASSIFIED"
                 

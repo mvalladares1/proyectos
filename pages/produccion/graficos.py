@@ -28,11 +28,14 @@ def grafico_congelado_semanal(mos_data: list):
         sala_tipo = mo.get('sala_tipo', '').strip()
         salas_encontradas.add(f"{sala} ({sala_tipo})")
         
-        # Filtrar solo CONGELADO o si tiene "tunel" en el nombre
+        # SOLO túneles de congelado - filtro estricto
+        # Debe cumplir AMBAS condiciones:
+        # 1. sala_tipo == 'CONGELADO'
+        # 2. El nombre contiene "tunel" o "túnel"
         sala_lower = sala.lower()
-        es_congelado = sala_tipo == 'CONGELADO' or 'tunel' in sala_lower or 'túnel' in sala_lower
+        es_tunel = 'tunel' in sala_lower or 'túnel' in sala_lower
         
-        if not es_congelado:
+        if sala_tipo != 'CONGELADO' or not es_tunel:
             continue
         
         # Obtener fecha
@@ -161,11 +164,14 @@ def grafico_vaciado_por_sala(mos_data: list):
         sala_tipo = mo.get('sala_tipo', '').strip()
         salas_encontradas.add(f"{sala_completa} ({sala_tipo})")
         
-        # Filtrar solo PROCESO o excluir CONGELADO
+        # SOLO salas de proceso - filtro estricto
+        # Debe cumplir AMBAS condiciones:
+        # 1. sala_tipo == 'PROCESO'
+        # 2. El nombre NO contiene "tunel" ni "túnel"
         sala_lower = sala_completa.lower()
-        es_proceso = sala_tipo == 'PROCESO' or (sala_tipo != 'CONGELADO' and 'tunel' not in sala_lower and 'túnel' not in sala_lower)
+        tiene_tunel = 'tunel' in sala_lower or 'túnel' in sala_lower
         
-        if not es_proceso or not sala_completa or sala_completa == 'SIN SALA':
+        if sala_tipo != 'PROCESO' or tiene_tunel or not sala_completa or sala_completa == 'SIN SALA':
             continue
         
         # Extraer sala y línea
