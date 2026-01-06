@@ -545,7 +545,16 @@ class RendimientoService:
                 costos_op = costos_op_by_mo.get(mo_id, {'costo_electricidad': 0})
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
-                kg_pt = sum(p.get('qty_done', 0) or 0 for p in produccion)
+                
+                # FILTRAR kg_pt: Excluir subproductos intermedios (con "PROCESO" o "TÚNEL" en nombre)
+                kg_pt = 0.0
+                for p in produccion:
+                    product_name = p.get('product_name', '').upper()
+                    # Excluir si es subproducto intermedio
+                    if 'PROCESO' in product_name or 'TUNEL' in product_name or 'TÚNEL' in product_name:
+                        continue
+                    kg_pt += p.get('qty_done', 0) or 0
+                
                 costo_elec = costos_op.get('costo_electricidad', 0)
                 
                 if kg_mp == 0:

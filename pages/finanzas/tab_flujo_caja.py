@@ -316,21 +316,45 @@ def render(username: str, password: str):
             from .shared import render_ias7_tree_activity
             colores = {"OPERACION": "#2ecc71", "INVERSION": "#3498db", "FINANCIAMIENTO": "#9b59b6"}
             
-            # Construir docs_por_concepto desde los conceptos de actividades
+            # Construir docs_por_concepto y cuentas_por_concepto desde los conceptos de actividades
             docs_por_concepto = {}
+            cuentas_por_concepto_proyeccion = {}
+            
             for act_key, act_data in actividades.items():
                 for concepto in act_data.get("conceptos", []):
                     codigo = concepto.get("codigo") or concepto.get("id")
                     docs = concepto.get("documentos", [])
                     if docs and codigo:
                         docs_por_concepto[codigo] = docs
+                        
+                        # Agregar montos por cuenta contable
+                        cuentas_agrupadas = {}
+                        for doc in docs:
+                            cuenta_codigo = doc.get("cuenta", "")
+                            cuenta_nombre = doc.get("cuenta_nombre", "") or cuenta_codigo
+                            monto = doc.get("monto", 0)
+                            
+                            if cuenta_codigo:
+                                if cuenta_codigo not in cuentas_agrupadas:
+                                    cuentas_agrupadas[cuenta_codigo] = {
+                                        "codigo": cuenta_codigo,
+                                        "nombre": cuenta_nombre,
+                                        "monto": 0
+                                    }
+                                cuentas_agrupadas[cuenta_codigo]["monto"] += monto
+                        
+                        if cuentas_agrupadas:
+                            cuentas_por_concepto_proyeccion[codigo] = list(cuentas_agrupadas.values())
+            
+            # Usar cuentas de proyección si estamos en modo Proyectado, sino usar drill_down real
+            cuentas_a_usar = cuentas_por_concepto_proyeccion if modo_ver in ["Proyectado", "Consolidado"] else drill_down
             
             for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
                 act_data = actividades.get(act_key, {})
                 if act_data:
                     render_ias7_tree_activity(
                         actividad_data=act_data,
-                        cuentas_por_concepto=drill_down,
+                        cuentas_por_concepto=cuentas_a_usar,
                         docs_por_concepto=docs_por_concepto,
                         actividad_key=act_key,
                         color=colores.get(act_key, "#718096")
