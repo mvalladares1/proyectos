@@ -9,8 +9,9 @@ from datetime import datetime, timedelta
 
 def grafico_congelado_semanal(mos_data: list):
     """
-    Gráfico de barras agrupado por semana para túneles de congelado.
+    Gráficos de barras separados por túnel de congelado.
     Muestra Kg congelados por semana para cada túnel.
+    Crea un gráfico independiente por cada túnel.
     
     Args:
         mos_data: Lista de órdenes de fabricación (MOs)
@@ -19,8 +20,8 @@ def grafico_congelado_semanal(mos_data: list):
         st.info("No hay datos de congelado disponibles")
         return
     
-    # Preparar datos
-    datos_grafico = []
+    # Preparar datos por túnel
+    datos_por_tunel = {}
     salas_encontradas = set()
     
     for mo in mos_data:
@@ -33,9 +34,6 @@ def grafico_congelado_semanal(mos_data: list):
         es_tunel_continuo = '[1.4]' in product_name and 'TÚNEL CONTÍNUO' in product_name.upper()
         
         # SOLO túneles de congelado - filtro estricto
-        # Debe cumplir ALGUNA de estas condiciones:
-        # 1. (sala_tipo == 'CONGELADO' Y nombre contiene "tunel")
-        # 2. Es túnel continuo por nombre de producto
         sala_lower = sala.lower()
         es_tunel_estatico = sala_tipo == 'CONGELADO' and ('tunel' in sala_lower or 'túnel' in sala_lower)
         
@@ -44,7 +42,9 @@ def grafico_congelado_semanal(mos_data: list):
         
         # Usar nombre específico para túnel continuo
         if es_tunel_continuo:
-            sala = 'Tunel Continuo'
+            tunel_nombre = 'Tunel Continuo'
+        else:
+            tunel_nombre = sala
         
         # Obtener fecha
         fecha_str = mo.get('fecha') or mo.get('fecha_inicio') or mo.get('fecha_fin')
@@ -67,15 +67,17 @@ def grafico_congelado_semanal(mos_data: list):
         kg_pt = mo.get('kg_pt', 0) or 0
         
         if kg_pt > 0:
-            datos_grafico.append({
+            if tunel_nombre not in datos_por_tunel:
+                datos_por_tunel[tunel_nombre] = []
+            
+            datos_por_tunel[tunel_nombre].append({
                 'Semana': semana_label,
-                'Túnel': sala,
                 'Kg': kg_pt,
                 'iso_year': iso_year,
                 'iso_week': iso_week
             })
     
-    if not datos_grafico:
+    if not datos_por_tunel:
         st.warning(f"No se encontraron datos de túneles de congelado en el período seleccionado")
         with st.expander("🔍 Debug: Ver datos disponibles"):
             st.write(f"**Total de MOs recibidos:** {len(mos_data)}")
@@ -92,63 +94,53 @@ def grafico_congelado_semanal(mos_data: list):
                 st.json(primer_mo)
         return
     
-    # Crear DataFrame
-    df = pd.DataFrame(datos_grafico)
-    
-    # Agrupar por semana y túnel
-    df_grouped = df.groupby(['Semana', 'Túnel', 'iso_year', 'iso_week'], as_index=False).agg({'Kg': 'sum'})
-    
-    # Ordenar por semana ISO
-    df_grouped = df_grouped.sort_values(['iso_year', 'iso_week'])
-    
-    # Crear gráfico de barras agrupadas con Altair
-    chart = alt.Chart(df_grouped).mark_bar().encode(
-        x=alt.X('Semana:N', 
-                title='Semana ISO',
-                sort=df_grouped['Semana'].unique().tolist(),
-                axis=alt.Axis(labelAngle=-45)),
-        y=alt.Y('Kg:Q', 
-                title='Kg Congelados',
-                axis=alt.Axis(format=',.0f')),
-        color=alt.Color('Túnel:N',
-                       title='Túnel de Congelado',
-                       scale=alt.Scale(scheme='tableau10')),
-        tooltip=[
-            alt.Tooltip('Semana:N', title='Semana'),
-            alt.Tooltip('Túnel:N', title='Túnel'),
-            alt.Tooltip('Kg:Q', title='Kg Congelados', format=',.0f')
-        ]
-    ).properties(
-        title='📈 Kg Congelados por Semana y Túnel',
-        height=400
-    ).configure_axis(
-        labelFontSize=11,
-        titleFontSize=13
-    ).configure_title(
-        fontSize=16,
-        anchor='start'
-    )
-    
-    st.altair_chart(chart, use_container_width=True)
-    
-    # Tabla resumen
-    with st.expander("📊 Ver tabla de datos"):
-        df_pivot = df_grouped.pivot_table(
-            index='Semana', 
-            columns='Túnel', 
-            values='Kg', 
-            aggfunc='sum',
-            fill_value=0
-        ).reset_index()
+    # Crear un gráfico por cada túnel
+    for tunel_nombre in sorted(datos_por_tunel.keys()):
+        st.markdown(f"#### ❄️ {tunel_nombre}")
         
-        # Agregar total por semana
-        df_pivot['TOTAL'] = df_pivot.iloc[:, 1:].sum(axis=1)
+        datos_tunel = datos_por_tunel[tunel_nombre]
+        df = pd.DataFrame(datos_tunel)
         
-        # Formatear números
-        for col in df_pivot.columns[1:]:
-            df_pivot[col] = df_pivot[col].apply(lambda x: f"{x:,.0f}")
+        # Agrupar por semana
+        df_grouped = df.groupby(['Semana', 'iso_year', 'iso_week'], as_index=False).agg({'Kg': 'sum'})
         
-        st.dataframe(df_pivot, use_container_width=True, hide_index=True)
+        # Ordenar por semana ISO
+        df_grouped = df_grouped.sort_values(['iso_year', 'iso_week'])
+        
+        # Crear gráfico de barras
+        chart = alt.Chart(df_grouped).mark_bar(color='steelblue').encode(
+            x=alt.X('Semana:N', 
+                    title='Semana ISO',
+                    sort=df_grouped['Semana'].unique().tolist(),
+                    axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y('Kg:Q', 
+                    title='Kg Congelados',
+                    axis=alt.Axis(format=',.0f')),
+            tooltip=[
+                alt.Tooltip('Semana:N', title='Semana'),
+                alt.Tooltip('Kg:Q', title='Kg Congelados', format=',.0f')
+            ]
+        ).properties(
+            title=f'Kg Congelados por Semana - {tunel_nombre}',
+            height=350
+        )
+        
+        st.altair_chart(chart, use_container_width=True)
+        
+        # Tabla resumen para este túnel
+        with st.expander(f"📊 Ver tabla de datos - {tunel_nombre}"):
+            st.markdown("**Kg Congelados por Semana**")
+            df_table = df_grouped[['Semana', 'Kg']].copy()
+            df_table['Kg'] = df_table['Kg'].apply(lambda x: f"{x:,.0f}")
+            
+            # Agregar total
+            total_kg = df_grouped['Kg'].sum()
+            df_total = pd.DataFrame([{'Semana': 'TOTAL', 'Kg': f"{total_kg:,.0f}"}])
+            df_table = pd.concat([df_table, df_total], ignore_index=True)
+            
+            st.dataframe(df_table, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")  # Separador entre túneles
 
 
 def grafico_vaciado_por_sala(mos_data: list):
@@ -292,30 +284,33 @@ def grafico_vaciado_por_sala(mos_data: list):
             st.altair_chart(chart_kg, use_container_width=True)
         
         with tab_rend:
-            # Gráfico de Rendimiento
-            chart_rend = alt.Chart(df_grouped).mark_bar().encode(
-                x=alt.X('Semana:N', 
-                        title='Semana ISO',
-                        sort=df_grouped['Semana'].unique().tolist(),
-                        axis=alt.Axis(labelAngle=-45)),
-                y=alt.Y('Rendimiento:Q', 
-                        title='Rendimiento %',
-                        axis=alt.Axis(format='.1f'),
-                        scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color('Línea:N',
-                               title='Línea',
-                               scale=alt.Scale(scheme='category10')),
-                tooltip=[
-                    alt.Tooltip('Semana:N', title='Semana'),
-                    alt.Tooltip('Línea:N', title='Línea'),
-                    alt.Tooltip('Rendimiento:Q', title='Rendimiento %', format='.2f')
-                ]
-            ).properties(
-                title=f'Rendimiento % por Semana - {sala_nombre}',
-                height=350
-            )
-            
-            st.altair_chart(chart_rend, use_container_width=True)
+            # Verificar si hay datos de rendimiento
+            if df_grouped['Rendimiento'].sum() == 0 or df_grouped['Rendimiento'].isna().all():
+                st.warning("No hay datos de rendimiento disponibles para esta sala")
+            else:
+                # Gráfico de Rendimiento
+                chart_rend = alt.Chart(df_grouped).mark_bar().encode(
+                    x=alt.X('Semana:N', 
+                            title='Semana ISO',
+                            sort=df_grouped['Semana'].unique().tolist(),
+                            axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y('Rendimiento:Q', 
+                            title='Rendimiento %',
+                            axis=alt.Axis(format='.1f')),
+                    color=alt.Color('Línea:N',
+                                   title='Línea',
+                                   scale=alt.Scale(scheme='category10')),
+                    tooltip=[
+                        alt.Tooltip('Semana:N', title='Semana'),
+                        alt.Tooltip('Línea:N', title='Línea'),
+                        alt.Tooltip('Rendimiento:Q', title='Rendimiento %', format='.2f')
+                    ]
+                ).properties(
+                    title=f'Rendimiento % por Semana - {sala_nombre}',
+                    height=350
+                )
+                
+                st.altair_chart(chart_rend, use_container_width=True)
         
         # Tabla resumen para esta sala
         with st.expander(f"📊 Ver tabla de datos - {sala_nombre}"):
