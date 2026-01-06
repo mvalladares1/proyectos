@@ -817,10 +817,6 @@ class FlujoCajaService:
                         continue  # Ignorar esta cuenta, no está en la lista monitoreada
                     
                     # Clasificar
-                    # NOTA: Para mayor precisión, podríamos cachear todos los accounts IDs -> Codes antes
-                    # Pero extraer del display name es usualmente seguro en Odoo estándar.
-                    # Si falla, el fallback es UNCLASSIFIED
-                    
                     concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
                     
                     # NEUTRAL
@@ -1130,24 +1126,44 @@ class FlujoCajaService:
         if company_id:
             domain_base.append(('company_id', '=', company_id))
             
-        # Filtro fecha: O vencimiento en rango O (si no hay vencimiento) fecha en rango
+        # Filtro fecha: O vencimiento en rango O (si no hay vencimiento o es borrador) fecha factura/contable en rango
         # Odoo domains use Polish Notation (prefix)
-        # OR( AND(inv_due >= start, inv_due <= end), AND(inv_due=False, inv_date >= start, inv_date <= end) )
+        # OR( 
+        #   AND(inv_due >= start, inv_due <= end), 
+        #   AND(inv_due=False, OR(  # Fallback si no hay due date
+        #       AND(inv_date >= start, inv_date <= end),
+        #       AND(date >= start, date <= end)
+        #   ))
+        # )
         
         domain = domain_base + [
             '|',
                 '&', ('invoice_date_due', '>=', fecha_inicio), ('invoice_date_due', '<=', fecha_fin),
-                '&', '&', ('invoice_date_due', '=', False), ('invoice_date', '>=', fecha_inicio), ('invoice_date', '<=', fecha_fin)
+                '&', ('invoice_date_due', '=', False),
+                    '|',
+                        '&', ('invoice_date', '>=', fecha_inicio), ('invoice_date', '<=', fecha_fin),
+                        '&', ('date', '>=', fecha_inicio), ('date', '<=', fecha_fin)
         ]
             
         campos_move = ['id', 'name', 'ref', 'partner_id', 'invoice_date', 'invoice_date_due', 'amount_total', 
-                       'amount_residual', 'move_type', 'state', 'payment_state', 'date']
+                       'amount_residual', 'move_type', 'state', 'payment_state', 'date', 'x_studio_fecha_de_pago']
         
         try:
             moves = self.odoo.search_read('account.move', domain, campos_move, limit=2000)
+            # print(f"[FlujoProyeccion] Found {len(moves)} moves for projection")
         except Exception as e:
-            print(f"[FlujoProyeccion] Error fetching moves: {e}")
-            return proyeccion
+            # Fallback if x_studio field fails
+            if "x_studio_fecha_de_pago" in str(e):
+                print(f"[FlujoProyeccion] Custom field not found, retrying standard: {e}")
+                campos_move.remove('x_studio_fecha_de_pago')
+                try:
+                    moves = self.odoo.search_read('account.move', domain, campos_move, limit=2000)
+                except Exception as e2:
+                    print(f"[FlujoProyeccion] Error fetching moves retry: {e2}")
+                    return proyeccion
+            else:
+                print(f"[FlujoProyeccion] Error fetching moves: {e}")
+                return proyeccion
 
         if not moves:
             return proyeccion
@@ -1205,12 +1221,49 @@ class FlujoCajaService:
         docs_sin_etiqueta = []  # Lista de documentos sin etiquetas
 
         # 3. Procesar cada documento
+        from datetime import datetime, timedelta
+
         for move in moves:
             move_id = move['id']
             # Usar amount_residual (lo que falta por pagar) para proyección, salvo que sea draft (todo)
             monto_documento = move.get('amount_residual', 0) if move.get('state') == 'posted' else move.get('amount_total', 0)
             
             if monto_documento == 0:
+                continue
+            
+            # --- LOGICA DE FECHAS (Prioridad Usuario) ---
+            # 1. Fecha Acordada de Pago (x_studio_fecha_de_pago)
+            # 2. Vencimiento (invoice_date_due)
+            # 3. Estimación Borrador (invoice_date + 30 días)
+            
+            fecha_pago_acordada = move.get('x_studio_fecha_de_pago')
+            fecha_vencimiento = move.get('invoice_date_due')
+            fecha_factura = move.get('invoice_date') or move.get('date')
+            
+            fecha_proyeccion = None
+            es_estimada = False
+            
+            if fecha_pago_acordada:
+                fecha_proyeccion = fecha_pago_acordada
+            elif fecha_vencimiento:
+                fecha_proyeccion = fecha_vencimiento
+            elif move.get('state') == 'draft' and fecha_factura:
+                # Estimación +30 días
+                try:
+                    dt_factura = datetime.strptime(fecha_factura, '%Y-%m-%d')
+                    dt_estimada = dt_factura + timedelta(days=30)
+                    fecha_proyeccion = dt_estimada.strftime('%Y-%m-%d')
+                    es_estimada = True
+                except:
+                    pass
+            
+            # Si no logramos determinar fecha, usar fecha documento como fallback ultimo
+            if not fecha_proyeccion:
+                fecha_proyeccion = fecha_factura
+                
+            # --- FILTRO FINAL POR FECHA PROYECCION ---
+            # El query trajo un rango amplio, ahora filtramos exacto por la fecha real de flujo
+            if not fecha_proyeccion or not (fecha_inicio <= fecha_proyeccion <= fecha_fin):
                 continue
                 
             # Determinar signo flujo (Cliente +, Proveedor -)
@@ -1261,13 +1314,14 @@ class FlujoCajaService:
                     "documento": move.get('name') or move.get('ref') or str(move_id),
                     "partner": partner_name,
                     "fecha_emision": move.get('invoice_date'),  # Fecha emisión
-                    "fecha_venc": move.get('invoice_date_due'),
+                    "fecha_venc": fecha_proyeccion, # Usamos la fecha real de flujo
+                    "es_estimada": es_estimada,
                     "estado": "Borrador" if move.get('state') == 'draft' else "Abierto",
                     "monto": round(monto_parte, 0),
                     "cuenta": acc_code,
                     "cuenta_nombre": cuentas_info.get(acc_id, {}).get('name', ''),
                     "tipo": "Factura Cliente" if es_ingreso else "Factura Proveedor",
-                    "linea_nombre": line.get('name', ''),  # Descripción de la línea
+                    "linea_nombre": line.get('name', ''),  # Descripción de la línea (etiqueta usuario)
                     "etiquetas": etiquetas_nombres,  # OBLIGATORIO - Lista de etiquetas
                     "sin_etiqueta": sin_etiqueta  # Warning flag
                 }
@@ -1302,8 +1356,8 @@ class FlujoCajaService:
                 monto = montos_por_concepto.get(codigo, 0)
                 docs = detalles_por_concepto.get(codigo, [])
                 
-                # Ordenar documentos por fecha vencimiento (o emision como fallback)
-                docs.sort(key=lambda x: x['fecha_venc'] or x['fecha_emision'] or '9999-12-31')
+                # Ordenar documentos por fecha calculada
+                docs.sort(key=lambda x: x['fecha_venc'] or '9999-12-31')
                 
                 if monto != 0 or docs:
                     conceptos_res.append({
