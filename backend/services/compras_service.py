@@ -33,7 +33,6 @@ class ComprasService:
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self._cache = get_cache()
-        self._cache[key] = (data, time.time())
     
     # ============================================================
     #                    ESTADO DE RECEPCIÓN
