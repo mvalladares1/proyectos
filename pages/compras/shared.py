@@ -106,9 +106,8 @@ def fetch_compras_ordenes(_username, _password, state=None, date_from=None, date
             params=params,
             timeout=120
         )
-        if resp.status_code == 200:
-            return resp.json()
-        return []
+        resp.raise_for_status()
+        return resp.json()
     except Exception as e:
         st.error(f"Error al obtener órdenes: {str(e)}")
         return []
