@@ -190,9 +190,19 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         cache_key = f"products_mp:{hash(tuple(sorted(all_product_ids)))}"
         cached = cache.get(cache_key)
         
+        # VALIDACIÓN CRÍTICA: Verificar que el caché devuelve un diccionario
         if cached:
-            product_info_map = cached
-        else:
+            if isinstance(cached, dict):
+                product_info_map = cached
+                print(f"[DEBUG] Productos cargados desde caché: {len(product_info_map)} items")
+            else:
+                print(f"[ERROR CRÍTICO] Caché de productos corrupto: se esperaba dict, se recibió {type(cached)}")
+                print(f"[ERROR] Limpiando caché corrupto para key: {cache_key}")
+                cache.delete(cache_key)
+                cached = None  # Forzar recarga desde Odoo
+        
+        if not cached:
+            print(f"[DEBUG] Cargando {len(all_product_ids)} productos desde Odoo...")
             product_infos = client.read(
                 "product.product", 
                 list(all_product_ids), 
@@ -249,8 +259,14 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     "tipo_fruta": tmpl_data.get("tipo_fruta", "")
                 }
             
-            # Cachear productos por 30 minutos
-            cache.set(cache_key, product_info_map, ttl=OdooCache.TTL_PRODUCTOS)
+            # VALIDACIÓN: Asegurar que product_info_map es un diccionario antes de cachear
+            if not isinstance(product_info_map, dict):
+                print(f"[ERROR CRÍTICO] product_info_map no es diccionario antes de cachear: {type(product_info_map)}")
+                product_info_map = {}  # Resetear a diccionario vacío
+            else:
+                # Cachear productos por 30 minutos
+                print(f"[DEBUG] Cacheando {len(product_info_map)} productos")
+                cache.set(cache_key, product_info_map, ttl=OdooCache.TTL_PRODUCTOS)
     
     checks_map = {}
     checks_by_picking = {}
@@ -404,6 +420,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         # Procesar movimientos de este picking
         rec_moves = moves_by_picking.get(picking_id, [])
         kg_total = sum(m.get("quantity_done", 0) or 0 for m in rec_moves)
+        
+        # VALIDACIÓN CRÍTICA: Verificar que product_info_map es un diccionario
+        if not isinstance(product_info_map, dict):
+            print(f"[ERROR CRÍTICO] product_info_map es {type(product_info_map)} en lugar de dict. Reconstruyendo...")
+            product_info_map = {}
         
         productos = []
         for m in rec_moves:
