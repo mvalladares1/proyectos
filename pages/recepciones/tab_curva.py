@@ -243,10 +243,17 @@ def render(username: str, password: str):
                 kg_por_semana = {}
 
                 for rec in recepciones:
-                    # Filtrar recepciones sin tipo_fruta (igual que KPIs)
+                    # Obtener tipo_fruta, con fallback a productos si no existe en recepción
                     tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
+                    # Si no hay tipo_fruta en recepción, intentar obtener del primer producto válido
                     if not tipo_fruta_row:
-                        continue
+                        for p_check in rec.get('productos', []) or []:
+                            cat_check = (p_check.get('Categoria') or '').upper()
+                            if 'BANDEJ' not in cat_check:
+                                tipo_fruta_row = (p_check.get('TipoFruta') or '').strip()
+                                if tipo_fruta_row:
+                                    break
+                    # Si sigue sin tipo_fruta, continuar de todas formas para sumar kg
 
                     # Obtener semana de la fecha
                     fecha_str = rec.get('fecha')
@@ -393,8 +400,7 @@ def render(username: str, password: str):
                                     tipo_fruta_row = (p_check.get('TipoFruta') or '').strip()
                                     if tipo_fruta_row:
                                         break
-                        if not tipo_fruta_row:
-                            continue
+                        # Si sigue sin tipo_fruta, continuar de todas formas para sumar kg
 
                         fecha_str = rec.get('fecha')
                         if not fecha_str:
