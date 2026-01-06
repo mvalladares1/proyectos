@@ -204,6 +204,19 @@ def get_proyecciones_por_semana(
     Returns:
         Lista de diccionarios con datos por semana incluyendo gasto proyectado
     """
+    # VALIDACIÓN DE TIPOS: Normalizar planta y especie
+    if planta is not None:
+        if isinstance(planta, str):
+            planta = [planta]
+        elif not isinstance(planta, list):
+            planta = list(planta) if planta else []
+    
+    if especie is not None:
+        if isinstance(especie, str):
+            especie = [especie]
+        elif not isinstance(especie, list):
+            especie = list(especie) if especie else []
+    
     df = load_proyecciones_consolidado()
     
     # Aplicar filtros
@@ -250,6 +263,13 @@ def get_proyecciones_por_especie(
     """
     Obtiene las proyecciones agregadas por especie.
     """
+    # VALIDACIÓN DE TIPOS: Normalizar planta
+    if planta is not None:
+        if isinstance(planta, str):
+            planta = [planta]
+        elif not isinstance(planta, list):
+            planta = list(planta) if planta else []
+    
     df = load_proyecciones_consolidado()
     
     if planta:
@@ -296,6 +316,19 @@ def get_precios_por_especie(
     Returns:
         Lista de diccionarios con especie_manejo y precio_promedio
     """
+    # VALIDACIÓN DE TIPOS: Normalizar planta y especie
+    if planta is not None:
+        if isinstance(planta, str):
+            planta = [planta]
+        elif not isinstance(planta, list):
+            planta = list(planta) if planta else []
+    
+    if especie is not None:
+        if isinstance(especie, str):
+            especie = [especie]
+        elif not isinstance(especie, list):
+            especie = list(especie) if especie else []
+    
     df = load_proyecciones_consolidado()
     
     # Aplicar filtros
@@ -348,6 +381,19 @@ def get_precios_detalle_productor(
     Returns:
         Lista de diccionarios con: productor, especie, precio_proyectado, kg_total
     """
+    # VALIDACIÓN DE TIPOS: Normalizar planta y especie
+    if planta is not None:
+        if isinstance(planta, str):
+            planta = [planta]
+        elif not isinstance(planta, list):
+            planta = list(planta) if planta else []
+    
+    if especie is not None:
+        if isinstance(especie, str):
+            especie = [especie]
+        elif not isinstance(especie, list):
+            especie = list(especie) if especie else []
+    
     df = load_proyecciones_consolidado()
     
     # Aplicar filtros

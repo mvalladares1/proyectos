@@ -39,6 +39,27 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     client = OdooClient(username=username, password=password)
     cache = get_cache()
     
+    # VALIDACIÓN DE TIPOS: Normalizar origen y estados antes de usarlos
+    if origen is not None:
+        if isinstance(origen, str):
+            print(f"[WARNING] origen llegó como string '{origen}', convirtiendo a lista")
+            origen = [origen]
+        elif not isinstance(origen, list):
+            print(f"[WARNING] origen llegó como tipo {type(origen)}, convirtiendo a lista")
+            origen = list(origen) if origen else []
+    
+    if estados is not None:
+        if isinstance(estados, str):
+            print(f"[WARNING] estados llegó como string '{estados}', convirtiendo a lista")
+            estados = [estados]
+        elif not isinstance(estados, list):
+            print(f"[WARNING] estados llegó como tipo {type(estados)}, convirtiendo a lista")
+            estados = list(estados) if estados else []
+    
+    # DEBUG: Log parámetros normalizados
+    print(f"[DEBUG recepcion_service] origen (normalizado): {origen}, tipo: {type(origen)}")
+    print(f"[DEBUG recepcion_service] estados (normalizado): {estados}, tipo: {type(estados)}")
+    
     # Intentar obtener del caché
     cache_key = cache._make_key(
         "recepciones_mp",

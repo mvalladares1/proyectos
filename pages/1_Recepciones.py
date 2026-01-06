@@ -41,6 +41,18 @@ shared.init_session_state()
 st.title("📥 Recepciones de Materia Prima (MP)")
 st.caption("Monitorea la fruta recepcionada en planta, con KPIs de calidad asociados")
 
+# Botón de emergencia para limpiar caché (en caso de errores intermitentes)
+with st.expander("⚙️ Herramientas de Depuración", expanded=False):
+    st.caption("Si experimentas errores 500 intermitentes, usa este botón para limpiar todos los cachés")
+    if st.button("🔄 Limpiar Todos los Cachés", type="secondary"):
+        with st.spinner("Limpiando cachés..."):
+            success, msg = shared.clear_all_caches()
+            if success:
+                st.success(msg)
+                st.info("Por favor, recarga la página para aplicar los cambios")
+            else:
+                st.warning(msg)
+
 # === PRE-CALCULAR PERMISOS ===
 _perm_kpis = tiene_acceso_pagina("recepciones", "kpis_calidad")
 _perm_gestion = tiene_acceso_pagina("recepciones", "gestion_recepciones")

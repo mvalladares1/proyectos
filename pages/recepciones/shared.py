@@ -119,6 +119,31 @@ def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
     return None
 
 
+# --------------------- Gestión de Caché ---------------------
+
+def clear_backend_cache():
+    """Limpia el caché del backend."""
+    try:
+        resp = requests.post(f"{API_URL}/api/v1/recepciones-mp/clear-cache", timeout=10)
+        if resp.status_code == 200:
+            return True, "✅ Caché del backend limpiado"
+        else:
+            return False, f"❌ Error {resp.status_code}: {resp.text}"
+    except Exception as e:
+        return False, f"❌ Error al limpiar caché: {str(e)}"
+
+
+def clear_all_caches():
+    """Limpia todos los cachés (frontend + backend)."""
+    # Limpiar cachés de Streamlit
+    st.cache_data.clear()
+    
+    # Limpiar caché del backend
+    success, msg = clear_backend_cache()
+    
+    return success, msg
+
+
 # --------------------- Inicialización de Session State ---------------------
 
 def init_session_state():

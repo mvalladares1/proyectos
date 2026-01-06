@@ -5,6 +5,7 @@ from backend.services.recepcion_service import get_recepciones_mp, validar_recep
 from backend.services.recepciones_gestion_service import RecepcionesGestionService
 from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
+from backend.cache import get_cache
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 import os
@@ -30,13 +31,17 @@ async def get_recepciones(
         origen: Lista de orígenes. Valores válidos: "RFP" (ID 1), "VILKUN" (ID 217).
                 Si no se especifica, muestra recepciones de ambos orígenes.
     """
-    # DEBUG: Log incoming origen parameter
-    print(f"[DEBUG router] origen recibido en endpoint: {origen}, tipo: {type(origen)}")
+    # DEBUG: Log incoming parameters
+    print(f"[DEBUG router] origen={origen} (type={type(origen)}), estados={estados} (type={type(estados)})")
     
     try:
         data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen, estados)
         return data
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[ERROR] Error en get_recepciones: {str(e)}")
+        print(f"[ERROR] Traceback completo:\n{error_trace}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -254,3 +259,16 @@ async def validate_recepciones(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.post("/clear-cache")
+async def clear_cache():
+    """
+    Limpia el caché de recepciones.
+    Útil cuando hay problemas de datos o se necesita forzar una recarga.
+    """
+    try:
+        cache = get_cache()
+        cache.clear()
+        return {"status": "ok", "message": "Caché limpiado exitosamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
