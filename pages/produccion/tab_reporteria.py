@@ -13,6 +13,7 @@ from .shared import (
     API_URL, fmt_numero, fmt_porcentaje, get_alert_color,
     filtrar_mos_por_planta, fetch_dashboard_completo, skeleton_loader
 )
+from .graficos import grafico_congelado_semanal, grafico_vaciado_por_sala
 
 
 def render(username: str, password: str):
@@ -163,7 +164,7 @@ def render(username: str, password: str):
     
     if data:
         st.markdown("---")
-        _render_kpis_tabs(data)
+        _render_kpis_tabs(data, mos)
         st.markdown("---")
         
         if consolidado:
@@ -182,7 +183,7 @@ def render(username: str, password: str):
         _render_info_ayuda()
 
 
-def _render_kpis_tabs(data):
+def _render_kpis_tabs(data, mos=None):
     """Renderiza los sub-tabs de KPIs: Proceso, Congelado, Global."""
     vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)", "📊 Global"])
     
@@ -218,6 +219,12 @@ def _render_kpis_tabs(data):
                 st.metric("Lotes Únicos", data.get('lotes_unicos', 0))
         
         _fragment_kpis_proceso()
+        
+        # === GRÁFICO SEMANAL DE PROCESO/VACIADO POR SALA ===
+        if mos:
+            st.markdown("---")
+            st.markdown("### 📊 Análisis Semanal por Sala y Línea")
+            grafico_vaciado_por_sala(mos)
     
     with vista_tabs[1]:
         @st.fragment
@@ -241,6 +248,12 @@ def _render_kpis_tabs(data):
                 st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}")
         
         _fragment_kpis_congelado()
+        
+        # === GRÁFICO SEMANAL DE CONGELADO ===
+        if mos:
+            st.markdown("---")
+            st.markdown("### 📊 Análisis Semanal de Congelado")
+            grafico_congelado_semanal(mos)
     
     with vista_tabs[2]:
         @st.fragment
