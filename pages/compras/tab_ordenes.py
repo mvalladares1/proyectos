@@ -46,25 +46,22 @@ def render(username: str, password: str):
             status_text.text("⏳ Fase 1/4: Conectando con Odoo...")
             progress_bar.progress(25)
             
-            # Llamadas cacheadas
-            st.session_state.compras_data = fetch_compras_overview(username, password)
-            
-            status_text.text("⏳ Fase 2/4: Consultando órdenes...")
-            progress_bar.progress(50)
-            
             # Parámetros para órdenes
             state = None if status_filter == "Todos" else status_filter
             date_from = fecha_inicio.strftime("%Y-%m-%d")
             date_to = fecha_fin.strftime("%Y-%m-%d")
+            
+            # Llamadas cacheadas
+            st.session_state.compras_data = fetch_compras_overview(username, password, date_from, date_to)
             
             status_text.text("⏳ Fase 3/4: Procesando datos...")
             progress_bar.progress(75)
             
             st.session_state.compras_ordenes = fetch_compras_ordenes(
                 username, password, 
-                state=state,
-                date_from=date_from,
-                date_to=date_to
+                status_filter=state,
+                fecha_inicio=date_from,
+                fecha_fin=date_to
             )
             
             status_text.text("✅ Fase 4/4: Completado")

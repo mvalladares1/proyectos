@@ -71,13 +71,18 @@ def get_receive_color(status):
 # --------------------- Funciones fetch con caché ---------------------
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_compras_overview(_username, _password):
+def fetch_compras_overview(_username, _password, fecha_inicio, fecha_fin):
     """Obtiene overview de compras (KPIs)."""
     try:
         import requests
         resp = requests.get(
             f"{API_URL}/api/v1/compras/overview",
-            params={"username": _username, "password": _password},
+            params={
+                "username": _username, 
+                "password": _password,
+                "fecha_inicio": fecha_inicio,
+                "fecha_fin": fecha_fin
+            },
             timeout=30
         )
         if resp.status_code == 200:
@@ -89,17 +94,17 @@ def fetch_compras_overview(_username, _password):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_compras_ordenes(_username, _password, state=None, date_from=None, date_to=None):
+def fetch_compras_ordenes(_username, _password, status_filter=None, fecha_inicio=None, fecha_fin=None):
     """Obtiene órdenes de compra."""
     try:
         import requests
         params = {"username": _username, "password": _password}
-        if state:
-            params["state"] = state
-        if date_from:
-            params["date_from"] = date_from
-        if date_to:
-            params["date_to"] = date_to
+        if status_filter:
+            params["status_filter"] = status_filter
+        if fecha_inicio:
+            params["fecha_inicio"] = fecha_inicio
+        if fecha_fin:
+            params["fecha_fin"] = fecha_fin
         
         resp = requests.get(
             f"{API_URL}/api/v1/compras/ordenes",
