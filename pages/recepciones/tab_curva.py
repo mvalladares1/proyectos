@@ -168,11 +168,13 @@ def render(username: str, password: str):
                     if resp_sist.status_code == 200:
                         recepciones_sist = resp_sist.json()
                         st.session_state.curva_sistema_raw = recepciones_sist
+                        st.toast(f"✅ {len(recepciones_sist)} recepciones cargadas del sistema")
                     else:
-                        st.error(f"Error al cargar recepciones del sistema: {resp_sist.status_code}")
+                        st.error(f"Error al cargar recepciones del sistema: {resp_sist.status_code} - {resp_sist.text}")
                         st.session_state.curva_sistema_raw = None
                 except Exception as e:
                     st.error(f"Error de conexión al sistema: {e}")
+                    st.session_state.curva_sistema_raw = None
                     st.session_state.curva_sistema_raw = None
                 
                 status_text.text("✅ Fase 4/4: Completado")
@@ -248,6 +250,8 @@ def render(username: str, password: str):
             df_sistema_semana = None
             if 'curva_sistema_raw' in st.session_state and st.session_state.curva_sistema_raw:
                 recepciones = st.session_state.curva_sistema_raw
+                
+                st.info(f"📊 Procesando {len(recepciones)} recepciones del sistema...")
 
                 # Procesar recepciones igual que KPIs:
                 # - Iterar sobre productos
@@ -334,6 +338,10 @@ def render(username: str, password: str):
                     df_sistema_semana['sort_key'] = df_sistema_semana.apply(
                         lambda x: x['semana'] if x['año'] == 2024 else x['semana'] + 100, axis=1
                     )
+                    total_kg_sistema = df_sistema_semana['kg_sistema'].sum()
+                    st.success(f"✅ Sistema: {fmt_numero(total_kg_sistema, 0)} kg procesados en {len(df_sistema_semana)} semanas")
+                else:
+                    st.warning("⚠️ No se encontraron kg en las recepciones del sistema")
 
             # Mostrar info de filtro activo
             if especies_filtro:
