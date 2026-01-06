@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from recepciones import shared
 from recepciones import tab_kpis
 from recepciones import tab_gestion
-from recepciones import tab_curva
 from recepciones import tab_aprobaciones
 
 # Configuración de página
@@ -41,29 +40,15 @@ shared.init_session_state()
 st.title("📥 Recepciones de Materia Prima (MP)")
 st.caption("Monitorea la fruta recepcionada en planta, con KPIs de calidad asociados")
 
-# Botón de emergencia para limpiar caché (en caso de errores intermitentes)
-with st.expander("⚙️ Herramientas de Depuración", expanded=False):
-    st.caption("Si experimentas errores 500 intermitentes, usa este botón para limpiar todos los cachés")
-    if st.button("🔄 Limpiar Todos los Cachés", type="secondary"):
-        with st.spinner("Limpiando cachés..."):
-            success, msg = shared.clear_all_caches()
-            if success:
-                st.success(msg)
-                st.info("Por favor, recarga la página para aplicar los cambios")
-            else:
-                st.warning(msg)
-
 # === PRE-CALCULAR PERMISOS ===
 _perm_kpis = tiene_acceso_pagina("recepciones", "kpis_calidad")
 _perm_gestion = tiene_acceso_pagina("recepciones", "gestion_recepciones")
-_perm_curva = tiene_acceso_pagina("recepciones", "curva_abastecimiento")
 _perm_aprobaciones = tiene_acceso_pagina("recepciones", "aprobaciones_mp")
 
 # === TABS PRINCIPALES ===
-tab_kpis_ui, tab_gestion_ui, tab_curva_ui, tab_aprobaciones_ui = st.tabs([
+tab_kpis_ui, tab_gestion_ui, tab_aprobaciones_ui = st.tabs([
     "📊 KPIs y Calidad", 
     "📋 Gestión de Recepciones", 
-    "📈 Curva de Abastecimiento", 
     "📥 Aprobaciones MP"
 ])
 
@@ -94,24 +79,14 @@ with tab_gestion_ui:
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
 
 # =====================================================
-#           TAB 3: CURVA DE ABASTECIMIENTO
-# =====================================================
-with tab_curva_ui:
-    if _perm_curva:
-        @st.fragment
-        def _frag_curva():
-            tab_curva.render(username, password)
-        _frag_curva()
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Curva de Abastecimiento'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
-
-# =====================================================
-#           TAB 4: APROBACIONES MP
+#           TAB 3: APROBACIONES MP
 # =====================================================
 with tab_aprobaciones_ui:
     if _perm_aprobaciones:
-        tab_aprobaciones.render(username, password)
+        @st.fragment
+        def _frag_aprobaciones():
+            tab_aprobaciones.render(username, password)
+        _frag_aprobaciones()
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Aprobaciones MP'. Contacta al administrador.")
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")

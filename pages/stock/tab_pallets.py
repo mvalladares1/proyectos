@@ -99,72 +99,72 @@ def render(username: str, password: str, camaras_data: list):
                     col2.metric("Stock Total (kg)", fmt_numero(total_qty, 2))
                     col3.metric("Antigüedad Promedio", f"{fmt_numero(avg_age, 0)} días")
                 
-                st.divider()
-                
-                # Tabla de pallets
-                df_pallets = pd.DataFrame(pallets_data)
-                
-                # Reordenar columnas en el dataset completo
-                column_order = ["pallet", "product", "lot", "quantity", "category", "condition", "in_date", "days_old"]
-                df_pallets = df_pallets[[c for c in column_order if c in df_pallets.columns]]
-                
-                # Renombrar columnas
-                df_pallets.columns = ["Pallet", "Producto", "Lote", "Cantidad (kg)", "Categoría", "Condición", "Fecha Ingreso", "Días"]
-                
-                # Formatear números en el dataset completo
-                df_pallets["Cantidad (kg)"] = df_pallets["Cantidad (kg)"].apply(lambda x: fmt_numero(x, 2))
-                
-                # Paginación
-                ITEMS_PER_PAGE = 50
-                total_items = len(df_pallets)
-                total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
-                
-                if 'pallets_page' not in st.session_state:
-                    st.session_state.pallets_page = 1
-                if st.session_state.pallets_page > total_pages:
-                    st.session_state.pallets_page = 1
-                
-                col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
-                with col_nav2:
-                    st.session_state.pallets_page = st.number_input(
-                        "Página",
-                        min_value=1,
-                        max_value=total_pages,
-                        value=st.session_state.pallets_page,
-                        key="pallets_page_input"
+                    st.divider()
+                    
+                    # Tabla de pallets
+                    df_pallets = pd.DataFrame(pallets_data)
+                    
+                    # Reordenar columnas en el dataset completo
+                    column_order = ["pallet", "product", "lot", "quantity", "category", "condition", "in_date", "days_old"]
+                    df_pallets = df_pallets[[c for c in column_order if c in df_pallets.columns]]
+                    
+                    # Renombrar columnas
+                    df_pallets.columns = ["Pallet", "Producto", "Lote", "Cantidad (kg)", "Categoría", "Condición", "Fecha Ingreso", "Días"]
+                    
+                    # Formatear números en el dataset completo
+                    df_pallets["Cantidad (kg)"] = df_pallets["Cantidad (kg)"].apply(lambda x: fmt_numero(x, 2))
+                    
+                    # Paginación
+                    ITEMS_PER_PAGE = 50
+                    total_items = len(df_pallets)
+                    total_pages = max(1, (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+                    
+                    if 'pallets_page' not in st.session_state:
+                        st.session_state.pallets_page = 1
+                    if st.session_state.pallets_page > total_pages:
+                        st.session_state.pallets_page = 1
+                    
+                    col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
+                    with col_nav2:
+                        st.session_state.pallets_page = st.number_input(
+                            "Página",
+                            min_value=1,
+                            max_value=total_pages,
+                            value=st.session_state.pallets_page,
+                            key="pallets_page_input"
+                        )
+                    
+                    st.caption(f"Mostrando {total_items} pallets | Página {st.session_state.pallets_page} de {total_pages}")
+                    
+                    start_idx = (st.session_state.pallets_page - 1) * ITEMS_PER_PAGE
+                    end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
+                    df_page = df_pallets.iloc[start_idx:end_idx]
+                    
+                    # Resaltar antigüedad
+                    def highlight_age(row):
+                        days = row["Días"]
+                        if days > 30:
+                            return ['background-color: rgba(255, 153, 102, 0.3)'] * len(row)
+                        elif days > 15:
+                            return ['background-color: rgba(255, 243, 205, 0.3)'] * len(row)
+                        return [''] * len(row)
+                    
+                    st.dataframe(
+                        df_page.style.apply(highlight_age, axis=1),
+                        use_container_width=True,
+                        height=500
                     )
-                
-                st.caption(f"Mostrando {total_items} pallets | Página {st.session_state.pallets_page} de {total_pages}")
-                
-                start_idx = (st.session_state.pallets_page - 1) * ITEMS_PER_PAGE
-                end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
-                df_page = df_pallets.iloc[start_idx:end_idx]
-                
-                # Resaltar antigüedad
-                def highlight_age(row):
-                    days = row["Días"]
-                    if days > 30:
-                        return ['background-color: rgba(255, 153, 102, 0.3)'] * len(row)
-                    elif days > 15:
-                        return ['background-color: rgba(255, 243, 205, 0.3)'] * len(row)
-                    return [''] * len(row)
-                
-                st.dataframe(
-                    df_page.style.apply(highlight_age, axis=1),
-                    use_container_width=True,
-                    height=500
-                )
-                
-                # Descargar CSV (de todos los datos, no solo la página)
-                csv = df_pallets.to_csv(index=False)
-                st.download_button(
-                    "📥 Descargar CSV",
-                    csv,
-                    f"pallets_{selected_location_name}_{datetime.now().strftime('%Y%m%d')}.csv",
-                    "text/csv"
-                )
-            else:
-                st.warning("No se encontraron pallets con los filtros aplicados")
+                    
+                    # Descargar CSV (de todos los datos, no solo la página)
+                    csv = df_pallets.to_csv(index=False)
+                    st.download_button(
+                        "📥 Descargar CSV",
+                        csv,
+                        f"pallets_{selected_location_name}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        "text/csv"
+                    )
+                else:
+                    st.warning("No se encontraron pallets con los filtros aplicados")
         except Exception as e:
             st.error(f"Error: {e}")
         finally:

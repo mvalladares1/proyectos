@@ -108,82 +108,82 @@ def render(username: str, password: str):
         if st.session_state["production_ofs"]:
             df = pd.DataFrame(st.session_state["production_ofs"])
             st.subheader("📋 Tabla de órdenes encontradas")
-        
-        if not df.empty:
-            display_cols = [col for col in [
-                "name", "state", "date_planned_start", "product_id",
-                "product_qty", "qty_produced", "date_start", "date_finished", "user_id"
-            ] if col in df.columns]
-            df_display = df[display_cols].copy()
             
-            if "product_id" in df_display.columns:
-                df_display["producto"] = df_display["product_id"].apply(clean_name)
-                df_display.drop(columns=["product_id"], inplace=True)
-            if "user_id" in df_display.columns:
-                df_display["responsable"] = df_display["user_id"].apply(clean_name)
-                df_display.drop(columns=["user_id"], inplace=True)
-            for col in ["date_planned_start", "date_start", "date_finished"]:
-                if col in df_display.columns:
-                    df_display[col] = df_display[col].apply(lambda x: pd.to_datetime(x).strftime("%d/%m/%Y %H:%M") if pd.notna(x) and x else "")
-            
-            df_display = df_display.rename(columns={
-                "name": "Orden",
-                "state": "Estado",
-                "date_planned_start": "Fecha Planificada",
-                "product_qty": "Cant. Planificada",
-                "qty_produced": "Cant. Producida",
-                "date_start": "Fecha Inicio",
-                "date_finished": "Fecha Fin"
-            })
-            st.dataframe(df_display, use_container_width=True, height=350)
-            csv = df_display.to_csv(index=False)
-            st.download_button("📥 Descargar órdenes", csv, "ordenes_produccion.csv", "text/csv")
+            if not df.empty:
+                display_cols = [col for col in [
+                    "name", "state", "date_planned_start", "product_id",
+                    "product_qty", "qty_produced", "date_start", "date_finished", "user_id"
+                ] if col in df.columns]
+                df_display = df[display_cols].copy()
+                
+                if "product_id" in df_display.columns:
+                    df_display["producto"] = df_display["product_id"].apply(clean_name)
+                    df_display.drop(columns=["product_id"], inplace=True)
+                if "user_id" in df_display.columns:
+                    df_display["responsable"] = df_display["user_id"].apply(clean_name)
+                    df_display.drop(columns=["user_id"], inplace=True)
+                for col in ["date_planned_start", "date_start", "date_finished"]:
+                    if col in df_display.columns:
+                        df_display[col] = df_display[col].apply(lambda x: pd.to_datetime(x).strftime("%d/%m/%Y %H:%M") if pd.notna(x) and x else "")
+                
+                df_display = df_display.rename(columns={
+                    "name": "Orden",
+                    "state": "Estado",
+                    "date_planned_start": "Fecha Planificada",
+                    "product_qty": "Cant. Planificada",
+                    "qty_produced": "Cant. Producida",
+                    "date_start": "Fecha Inicio",
+                    "date_finished": "Fecha Fin"
+                })
+                st.dataframe(df_display, use_container_width=True, height=350)
+                csv = df_display.to_csv(index=False)
+                st.download_button("📥 Descargar órdenes", csv, "ordenes_produccion.csv", "text/csv")
 
-        st.markdown("---")
-        options = {
-            f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))}": of["id"]
-            for of in st.session_state["production_ofs"]
-        }
-        selected_label = st.selectbox("Seleccionar orden para detalle", options=list(options.keys()), key="prod_selector")
-        selected_id = options[selected_label]
-        
-        if st.button("Cargar detalle", type="primary", key="btn_cargar_detalle", disabled=st.session_state.prod_detalle_loading):
-            st.session_state.prod_detalle_loading = True
-            try:
-                # Progress bar personalizado
-                progress_placeholder = st.empty()
-                
-                with progress_placeholder.container():
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+            st.markdown("---")
+            options = {
+                f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))}": of["id"]
+                for of in st.session_state["production_ofs"]
+            }
+            selected_label = st.selectbox("Seleccionar orden para detalle", options=list(options.keys()), key="prod_selector")
+            selected_id = options[selected_label]
+            
+            if st.button("Cargar detalle", type="primary", key="btn_cargar_detalle", disabled=st.session_state.prod_detalle_loading):
+                st.session_state.prod_detalle_loading = True
+                try:
+                    # Progress bar personalizado
+                    progress_placeholder = st.empty()
                     
-                    status_text.text("🔗 Conectando con Odoo...")
-                    progress_bar.progress(25)
+                    with progress_placeholder.container():
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        status_text.text("🔗 Conectando con Odoo...")
+                        progress_bar.progress(25)
+                        
+                        status_text.text("📋 Consultando detalle de OF...")
+                        progress_bar.progress(50)
+                        
+                        detail = fetch_of_detail(selected_id, username, password)
+                        
+                        status_text.text("⚙️ Procesando componentes...")
+                        progress_bar.progress(75)
+                        
+                        st.session_state["production_current_of"] = detail
+                        
+                        progress_bar.progress(100)
+                        status_text.text("✅ Detalle cargado")
                     
-                    status_text.text("📋 Consultando detalle de OF...")
-                    progress_bar.progress(50)
-                    
-                    detail = fetch_of_detail(selected_id, username, password)
-                    
-                    status_text.text("⚙️ Procesando componentes...")
-                    progress_bar.progress(75)
-                    
-                    st.session_state["production_current_of"] = detail
-                    
-                    progress_bar.progress(100)
-                    status_text.text("✅ Detalle cargado")
-                
-                progress_placeholder.empty()
-                st.toast("✅ Detalle cargado correctamente", icon="✅")
-            except Exception as error:
-                progress_placeholder.empty()
-                st.error(f"No se pudo cargar la orden: {error}")
-                st.toast(f"❌ Error: {str(error)[:100]}", icon="❌")
-            finally:
-                st.session_state.prod_detalle_loading = False
-                st.rerun()
-    else:
-        st.info("Busca una orden para comenzar")
+                    progress_placeholder.empty()
+                    st.toast("✅ Detalle cargado correctamente", icon="✅")
+                except Exception as error:
+                    progress_placeholder.empty()
+                    st.error(f"No se pudo cargar la orden: {error}")
+                    st.toast(f"❌ Error: {str(error)[:100]}", icon="❌")
+                finally:
+                    st.session_state.prod_detalle_loading = False
+                    st.rerun()
+        else:
+            st.info("Busca una orden para comenzar")
 
     # Detalle de OF seleccionada
     if st.session_state["production_current_of"]:
