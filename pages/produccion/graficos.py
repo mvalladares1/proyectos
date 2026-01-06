@@ -7,18 +7,53 @@ import altair as alt
 from datetime import datetime, timedelta
 
 
-def grafico_congelado_semanal(mos_data: list):
+def _agrupar_por_periodo(fecha: datetime, agrupacion: str):
+    """
+    Agrupa una fecha según el período especificado.
+    
+    Args:
+        fecha: Fecha a agrupar
+        agrupacion: "Día", "Semana" o "Mes"
+    
+    Returns:
+        tuple: (label, sort_year, sort_value)
+    """
+    if agrupacion == "Día":
+        return (
+            fecha.strftime("%d/%m"),  # Label: 06/01
+            fecha.year,
+            fecha.timetuple().tm_yday  # Día del año para ordenar
+        )
+    elif agrupacion == "Mes":
+        return (
+            fecha.strftime("%b"),  # Label: Ene, Feb
+            fecha.year,
+            fecha.month
+        )
+    else:  # Semana (default)
+        iso_year, iso_week, _ = fecha.isocalendar()
+        return (
+            f"S{iso_week:02d}",  # Label: S01, S02
+            iso_year,
+            iso_week
+        )
+
+
+def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana"):
     """
     Gráficos de barras separados por túnel de congelado.
-    Muestra Kg congelados por semana para cada túnel.
+    Muestra Kg congelados por período (día/semana/mes) para cada túnel.
     Crea un gráfico independiente por cada túnel.
     
     Args:
         mos_data: Lista de órdenes de fabricación (MOs)
+        agrupacion: "Día", "Semana" o "Mes"
     """
     if not mos_data:
         st.info("No hay datos de congelado disponibles")
         return
+    
+    periodo_label = {"Día": "Diario", "Semana": "Semana ISO", "Mes": "Mes"}.get(agrupacion, "Semana ISO")
     
     # Preparar datos por túnel
     datos_por_tunel = {}
@@ -59,9 +94,8 @@ def grafico_congelado_semanal(mos_data: list):
             except:
                 continue
         
-        # Obtener semana ISO
-        iso_year, iso_week, _ = fecha.isocalendar()
-        semana_label = f"S{iso_week:02d}"
+        # Obtener período de agrupación
+        periodo_label_str, sort_year, sort_value = _agrupar_por_periodo(fecha, agrupacion)
         
         # Obtener kg procesados (salida)
         kg_pt = mo.get('kg_pt', 0) or 0
@@ -71,10 +105,10 @@ def grafico_congelado_semanal(mos_data: list):
                 datos_por_tunel[tunel_nombre] = []
             
             datos_por_tunel[tunel_nombre].append({
-                'Semana': semana_label,
+                'Periodo': periodo_label_str,
                 'Kg': kg_pt,
-                'iso_year': iso_year,
-                'iso_week': iso_week
+                'sort_year': sort_year,
+                'sort_value': sort_value
             })
     
     if not datos_por_tunel:
@@ -101,27 +135,27 @@ def grafico_congelado_semanal(mos_data: list):
         datos_tunel = datos_por_tunel[tunel_nombre]
         df = pd.DataFrame(datos_tunel)
         
-        # Agrupar por semana
-        df_grouped = df.groupby(['Semana', 'iso_year', 'iso_week'], as_index=False).agg({'Kg': 'sum'})
+        # Agrupar por período
+        df_grouped = df.groupby(['Periodo', 'sort_year', 'sort_value'], as_index=False).agg({'Kg': 'sum'})
         
-        # Ordenar por semana ISO
-        df_grouped = df_grouped.sort_values(['iso_year', 'iso_week'])
+        # Ordenar por año y valor
+        df_grouped = df_grouped.sort_values(['sort_year', 'sort_value'])
         
         # Crear gráfico de barras
         chart = alt.Chart(df_grouped).mark_bar(color='steelblue').encode(
-            x=alt.X('Semana:N', 
-                    title='Semana ISO',
-                    sort=df_grouped['Semana'].unique().tolist(),
+            x=alt.X('Periodo:N', 
+                    title=periodo_label,
+                    sort=df_grouped['Periodo'].unique().tolist(),
                     axis=alt.Axis(labelAngle=-45)),
             y=alt.Y('Kg:Q', 
                     title='Kg Congelados',
                     axis=alt.Axis(format=',.0f')),
             tooltip=[
-                alt.Tooltip('Semana:N', title='Semana'),
+                alt.Tooltip('Periodo:N', title=periodo_label),
                 alt.Tooltip('Kg:Q', title='Kg Congelados', format=',.0f')
             ]
         ).properties(
-            title=f'Kg Congelados por Semana - {tunel_nombre}',
+            title=f'Kg Congelados por {agrupacion} - {tunel_nombre}',
             height=350
         )
         
@@ -129,13 +163,13 @@ def grafico_congelado_semanal(mos_data: list):
         
         # Tabla resumen para este túnel
         with st.expander(f"📊 Ver tabla de datos - {tunel_nombre}"):
-            st.markdown("**Kg Congelados por Semana**")
-            df_table = df_grouped[['Semana', 'Kg']].copy()
+            st.markdown(f"**Kg Congelados por {agrupacion}**")
+            df_table = df_grouped[['Periodo', 'Kg']].copy()
             df_table['Kg'] = df_table['Kg'].apply(lambda x: f"{x:,.0f}")
             
             # Agregar total
             total_kg = df_grouped['Kg'].sum()
-            df_total = pd.DataFrame([{'Semana': 'TOTAL', 'Kg': f"{total_kg:,.0f}"}])
+            df_total = pd.DataFrame([{'Periodo': 'TOTAL', 'Kg': f"{total_kg:,.0f}"}])
             df_table = pd.concat([df_table, df_total], ignore_index=True)
             
             st.dataframe(df_table, use_container_width=True, hide_index=True)
@@ -143,7 +177,7 @@ def grafico_congelado_semanal(mos_data: list):
         st.markdown("---")  # Separador entre túneles
 
 
-def grafico_vaciado_por_sala(mos_data: list):
+def grafico_vaciado_por_sala(mos_data: list, agrupacion: str = "Semana"):
     """
     Gráficos de barras separados por sala con desglose de líneas.
     Muestra rendimiento individual de cada línea dentro de su sala.
@@ -151,10 +185,13 @@ def grafico_vaciado_por_sala(mos_data: list):
     
     Args:
         mos_data: Lista de órdenes de fabricación (MOs)
+        agrupacion: "Día", "Semana" o "Mes"
     """
     if not mos_data:
         st.info("No hay datos de proceso disponibles")
         return
+    
+    periodo_label = {"Día": "Día", "Semana": "Semana ISO", "Mes": "Mes"}.get(agrupacion, "Semana ISO")
     
     # Preparar datos
     datos_por_sala = {}
@@ -200,9 +237,8 @@ def grafico_vaciado_por_sala(mos_data: list):
             except:
                 continue
         
-        # Obtener semana ISO
-        iso_year, iso_week, _ = fecha.isocalendar()
-        semana_label = f"S{iso_week:02d}"
+        # Obtener período de agrupación
+        periodo_label_str, sort_year, sort_value = _agrupar_por_periodo(fecha, agrupacion)
         
         # Obtener kg procesados y rendimiento
         kg_pt = mo.get('kg_pt', 0) or 0
@@ -213,13 +249,13 @@ def grafico_vaciado_por_sala(mos_data: list):
                 datos_por_sala[sala] = []
             
             datos_por_sala[sala].append({
-                'Semana': semana_label,
+                'Periodo': periodo_label_str,
                 'Línea': linea,
                 'Sala-Línea': f"{sala} - {linea}",
                 'Kg PT': kg_pt,
                 'Rendimiento': rendimiento,
-                'iso_year': iso_year,
-                'iso_week': iso_week
+                'sort_year': sort_year,
+                'sort_value': sort_value
             })
     
     if not datos_por_sala:
@@ -246,14 +282,14 @@ def grafico_vaciado_por_sala(mos_data: list):
         datos_sala = datos_por_sala[sala_nombre]
         df = pd.DataFrame(datos_sala)
         
-        # Agrupar por semana y línea
-        df_grouped = df.groupby(['Semana', 'Línea', 'Sala-Línea', 'iso_year', 'iso_week'], as_index=False).agg({
+        # Agrupar por período y línea
+        df_grouped = df.groupby(['Periodo', 'Línea', 'Sala-Línea', 'sort_year', 'sort_value'], as_index=False).agg({
             'Kg PT': 'sum',
             'Rendimiento': 'mean'
         })
         
-        # Ordenar por semana ISO
-        df_grouped = df_grouped.sort_values(['iso_year', 'iso_week'])
+        # Ordenar por año y valor
+        df_grouped = df_grouped.sort_values(['sort_year', 'sort_value'])
         
         # Crear dos pestañas: Kg PT y Rendimiento
         tab_kg, tab_rend = st.tabs(["📊 Kg Procesados", "📈 Rendimiento %"])
@@ -261,9 +297,9 @@ def grafico_vaciado_por_sala(mos_data: list):
         with tab_kg:
             # Gráfico de Kg procesados
             chart_kg = alt.Chart(df_grouped).mark_bar().encode(
-                x=alt.X('Semana:N', 
-                        title='Semana ISO',
-                        sort=df_grouped['Semana'].unique().tolist(),
+                x=alt.X('Periodo:N', 
+                        title=periodo_label,
+                        sort=df_grouped['Periodo'].unique().tolist(),
                         axis=alt.Axis(labelAngle=-45)),
                 y=alt.Y('Kg PT:Q', 
                         title='Kg Procesados',
@@ -272,12 +308,12 @@ def grafico_vaciado_por_sala(mos_data: list):
                                title='Línea',
                                scale=alt.Scale(scheme='category10')),
                 tooltip=[
-                    alt.Tooltip('Semana:N', title='Semana'),
+                    alt.Tooltip('Periodo:N', title=periodo_label),
                     alt.Tooltip('Línea:N', title='Línea'),
                     alt.Tooltip('Kg PT:Q', title='Kg Procesados', format=',.0f')
                 ]
             ).properties(
-                title=f'Kg Procesados por Semana - {sala_nombre}',
+                title=f'Kg Procesados por {agrupacion} - {sala_nombre}',
                 height=350
             )
             
@@ -290,9 +326,9 @@ def grafico_vaciado_por_sala(mos_data: list):
             else:
                 # Gráfico de Rendimiento
                 chart_rend = alt.Chart(df_grouped).mark_bar().encode(
-                    x=alt.X('Semana:N', 
-                            title='Semana ISO',
-                            sort=df_grouped['Semana'].unique().tolist(),
+                    x=alt.X('Periodo:N', 
+                            title=periodo_label,
+                            sort=df_grouped['Periodo'].unique().tolist(),
                             axis=alt.Axis(labelAngle=-45)),
                     y=alt.Y('Rendimiento:Q', 
                             title='Rendimiento %',
@@ -301,12 +337,12 @@ def grafico_vaciado_por_sala(mos_data: list):
                                    title='Línea',
                                    scale=alt.Scale(scheme='category10')),
                     tooltip=[
-                        alt.Tooltip('Semana:N', title='Semana'),
+                        alt.Tooltip('Periodo:N', title=periodo_label),
                         alt.Tooltip('Línea:N', title='Línea'),
                         alt.Tooltip('Rendimiento:Q', title='Rendimiento %', format='.2f')
                     ]
                 ).properties(
-                    title=f'Rendimiento % por Semana - {sala_nombre}',
+                    title=f'Rendimiento % por {agrupacion} - {sala_nombre}',
                     height=350
                 )
                 
@@ -315,10 +351,10 @@ def grafico_vaciado_por_sala(mos_data: list):
         # Tabla resumen para esta sala
         with st.expander(f"📊 Ver tabla de datos - {sala_nombre}"):
             # Tabla de Kg PT
-            st.markdown("**Kg Procesados por Línea y Semana**")
+            st.markdown(f"**Kg Procesados por Línea y {agrupacion}**")
             df_pivot_kg = df_grouped.pivot_table(
                 index='Línea', 
-                columns='Semana', 
+                columns='Periodo', 
                 values='Kg PT', 
                 aggfunc='sum',
                 fill_value=0
@@ -336,10 +372,10 @@ def grafico_vaciado_por_sala(mos_data: list):
             st.markdown("---")
             
             # Tabla de Rendimiento
-            st.markdown("**Rendimiento % Promedio por Línea y Semana**")
+            st.markdown(f"**Rendimiento % Promedio por Línea y {agrupacion}**")
             df_pivot_rend = df_grouped.pivot_table(
                 index='Línea', 
-                columns='Semana', 
+                columns='Periodo', 
                 values='Rendimiento', 
                 aggfunc='mean',
                 fill_value=0

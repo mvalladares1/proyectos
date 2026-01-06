@@ -92,6 +92,17 @@ def render(username: str, password: str):
     with col_planta2:
         filtro_vilkun_prod = st.checkbox("VILKUN", value=True, key="prod_vilkun")
     
+    # Selector de Agrupación para Gráficos
+    st.markdown("**📊 Agrupación de Gráficos**")
+    agrupacion = st.radio(
+        "Formato de visualización:",
+        options=["Día", "Semana", "Mes"],
+        index=1,  # Por defecto: Semana
+        horizontal=True,
+        key="prod_agrupacion",
+        help="Define cómo se agrupan los datos en los gráficos de barras"
+    )
+    
     if st.button("🔄 Consultar Reportería", type="primary", key="btn_consultar_reporteria", disabled=st.session_state.prod_reporteria_loading):
         st.session_state.prod_reporteria_loading = True
         st.session_state.prod_reporteria_error = None
@@ -164,7 +175,7 @@ def render(username: str, password: str):
     
     if data:
         st.markdown("---")
-        _render_kpis_tabs(data, mos, consolidado, fecha_inicio_rep, fecha_fin_rep, username, password)
+        _render_kpis_tabs(data, mos, consolidado, fecha_inicio_rep, fecha_fin_rep, username, password, agrupacion)
         st.markdown("---")
     elif st.session_state.prod_reporteria_loading:
         # Mostrar skeleton loader mientras carga
@@ -174,7 +185,7 @@ def render(username: str, password: str):
         _render_info_ayuda()
 
 
-def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None):
+def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
     """Renderiza los sub-tabs de KPIs: Proceso, Congelado, Global."""
     vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)", "📊 Global"])
     
@@ -216,11 +227,12 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, f
             st.markdown("---")
             _render_resumen_fruta_manejo(consolidado)
         
-        # === GRÁFICO SEMANAL DE PROCESO/VACIADO POR SALA ===
+        # === GRÁFICO TEMPORAL DE PROCESO/VACIADO POR SALA ===
         if mos:
             st.markdown("---")
-            st.markdown("### 📊 Análisis Semanal por Sala y Línea")
-            grafico_vaciado_por_sala(mos)
+            titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
+            st.markdown(f"### 📊 Análisis {titulo_agrupacion} por Sala y Línea")
+            grafico_vaciado_por_sala(mos, agrupacion)
         
         # === DETALLE DE FABRICACIONES - PROCESO ===
         if mos:
@@ -252,11 +264,12 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, f
         
         _fragment_kpis_congelado()
         
-        # === GRÁFICO SEMANAL DE CONGELADO ===
+        # === GRÁFICO TEMPORAL DE CONGELADO ===
         if mos:
             st.markdown("---")
-            st.markdown("### 📊 Análisis Semanal de Congelado")
-            grafico_congelado_semanal(mos)
+            titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
+            st.markdown(f"### 📊 Análisis {titulo_agrupacion} de Congelado")
+            grafico_congelado_semanal(mos, agrupacion)
         
         # === DETALLE DE FABRICACIONES - CONGELADO ===
         if mos:
