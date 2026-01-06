@@ -123,8 +123,31 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         limit=5000
     )
     
+    # VALIDACIÓN CRÍTICA: Verificar que recepciones sea una lista de diccionarios
     if not recepciones:
         return []
+    
+    if not isinstance(recepciones, list):
+        print(f"[ERROR CRÍTICO] recepciones no es una lista: {type(recepciones)}")
+        raise TypeError(f"Se esperaba lista de recepciones, se recibió {type(recepciones)}")
+    
+    # Filtrar recepciones inválidas
+    recepciones_validas = []
+    for idx, r in enumerate(recepciones):
+        if not isinstance(r, dict):
+            print(f"[ERROR] Recepción #{idx} no es diccionario: {type(r)} - valor: {r}")
+            continue
+        if "id" not in r:
+            print(f"[WARNING] Recepción #{idx} sin ID: {r}")
+            continue
+        recepciones_validas.append(r)
+    
+    if not recepciones_validas:
+        print(f"[WARNING] No hay recepciones válidas después de filtrar")
+        return []
+    
+    recepciones = recepciones_validas
+    print(f"[DEBUG] Recepciones válidas procesadas: {len(recepciones)}")
     
     # Recolectar IDs para batch queries
     picking_ids = [r["id"] for r in recepciones]
@@ -353,8 +376,17 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     # ============ PASO 7: Construir resultado final ============
     resultado = []
     
-    for rec in recepciones:
+    for idx, rec in enumerate(recepciones):
+        # VALIDACIÓN: Asegurar que rec es un diccionario
+        if not isinstance(rec, dict):
+            print(f"[ERROR] Recepción #{idx} en loop final no es diccionario: {type(rec)}")
+            continue
+        
         picking_id = rec.get("id")
+        if not picking_id:
+            print(f"[WARNING] Recepción #{idx} sin ID, saltando")
+            continue
+            
         productor = rec.get("partner_id", [None, ""])[1] if rec.get("partner_id") else ""
         
         # Excluir productor ADMINISTRADOR
@@ -375,6 +407,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         
         productos = []
         for m in rec_moves:
+            # VALIDACIÓN: Asegurar que m es un diccionario
+            if not isinstance(m, dict):
+                print(f"[WARNING] Movimiento en picking {picking_id} no es diccionario: {type(m)}")
+                continue
+                
             prod = m.get("product_id")
             prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod if prod else None
             prod_info = product_info_map.get(prod_id, {})
