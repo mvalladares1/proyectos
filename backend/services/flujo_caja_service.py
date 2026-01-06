@@ -1172,7 +1172,7 @@ class FlujoCajaService:
             ('display_type', 'not in', ['line_section', 'line_note'])
         ]
         
-        campos_lines = ['move_id', 'account_id', 'price_subtotal', 'analytic_tag_ids', 'name']
+        campos_lines = ['move_id', 'account_id', 'price_subtotal', 'name']
         try:
             lines = self.odoo.search_read('account.move.line', domain_lines, campos_lines, limit=10000)
         except Exception as e:
@@ -1197,19 +1197,8 @@ class FlujoCajaService:
                 cuentas_info = {a['id']: a for a in acc_read}
             except: pass
         
-        # Cache de etiquetas analíticas (OBLIGATORIO para proyección)
-        tag_ids = list(set(
-            tag_id
-            for l in lines
-            for tag_id in (l.get('analytic_tag_ids') or [])
-        ))
+        # Nota: analytic_tag_ids no disponible en esta versión de Odoo
         tags_info = {}
-        if tag_ids:
-            try:
-                tags_read = self.odoo.read('account.analytic.tag', tag_ids, ['id', 'name'])
-                tags_info = {t['id']: t.get('name', '') for t in tags_read}
-            except Exception as e:
-                print(f"[FlujoProyeccion] Error fetching tags: {e}")
         
         # Contadores para warnings
         docs_sin_etiqueta = []  # Lista de documentos sin etiquetas
@@ -1298,9 +1287,9 @@ class FlujoCajaService:
                 montos_por_concepto[categoria] = montos_por_concepto.get(categoria, 0) + monto_parte
                 
                 # Resolver etiquetas de la línea
-                line_tag_ids = line.get('analytic_tag_ids') or []
-                etiquetas_nombres = [tags_info.get(tid, f"Tag_{tid}") for tid in line_tag_ids]
-                sin_etiqueta = len(line_tag_ids) == 0
+                # analytic_tag_ids no disponible - usar descripción de línea como etiqueta
+                etiquetas_nombres = [line.get('name', '')] if line.get('name') else []
+                sin_etiqueta = not line.get('name')
                 
                 # Detalle documento (ENRIQUECIDO con etiquetas)
                 entry = {
