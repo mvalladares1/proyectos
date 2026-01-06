@@ -17,6 +17,12 @@ def render(username: str, password: str):
     st.subheader("Gestión de Órdenes de Compra")
     
     # Filtros
+    if "compras_error" not in st.session_state:
+        st.session_state.compras_error = None
+
+    if st.session_state.compras_error:
+        st.error(st.session_state.compras_error)
+
     col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
     with col1:
         fecha_inicio = st.date_input("Desde", datetime.now() - timedelta(days=7), format="DD/MM/YYYY", key="po_desde")
@@ -31,6 +37,7 @@ def render(username: str, password: str):
     
     if st.button("🔄 Consultar POs", type="primary", disabled=st.session_state.compras_loading):
         st.session_state.compras_loading = True
+        st.session_state.compras_error = None  # Limpiar errores previos
         try:
             # Progress bar personalizado
             progress_bar = st.progress(0)
@@ -67,7 +74,8 @@ def render(username: str, password: str):
         except Exception as e:
             progress_bar.empty()
             status_text.empty()
-            st.error(f"Error: {e}")
+            st.session_state.compras_error = f"Error al cargar datos: {e}"
+            st.error(st.session_state.compras_error)
             st.toast(f"❌ Error al cargar datos: {str(e)[:100]}", icon="❌")
         finally:
             st.session_state.compras_loading = False

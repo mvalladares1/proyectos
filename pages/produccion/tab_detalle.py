@@ -44,6 +44,11 @@ def render(username: str, password: str):
         st.session_state["production_ofs"] = []
     if "production_current_of" not in st.session_state:
         st.session_state["production_current_of"] = None
+    if "prod_error" not in st.session_state:
+        st.session_state["prod_error"] = None
+
+    if st.session_state["prod_error"]:
+        st.error(st.session_state["prod_error"])
 
     # Filtros de búsqueda
     with st.expander("🔍 Filtros de búsqueda", expanded=True):
@@ -55,6 +60,7 @@ def render(username: str, password: str):
 
         btn_col1, btn_col2 = st.columns(2)
         if btn_col1.button("Buscar órdenes", type="primary", key="btn_buscar_ordenes"):
+            st.session_state["prod_error"] = None  # Limpiar error
             # SKELETON LOADER
             skeleton = st.empty()
             with skeleton.container():
@@ -83,7 +89,8 @@ def render(username: str, password: str):
                     # Force UI update
                     st.rerun()
                 except Exception as error:
-                    st.error(f"Error al buscar órdenes: {error}")
+                    st.session_state["prod_error"] = f"Error al buscar órdenes: {error}"
+                    st.error(st.session_state["prod_error"])
                 finally:
                     skeleton.empty()
         
