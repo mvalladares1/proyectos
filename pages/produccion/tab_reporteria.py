@@ -233,10 +233,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
             st.markdown(f"### 📊 Análisis {titulo_agrupacion} por Sala y Línea")
             grafico_vaciado_por_sala(mos, agrupacion)
-            
-            # PRODUCTIVIDAD DETALLADA POR SALA - debajo del gráfico de vaciado
-            if salas:
-                _render_salas(salas, tipo='PROCESO')
+
         
         # === DETALLE DE FABRICACIONES - PROCESO ===
         if mos:
@@ -274,10 +271,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
             st.markdown(f"### 📊 Análisis {titulo_agrupacion} de Congelado")
             grafico_congelado_semanal(mos, agrupacion)
-            
-            # PRODUCTIVIDAD DETALLADA POR TÚNELES - debajo del gráfico de congelado
-            if salas:
-                _render_salas(salas, tipo='CONGELADO')
+
         
         # === DETALLE DE FABRICACIONES - CONGELADO ===
         if mos:
@@ -429,135 +423,6 @@ def _render_resumen_fruta_manejo(consolidado):
         
         st.altair_chart(chart, use_container_width=True)
         st.caption("📊 **Línea roja**: 90% (Meta) | **Línea naranja**: 85% (Mínimo)")
-
-
-def _render_salas(salas, tipo='PROCESO'):
-    """
-    Renderiza productividad por sala con KPIs detallados.
-    
-    Args:
-        salas: Lista de datos de salas
-        tipo: 'PROCESO' o 'CONGELADO' para filtrar y mostrar KPIs apropiados
-    """
-    if tipo == 'PROCESO':
-        st.markdown("---")
-        st.subheader("🏠 Productividad Detallada por Sala de Proceso")
-        st.caption("Promedios calculados sobre todas las órdenes de fabricación de cada sala")
-    else:
-        st.markdown("---")
-        st.subheader("❄️ Productividad Detallada por Túnel de Congelado")
-        st.caption("Métricas de eficiencia energética y producción de túneles")
-    
-    df_salas = pd.DataFrame(salas)
-    
-    # Filtrar según tipo
-    if tipo == 'PROCESO':
-        # Filtrar solo salas de proceso reales (excluir túneles, congelado y sin sala)
-        df_salas = df_salas[
-            ~df_salas['sala'].str.lower().str.contains('tunel|túnel|congelado', na=False) &
-            (df_salas['sala'] != 'SIN SALA')
-        ]
-    else:  # CONGELADO
-        # Filtrar solo túneles de congelado
-        df_salas = df_salas[
-            df_salas['sala'].str.lower().str.contains('tunel|túnel|congelado', na=False) &
-            (df_salas['sala'] != 'SIN SALA')
-        ]
-    
-    if len(df_salas) == 0:
-        if tipo == 'PROCESO':
-            st.info("No hay datos de salas de proceso disponibles")
-        else:
-            st.info("No hay datos de túneles de congelado disponibles")
-        return
-    
-    for _, sala in df_salas.iterrows():
-        alert = get_alert_color(sala['rendimiento'])
-        with st.expander(f"{alert} **{sala['sala']}** | {fmt_numero(sala['kg_pt'])} Kg PT | {sala['num_mos']} MOs", expanded=False):
-            
-            if tipo == 'PROCESO':
-                # KPIs para salas de proceso (SIN electricidad)
-                # Fila 1: KPIs principales de rendimiento
-                st.markdown("**📊 KPIs de Rendimiento**")
-                cols = st.columns(5)
-                with cols[0]:
-                    st.metric("Rendimiento", fmt_porcentaje(sala['rendimiento']))
-                with cols[1]:
-                    st.metric("Kg/Hora", fmt_numero(sala.get('kg_por_hora', 0), 1))
-                with cols[2]:
-                    st.metric("Kg/HH", fmt_numero(sala.get('kg_por_hh', 0), 1))
-                with cols[3]:
-                    st.metric("Kg/Operario", fmt_numero(sala.get('kg_por_operario', 0), 1))
-                with cols[4]:
-                    st.metric("Merma (Kg)", fmt_numero(sala.get('merma', 0), 0))
-                
-                st.markdown("---")
-                
-                # Fila 2: Datos de producción
-                st.markdown("**📦 Datos de Producción**")
-                cols2 = st.columns(4)
-                with cols2[0]:
-                    st.markdown(f"**Kg MP:** {fmt_numero(sala['kg_mp'])}")
-                with cols2[1]:
-                    st.markdown(f"**Kg PT:** {fmt_numero(sala['kg_pt'])}")
-                with cols2[2]:
-                    st.markdown(f"**HH Total:** {fmt_numero(sala.get('hh_total', 0), 1)}")
-                with cols2[3]:
-                    st.markdown(f"**Dotación Prom:** {sala.get('dotacion_promedio', 0):.1f}")
-                
-                st.markdown("---")
-                
-                # Fila 3: KPIs efectivos (sin electricidad)
-                st.markdown("**⚡ KPIs Efectivos (Promedios)**")
-                cols3 = st.columns(4)
-                with cols3[0]:
-                    hh_efectiva_prom = sala.get('hh_efectiva_promedio', 0)
-                    st.metric("HH Efectiva", fmt_numero(hh_efectiva_prom, 1), 
-                             help="Promedio de Horas Hombre efectivas por orden de fabricación")
-                with cols3[1]:
-                    kg_hora_efectiva = sala.get('kg_por_hora_efectiva', 0)
-                    st.metric("Kg/Hora Efect.", fmt_numero(kg_hora_efectiva, 1),
-                             help="Kg procesados por hora efectiva")
-                with cols3[2]:
-                    kg_hh_efectiva = sala.get('kg_por_hh_efectiva', 0)
-                    st.metric("Kg/HH Efect.", fmt_numero(kg_hh_efectiva, 1),
-                             help="Kg procesados por HH efectiva")
-                with cols3[3]:
-                    detenciones_prom = sala.get('detenciones_promedio', 0)
-                    st.metric("Detenciones (h)", fmt_numero(detenciones_prom, 1),
-                             help="Promedio de horas de detención por orden de fabricación")
-            
-            else:  # CONGELADO
-                # KPIs para túneles de congelado (CON electricidad)
-                # Fila 1: KPIs principales
-                st.markdown("**📊 KPIs de Congelado**")
-                cols = st.columns(4)
-                with cols[0]:
-                    st.metric("Rendimiento", fmt_porcentaje(sala['rendimiento']))
-                with cols[1]:
-                    st.metric("Kg Entrada", fmt_numero(sala.get('kg_mp', 0), 0))
-                with cols[2]:
-                    st.metric("Kg Salida", fmt_numero(sala.get('kg_pt', 0), 0))
-                with cols[3]:
-                    costo_elec = sala.get('costo_electricidad', 0)
-                    st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}",
-                             help="Costo de electricidad del túnel")
-                
-                st.markdown("---")
-                
-                # Fila 2: Eficiencia energética
-                st.markdown("**⚡ Eficiencia Energética**")
-                cols2 = st.columns(3)
-                with cols2[0]:
-                    kwh_total = sala.get('total_electricidad', 0)
-                    st.metric("KWh Total", fmt_numero(kwh_total, 1),
-                             help="Total de kilovatios-hora consumidos")
-                with cols2[1]:
-                    kwh_por_kg = sala.get('kwh_por_kg', 0)
-                    st.metric("KWh/Kg", fmt_numero(kwh_por_kg, 2),
-                             help="Consumo de energía por kilogramo congelado")
-                with cols2[2]:
-                    st.metric("MOs", sala.get('num_mos', 0))
 
 
 def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username, password, tipo_filtro=None):

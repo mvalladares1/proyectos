@@ -7,6 +7,35 @@ import altair as alt
 from datetime import datetime, timedelta
 
 
+def fmt_numero(valor, decimales=0):
+    """Formatea número con separador de miles."""
+    try:
+        v = float(valor)
+        if decimales == 0 and v == int(v):
+            return f"{int(v):,}".replace(",", ".")
+        return f"{v:,.{decimales}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return str(valor)
+
+
+def fmt_porcentaje(valor):
+    """Formatea porcentaje."""
+    try:
+        return f"{float(valor):.1f}%"
+    except:
+        return "0.0%"
+
+
+def get_alert_color(rendimiento):
+    """Obtiene el emoji de alerta según el rendimiento."""
+    if rendimiento >= 90:
+        return "🟢"
+    elif rendimiento >= 85:
+        return "🟡"
+    else:
+        return "🔴"
+
+
 def _generar_todos_los_periodos(fecha_inicio: datetime, fecha_fin: datetime, agrupacion: str):
     """
     Genera todos los períodos entre fecha_inicio y fecha_fin según la agrupación.
@@ -83,15 +112,16 @@ def _agrupar_por_periodo(fecha: datetime, agrupacion: str):
         )
 
 
-def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana"):
+def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana", salas_data: list = None):
     """
     Gráficos de barras separados por túnel de congelado.
     Muestra Kg congelados por período (día/semana/mes) para cada túnel.
-    Crea un gráfico independiente por cada túnel.
+    Crea un gráfico independiente por cada túnel con sus KPIs.
     
     Args:
         mos_data: Lista de órdenes de fabricación (MOs)
         agrupacion: "Día", "Semana" o "Mes"
+        salas_data: Lista con datos agregados de KPIs por sala/túnel
     """
     if not mos_data:
         st.info("No hay datos de congelado disponibles")
@@ -233,31 +263,56 @@ def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana"):
         
         st.altair_chart(chart, use_container_width=True)
         
-        # Tabla resumen para este túnel
-        with st.expander(f"📊 Ver tabla de datos - {tunel_nombre}"):
-            st.markdown(f"**Kg Congelados por {agrupacion}**")
-            df_table = df_grouped[['Periodo', 'Kg']].copy()
-            df_table['Kg'] = df_table['Kg'].apply(lambda x: f"{x:,.0f}")
+        # Buscar KPIs del túnel en salas_data
+        sala_info = None
+        if salas_data:
+            for sala in salas_data:
+                if sala.get('sala', '').strip() == tunel_nombre:
+                    sala_info = sala
+                    break
+        
+        # Mostrar KPIs del túnel (solo electricidad para congelado)
+        if sala_info:
+            st.markdown("---")
+            st.markdown("**⚡ KPIs del Túnel**")
+            cols = st.columns(4)
+            with cols[0]:
+                st.metric("Rendimiento", fmt_porcentaje(sala_info.get('rendimiento', 0)))
+            with cols[1]:
+                st.metric("Kg Entrada", fmt_numero(sala_info.get('kg_mp', 0), 0))
+            with cols[2]:
+                st.metric("Kg Salida", fmt_numero(sala_info.get('kg_pt', 0), 0))
+            with cols[3]:
+                costo_elec = sala_info.get('costo_electricidad', 0)
+                st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}",
+                         help="Costo de electricidad del túnel")
             
-            # Agregar total
-            total_kg = df_grouped['Kg'].sum()
-            df_total = pd.DataFrame([{'Periodo': 'TOTAL', 'Kg': f"{total_kg:,.0f}"}])
-            df_table = pd.concat([df_table, df_total], ignore_index=True)
-            
-            st.dataframe(df_table, use_container_width=True, hide_index=True)
+            st.markdown("**⚡ Eficiencia Energética**")
+            cols2 = st.columns(3)
+            with cols2[0]:
+                kwh_total = sala_info.get('total_electricidad', 0)
+                st.metric("KWh Total", fmt_numero(kwh_total, 1),
+                         help="Total de kilovatios-hora consumidos")
+            with cols2[1]:
+                kwh_por_kg = sala_info.get('kwh_por_kg', 0)
+                st.metric("KWh/Kg", fmt_numero(kwh_por_kg, 2),
+                         help="Consumo de energía por kilogramo congelado")
+            with cols2[2]:
+                st.metric("MOs", sala_info.get('num_mos', 0))
         
         st.markdown("---")  # Separador entre túneles
 
 
-def grafico_vaciado_por_sala(mos_data: list, agrupacion: str = "Semana"):
+def grafico_vaciado_por_sala(mos_data: list, agrupacion: str = "Semana", salas_data: list = None):
     """
     Gráficos de barras separados por sala con desglose de líneas.
-    Muestra rendimiento individual de cada línea dentro de su sala.
+    Muestra rendimiento individual de cada línea dentro de su sala con sus KPIs.
     Crea un gráfico independiente por cada sala.
     
     Args:
         mos_data: Lista de órdenes de fabricación (MOs)
         agrupacion: "Día", "Semana" o "Mes"
+        salas_data: Lista con datos agregados de KPIs por sala
     """
     if not mos_data:
         st.info("No hay datos de proceso disponibles")
@@ -465,43 +520,70 @@ def grafico_vaciado_por_sala(mos_data: list, agrupacion: str = "Semana"):
                 
                 st.altair_chart(chart_rend, use_container_width=True)
         
-        # Tabla resumen para esta sala
-        with st.expander(f"📊 Ver tabla de datos - {sala_nombre}"):
-            # Tabla de Kg PT
-            st.markdown(f"**Kg Procesados por Línea y {agrupacion}**")
-            df_pivot_kg = df_grouped.pivot_table(
-                index='Línea', 
-                columns='Periodo', 
-                values='Kg PT', 
-                aggfunc='sum',
-                fill_value=0
-            ).reset_index()
-            
-            # Agregar total por línea
-            df_pivot_kg['TOTAL'] = df_pivot_kg.iloc[:, 1:].sum(axis=1)
-            
-            # Formatear números
-            for col in df_pivot_kg.columns[1:]:
-                df_pivot_kg[col] = df_pivot_kg[col].apply(lambda x: f"{x:,.0f}")
-            
-            st.dataframe(df_pivot_kg, use_container_width=True, hide_index=True)
-            
+        # Buscar KPIs de la sala en salas_data
+        sala_info = None
+        if salas_data:
+            for sala in salas_data:
+                sala_data_nombre = sala.get('sala', '').strip()
+                # Comparar sin considerar líneas
+                if ' - ' in sala_data_nombre:
+                    sala_base = sala_data_nombre.split(' - ', 1)[0].strip()
+                else:
+                    sala_base = sala_data_nombre
+                
+                if sala_base == sala_nombre:
+                    sala_info = sala
+                    break
+        
+        # Mostrar KPIs de la sala (sin electricidad para proceso)
+        if sala_info:
             st.markdown("---")
+            alert = get_alert_color(sala_info.get('rendimiento', 0))
+            st.markdown(f"**{alert} KPIs de la Sala**")
             
-            # Tabla de Rendimiento
-            st.markdown(f"**Rendimiento % Promedio por Línea y {agrupacion}**")
-            df_pivot_rend = df_grouped.pivot_table(
-                index='Línea', 
-                columns='Periodo', 
-                values='Rendimiento', 
-                aggfunc='mean',
-                fill_value=0
-            ).reset_index()
+            # Fila 1: KPIs principales de rendimiento
+            cols = st.columns(5)
+            with cols[0]:
+                st.metric("Rendimiento", fmt_porcentaje(sala_info.get('rendimiento', 0)))
+            with cols[1]:
+                st.metric("Kg/Hora", fmt_numero(sala_info.get('kg_por_hora', 0), 1))
+            with cols[2]:
+                st.metric("Kg/HH", fmt_numero(sala_info.get('kg_por_hh', 0), 1))
+            with cols[3]:
+                st.metric("Kg/Operario", fmt_numero(sala_info.get('kg_por_operario', 0), 1))
+            with cols[4]:
+                st.metric("Merma (Kg)", fmt_numero(sala_info.get('merma', 0), 0))
             
-            # Formatear números
-            for col in df_pivot_rend.columns[1:]:
-                df_pivot_rend[col] = df_pivot_rend[col].apply(lambda x: f"{x:.2f}%")
+            # Fila 2: Datos de producción
+            st.markdown("**📦 Datos de Producción**")
+            cols2 = st.columns(4)
+            with cols2[0]:
+                st.markdown(f"**Kg MP:** {fmt_numero(sala_info['kg_mp'])}")
+            with cols2[1]:
+                st.markdown(f"**Kg PT:** {fmt_numero(sala_info['kg_pt'])}")
+            with cols2[2]:
+                st.markdown(f"**HH Total:** {fmt_numero(sala_info.get('hh_total', 0), 1)}")
+            with cols2[3]:
+                st.markdown(f"**Dotación Prom:** {sala_info.get('dotacion_promedio', 0):.1f}")
             
-            st.dataframe(df_pivot_rend, use_container_width=True, hide_index=True)
+            # Fila 3: KPIs efectivos (sin electricidad)
+            st.markdown("**⚡ KPIs Efectivos (Promedios)**")
+            cols3 = st.columns(4)
+            with cols3[0]:
+                hh_efectiva_prom = sala_info.get('hh_efectiva_promedio', 0)
+                st.metric("HH Efectiva", fmt_numero(hh_efectiva_prom, 1), 
+                         help="Promedio de Horas Hombre efectivas por orden de fabricación")
+            with cols3[1]:
+                kg_hora_efectiva = sala_info.get('kg_por_hora_efectiva', 0)
+                st.metric("Kg/Hora Efect.", fmt_numero(kg_hora_efectiva, 1),
+                         help="Kg procesados por hora efectiva")
+            with cols3[2]:
+                kg_hh_efectiva = sala_info.get('kg_por_hh_efectiva', 0)
+                st.metric("Kg/HH Efect.", fmt_numero(kg_hh_efectiva, 1),
+                         help="Kg procesados por HH efectiva")
+            with cols3[3]:
+                detenciones_prom = sala_info.get('detenciones_promedio', 0)
+                st.metric("Detenciones (h)", fmt_numero(detenciones_prom, 1),
+                         help="Promedio de horas de detención por orden de fabricación")
         
         st.markdown("---")  # Separador entre salas
