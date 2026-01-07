@@ -11,7 +11,12 @@ import os
 from datetime import datetime
 from typing import List, Dict, Optional
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+# Determinar API_URL basado en ENV
+ENV = os.getenv("ENV", "prod")
+if ENV == "dev":
+    API_URL = "http://127.0.0.1:8002"
+else:
+    API_URL = "http://127.0.0.1:8000"
 
 
 # --------------------- Constantes ---------------------
