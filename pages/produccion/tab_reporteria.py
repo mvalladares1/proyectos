@@ -544,66 +544,6 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
     total_registros = len(df_mos_original)
     filtrados = len(df_mos)
     
-    # Resumen por tipo - dinámico según el tipo_filtro
-    if 'sala_tipo' in df_mos.columns and filtrados > 0:
-        st.markdown("**📊 Resumen de Órdenes:**")
-        
-        if tipo_filtro == 'PROCESO':
-            # Solo mostrar resumen de proceso
-            summary_cols = st.columns(2)
-            df_proceso = df_mos[df_mos['sala_tipo'] == 'PROCESO']
-            # Excluir subproductos intermedios
-            df_proceso_final = df_proceso[~df_proceso['product_name'].str.upper().str.contains('PROCESO|TUNEL|TÚNEL', na=False)]
-            proceso_count = len(df_proceso)
-            proceso_kg = df_proceso_final['kg_pt'].sum() if len(df_proceso_final) > 0 else 0
-            
-            with summary_cols[0]:
-                st.metric("🏭 Proceso (Vaciado)", proceso_count)
-            with summary_cols[1]:
-                st.metric("Kg PT Proceso", fmt_numero(proceso_kg, 0))
-        
-        elif tipo_filtro == 'CONGELADO':
-            # Solo mostrar resumen de congelado
-            summary_cols = st.columns(2)
-            df_congelado = df_mos[df_mos['sala_tipo'] == 'CONGELADO']
-            # Excluir subproductos intermedios
-            df_congelado_final = df_congelado[~df_congelado['product_name'].str.upper().str.contains('PROCESO|TUNEL|TÚNEL', na=False)]
-            congelado_count = len(df_congelado)
-            congelado_kg = df_congelado_final['kg_pt'].sum() if len(df_congelado_final) > 0 else 0
-            
-            with summary_cols[0]:
-                st.metric("❄️ Congelado (Túneles)", congelado_count)
-            with summary_cols[1]:
-                st.metric("Kg PT Congelado", fmt_numero(congelado_kg, 0))
-        
-        else:
-            # Mostrar ambos (vista Global)
-            summary_cols = st.columns(4)
-            
-            tipo_counts = df_mos['sala_tipo'].value_counts()
-            proceso_count = tipo_counts.get('PROCESO', 0)
-            congelado_count = tipo_counts.get('CONGELADO', 0)
-            
-            proceso_df = df_mos[df_mos['sala_tipo'] == 'PROCESO']
-            congelado_df = df_mos[df_mos['sala_tipo'] == 'CONGELADO']
-            
-            # Excluir subproductos intermedios de los Kg PT
-            proceso_df_final = proceso_df[~proceso_df['product_name'].str.upper().str.contains('PROCESO|TUNEL|TÚNEL', na=False)]
-            congelado_df_final = congelado_df[~congelado_df['product_name'].str.upper().str.contains('PROCESO|TUNEL|TÚNEL', na=False)]
-            
-            with summary_cols[0]:
-                st.metric("🏭 Proceso (Vaciado)", proceso_count)
-            with summary_cols[1]:
-                if len(proceso_df_final) > 0:
-                    st.metric("Kg PT Proceso", fmt_numero(proceso_df_final['kg_pt'].sum(), 0))
-            with summary_cols[2]:
-                st.metric("❄️ Congelado (Túneles)", congelado_count)
-            with summary_cols[3]:
-                if len(congelado_df_final) > 0:
-                    st.metric("Kg PT Congelado", fmt_numero(congelado_df_final['kg_pt'].sum(), 0))
-        
-        st.markdown("---")
-    
     if filtrados < total_registros:
         st.caption(f"📋 Mostrando **{filtrados}** de {total_registros} órdenes (filtrado)")
     else:
