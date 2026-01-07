@@ -589,6 +589,290 @@ class RendimientoService:
         }
     
     # ===========================================
+    # TRAZABILIDAD COMPLETA POR PALLETS
+    # ===========================================
+    
+    def get_trazabilidad_pallets(self, pallet_names: List[str]) -> Dict:
+        """
+        Trazabilidad completa de uno o varios pallets.
+        Rastrea desde el pallet físico hasta el productor original,
+        pasando por todas las etapas de producción.
+        
+        Args:
+            pallet_names: Lista de nombres de pallets a rastrear
+        
+        Returns:
+            Dict con trazabilidad completa de todos los pallets
+        """
+        resultados = []
+        
+        for pallet_name in pallet_names:
+            try:
+                trazabilidad = self._rastrear_pallet_completo(pallet_name)
+                resultados.append(trazabilidad)
+            except Exception as e:
+                resultados.append({
+                    'pallet': pallet_name,
+                    'error': str(e),
+                    'cadena': []
+                })
+        
+        return {
+            'pallets_rastreados': len(resultados),
+            'pallets': resultados,
+            'fecha_consulta': datetime.now().isoformat()
+        }
+    
+    def _rastrear_pallet_completo(self, pallet_name: str) -> Dict:
+        """Rastrea un pallet completo hasta el productor."""
+        
+        # 1. Buscar el pallet
+        pallet = self.odoo.search_read(
+            'stock.quant.package',
+            [['name', '=', pallet_name]],
+            ['id', 'name', 'location_id'],
+            limit=1
+        )
+        
+        if not pallet:
+            return {
+                'pallet': pallet_name,
+                'error': f'Pallet {pallet_name} no encontrado',
+                'cadena': []
+            }
+        
+        pallet_id = pallet[0]['id']
+        
+        # 2. Buscar movimientos del pallet
+        move_lines = self.odoo.search_read(
+            'stock.move.line',
+            [['result_package_id', '=', pallet_id]],
+            ['id', 'lot_id', 'product_id', 'qty_done', 'picking_id', 'date'],
+            order='date desc',
+            limit=10
+        )
+        
+        if not move_lines:
+            return {
+                'pallet': pallet_name,
+                'error': 'No se encontraron movimientos para este pallet',
+                'cadena': []
+            }
+        
+        # 3. Tomar el lote más reciente
+        lote_pt = move_lines[0].get('lot_id')
+        if not lote_pt:
+            return {
+                'pallet': pallet_name,
+                'error': 'El pallet no tiene lote asignado',
+                'cadena': []
+            }
+        
+        lote_pt_id = lote_pt[0]
+        lote_pt_name = lote_pt[1]
+        product_pt = move_lines[0].get('product_id')
+        qty_pt = move_lines[0].get('qty_done', 0)
+        
+        # 4. Rastrear recursivamente
+        cadena = []
+        lotes_procesados = set()
+        self._rastrear_lote_recursivo(lote_pt_id, cadena, lotes_procesados, nivel=0)
+        
+        # 5. Calcular resumen
+        resumen = self._generar_resumen_pallet(cadena, qty_pt)
+        
+        return {
+            'pallet': pallet_name,
+            'lote_pt': lote_pt_name,
+            'producto_pt': product_pt[1] if product_pt else 'N/A',
+            'kg_pt': round(qty_pt, 2),
+            'cadena': cadena,
+            'resumen': resumen
+        }
+    
+    def _rastrear_lote_recursivo(self, lot_id: int, cadena: List[Dict], 
+                                  lotes_procesados: set, nivel: int = 0):
+        """Rastrea recursivamente un lote hasta encontrar el origen."""
+        
+        # Evitar loops infinitos
+        if lot_id in lotes_procesados:
+            return
+        
+        lotes_procesados.add(lot_id)
+        
+        # Obtener info del lote
+        lote = self.odoo.search_read(
+            'stock.lot',
+            [['id', '=', lot_id]],
+            ['id', 'name', 'product_id', 'create_date'],
+            limit=1
+        )
+        
+        if not lote:
+            return
+        
+        lote_info = lote[0]
+        product_info = lote_info.get('product_id')
+        
+        # Buscar primer movimiento del lote (creación)
+        move_lines = self.odoo.search_read(
+            'stock.move.line',
+            [['lot_id', '=', lot_id]],
+            ['id', 'move_id', 'date', 'location_id'],
+            order='date asc',
+            limit=1
+        )
+        
+        if not move_lines:
+            return
+        
+        move_id = move_lines[0]['move_id'][0]
+        fecha_creacion = str(move_lines[0].get('date', ''))[:19]
+        
+        # Obtener el stock.move
+        moves = self.odoo.search_read(
+            'stock.move',
+            [['id', '=', move_id]],
+            ['id', 'production_id', 'raw_material_production_id']
+        )
+        
+        if not moves:
+            return
+        
+        move = moves[0]
+        mo_ref = move.get('production_id')
+        
+        if not mo_ref:
+            # Es MP (no fue producido)
+            productor_info = self.get_proveedor_lote(lot_id)
+            
+            cadena.append({
+                'nivel': nivel,
+                'tipo': 'MATERIA_PRIMA',
+                'lot_id': lot_id,
+                'lot_name': lote_info['name'],
+                'product_name': product_info[1] if product_info else 'N/A',
+                'fecha': fecha_creacion[:10],
+                'productor': productor_info.get('name', 'Desconocido') if productor_info else 'Desconocido',
+                'fecha_recepcion': str(productor_info.get('fecha_recepcion', ''))[:10] if productor_info and productor_info.get('fecha_recepcion') else 'N/A'
+            })
+            return
+        
+        # Es un producto intermedio o final (fue producido por una MO)
+        mo_id = mo_ref[0]
+        
+        # Obtener detalles de la MO
+        mos = self.odoo.search_read(
+            'mrp.production',
+            [['id', '=', mo_id]],
+            ['id', 'name', 'move_raw_ids', 'date_planned_start', 'x_studio_sala_de_proceso'],
+            limit=1
+        )
+        
+        if not mos:
+            return
+        
+        mo = mos[0]
+        move_raw_ids = mo.get('move_raw_ids', [])
+        
+        # Obtener consumos
+        consumos = []
+        if move_raw_ids:
+            consumos_data = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ['move_id', 'in', move_raw_ids],
+                    ['lot_id', '!=', False]
+                ],
+                ['id', 'product_id', 'lot_id', 'qty_done']
+            )
+            
+            for c in consumos_data:
+                prod_info = c.get('product_id')
+                prod_name = prod_info[1] if prod_info else ''
+                
+                # Filtrar insumos
+                if self._is_excluded_consumo(prod_name):
+                    continue
+                
+                lot_info = c.get('lot_id')
+                if lot_info:
+                    consumos.append({
+                        'lot_id': lot_info[0],
+                        'lot_name': lot_info[1],
+                        'product_name': prod_name,
+                        'qty_done': round(c.get('qty_done', 0), 2)
+                    })
+        
+        # Agregar registro a la cadena
+        cadena.append({
+            'nivel': nivel,
+            'tipo': 'PROCESO',
+            'lot_id': lot_id,
+            'lot_name': lote_info['name'],
+            'product_name': product_info[1] if product_info else 'N/A',
+            'fecha': fecha_creacion[:10],
+            'mo_id': mo['id'],
+            'mo_name': mo['name'],
+            'sala': mo.get('x_studio_sala_de_proceso', 'N/A'),
+            'fecha_mo': str(mo.get('date_planned_start', ''))[:10],
+            'consumos': consumos,
+            'total_kg_consumido': round(sum(c['qty_done'] for c in consumos), 2)
+        })
+        
+        # Rastrear recursivamente cada lote consumido
+        for consumo in consumos:
+            self._rastrear_lote_recursivo(
+                consumo['lot_id'], 
+                cadena, 
+                lotes_procesados, 
+                nivel + 1
+            )
+    
+    def _generar_resumen_pallet(self, cadena: List[Dict], qty_pt: float) -> Dict:
+        """Genera resumen de rendimiento del pallet."""
+        
+        procesos = [r for r in cadena if r['tipo'] == 'PROCESO']
+        mp = [r for r in cadena if r['tipo'] == 'MATERIA_PRIMA']
+        
+        # Calcular kg total de MP
+        total_kg_mp = 0.0
+        if procesos:
+            # Buscar el proceso de nivel más alto (vaciado)
+            nivel_max = max(r['nivel'] for r in procesos)
+            procesos_max_nivel = [r for r in procesos if r['nivel'] == nivel_max]
+            
+            for p in procesos_max_nivel:
+                total_kg_mp += p.get('total_kg_consumido', 0)
+        
+        # Rendimiento total
+        rendimiento = (qty_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0
+        
+        # Etapas
+        etapas = []
+        for p in sorted(procesos, key=lambda x: x['nivel'], reverse=True):
+            etapas.append({
+                'etapa': p.get('sala', 'N/A'),
+                'mo': p['mo_name'],
+                'fecha': p['fecha_mo']
+            })
+        
+        # Productores
+        productores = list(set(r['productor'] for r in mp if r.get('productor')))
+        
+        return {
+            'total_procesos': len(procesos),
+            'total_lotes_mp': len(mp),
+            'kg_mp_total': round(total_kg_mp, 2),
+            'kg_pt': round(qty_pt, 2),
+            'rendimiento_total': round(rendimiento, 2),
+            'merma_kg': round(total_kg_mp - qty_pt, 2),
+            'merma_pct': round(100 - rendimiento, 2),
+            'etapas': etapas,
+            'productores': productores
+        }
+    
+    # ===========================================
     # DASHBOARD COMPLETO (usado por Producción)
     # ===========================================
     
