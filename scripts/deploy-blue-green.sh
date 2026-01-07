@@ -119,22 +119,11 @@ sleep 10
 
 MAX_RETRIES=30
 RETRY=0
-API_HEALTHY=false
-WEB_HEALTHY=false
 
 while [ $RETRY -lt $MAX_RETRIES ]; do
-    # Check API
+    # Check API (solo API, web depende de API via depends_on)
     if curl -sf http://localhost:8002/health > /dev/null 2>&1; then
-        API_HEALTHY=true
-    fi
-    
-    # Check WEB
-    if curl -sf http://localhost:8502/_stcore/health > /dev/null 2>&1; then
-        WEB_HEALTHY=true
-    fi
-    
-    if [ "$API_HEALTHY" = true ] && [ "$WEB_HEALTHY" = true ]; then
-        log "✅ Containers DEV están healthy"
+        log "✅ Container DEV API healthy, web iniciado"
         break
     fi
     
@@ -144,7 +133,7 @@ while [ $RETRY -lt $MAX_RETRIES ]; do
 done
 
 if [ $RETRY -eq $MAX_RETRIES ]; then
-    error "❌ Containers DEV no pasaron health check"
+    error "❌ Container DEV API no pasó health check"
     docker-compose -f docker-compose.dev.yml logs --tail=50
     exit 1
 fi
@@ -248,9 +237,9 @@ docker-compose -f docker-compose.prod.yml up -d
 sleep 10
 RETRY=0
 while [ $RETRY -lt $MAX_RETRIES ]; do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1 && \
-       curl -sf http://localhost:8501/_stcore/health > /dev/null 2>&1; then
-        log "✅ PROD está healthy"
+    # Solo verificar API (web depende de API via depends_on)
+    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+        log "✅ PROD API healthy, web iniciado"
         break
     fi
     RETRY=$((RETRY+1))
@@ -258,7 +247,7 @@ while [ $RETRY -lt $MAX_RETRIES ]; do
 done
 
 if [ $RETRY -eq $MAX_RETRIES ]; then
-    error "❌ PROD no pasó health check, haciendo rollback..."
+    error "❌ PROD API no pasó health check, haciendo rollback..."
     docker-compose -f docker-compose.prod.yml down
     docker-compose -f docker-compose.dev.yml up -d
     exit 1
