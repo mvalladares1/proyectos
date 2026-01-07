@@ -71,17 +71,43 @@ def get_sankey_data(username: str, password: str, fecha_inicio: str, fecha_fin: 
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
     """Obtiene trazabilidad completa de uno o varios pallets."""
     try:
+        # DEBUG: Mostrar información de la petición
+        url = f"{API_URL}/api/v1/rendimiento/trazabilidad-pallets"
         params = {"username": username, "password": password}
         body = pallet_names  # Lista de nombres de pallets
         
+        print(f"🔍 DEBUG - URL: {url}")
+        print(f"🔍 DEBUG - Params: {params}")
+        print(f"🔍 DEBUG - Body (tipo: {type(body)}): {body}")
+        st.info(f"**DEBUG INFO:**\n- URL: `{url}`\n- Pallets: `{body}`")
+        
         resp = requests.post(
-            f"{API_URL}/api/v1/rendimiento/trazabilidad-pallets",
+            url,
             params=params,
             json=body,
             timeout=120
         )
+        
+        # DEBUG: Mostrar respuesta completa
+        print(f"🔍 DEBUG - Status Code: {resp.status_code}")
+        print(f"🔍 DEBUG - Response Headers: {dict(resp.headers)}")
+        print(f"🔍 DEBUG - Response Text: {resp.text[:500]}")
+        
+        st.warning(f"**DEBUG RESPONSE:**\n- Status: {resp.status_code}\n- URL Final: {resp.url}\n- Response: {resp.text[:200]}")
+        
         if resp.status_code == 200:
             return resp.json()
-        return {"error": f"Error HTTP: {resp.status_code}"}
+        
+        # Retornar error con detalles
+        return {
+            "error": f"Error HTTP: {resp.status_code}",
+            "url": resp.url,
+            "response": resp.text[:500]
+        }
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"🔍 DEBUG - Exception: {error_detail}")
+        st.error(f"**DEBUG EXCEPTION:**\n```\n{error_detail}\n```")
+        return {"error": str(e), "detail": error_detail}
+

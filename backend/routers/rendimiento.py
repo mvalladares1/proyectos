@@ -50,10 +50,22 @@ async def get_trazabilidad_pallets(
         - pallets: Lista con trazabilidad completa de cada pallet
     """
     try:
+        # DEBUG: Log de entrada
+        print(f"🔍 BACKEND DEBUG - Endpoint /trazabilidad-pallets llamado")
+        print(f"🔍 BACKEND DEBUG - pallet_names (tipo: {type(pallet_names)}): {pallet_names}")
+        print(f"🔍 BACKEND DEBUG - username: {username}")
+        
         service = RendimientoService(username=username, password=password)
-        return service.get_trazabilidad_pallets(pallet_names)
+        result = service.get_trazabilidad_pallets(pallet_names)
+        
+        print(f"🔍 BACKEND DEBUG - Resultado exitoso: {len(result.get('pallets', []))} pallets")
+        return result
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"❌ BACKEND ERROR - Exception: {error_detail}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
