@@ -403,9 +403,7 @@ def render(username: str, password: str):
                 query_string_ant = urlencode(params_anterior)
                 url_anterior = f"{API_URL}/api/v1/recepciones-mp/?{query_string_ant}"
                 
-                print(f"[DEBUG] Consultando año anterior: {url_anterior}")
                 resp_anterior = requests.get(url_anterior, timeout=60)
-                print(f"[DEBUG] Respuesta año anterior: status={resp_anterior.status_code}")
 
                 if resp_anterior.status_code == 200:
                     try:
@@ -417,7 +415,6 @@ def render(username: str, password: str):
                             print(f"[ERROR] Respuesta año anterior no es lista: {type(recepciones_anterior)}")
                             recepciones_anterior = []
                         
-                        print(f"[DEBUG] Recepciones año anterior cargadas: {len(recepciones_anterior)}")
                         
                     except Exception as json_error:
                         st.error(f"❌ Error al parsear JSON del año anterior: {json_error}")

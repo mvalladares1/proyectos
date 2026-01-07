@@ -25,7 +25,6 @@ class StockService:
         1. Si es Stock Real (Quant): Crea Transferencia Interna para TODOS los quants del paquete.
         2. Si es Pre-Recepción (Moving Line): Actualiza destino en TODAS las líneas de recepción abiertas del paquete.
         """
-        print(f"DEBUG: Intentando mover '{pallet_code}' a {location_dest_id}")
         
         # 0. Buscar el record del paquete (necesario para ambos casos)
         packages = self.odoo.search_read(
@@ -54,7 +53,6 @@ class StockService:
             if len(locations_found) == 1 and list(locations_found)[0] == location_dest_id:
                 return {"success": False, "message": f"El pallet ya está en la ubicación destino."}
 
-            print(f"DEBUG: Pallet {pallet_code} encontrado en Stock con {len(quants)} registros. Creando transferencia.")
             
             # Buscar picking type interno dinamicamente
             picking_type_id = 5 # Default
@@ -128,7 +126,6 @@ class StockService:
             }
 
         # 2. Buscar en Pre-Recepción (Stock Entrante no validado)
-        print(f"DEBUG: Buscando {pallet_code} en recepciones abiertas...")
         
         move_lines = self.odoo.search_read(
             "stock.move.line",
@@ -240,7 +237,6 @@ class StockService:
                 ],
                 ["id", "name", "display_name", "location_id"]
             )
-            print(f"DEBUG: Encontradas {len(camaras_encontradas)} ubicaciones específicas")
         except Exception as e:
             print(f"Error buscando cámaras: {e}")
             import traceback

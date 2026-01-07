@@ -28,7 +28,6 @@ def cargar_presupuesto_2025(filepath: Optional[Path] = None) -> pd.DataFrame | D
         
         excel_file = pd.ExcelFile(path)
         hojas_disponibles = excel_file.sheet_names
-        print(f"DEBUG: Hojas disponibles en {path}: {hojas_disponibles}")
         
         # Buscar la primera hoja que coincida
         hoja_usar = None
@@ -41,10 +40,7 @@ def cargar_presupuesto_2025(filepath: Optional[Path] = None) -> pd.DataFrame | D
         if hoja_usar is None:
             hoja_usar = hojas_disponibles[0] if hojas_disponibles else 0
         
-        print(f"DEBUG: Usando hoja: {hoja_usar}")
         df = pd.read_excel(path, sheet_name=hoja_usar, header=0)
-        print(f"DEBUG: Columnas encontradas: {list(df.columns)}")
-        print(f"DEBUG: Filas cargadas: {len(df)}")
 
         columnas_rename = {
             "Nuero de fila": "numero_fila",
@@ -75,7 +71,6 @@ def cargar_presupuesto_2025(filepath: Optional[Path] = None) -> pd.DataFrame | D
             "CAT IFRS 1": "cat_ifrs_1"
         }
         df = df.rename(columns=columnas_rename)
-        print(f"DEBUG: Columnas después de renombrar: {list(df.columns)}")
         return df
     except FileNotFoundError:
         return {"error": f"Archivo no encontrado: {path}"}

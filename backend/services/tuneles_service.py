@@ -846,7 +846,6 @@ class TunelesService:
                 
                 if moves:
                     move_id = moves[0]['id']
-                    print(f"DEBUG: Reutilizando stock.move {move_id} para pallet {codigo}")
                 else:
                     # Fallback por si alguien borró la línea manual en Odoo
                     move_data = {
@@ -862,7 +861,6 @@ class TunelesService:
                         'reference': mo_name
                     }
                     move_id = self.odoo.execute('stock.move', 'create', move_data)
-                    print(f"DEBUG: Creado nuevo stock.move {move_id} (fallback) para pallet {codigo}")
                 
                 # Crear stock.move.line con qty_done
                 move_line_data = {
@@ -945,7 +943,6 @@ class TunelesService:
                             'company_id': 1
                         }
                         self.odoo.execute('stock.move.line', 'create', subprod_line)
-                        print(f"DEBUG: Creada línea de subproducto {package_name_out} para pallet {codigo}")
                 except Exception as e_sub:
                     print(f"ERROR: No se pudo crear subproducto para {codigo}: {e_sub}")
                 
@@ -1227,8 +1224,7 @@ class TunelesService:
                     'pendiente_recepcion': True,  # Flag para saber que es especial
                     'picking_id': pallet.get('picking_id')  # Guardar picking_id para JSON
                 })
-                # DEBUG: Log de datos del pallet pendiente
-                print(f"DEBUG Pallet Pendiente: codigo={pallet['codigo']}, lot_name={pallet.get('lot_name')}, lot_id={pallet.get('lot_id')}")
+                # Log de datos del pallet pendiente
                 advertencias.append(f"Pallet {pallet['codigo']} agregado desde Recepción Pendiente (Sin reserva stock)")
                 continue
 

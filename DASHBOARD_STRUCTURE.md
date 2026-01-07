@@ -2,7 +2,7 @@
 
 Este documento describe la estructura del repositorio `rio-futuro-dashboards`.
 
-**Última actualización:** 26 de Diciembre 2024
+**Última actualización:** 07 de Enero 2026
 
 ---
 
@@ -12,7 +12,7 @@ Este documento describe la estructura del repositorio `rio-futuro-dashboards`.
 |------------|------------|--------|
 | Frontend | Streamlit | 8501 |
 | Backend | FastAPI + Uvicorn | 8000 |
-| Base de datos | Odoo (XML-RPC) | - |
+| Base de datos | Odoo 16 (XML-RPC) | - |
 | Servidor | debian@167.114.114.51 | - |
 
 ---
@@ -29,10 +29,15 @@ proyectos/
 ├── DASHBOARD_STRUCTURE.md        # Este archivo
 ├── PAGES.md                      # Guía para agregar páginas
 │
+├── .agent/workflows/             # Workflows de desarrollo
+│   ├── project-structure.md      # 📂 Estructura del proyecto
+│   └── debugging.md              # 🐛 Estándares de debugging
+│
 ├── backend/                      # API FastAPI
 │   ├── main.py                   # Entry point
+│   ├── cache.py                  # Sistema de caché
 │   ├── config/settings.py        # Configuración
-│   ├── routers/                  # Endpoints por feature
+│   ├── routers/                  # 16 endpoints por feature
 │   │   ├── auth.py               # 🔐 Autenticación con tokens
 │   │   ├── produccion.py
 │   │   ├── bandejas.py
@@ -41,53 +46,60 @@ proyectos/
 │   │   ├── estado_resultado.py
 │   │   ├── presupuesto.py
 │   │   ├── permissions.py
-│   │   ├── recepciones_mp.py
+│   │   ├── recepcion.py          # Recepciones MP
 │   │   ├── rendimiento.py
 │   │   ├── compras.py
-│   │   └── automatizaciones.py   # 🆕 Túneles Estáticos
-│   └── services/
+│   │   ├── flujo_caja.py         # 💰 Flujo de caja
+│   │   ├── comercial.py          # 🤝 Relación comercial
+│   │   └── automatizaciones.py   # 🤖 Túneles Estáticos
+│   └── services/                 # 22 servicios de negocio
 │       ├── rendimiento_service.py
-│       ├── tuneles_service.py    # 🆕 Lógica de MO automáticas
-│       └── session_service.py    # 🆕 Gestión de sesiones JWT
+│       ├── tuneles_service.py
+│       ├── session_service.py
+│       ├── flujo_caja_service.py # 💰 Flujo de caja
+│       ├── comercial_service.py  # 🤝 Relación comercial
+│       └── ...                   # Ver .agent/workflows/project-structure.md
 │
 ├── pages/                        # Páginas Streamlit
-│   ├── 1_Recepciones.py
-│   ├── 2_Produccion.py
-│   ├── 3_Bandejas.py
-│   ├── 4_Stock.py
-│   ├── 5_Containers.py
-│   ├── 6_Finanzas.py
-│   ├── 7_Rendimiento.py
-│   ├── 8_Compras.py
-│   ├── 9_Permisos.py
-│   └── 10_Automatizaciones.py    # 🆕 Túneles Estáticos
+│   ├── 1_Recepciones.py          # 📥 KPIs, Curva, Gestión
+│   ├── 2_Produccion.py           # 🏭 Órdenes de fabricación
+│   ├── 3_Bandejas.py             # 📊 Control de bandejas
+│   ├── 4_Stock.py                # 📦 Inventario en cámaras
+│   ├── 5_Containers.py           # 🚢 Pedidos y avance
+│   ├── 6_Finanzas.py             # 💰 EERR, Flujo Caja
+│   ├── 7_Rendimiento.py          # ⚡ Rendimiento MP → PT
+│   ├── 8_Compras.py              # 🛒 OC, Líneas Crédito
+│   ├── 9_Permisos.py             # ⚙️ Panel de administración
+│   ├── 10_Automatizaciones.py    # 🤖 Túneles Estáticos
+│   └── 11_Relacion_Comercial.py  # 🤝 Deudas y saldos
 │
 ├── shared/                       # Módulos compartidos
 │   ├── auth.py                   # 🔐 Autenticación frontend
-│   ├── cookies.py                # 🆕 Manejo de cookies/persistencia
+│   ├── cookies.py                # Manejo de cookies
 │   ├── constants.py
 │   └── odoo_client.py
 │
 └── data/
-    └── sessions.json             # 🆕 Almacenamiento de sesiones
+    └── sessions.json             # Almacenamiento de sesiones
 ```
 
 ---
 
-## 3. Dashboards Disponibles
+## 3. Dashboards Disponibles (11)
 
 | # | Nombre | Archivo | Descripción |
 |---|--------|---------|-------------|
-| 1 | Recepciones | `1_Recepciones.py` | KPIs de Kg, costos, calidad por productor |
+| 1 | Recepciones | `1_Recepciones.py` | KPIs de Kg, costos, calidad, curva abastecimiento |
 | 2 | Producción | `2_Produccion.py` | Órdenes de fabricación, rendimientos |
 | 3 | Bandejas | `3_Bandejas.py` | Control de bandejas por proveedor |
 | 4 | Stock | `4_Stock.py` | Inventario en cámaras y pallets |
 | 5 | Containers | `5_Containers.py` | Pedidos y avance de producción |
-| 6 | Finanzas | `6_Finanzas.py` | Estado de Resultado vs Presupuesto |
-| 7 | Rendimiento | `7_Rendimiento.py` | Análisis de rendimiento por lote (MP → PT) |
+| 6 | Finanzas | `6_Finanzas.py` | Estado de Resultado, Flujo Caja, Presupuesto |
+| 7 | Rendimiento | `7_Rendimiento.py` | Análisis de rendimiento MP → PT |
 | 8 | Compras | `8_Compras.py` | Órdenes de compra, líneas de crédito |
 | 9 | Permisos | `9_Permisos.py` | Panel de administración |
-| 10 | **Automatizaciones** | `10_Automatizaciones.py` | **🆕 Túneles Estáticos - Creación de MO** |
+| 10 | Automatizaciones | `10_Automatizaciones.py` | Túneles Estáticos - Creación de MO |
+| 11 | **Relación Comercial** | `11_Relacion_Comercial.py` | **Deudas y saldos proveedores** |
 
 ---
 

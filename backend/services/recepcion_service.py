@@ -56,9 +56,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             print(f"[WARNING] estados llegó como tipo {type(estados)}, convirtiendo a lista")
             estados = list(estados) if estados else []
     
-    # DEBUG: Log parámetros normalizados
-    print(f"[DEBUG recepcion_service] origen (normalizado): {origen}, tipo: {type(origen)}")
-    print(f"[DEBUG recepcion_service] estados (normalizado): {estados}, tipo: {type(estados)}")
     
     # Intentar obtener del caché
     cache_key = cache._make_key(
@@ -88,8 +85,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     if not picking_type_ids:
         picking_type_ids = [1, 217]
     
-    # DEBUG: Log the picking_type_ids being used
-    print(f"[DEBUG recepcion_service] picking_type_ids a usar: {picking_type_ids}")
     
     # ============ PASO 1: Obtener todas las recepciones ============
     domain = [
@@ -147,7 +142,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         return []
     
     recepciones = recepciones_validas
-    print(f"[DEBUG] Recepciones válidas procesadas: {len(recepciones)}")
     
     # Recolectar IDs para batch queries
     picking_ids = [r["id"] for r in recepciones]
@@ -194,7 +188,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         if cached:
             if isinstance(cached, dict):
                 product_info_map = cached
-                print(f"[DEBUG] Productos cargados desde caché: {len(product_info_map)} items")
             else:
                 print(f"[ERROR CRÍTICO] Caché de productos corrupto: se esperaba dict, se recibió {type(cached)}")
                 print(f"[ERROR] Limpiando caché corrupto para key: {cache_key}")
@@ -202,7 +195,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 cached = None  # Forzar recarga desde Odoo
         
         if not cached:
-            print(f"[DEBUG] Cargando {len(all_product_ids)} productos desde Odoo...")
             product_infos = client.read(
                 "product.product", 
                 list(all_product_ids), 
@@ -265,7 +257,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                 product_info_map = {}  # Resetear a diccionario vacío
             else:
                 # Cachear productos por 30 minutos
-                print(f"[DEBUG] Cacheando {len(product_info_map)} productos")
                 cache.set(cache_key, product_info_map, ttl=OdooCache.TTL_PRODUCTOS)
     
     checks_map = {}

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rio-api-dev
+    ports:
+      - "8002:8000"  # Puerto externo 8002, interno 8000
+    environment:
+      - ENV=development
+      - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
+      - ./backend/data:/app/backend/data
+    restart: unless-stopped
+    networks:
+      - rio-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  web-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: rio-web-dev
+    ports:
+      - "8502:8501"
+    environment:
+      - ENV=development
+      - API_URL=http://api-dev:8000
+    depends_on:
+      api-dev:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rio-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+networks:
+  rio-network:
+    name: rio-network
+    external: true

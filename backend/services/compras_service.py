@@ -622,10 +622,6 @@ class ComprasService:
                     recepciones_sin_facturar_by_partner[pid][oc_name]['monto_pendiente'] += monto_pendiente
                     recepciones_sin_facturar_by_partner[pid][oc_name]['lineas_count'] += 1
             
-            # DEBUG: Mostrar resultados
-            for pid, ocs in recepciones_sin_facturar_by_partner.items():
-                for oc_name, data in ocs.items():
-                    print(f"[DEBUG RESULTADO] Partner {pid}: {oc_name} = ${data['monto_pendiente']:,.0f}")
         
         # === 4. STOCK.PICKING EN TODOS LOS ESTADOS EXCEPTO BORRADOR/CANCELADO ===
         # Solo considerar recepciones con quantity_done > 0 (algo realmente recibido)
@@ -647,7 +643,6 @@ class ComprasService:
                     limit=1000
                 )
                 
-                print(f"[DEBUG PICKINGS] Encontrados {len(pickings)} pickings completados (estado: done)")
                 
                 if pickings:
                     picking_ids = [p['id'] for p in pickings]
@@ -714,10 +709,6 @@ class ComprasService:
                             recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_recibido
                             recepciones_preparadas_by_partner[pid][picking_name]['lineas_count'] += 1
                     
-                    # DEBUG
-                    for pid, pickings_dict in recepciones_preparadas_by_partner.items():
-                        for pick_name, data in pickings_dict.items():
-                            print(f"[DEBUG RECEP DONE] Partner {pid}: {pick_name} = ${data['monto_pendiente']:,.0f}")
         except Exception as e:
             print(f"[ERROR PICKINGS] Error al obtener pickings: {e}")
             # Continuar sin pickings, no bloquear la carga

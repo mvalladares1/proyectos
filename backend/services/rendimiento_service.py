@@ -721,15 +721,6 @@ class RendimientoService:
                         kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (INCLUIDO - {especie}/{manejo})")
                         kg_pt += qty
                 
-                # Debug: imprimir para órdenes específicas
-                if mo.get('name', '').endswith('/00104') or mo.get('name', '') == 'WH/RF/MO/00812':
-                    print(f"\n{'='*80}")
-                    print(f"DEBUG MO: {mo.get('name')}")
-                    print(f"Producción:")
-                    for line in kg_pt_debug:
-                        print(f"  - {line}")
-                    print(f"kg_pt FINAL: {kg_pt}")
-                    print(f"{'='*80}\n")
                 
                 costo_elec = costos_op.get('costo_electricidad', 0)
                 

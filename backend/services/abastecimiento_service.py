@@ -21,11 +21,9 @@ def _get_excel_path():
     
     for path in possible_paths:
         if os.path.exists(path):
-            print(f"[DEBUG abastecimiento] Excel encontrado en: {path}")
             return path
     
     # Si no se encuentra, retornar la primera opción y dejar que falle con mensaje claro
-    print(f"[DEBUG abastecimiento] Excel NO encontrado. Rutas probadas: {possible_paths}")
     return possible_paths[0]
 
 ABASTECIMIENTO_EXCEL_PATH = _get_excel_path()
@@ -69,7 +67,6 @@ def _get_cached_proyecciones():
     if _cached_df is None or (current_time - _cache_timestamp) > _cache_ttl:
         _cached_df = _load_proyecciones_from_excel()
         _cache_timestamp = current_time
-        print(f"[DEBUG abastecimiento] Cache renovado a las {datetime.now()}")
     
     return _cached_df
 
