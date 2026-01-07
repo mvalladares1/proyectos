@@ -8,12 +8,13 @@ Este documento describe la estructura del repositorio `rio-futuro-dashboards`.
 
 ## 1. Resumen General
 
-| Componente | Tecnología | Puerto |
-|------------|------------|--------|
-| Frontend | Streamlit | 8501 |
-| Backend | FastAPI + Uvicorn | 8000 |
-| Base de datos | Odoo 16 (XML-RPC) | - |
-| Servidor | debian@167.114.114.51 | - |
+| Componente | Tecnología | Puerto PROD | Puerto DEV | Deployment |
+|------------|------------|-------------|------------|------------|
+| Frontend | Streamlit | 8501 | 8502 | Docker (host network) |
+| Backend | FastAPI + Uvicorn | 8000 | 8002 | Docker (bridge network) |
+| Base de datos | Odoo 16 (XML-RPC) | - | - | Externo |
+| Reverse Proxy | NGINX | 443 (SSL) | - | Systemd |
+| Servidor | debian@167.114.114.51 | - | - | OVH Hosting |
 
 ---
 
@@ -85,7 +86,43 @@ proyectos/
 
 ---
 
-## 3. Dashboards Disponibles (11)
+## 3. Deployment Docker
+
+### Arquitectura
+
+```
+NGINX (443) → Blue-Green Failover
+├─→ PROD: 8501 (Streamlit) + 8000 (FastAPI)
+└─→ DEV:  8502 (Streamlit) + 8002 (FastAPI)
+```
+
+### Network Configuration
+
+- **Backend containers**: Bridge network `rio-network` (172.19.0.0/16)
+- **Frontend containers**: Host network mode (acceso directo a 127.0.0.1)
+- **Razón**: Docker bridge bloquea container-to-gateway, host mode permite conectividad
+
+### Archivos Docker
+
+- `docker-compose.prod.yml` - Producción (puertos 8000, 8501)
+- `docker-compose.dev.yml` - Desarrollo (puertos 8002, 8502)
+- `Dockerfile.api` - Backend FastAPI
+- `Dockerfile.web` - Frontend Streamlit con puerto dinámico
+
+### URLs de Acceso
+
+| Entorno | URL |
+|---------|-----|
+| **PROD Dashboard** | https://riofuturoprocesos.com/dashboards/ |
+| **DEV Dashboard** | https://riofuturoprocesos.com/dashboards-dev/ |
+| **API PROD** | https://riofuturoprocesos.com/api/ |
+| **Logística** | https://riofuturoprocesos.com/logistica/ |
+
+**Ver guía completa**: `.agent/workflows/docker-deployment.md`
+
+---
+
+## 4. Dashboards Disponibles (11)
 
 | # | Nombre | Archivo | Descripción |
 |---|--------|---------|-------------|
@@ -103,7 +140,7 @@ proyectos/
 
 ---
 
-## 4. Sistema de Autenticación
+## 5. Sistema de Autenticación
 
 ### Módulos Nuevos
 
@@ -137,7 +174,7 @@ proyectos/
 
 ---
 
-## 5. Dashboard de Rendimiento (Detalle)
+## 6. Dashboard de Rendimiento (Detalle)
 
 ### Pestañas Disponibles
 
@@ -163,7 +200,7 @@ proyectos/
 
 ---
 
-## 6. Dashboard de Compras
+## 7. Dashboard de Compras
 
 ### Secciones
 
@@ -181,7 +218,7 @@ proyectos/
 
 ---
 
-## 7. Dashboard de Automatizaciones (Túneles Estáticos) 🆕
+## 8. Dashboard de Automatizaciones (Túneles Estáticos) 🆕
 
 ### Descripción General
 
@@ -289,7 +326,7 @@ Output: MO completa lista en Odoo
 
 ---
 
-## 8. Dataset de Compras
+## 9. Dataset de Compras
 
 ### Rendimiento
 
@@ -311,7 +348,7 @@ Output: MO completa lista en Odoo
 
 ---
 
-## 8. Despliegue
+## 10. Despliegue
 
 ```bash
 # Conectar al servidor
@@ -336,7 +373,7 @@ sudo journalctl -u rio-futuro-web -n 50 -f
 
 ---
 
-## 9. Dependencias Nuevas
+## 11. Dependencias Nuevas
 
 ```txt
 extra-streamlit-components>=0.1.60  # Cookies (opcional)
@@ -344,7 +381,7 @@ extra-streamlit-components>=0.1.60  # Cookies (opcional)
 
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 ### Problema: "Port 8501 is already in use"
 
@@ -436,7 +473,7 @@ sudo systemctl restart rio-futuro-api rio-futuro-web nginx
 
 ---
 
-## 11. Infraestructura del Servidor VPS
+## 13. Infraestructura del Servidor VPS
 
 > **Estado:** Producción funcional y estable  
 > **Última limpieza:** 2 de Enero 2026
@@ -607,7 +644,7 @@ Todo lo demás cerrado.
 
 ---
 
-## 12. Registro de Cambios en Producción (2 Enero 2026)
+## 14. Registro de Cambios en Producción (2 Enero 2026)
 
 > **Objetivo:** Documentar exactamente qué se modificó, por qué, y cómo quedó funcionando.
 
@@ -864,7 +901,7 @@ curl https://riofuturoprocesos.com/api/v1/
 
 ---
 
-## 13. TODOs Pendientes
+## 15. TODOs Pendientes
 
 - [ ] Crear servicio systemd para Reportería (puerto 8503)
 - [ ] Configurar renovación automática de Origin Certificate (15 años)

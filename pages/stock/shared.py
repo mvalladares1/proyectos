@@ -39,10 +39,14 @@ def fmt_numero(valor, decimales=0):
 # --------------------- Configuración de cámaras ---------------------
 
 CAMARAS_CONFIG = {
-    "RF/Stock/Camara 0°C REAL": {"capacidad": 200, "patron": ["Camara 0°C REAL"], "id": 5452},
-    "VLK/Camara 0°": {"capacidad": 200, "patron": ["VLK/Camara 0", "VLK", "Camara 0°"], "id": 8528},
-    "RF/Stock/Inventario Real": {"capacidad": 500, "patron": ["Inventario Real"], "id": 8474},
-    "VLK/Stock": {"capacidad": 500, "patron": ["VLK/Stock"], "id": 8497},
+    # Grupo RF (Rio Futuro)
+    "RF/Stock/Camara 0°C REAL": {"capacidad": 200, "patron": ["Camara 0°C REAL"], "id": 5452, "grupo": "RF"},
+    "RF/Stock/Inventario Real": {"capacidad": 500, "patron": ["Inventario Real"], "id": 8474, "grupo": "RF"},
+    # Grupo VLK
+    "VLK/Camara 0°": {"capacidad": 200, "patron": ["VLK/Camara 0", "Camara 0°"], "id": 8528, "grupo": "VLK"},
+    "VLK/Camara 1 -25°C": {"capacidad": 200, "patron": ["VLK/Camara 1", "Camara 1 -25"], "id": None, "grupo": "VLK"},
+    "VLK/Camara 2 -25°C": {"capacidad": 200, "patron": ["VLK/Camara 2", "Camara 2 -25"], "id": None, "grupo": "VLK"},
+    "VLK/Stock": {"capacidad": 500, "patron": ["VLK/Stock"], "id": 8497, "grupo": "VLK"},
 }
 
 
@@ -50,8 +54,10 @@ def get_capacidades_default():
     """Retorna capacidades por defecto."""
     return {
         "RF/Stock/Camara 0°C REAL": 200,
-        "VLK/Camara 0°": 200,
         "RF/Stock/Inventario Real": 500,
+        "VLK/Camara 0°": 200,
+        "VLK/Camara 1 -25°C": 200,
+        "VLK/Camara 2 -25°C": 200,
         "VLK/Stock": 500
     }
 
@@ -186,7 +192,40 @@ def init_session_state():
         'stock_lotes_loading': False,
         'stock_data_loaded': False,
         'stock_loading': False,
+        'pallet_info': None,  # Info del pallet buscado
     }
     for key, default in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default
+
+
+# --------------------- Funciones de Pallet Info ---------------------
+
+def fetch_pallet_info(_username: str, _password: str, pallet_code: str) -> Dict:
+    """Obtiene información de un pallet para validación antes de mover."""
+    try:
+        response = httpx.get(
+            f"{API_URL}/api/v1/stock/pallet-info",
+            params={
+                "username": _username,
+                "password": _password,
+                "pallet_code": pallet_code
+            },
+            timeout=15.0
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        return {"found": False, "message": f"Error al buscar pallet: {str(e)}"}
+
+
+def get_camaras_por_grupo(camaras_data: List[Dict], grupo: str) -> List[Dict]:
+    """Filtra cámaras por grupo (RF o VLK)."""
+    result = []
+    for camara in camaras_data:
+        config_name = camara.get("config_name", "")
+        config = CAMARAS_CONFIG.get(config_name, {})
+        if config.get("grupo") == grupo:
+            result.append(camara)
+    return result
+

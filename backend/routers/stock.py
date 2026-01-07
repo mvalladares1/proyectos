@@ -87,3 +87,21 @@ async def get_lotes_by_category(
         return service.get_lots_by_category(category, loc_ids)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pallet-info")
+async def get_pallet_info(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    pallet_code: str = Query(..., description="Código del pallet/tarja a buscar")
+):
+    """
+    Obtiene información detallada de un pallet para validación antes de mover.
+    Retorna ubicación actual, productos, cantidades y estado (in_stock o pending_reception).
+    """
+    try:
+        service = StockService(username=username, password=password)
+        return service.get_pallet_info(pallet_code)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

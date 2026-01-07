@@ -1,18 +1,65 @@
 """
 Tab: Cámaras
 Stock por cámaras de frío, ocupación y detalle por tipo de fruta.
+Incluye sección separada para cámaras VLK.
 """
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from .shared import fmt_numero, filtrar_camaras_principales
+from .shared import fmt_numero, filtrar_camaras_principales, CAMARAS_CONFIG
+
+
+def _render_tabla_camaras(camaras_list: list, title: str = "Detalle"):
+    """Renderiza tabla de cámaras con formato."""
+    if not camaras_list:
+        st.info(f"No hay cámaras {title} disponibles")
+        return
+    
+    df_camaras = pd.DataFrame(camaras_list)
+    
+    # Formatear para display
+    df_display = df_camaras.copy()
+    df_display["Capacidad"] = df_display["Capacidad"].apply(lambda x: fmt_numero(x))
+    df_display["Ocupado"] = df_display["Ocupado"].apply(lambda x: fmt_numero(x))
+    df_display["Disponible"] = df_display["Disponible"].apply(lambda x: fmt_numero(x))
+    df_display["Ocupación %"] = df_display["Ocupación %"].apply(lambda x: fmt_numero(x, 1))
+    df_display["Stock (kg)"] = df_display["Stock (kg)"].apply(lambda x: fmt_numero(x))
+    
+    st.dataframe(
+        df_display,
+        use_container_width=True,
+        height=200,
+        hide_index=True
+    )
+
+
+def _procesar_camaras_a_lista(camaras_data: list) -> list:
+    """Procesa datos de cámaras a formato de lista para tabla."""
+    camaras_list = []
+    for camara in camaras_data:
+        total_kg = sum(camara.get("stock_data", {}).values())
+        cap = camara.get("capacity_pallets", 1)
+        ocup = camara.get("occupied_pallets", 0)
+        ocupacion = (ocup / cap * 100) if cap > 0 else 0
+        
+        camaras_list.append({
+            "Cámara": camara.get("name", ""),
+            "Ubicación Completa": camara.get("full_name", ""),
+            "Capacidad": cap,
+            "Ocupado": ocup,
+            "Disponible": cap - ocup,
+            "Ocupación %": round(ocupacion, 1),
+            "Stock (kg)": round(total_kg, 0),
+            "Tipos": len(camara.get("stock_data", {}))
+        })
+    return camaras_list
 
 
 @st.fragment
 def render(username: str, password: str, camaras_data_all: list):
     """Renderiza el contenido del tab Cámaras como fragment independiente."""
-    st.header("Stock por Cámaras")
+    st.header("📦 Stock por Cámaras")
     
     if not camaras_data_all:
         st.info("No hay datos de cámaras disponibles")
@@ -40,60 +87,54 @@ def render(username: str, password: str, camaras_data_all: list):
     
     st.divider()
     
-    # Tabla de cámaras con stock
-    st.subheader("Detalle por Cámara")
+    # Separar cámaras por grupo
+    vlk_camaras = [c for c in camaras_data_tab if "VLK" in c.get("name", "") or "VLK" in c.get("full_name", "")]
+    rf_camaras = [c for c in camaras_data_tab if c not in vlk_camaras]
     
-    camaras_list = []
-    for camara in camaras_data_tab:
-        total_kg = sum(camara["stock_data"].values())
-        ocupacion = (camara["occupied_pallets"] / camara["capacity_pallets"] * 100) if camara["capacity_pallets"] > 0 else 0
+    # === SECCIÓN VLK ===
+    st.subheader("🏢 Cámaras VLK")
+    
+    if vlk_camaras:
+        # Métricas VLK
+        vlk_capacity = sum(c.get("capacity_pallets", 0) for c in vlk_camaras)
+        vlk_occupied = sum(c.get("occupied_pallets", 0) for c in vlk_camaras)
+        vlk_ocupacion = (vlk_occupied / vlk_capacity * 100) if vlk_capacity > 0 else 0
         
-        camaras_list.append({
-            "Cámara": camara["name"],
-            "Ubicación Completa": camara["full_name"],
-            "Padre": camara["parent_name"],
-            "Capacidad": camara["capacity_pallets"],
-            "Ocupado": camara["occupied_pallets"],
-            "Disponible": camara["capacity_pallets"] - camara["occupied_pallets"],
-            "Ocupación %": round(ocupacion, 1),
-            "Stock (kg)": round(total_kg, 0),
-            "Tipos": len(camara["stock_data"])
-        })
+        col_v1, col_v2, col_v3 = st.columns(3)
+        col_v1.metric("Cámaras VLK", len(vlk_camaras))
+        col_v2.metric("Ocupado VLK", f"{fmt_numero(vlk_occupied)} / {fmt_numero(vlk_capacity)}")
+        col_v3.metric("Ocupación VLK", f"{fmt_numero(vlk_ocupacion, 1)}%")
+        
+        vlk_list = _procesar_camaras_a_lista(vlk_camaras)
+        _render_tabla_camaras(vlk_list, "VLK")
+    else:
+        st.info("No hay cámaras VLK disponibles")
     
-    df_camaras = pd.DataFrame(camaras_list)
+    st.divider()
     
-    # Filtros
-    col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        min_ocupacion = st.slider("Ocupación mínima (%)", 0, 100, 0)
-    with col_f2:
-        buscar_camara = st.text_input("Buscar cámara", "")
+    # === SECCIÓN RF/STOCK ===
+    st.subheader("🏭 Cámaras RF/Stock")
     
-    # Aplicar filtros sobre datos originales
-    mask = df_camaras["Ocupación %"] >= min_ocupacion
-    if buscar_camara:
-        mask = mask & (
-            df_camaras["Cámara"].str.contains(buscar_camara, case=False, na=False) |
-            df_camaras["Ubicación Completa"].str.contains(buscar_camara, case=False, na=False)
-        )
+    if rf_camaras:
+        # Métricas RF
+        rf_capacity = sum(c.get("capacity_pallets", 0) for c in rf_camaras)
+        rf_occupied = sum(c.get("occupied_pallets", 0) for c in rf_camaras)
+        rf_ocupacion = (rf_occupied / rf_capacity * 100) if rf_capacity > 0 else 0
+        
+        col_r1, col_r2, col_r3 = st.columns(3)
+        col_r1.metric("Cámaras RF", len(rf_camaras))
+        col_r2.metric("Ocupado RF", f"{fmt_numero(rf_occupied)} / {fmt_numero(rf_capacity)}")
+        col_r3.metric("Ocupación RF", f"{fmt_numero(rf_ocupacion, 1)}%")
+        
+        rf_list = _procesar_camaras_a_lista(rf_camaras)
+        _render_tabla_camaras(rf_list, "RF")
+    else:
+        st.info("No hay cámaras RF/Stock disponibles")
     
-    # Crear df formateado con filtro aplicado
-    df_filtered = df_camaras[mask].copy()
-    df_filtered["Capacidad"] = df_filtered["Capacidad"].apply(lambda x: fmt_numero(x))
-    df_filtered["Ocupado"] = df_filtered["Ocupado"].apply(lambda x: fmt_numero(x))
-    df_filtered["Disponible"] = df_filtered["Disponible"].apply(lambda x: fmt_numero(x))
-    df_filtered["Ocupación %"] = df_filtered["Ocupación %"].apply(lambda x: fmt_numero(x, 1))
-    df_filtered["Stock (kg)"] = df_filtered["Stock (kg)"].apply(lambda x: fmt_numero(x))
-
-    st.dataframe(
-        df_filtered,
-        use_container_width=True,
-        height=300,
-        hide_index=True
-    )
+    st.divider()
     
     # Detalle de stock por Tipo Fruta / Manejo
-    st.subheader("Stock por Tipo Fruta / Manejo")
+    st.subheader("📊 Stock por Tipo Fruta / Manejo")
     
     @st.fragment
     def _fragment_detalle_camara():
@@ -104,7 +145,7 @@ def render(username: str, password: str, camaras_data_all: list):
         
         if selected_camara:
             camara_detail = next((c for c in camaras_data_tab if c["name"] == selected_camara), None)
-            if camara_detail and camara_detail["stock_data"]:
+            if camara_detail and camara_detail.get("stock_data"):
                 stock_items = [
                     {"Tipo Fruta - Manejo": k, "Stock (kg)": round(v, 2)}
                     for k, v in camara_detail["stock_data"].items()
@@ -143,6 +184,8 @@ def render(username: str, password: str, camaras_data_all: list):
                 # Tabla debajo del gráfico con formato chileno
                 df_stock_display = df_stock[["Tipo Fruta - Manejo", "Stock (kg)"]].copy()
                 df_stock_display["Stock (kg)"] = df_stock_display["Stock (kg)"].apply(lambda x: fmt_numero(x, 2))
-                st.dataframe(df_stock_display, use_container_width=True, height=300, hide_index=True)
+                st.dataframe(df_stock_display, use_container_width=True, height=200, hide_index=True)
+            else:
+                st.info("Esta cámara no tiene stock registrado")
     
     _fragment_detalle_camara()

@@ -12,6 +12,13 @@ proyectos/
 ├── Home_Content.py           # Contenido Home (login/dashboard)
 ├── DASHBOARD_STRUCTURE.md    # Documentación técnica
 ├── PAGES.md                  # Guía para agregar páginas
+├── requirements.txt          # Dependencias Python
+│
+├── Dockerfile.api            # Docker image para FastAPI
+├── Dockerfile.web            # Docker image para Streamlit
+├── docker-compose.prod.yml   # Compose PROD (8000, 8501)
+├── docker-compose.dev.yml    # Compose DEV (8002, 8502)
+├── riofuturoprocesos.com.nginx # Configuración NGINX
 │
 ├── backend/                  # API FastAPI
 │   ├── main.py               # Entry point
@@ -53,7 +60,24 @@ proyectos/
 
 ---
 
-## 2. Dashboards Disponibles
+## 2. Deployment
+
+### Servidor: debian@167.114.114.51
+
+**Entornos activos**:
+- PROD: Puertos 8000 (API), 8501 (Web)
+- DEV: Puertos 8002 (API), 8502 (Web)
+
+**Tecnologías**:
+- Docker Compose para orquestación
+- NGINX como reverse proxy (Blue-Green failover)
+- Network mode `host` para web containers (solución a conectividad)
+
+**Guía completa**: Ver `.agent/workflows/docker-deployment.md`
+
+---
+
+## 3. Dashboards Disponibles
 
 | # | Dashboard | Archivo | Descripción |
 |---|-----------|---------|-------------|
@@ -71,7 +95,7 @@ proyectos/
 
 ---
 
-## 3. Backend Services (22)
+## 4. Backend Services (22)
 
 | Servicio | Descripción |
 |----------|-------------|

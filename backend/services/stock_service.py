@@ -96,15 +96,16 @@ class StockService:
             self.odoo.execute("stock.picking", "action_assign", [picking_id])
             
             # Buscar las move lines creadas y asignar package y qty_done
+            # NOTA: En Odoo 16, stock.move.line usa reserved_uom_qty, no product_uom_qty
             m_lines = self.odoo.search_read(
                 "stock.move.line",
                 [("picking_id", "=", picking_id)],
-                ["id", "product_id", "product_uom_qty"]
+                ["id", "product_id", "reserved_uom_qty"]
             )
             
             for ml in m_lines:
                 # Intentar matchear con el quant original por producto (simplificado)
-                # En un flujo directo, la qty_done suele ser igual a la product_uom_qty
+                # En un flujo directo, la qty_done suele ser igual a la reserved_uom_qty
                 self.odoo.execute(
                     "stock.move.line", 
                     "write", 
@@ -112,7 +113,7 @@ class StockService:
                     {
                         "package_id": package_id, 
                         "result_package_id": package_id, 
-                        "qty_done": ml["product_uom_qty"]
+                        "qty_done": ml["reserved_uom_qty"]
                     }
                 )
             
@@ -216,19 +217,27 @@ class StockService:
             fecha_desde: Fecha inicio para filtrar pallets (formato YYYY-MM-DD)
             fecha_hasta: Fecha fin para filtrar pallets (formato YYYY-MM-DD)
         """
-        # PASO 1: Configuración de las 4 ubicaciones específicas a mostrar
-        # IDs: 5452=RF/Stock/Camara 0°C REAL, 8528=VLK/Camara 0°, 8474=RF/Stock/Inventario Real, 8497=VLK/Stock
+        # PASO 1: Configuración de ubicaciones específicas a mostrar
+        # Incluye cámaras RF y VLK
         UBICACIONES_ESPECIFICAS = {
+            # RF/Stock
             5452: {"nombre": "Camara 0°C REAL", "capacidad": 200},
-            8528: {"nombre": "VLK/Camara 0°", "capacidad": 200},
             8474: {"nombre": "Inventario Real", "capacidad": 500},
+            # VLK - cámaras conocidas
+            8528: {"nombre": "VLK/Camara 0°", "capacidad": 200},
             8497: {"nombre": "VLK/Stock", "capacidad": 500},
         }
         
+        # Patrones para buscar cámaras VLK adicionales por nombre
+        VLK_PATRONES = [
+            {"patron": "Camara 1 -25", "capacidad": 200},
+            {"patron": "Camara 2 -25", "capacidad": 200},
+        ]
+        
         try:
-            # Buscar directamente por IDs específicos
+            # Buscar por IDs específicos
             ubicacion_ids = list(UBICACIONES_ESPECIFICAS.keys())
-            camaras_encontradas = self.odoo.search_read(
+            camaras_por_id = self.odoo.search_read(
                 "stock.location",
                 [
                     ("id", "in", ubicacion_ids),
@@ -237,6 +246,31 @@ class StockService:
                 ],
                 ["id", "name", "display_name", "location_id"]
             )
+            
+            # Buscar cámaras VLK adicionales por nombre
+            camaras_vlk_extra = []
+            for vlk in VLK_PATRONES:
+                found = self.odoo.search_read(
+                    "stock.location",
+                    [
+                        ("display_name", "ilike", f"%VLK%{vlk['patron']}%"),
+                        ("usage", "=", "internal"),
+                        ("active", "=", True)
+                    ],
+                    ["id", "name", "display_name", "location_id"],
+                    limit=1
+                )
+                if found:
+                    # Agregar capacidad al config
+                    UBICACIONES_ESPECIFICAS[found[0]["id"]] = {
+                        "nombre": found[0]["display_name"],
+                        "capacidad": vlk["capacidad"]
+                    }
+                    camaras_vlk_extra.extend(found)
+            
+            # Combinar resultados
+            camaras_encontradas = camaras_por_id + camaras_vlk_extra
+            
         except Exception as e:
             print(f"Error buscando cámaras: {e}")
             import traceback
@@ -714,3 +748,93 @@ class StockService:
         result.sort(key=lambda x: x["days_old"], reverse=True)
         
         return result
+
+    def get_pallet_info(self, pallet_code: str) -> Dict:
+        """
+        Obtiene información detallada de un pallet/tarja para validación.
+        Retorna ubicación actual, productos, cantidades y estado.
+        """
+        # Buscar el paquete
+        packages = self.odoo.search_read(
+            "stock.quant.package", 
+            [("name", "=", pallet_code)], 
+            ["id", "name"]
+        )
+        
+        if not packages:
+            return {"found": False, "message": f"Pallet '{pallet_code}' no encontrado en el sistema"}
+        
+        package_id = packages[0]["id"]
+        
+        # 1. Buscar en Stock Real (Quants)
+        quants = self.odoo.search_read(
+            "stock.quant",
+            [("package_id", "=", package_id), ("quantity", ">", 0)],
+            ["location_id", "product_id", "quantity", "lot_id", "in_date"]
+        )
+        
+        if quants:
+            # Pallet está en inventario
+            location = quants[0]["location_id"]
+            products = []
+            total_qty = 0
+            
+            for q in quants:
+                if q.get("product_id"):
+                    products.append({
+                        "name": q["product_id"][1],
+                        "quantity": q["quantity"],
+                        "lot": q["lot_id"][1] if q.get("lot_id") else "N/A"
+                    })
+                    total_qty += q["quantity"]
+            
+            return {
+                "found": True,
+                "status": "in_stock",
+                "pallet_code": pallet_code,
+                "location_id": location[0],
+                "location_name": location[1],
+                "products": products,
+                "total_quantity": total_qty,
+                "items_count": len(quants)
+            }
+        
+        # 2. Buscar en Recepciones Pendientes
+        move_lines = self.odoo.search_read(
+            "stock.move.line",
+            [
+                ("result_package_id", "=", package_id),
+                ("state", "not in", ["done", "cancel"])
+            ],
+            ["picking_id", "location_dest_id", "product_id", "reserved_uom_qty"]
+        )
+        
+        if move_lines:
+            picking = move_lines[0]["picking_id"]
+            dest = move_lines[0]["location_dest_id"]
+            products = []
+            
+            for ml in move_lines:
+                if ml.get("product_id"):
+                    products.append({
+                        "name": ml["product_id"][1],
+                        "quantity": ml["reserved_uom_qty"]
+                    })
+            
+            return {
+                "found": True,
+                "status": "pending_reception",
+                "pallet_code": pallet_code,
+                "picking_id": picking[0],
+                "picking_name": picking[1],
+                "destination_id": dest[0] if dest else None,
+                "destination_name": dest[1] if dest else "N/A",
+                "products": products,
+                "items_count": len(move_lines)
+            }
+        
+        return {
+            "found": False, 
+            "message": f"Pallet '{pallet_code}' existe pero no tiene stock ni recepciones pendientes"
+        }
+
