@@ -1099,12 +1099,18 @@ class RendimientoService:
                         'detenciones_total': 0,
                         'dotacion_sum': 0, 
                         'duracion_total': 0, 
-                        'num_mos': 0
+                        'num_mos': 0,
+                        'costo_electricidad': 0,  # Costo eléctrico acumulado
+                        'total_electricidad': 0   # Total kWh
                     }
                 
                 salas_data[sala]['kg_mp'] += kg_mp
                 salas_data[sala]['kg_pt'] += kg_pt
                 salas_data[sala]['hh_total'] += hh if isinstance(hh, (int, float)) else 0
+                
+                # Acumular electricidad por sala
+                salas_data[sala]['costo_electricidad'] += costo_elec
+                salas_data[sala]['total_electricidad'] += costo_elec  # kWh = mismo valor por ahora
                 
                 # HH Efectiva
                 hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
@@ -1255,6 +1261,11 @@ class RendimientoService:
             hh_promedio = hh / num_mos if num_mos > 0 else 0
             hh_efectiva_promedio = hh_efectiva / num_mos if num_mos > 0 else 0
             
+            # Electricidad
+            costo_elec = data.get('costo_electricidad', 0)
+            total_elec = data.get('total_electricidad', 0)
+            kwh_por_kg = total_elec / kg_pt if kg_pt > 0 else 0
+            
             resultado_salas.append({
                 'sala': sala,
                 'kg_mp': round(kg_mp, 2),
@@ -1273,7 +1284,11 @@ class RendimientoService:
                 'detenciones_total': round(detenciones, 2),
                 'detenciones_promedio': round(detenciones_promedio, 2),
                 'dotacion_promedio': round(dotacion_prom, 1),
-                'num_mos': num_mos
+                'num_mos': num_mos,
+                # Electricidad (para túneles)
+                'costo_electricidad': round(costo_elec, 2),
+                'total_electricidad': round(total_elec, 2),
+                'kwh_por_kg': round(kwh_por_kg, 4)
             })
         resultado_salas.sort(key=lambda x: x['kg_pt'], reverse=True)
         
