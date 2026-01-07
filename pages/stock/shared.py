@@ -8,7 +8,12 @@ from datetime import datetime
 from typing import Dict, List
 import os
 
-API_URL = os.getenv("API_URL", st.secrets.get("API_URL", "http://localhost:8000"))
+# Configuración de API URL
+ENV = os.getenv("ENV", "production")
+if ENV == "development":
+    API_URL = "http://127.0.0.1:8002"
+else:
+    API_URL = os.getenv("API_URL", st.secrets.get("API_URL", "http://127.0.0.1:8000"))
 
 
 # --------------------- Funciones de formateo ---------------------
