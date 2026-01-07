@@ -31,11 +31,13 @@ services:
       context: .
       dockerfile: Dockerfile.web
     container_name: rio-web-dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8502:8501"
     environment:
       - ENV=development
-      - API_URL=http://172.19.0.1:8002
+      - API_URL=http://host.docker.internal:8002
     depends_on:
       api-dev:
         condition: service_healthy
