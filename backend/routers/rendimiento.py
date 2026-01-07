@@ -2,7 +2,7 @@
 Router de Rendimiento Productivo
 Incluye trazabilidad inversa y endpoints para el módulo de Producción
 """
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 from backend.services.rendimiento_service import RendimientoService
@@ -28,7 +28,7 @@ async def get_trazabilidad_inversa(
 
 @router.post("/trazabilidad-pallets")
 async def get_trazabilidad_pallets(
-    pallet_names: List[str] = Body(..., description="Lista de nombres de pallets"),
+    pallet_names: List[str],
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo")
 ):
@@ -36,8 +36,14 @@ async def get_trazabilidad_pallets(
     Trazabilidad completa de uno o varios pallets.
     Rastrea desde el pallet físico hasta el productor original.
     
-    Body:
-        pallet_names: Lista de nombres de pallets (ej: ["PALLET-001", "PALLET-002"])
+    Request body debe ser una lista JSON:
+    ```json
+    ["PALLET-001", "PALLET-002"]
+    ```
+    
+    Query params:
+    - username: Usuario Odoo
+    - password: API Key Odoo
     
     Returns:
         - pallets_rastreados: Número de pallets procesados
@@ -48,6 +54,7 @@ async def get_trazabilidad_pallets(
         return service.get_trazabilidad_pallets(pallet_names)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/dashboard")
