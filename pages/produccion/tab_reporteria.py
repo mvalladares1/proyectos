@@ -236,10 +236,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
         
         # === PRODUCTIVIDAD DETALLADA POR SALA ===
         if salas:
-            # Filtrar solo salas de proceso
-            salas_proceso = [s for s in salas if 'tunel' not in s.get('sala', '').lower() and 'túnel' not in s.get('sala', '').lower()]
-            if salas_proceso:
-                _render_salas(salas_proceso)
+            _render_salas(salas)
         
         # === DETALLE DE FABRICACIONES - PROCESO ===
         if mos:
@@ -438,8 +435,11 @@ def _render_salas(salas):
     
     df_salas = pd.DataFrame(salas)
     
-    # Filtrar solo salas de proceso (excluir túneles de congelado)
-    df_salas = df_salas[~df_salas['sala'].str.lower().str.contains('tunel|túnel', na=False)]
+    # Filtrar solo salas de proceso reales (excluir túneles, congelado y sin sala)
+    df_salas = df_salas[
+        ~df_salas['sala'].str.lower().str.contains('tunel|túnel|congelado', na=False) &
+        (df_salas['sala'] != 'SIN SALA')
+    ]
     
     if len(df_salas) == 0:
         st.info("No hay datos de salas de proceso disponibles")
