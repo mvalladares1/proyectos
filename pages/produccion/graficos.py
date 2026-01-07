@@ -7,6 +7,50 @@ import altair as alt
 from datetime import datetime, timedelta
 
 
+def _generar_todos_los_periodos(fecha_inicio: datetime, fecha_fin: datetime, agrupacion: str):
+    """
+    Genera todos los períodos entre fecha_inicio y fecha_fin según la agrupación.
+    Esto asegura que los gráficos muestren días con 0 producción.
+    
+    Args:
+        fecha_inicio: Fecha de inicio del rango
+        fecha_fin: Fecha de fin del rango
+        agrupacion: "Día", "Semana" o "Mes"
+    
+    Returns:
+        list: Lista de tuplas (label, sort_year, sort_value)
+    """
+    periodos = []
+    fecha_actual = fecha_inicio
+    
+    if agrupacion == "Día":
+        while fecha_actual <= fecha_fin:
+            periodos.append(_agrupar_por_periodo(fecha_actual, agrupacion))
+            fecha_actual += timedelta(days=1)
+    elif agrupacion == "Mes":
+        while fecha_actual <= fecha_fin:
+            periodos.append(_agrupar_por_periodo(fecha_actual, agrupacion))
+            # Avanzar al primer día del siguiente mes
+            if fecha_actual.month == 12:
+                fecha_actual = fecha_actual.replace(year=fecha_actual.year + 1, month=1, day=1)
+            else:
+                fecha_actual = fecha_actual.replace(month=fecha_actual.month + 1, day=1)
+    else:  # Semana
+        while fecha_actual <= fecha_fin:
+            periodos.append(_agrupar_por_periodo(fecha_actual, agrupacion))
+            fecha_actual += timedelta(weeks=1)
+    
+    # Eliminar duplicados manteniendo el orden
+    seen = set()
+    unique_periodos = []
+    for p in periodos:
+        if p not in seen:
+            seen.add(p)
+            unique_periodos.append(p)
+    
+    return unique_periodos
+
+
 def _agrupar_por_periodo(fecha: datetime, agrupacion: str):
     """
     Agrupa una fecha según el período especificado.
@@ -137,6 +181,34 @@ def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana"):
         
         # Agrupar por período
         df_grouped = df.groupby(['Periodo', 'sort_year', 'sort_value'], as_index=False).agg({'Kg': 'sum'})
+        
+        # Obtener rango de fechas del dataset
+        fechas_mo = []
+        for mo in mos_data:
+            fecha_str = mo.get('fecha') or mo.get('fecha_inicio') or mo.get('fecha_fin')
+            if fecha_str:
+                try:
+                    fecha = datetime.fromisoformat(fecha_str.replace('Z', '+00:00'))
+                    fechas_mo.append(fecha)
+                except:
+                    try:
+                        fecha = datetime.strptime(fecha_str[:10], '%Y-%m-%d')
+                        fechas_mo.append(fecha)
+                    except:
+                        pass
+        
+        # Generar todos los períodos (incluyendo los que no tienen datos)
+        if fechas_mo:
+            fecha_min = min(fechas_mo)
+            fecha_max = max(fechas_mo)
+            todos_periodos = _generar_todos_los_periodos(fecha_min, fecha_max, agrupacion)
+            
+            # Crear DataFrame con todos los períodos
+            df_todos = pd.DataFrame(todos_periodos, columns=['Periodo', 'sort_year', 'sort_value'])
+            
+            # Hacer merge para incluir períodos con 0
+            df_grouped = df_todos.merge(df_grouped, on=['Periodo', 'sort_year', 'sort_value'], how='left')
+            df_grouped['Kg'] = df_grouped['Kg'].fillna(0)
         
         # Ordenar por año y valor
         df_grouped = df_grouped.sort_values(['sort_year', 'sort_value'])
@@ -287,6 +359,51 @@ def grafico_vaciado_por_sala(mos_data: list, agrupacion: str = "Semana"):
             'Kg PT': 'sum',
             'Rendimiento': 'mean'
         })
+        
+        # Obtener rango de fechas del dataset
+        fechas_mo = []
+        for mo in mos_data:
+            fecha_str = mo.get('fecha') or mo.get('fecha_inicio') or mo.get('fecha_fin')
+            if fecha_str:
+                try:
+                    fecha = datetime.fromisoformat(fecha_str.replace('Z', '+00:00'))
+                    fechas_mo.append(fecha)
+                except:
+                    try:
+                        fecha = datetime.strptime(fecha_str[:10], '%Y-%m-%d')
+                        fechas_mo.append(fecha)
+                    except:
+                        pass
+        
+        # Generar todos los períodos y líneas (incluyendo combinaciones con 0)
+        if fechas_mo:
+            fecha_min = min(fechas_mo)
+            fecha_max = max(fechas_mo)
+            todos_periodos = _generar_todos_los_periodos(fecha_min, fecha_max, agrupacion)
+            lineas_unicas = df_grouped['Línea'].unique()
+            
+            # Crear todas las combinaciones de período x línea
+            all_combinations = []
+            for periodo, sort_year, sort_value in todos_periodos:
+                for linea in lineas_unicas:
+                    all_combinations.append({
+                        'Periodo': periodo,
+                        'Línea': linea,
+                        'Sala-Línea': f"{sala_nombre} - {linea}",
+                        'sort_year': sort_year,
+                        'sort_value': sort_value
+                    })
+            
+            df_todos = pd.DataFrame(all_combinations)
+            
+            # Hacer merge para incluir períodos con 0
+            df_grouped = df_todos.merge(
+                df_grouped,
+                on=['Periodo', 'Línea', 'Sala-Línea', 'sort_year', 'sort_value'],
+                how='left'
+            )
+            df_grouped['Kg PT'] = df_grouped['Kg PT'].fillna(0)
+            df_grouped['Rendimiento'] = df_grouped['Rendimiento'].fillna(0)
         
         # Ordenar por año y valor
         df_grouped = df_grouped.sort_values(['sort_year', 'sort_value'])

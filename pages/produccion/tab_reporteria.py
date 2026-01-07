@@ -175,7 +175,7 @@ def render(username: str, password: str):
     
     if data:
         st.markdown("---")
-        _render_kpis_tabs(data, mos, consolidado, fecha_inicio_rep, fecha_fin_rep, username, password, agrupacion)
+        _render_kpis_tabs(data, mos, consolidado, salas, fecha_inicio_rep, fecha_fin_rep, username, password, agrupacion)
         st.markdown("---")
     elif st.session_state.prod_reporteria_loading:
         # Mostrar skeleton loader mientras carga
@@ -185,7 +185,7 @@ def render(username: str, password: str):
         _render_info_ayuda()
 
 
-def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
+def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
     """Renderiza los sub-tabs de KPIs: Proceso y Congelado."""
     vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)"])
     
@@ -233,6 +233,13 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, f
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
             st.markdown(f"### 📊 Análisis {titulo_agrupacion} por Sala y Línea")
             grafico_vaciado_por_sala(mos, agrupacion)
+        
+        # === PRODUCTIVIDAD DETALLADA POR SALA ===
+        if salas:
+            # Filtrar solo salas de proceso
+            salas_proceso = [s for s in salas if 'tunel' not in s.get('sala', '').lower() and 'túnel' not in s.get('sala', '').lower()]
+            if salas_proceso:
+                _render_salas(salas_proceso)
         
         # === DETALLE DE FABRICACIONES - PROCESO ===
         if mos:
@@ -424,34 +431,80 @@ def _render_resumen_fruta_manejo(consolidado):
 
 
 def _render_salas(salas):
-    """Renderiza productividad por sala."""
+    """Renderiza productividad por sala con KPIs detallados."""
     st.markdown("---")
-    st.subheader("🏠 Productividad por Sala de Proceso")
+    st.subheader("🏠 Productividad Detallada por Sala de Proceso")
+    st.caption("Promedios calculados sobre todas las órdenes de fabricación de cada sala")
     
     df_salas = pd.DataFrame(salas)
     
+    # Filtrar solo salas de proceso (excluir túneles de congelado)
+    df_salas = df_salas[~df_salas['sala'].str.lower().str.contains('tunel|túnel', na=False)]
+    
+    if len(df_salas) == 0:
+        st.info("No hay datos de salas de proceso disponibles")
+        return
+    
     for _, sala in df_salas.iterrows():
         alert = get_alert_color(sala['rendimiento'])
-        with st.expander(f"{alert} **{sala['sala']}** | {fmt_numero(sala['kg_pt'])} Kg PT | {sala['num_mos']} MOs"):
-            cols = st.columns(4)
+        with st.expander(f"{alert} **{sala['sala']}** | {fmt_numero(sala['kg_pt'])} Kg PT | {sala['num_mos']} MOs", expanded=False):
+            # Fila 1: KPIs principales de rendimiento
+            st.markdown("**📊 KPIs de Rendimiento**")
+            cols = st.columns(5)
             with cols[0]:
                 st.metric("Rendimiento", fmt_porcentaje(sala['rendimiento']))
             with cols[1]:
-                st.metric("Kg/Hora", fmt_numero(sala['kg_por_hora'], 1))
+                st.metric("Kg/Hora", fmt_numero(sala.get('kg_por_hora', 0), 1))
             with cols[2]:
-                st.metric("Kg/HH", fmt_numero(sala['kg_por_hh'], 1))
+                st.metric("Kg/HH", fmt_numero(sala.get('kg_por_hh', 0), 1))
             with cols[3]:
-                st.metric("Kg/Operario", fmt_numero(sala['kg_por_operario'], 1))
+                st.metric("Kg/Operario", fmt_numero(sala.get('kg_por_operario', 0), 1))
+            with cols[4]:
+                st.metric("Merma (Kg)", fmt_numero(sala.get('merma', 0), 0))
             
+            st.markdown("---")
+            
+            # Fila 2: Datos de producción
+            st.markdown("**📦 Datos de Producción**")
             cols2 = st.columns(4)
             with cols2[0]:
                 st.markdown(f"**Kg MP:** {fmt_numero(sala['kg_mp'])}")
             with cols2[1]:
                 st.markdown(f"**Kg PT:** {fmt_numero(sala['kg_pt'])}")
             with cols2[2]:
-                st.markdown(f"**HH Total:** {fmt_numero(sala['hh_total'], 1)}")
+                st.markdown(f"**HH Total:** {fmt_numero(sala.get('hh_total', 0), 1)}")
             with cols2[3]:
-                st.markdown(f"**Dotación Prom:** {sala['dotacion_promedio']:.1f}")
+                st.markdown(f"**Dotación Prom:** {sala.get('dotacion_promedio', 0):.1f}")
+            
+            st.markdown("---")
+            
+            # Fila 3: KPIs efectivos (nuevos)
+            st.markdown("**⚡ KPIs Efectivos (Promedios)**")
+            cols3 = st.columns(6)
+            with cols3[0]:
+                hh_efectiva_prom = sala.get('hh_efectiva_promedio', 0)
+                st.metric("HH Efectiva", fmt_numero(hh_efectiva_prom, 1), 
+                         help="Promedio de Horas Hombre efectivas por orden de fabricación")
+            with cols3[1]:
+                kg_hora_efectiva = sala.get('kg_por_hora_efectiva', 0)
+                st.metric("Kg/Hora Efect.", fmt_numero(kg_hora_efectiva, 1),
+                         help="Kg procesados por hora efectiva")
+            with cols3[2]:
+                kg_hh_efectiva = sala.get('kg_por_hh_efectiva', 0)
+                st.metric("Kg/HH Efect.", fmt_numero(kg_hh_efectiva, 1),
+                         help="Kg procesados por HH efectiva")
+            with cols3[3]:
+                detenciones_prom = sala.get('detenciones_promedio', 0)
+                st.metric("Detenciones (h)", fmt_numero(detenciones_prom, 1),
+                         help="Promedio de horas de detención por orden de fabricación")
+            with cols3[4]:
+                hh_prom = sala.get('hh_promedio', 0)
+                st.metric("HH Prom/OF", fmt_numero(hh_prom, 1),
+                         help="Promedio de Horas Hombre por orden de fabricación")
+            with cols3[5]:
+                dotacion = sala.get('dotacion_promedio', 0)
+                st.metric("Dotación", fmt_numero(dotacion, 1),
+                         help="Promedio de operarios por orden de fabricación")
 
 
 def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username, password, tipo_filtro=None):

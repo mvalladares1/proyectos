@@ -161,8 +161,9 @@ class RendimientoService:
             'mrp.production',
             domain,
             ['id', 'name', 'product_id', 'state', 'date_planned_start', 'date_finished',
-             'x_studio_sala_de_proceso', 'x_studio_dotacin', 'x_studio_hh_efectiva',
+             'x_studio_sala_de_proceso', 'x_studio_dotacin', 'x_studio_hh_efectiva', 'x_studio_hh',
              'x_studio_kghora_efectiva', 'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso',
+             'x_studio_horas_detencion_totales', 'x_studio_kghh_efectiva',
              'move_raw_ids', 'move_finished_ids', 'move_byproduct_ids'],
             limit=500,
             order='date_planned_start desc'
@@ -805,12 +806,29 @@ class RendimientoService:
                 
                 # Salas
                 if sala not in salas_data:
-                    salas_data[sala] = {'sala': sala, 'kg_mp': 0, 'kg_pt': 0, 'hh_total': 0, 
-                                       'dotacion_sum': 0, 'duracion_total': 0, 'num_mos': 0}
+                    salas_data[sala] = {
+                        'sala': sala, 
+                        'kg_mp': 0, 
+                        'kg_pt': 0, 
+                        'hh_total': 0,
+                        'hh_efectiva_total': 0,
+                        'detenciones_total': 0,
+                        'dotacion_sum': 0, 
+                        'duracion_total': 0, 
+                        'num_mos': 0
+                    }
                 
                 salas_data[sala]['kg_mp'] += kg_mp
                 salas_data[sala]['kg_pt'] += kg_pt
                 salas_data[sala]['hh_total'] += hh if isinstance(hh, (int, float)) else 0
+                
+                # HH Efectiva
+                hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
+                salas_data[sala]['hh_efectiva_total'] += hh_efectiva if isinstance(hh_efectiva, (int, float)) else 0
+                
+                # Detenciones
+                detenciones = mo.get('x_studio_horas_detencion_totales') or 0
+                salas_data[sala]['detenciones_total'] += detenciones if isinstance(detenciones, (int, float)) else 0
                 
                 dotacion = mo.get('x_studio_dotacin') or 0
                 salas_data[sala]['dotacion_sum'] += dotacion if isinstance(dotacion, (int, float)) else 0
@@ -940,9 +958,18 @@ class RendimientoService:
             kg_pt = data['kg_pt']
             kg_mp = data['kg_mp']
             hh = data['hh_total']
+            hh_efectiva = data['hh_efectiva_total']
+            detenciones = data['detenciones_total']
             duracion = data['duracion_total']
             num_mos = data['num_mos']
             dotacion_prom = data['dotacion_sum'] / num_mos if num_mos > 0 else 0
+            
+            # Calcular KPIs adicionales
+            kg_por_hora_efectiva = kg_pt / hh_efectiva if hh_efectiva > 0 else 0
+            kg_por_hh_efectiva = kg_pt / hh_efectiva if hh_efectiva > 0 else 0
+            detenciones_promedio = detenciones / num_mos if num_mos > 0 else 0
+            hh_promedio = hh / num_mos if num_mos > 0 else 0
+            hh_efectiva_promedio = hh_efectiva / num_mos if num_mos > 0 else 0
             
             resultado_salas.append({
                 'sala': sala,
@@ -954,6 +981,13 @@ class RendimientoService:
                 'kg_por_hora': round(kg_pt / duracion if duracion > 0 else 0, 2),
                 'kg_por_operario': round(kg_pt / dotacion_prom if dotacion_prom > 0 else 0, 2),
                 'hh_total': round(hh, 2),
+                'hh_promedio': round(hh_promedio, 2),
+                'hh_efectiva_total': round(hh_efectiva, 2),
+                'hh_efectiva_promedio': round(hh_efectiva_promedio, 2),
+                'kg_por_hora_efectiva': round(kg_por_hora_efectiva, 2),
+                'kg_por_hh_efectiva': round(kg_por_hh_efectiva, 2),
+                'detenciones_total': round(detenciones, 2),
+                'detenciones_promedio': round(detenciones_promedio, 2),
                 'dotacion_promedio': round(dotacion_prom, 1),
                 'num_mos': num_mos
             })
