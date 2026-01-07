@@ -35,7 +35,7 @@ services:
       - "8502:8501"
     environment:
       - ENV=development
-      - API_URL=http://api-dev:8000
+      - API_URL=http://172.19.0.1:8002
     depends_on:
       api-dev:
         condition: service_healthy

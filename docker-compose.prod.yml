@@ -35,7 +35,7 @@ services:
       - "8501:8501"
     environment:
       - ENV=production
-      - API_URL=http://api-prod:8000
+      - API_URL=http://172.19.0.1:8000
     depends_on:
       api-prod:
         condition: service_healthy
