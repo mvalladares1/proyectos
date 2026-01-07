@@ -66,3 +66,22 @@ def get_sankey_data(username: str, password: str, fecha_inicio: str, fecha_fin: 
     except Exception as e:
         st.error(f"Error: {str(e)}")
         return None
+
+
+def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
+    """Obtiene trazabilidad completa de uno o varios pallets."""
+    try:
+        params = {"username": username, "password": password}
+        body = pallet_names  # Lista de nombres de pallets
+        
+        resp = requests.post(
+            f"{API_URL}/api/v1/rendimiento/trazabilidad-pallets",
+            params=params,
+            json=body,
+            timeout=120
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return {"error": f"Error HTTP: {resp.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}

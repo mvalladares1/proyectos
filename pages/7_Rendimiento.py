@@ -33,7 +33,7 @@ if not username or not password:
 
 # Título
 st.title("🔍 Trazabilidad Productiva")
-st.caption("Seguimiento de lotes: Materia Prima (MP) → Producto Terminado (PT)")
+st.caption("Seguimiento completo: Pallet → Proceso → Productor")
 
 # Renderizar contenido
 content.render(username, password)
