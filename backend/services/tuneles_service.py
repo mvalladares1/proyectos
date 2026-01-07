@@ -64,7 +64,7 @@ PRODUCTOS_TRANSFORMACION = {
 }
 
 # Provisión eléctrica
-PRODUCTO_ELECTRICIDAD_ID = 15033  # [ETE] Provisión Electricidad Túnel Estático ($/hr)
+PRODUCTO_ELECTRICIDAD_ID = 15995  # [ETE] Provisión Electricidad Túnel Estático ($/hr)
 UOM_DOLARES_KG_ID = 210  # $/Kg - UoM para provisión eléctrica
 
 # Ubicaciones virtuales
