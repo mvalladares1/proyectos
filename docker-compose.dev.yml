@@ -35,6 +35,7 @@ services:
       - ENV=development
       - API_URL=http://127.0.0.1:8002
       - STREAMLIT_SERVER_PORT=8502
+      - STREAMLIT_SERVER_BASE_URL_PATH=/dashboards-dev
     network_mode: "host"
     depends_on:
       api-dev:
