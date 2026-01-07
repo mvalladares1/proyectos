@@ -271,6 +271,10 @@ def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana", salas_
                     sala_info = sala
                     break
         
+        # DEBUG temporal
+        if not sala_info and salas_data:
+            st.warning(f"⚠️ DEBUG: No se encontraron KPIs para '{tunel_nombre}'. Salas disponibles: {[s.get('sala') for s in salas_data[:3]]}")
+        
         # Mostrar KPIs del túnel (solo electricidad para congelado)
         if sala_info:
             st.markdown("---")
@@ -534,6 +538,10 @@ def grafico_vaciado_por_sala(mos_data: list, agrupacion: str = "Semana", salas_d
                 if sala_base == sala_nombre:
                     sala_info = sala
                     break
+        
+        # DEBUG temporal
+        if not sala_info and salas_data:
+            st.warning(f"⚠️ DEBUG: No se encontraron KPIs para '{sala_nombre}'. Salas disponibles: {[s.get('sala') for s in salas_data[:3]]}")
         
         # Mostrar KPIs de la sala (sin electricidad para proceso)
         if sala_info:
