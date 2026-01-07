@@ -232,7 +232,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             st.markdown("---")
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
             st.markdown(f"### 📊 Análisis {titulo_agrupacion} por Sala y Línea")
-            grafico_vaciado_por_sala(mos, agrupacion)
+            grafico_vaciado_por_sala(mos, agrupacion, salas)
 
         
         # === DETALLE DE FABRICACIONES - PROCESO ===
@@ -270,7 +270,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             st.markdown("---")
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
             st.markdown(f"### 📊 Análisis {titulo_agrupacion} de Congelado")
-            grafico_congelado_semanal(mos, agrupacion)
+            grafico_congelado_semanal(mos, agrupacion, salas)
 
         
         # === DETALLE DE FABRICACIONES - CONGELADO ===
