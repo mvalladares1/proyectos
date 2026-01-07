@@ -16,7 +16,9 @@ services:
       - ./backend/data:/app/backend/data
     restart: unless-stopped
     networks:
-      - rio-network
+      rio-network:
+        aliases:
+          - api-dev
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -39,7 +41,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - rio-network
+      rio-network:
+        aliases:
+          - web-dev
 
 networks:
   rio-network:
