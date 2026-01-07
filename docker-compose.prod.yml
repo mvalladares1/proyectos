@@ -31,21 +31,14 @@ services:
       context: .
       dockerfile: Dockerfile.web
     container_name: rio-web-prod
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8501:8501"
     environment:
       - ENV=production
-      - API_URL=http://host.docker.internal:8000
+      - API_URL=http://127.0.0.1:8000
+    network_mode: "host"
     depends_on:
       api-prod:
         condition: service_healthy
     restart: unless-stopped
-    networks:
-      rio-network:
-        aliases:
-          - web-prod
 
 networks:
   rio-network:
