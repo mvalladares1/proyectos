@@ -8,7 +8,12 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+# Determinar API_URL basado en ENV
+ENV = os.getenv("ENV", "production")
+if ENV == "development":
+    API_URL = "http://127.0.0.1:8002"  # Puerto DEV
+else:
+    API_URL = "http://127.0.0.1:8000"  # Puerto PROD
 ESTADO_RESULTADO_URL = f"{API_URL}/api/v1/estado-resultado"
 PRESUPUESTO_URL = f"{API_URL}/api/v1/presupuesto"
 FLUJO_CAJA_URL = f"{API_URL}/api/v1/flujo-caja"
