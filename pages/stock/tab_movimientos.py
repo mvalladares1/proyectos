@@ -13,6 +13,8 @@ from .shared import API_URL, fetch_pallet_info, fmt_numero, CAMARAS_CONFIG
 @st.fragment
 def render(username: str, password: str, camaras_data_all: list):
     """Renderiza el contenido del tab Movimientos como fragment independiente."""
+    # DEBUG: Mostrar API_URL actual
+    st.info(f"🔍 DEBUG: Usando API URL: {API_URL}")
     st.markdown("### 📲 Gestión de Movimientos")
     st.info(
         "💡 **Flujo**: Busca el pallet → Verifica la información → Confirma el movimiento"
