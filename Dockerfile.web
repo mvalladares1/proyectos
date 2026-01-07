@@ -40,4 +40,4 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Comando de inicio
-CMD ["streamlit", "run", "Home.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+CMD streamlit run Home.py --server.port=${STREAMLIT_SERVER_PORT:-8501} --server.address=0.0.0.0 --server.headless=true
