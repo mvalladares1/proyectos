@@ -1610,15 +1610,57 @@ class TunelesService:
             
             # Crear stock.move.line por cada pallet
             for pallet in data['pallets']:
-                # --- NUEVO: Si es pendiente de recepción, NO crear la línea física ---
-                if pallet.get('pendiente_recepcion'):
-                    print(f"DEBUG: Saltando stock.move.line para pallet PENDIENTE: {pallet['codigo']}")
-                    continue
-
                 # Obtener lote_id del quant del pallet (viene de la validación)
                 lote_id = pallet.get('lote_id')
                 package_id = pallet.get('package_id')  # ID del package origen
                 
+                # --- NUEVO: Si es pendiente de recepción, crear línea con qty=0 ---
+                if pallet.get('pendiente_recepcion'):
+                    print(f"DEBUG: Creando stock.move.line PENDIENTE (qty=0) para: {pallet['codigo']}")
+                    
+                    # Buscar o crear lote temporal con el nombre correcto
+                    lote_nombre_temp = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
+                    if not lote_id:
+                        lote_id = self._buscar_o_crear_lote(lote_nombre_temp, producto_id)
+                    
+                    # Buscar o crear package
+                    if not package_id:
+                        pkg = self.odoo.search_read(
+                            'stock.quant.package',
+                            [('name', '=', pallet['codigo'])],
+                            ['id'],
+                            limit=1
+                        )
+                        if pkg:
+                            package_id = pkg[0]['id']
+                        else:
+                            package_id = self.odoo.execute('stock.quant.package', 'create', {
+                                'name': pallet['codigo'],
+                                'company_id': 1
+                            })
+                    
+                    move_line_data = {
+                        'move_id': move_id,
+                        'product_id': producto_id,
+                        'qty_done': 0.0,  # PENDIENTE: qty en 0 hasta que se confirme recepción
+                        'reserved_uom_qty': 0.0,  # Sin reserva
+                        'product_uom_id': 12,  # kg
+                        'location_id': pallet.get('ubicacion_id', config['ubicacion_origen_id']),
+                        'location_dest_id': ubicacion_virtual,
+                        'state': 'draft',
+                        'reference': f"{mo_name} [PENDIENTE: {pallet.get('kg', 0)} kg]",
+                        'company_id': 1
+                    }
+                    
+                    if lote_id:
+                        move_line_data['lot_id'] = lote_id
+                    if package_id:
+                        move_line_data['package_id'] = package_id
+                    
+                    self.odoo.execute('stock.move.line', 'create', move_line_data)
+                    continue  # Siguiente pallet
+
+                # Flujo normal para pallets con stock
                 move_line_data = {
                     'move_id': move_id,
                     'product_id': producto_id,
@@ -1852,11 +1894,6 @@ class TunelesService:
             
             # Ahora crear los move.lines
             for idx, pallet in enumerate(data['pallets']):
-                # --- NUEVO: Si es pendiente de recepción, NO crear la línea física de salida ---
-                if pallet.get('pendiente_recepcion'):
-                    print(f"DEBUG: Saltando stock.move.line (subproducto) para pallet PENDIENTE: {pallet['codigo']}")
-                    continue
-
                 # LOTE: Usar nombre del lote original + sufijo -C
                 # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
                 lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
@@ -1876,6 +1913,29 @@ class TunelesService:
                 lote_id_output = lotes_map.get(lote_output_name)
                 package_id = packages_map.get(package_name)
                 
+                # --- NUEVO: Si es pendiente de recepción, crear línea con qty=0 ---
+                if pallet.get('pendiente_recepcion'):
+                    print(f"DEBUG: Creando stock.move.line SUBPRODUCTO PENDIENTE (qty=0) para: {pallet['codigo']}")
+                    
+                    move_line_data = {
+                        'move_id': move_id,
+                        'product_id': producto_id_output,
+                        'lot_id': lote_id_output,
+                        'result_package_id': package_id,
+                        'qty_done': 0.0,  # PENDIENTE: qty en 0 hasta que se confirme recepción
+                        'reserved_uom_qty': 0.0,  # Sin reserva
+                        'product_uom_id': 12,  # kg
+                        'location_id': ubicacion_virtual,
+                        'location_dest_id': config['ubicacion_destino_id'],
+                        'state': 'draft',
+                        'reference': f"{mo_name} [PENDIENTE: {pallet.get('kg', 0)} kg]",
+                        'company_id': 1
+                    }
+                    
+                    self.odoo.execute('stock.move.line', 'create', move_line_data)
+                    continue  # Siguiente pallet
+                
+                # Flujo normal para pallets con stock
                 move_line_data = {
                     'move_id': move_id,
                     'product_id': producto_id_output,
