@@ -10,7 +10,7 @@ import os
 
 # Determinar API_URL basado en ENV
 ENV = os.getenv("ENV", "prod")
-if ENV == "dev":
+if ENV == "development":
     API_URL = "http://127.0.0.1:8002"
 else:
     API_URL = "http://127.0.0.1:8000"
