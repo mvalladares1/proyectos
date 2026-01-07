@@ -186,8 +186,8 @@ def render(username: str, password: str):
 
 
 def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
-    """Renderiza los sub-tabs de KPIs: Proceso, Congelado, Global."""
-    vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)", "📊 Global"])
+    """Renderiza los sub-tabs de KPIs: Proceso y Congelado."""
+    vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)"])
     
     with vista_tabs[0]:
         @st.fragment
@@ -277,39 +277,6 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, fecha_inicio_rep=None, f
             mos_congelado = [mo for mo in mos if mo.get('sala_tipo') == 'CONGELADO']
             if mos_congelado:
                 _render_detalle_fabricaciones(mos_congelado, fecha_inicio_rep, fecha_fin_rep, username, password, tipo_filtro='CONGELADO')
-    
-    with vista_tabs[2]:
-        @st.fragment
-        def _fragment_kpis_global():
-            """Fragment para KPIs Globales - se ejecuta independientemente."""
-            st.subheader("📊 Resumen Global")
-            st.caption("Consolidado de todos los procesos")
-            
-            global_cols = st.columns(5)
-            with global_cols[0]:
-                st.metric("Kg MP Totales", fmt_numero(data.get('total_kg_mp', 0), 0))
-            with global_cols[1]:
-                st.metric("Kg PT Totales", fmt_numero(data.get('total_kg_pt', 0), 0))
-            with global_cols[2]:
-                rend_global = data.get('rendimiento_promedio', 0)
-                st.metric("Rendimiento Global", fmt_porcentaje(rend_global))
-            with global_cols[3]:
-                st.metric("Merma Total", fmt_numero(data.get('merma_total_kg', 0), 0) + " Kg")
-            with global_cols[4]:
-                st.metric("Kg/HH Global", fmt_numero(data.get('kg_por_hh', 0), 1))
-            
-            st.markdown("")
-            comp_cols = st.columns(2)
-            with comp_cols[0]:
-                st.metric("🏭 Proceso", f"{fmt_numero(data.get('proceso_kg_pt', 0), 0)} Kg ({data.get('proceso_mos', 0)} MOs)")
-            with comp_cols[1]:
-                st.metric("❄️ Congelado", f"{fmt_numero(data.get('congelado_kg_pt', 0), 0)} Kg ({data.get('congelado_mos', 0)} MOs)")
-        
-        _fragment_kpis_global()
-        
-        # === DETALLE DE FABRICACIONES - TODAS ===
-        if mos:
-            _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username, password, tipo_filtro=None)
 
 
 def _render_resumen_fruta_manejo(consolidado):
