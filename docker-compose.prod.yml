@@ -43,5 +43,4 @@ services:
 
 networks:
   rio-network:
-    name: rio-network
-    driver: bridge
+    external: true
