@@ -838,3 +838,73 @@ class StockService:
             "message": f"Pallet '{pallet_code}' existe pero no tiene stock ni recepciones pendientes"
         }
 
+    def get_ubicacion_by_barcode(self, barcode: str) -> Dict:
+        """
+        Busca una ubicación por su código de barras.
+        Retorna información básica de la ubicación encontrada.
+        """
+        try:
+            locations = self.odoo.search_read(
+                "stock.location",
+                [("barcode", "=", barcode), ("usage", "=", "internal")],
+                ["id", "name", "display_name", "barcode"]
+            )
+            
+            if not locations:
+                return {
+                    "found": False,
+                    "message": f"No se encontró ubicación con código de barras: {barcode}"
+                }
+            
+            loc = locations[0]
+            return {
+                "found": True,
+                "id": loc["id"],
+                "name": loc["name"],
+                "display_name": loc.get("display_name", loc["name"]),
+                "barcode": loc.get("barcode", "")
+            }
+        except Exception as e:
+            return {
+                "found": False,
+                "message": f"Error buscando ubicación: {str(e)}"
+            }
+
+    def move_multiple_pallets(self, pallet_codes: List[str], location_dest_id: int) -> Dict:
+        """
+        Mueve múltiples pallets a una ubicación destino.
+        Retorna resumen de éxitos y errores.
+        """
+        results = {
+            "total": len(pallet_codes),
+            "success": 0,
+            "failed": 0,
+            "details": []
+        }
+        
+        for pallet_code in pallet_codes:
+            try:
+                result = self.move_pallet(pallet_code, location_dest_id)
+                if result.get("success"):
+                    results["success"] += 1
+                    results["details"].append({
+                        "pallet": pallet_code,
+                        "status": "ok",
+                        "message": result.get("message", "Movido correctamente")
+                    })
+                else:
+                    results["failed"] += 1
+                    results["details"].append({
+                        "pallet": pallet_code,
+                        "status": "error",
+                        "message": result.get("message", "Error desconocido")
+                    })
+            except Exception as e:
+                results["failed"] += 1
+                results["details"].append({
+                    "pallet": pallet_code,
+                    "status": "error",
+                    "message": str(e)
+                })
+        
+        return results

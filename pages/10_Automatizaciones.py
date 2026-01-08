@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from automatizaciones import shared
 from automatizaciones import tab_crear
 from automatizaciones import tab_monitor
+from automatizaciones import tab_movimientos
 
 # Requerir autenticación
 proteger_pagina()
@@ -80,12 +81,16 @@ if 'last_order_result' in st.session_state and st.session_state.last_order_resul
 # === PRE-CALCULAR PERMISOS ===
 _perm_crear = tiene_acceso_pagina("automatizaciones", "crear_orden")
 _perm_monitor = tiene_acceso_pagina("automatizaciones", "monitor_ordenes")
+_perm_movimientos = tiene_acceso_pagina("automatizaciones", "movimientos")
 
 # Cargar túneles (para ambos tabs)
 tuneles = shared.get_tuneles(username, password)
 
+# Obtener API URL
+API_URL = shared.API_URL
+
 # === TABS PRINCIPALES ===
-tab1, tab2 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes"])
+tab1, tab2, tab3 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes", "📦 Movimientos"])
 
 # =====================================================
 #           TAB 1: CREAR ORDEN
@@ -104,3 +109,12 @@ with tab2:
         tab_monitor.render(username, password, tuneles)
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor de Órdenes'. Contacta al administrador.")
+
+# =====================================================
+#           TAB 3: MOVIMIENTOS DE PALLETS
+# =====================================================
+with tab3:
+    if _perm_movimientos:
+        tab_movimientos.render(username, password, API_URL)
+    else:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Movimientos'. Contacta al administrador.")

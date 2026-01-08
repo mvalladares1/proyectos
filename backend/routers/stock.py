@@ -105,3 +105,38 @@ async def get_pallet_info(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/ubicacion-by-barcode")
+async def get_ubicacion_by_barcode(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    barcode: str = Query(..., description="Código de barras de la ubicación")
+):
+    """
+    Busca una ubicación por su código de barras.
+    Retorna información de la ubicación encontrada.
+    """
+    try:
+        service = StockService(username=username, password=password)
+        return service.get_ubicacion_by_barcode(barcode)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MultipleMoveRequest(BaseModel):
+    pallet_codes: list[str]
+    target_location_id: int
+    username: str
+    password: str
+
+
+@router.post("/move-multiple")
+async def move_multiple_pallets(request: MultipleMoveRequest):
+    """
+    Mueve múltiples pallets a una ubicación destino en una sola operación.
+    """
+    try:
+        service = StockService(username=request.username, password=request.password)
+        return service.move_multiple_pallets(request.pallet_codes, request.target_location_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
