@@ -371,6 +371,9 @@ def render(username: str, password: str):
                     tipo_fruta_upper = tipo_raw.upper()
                     manejo_raw = (p.get('Manejo') or '').strip()
                     
+                    # DEBUG: Ver TODOS los valores de manejo
+                    print(f"[DEBUG] Prod: {p.get('Producto', '')[:25]} | Manejo: '{manejo_raw}' | Cat: {p.get('Categoria', '')}")
+                    
                     # Detectar especie base
                     if 'ARANDANO' in tipo_fruta_upper or 'ARÁNDANO' in tipo_fruta_upper or 'BLUEBERRY' in tipo_fruta_upper:
                         tipo = 'Arándano'
