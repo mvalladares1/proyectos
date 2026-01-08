@@ -344,34 +344,7 @@ def render(username: str, password: str):
             }
 
             agrup = {}
-            
-            # DEBUG: Ver valores de Manejo de los primeros productos
-            with st.expander("🔍 DEBUG: Valores de Manejo", expanded=False):
-                debug_manejos = []
-                for _, row in df.head(3).iterrows():
-                    for p in (row.get('productos', []) or [])[:3]:
-                        manejo_raw = (p.get('Manejo') or '').strip()
-                        manejo_upper = manejo_raw.upper()
-                        tipo_fruta_upper = (p.get('TipoFruta') or '').strip().upper()
-                        es_organico = (
-                            'ORG' in manejo_upper or
-                            'ORGÁN' in manejo_upper or
-                            'ORG' in tipo_fruta_upper or
-                            'ORGÁN' in tipo_fruta_upper
-                        )
-                        debug_manejos.append({
-                            'Producto': str(p.get('Producto', ''))[:30],
-                            'Manejo': str(p.get('Manejo', '')),
-                            'manejo_upper': manejo_upper,
-                            'es_organico': str(es_organico),
-                            'ORG in manejo': str('ORG' in manejo_upper),
-                            'Categoria': str(p.get('Categoria', '')),
-                        })
-                if debug_manejos:
-                    st.dataframe(debug_manejos)
-                else:
-                    st.write("No hay productos para mostrar")
-            
+
             for _, row in df.iterrows():
                 # IQF/Block son del QC de la recepción, asociados al tipo_fruta del QC
                 iqf_val = row.get('total_iqf', 0) or 0
@@ -399,8 +372,6 @@ def render(username: str, password: str):
                     tipo_fruta_upper = tipo_raw.upper()
                     manejo_raw = (p.get('Manejo') or '').strip()
                     
-                    # DEBUG: Ver TODOS los valores de manejo
-                    print(f"[DEBUG] Prod: {p.get('Producto', '')[:25]} | Manejo: '{manejo_raw}' | Cat: {p.get('Categoria', '')}")
                     
                     # Detectar especie base
                     if 'ARANDANO' in tipo_fruta_upper or 'ARÁNDANO' in tipo_fruta_upper or 'BLUEBERRY' in tipo_fruta_upper:
@@ -429,9 +400,6 @@ def render(username: str, password: str):
                     else:
                         manejo = 'Convencional'
                     
-                    # DEBUG: Ver qué manejo se detecta
-                    if manejo == 'Orgánico' or 'org' in manejo_raw.lower():
-                        print(f"[DEBUG MANEJO] Producto: {p.get('Producto', '')[:30]} | manejo_raw: '{manejo_raw}' | tipo_raw: '{tipo_raw}' | DETECTADO: {manejo}")
 
                     # Rastrear qué manejos tiene cada tipo de fruta
                     if tipo not in manejos_por_tipo:
