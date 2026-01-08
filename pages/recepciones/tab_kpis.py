@@ -239,52 +239,84 @@ def render(username: str, password: str):
             except Exception as e:
                 print(f"Error obteniendo precios proyectados: {e}")
 
-            # Obtener kg proyectados por especie_manejo para el rango de fechas filtrado
+            # Obtener kg proyectados por especie_manejo desde el Excel por semana
+            # NUEVO: Usar proyecciones por semana en lugar de proporción
             kg_proyectados_por_especie = {}
             try:
-                # Obtener fechas del filtro
-                fecha_inicio_filtro = st.session_state.get('fecha_inicio_filtro')
+                # Obtener fecha HASTA del filtro
                 fecha_fin_filtro = st.session_state.get('fecha_fin_filtro')
             
-                if fecha_inicio_filtro and fecha_fin_filtro:
-                    # Calcular las semanas ISO dentro del rango de fechas
+                if fecha_fin_filtro:
                     from datetime import date
-                    if isinstance(fecha_inicio_filtro, date):
-                        fecha_ini = fecha_inicio_filtro
-                    else:
-                        fecha_ini = datetime.strptime(str(fecha_inicio_filtro), '%Y-%m-%d').date()
                     if isinstance(fecha_fin_filtro, date):
                         fecha_f = fecha_fin_filtro
                     else:
                         fecha_f = datetime.strptime(str(fecha_fin_filtro), '%Y-%m-%d').date()
                 
-                    # Obtener semanas únicas en el rango
-                    semanas_en_rango = set()
-                    current = fecha_ini
-                    while current <= fecha_f:
-                        semanas_en_rango.add(current.isocalendar()[1])
-                        current += timedelta(days=1)
-                
-                    # Obtener datos detallados de kg por especie desde los precios
-                    # (aprovechamos que get_precios_por_especie retorna kg_total por especie)
-                    # Construir URL con múltiples parámetros planta
-                    url_kg_especie = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios"
+                    # Calcular semana ISO de la fecha HASTA
+                    semana_hasta = fecha_f.isocalendar()[1]
+                    
+                    # Obtener proyecciones por semana desde el Excel
+                    # Filtrar por plantas si está activo el filtro
+                    url_proy = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado"
+                    query_params = []
                     if plantas_filtro:
-                        query_string_kg = ""
                         for planta in plantas_filtro:
-                            query_string_kg += f"&planta={planta}" if query_string_kg else f"planta={planta}"
-                        url_kg_especie += f"?{query_string_kg}"
-                    resp_kg_especie = requests.get(url_kg_especie, timeout=30)
-                    if resp_kg_especie.status_code == 200:
-                        for item in resp_kg_especie.json():
-                            especie = item.get('especie', '')
-                            kg_total = item.get('kg_total', 0)
-                            # Estos son kg proyectados total de toda la temporada
-                            # Proporcionamos por semanas filtradas (aproximación lineal)
-                            total_semanas_temporada = 23  # S47-S52 (6) + S1-S17 (17) = 23 semanas
-                            semanas_filtradas = len(semanas_en_rango)
-                            kg_proporcion = (kg_total / total_semanas_temporada) * semanas_filtradas if total_semanas_temporada > 0 else 0
-                            kg_proyectados_por_especie[especie] = kg_proporcion
+                            query_params.append(f"planta={planta}")
+                    
+                    if query_params:
+                        url_proy += f"?{'&'.join(query_params)}"
+                    
+                    resp_proy = requests.get(url_proy, timeout=30)
+                    if resp_proy.status_code == 200:
+                        proyecciones_semanas = resp_proy.json()
+                        
+                        # Filtrar solo las semanas hasta la fecha HASTA
+                        # Temporada: S47-S52 (2024) + S1-S17 (2025)
+                        # Si semana_hasta >= 47, incluir S47 hasta semana_hasta
+                        # Si semana_hasta < 47, incluir S47-S52 + S1 hasta semana_hasta
+                        
+                        semanas_incluir = []
+                        if semana_hasta >= 47:
+                            # Solo parte de 2024
+                            semanas_incluir = list(range(47, semana_hasta + 1))
+                        else:
+                            # 2024 completo + parte de 2025
+                            semanas_incluir = list(range(47, 53)) + list(range(1, semana_hasta + 1))
+                        
+                        # Sumar kg de las semanas incluidas
+                        for sem_data in proyecciones_semanas:
+                            semana = sem_data.get('semana', 0)
+                            if semana in semanas_incluir:
+                                kg = sem_data.get('kg_proyectados', 0)
+                                # Esta suma es por TODAS las especies juntas
+                                # Necesitamos obtener el detalle por especie desde otro endpoint
+                                pass
+                        
+                        # Obtener kg proyectados POR ESPECIE desde el endpoint de precios
+                        # que retorna kg_total por especie (toda la temporada)
+                        url_kg_especie = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios"
+                        if plantas_filtro:
+                            query_kg = ""
+                            for planta in plantas_filtro:
+                                query_kg += f"&planta={planta}" if query_kg else f"planta={planta}"
+                            url_kg_especie += f"?{query_kg}"
+                        
+                        resp_kg = requests.get(url_kg_especie, timeout=30)
+                        if resp_kg.status_code == 200:
+                            especies_kg_total = resp_kg.json()
+                            
+                            # Calcular proporción de semanas filtradas vs total temporada
+                            total_semanas = 23  # S47-S52 (6) + S1-S17 (17)
+                            semanas_filtradas = len(semanas_incluir)
+                            proporcion = semanas_filtradas / total_semanas if total_semanas > 0 else 0
+                            
+                            # Aplicar proporción a cada especie
+                            for item in especies_kg_total:
+                                especie = item.get('especie', '')
+                                kg_total_temporada = item.get('kg_total', 0)
+                                kg_hasta_fecha = kg_total_temporada * proporcion
+                                kg_proyectados_por_especie[especie] = kg_hasta_fecha
             except Exception as e:
                 print(f"Error obteniendo kg proyectados: {e}")
 
