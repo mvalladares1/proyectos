@@ -350,11 +350,22 @@ def render(username: str, password: str):
                 debug_manejos = []
                 for _, row in df.head(3).iterrows():
                     for p in (row.get('productos', []) or [])[:3]:
+                        manejo_raw = (p.get('Manejo') or '').strip()
+                        manejo_upper = manejo_raw.upper()
+                        tipo_fruta_upper = (p.get('TipoFruta') or '').strip().upper()
+                        es_organico = (
+                            'ORG' in manejo_upper or
+                            'ORGÁN' in manejo_upper or
+                            'ORG' in tipo_fruta_upper or
+                            'ORGÁN' in tipo_fruta_upper
+                        )
                         debug_manejos.append({
                             'Producto': str(p.get('Producto', ''))[:30],
                             'Manejo': str(p.get('Manejo', '')),
+                            'manejo_upper': manejo_upper,
+                            'es_organico': str(es_organico),
+                            'ORG in manejo': str('ORG' in manejo_upper),
                             'Categoria': str(p.get('Categoria', '')),
-                            'TipoFruta': str(p.get('TipoFruta', ''))
                         })
                 if debug_manejos:
                     st.dataframe(debug_manejos)
