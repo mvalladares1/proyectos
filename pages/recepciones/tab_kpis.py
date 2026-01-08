@@ -390,6 +390,10 @@ def render(username: str, password: str):
                         manejo = 'Orgánico'
                     else:
                         manejo = 'Convencional'
+                    
+                    # DEBUG: Ver qué manejo se detecta
+                    if manejo == 'Orgánico' or 'org' in manejo_raw.lower():
+                        print(f"[DEBUG MANEJO] Producto: {p.get('Producto', '')[:30]} | manejo_raw: '{manejo_raw}' | tipo_raw: '{tipo_raw}' | DETECTADO: {manejo}")
 
                     # Rastrear qué manejos tiene cada tipo de fruta
                     if tipo not in manejos_por_tipo:
