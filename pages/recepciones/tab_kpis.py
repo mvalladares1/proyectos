@@ -363,13 +363,33 @@ def render(username: str, password: str):
                         continue
 
                     # Usar el TipoFruta del producto, con fallback al tipo_fruta de la recepción
-                    tipo = (p.get('TipoFruta') or row.get('tipo_fruta') or '').strip()
-                    if not tipo:
+                    tipo_raw = (p.get('TipoFruta') or row.get('tipo_fruta') or '').strip()
+                    if not tipo_raw:
                         continue
 
-                    manejo = (p.get('Manejo') or '').strip()
-                    if not manejo:
-                        manejo = 'Sin Manejo'
+                    # Normalizar especie BASE (igual que en Curva)
+                    tipo_fruta_upper = tipo_raw.upper()
+                    manejo_raw = (p.get('Manejo') or '').strip()
+                    
+                    # Detectar especie base
+                    if 'ARANDANO' in tipo_fruta_upper or 'ARÁNDANO' in tipo_fruta_upper or 'BLUEBERRY' in tipo_fruta_upper:
+                        tipo = 'Arándano'
+                    elif 'FRAM' in tipo_fruta_upper or 'MEEKER' in tipo_fruta_upper or 'HERITAGE' in tipo_fruta_upper or 'RASPBERRY' in tipo_fruta_upper:
+                        tipo = 'Frambuesa'
+                    elif 'FRUTILLA' in tipo_fruta_upper or 'FRESA' in tipo_fruta_upper or 'STRAWBERRY' in tipo_fruta_upper:
+                        tipo = 'Frutilla'
+                    elif 'MORA' in tipo_fruta_upper or 'BLACKBERRY' in tipo_fruta_upper:
+                        tipo = 'Mora'
+                    elif 'CEREZA' in tipo_fruta_upper or 'CHERRY' in tipo_fruta_upper:
+                        tipo = 'Cereza'
+                    else:
+                        tipo = 'Otro'
+                    
+                    # Normalizar manejo
+                    if 'ORGAN' in manejo_raw.upper() or 'ORGAN' in tipo_fruta_upper:
+                        manejo = 'Orgánico'
+                    else:
+                        manejo = 'Convencional'
 
                     # Rastrear qué manejos tiene cada tipo de fruta
                     if tipo not in manejos_por_tipo:
