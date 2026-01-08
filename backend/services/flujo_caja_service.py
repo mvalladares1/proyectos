@@ -325,8 +325,8 @@ class FlujoCajaService:
                 nuevo_id = self._migrar_codigo_antiguo(cuenta_info)
                 return (nuevo_id, False)
         
-        # No mapeada → fallback + marcar como pendiente
-        return (CONCEPTO_FALLBACK, True)
+        # No mapeada → ignorar (retornar None para que se salte)
+        return (None, True)
     
     def _clasificar_cuenta(self, codigo_cuenta: str) -> Tuple[str, bool]:
         """
@@ -823,6 +823,10 @@ class FlujoCajaService:
                     
                     # Clasificar
                     concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
+                    
+                    # NUEVO: Si no tiene mapeo (concepto_id=None), ignorar la cuenta
+                    if concepto_id is None:
+                        continue  # Cuenta sin mapeo, no procesar
                     
                     # NEUTRAL
                     if concepto_id == self.CATEGORIA_NEUTRAL:

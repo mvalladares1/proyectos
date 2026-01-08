@@ -206,6 +206,23 @@ async def get_proyecciones_abastecimiento(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get('/abastecimiento/proyectado-detalle')
+async def get_proyecciones_detalle_abastecimiento(
+    planta: Optional[List[str]] = Query(None, description="Plantas a filtrar: RFP, VILKUN")
+):
+    """
+    Obtiene las proyecciones de abastecimiento DETALLADAS (por semana y especie_manejo).
+    Retorna una fila por cada combinación semana-especie.
+    """
+    try:
+        from backend.services.abastecimiento_service import get_proyecciones_detalle
+        return get_proyecciones_detalle(planta=planta)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get('/abastecimiento/especies')
 async def get_especies_abastecimiento():
     """

@@ -254,6 +254,56 @@ def get_proyecciones_por_semana(
     return result
 
 
+def get_proyecciones_detalle(
+    planta: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Obtiene las proyecciones DETALLADAS por semana y especie_manejo.
+    NO agrega, retorna una fila por cada combinación semana-especie.
+    
+    Args:
+        planta: Lista de plantas a filtrar (RFP, VILKUN)
+    
+    Returns:
+        Lista de diccionarios con: semana, especie_manejo, kg_proyectados
+    """
+    # VALIDACIÓN DE TIPOS: Normalizar planta
+    if planta is not None:
+        if isinstance(planta, str):
+            planta = [planta]
+        elif not isinstance(planta, list):
+            planta = list(planta) if planta else []
+    
+    df = load_proyecciones_consolidado()
+    
+    # Aplicar filtros
+    if planta:
+        planta_upper = [p.upper() for p in planta]
+        df = df[df['planta'].isin(planta_upper)]
+    
+    # Agrupar por semana y especie_manejo (NO por productor)
+    grouped = df.groupby(['semana', 'especie_manejo']).agg({
+        'kg_proyectados': 'sum'
+    }).reset_index()
+    
+    # Ordenar por semana
+    def sort_key(x):
+        return x if x >= 47 else x + 100
+    
+    grouped['sort_key'] = grouped['semana'].apply(sort_key)
+    grouped = grouped.sort_values('sort_key').drop(columns=['sort_key'])
+    
+    result = []
+    for _, row in grouped.iterrows():
+        result.append({
+            'semana': int(row['semana']),
+            'especie_manejo': row['especie_manejo'],
+            'kg_proyectados': float(row['kg_proyectados'])
+        })
+    
+    return result
+
+
 def get_proyecciones_por_especie(
     planta: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:

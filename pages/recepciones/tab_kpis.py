@@ -239,8 +239,7 @@ def render(username: str, password: str):
             except Exception as e:
                 print(f"Error obteniendo precios proyectados: {e}")
 
-            # Obtener kg proyectados por especie_manejo desde el Excel por semana
-            # NUEVO: Usar proyecciones por semana en lugar de proporción
+            # Obtener kg proyectados por especie_manejo desde el Excel sumando directamente las semanas
             kg_proyectados_por_especie = {}
             try:
                 # Obtener fecha HASTA del filtro
@@ -256,45 +255,51 @@ def render(username: str, password: str):
                     # Calcular semana ISO de la fecha HASTA
                     semana_hasta = fecha_f.isocalendar()[1]
                     
-                    # Obtener proyecciones por semana desde el Excel
-                    # Filtrar por plantas si está activo el filtro
-                    url_proy = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado"
+                    # Determinar semanas a incluir
+                    # Temporada: S47-S52 (2024) + S1-S17 (2025)
+                    if semana_hasta >= 47:
+                        # Solo parte de 2024
+                        semanas_incluir = list(range(47, semana_hasta + 1))
+                    else:
+                        # 2024 completo + parte de 2025
+                        semanas_incluir = list(range(47, 53)) + list(range(1, semana_hasta + 1))
+                    
+                    # Obtener proyecciones DETALLADAS desde el backend (por productor, planta, especie, semana)
+                    # Este endpoint retorna datos más granulares que nos permiten sumar por especie
+                    url_proy_det = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/proyectado-detalle"
                     query_params = []
                     if plantas_filtro:
                         for planta in plantas_filtro:
                             query_params.append(f"planta={planta}")
                     
                     if query_params:
-                        url_proy += f"?{'&'.join(query_params)}"
+                        url_proy_det += f"?{'&'.join(query_params)}"
                     
-                    resp_proy = requests.get(url_proy, timeout=30)
-                    if resp_proy.status_code == 200:
-                        proyecciones_semanas = resp_proy.json()
-                        
-                        # Filtrar solo las semanas hasta la fecha HASTA
-                        # Temporada: S47-S52 (2024) + S1-S17 (2025)
-                        # Si semana_hasta >= 47, incluir S47 hasta semana_hasta
-                        # Si semana_hasta < 47, incluir S47-S52 + S1 hasta semana_hasta
-                        
-                        semanas_incluir = []
-                        if semana_hasta >= 47:
-                            # Solo parte de 2024
-                            semanas_incluir = list(range(47, semana_hasta + 1))
+                    try:
+                        resp_det = requests.get(url_proy_det, timeout=30)
+                        if resp_det.status_code == 200:
+                            proyecciones_detalle = resp_det.json()
+                            
+                            # Sumar kg por especie_manejo, filtrando solo las semanas incluidas
+                            for item in proyecciones_detalle:
+                                semana = item.get('semana', 0)
+                                if semana in semanas_incluir:
+                                    especie_manejo = item.get('especie_manejo', '')
+                                    kg = item.get('kg_proyectados', 0)
+                                    
+                                    if especie_manejo:
+                                        if especie_manejo not in kg_proyectados_por_especie:
+                                            kg_proyectados_por_especie[especie_manejo] = 0
+                                        kg_proyectados_por_especie[especie_manejo] += kg
                         else:
-                            # 2024 completo + parte de 2025
-                            semanas_incluir = list(range(47, 53)) + list(range(1, semana_hasta + 1))
+                            # Fallback: Si el endpoint detallado no existe, usar el agregado con proporción
+                            print(f"Endpoint detallado no disponible ({resp_det.status_code}), usando método de proporción")
+                            raise Exception("Fallback a método de proporción")
+                    
+                    except Exception as e_det:
+                        # Fallback: usar endpoint /precios con proporción de semanas
+                        print(f"Error obteniendo proyecciones detalladas: {e_det}, usando fallback")
                         
-                        # Sumar kg de las semanas incluidas
-                        for sem_data in proyecciones_semanas:
-                            semana = sem_data.get('semana', 0)
-                            if semana in semanas_incluir:
-                                kg = sem_data.get('kg_proyectados', 0)
-                                # Esta suma es por TODAS las especies juntas
-                                # Necesitamos obtener el detalle por especie desde otro endpoint
-                                pass
-                        
-                        # Obtener kg proyectados POR ESPECIE desde el endpoint de precios
-                        # que retorna kg_total por especie (toda la temporada)
                         url_kg_especie = f"{API_URL}/api/v1/recepciones-mp/abastecimiento/precios"
                         if plantas_filtro:
                             query_kg = ""
@@ -317,6 +322,7 @@ def render(username: str, password: str):
                                 kg_total_temporada = item.get('kg_total', 0)
                                 kg_hasta_fecha = kg_total_temporada * proporcion
                                 kg_proyectados_por_especie[especie] = kg_hasta_fecha
+            
             except Exception as e:
                 print(f"Error obteniendo kg proyectados: {e}")
 
