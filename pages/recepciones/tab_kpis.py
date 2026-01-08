@@ -344,6 +344,23 @@ def render(username: str, password: str):
             }
 
             agrup = {}
+            
+            # DEBUG: Ver valores de Manejo de los primeros productos
+            with st.expander("🔍 DEBUG: Valores de Manejo", expanded=False):
+                debug_manejos = []
+                for _, row in df.head(3).iterrows():
+                    for p in (row.get('productos', []) or [])[:3]:
+                        debug_manejos.append({
+                            'Producto': str(p.get('Producto', ''))[:30],
+                            'Manejo': str(p.get('Manejo', '')),
+                            'Categoria': str(p.get('Categoria', '')),
+                            'TipoFruta': str(p.get('TipoFruta', ''))
+                        })
+                if debug_manejos:
+                    st.dataframe(debug_manejos)
+                else:
+                    st.write("No hay productos para mostrar")
+            
             for _, row in df.iterrows():
                 # IQF/Block son del QC de la recepción, asociados al tipo_fruta del QC
                 iqf_val = row.get('total_iqf', 0) or 0
