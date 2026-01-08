@@ -33,7 +33,7 @@ services:
     container_name: rio-web-dev
     environment:
       - ENV=development
-      - API_URL=http://127.0.0.1:8002
+      - API_URL=https://167.114.114.51/api-dev
       - STREAMLIT_SERVER_PORT=8502
       - STREAMLIT_SERVER_BASE_URL_PATH=/dashboards-dev
     network_mode: "host"
