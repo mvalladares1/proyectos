@@ -141,11 +141,10 @@ def _fragment_main_aprobaciones(username: str, password: str):
         # Procesar datos
         filas_aprobacion = []
         for rec in recepciones:
-            # Filtro de QC relajado: permitir mostrar incluso sin 'pass' si el usuario lo necesita
-            # calific_final = rec.get('calific_final', '') or ''
-            # quality_state = rec.get('quality_state', '') or ''
-            # if not calific_final.strip() or quality_state != 'pass':
-            #     continue
+            # Filtro de QC: Solo mostrar recepciones con quality_state = 'pass'
+            quality_state = rec.get('quality_state', '') or ''
+            if quality_state != 'pass':
+                continue
 
             recep_name = rec.get('albaran', '')
             picking_id = rec.get('id', 0)  # ID para link a Odoo
