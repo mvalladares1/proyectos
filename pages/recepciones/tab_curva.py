@@ -260,17 +260,8 @@ def render(username: str, password: str):
                 kg_por_semana = {}
 
                 for rec in recepciones:
-                    # Obtener tipo_fruta, con fallback a productos si no existe en recepción
+                    # Obtener tipo_fruta de la recepción
                     tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
-                    # Si no hay tipo_fruta en recepción, intentar obtener del primer producto válido
-                    if not tipo_fruta_row:
-                        for p_check in rec.get('productos', []) or []:
-                            cat_check = (p_check.get('Categoria') or '').upper()
-                            if 'BANDEJ' not in cat_check:
-                                tipo_fruta_row = (p_check.get('TipoFruta') or '').strip()
-                                if tipo_fruta_row:
-                                    break
-                    # Si sigue sin tipo_fruta, continuar de todas formas para sumar kg
 
                     # Obtener semana de la fecha
                     fecha_str = rec.get('fecha')
@@ -291,6 +282,12 @@ def render(username: str, password: str):
 
                         # Excluir solo BANDEJAS por categoría (igual que KPIs)
                         if 'BANDEJ' in categoria:
+                            continue
+
+                        # IMPORTANTE: Usar TipoFruta del producto con fallback a tipo_fruta de recepción
+                        # Si no hay ninguno, SALTAR este producto (consistencia con KPIs)
+                        tipo = (p.get('TipoFruta') or rec.get('tipo_fruta') or '').strip()
+                        if not tipo:
                             continue
 
                         kg_hechos = p.get('Kg Hechos', 0) or 0
@@ -427,18 +424,6 @@ def render(username: str, password: str):
                         if not isinstance(rec, dict):
                             print(f"[WARNING] Registro no es diccionario, saltando: {type(rec)}")
                             continue
-                            
-                        # Filtrar recepciones sin tipo_fruta (igual que año actual y KPIs)
-                        tipo_fruta_row = (rec.get('tipo_fruta') or '').strip()
-                        # Si no hay tipo_fruta en recepción, intentar obtener del primer producto válido
-                        if not tipo_fruta_row:
-                            for p_check in rec.get('productos', []) or []:
-                                cat_check = (p_check.get('Categoria') or '').upper()
-                                if 'BANDEJ' not in cat_check:
-                                    tipo_fruta_row = (p_check.get('TipoFruta') or '').strip()
-                                    if tipo_fruta_row:
-                                        break
-                        # Si sigue sin tipo_fruta, continuar de todas formas para sumar kg
 
                         fecha_str = rec.get('fecha')
                         if not fecha_str:
@@ -462,6 +447,12 @@ def render(username: str, password: str):
                             if 'PALLET' in categoria:
                                 continue
 
+                            # IMPORTANTE: Usar TipoFruta del producto con fallback a tipo_fruta de recepción
+                            # Si no hay ninguno, SALTAR este producto (consistencia con KPIs y año actual)
+                            tipo = (p.get('TipoFruta') or rec.get('tipo_fruta') or '').strip()
+                            if not tipo:
+                                continue
+
                             kg_hechos = p.get('Kg Hechos', 0) or 0
                             if kg_hechos <= 0:
                                 continue
@@ -469,7 +460,7 @@ def render(username: str, password: str):
                             # SINCRO FILTROS: Aplicar los mismos filtros que el año actual
                             # (especie y manejo) si están activos
                             if especies_filtro:
-                                tipo_fruta = (rec.get('tipo_fruta') or '').upper()
+                                tipo_fruta = tipo.upper()
                                 # Obtener manejo del producto
                                 manejo_prod = (p.get('Manejo') or '').strip()
                                 if not manejo_prod:
