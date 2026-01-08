@@ -405,8 +405,15 @@ def render(username: str, password: str):
                     else:
                         tipo = 'Otro'
                     
-                    # Normalizar manejo
-                    if 'ORGAN' in manejo_raw.upper() or 'ORGAN' in tipo_fruta_upper:
+                    # Normalizar manejo - detectar cualquier variante de "orgánico"
+                    manejo_upper = manejo_raw.upper()
+                    es_organico = (
+                        'ORG' in manejo_upper or  # Org, Organic, Orgánico
+                        'ORGÁN' in manejo_upper or  # Con acento
+                        'ORG' in tipo_fruta_upper or
+                        'ORGÁN' in tipo_fruta_upper
+                    )
+                    if es_organico:
                         manejo = 'Orgánico'
                     else:
                         manejo = 'Convencional'
