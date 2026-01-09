@@ -614,12 +614,17 @@ class TunelesService:
                 picking_names = {p['id']: {'name': p['name'], 'state': p['state']} for p in pickings}
             
             # Obtener los componentes actuales de la MO para saber cuáles ya se agregaron
+            # Buscamos en stock.move.line que tengan qty_done > 0 y package_id
             move_raw_ids = mo_data.get('move_raw_ids', [])
             componentes_existentes = set()
             if move_raw_ids:
                 moves = self.odoo.search_read(
                     'stock.move.line',
-                    [('move_id', 'in', move_raw_ids)],
+                    [
+                        ('move_id', 'in', move_raw_ids),
+                        ('package_id', '!=', False),
+                        ('qty_done', '>', 0)  # Solo contar si tiene cantidad procesada
+                    ],
                     ['package_id']
                 )
                 for m in moves:
