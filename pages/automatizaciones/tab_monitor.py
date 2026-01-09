@@ -167,11 +167,31 @@ def _render_pendientes(orden, username, password):
             
             if detalle.get('success'):
                 resumen = detalle.get('resumen', {})
-                st.markdown(f"""
-                **Resumen:** ✅ {resumen.get('agregados', 0)} agregados | 
-                🟢 {resumen.get('disponibles', 0)} disponibles | 
-                🟠 {resumen.get('pendientes', 0)} pendientes
-                """)
+                
+                # NUEVO: Mostrar notificación si hay cambios
+                if detalle.get('hay_cambios_nuevos'):
+                    nuevos = detalle.get('nuevos_disponibles', 0)
+                    st.success(f"🎉 {nuevos} pallet(s) ahora disponible(s)! Haz click en 'Agregar Disponibles' para incorporarlos a la orden.")
+                
+                # Mostrar resumen con progreso
+                total = resumen.get('total', 0)
+                agregados = resumen.get('agregados', 0)
+                disponibles = resumen.get('disponibles', 0)
+                pendientes = resumen.get('pendientes', 0)
+                
+                if total > 0:
+                    progreso = (agregados / total * 100)
+                    st.progress(progreso / 100)
+                    st.markdown(f"""
+                    **Progreso:** {agregados}/{total} agregados ({progreso:.0f}%)  
+                    ✅ {agregados} agregados | 🟢 {disponibles} disponibles | 🟠 {pendientes} pendientes
+                    """)
+                else:
+                    st.markdown(f"""
+                    **Resumen:** ✅ {agregados} agregados | 
+                    🟢 {disponibles} disponibles | 
+                    🟠 {pendientes} pendientes
+                    """)
                 
                 pallets = detalle.get('pallets', [])
                 if pallets:
@@ -181,6 +201,7 @@ def _render_pendientes(orden, username, password):
                             'Código': p['codigo'],
                             'Kg': f"{p['kg']:,.2f}",
                             'Estado': p['estado_label'],
+                            'Cambios': '🆕 Disponible!' if p.get('nuevo_disponible') else ('📊 Cambio' if p.get('cambio_detectado') else ''),
                             'Recepción': p.get('picking_name', 'N/A')
                         }
                         for p in pallets
@@ -229,24 +250,37 @@ def _render_pendientes(orden, username, password):
                 col_a, col_b = st.columns(2)
                 
                 with col_a:
-                    if detalle.get('hay_disponibles_sin_agregar'):
+                    if detalle.get('hay_disponibles_sin_agregar') or disponibles > 0:
                         if st.button("✅ Agregar Disponibles", key=f"agregar_{orden_id}", type="primary"):
                             resp = agregar_disponibles(username, password, orden_id)
                             if resp and resp.status_code == 200:
                                 result = resp.json()
                                 st.success(f"✅ {result.get('mensaje')}")
                                 del st.session_state[detalle_key]
+                                st.cache_data.clear()
                                 st.rerun()
                             elif resp:
-                                st.error(f"Error: {resp.text}")
+                                error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
+                                st.error(f"❌ Error: {error_data.get('detail', resp.text)}")
                 
                 with col_b:
-                    if detalle.get('todos_listos'):
-                        if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}"):
+                    # Validación mejorada para completar pendientes
+                    pallets_sin_agregar = [p for p in pallets if p['estado'] in ['pendiente', 'disponible']]
+                    
+                    if pallets_sin_agregar:
+                        st.warning(f"⚠️ Aún quedan {len(pallets_sin_agregar)} pallet(s) sin agregar")
+                    elif detalle.get('todos_listos') or (pendientes == 0 and disponibles == 0):
+                        if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}", type="secondary"):
                             resp = completar_pendientes(username, password, orden_id)
                             if resp and resp.status_code == 200:
-                                st.success("✅ Pendientes completados!")
+                                result = resp.json()
+                                st.success(f"✅ {result.get('mensaje', 'Pendientes completados!')}")
+                                del st.session_state[detalle_key]
                                 st.cache_data.clear()
+                                st.rerun()
+                            elif resp:
+                                error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
+                                st.error(f"❌ {error_data.get('detail', resp.text)}")
                                 st.rerun()
                             elif resp:
                                 st.error(f"Error: {resp.text}")

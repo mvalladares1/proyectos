@@ -486,50 +486,75 @@ class TunelesService:
     
     def completar_pendientes(self, mo_id: int) -> Dict:
         """
-        Quita el flag de pendientes cuando todas las recepciones están validadas.
+        Completa los pendientes solo si TODOS los pallets están agregados.
         
         Args:
             mo_id: ID de la orden de fabricación
             
         Returns:
-            Dict con: success, mensaje
+            Dict con: success, mensaje o error
         """
         try:
-            # Primero verificar que todas estén listas
-            verificacion = self.verificar_pendientes(mo_id)
+            import json
             
-            if not verificacion.get('success'):
-                return verificacion
+            # Verificar estado actual con detalle completo
+            detalle = self.obtener_detalle_pendientes(mo_id)
+            if not detalle.get('success'):
+                return detalle
             
-            if not verificacion.get('all_ready'):
-                pending = verificacion.get('pending_count', 0)
+            # VALIDACIÓN ESTRICTA: No deben quedar pallets pendientes ni disponibles
+            pallets_sin_agregar = [
+                p for p in detalle.get('pallets', []) 
+                if p['estado'] in ['pendiente', 'disponible']
+            ]
+            
+            if pallets_sin_agregar:
                 return {
                     'success': False,
-                    'error': f'Aún hay {pending} recepciones pendientes de validar'
+                    'error': f"Aún quedan {len(pallets_sin_agregar)} pallet(s) sin agregar",
+                    'pendientes_restantes': [p['codigo'] for p in pallets_sin_agregar],
+                    'detalles': f"Pallets: {', '.join([p['codigo'] for p in pallets_sin_agregar])}"
                 }
             
-            # Limpiar el JSON de pendientes (marcar como completado)
-            import json
-            completed_data = json.dumps({
-                'pending': False,
-                'completed_at': datetime.now().isoformat()
+            # Leer el JSON actual y marcarlo como completado
+            mo_data = self.odoo.read('mrp.production', [mo_id], ['x_studio_pending_receptions', 'name'])[0]
+            pending_json = mo_data.get('x_studio_pending_receptions')
+            pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            
+            pending_data['pending'] = False
+            pending_data['completed_at'] = datetime.now().isoformat()
+            pending_data['completed_by'] = 'automatizaciones_validacion'
+            
+            # Agregar al historial
+            if 'historial_revisiones' not in pending_data:
+                pending_data['historial_revisiones'] = []
+            
+            pending_data['historial_revisiones'].append({
+                'timestamp': datetime.now().isoformat(),
+                'accion': 'completar_pendientes',
+                'total_pallets': len(detalle.get('pallets', [])),
+                'mensaje': 'Todos los pallets agregados correctamente'
             })
-            # Usar execute_kw directamente con formato correcto
-            self.odoo.models.execute_kw(
-                self.odoo.db, self.odoo.uid, self.odoo.password,
-                'mrp.production', 'write',
-                [[mo_id], {'x_studio_pending_receptions': completed_data}]
-            )
+            
+            # Guardar JSON actualizado
+            self.odoo.write('mrp.production', [mo_id], {
+                'x_studio_pending_receptions': json.dumps(pending_data)
+            })
             
             return {
                 'success': True,
                 'mo_id': mo_id,
-                'mo_name': verificacion['mo_name'],
-                'mensaje': 'Flag de pendientes removido. MO lista para confirmar.'
+                'mo_name': mo_data['name'],
+                'mensaje': f"Completados {len(detalle.get('pallets', []))} pendientes correctamente"
             }
             
         except Exception as e:
-            return {'success': False, 'error': str(e)}
+            import traceback
+            return {
+                'success': False,
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
     
     def obtener_detalle_pendientes(self, mo_id: int) -> Dict:
         """
@@ -601,13 +626,17 @@ class TunelesService:
                     if m.get('package_id'):
                         componentes_existentes.add(m['package_id'][1])  # Nombre del package
             
-            # Verificar disponibilidad de cada pallet
+            # Verificar disponibilidad de cada pallet y detectar cambios
             resultado_pallets = []
+            cambios_detectados = 0
+            json_modificado = False
+            
             for p in pallets_info:
                 codigo = p.get('codigo', '')
                 kg = p.get('kg', 0)
                 producto_id = p.get('producto_id')
                 picking_id = p.get('picking_id')
+                estado_anterior = p.get('estado_ultima_revision', 'pendiente')  # Estado guardado previamente
                 
                 # Verificar si el pallet ya fue agregado como componente
                 ya_agregado = codigo in componentes_existentes
@@ -630,16 +659,31 @@ class TunelesService:
                 picking_state = picking_info.get('state', 'unknown')
                 picking_name = picking_info.get('name', 'N/A')
                 
-                # Determinar estado
+                # Determinar estado actual
                 if ya_agregado:
-                    estado = 'agregado'
+                    estado_actual = 'agregado'
                     estado_label = '✅ Ya agregado'
                 elif tiene_stock:
-                    estado = 'disponible'
+                    estado_actual = 'disponible'
                     estado_label = '🟢 Disponible'
                 else:
-                    estado = 'pendiente'
+                    estado_actual = 'pendiente'
                     estado_label = '🟠 Pendiente'
+                
+                # Detectar cambio de estado
+                cambio_detectado = (estado_actual != estado_anterior)
+                nuevo_disponible = cambio_detectado and estado_actual == 'disponible'
+                
+                if nuevo_disponible:
+                    cambios_detectados += 1
+                
+                # Actualizar estado en JSON si cambió
+                if cambio_detectado:
+                    p['estado_ultima_revision'] = estado_actual
+                    p['timestamp_ultima_revision'] = datetime.now().isoformat()
+                    if nuevo_disponible:
+                        p['fecha_disponible'] = datetime.now().isoformat()
+                    json_modificado = True
                 
                 resultado_pallets.append({
                     'codigo': codigo,
@@ -648,8 +692,11 @@ class TunelesService:
                     'picking_id': picking_id,
                     'picking_name': picking_name,
                     'picking_state': picking_state,
-                    'estado': estado,
+                    'estado': estado_actual,
+                    'estado_anterior': estado_anterior,
                     'estado_label': estado_label,
+                    'cambio_detectado': cambio_detectado,
+                    'nuevo_disponible': nuevo_disponible,
                     'tiene_stock': tiene_stock,
                     'ya_agregado': ya_agregado,
                     'quant_info': quants[0] if quants else None
@@ -733,6 +780,26 @@ class TunelesService:
                             'ubicacion': line['location_dest_id'][1] if line.get('location_dest_id') else 'N/A'
                         })
             
+            # Guardar JSON actualizado si hubo cambios
+            if json_modificado:
+                # Agregar registro al historial de revisiones
+                if 'historial_revisiones' not in pending_data:
+                    pending_data['historial_revisiones'] = []
+                
+                pending_data['historial_revisiones'].append({
+                    'timestamp': datetime.now().isoformat(),
+                    'accion': 'validar_disponibilidad',
+                    'cambios_detectados': cambios_detectados,
+                    'agregados': agregados,
+                    'disponibles': disponibles,
+                    'pendientes': pendientes
+                })
+                
+                # Actualizar JSON en Odoo
+                self.odoo.write('mrp.production', [mo_id], {
+                    'x_studio_pending_receptions': json.dumps(pending_data)
+                })
+            
             return {
                 'success': True,
                 'mo_id': mo_id,
@@ -745,6 +812,8 @@ class TunelesService:
                     'disponibles': disponibles,
                     'pendientes': pendientes
                 },
+                'hay_cambios_nuevos': cambios_detectados > 0,
+                'nuevos_disponibles': cambios_detectados,
                 'todos_listos': pendientes == 0 and disponibles == 0,
                 'hay_disponibles_sin_agregar': disponibles > 0,
                 'componentes': componentes,
@@ -949,36 +1018,33 @@ class TunelesService:
                 agregados += 1
                 pallets_agregados.append(codigo)
             
-            # Actualizar JSON: marcar pallets como procesados
-            pallets_actualizados = []
+            # NUEVO: Actualizar JSON con estado y historial
             for p in pending_data.get('pallets', []):
                 if p.get('codigo') in pallets_agregados:
-                    p['procesado'] = True
-                    p['procesado_at'] = datetime.now().isoformat()
-                pallets_actualizados.append(p)
+                    p['estado_ultima_revision'] = 'agregado'
+                    p['timestamp_agregado'] = datetime.now().isoformat()
             
-            pending_data['pallets'] = pallets_actualizados
+            # Agregar al historial de revisiones
+            if 'historial_revisiones' not in pending_data:
+                pending_data['historial_revisiones'] = []
             
-            # Verificar si quedan pendientes
-            pendientes_restantes = sum(1 for p in pallets_actualizados 
-                                       if not p.get('procesado'))
-            if pendientes_restantes == 0:
-                pending_data['pending'] = False
-                pending_data['completed_at'] = datetime.now().isoformat()
+            pending_data['historial_revisiones'].append({
+                'timestamp': datetime.now().isoformat(),
+                'accion': 'agregar_disponibles',
+                'cantidad': agregados,
+                'pallets': pallets_agregados
+            })
             
             # Guardar JSON actualizado
-            self.odoo.models.execute_kw(
-                self.odoo.db, self.odoo.uid, self.odoo.password,
-                'mrp.production', 'write',
-                [[mo_id], {'x_studio_pending_receptions': json.dumps(pending_data)}]
-            )
+            self.odoo.write('mrp.production', [mo_id], {
+                'x_studio_pending_receptions': json.dumps(pending_data)
+            })
             
             return {
                 'success': True,
                 'agregados': agregados,
                 'pallets_agregados': pallets_agregados,
-                'pendientes_restantes': pendientes_restantes,
-                'mensaje': f'Se agregaron {agregados} componentes. Quedan {pendientes_restantes} pendientes.'
+                'mensaje': f'Se agregaron {agregados} pallet(s) disponible(s) a la orden'
             }
             
         except Exception as e:
