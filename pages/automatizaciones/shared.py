@@ -182,13 +182,22 @@ def get_pendientes_orden(username, password, orden_id):
     try:
         resp = requests.get(
             f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes",
-            params={"username": username, "password": password}
+            params={"username": username, "password": password},
+            headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+            timeout=10
         )
         if resp.status_code == 200:
-            return resp.json()
-        return None
+            data = resp.json()
+            # Debug: mostrar resumen
+            if data.get('success'):
+                resumen = data.get('resumen', {})
+                st.info(f"📊 Datos del servidor - Agregados: {resumen.get('agregados')}, Disponibles: {resumen.get('disponibles')}, Pendientes: {resumen.get('pendientes')}")
+            return data
+        else:
+            st.error(f"Error HTTP {resp.status_code}: {resp.text[:200]}")
+            return None
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error al consultar: {e}")
         return None
 
 
