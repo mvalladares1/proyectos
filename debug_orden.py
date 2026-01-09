@@ -3,13 +3,17 @@
 Script de debug para analizar orden RF/MO/CongTE1/00130
 """
 import sys
+import os
 sys.path.insert(0, '/app')
 from backend.services.tuneles_service import TunelesService
 from shared.odoo_client import OdooClient
 import json
 
-# Conectar a Odoo
-odoo = OdooClient()
+# Conectar a Odoo con credenciales
+USUARIO = os.getenv("ODOO_USER", "mvalladares@riofuturo.cl")
+API_KEY = os.getenv("ODOO_API_KEY", "c0766224bec30cac071ffe43a858c9ccbd521ddd")
+
+odoo = OdooClient(username=USUARIO, password=API_KEY)
 service = TunelesService(odoo)
 
 # Buscar la orden
