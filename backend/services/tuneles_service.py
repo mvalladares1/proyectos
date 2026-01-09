@@ -2150,12 +2150,27 @@ class TunelesService:
                 if pallet.get('pendiente_recepcion'):
                      # MEJORA: Obtener lot_name real si existe, sino intentar construirlo o usar el del input
                      lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre')
+                     
+                     # Si no viene en el payload, intentamos buscarlo en Odoo usando el picking_id
+                     if not lote_origen and pallet.get('picking_id'):
+                         try:
+                             # Buscar move line en el picking para este pallet
+                             mls = self.odoo.search_read(
+                                 'stock.move.line',
+                                 [
+                                     ('picking_id', '=', pallet['picking_id']),
+                                     ('package_id.name', '=', pallet['codigo'])
+                                 ],
+                                 ['lot_id'],
+                                 limit=1
+                             )
+                             if mls and mls[0].get('lot_id'):
+                                 lote_origen = mls[0]['lot_id'][1]
+                                 print(f"✅ Recuperado lot_name desde Odoo para {pallet['codigo']}: {lote_origen}")
+                         except Exception as e:
+                             print(f"⚠️ Error recuperando lot_name en backend: {e}")
+
                      if not lote_origen:
-                         # Si aún no tenemos lot_name, puede ser porque no se pasó o no se encontró.
-                         # Si el usuario quiere literalmente el que hay en recepción, pero si no hay nada...
-                         # Fallback debe ser el código del pallet? O "LOTE <PALLET>"?
-                         # Según instrucción usuario: "el lote debe ser el nombre del lote que se existe en la recepcion... de igual forma y ponerlo"
-                         # Si no logramos obtenerlo (ej error de lectura), usamos el código.
                          lote_origen = f"{pallet.get('codigo')}" 
                 else:
                     lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre') or pallet.get('codigo')

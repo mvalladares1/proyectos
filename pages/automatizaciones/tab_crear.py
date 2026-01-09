@@ -10,6 +10,25 @@ from .shared import (
 )
 
 
+
+@st.experimental_dialog("⚠️ Advertencia: Pallets en Uso")
+def show_duplicate_dialog(duplicados):
+    st.write("Los siguientes pallets ya están asignados a otra orden activa:")
+    for d in duplicados:
+        st.warning(d)
+    
+    st.markdown("---")
+    st.write("¿Desea continuar con la creación de la orden?")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Cancelar", key="btn_cancel_dup"):
+            st.rerun()
+    with col2:
+        if st.button("Confirmar y Crear", type="primary", key="btn_confirm_dup"):
+            st.session_state.confirmado_duplicados = True
+            st.rerun()
+
 def render(username: str, password: str):
     """Renderiza el contenido del tab Crear Orden."""
     st.header("Crear Orden de Fabricación")
@@ -254,16 +273,21 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                         
                         pallets_payload.append(pallet_data)
                     
-                    # 0. Verificar duplicados antes de enviar (Doble check)
-                    duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
-                    if duplicados:
-                         st.warning("⚠️ Advertencia: Algunos pallets ya están en uso:")
-                         for d in duplicados:
-                             st.markdown(f"- {d}")
-                         if not st.checkbox("Continuar de todos modos", key="confirm_dup_create"):
+                    
+                    # 0. Verificar duplicados (Modal Flow)
+                    # Si ya se confirmó, procedemos. Si no, verificamos y mostramos dialog.
+                    if not st.session_state.get('confirmado_duplicados'):
+                        duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
+                        if duplicados:
+                             show_duplicate_dialog(duplicados)
                              st.session_state.creando_orden = False
                              st.stop()
                     
+                    # Si llegamos aquí, o no hubo duplicados o ya se confirmaron
+                    # Limpiamos flag para la próxima
+                    if st.session_state.get('confirmado_duplicados'):
+                        st.session_state.confirmado_duplicados = False
+                        
                     response = crear_orden(username, password, selected_tunel, pallets_payload, buscar_ubicacion_auto)
                     
                     if response and response.status_code == 200:
