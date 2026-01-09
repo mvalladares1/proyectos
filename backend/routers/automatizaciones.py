@@ -146,6 +146,23 @@ async def validar_pallets(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/tuneles-estaticos/duplicados", response_model=List[str])
+async def check_duplicados(
+    request: ValidarPalletsRequest,
+    odoo: OdooClient = Depends(get_odoo_client),
+):
+    """
+    Verifica si los pallets ya están asignados a otra orden activa.
+    Retorna lista de advertencias (ej: "PACK001: Ya está en orden MO/123 (activa)")
+    """
+    try:
+        service = get_tuneles_service(odoo)
+        duplicados = service.check_pallets_duplicados(request.pallets)
+        return duplicados
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/tuneles-estaticos/crear", response_model=CrearOrdenResponse)
 async def crear_orden(
     request: CrearOrdenRequest,

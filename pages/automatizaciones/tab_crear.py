@@ -256,20 +256,18 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
         st.session_state.creando_orden = False
     
     with col2:
-        # Debug: Mostrar estado actual
-        # st.caption(f"DEBUG: creando_orden = {st.session_state.creando_orden}")
-        
         if st.button(
             "✅ Crear Orden de Fabricación", 
             use_container_width=True, 
             type="primary",
             disabled=st.session_state.creando_orden
         ):
-            st.info("🔄 Procesando creación de orden...")
             pallets_sin_kg = [p for p in st.session_state.pallets_list if p['kg'] <= 0]
             
             if pallets_sin_kg:
                 st.error(f"❌ {len(pallets_sin_kg)} pallets sin cantidad. Ingresa los Kg manualmente.")
+            elif not st.session_state.pallets_list:
+                st.error("❌ No hay pallets para crear la orden")
             else:
                 st.session_state.creando_orden = True
                 
