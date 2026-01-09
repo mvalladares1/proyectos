@@ -129,56 +129,33 @@ def _render_orden_card(orden, username, password):
 def _render_pendientes(orden, username, password):
     """Renderiza la sección de pendientes de una orden."""
     orden_id = orden.get('id')
-    detalle_key = f'pendientes_{orden_id}'
     
     col_act1, col_act2 = st.columns([2, 1])
     with col_act1:
         st.warning(f"⚠️ Esta orden tiene pallets esperando recepción")
     
     with col_act2:
-        if detalle_key in st.session_state and st.session_state[detalle_key].get('hay_disponibles_sin_agregar'):
-            if st.button("✅ Agregar Listos", key=f"quick_agregar_{orden_id}", type="primary", use_container_width=True):
-                resp = agregar_disponibles(username, password, orden_id)
-                if resp and resp.status_code == 200:
-                    st.success("¡Pallets agregados!")
-                    del st.session_state[detalle_key]
-                    st.rerun()
-                elif resp:
-                    st.error(f"Error: {resp.text}")
+        # Botón rápido para agregar disponibles (se habilitará si hay alguno)
+        pass
 
     with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        # Siempre cargar datos frescos al abrir el expander
+        with st.spinner("Cargando datos..."):
+            detalle = get_pendientes_orden(username, password, orden_id)
         
-        with col_btn1:
-            if st.button("🔄 Validar Disponibilidad", key=f"validar_{orden_id}"):
-                # Forzar limpieza del cache antes de consultar
-                if detalle_key in st.session_state:
-                    del st.session_state[detalle_key]
-                
-                with st.spinner("Consultando datos del servidor..."):
-                    detalle = get_pendientes_orden(username, password, orden_id)
-                    if detalle:
-                        st.session_state[detalle_key] = detalle
-                        # NO hacer rerun aquí, dejar que se muestre el mensaje de debug
-                    else:
-                        st.error("⚠️ Error al obtener datos del servidor. Verifica la conexión.")
-        
-        if detalle_key in st.session_state:
-            detalle = st.session_state[detalle_key]
+        if detalle and detalle.get('success'):
+            resumen = detalle.get('resumen', {})
             
-            if detalle.get('success'):
-                resumen = detalle.get('resumen', {})
-                
-                # NUEVO: Mostrar notificación si hay cambios
-                if detalle.get('hay_cambios_nuevos'):
-                    nuevos = detalle.get('nuevos_disponibles', 0)
-                    st.success(f"🎉 {nuevos} pallet(s) ahora disponible(s)! Haz click en 'Agregar Disponibles' para incorporarlos a la orden.")
-                
-                # Mostrar resumen con progreso
-                total = resumen.get('total', 0)
-                agregados = resumen.get('agregados', 0)
-                disponibles = resumen.get('disponibles', 0)
-                pendientes = resumen.get('pendientes', 0)
+            # Mostrar notificación si hay cambios
+            if detalle.get('hay_cambios_nuevos'):
+                nuevos = detalle.get('nuevos_disponibles', 0)
+                st.success(f"🎉 {nuevos} pallet(s) ahora disponible(s)! Haz click en 'Agregar Disponibles' para incorporarlos a la orden.")
+            
+            # Mostrar resumen con progreso
+            total = resumen.get('total', 0)
+            agregados = resumen.get('agregados', 0)
+            disponibles = resumen.get('disponibles', 0)
+            pendientes = resumen.get('pendientes', 0)
                 
                 if total > 0:
                     progreso = (agregados / total * 100)
@@ -257,7 +234,6 @@ def _render_pendientes(orden, username, password):
                             if resp and resp.status_code == 200:
                                 result = resp.json()
                                 st.success(f"✅ {result.get('mensaje')}")
-                                del st.session_state[detalle_key]
                                 st.cache_data.clear()
                                 st.rerun()
                             elif resp:
@@ -276,7 +252,6 @@ def _render_pendientes(orden, username, password):
                             if resp and resp.status_code == 200:
                                 result = resp.json()
                                 st.success(f"✅ {result.get('mensaje', 'Pendientes completados!')}")
-                                del st.session_state[detalle_key]
                                 st.cache_data.clear()
                                 st.rerun()
                             elif resp:
