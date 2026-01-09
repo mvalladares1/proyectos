@@ -243,79 +243,92 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
         st.session_state.creando_orden = False
     
     with col2:
-        # Verificar duplicados ANTES de presionar el botón de crear
-        # Mostramos el modal si hay duplicados pendientes de confirmar
+        # Verificar si hay duplicados pendientes de confirmar - mostrar modal
         if st.session_state.get('pending_duplicados'):
             show_duplicate_dialog(st.session_state.pending_duplicados)
-            
+        
+        # Flag para ejecutar creación (se activa por botón O por confirmación de dialog)
+        should_create = False
+        
+        # Si ya se confirmó desde el dialog, proceder automáticamente
+        if st.session_state.get('confirmado_duplicados') and st.session_state.get('pallets_to_create'):
+            should_create = True
+            pallets_payload = st.session_state.pallets_to_create
+            st.session_state.confirmado_duplicados = False
+            st.session_state.pallets_to_create = None
+            st.session_state.pending_duplicados = None
+        
         if st.button(
             "✅ Crear Orden de Fabricación", 
             use_container_width=True, 
             type="primary",
-            disabled=st.session_state.creando_orden
+            disabled=st.session_state.creando_orden or st.session_state.get('pending_duplicados')
         ):
             pallets_sin_kg = [p for p in st.session_state.pallets_list if p['kg'] <= 0]
             
             if pallets_sin_kg:
                 st.error(f"❌ {len(pallets_sin_kg)} pallets sin cantidad. Ingresa los Kg manualmente.")
             else:
-                # Verificar duplicados ANTES de crear
-                if not st.session_state.get('confirmado_duplicados'):
-                    duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
-                    if duplicados:
-                        # Guardar duplicados y mostrar modal en siguiente render
-                        st.session_state.pending_duplicados = duplicados
-                        st.rerun()
-                
-                # Si llegamos aquí, no hay duplicados o ya se confirmaron
-                st.session_state.pending_duplicados = None
-                st.session_state.confirmado_duplicados = False
-                st.session_state.creando_orden = True
-                
-                with st.spinner("Creando orden de fabricación..."):
-                    pallets_payload = []
-                    for p in st.session_state.pallets_list:
-                        pallet_data = {'codigo': p['codigo'], 'kg': p['kg']}
-                        
-                        if p.get('pendiente_recepcion'):
-                            pallet_data['pendiente_recepcion'] = True
-                            pallet_data['producto_id'] = p.get('producto_id')
-                            pallet_data['picking_id'] = p.get('picking_id')
-                            pallet_data['lot_id'] = p.get('lot_id')
-                            pallet_data['lot_name'] = p.get('lot_name')
-                        elif p.get('manual'):
-                            pallet_data['manual'] = True
-                            pallet_data['producto_id'] = p.get('producto_id')
-                        
-                        pallets_payload.append(pallet_data)
-                        
-                    response = crear_orden(username, password, selected_tunel, pallets_payload, buscar_ubicacion_auto)
+                # Preparar payload
+                pallets_payload = []
+                for p in st.session_state.pallets_list:
+                    pallet_data = {'codigo': p['codigo'], 'kg': p['kg']}
                     
-                    if response and response.status_code == 200:
-                        result = response.json()
-                        
-                        st.session_state.last_order_result = {
-                            'success': True,
-                            'mensaje': result.get('mensaje', 'Orden creada exitosamente'),
-                            'mo_name': result.get('mo_name'),
-                            'total_kg': result.get('total_kg'),
-                            'pallets_count': result.get('pallets_count'),
-                            'componentes_count': result.get('componentes_count'),
-                            'subproductos_count': result.get('subproductos_count'),
-                            'advertencias': result.get('advertencias', []),
-                            'validation_warnings': result.get('validation_warnings', []),
-                            'validation_errors': result.get('validation_errors', []),
-                            'has_pending': result.get('has_pending', False),
-                            'pending_count': result.get('pending_count', 0)
-                        }
-                        
-                        st.session_state.pallets_list = []
-                        st.session_state.creando_orden = False
-                        st.balloons()
-                        st.rerun()
-                    elif response:
-                        error_detail = response.json().get('detail', 'Error desconocido')
-                        st.error(f"❌ Error al crear orden: {error_detail}")
-                        st.session_state.creando_orden = False
-                    else:
-                        st.session_state.creando_orden = False
+                    if p.get('pendiente_recepcion'):
+                        pallet_data['pendiente_recepcion'] = True
+                        pallet_data['producto_id'] = p.get('producto_id')
+                        pallet_data['picking_id'] = p.get('picking_id')
+                        pallet_data['lot_id'] = p.get('lot_id')
+                        pallet_data['lot_name'] = p.get('lot_name')
+                    elif p.get('manual'):
+                        pallet_data['manual'] = True
+                        pallet_data['producto_id'] = p.get('producto_id')
+                    
+                    pallets_payload.append(pallet_data)
+                
+                # Verificar duplicados
+                duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
+                if duplicados:
+                    # Guardar payload para después de confirmación y mostrar modal
+                    st.session_state.pallets_to_create = pallets_payload
+                    st.session_state.pending_duplicados = duplicados
+                    st.rerun()
+                else:
+                    should_create = True
+        
+        # Ejecutar creación (por botón directo O después de confirmar dialog)
+        if should_create:
+            st.session_state.creando_orden = True
+            
+            with st.spinner("Creando orden de fabricación..."):
+                response = crear_orden(username, password, selected_tunel, pallets_payload, buscar_ubicacion_auto)
+                
+                if response and response.status_code == 200:
+                    result = response.json()
+                    
+                    st.session_state.last_order_result = {
+                        'success': True,
+                        'mensaje': result.get('mensaje', 'Orden creada exitosamente'),
+                        'mo_name': result.get('mo_name'),
+                        'total_kg': result.get('total_kg'),
+                        'pallets_count': result.get('pallets_count'),
+                        'componentes_count': result.get('componentes_count'),
+                        'subproductos_count': result.get('subproductos_count'),
+                        'advertencias': result.get('advertencias', []),
+                        'validation_warnings': result.get('validation_warnings', []),
+                        'validation_errors': result.get('validation_errors', []),
+                        'has_pending': result.get('has_pending', False),
+                        'pending_count': result.get('pending_count', 0)
+                    }
+                    
+                    st.session_state.pallets_list = []
+                    st.session_state.creando_orden = False
+                    st.balloons()
+                    st.rerun()
+                elif response:
+                    error_detail = response.json().get('detail', 'Error desconocido')
+                    st.error(f"❌ Error al crear orden: {error_detail}")
+                    st.session_state.creando_orden = False
+                else:
+                    st.session_state.creando_orden = False
+
