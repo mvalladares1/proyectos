@@ -10,20 +10,6 @@ from .shared import (
 )
 
 
-
-@st.dialog("⚠️ Advertencia: Pallets en Uso")
-def show_duplicate_dialog(duplicados):
-    st.write("Los siguientes pallets ya están asignados a otra orden activa:")
-    for d in duplicados:
-        st.warning(d)
-    
-    st.markdown("---")
-    st.write("Se agregarán de todos modos a la lista. Puedes quitarlos manualmente si lo deseas.")
-    
-    if st.button("Entendido", type="primary", key="btn_close_dup"):
-        st.session_state.pending_duplicados = None
-        st.rerun()
-
 def render(username: str, password: str):
     """Renderiza el contenido del tab Crear Orden."""
     st.header("Crear Orden de Fabricación")
@@ -171,8 +157,21 @@ def _procesar_pallets(username, password, pallets_textarea, buscar_ubicacion_aut
             # Verificar si algún pallet recién agregado ya está en otra orden
             codigos_agregados = [p['codigo'] for p in st.session_state.pallets_list[-agregados-en_recepcion:]]
             duplicados = validar_duplicados(username, password, codigos_agregados)
+            
+            # Si hay duplicados, agregar la info a cada pallet afectado
             if duplicados:
-                st.session_state.pending_duplicados = duplicados
+                # Parsear los mensajes de duplicados para obtener código y orden
+                # Formato: "CODIGO: Ya está en orden ORDEN1, ORDEN2 (activa)"
+                for dup_msg in duplicados:
+                    try:
+                        codigo = dup_msg.split(":")[0].strip()
+                        ordenes = dup_msg.split("Ya está en orden")[1].split("(")[0].strip()
+                        # Buscar el pallet en la lista y agregar la info
+                        for p in st.session_state.pallets_list:
+                            if p['codigo'] == codigo:
+                                p['duplicado_en'] = ordenes
+                    except:
+                        pass
                 
             st.rerun()
         else:
@@ -191,7 +190,15 @@ def _mostrar_pallets_lista():
     
     for idx, pallet in enumerate(st.session_state.pallets_list):
         is_pending = pallet.get('pendiente_recepcion', False)
-        border_color = '#ff9800' if is_pending else '#4caf50'
+        is_duplicate = pallet.get('duplicado_en')  # Contiene nombre de orden si es duplicado
+        
+        # Color del borde: rojo si duplicado, naranja si pendiente, verde si ok
+        if is_duplicate:
+            border_color = '#f44336'  # Rojo
+        elif is_pending:
+            border_color = '#ff9800'  # Naranja
+        else:
+            border_color = '#4caf50'  # Verde
         
         with st.container():
             col1, col2 = st.columns([5, 1])
@@ -202,6 +209,10 @@ def _mostrar_pallets_lista():
                 
                 lines = [f"<strong>{producto_display}</strong> - {kg_display}"]
                 lines.append(f"<br><small style='color: #aaa;'>📦 {pallet['codigo']}</small>")
+                
+                # MOSTRAR ADVERTENCIA DE DUPLICADO EN ROJO
+                if is_duplicate:
+                    lines.append(f"<br><small style='color: #f44336; font-weight: bold;'>⚠️ YA ESTÁ EN: {is_duplicate}</small>")
                 
                 if is_pending:
                     reception_state = pallet.get('ubicacion', 'Pendiente').replace('RECEPCIÓN PENDIENTE ', '')
@@ -217,7 +228,7 @@ def _mostrar_pallets_lista():
                     ubicacion = pallet.get('ubicacion', 'N/A')
                     if ubicacion and ubicacion != 'N/A':
                         lines.append(f"<br><small style='color: #aaa;'>📍 {ubicacion}</small>")
-                    if pallet.get('advertencia'):
+                    if pallet.get('advertencia') and not is_duplicate:
                         lines.append(f"<br><small style='color: orange;'>⚠️ {pallet['advertencia']}</small>")
                 
                 html_content = f"<div style='border-left: 4px solid {border_color}; padding: 10px; margin: 5px 0; background: rgba(255,255,255,0.05); border-radius: 4px;'>{''.join(lines)}</div>"
@@ -245,9 +256,6 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
         st.session_state.creando_orden = False
     
     with col2:
-        # Mostrar modal informativo si hay duplicados detectados al agregar
-        if st.session_state.get('pending_duplicados'):
-            show_duplicate_dialog(st.session_state.pending_duplicados)
         
         if st.button(
             "✅ Crear Orden de Fabricación", 
