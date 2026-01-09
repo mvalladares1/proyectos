@@ -11,7 +11,7 @@ from .shared import (
 
 
 
-@st.experimental_dialog("⚠️ Advertencia: Pallets en Uso")
+@st.dialog("⚠️ Advertencia: Pallets en Uso")
 def show_duplicate_dialog(duplicados):
     st.write("Los siguientes pallets ya están asignados a otra orden activa:")
     for d in duplicados:
