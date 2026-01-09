@@ -2081,19 +2081,14 @@ class TunelesService:
         # DEBUG: Log TODOS los productos a procesar
         print(f"DEBUG _crear_subproductos: productos_totales keys = {list(productos_totales.keys())}")
         
-        for producto_id_input, data in productos_totales.items():
-            # DEBUG: Log cada iteración con tipo
-            print(f"DEBUG _crear_subproductos: Procesando producto_id={producto_id_input} (type={type(producto_id_input).__name__}), pallets={len(data['pallets'])}, kg={data['kg']}")
-            
             # Asegurarse que producto_id_input sea entero
             if not producto_id_input:
-                print(f"DEBUG: producto_id_input es None/0, saltando")
                 continue
             
             try:
                 producto_id_input_int = int(producto_id_input)
             except (ValueError, TypeError):
-                print(f"DEBUG: producto_id_input no es entero válido: {producto_id_input}")
+                print(f"WARN _crear_subproductos: producto_id invalido: {producto_id_input}")
                 continue
             
             # Obtener producto congelado (output) - DINÁMICO
@@ -2108,8 +2103,6 @@ class TunelesService:
                     ['default_code', 'name'],
                     limit=1
                 )
-                
-                print(f"DEBUG: prod_input result = {prod_input}")
                 
                 if prod_input and prod_input[0].get('default_code'):
                     codigo_input = prod_input[0]['default_code']
@@ -2126,31 +2119,24 @@ class TunelesService:
                             limit=1
                         )
                         
-                        print(f"DEBUG: Buscando {codigo_output}, resultado = {prod_output}")
-                        
                         if prod_output:
                             producto_id_output = prod_output[0]['id']
-                            print(f"DEBUG Transformación EXITOSA: {codigo_input} → {codigo_output} (ID={producto_id_output})")
+                            # print(f"DEBUG Transformación: {codigo_input} → {codigo_output}")
                         else:
-                            print(f"DEBUG: Producto congelado {codigo_output} NO EXISTE en Odoo")
-                            producto_id_output = producto_id_input_int  # Usar mismo producto
+                            print(f"WARN: Producto congelado {codigo_output} no encontrado")
+                            producto_id_output = producto_id_input_int
                     else:
-                        print(f"DEBUG: Código {codigo_input} no empieza con 1")
                         producto_id_output = producto_id_input_int
                 else:
-                    print(f"DEBUG: Producto ID {producto_id_input_int} sin default_code")
                     producto_id_output = producto_id_input_int
                     
             except Exception as e:
-                import traceback
                 print(f"ERROR buscando producto congelado: {e}")
-                print(f"ERROR Traceback: {traceback.format_exc()}")
                 producto_id_output = producto_id_input_int
             
             # Garantizar que siempre tenemos un producto_id_output
             if not producto_id_output:
                 producto_id_output = producto_id_input_int
-                print(f"DEBUG: Usando mismo producto como fallback final: {producto_id_input_int}")
             
             # Crear stock.move principal
             move_data = {
