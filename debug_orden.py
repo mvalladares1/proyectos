@@ -153,23 +153,41 @@ print(f"{'─'*80}")
 try:
     detalle = service.obtener_detalle_pendientes(mo_id)
     
-    print(f"\nEstadísticas:")
-    print(f"  Agregados: {detalle.get('agregados', 0)}")
-    print(f"  Disponibles: {detalle.get('disponibles', 0)}")
-    print(f"  Pendientes: {detalle.get('pendientes', 0)}")
-    print(f"  Hay cambios nuevos: {detalle.get('hay_cambios_nuevos', False)}")
-    print(f"  Nuevos disponibles: {detalle.get('nuevos_disponibles', 0)}")
+    print(f"\nSuccess: {detalle.get('success')}")
+    print(f"Error: {detalle.get('error', 'N/A')}")
     
-    pallets_detalle = detalle.get('pallets', [])
-    print(f"\nDetalle por pallet:")
-    for p in pallets_detalle:
-        print(f"\n  {p['codigo']}:")
-        print(f"    Estado actual: {p['estado']} ({p['estado_label']})")
-        print(f"    Estado anterior: {p.get('estado_anterior', 'N/A')}")
-        print(f"    Cambio detectado: {p.get('cambio_detectado', False)}")
-        print(f"    Nuevo disponible: {p.get('nuevo_disponible', False)}")
-        print(f"    Tiene stock: {p.get('tiene_stock', False)}")
-        print(f"    Ya agregado: {p.get('ya_agregado', False)}")
+    if not detalle.get('success'):
+        print(f"\n❌ ERROR EN EL MÉTODO:")
+        print(detalle.get('traceback', 'N/A'))
+    else:
+        resumen = detalle.get('resumen', {})
+        print(f"\nResumen:")
+        print(f"  Total: {resumen.get('total', 0)}")
+        print(f"  Agregados: {resumen.get('agregados', 0)}")
+        print(f"  Disponibles: {resumen.get('disponibles', 0)}")
+        print(f"  Pendientes: {resumen.get('pendientes', 0)}")
+        
+        print(f"\nFlags:")
+        print(f"  Hay cambios nuevos: {detalle.get('hay_cambios_nuevos', False)}")
+        print(f"  Nuevos disponibles: {detalle.get('nuevos_disponibles', 0)}")
+        print(f"  Todos listos: {detalle.get('todos_listos', False)}")
+        print(f"  Hay disponibles sin agregar: {detalle.get('hay_disponibles_sin_agregar', False)}")
+        
+        pallets_detalle = detalle.get('pallets', [])
+        print(f"\nTotal pallets en respuesta: {len(pallets_detalle)}")
+        
+        if not pallets_detalle:
+            print("⚠️  LISTA DE PALLETS VACÍA - REVISAR POR QUÉ")
+        else:
+            print(f"\nDetalle por pallet:")
+            for p in pallets_detalle:
+                print(f"\n  {p['codigo']}:")
+                print(f"    Estado actual: {p['estado']} ({p['estado_label']})")
+                print(f"    Estado anterior: {p.get('estado_anterior', 'N/A')}")
+                print(f"    Cambio detectado: {p.get('cambio_detectado', False)}")
+                print(f"    Nuevo disponible: {p.get('nuevo_disponible', False)}")
+                print(f"    Tiene stock: {p.get('tiene_stock', False)}")
+                print(f"    Ya agregado: {p.get('ya_agregado', False)}")
         
 except Exception as e:
     print(f"❌ Error al ejecutar obtener_detalle_pendientes: {e}")
