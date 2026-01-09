@@ -1325,42 +1325,93 @@ class TunelesService:
         packages_map = {pkg['name']: pkg['id'] for pkg in packages}
         
         if package_ids:
-            # Buscar en stock.move.line si estos packages están en MOs no canceladas/terminadas
+            # Buscar moveline de estos packages
+            # Traemos move_id para ver si es consumo de materia prima
             move_lines = self.odoo.search_read(
                 'stock.move.line',
-                [
-                    ('package_id', 'in', package_ids),
-                    ('production_id', '!=', False)
-                ],
-                ['package_id', 'production_id'],
+                [('package_id', 'in', package_ids)],
+                ['package_id', 'production_id', 'move_id'],
                 limit=100
             )
             
             if move_lines:
-                # Verificar estado de las MOs encontradas
-                mo_ids = list(set([ml['production_id'][0] for ml in move_lines]))
-                mos = self.odoo.search_read(
-                    'mrp.production',
-                    [('id', 'in', mo_ids), ('state', 'not in', ['done', 'cancel'])],
-                    ['id', 'name', 'state']
-                )
+                mo_ids = set()
+                # 1. Direct production_id (Finished Goods usually)
+                for ml in move_lines:
+                    if ml.get('production_id'):
+                        mo_ids.add(ml['production_id'][0])
                 
-                if mos:
-                    # Mapear package_id a mo_name
-                    pkg_to_mo = {}
-                    for ml in move_lines:
-                        pkg_id = ml['package_id'][0]
-                        mo_id = ml['production_id'][0]
-                        mo_match = [m for m in mos if m['id'] == mo_id]
-                        if mo_match:
-                            pkg_to_mo[pkg_id] = mo_match[0]['name']
+                # 2. Via move_id (Raw Materials usually)
+                move_ids = [ml['move_id'][0] for ml in move_lines if ml.get('move_id')]
+                if move_ids:
+                    moves = self.odoo.search_read(
+                        'stock.move',
+                        [('id', 'in', move_ids)],
+                        ['raw_material_production_id', 'production_id']
+                    )
+                    for m in moves:
+                        if m.get('raw_material_production_id'):
+                            mo_ids.add(m['raw_material_production_id'][0])
+                        if m.get('production_id'):
+                            mo_ids.add(m['production_id'][0])
+                
+                if mo_ids:
+                    # Verificar estado de las MOs encontradas
+                    mos = self.odoo.search_read(
+                        'mrp.production',
+                        [('id', 'in', list(mo_ids)), ('state', 'not in', ['done', 'cancel'])],
+                        ['id', 'name', 'state']
+                    )
                     
-                    # Verificar si algún pallet de la lista está en estas MOs
-                    for codigo in codigos_pallets:
-                        pkg_id = packages_map.get(codigo)
-                        if pkg_id and pkg_id in pkg_to_mo:
-                            msg = f"{codigo}: Ya está en orden {pkg_to_mo[pkg_id]} (activa)"
-                            advertencias.append(msg)
+                    if mos:
+                        # Mapear MO ID -> Name
+                        mo_map = {m['id']: m['name'] for m in mos}
+                        active_mo_ids = set(mo_map.keys())
+
+                        # Re-recorrer para asociar pallet -> MO activa
+                        # Esto es más complejo porque un pallet puede estar en varias lineas/moves
+                        # Hacemos un mapa PalletID -> Lista de MOs activas
+                        pallet_to_mos = {} # {pkg_id: set(mo_names)}
+                        
+                        # Cache de move -> MOs
+                        move_to_mos = {} # {move_id: [mo_id1, mo_id2]}
+                        if move_ids:
+                             for m in moves:
+                                m_mos = []
+                                if m.get('raw_material_production_id'):
+                                    m_mos.append(m['raw_material_production_id'][0])
+                                if m.get('production_id'):
+                                    m_mos.append(m['production_id'][0])
+                                move_to_mos[m['id']] = m_mos
+
+                        for ml in move_lines:
+                            pkg_id = ml['package_id'][0]
+                            found_mos = []
+                            
+                            # Direct check
+                            if ml.get('production_id') and ml['production_id'][0] in active_mo_ids:
+                                found_mos.append(mo_map[ml['production_id'][0]])
+                            
+                            # Move check
+                            if ml.get('move_id'):
+                                m_id = ml['move_id'][0]
+                                associated_mo_ids = move_to_mos.get(m_id, [])
+                                for mid in associated_mo_ids:
+                                    if mid in active_mo_ids:
+                                        found_mos.append(mo_map[mid])
+                            
+                            if found_mos:
+                                if pkg_id not in pallet_to_mos:
+                                    pallet_to_mos[pkg_id] = set()
+                                pallet_to_mos[pkg_id].update(found_mos)
+                        
+                        # Generar advertencias
+                        for codigo in codigos_pallets:
+                            pkg_id = packages_map.get(codigo)
+                            if pkg_id and pkg_id in pallet_to_mos:
+                                mo_names = ", ".join(sorted(list(pallet_to_mos[pkg_id])))
+                                msg = f"{codigo}: Ya está en orden {mo_names} (activa)"
+                                advertencias.append(msg)
                             
         return advertencias
 
