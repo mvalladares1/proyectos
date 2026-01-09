@@ -254,6 +254,16 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                         
                         pallets_payload.append(pallet_data)
                     
+                    # 0. Verificar duplicados antes de enviar (Doble check)
+                    duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
+                    if duplicados:
+                         st.warning("⚠️ Advertencia: Algunos pallets ya están en uso:")
+                         for d in duplicados:
+                             st.markdown(f"- {d}")
+                         if not st.checkbox("Continuar de todos modos", key="confirm_dup_create"):
+                             st.session_state.creando_orden = False
+                             st.stop()
+                    
                     response = crear_orden(username, password, selected_tunel, pallets_payload, buscar_ubicacion_auto)
                     
                     if response and response.status_code == 200:

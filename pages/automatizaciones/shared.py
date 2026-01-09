@@ -139,6 +139,27 @@ def validar_pallets(username, password, codigos, buscar_ubicacion_auto=False):
         return None
 
 
+def validar_duplicados(username, password, codigos):
+    """Valida si los pallets están duplicados en otras órdenes."""
+    try:
+        response = requests.post(
+            f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/duplicados",
+            params={"username": username, "password": password},
+            json={
+                "pallets": codigos,
+                # buscar_ubicacion no se usa para duplicados pero el modelo lo requiere
+                "buscar_ubicacion": False
+            },
+            timeout=10
+        )
+        if response.status_code == 200:
+            return response.json()
+        return []
+    except Exception as e:
+        print(f"Error validando duplicados: {e}")
+        return []
+
+
 def crear_orden(username, password, tunel, pallets_payload, buscar_ubicacion_auto=False):
     """Crea una orden de fabricación en túneles estáticos."""
     try:

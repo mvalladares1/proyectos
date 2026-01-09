@@ -143,7 +143,7 @@ class TunelesService:
                         ('package_id', 'in', pkg_ids_pendientes),
                         ('picking_id', '!=', False)
                     ],
-                    ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty', 'result_package_id', 'package_id'],
+                    ['picking_id', 'product_id', 'qty_done', 'reserved_uom_qty', 'result_package_id', 'package_id', 'lot_id'],
                     limit=100,
                     order='id desc'
                 )
@@ -191,6 +191,10 @@ class TunelesService:
                             odoo_url = f"{base_url}/web#id={picking_id}&model=stock.picking&view_type=form"
                             kg = ml['qty_done'] if ml['qty_done'] and ml['qty_done'] > 0 else ml.get('reserved_uom_qty', 0)
                             
+                            
+                            lot_id = ml['lot_id'][0] if ml.get('lot_id') else None
+                            lot_name = ml['lot_id'][1] if ml.get('lot_id') else None
+
                             reception_info_map[pkg_code] = {
                                 'found_in_reception': True,
                                 'picking_name': picking_name,
@@ -199,7 +203,9 @@ class TunelesService:
                                 'odoo_url': odoo_url,
                                 'product_name': ml['product_id'][1] if ml['product_id'] else 'Desconocido',
                                 'kg': kg,
-                                'product_id': ml['product_id'][0] if ml['product_id'] else None
+                                'product_id': ml['product_id'][0] if ml['product_id'] else None,
+                                'lot_id': lot_id,
+                                'lot_name': lot_name
                             }
         
         # Agregar resultados de no encontrados
@@ -846,14 +852,14 @@ class TunelesService:
                     move_lines = self.odoo.search_read(
                         'stock.move.line',
                         [('move_id', '=', move['id'])],
-                        ['lot_id', 'package_id', 'qty_done', 'location_dest_id']
+                        ['lot_id', 'result_package_id', 'qty_done', 'location_dest_id']
                     )
                     
                     for line in move_lines:
                         subproductos.append({
                             'producto': producto_nombre,
                             'lote': line['lot_id'][1] if line.get('lot_id') else 'Sin lote',
-                            'pallet': line['package_id'][1] if line.get('package_id') else 'Sin pallet',
+                            'pallet': line['result_package_id'][1] if line.get('result_package_id') else 'Sin pallet',
                             'kg': line.get('qty_done', 0),
                             'ubicacion': line['location_dest_id'][1] if line.get('location_dest_id') else 'N/A'
                         })
@@ -1300,39 +1306,12 @@ class TunelesService:
             traceback.print_exc()
             return []
     
-    def crear_orden_fabricacion(
-        self,
-        tunel: str,
-        pallets: List[Dict[str, float]],
-        buscar_ubicacion_auto: bool = False,
-        responsable_id: Optional[int] = None
-    ) -> Dict:
+    def check_pallets_duplicados(self, codigos_pallets: List[str]) -> List[str]:
         """
-        Crea una orden de fabricación para un túnel estático.
-        
-        Args:
-            tunel: Código del túnel (TE1, TE2, TE3, VLK)
-            pallets: Lista de dicts con {codigo: str, kg: float}
-            buscar_ubicacion_auto: Si True, busca ubicación real del pallet
-            responsable_id: ID del usuario responsable
-            
-        Returns:
-            Dict con: success, mo_id, mo_name, total_kg, errores, advertencias
+        Verifica si los pallets ya están en uso en otras órdenes activas (no canceladas/done).
+        Retorna lista de advertencias.
         """
-        if tunel not in TUNELES_CONFIG:
-            return {
-                'success': False,
-                'error': f'Túnel {tunel} no válido. Opciones: {list(TUNELES_CONFIG.keys())}'
-            }
-        
-        config = TUNELES_CONFIG[tunel]
-        errores = []
         advertencias = []
-        validation_warnings = []  # Para registro en JSON
-        validation_errors = []    # Para registro en JSON
-        
-        # 0. VALIDAR DUPLICADOS: Verificar que los pallets no estén en otras MOs activas
-        codigos_pallets = [p['codigo'] for p in pallets]
         
         # Buscar packages con estos códigos
         packages = self.odoo.search_read(
@@ -1378,15 +1357,136 @@ class TunelesService:
                     for codigo in codigos_pallets:
                         pkg_id = packages_map.get(codigo)
                         if pkg_id and pkg_id in pkg_to_mo:
-                            # CAMBIO: Advertencia en lugar de error bloqueante
                             msg = f"{codigo}: Ya está en orden {pkg_to_mo[pkg_id]} (activa)"
                             advertencias.append(msg)
-                            validation_warnings.append({
-                                'tipo': 'pallet_duplicado',
-                                'pallet': codigo,
-                                'orden_existente': pkg_to_mo[pkg_id],
-                                'timestamp': datetime.now().isoformat()
+                            
+        return advertencias
+
+    def crear_orden_fabricacion(
+        self,
+        tunel: str,
+        pallets: List[Dict[str, float]],
+        buscar_ubicacion_auto: bool = False,
+        responsable_id: Optional[int] = None
+    ) -> Dict:
+        """
+        Crea una orden de fabricación para un túnel estático.
+        
+        Args:
+            tunel: Código del túnel (TE1, TE2, TE3, VLK)
+            pallets: Lista de dicts con {codigo: str, kg: float}
+            buscar_ubicacion_auto: Si True, busca ubicación real del pallet
+            responsable_id: ID del usuario responsable
+            
+        Returns:
+            Dict con: success, mo_id, mo_name, total_kg, errores, advertencias
+        """
+        if tunel not in TUNELES_CONFIG:
+            return {
+                'success': False,
+                'error': f'Túnel {tunel} no válido. Opciones: {list(TUNELES_CONFIG.keys())}'
+            }
+        
+        config = TUNELES_CONFIG[tunel]
+        errores = []
+        advertencias = []
+        validation_warnings = []  # Para registro en JSON
+        validation_errors = []    # Para registro en JSON
+        
                             })
+        
+        return advertencias, validation_warnings
+
+    def check_pallets_duplicados(self, codigos_pallets: List[str]) -> List[str]:
+        """
+        Verifica si los pallets ya están en uso en otras órdenes activas (no canceladas/done).
+        Retorna lista de advertencias.
+        """
+        advertencias = []
+        
+        # Buscar packages con estos códigos
+        packages = self.odoo.search_read(
+            'stock.quant.package',
+            [('name', 'in', codigos_pallets)],
+            ['id', 'name']
+        )
+        package_ids = [pkg['id'] for pkg in packages]
+        packages_map = {pkg['name']: pkg['id'] for pkg in packages}
+        
+        if package_ids:
+            # Buscar en stock.move.line si estos packages están en MOs no canceladas/terminadas
+            move_lines = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ('package_id', 'in', package_ids),
+                    ('production_id', '!=', False)
+                ],
+                ['package_id', 'production_id'],
+                limit=100
+            )
+            
+            if move_lines:
+                # Verificar estado de las MOs encontradas
+                mo_ids = list(set([ml['production_id'][0] for ml in move_lines]))
+                mos = self.odoo.search_read(
+                    'mrp.production',
+                    [('id', 'in', mo_ids), ('state', 'not in', ['done', 'cancel'])],
+                    ['id', 'name', 'state']
+                )
+                
+                if mos:
+                    # Mapear package_id a mo_name
+                    pkg_to_mo = {}
+                    for ml in move_lines:
+                        pkg_id = ml['package_id'][0]
+                        mo_id = ml['production_id'][0]
+                        mo_match = [m for m in mos if m['id'] == mo_id]
+                        if mo_match:
+                            pkg_to_mo[pkg_id] = mo_match[0]['name']
+                    
+                    # Verificar si algún pallet de la lista está en estas MOs
+                    for codigo in codigos_pallets:
+                        pkg_id = packages_map.get(codigo)
+                        if pkg_id and pkg_id in pkg_to_mo:
+                            msg = f"{codigo}: Ya está en orden {pkg_to_mo[pkg_id]} (activa)"
+                            advertencias.append(msg)
+                            
+        return advertencias
+
+    def crear_orden_fabricacion(
+        self,
+        tunel: str,
+        pallets: List[Dict[str, float]],
+        buscar_ubicacion_auto: bool = False,
+        responsable_id: Optional[int] = None
+    ) -> Dict:
+        """
+        Crea una orden de fabricación para un túnel estático.
+        """
+        if tunel not in TUNELES_CONFIG:
+            return {
+                'success': False,
+                'error': f'Túnel {tunel} no válido. Opciones: {list(TUNELES_CONFIG.keys())}'
+            }
+        
+        config = TUNELES_CONFIG[tunel]
+        errores = []
+        advertencias = []
+        validation_warnings = []  # Para registro en JSON
+        validation_errors = []    # Para registro en JSON
+        
+        # 0. VALIDAR DUPLICADOS: Verificar que los pallets no estén en otras MOs activas
+        codigos_pallets = [p['codigo'] for p in pallets]
+        duplicados_adv = self.check_pallets_duplicados(codigos_pallets)
+        
+        if duplicados_adv:
+            advertencias.extend(duplicados_adv)
+            for msg in duplicados_adv:
+                validation_warnings.append({
+                    'tipo': 'pallet_duplicado',
+                    'detalle': msg,
+                    'timestamp': datetime.now().isoformat()
+                })
         
         # 1. Validar todos los pallets primero
         pallets_validados = []
@@ -2085,7 +2185,18 @@ class TunelesService:
             for pallet in data['pallets']:
                 # LOTE: Usar nombre del lote original + sufijo -C
                 # Prioridad: lot_name (frontend) -> lote_nombre (backend) -> codigo (fallback)
-                lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre') or pallet.get('codigo')
+                if pallet.get('pendiente_recepcion'):
+                     # MEJORA: Obtener lot_name real si existe, sino intentar construirlo o usar el del input
+                     lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre')
+                     if not lote_origen:
+                         # Si aún no tenemos lot_name, puede ser porque no se pasó o no se encontró.
+                         # Si el usuario quiere literalmente el que hay en recepción, pero si no hay nada...
+                         # Fallback debe ser el código del pallet? O "LOTE <PALLET>"?
+                         # Según instrucción usuario: "el lote debe ser el nombre del lote que se existe en la recepcion... de igual forma y ponerlo"
+                         # Si no logramos obtenerlo (ej error de lectura), usamos el código.
+                         lote_origen = f"{pallet.get('codigo')}" 
+                else:
+                    lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
                 
                 # DEBUG: Log detallado del lote
