@@ -1325,6 +1325,8 @@ class TunelesService:
         config = TUNELES_CONFIG[tunel]
         errores = []
         advertencias = []
+        validation_warnings = []  # Para registro en JSON
+        validation_errors = []    # Para registro en JSON
         
         # 0. VALIDAR DUPLICADOS: Verificar que los pallets no estén en otras MOs activas
         codigos_pallets = [p['codigo'] for p in pallets]
@@ -1373,14 +1375,15 @@ class TunelesService:
                     for codigo in codigos_pallets:
                         pkg_id = packages_map.get(codigo)
                         if pkg_id and pkg_id in pkg_to_mo:
-                            errores.append(f"{codigo}: Ya está en orden {pkg_to_mo[pkg_id]} (activa)")
-        
-        if errores:
-            return {
-                'success': False,
-                'errores': errores,
-                'error': f"Pallets ya usados en otras órdenes activas: {', '.join(codigos_pallets[:3])}"
-            }
+                            # CAMBIO: Advertencia en lugar de error bloqueante
+                            msg = f"{codigo}: Ya está en orden {pkg_to_mo[pkg_id]} (activa)"
+                            advertencias.append(msg)
+                            validation_warnings.append({
+                                'tipo': 'pallet_duplicado',
+                                'pallet': codigo,
+                                'orden_existente': pkg_to_mo[pkg_id],
+                                'timestamp': datetime.now().isoformat()
+                            })
         
         # 1. Validar todos los pallets primero
         pallets_validados = []
@@ -1434,18 +1437,51 @@ class TunelesService:
             validacion = self.validar_pallet(pallet['codigo'], buscar_ubicacion_auto)
             
             if not validacion['existe']:
-                errores.append(validacion['error'])
+                # ERROR: Pallet no existe en sistema
+                msg = validacion['error']
+                errores.append(msg)
+                validation_errors.append({
+                    'tipo': 'pallet_no_existe',
+                    'pallet': pallet['codigo'],
+                    'detalle': msg,
+                    'timestamp': datetime.now().isoformat()
+                })
                 continue
             
-            # Si no tiene kg en Odoo, usar el ingresado manualmente
+            # Si no tiene kg en Odoo, verificar si puede usar kg manual
             kg = validacion['kg'] if validacion['kg'] > 0 else pallet.get('kg', 0)
             
             if kg <= 0:
-                advertencias.append(f"{pallet['codigo']}: Sin stock, debe ingresar kg manualmente")
-                kg = pallet.get('kg', 0)
-                if kg <= 0:
-                    errores.append(f"{pallet['codigo']}: Debe especificar cantidad en Kg")
+                # ERROR: Sin stock disponible - crear como pendiente
+                msg = f"{pallet['codigo']}: Sin stock disponible para consumir"
+                advertencias.append(msg)
+                validation_errors.append({
+                    'tipo': 'sin_stock',
+                    'pallet': pallet['codigo'],
+                    'detalle': msg,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                # Intentar obtener producto_id de la validación
+                producto_id = validacion.get('producto_id')
+                if not producto_id:
+                    errores.append(f"{pallet['codigo']}: Sin stock y sin producto identificado")
                     continue
+                
+                # Agregar como pallet pendiente (sin stock)
+                pallets_validados.append({
+                    'codigo': pallet['codigo'],
+                    'kg': pallet.get('kg', 0),  # Usar kg esperado del frontend
+                    'lote_id': validacion.get('lote_id'),
+                    'lote_nombre': validacion.get('lote_nombre'),
+                    'producto_id': producto_id,
+                    'ubicacion_id': config['ubicacion_origen_id'],
+                    'package_id': validacion.get('package_id'),
+                    'manual': False,
+                    'pendiente_recepcion': True,  # Marcar como pendiente por falta de stock
+                    'picking_id': None
+                })
+                continue
             
             pallets_validados.append({
                 'codigo': pallet['codigo'],
@@ -1527,7 +1563,9 @@ class TunelesService:
                 pending_data = {
                     'pending': True,
                     'created_at': datetime.now().isoformat(),
-                    'pallets': []
+                    'pallets': [],
+                    'validation_warnings': validation_warnings,  # Agregar warnings
+                    'validation_errors': validation_errors        # Agregar errors
                 }
                 
                 picking_ids_set = set()
@@ -1590,6 +1628,8 @@ class TunelesService:
                 'componentes_count': componentes_creados,
                 'subproductos_count': subproductos_creados,
                 'advertencias': advertencias,
+                'validation_warnings': validation_warnings,  # Incluir warnings
+                'validation_errors': validation_errors,      # Incluir errors
                 'has_pending': has_pending,
                 'pending_count': len(pallets_pendientes),
                 'mensaje': f'Orden {mo_name} creada con {componentes_creados} componentes y {subproductos_creados} subproductos' + 
@@ -2041,8 +2081,8 @@ class TunelesService:
             
             for pallet in data['pallets']:
                 # LOTE: Usar nombre del lote original + sufijo -C
-                # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
-                lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
+                # Prioridad: lot_name (frontend) -> lote_nombre (backend) -> codigo (fallback)
+                lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
                 
                 # DEBUG: Log detallado del lote
@@ -2075,8 +2115,8 @@ class TunelesService:
             # Ahora crear los move.lines
             for idx, pallet in enumerate(data['pallets']):
                 # LOTE: Usar nombre del lote original + sufijo -C
-                # Prioridad: lote_nombre (backend) -> lot_name (frontend) -> codigo (fallback)
-                lote_origen = pallet.get('lote_nombre') or pallet.get('lot_name') or pallet.get('codigo')
+                # Prioridad: lot_name (frontend) -> lote_nombre (backend) -> codigo (fallback)
+                lote_origen = pallet.get('lot_name') or pallet.get('lote_nombre') or pallet.get('codigo')
                 lote_output_name = f"{lote_origen}-C"
                 
                 # PACKAGE: Extraer solo el número y generar nombre correcto

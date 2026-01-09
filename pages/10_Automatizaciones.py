@@ -69,6 +69,23 @@ if 'last_order_result' in st.session_state and st.session_state.last_order_resul
             for adv in result.get('advertencias', []):
                 st.warning(f"⚠️ {adv}")
             
+            # Mostrar validaciones con colores diferenciados
+            for warning in result.get('validation_warnings', []):
+                tipo = warning.get('tipo', 'desconocido')
+                if tipo == 'pallet_duplicado':
+                    st.warning(f"🟡 ADVERTENCIA: {warning.get('pallet')} ya está en orden {warning.get('orden_existente')} (se agregó de todas formas)")
+                else:
+                    st.warning(f"🟡 ADVERTENCIA: {warning.get('detalle', 'Sin detalle')}")
+            
+            for error in result.get('validation_errors', []):
+                tipo = error.get('tipo', 'desconocido')
+                if tipo == 'sin_stock':
+                    st.error(f"🔴 ERROR: {error.get('pallet')} sin stock disponible - Agregado como PENDIENTE")
+                elif tipo == 'pallet_no_existe':
+                    st.error(f"🔴 ERROR: {error.get('detalle', 'Sin detalle')}")
+                else:
+                    st.error(f"🔴 ERROR: {error.get('detalle', 'Sin detalle')}")
+            
             if result.get('has_pending'):
                 st.info(f"🟠 {result.get('pending_count', 0)} pallets pendientes de recepción")
         

@@ -79,6 +79,12 @@ def _render_orden_card(orden, username, password):
     
     fecha_str = format_fecha(orden.get('fecha_creacion', 'N/A'))
     
+    # Construir link clickeable a Odoo
+    mo_id = orden.get('id')
+    mo_name = orden.get('mo_name', orden.get('nombre', 'N/A'))
+    odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={mo_id}&menu_id=390&cids=1&action=604&model=mrp.production&view_type=form"
+    nombre_clickeable = f'<a href="{odoo_url}" target="_blank" style="color: #ffffff; text-decoration: none; border-bottom: 2px solid #3b82f6; padding-bottom: 2px; transition: all 0.2s;">{mo_name}</a>'
+    
     total_kg = orden.get('kg_total', 0)
     pallets = orden.get('pallets_count', 0)
     componentes = orden.get('componentes_count', 0)
@@ -88,7 +94,7 @@ def _render_orden_card(orden, username, password):
     html_content = f'''<div style="background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%); border-left: 5px solid {color_borde}; border-radius: 14px; padding: 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.6);">
 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
 <div style="flex: 1;">
-<h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">{orden.get('mo_name', orden.get('nombre', 'N/A'))}</h3>
+<h3 style="margin: 0 0 8px 0; font-size: 1.2em; color: #ffffff; font-weight: 700;">{nombre_clickeable}</h3>
 <p style="margin: 0; color: #a0a0b0; font-size: 0.95em;">🏭 <strong style="color: #e0e0e0;">{orden.get('tunel', 'N/A')}</strong> | 📦 {orden.get('producto_nombre', orden.get('producto', 'N/A'))}</p>
 </div>
 <span style="background: {color_badge_bg}; color: {color_badge_text}; padding: 8px 16px; border-radius: 24px; font-size: 0.7em; font-weight: 800; white-space: nowrap; margin-left: 16px; letter-spacing: 1px;">{estado_label}</span>

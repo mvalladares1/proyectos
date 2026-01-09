@@ -268,6 +268,8 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                             'componentes_count': result.get('componentes_count'),
                             'subproductos_count': result.get('subproductos_count'),
                             'advertencias': result.get('advertencias', []),
+                            'validation_warnings': result.get('validation_warnings', []),
+                            'validation_errors': result.get('validation_errors', []),
                             'has_pending': result.get('has_pending', False),
                             'pending_count': result.get('pending_count', 0)
                         }
