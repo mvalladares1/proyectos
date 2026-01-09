@@ -11,7 +11,9 @@ import urllib3
 # Deshabilitar warnings de SSL para certificados autofirmados
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+# Forzar lectura de API_URL desde environment
+API_URL = os.environ.get("API_URL") or os.getenv("API_URL", "http://127.0.0.1:8000")
+st.write(f"🔍 API_URL configurada: {API_URL}")  # Debug temporal
 
 # --------------------- CSS Global ---------------------
 
