@@ -521,31 +521,34 @@ class TunelesService:
             pending_json = mo_data.get('x_studio_pending_receptions')
             pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
             
-            pending_data['pending'] = False
-            pending_data['completed_at'] = datetime.now().isoformat()
-            pending_data['completed_by'] = 'automatizaciones_validacion'
+            # OPTIMIZACIÓN: Limpiar JSON manteniendo solo datos esenciales
+            # Eliminar: pallets individuales, historial largo, validation_warnings/errors
+            cleaned_data = {
+                'pending': False,
+                'completed_at': datetime.now().isoformat(),
+                'completed_by': 'automatizaciones_validacion',
+                'pallets_count': len(detalle.get('pallets', [])),
+                'created_at': pending_data.get('created_at'),  # Mantener fecha de creación
+                'historial_revisiones': [
+                    {
+                        'timestamp': datetime.now().isoformat(),
+                        'accion': 'completar_pendientes',
+                        'total_pallets': len(detalle.get('pallets', [])),
+                        'mensaje': 'Todos los pallets agregados correctamente - JSON limpiado para optimización'
+                    }
+                ]
+            }
             
-            # Agregar al historial
-            if 'historial_revisiones' not in pending_data:
-                pending_data['historial_revisiones'] = []
-            
-            pending_data['historial_revisiones'].append({
-                'timestamp': datetime.now().isoformat(),
-                'accion': 'completar_pendientes',
-                'total_pallets': len(detalle.get('pallets', [])),
-                'mensaje': 'Todos los pallets agregados correctamente'
-            })
-            
-            # Guardar JSON actualizado
+            # Guardar JSON limpio y optimizado
             self.odoo.execute('mrp.production', 'write', [mo_id], {
-                'x_studio_pending_receptions': json.dumps(pending_data)
+                'x_studio_pending_receptions': json.dumps(cleaned_data)
             })
             
             return {
                 'success': True,
                 'mo_id': mo_id,
                 'mo_name': mo_data['name'],
-                'mensaje': f"Completados {len(detalle.get('pallets', []))} pendientes correctamente"
+                'mensaje': f"Completados {len(detalle.get('pallets', []))} pendientes - JSON optimizado"
             }
             
         except Exception as e:
