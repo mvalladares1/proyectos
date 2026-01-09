@@ -255,11 +255,14 @@ def _render_pendientes(orden, username, password):
                             st.cache_data.clear()
                             st.rerun()
                         elif resp:
-                            error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
-                            st.error(f"❌ {error_data.get('detail', resp.text)}")
-                            st.rerun()
-                        elif resp:
-                            st.error(f"Error: {resp.text}")
+                            try:
+                                error_data = resp.json()
+                                error_msg = error_data.get('detail', error_data.get('error', resp.text))
+                            except:
+                                error_msg = resp.text
+                            st.error(f"❌ {error_msg}")
+                        else:
+                            st.error("❌ No se pudo conectar con el servidor")
             
             # Links a Odoo
             pendientes_lista = [p for p in pallets if p['estado'] == 'pendiente']
