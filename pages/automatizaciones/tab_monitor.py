@@ -155,12 +155,13 @@ def _render_pendientes(orden, username, password):
                 if detalle_key in st.session_state:
                     del st.session_state[detalle_key]
                 
-                detalle = get_pendientes_orden(username, password, orden_id)
-                if detalle:
-                    st.session_state[detalle_key] = detalle
-                    st.rerun()
-                else:
-                    st.error("⚠️ Error al obtener datos del servidor. Verifica la conexión.")
+                with st.spinner("Consultando datos del servidor..."):
+                    detalle = get_pendientes_orden(username, password, orden_id)
+                    if detalle:
+                        st.session_state[detalle_key] = detalle
+                        # NO hacer rerun aquí, dejar que se muestre el mensaje de debug
+                    else:
+                        st.error("⚠️ Error al obtener datos del servidor. Verifica la conexión.")
         
         if detalle_key in st.session_state:
             detalle = st.session_state[detalle_key]
