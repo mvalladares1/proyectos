@@ -145,12 +145,6 @@ def _render_pendientes(orden, username, password):
                     st.rerun()
                 elif resp:
                     st.error(f"Error: {resp.text}")
-        else:
-            if st.button("🔄 Validar Stock", key=f"quick_validar_{orden_id}", type="secondary", use_container_width=True):
-                detalle = get_pendientes_orden(username, password, orden_id)
-                if detalle:
-                    st.session_state[detalle_key] = detalle
-                    st.rerun()
 
     with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
         col_btn1, col_btn2, col_btn3 = st.columns(3)
