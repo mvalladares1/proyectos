@@ -6,7 +6,7 @@ import streamlit as st
 import requests
 
 from .shared import (
-    API_URL, get_tuneles, validar_pallets, crear_orden
+    API_URL, get_tuneles, validar_pallets, crear_orden, validar_duplicados
 )
 
 
