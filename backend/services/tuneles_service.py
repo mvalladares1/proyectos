@@ -1027,6 +1027,21 @@ class TunelesService:
                 
                 self.odoo.execute('stock.move.line', 'create', move_line_data)
 
+                # --- LIMPIAR LÍNEAS ANTIGUAS CON kg=0 DEL COMPONENTE ---
+                # Buscar líneas del mismo move con qty_done=0 y package_id
+                lineas_vacias = self.odoo.search_read(
+                    'stock.move.line',
+                    [
+                        ('move_id', '=', move_id),
+                        ('qty_done', '=', 0),
+                        ('package_id', '!=', False)
+                    ],
+                    ['id']
+                )
+                if lineas_vacias:
+                    ids_a_borrar = [l['id'] for l in lineas_vacias]
+                    self.odoo.execute('stock.move.line', 'unlink', ids_a_borrar)
+
                 # --- NUEVO: También crear la línea de SUBPRODUCTO (-C) ---
                 # Ya que también se saltó al crear la MO
                 try:
@@ -1057,8 +1072,18 @@ class TunelesService:
                         move_out_id = moves_out[0]['id']
                         
                         # Generar nombres para lote y package -C
-                        # Prioridad: usar lote de origen si existe
-                        lote_name_out = f"{pallet.get('lote_nombre') or pallet.get('codigo') or codigo}-C"
+                        # CORRECCIÓN: Obtener el lote REAL del quant, no usar el código del pallet
+                        lote_nombre_real = quant_info.get('lot_id', [None, None])[1] if quant_info.get('lot_id') else None
+                        
+                        if lote_nombre_real:
+                            # Si el lote ya tiene -C, no duplicar
+                            if lote_nombre_real.endswith('-C'):
+                                lote_name_out = lote_nombre_real
+                            else:
+                                lote_name_out = f"{lote_nombre_real}-C"
+                        else:
+                            # Fallback: usar código del pallet
+                            lote_name_out = f"{codigo}-C"
                         
                         # Limpiar nombre del pallet para el sufijo -C
                         clean_code = codigo[4:] if codigo.startswith('PACK') else codigo[3:] if codigo.startswith('PAC') else codigo
@@ -1071,6 +1096,20 @@ class TunelesService:
                             package_id_out = pkgs_out[0]
                         else:
                             package_id_out = self.odoo.execute('stock.quant.package', 'create', {'name': package_name_out, 'company_id': 1})
+                        
+                        # --- LIMPIAR LÍNEAS ANTIGUAS CON kg=0 DEL SUBPRODUCTO ---
+                        lineas_vacias_out = self.odoo.search_read(
+                            'stock.move.line',
+                            [
+                                ('move_id', '=', move_out_id),
+                                ('qty_done', '=', 0),
+                                ('result_package_id', '!=', False)
+                            ],
+                            ['id']
+                        )
+                        if lineas_vacias_out:
+                            ids_a_borrar_out = [l['id'] for l in lineas_vacias_out]
+                            self.odoo.execute('stock.move.line', 'unlink', ids_a_borrar_out)
                         
                         # Crear la línea de subproducto (stock.move.line)
                         subprod_line = {
