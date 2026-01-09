@@ -172,105 +172,105 @@ def _render_pendientes(orden, username, password):
                 """)
             
             pallets = detalle.get('pallets', [])
-                if pallets:
-                    st.markdown("##### 📦 Pallets Pendientes")
-                    df_pallets = pd.DataFrame([
+            if pallets:
+                st.markdown("##### 📦 Pallets Pendientes")
+                df_pallets = pd.DataFrame([
+                    {
+                        'Código': p['codigo'],
+                        'Kg': f"{p['kg']:,.2f}",
+                        'Estado': p['estado_label'],
+                        'Cambios': '🆕 Disponible!' if p.get('nuevo_disponible') else ('📊 Cambio' if p.get('cambio_detectado') else ''),
+                        'Recepción': p.get('picking_name', 'N/A')
+                    }
+                    for p in pallets
+                ])
+                st.dataframe(df_pallets, use_container_width=True, hide_index=True)
+            
+            electricidad_total = detalle.get('electricidad_total', 0)
+            if electricidad_total > 0:
+                st.markdown(f"##### ⚡ Electricidad: **${electricidad_total:,.2f}**")
+            
+            componentes = detalle.get('componentes', [])
+            if componentes:
+                st.markdown("##### 🔵 Componentes (Entrada)")
+                comp_no_elec = [c for c in componentes if not c.get('es_electricidad')]
+                comp_elec = [c for c in componentes if c.get('es_electricidad')]
+                
+                if comp_no_elec:
+                    df_comp = pd.DataFrame([
                         {
-                            'Código': p['codigo'],
-                            'Kg': f"{p['kg']:,.2f}",
-                            'Estado': p['estado_label'],
-                            'Cambios': '🆕 Disponible!' if p.get('nuevo_disponible') else ('📊 Cambio' if p.get('cambio_detectado') else ''),
-                            'Recepción': p.get('picking_name', 'N/A')
+                            'Producto': c['producto'][:40],
+                            'Lote': c['lote'],
+                            'Pallet': c['pallet'],
+                            'Kg': f"{c['kg']:,.2f}"
                         }
-                        for p in pallets
+                        for c in comp_no_elec
                     ])
-                    st.dataframe(df_pallets, use_container_width=True, hide_index=True)
+                    st.dataframe(df_comp, use_container_width=True, hide_index=True)
                 
-                electricidad_total = detalle.get('electricidad_total', 0)
-                if electricidad_total > 0:
-                    st.markdown(f"##### ⚡ Electricidad: **${electricidad_total:,.2f}**")
+                if comp_elec:
+                    st.caption(f"⚡ Electricidad: {len(comp_elec)} registro(s)")
+            
+            subproductos = detalle.get('subproductos', [])
+            if subproductos:
+                st.markdown("##### 🟢 Subproductos (Salida)")
+                df_sub = pd.DataFrame([
+                    {
+                        'Producto': s['producto'][:40],
+                        'Lote': s['lote'],
+                        'Pallet': s['pallet'],
+                        'Kg': f"{s['kg']:,.2f}"
+                    }
+                    for s in subproductos
+                ])
+                st.dataframe(df_sub, use_container_width=True, hide_index=True)
+            
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                if detalle.get('hay_disponibles_sin_agregar') or disponibles > 0:
+                    if st.button("✅ Agregar Disponibles", key=f"agregar_{orden_id}", type="primary"):
+                        resp = agregar_disponibles(username, password, orden_id)
+                        if resp and resp.status_code == 200:
+                            result = resp.json()
+                            st.success(f"✅ {result.get('mensaje')}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        elif resp:
+                            error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
+                            st.error(f"❌ Error: {error_data.get('detail', resp.text)}")
+            
+            with col_b:
+                # Validación mejorada para completar pendientes
+                pallets_sin_agregar = [p for p in pallets if p['estado'] in ['pendiente', 'disponible']]
                 
-                componentes = detalle.get('componentes', [])
-                if componentes:
-                    st.markdown("##### 🔵 Componentes (Entrada)")
-                    comp_no_elec = [c for c in componentes if not c.get('es_electricidad')]
-                    comp_elec = [c for c in componentes if c.get('es_electricidad')]
-                    
-                    if comp_no_elec:
-                        df_comp = pd.DataFrame([
-                            {
-                                'Producto': c['producto'][:40],
-                                'Lote': c['lote'],
-                                'Pallet': c['pallet'],
-                                'Kg': f"{c['kg']:,.2f}"
-                            }
-                            for c in comp_no_elec
-                        ])
-                        st.dataframe(df_comp, use_container_width=True, hide_index=True)
-                    
-                    if comp_elec:
-                        st.caption(f"⚡ Electricidad: {len(comp_elec)} registro(s)")
-                
-                subproductos = detalle.get('subproductos', [])
-                if subproductos:
-                    st.markdown("##### 🟢 Subproductos (Salida)")
-                    df_sub = pd.DataFrame([
-                        {
-                            'Producto': s['producto'][:40],
-                            'Lote': s['lote'],
-                            'Pallet': s['pallet'],
-                            'Kg': f"{s['kg']:,.2f}"
-                        }
-                        for s in subproductos
-                    ])
-                    st.dataframe(df_sub, use_container_width=True, hide_index=True)
-                
-                col_a, col_b = st.columns(2)
-                
-                with col_a:
-                    if detalle.get('hay_disponibles_sin_agregar') or disponibles > 0:
-                        if st.button("✅ Agregar Disponibles", key=f"agregar_{orden_id}", type="primary"):
-                            resp = agregar_disponibles(username, password, orden_id)
-                            if resp and resp.status_code == 200:
-                                result = resp.json()
-                                st.success(f"✅ {result.get('mensaje')}")
-                                st.cache_data.clear()
-                                st.rerun()
-                            elif resp:
-                                error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
-                                st.error(f"❌ Error: {error_data.get('detail', resp.text)}")
-                
-                with col_b:
-                    # Validación mejorada para completar pendientes
-                    pallets_sin_agregar = [p for p in pallets if p['estado'] in ['pendiente', 'disponible']]
-                    
-                    if pallets_sin_agregar:
-                        st.warning(f"⚠️ Aún quedan {len(pallets_sin_agregar)} pallet(s) sin agregar")
-                    elif detalle.get('todos_listos') or (pendientes == 0 and disponibles == 0):
-                        if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}", type="secondary"):
-                            resp = completar_pendientes(username, password, orden_id)
-                            if resp and resp.status_code == 200:
-                                result = resp.json()
-                                st.success(f"✅ {result.get('mensaje', 'Pendientes completados!')}")
-                                st.cache_data.clear()
-                                st.rerun()
-                            elif resp:
-                                error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
-                                st.error(f"❌ {error_data.get('detail', resp.text)}")
-                                st.rerun()
-                            elif resp:
-                                st.error(f"Error: {resp.text}")
-                
-                # Links a Odoo
-                pendientes_lista = [p for p in pallets if p['estado'] == 'pendiente']
-                if pendientes_lista:
-                    picking_ids = list(set(p.get('picking_id') for p in pendientes_lista if p.get('picking_id')))
-                    if picking_ids:
-                        st.markdown("**📋 Recepciones pendientes de aprobar:**")
-                        for pid in picking_ids:
-                            picking_name = next((p['picking_name'] for p in pendientes_lista if p.get('picking_id') == pid), f"Picking {pid}")
-                            odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={pid}&model=stock.picking&view_type=form"
-                            st.markdown(f"- [{picking_name}]({odoo_url}) ← Click para aprobar en Odoo")
+                if pallets_sin_agregar:
+                    st.warning(f"⚠️ Aún quedan {len(pallets_sin_agregar)} pallet(s) sin agregar")
+                elif detalle.get('todos_listos') or (pendientes == 0 and disponibles == 0):
+                    if st.button("☑️ Completar Pendientes", key=f"completar_{orden_id}", type="secondary"):
+                        resp = completar_pendientes(username, password, orden_id)
+                        if resp and resp.status_code == 200:
+                            result = resp.json()
+                            st.success(f"✅ {result.get('mensaje', 'Pendientes completados!')}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        elif resp:
+                            error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
+                            st.error(f"❌ {error_data.get('detail', resp.text)}")
+                            st.rerun()
+                        elif resp:
+                            st.error(f"Error: {resp.text}")
+            
+            # Links a Odoo
+            pendientes_lista = [p for p in pallets if p['estado'] == 'pendiente']
+            if pendientes_lista:
+                picking_ids = list(set(p.get('picking_id') for p in pendientes_lista if p.get('picking_id')))
+                if picking_ids:
+                    st.markdown("**📋 Recepciones pendientes de aprobar:**")
+                    for pid in picking_ids:
+                        picking_name = next((p['picking_name'] for p in pendientes_lista if p.get('picking_id') == pid), f"Picking {pid}")
+                        odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={pid}&model=stock.picking&view_type=form"
+                        st.markdown(f"- [{picking_name}]({odoo_url}) ← Click para aprobar en Odoo")
             else:
                 st.error(detalle.get('error', 'Error desconocido'))
         else:
