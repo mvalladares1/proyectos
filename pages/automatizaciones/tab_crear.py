@@ -243,6 +243,11 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
         st.session_state.creando_orden = False
     
     with col2:
+        # Verificar duplicados ANTES de presionar el botón de crear
+        # Mostramos el modal si hay duplicados pendientes de confirmar
+        if st.session_state.get('pending_duplicados'):
+            show_duplicate_dialog(st.session_state.pending_duplicados)
+            
         if st.button(
             "✅ Crear Orden de Fabricación", 
             use_container_width=True, 
@@ -254,6 +259,17 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
             if pallets_sin_kg:
                 st.error(f"❌ {len(pallets_sin_kg)} pallets sin cantidad. Ingresa los Kg manualmente.")
             else:
+                # Verificar duplicados ANTES de crear
+                if not st.session_state.get('confirmado_duplicados'):
+                    duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
+                    if duplicados:
+                        # Guardar duplicados y mostrar modal en siguiente render
+                        st.session_state.pending_duplicados = duplicados
+                        st.rerun()
+                
+                # Si llegamos aquí, no hay duplicados o ya se confirmaron
+                st.session_state.pending_duplicados = None
+                st.session_state.confirmado_duplicados = False
                 st.session_state.creando_orden = True
                 
                 with st.spinner("Creando orden de fabricación..."):
@@ -272,21 +288,6 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                             pallet_data['producto_id'] = p.get('producto_id')
                         
                         pallets_payload.append(pallet_data)
-                    
-                    
-                    # 0. Verificar duplicados (Modal Flow)
-                    # Si ya se confirmó, procedemos. Si no, verificamos y mostramos dialog.
-                    if not st.session_state.get('confirmado_duplicados'):
-                        duplicados = validar_duplicados(username, password, [p['codigo'] for p in st.session_state.pallets_list])
-                        if duplicados:
-                             show_duplicate_dialog(duplicados)
-                             st.session_state.creando_orden = False
-                             st.stop()
-                    
-                    # Si llegamos aquí, o no hubo duplicados o ya se confirmaron
-                    # Limpiamos flag para la próxima
-                    if st.session_state.get('confirmado_duplicados'):
-                        st.session_state.confirmado_duplicados = False
                         
                     response = crear_orden(username, password, selected_tunel, pallets_payload, buscar_ubicacion_auto)
                     

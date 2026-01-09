@@ -2154,12 +2154,14 @@ class TunelesService:
                      # Si no viene en el payload, intentamos buscarlo en Odoo usando el picking_id
                      if not lote_origen and pallet.get('picking_id'):
                          try:
-                             # Buscar move line en el picking para este pallet
+                             # Buscar move line en el picking para este pallet (puede ser package_id o result_package_id)
                              mls = self.odoo.search_read(
                                  'stock.move.line',
                                  [
                                      ('picking_id', '=', pallet['picking_id']),
-                                     ('package_id.name', '=', pallet['codigo'])
+                                     '|',
+                                     ('package_id.name', '=', pallet['codigo']),
+                                     ('result_package_id.name', '=', pallet['codigo'])
                                  ],
                                  ['lot_id'],
                                  limit=1
