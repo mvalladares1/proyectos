@@ -537,7 +537,7 @@ class TunelesService:
             })
             
             # Guardar JSON actualizado
-            self.odoo.write('mrp.production', [mo_id], {
+            self.odoo.execute('mrp.production', 'write', [mo_id], {
                 'x_studio_pending_receptions': json.dumps(pending_data)
             })
             
@@ -801,7 +801,7 @@ class TunelesService:
                 })
                 
                 # Actualizar JSON en Odoo
-                self.odoo.write('mrp.production', [mo_id], {
+                self.odoo.execute('mrp.production', 'write', [mo_id], {
                     'x_studio_pending_receptions': json.dumps(pending_data)
                 })
             
@@ -1041,7 +1041,7 @@ class TunelesService:
             })
             
             # Guardar JSON actualizado
-            self.odoo.write('mrp.production', [mo_id], {
+            self.odoo.execute('mrp.production', 'write', [mo_id], {
                 'x_studio_pending_receptions': json.dumps(pending_data)
             })
             
