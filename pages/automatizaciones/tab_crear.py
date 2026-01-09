@@ -69,6 +69,33 @@ def render(username: str, password: str):
     
     st.divider()
     
+    # ✅ MOSTRAR RESULTADO DE ORDEN CREADA
+    if st.session_state.get('last_order_result'):
+        result = st.session_state.last_order_result
+        if result.get('success'):
+            st.success(f"✅ **{result.get('mensaje', 'Orden creada exitosamente')}**")
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Orden", result.get('mo_name', 'N/A'))
+            col2.metric("Total Kg", f"{result.get('total_kg', 0):,.2f}")
+            col3.metric("Pallets", result.get('pallets_count', 0))
+            
+            if result.get('has_pending'):
+                st.warning(f"⚠️ {result.get('pending_count', 0)} pallets pendientes de recepción")
+            
+            for adv in result.get('advertencias', []):
+                st.warning(adv)
+            
+            for adv in result.get('validation_warnings', []):
+                st.warning(adv)
+            
+            # Botón para cerrar mensaje
+            if st.button("✓ Entendido", key="btn_close_result"):
+                st.session_state.last_order_result = None
+                st.rerun()
+            
+            st.divider()
+    
     # Lista de pallets agregados
     st.subheader("3️⃣ Pallets a Procesar")
     
