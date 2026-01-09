@@ -151,10 +151,16 @@ def _render_pendientes(orden, username, password):
         
         with col_btn1:
             if st.button("🔄 Validar Disponibilidad", key=f"validar_{orden_id}"):
+                # Forzar limpieza del cache antes de consultar
+                if detalle_key in st.session_state:
+                    del st.session_state[detalle_key]
+                
                 detalle = get_pendientes_orden(username, password, orden_id)
                 if detalle:
                     st.session_state[detalle_key] = detalle
                     st.rerun()
+                else:
+                    st.error("⚠️ Error al obtener datos del servidor. Verifica la conexión.")
         
         if detalle_key in st.session_state:
             detalle = st.session_state[detalle_key]
