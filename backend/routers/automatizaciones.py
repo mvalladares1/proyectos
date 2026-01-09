@@ -292,7 +292,8 @@ async def obtener_orden_detalle(
 @router.get("/tuneles-estaticos/ordenes/{orden_id}/pendientes")
 async def obtener_detalle_pendientes(
     orden_id: int,
-    odoo: OdooClient = Depends(get_odoo_client),
+    username: str,
+    password: str,
 ):
     """
     Obtiene el detalle de los pallets pendientes de una MO,
@@ -302,6 +303,7 @@ async def obtener_detalle_pendientes(
         Dict con: mo_name, pallets (con estado cada uno), resumen
     """
     try:
+        odoo = get_odoo_client(username=username, password=password)
         service = get_tuneles_service(odoo)
         resultado = service.obtener_detalle_pendientes(orden_id)
         
@@ -318,7 +320,8 @@ async def obtener_detalle_pendientes(
 @router.post("/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles")
 async def agregar_componentes_disponibles(
     orden_id: int,
-    odoo: OdooClient = Depends(get_odoo_client),
+    username: str,
+    password: str,
 ):
     """
     Agrega como componentes los pallets que ahora están disponibles.
@@ -327,6 +330,7 @@ async def agregar_componentes_disponibles(
         Dict con: success, agregados (cantidad), pendientes_restantes
     """
     try:
+        odoo = get_odoo_client(username=username, password=password)
         service = get_tuneles_service(odoo)
         resultado = service.agregar_componentes_disponibles(orden_id)
         
@@ -343,7 +347,8 @@ async def agregar_componentes_disponibles(
 @router.post("/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes")
 async def completar_pendientes(
     orden_id: int,
-    odoo: OdooClient = Depends(get_odoo_client),
+    username: str,
+    password: str,
 ):
     """
     Completa los pendientes de una MO cuando todas las recepciones están validadas.
@@ -353,6 +358,7 @@ async def completar_pendientes(
         Dict con: success, mensaje
     """
     try:
+        odoo = get_odoo_client(username=username, password=password)
         service = get_tuneles_service(odoo)
         resultado = service.completar_pendientes(orden_id)
         
