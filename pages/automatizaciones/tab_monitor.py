@@ -207,18 +207,9 @@ def _render_pendientes(orden, username, password):
             if pallets:
                 st.markdown("##### 📦 Pallets Pendientes")
                 for p in pallets:
-                    col_info, col_link = st.columns([4, 1])
-                    with col_info:
-                        estado_emoji = '🟢' if p['estado_label'] == 'Disponible' else '🟠'
-                        cambio = '🆕' if p.get('nuevo_disponible') else ('📊' if p.get('cambio_detectado') else '')
-                        st.markdown(f"{estado_emoji} **{p['codigo']}** - {p['kg']:,.2f} Kg | {p['estado_label']} {cambio}")
-                    
-                    with col_link:
-                        if p.get('picking_id'):
-                            picking_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={p['picking_id']}&menu_id=243&cids=1&action=396&model=stock.picking&view_type=form"
-                            st.markdown(f"[🔗 Recepción]({picking_url})", unsafe_allow_html=True)
-                        else:
-                            st.caption(p.get('picking_name', 'N/A'))
+                    estado_emoji = '🟢' if p['estado_label'] == 'Disponible' else '🟠'
+                    cambio = '🆕' if p.get('nuevo_disponible') else ('📊' if p.get('cambio_detectado') else '')
+                    st.markdown(f"{estado_emoji} **{p['codigo']}** - {p['kg']:,.2f} Kg | {p['estado_label']} {cambio}")
             
             electricidad_total = detalle.get('electricidad_total', 0)
             if electricidad_total > 0:
