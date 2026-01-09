@@ -247,14 +247,32 @@ def completar_pendientes(username, password, orden_id):
 def reset_estado_pendientes(username, password, orden_id):
     """SOLO DEBUG: Resetea el estado de pendientes para forzar re-validación."""
     try:
+        url = f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/reset-pendientes"
+        st.write(f"🔍 DEBUG: Llamando a {url}")
+        st.write(f"🔍 DEBUG: Usuario: {username[:20]}...")
+        
         resp = requests.post(
-            f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/reset-pendientes",
+            url,
             params={"username": username, "password": password},
-            verify=False
+            verify=False,
+            timeout=10
         )
+        
+        st.write(f"🔍 DEBUG: Status code: {resp.status_code}")
+        st.write(f"🔍 DEBUG: Response: {resp.text[:200]}")
+        
         return resp
+    except requests.exceptions.SSLError as e:
+        st.error(f"❌ Error SSL en reset: {str(e)[:200]}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        st.error(f"❌ Error de conexión en reset: {str(e)[:200]}")
+        return None
+    except requests.exceptions.Timeout:
+        st.error(f"❌ Timeout en reset")
+        return None
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"❌ Error inesperado en reset: {type(e).__name__} - {str(e)[:200]}")
         return None
 
 
