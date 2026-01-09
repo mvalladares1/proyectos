@@ -338,8 +338,7 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                         st.session_state.pallets_list = []
                         st.session_state.creando_orden = False
                         st.balloons()
-                        # NO hacer rerun aqui - dejar que el mensaje se muestre en el proximo render
-                        # st.rerun() - COMENTADO para probar
+                        st.rerun()
                     elif response:
                         error_detail = response.json().get('detail', 'Error desconocido')
                         st.error(f"❌ Error al crear orden: {error_detail}")
