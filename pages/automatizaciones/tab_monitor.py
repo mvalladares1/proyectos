@@ -8,7 +8,7 @@ import requests
 
 from .shared import (
     API_URL, get_tuneles, get_ordenes, get_pendientes_orden,
-    agregar_disponibles, completar_pendientes,
+    agregar_disponibles, completar_pendientes, reset_estado_pendientes,
     format_fecha, get_estado_visual
 )
 
@@ -139,6 +139,20 @@ def _render_pendientes(orden, username, password):
         pass
 
     with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
+        # Botón de debug para resetear estado (solo visible durante desarrollo)
+        if st.button("🔄 RESET Estado (DEBUG)", key=f"reset_{orden_id}", help="Resetea los timestamps de agregado para re-validar"):
+            resp = reset_estado_pendientes(username, password, orden_id)
+            if resp and resp.status_code == 200:
+                result = resp.json()
+                st.success(f"✅ {result.get('mensaje')}")
+                st.rerun()
+            elif resp:
+                try:
+                    error_data = resp.json()
+                    st.error(f"❌ {error_data.get('detail', resp.text)}")
+                except:
+                    st.error(f"❌ {resp.text}")
+        
         # Siempre cargar datos frescos al abrir el expander
         with st.spinner("Cargando datos..."):
             detalle = get_pendientes_orden(username, password, orden_id)

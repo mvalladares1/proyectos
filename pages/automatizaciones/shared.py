@@ -244,6 +244,20 @@ def completar_pendientes(username, password, orden_id):
         return None
 
 
+def reset_estado_pendientes(username, password, orden_id):
+    """SOLO DEBUG: Resetea el estado de pendientes para forzar re-validación."""
+    try:
+        resp = requests.post(
+            f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/reset-pendientes",
+            params={"username": username, "password": password},
+            verify=False
+        )
+        return resp
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
+
+
 # --------------------- Funciones de formato ---------------------
 
 def format_fecha(fecha_str):

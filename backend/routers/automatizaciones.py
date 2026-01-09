@@ -344,6 +344,34 @@ async def agregar_componentes_disponibles(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/tuneles-estaticos/ordenes/{orden_id}/reset-pendientes")
+async def reset_pendientes(
+    orden_id: int,
+    username: str,
+    password: str,
+):
+    """
+    SOLO PARA DEBUG: Resetea el estado de los pallets pendientes,
+    eliminando todos los timestamps de agregado para forzar re-validación.
+    
+    Returns:
+        Dict con: success, mensaje
+    """
+    try:
+        odoo = get_odoo_client(username=username, password=password)
+        service = get_tuneles_service(odoo)
+        resultado = service.reset_estado_pendientes(orden_id)
+        
+        if not resultado.get('success'):
+            raise HTTPException(status_code=400, detail=resultado.get('error'))
+        
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes")
 async def completar_pendientes(
     orden_id: int,

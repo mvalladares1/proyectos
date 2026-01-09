@@ -556,6 +556,74 @@ class TunelesService:
                 'traceback': traceback.format_exc()
             }
     
+    def reset_estado_pendientes(self, mo_id: int) -> Dict:
+        """
+        SOLO PARA DEBUG: Resetea el estado de todos los pallets pendientes,
+        eliminando timestamps de agregado para forzar re-validación.
+        
+        Args:
+            mo_id: ID de la orden de fabricación
+            
+        Returns:
+            Dict con: success, mensaje
+        """
+        try:
+            import json
+            
+            # Leer el JSON actual
+            mo_data = self.odoo.read('mrp.production', [mo_id], ['x_studio_pending_receptions', 'name'])[0]
+            pending_json = mo_data.get('x_studio_pending_receptions')
+            
+            if not pending_json:
+                return {
+                    'success': False,
+                    'error': 'Esta orden no tiene JSON de pendientes'
+                }
+            
+            pending_data = json.loads(pending_json) if isinstance(pending_json, str) else pending_json
+            
+            # Resetear timestamps de todos los pallets
+            pallets_reseteados = 0
+            for pallet in pending_data.get('pallets', []):
+                if 'timestamp_agregado' in pallet:
+                    del pallet['timestamp_agregado']
+                    pallets_reseteados += 1
+                # Resetear estado a pendiente para forzar re-evaluación
+                pallet['estado_ultima_revision'] = 'pendiente'
+                pallet['timestamp_ultima_revision'] = datetime.now().isoformat()
+            
+            # Agregar al historial
+            if 'historial_revisiones' not in pending_data:
+                pending_data['historial_revisiones'] = []
+            
+            pending_data['historial_revisiones'].append({
+                'timestamp': datetime.now().isoformat(),
+                'accion': 'reset_estado',
+                'pallets_reseteados': pallets_reseteados,
+                'mensaje': 'Reset manual para re-validación'
+            })
+            
+            # Guardar JSON actualizado
+            self.odoo.execute('mrp.production', 'write', [mo_id], {
+                'x_studio_pending_receptions': json.dumps(pending_data)
+            })
+            
+            return {
+                'success': True,
+                'mo_id': mo_id,
+                'mo_name': mo_data['name'],
+                'pallets_reseteados': pallets_reseteados,
+                'mensaje': f'Estado reseteado: {pallets_reseteados} pallet(s) listos para re-validación'
+            }
+            
+        except Exception as e:
+            import traceback
+            return {
+                'success': False,
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
+    
     def obtener_detalle_pendientes(self, mo_id: int) -> Dict:
         """
         Obtiene el detalle de los pallets pendientes de una MO,
