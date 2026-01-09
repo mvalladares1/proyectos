@@ -6,6 +6,10 @@ import streamlit as st
 import requests
 import os
 from datetime import datetime
+import urllib3
+
+# Deshabilitar warnings de SSL para certificados autofirmados
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
@@ -180,11 +184,13 @@ def get_ordenes(username, password, tunel=None, estado=None, limit=50):
 def get_pendientes_orden(username, password, orden_id):
     """Obtiene los pendientes de una orden específica."""
     try:
+        url = f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes"
         resp = requests.get(
-            f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/pendientes",
+            url,
             params={"username": username, "password": password},
             headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
-            timeout=10
+            timeout=10,
+            verify=False  # Ignorar verificación SSL para certificados autofirmados
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -195,10 +201,19 @@ def get_pendientes_orden(username, password, orden_id):
             return data
         else:
             st.error(f"Error HTTP {resp.status_code}: {resp.text[:200]}")
-            return None
+            return {'success': False, 'error': f"HTTP {resp.status_code}"}
+    except requests.exceptions.SSLError as e:
+        st.error(f"❌ Error SSL: {str(e)[:200]}")
+        return {'success': False, 'error': f"SSL Error: {str(e)}"}
+    except requests.exceptions.ConnectionError as e:
+        st.error(f"❌ Error de conexión a {API_URL}: {str(e)[:200]}")
+        return {'success': False, 'error': f"Connection error: {str(e)}"}
+    except requests.exceptions.Timeout:
+        st.error(f"❌ Timeout conectando a {API_URL}")
+        return {'success': False, 'error': "Timeout"}
     except Exception as e:
-        st.error(f"Error al consultar: {e}")
-        return None
+        st.error(f"❌ Error inesperado: {type(e).__name__} - {str(e)[:200]}")
+        return {'success': False, 'error': str(e)}
 
 
 def agregar_disponibles(username, password, orden_id):
@@ -206,7 +221,8 @@ def agregar_disponibles(username, password, orden_id):
     try:
         resp = requests.post(
             f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/agregar-disponibles",
-            params={"username": username, "password": password}
+            params={"username": username, "password": password},
+            verify=False
         )
         return resp
     except Exception as e:
@@ -219,7 +235,8 @@ def completar_pendientes(username, password, orden_id):
     try:
         resp = requests.post(
             f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/completar-pendientes",
-            params={"username": username, "password": password}
+            params={"username": username, "password": password},
+            verify=False
         )
         return resp
     except Exception as e:
