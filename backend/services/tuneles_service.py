@@ -2078,7 +2078,13 @@ class TunelesService:
         movimientos_creados = 0
         ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
         
+        # DEBUG: Log TODOS los productos a procesar
+        print(f"DEBUG _crear_subproductos: productos_totales keys = {list(productos_totales.keys())}")
+        
         for producto_id_input, data in productos_totales.items():
+            # DEBUG: Log cada iteración
+            print(f"DEBUG _crear_subproductos: Procesando producto_id={producto_id_input}, pallets={len(data['pallets'])}, kg={data['kg']}")
+            
             # Obtener producto congelado (output) - DINÁMICO
             # La lógica es: código 10xxxxxx → 20xxxxxx (cambiar primer dígito de 1 a 2)
             producto_id_output = None
