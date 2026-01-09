@@ -2120,9 +2120,10 @@ class TunelesService:
             except Exception as e:
                 print(f"ERROR buscando producto congelado: {e}")
             
-            # Fallback: usar mapeo estático o mismo producto
+            # Fallback: usar mismo producto si no se encontró el congelado
             if not producto_id_output:
-                producto_id_output = PRODUCTOS_TRANSFORMACION.get(producto_id_input, producto_id_input)
+                producto_id_output = producto_id_input
+                print(f"DEBUG: Usando mismo producto como fallback: {producto_id_input}")
             
             # Crear stock.move principal
             move_data = {
