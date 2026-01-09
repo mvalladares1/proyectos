@@ -156,22 +156,22 @@ def _render_pendientes(orden, username, password):
             agregados = resumen.get('agregados', 0)
             disponibles = resumen.get('disponibles', 0)
             pendientes = resumen.get('pendientes', 0)
-                
-                if total > 0:
-                    progreso = (agregados / total * 100)
-                    st.progress(progreso / 100)
-                    st.markdown(f"""
-                    **Progreso:** {agregados}/{total} agregados ({progreso:.0f}%)  
-                    ✅ {agregados} agregados | 🟢 {disponibles} disponibles | 🟠 {pendientes} pendientes
-                    """)
-                else:
-                    st.markdown(f"""
-                    **Resumen:** ✅ {agregados} agregados | 
-                    🟢 {disponibles} disponibles | 
-                    🟠 {pendientes} pendientes
-                    """)
-                
-                pallets = detalle.get('pallets', [])
+            
+            if total > 0:
+                progreso = (agregados / total * 100)
+                st.progress(progreso / 100)
+                st.markdown(f"""
+                **Progreso:** {agregados}/{total} agregados ({progreso:.0f}%)  
+                ✅ {agregados} agregados | 🟢 {disponibles} disponibles | 🟠 {pendientes} pendientes
+                """)
+            else:
+                st.markdown(f"""
+                **Resumen:** ✅ {agregados} agregados | 
+                🟢 {disponibles} disponibles | 
+                🟠 {pendientes} pendientes
+                """)
+            
+            pallets = detalle.get('pallets', [])
                 if pallets:
                     st.markdown("##### 📦 Pallets Pendientes")
                     df_pallets = pd.DataFrame([
