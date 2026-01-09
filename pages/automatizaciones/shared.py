@@ -199,10 +199,6 @@ def get_pendientes_orden(username, password, orden_id):
         )
         if resp.status_code == 200:
             data = resp.json()
-            # Debug: mostrar resumen
-            if data.get('success'):
-                resumen = data.get('resumen', {})
-                st.info(f"📊 Datos del servidor - Agregados: {resumen.get('agregados')}, Disponibles: {resumen.get('disponibles')}, Pendientes: {resumen.get('pendientes')}")
             return data
         else:
             st.error(f"Error HTTP {resp.status_code}: {resp.text[:200]}")
@@ -252,20 +248,12 @@ def completar_pendientes(username, password, orden_id):
 def reset_estado_pendientes(username, password, orden_id):
     """SOLO DEBUG: Resetea el estado de pendientes para forzar re-validación."""
     try:
-        url = f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/reset-pendientes"
-        st.write(f"🔍 DEBUG: Llamando a {url}")
-        st.write(f"🔍 DEBUG: Usuario: {username[:20]}...")
-        
         resp = requests.post(
-            url,
+            f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/ordenes/{orden_id}/reset-pendientes",
             params={"username": username, "password": password},
             verify=False,
             timeout=10
         )
-        
-        st.write(f"🔍 DEBUG: Status code: {resp.status_code}")
-        st.write(f"🔍 DEBUG: Response: {resp.text[:200]}")
-        
         return resp
     except requests.exceptions.SSLError as e:
         st.error(f"❌ Error SSL en reset: {str(e)[:200]}")

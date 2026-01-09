@@ -5,6 +5,7 @@ Visualización y gestión de órdenes de túneles estáticos.
 import streamlit as st
 import pandas as pd
 import requests
+import os
 
 from .shared import (
     API_URL, get_tuneles, get_ordenes, get_pendientes_orden,
@@ -139,29 +140,30 @@ def _render_pendientes(orden, username, password):
         pass
 
     with st.expander(f"📋 Ver detalle de pendientes - {orden.get('nombre', 'N/A')}", expanded=False):
-        # Botón de debug para resetear estado (solo visible durante desarrollo)
-        col_reset, col_info = st.columns([1, 3])
-        with col_reset:
-            if st.button("🔄 RESET", key=f"reset_{orden_id}", help="Resetea los timestamps de agregado para re-validar", type="secondary"):
-                with st.spinner("Reseteando estado..."):
-                    resp = reset_estado_pendientes(username, password, orden_id)
-                    if resp and resp.status_code == 200:
-                        result = resp.json()
-                        st.success(f"✅ {result.get('mensaje')}")
-                        st.balloons()
-                        st.rerun()
-                    elif resp:
-                        try:
-                            error_data = resp.json()
-                            st.error(f"❌ Reset falló: {error_data.get('detail', resp.text)}")
-                        except:
-                            st.error(f"❌ Reset falló: HTTP {resp.status_code}")
-                    else:
-                        st.error("❌ No se pudo conectar al servidor para reset")
-        with col_info:
-            st.caption("🐛 DEBUG: Limpia los estados 'Ya agregado' para forzar re-validación")
-        
-        st.divider()
+        # Botón de debug para resetear estado (solo visible en desarrollo)
+        ENV = os.getenv("ENV", "prod")
+        if ENV == "development":
+            col_reset, col_info = st.columns([1, 3])
+            with col_reset:
+                if st.button("🔄 RESET", key=f"reset_{orden_id}", help="Resetea los timestamps de agregado para re-validar", type="secondary"):
+                    with st.spinner("Reseteando estado..."):
+                        resp = reset_estado_pendientes(username, password, orden_id)
+                        if resp and resp.status_code == 200:
+                            result = resp.json()
+                            st.success(f"✅ {result.get('mensaje')}")
+                            st.rerun()
+                        elif resp:
+                            try:
+                                error_data = resp.json()
+                                st.error(f"❌ Reset falló: {error_data.get('detail', resp.text)}")
+                            except:
+                                st.error(f"❌ Reset falló: HTTP {resp.status_code}")
+                        else:
+                            st.error("❌ No se pudo conectar al servidor para reset")
+            with col_info:
+                st.caption("🐛 DEBUG: Limpia los estados 'Ya agregado' para forzar re-validación")
+            
+            st.divider()
         
         # Siempre cargar datos frescos al abrir el expander
         with st.spinner("Cargando datos..."):
