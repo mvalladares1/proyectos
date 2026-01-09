@@ -274,7 +274,9 @@ def _render_pendientes(orden, username, password):
                         picking_name = next((p['picking_name'] for p in pendientes_lista if p.get('picking_id') == pid), f"Picking {pid}")
                         odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={pid}&model=stock.picking&view_type=form"
                         st.markdown(f"- [{picking_name}]({odoo_url}) ← Click para aprobar en Odoo")
-            else:
-                st.error(detalle.get('error', 'Error desconocido'))
         else:
-            st.info("👆 Click en 'Validar Disponibilidad' para ver el detalle de pallets")
+            # Error al cargar datos
+            error_msg = detalle.get('error', 'Error desconocido') if detalle else 'No se recibió respuesta del servidor'
+            st.error(f"❌ {error_msg}")
+            if detalle:
+                st.json(detalle)  # Mostrar respuesta completa para debug
