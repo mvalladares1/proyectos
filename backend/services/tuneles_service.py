@@ -2081,6 +2081,7 @@ class TunelesService:
         # DEBUG: Log TODOS los productos a procesar
         print(f"DEBUG _crear_subproductos: productos_totales keys = {list(productos_totales.keys())}")
         
+        for producto_id_input, data in productos_totales.items():
             # Asegurarse que producto_id_input sea entero
             if not producto_id_input:
                 continue
