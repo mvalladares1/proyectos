@@ -710,9 +710,11 @@ class TunelesService:
                 producto_id = p.get('producto_id')
                 picking_id = p.get('picking_id')
                 estado_anterior = p.get('estado_ultima_revision', 'pendiente')  # Estado guardado previamente
+                timestamp_agregado = p.get('timestamp_agregado')  # Verificar si fue marcado como agregado
                 
-                # Verificar si el pallet ya fue agregado como componente
-                ya_agregado = codigo in componentes_existentes
+                # Verificar si el pallet ya fue agregado (basado en el JSON, no en qty_done)
+                # Solo consideramos agregado si tiene timestamp_agregado en el JSON
+                ya_agregado = timestamp_agregado is not None
                 
                 # Verificar si tiene stock disponible
                 quants = self.odoo.search_read(
