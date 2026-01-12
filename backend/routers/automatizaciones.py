@@ -420,16 +420,13 @@ async def completar_pendientes(
 
 @router.get("/tuneles-estaticos/ubicacion-by-barcode")
 async def get_ubicacion_by_barcode(
-    username: str,
-    password: str,
-    barcode: str
+    barcode: str,
+    odoo: OdooClient = Depends(get_odoo_client),
 ):
     """
     Busca una ubicación (cámara) por su código de barras.
     """
     try:
-        odoo = get_odoo_client(username=username, password=password)
-        
         locations = odoo.search_read(
             "stock.location",
             [("barcode", "=", barcode), ("usage", "=", "internal")],
