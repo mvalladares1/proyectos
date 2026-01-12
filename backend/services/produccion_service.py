@@ -534,4 +534,3 @@ class ProduccionService:
             error_detail = traceback.format_exc()
             print(f"❌ ERROR en get_clasificacion_pallets: {error_detail}")
             raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}") 
-                                  fecha_inicio: str, 
