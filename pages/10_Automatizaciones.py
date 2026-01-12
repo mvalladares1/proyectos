@@ -133,7 +133,7 @@ with tab2:
 # =====================================================
 with tab3:
     if _perm_movimientos:
-        tab_movimientos.render(username, password, API_URL)
+        tab_movimientos.render()
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Movimientos'. Contacta al administrador.")
 
@@ -142,6 +142,6 @@ with tab3:
 # =====================================================
 with tab4:
     if _perm_movimientos:
-        tab_monitor_movimientos.render(username, password, API_URL)
+        tab_monitor_movimientos.render()
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor Movimientos'. Contacta al administrador.")
