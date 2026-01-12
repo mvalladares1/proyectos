@@ -405,16 +405,23 @@ class ProduccionService:
             # FILTRO DE SALA: Identificamos primero las órdenes de esa sala
             if sala_proceso and sala_proceso.strip() and sala_proceso != "Todas":
                 # Buscamos las órdenes (mrp.production) que tienen asignada esa sala
-                prod_ids_sala = self.odoo.search(
-                    'mrp.production', 
-                    [('x_studio_sala_de_proceso', '=', sala_proceso.strip())]
-                )
+                # Usamos ilike para mayor flexibilidad con acentos/keys
+                prod_search_domain = [('x_studio_sala_de_proceso', 'ilike', sala_proceso.strip())]
+                
+                # Optimización: Filtrar también producciones por fecha aproximada
+                # (Damos un margen de 2 días antes/después por seguridad)
+                fecha_inicio_margin = (datetime.strptime(fecha_inicio, "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
+                fecha_fin_margin = (datetime.strptime(fecha_fin, "%Y-%m-%d") + timedelta(days=2)).strftime("%Y-%m-%d")
+                
+                prod_search_domain.append('|')
+                prod_search_domain.append(('date_planned_start', '>=', fecha_inicio_margin))
+                prod_search_domain.append(('date_finished', '>=', fecha_inicio_margin))
+                
+                prod_ids_sala = self.odoo.search('mrp.production', prod_search_domain)
                 
                 if not prod_ids_sala:
-                    # Si no hay órdenes para esa sala, no hay nada que mostrar
                     return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
                 
-                # Ahora restringimos los movimientos de stock a esas órdenes específicas
                 domain_sml.append(('move_id.production_id', 'in', prod_ids_sala))
             
             # FILTRO DE PLANTA (A nivel de picking_type de la producción)

@@ -144,7 +144,8 @@ def render(username: str, password: str):
                     if response.status_code == 200:
                         data = response.json()
                         st.session_state.clasificacion_data = data
-                        st.success(f"✅ Datos cargados correctamente ({tipo_operacion_seleccionado})")
+                        count = len(data.get('detalle', []))
+                        st.success(f"✅ Se cargaron {count} pallets correctamente ({tipo_operacion_seleccionado})")
                     else:
                         st.error(f"❌ Error al obtener datos: {response.status_code} - {response.text}")
                         return
@@ -168,10 +169,15 @@ def render(username: str, password: str):
         if tipo_fruta_seleccionado != "Todas":
             detalle_raw = [d for d in detalle_raw if tipo_fruta_seleccionado.lower() in d.get('producto', '').lower()]
             
-        # 3. Filtrar por Sala de Proceso (dinámico usando clave técnica)
+        # 3. Filtrar por Sala de Proceso (dinámico usando clave técnica o nombre)
         if sala_proceso_seleccionada != "Todas":
             target_key = SALA_MAP_INTERNAL.get(sala_proceso_seleccionada)
-            detalle_raw = [d for d in detalle_raw if d.get('sala') == target_key]
+            detalle_raw = [
+                d for d in detalle_raw 
+                if d.get('sala') == sala_proceso_seleccionada or 
+                   d.get('sala') == target_key or
+                   (target_key and target_key.lower() in (d.get('sala') or '').lower())
+            ]
 
         # 4. Filtrar por Manejo
         tipo_manejo_val = tipo_manejo_seleccionado or "Todos"
