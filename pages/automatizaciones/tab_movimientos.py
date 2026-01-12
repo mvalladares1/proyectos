@@ -558,41 +558,52 @@ def _play_sound(sound_type: str):
 
 def _render_pallet_card(pallet: dict, index: int = 0):
     """Renderiza una tarjeta de pallet con badge de estado y FROM → TO"""
-    # Determinar clase CSS según estado
-    card_class = "pallet-card"
-    status_badge = ""
-    
+    # Determinar estado
     if pallet.get("status") == "pending_reception":
-        card_class = "pallet-card warning"
-        status_badge = '<span class="status-badge status-pending">📥 En Recepción</span>'
+        status_emoji = "📥"
+        status_text = "En Recepción"
+        border_color = "#FFC107"
     else:
-        status_badge = '<span class="status-badge status-ready">✓ Stock</span>'
+        status_emoji = "✅"
+        status_text = "Stock"
+        border_color = "#4CAF50"
     
     # Obtener destino de session_state
     destino_name = st.session_state.mov_camara.get('name', 'N/A') if st.session_state.mov_camara else 'N/A'
     
-    st.markdown(f"""
-    <div class="{card_class}">
-        <div class="pallet-card-header">
-            <span class="pallet-code">📦 {pallet['code']}</span>
-            <span class="pallet-kg">{fmt_numero(pallet['kg'], 1)} kg</span>
+    # Crear contenedor con borde
+    with st.container():
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, rgba(30,30,40,0.9), rgba(40,40,55,0.9));
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-left: 4px solid {border_color};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 1.2rem; font-weight: bold; color: #4FC3F7;">📦 {pallet['code']}</span>
+                <span style="font-size: 1.1rem; color: #81C784; font-weight: 600;">{fmt_numero(pallet['kg'], 1)} kg</span>
+            </div>
+            <div style="margin: 4px 0;">
+                <span style="background: {border_color}; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                    {status_emoji} {status_text}
+                </span>
+            </div>
+            <div style="font-size: 0.9rem; color: #aaa; margin-top: 8px;">
+                {pallet['producto'][:40]}{'...' if len(pallet['producto']) > 40 else ''}
+            </div>
+            <div style="background: rgba(33, 150, 243, 0.1); border-radius: 8px; padding: 8px; margin: 8px 0; border-left: 3px solid #2196F3;">
+                <div style="color: #FFA726; font-size: 0.85rem;">📍 Actual: {pallet['ubicacion']}</div>
+                <div style="color: #2196F3; font-size: 1.2rem; text-align: center; margin: 4px 0;">⬇️</div>
+                <div style="color: #66BB6A; font-size: 0.9rem; font-weight: 600;">🎯 Destino: {destino_name}</div>
+            </div>
+            <div style="font-size: 0.9rem; color: #aaa; margin-top: 4px;">
+                🏷️ {pallet['lote']}
+            </div>
         </div>
-        <div style="margin: 4px 0;">{status_badge}</div>
-        <div class="pallet-detail">
-            {pallet['producto'][:40]}{'...' if len(pallet['producto']) > 40 else ''}
-        </div>
-        
-        <div class="move-indicator">
-            <div class="location-from">📍 Actual: {pallet['ubicacion']}</div>
-            <div class="arrow-down">⬇️</div>
-            <div class="location-to">🎯 Destino: {destino_name}</div>
-        </div>
-        
-        <div class="pallet-detail">
-            🏷️ {pallet['lote']}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 
 def _ejecutar_movimiento(username: str, password: str, api_url: str):
@@ -663,24 +674,23 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
             if resp.status_code == 200:
                 result = resp.json()
                 
-                # Validar respuesta
-                valid, error_msg = _validate_api_response(result, ["success", "failed"])
-                if not valid:
-                    st.error(f"❌ Respuesta inválida: {error_msg}")
-                    # Auditar error
-                    st.session_state.audit_logs.append({
-                        "timestamp": timestamp,
-                        "action": "move_pallets",
-                        "status": "validation_error",
-                        "error": error_msg,
-                        "pallets_count": len(pallet_codes),
-                        "destination": location_dest_name
-                    })
+                # API puede retornar diferentes formatos, validar campos comunes
+                # Si hay success/failed
+                if "success" in result or "failed" in result:
+                    success_count = result.get("success", 0)
+                    error_count = result.get("failed", 0)
+                # Si hay moved/errors (formato alternativo)
+                elif "moved" in result:
+                    success_count = result.get("moved", 0)
+                    error_count = len(result.get("errors", []))
+                # Si solo hay message de éxito
+                elif "message" in result:
+                    success_count = len(pallet_codes)
+                    error_count = 0
+                else:
+                    st.error("❌ Respuesta inesperada del servidor")
+                    st.json(result)
                     return
-                
-                # API retorna success y failed
-                success_count = result.get("success", 0)
-                error_count = result.get("failed", 0)
                 
                 # Auditar movimiento
                 audit_entry = {
