@@ -353,15 +353,15 @@ class ProduccionService:
                                   tipo_manejo: Optional[str] = None,
                                   orden_fabricacion: Optional[str] = None) -> Dict[str, Any]:
         """
-        Obtiene la clasificación de pallets (IQF A y RETAIL) filtrando por fecha, fruta, manejo y OF.
+        Obtiene la clasificación de pallets (IQF A y RETAIL) de SUBPRODUCTOS.
         
-        Lógica SIMPLIFICADA usando código de producto:
-        1. Obtiene stock.move.line filtrados por fecha y opcionalmente por OF
+        LÓGICA:
+        1. Busca en stock.move los movimientos de subproductos
         2. Lee el default_code (Referencia Interna) del producto
         3. Clasifica según el dígito en posición 5:
            - '2' → IQF A
            - '7' → IQF Retail
-        4. Suma kg de qty_done según la clasificación
+        4. Suma kg de quantity_done según la clasificación
         
         Estructura del código (ejemplo: 401272000):
         [1] Etapa | [2-3] Familia | [4] Manejo | [5] GRADO | [6] Variedad | [7-9] Retail
@@ -378,36 +378,51 @@ class ProduccionService:
                 "iqf_a_kg": float,
                 "retail_kg": float,
                 "total_kg": float,
-                "detalle": [...] # Lista de pallets clasificados
+                "detalle": [...] # Lista de productos clasificados
             }
         """
         try:
-            # 1. Construir domain para stock.move.line
-            domain_sml = [
+            # 1. Construir domain para stock.move (subproductos)
+            domain_sm = [
                 ('date', '>=', fecha_inicio + ' 00:00:00'),
                 ('date', '<=', fecha_fin + ' 23:59:59'),
-                ('result_package_id', '!=', False),
-                ('qty_done', '>', 0)
+                ('quantity_done', '>', 0)
             ]
             
-            # Campos a obtener
-            sml_fields = [
-                'result_package_id', 
-                'qty_done', 
-                'product_id', 
-                'lot_id',
+            # Filtrar por producción si se especifica
+            if orden_fabricacion and orden_fabricacion.strip():
+                # Primero buscar la orden de fabricación
+                production_ids = self.odoo.search(
+                    'mrp.production',
+                    [('name', 'ilike', orden_fabricacion.strip())]
+                )
+                if production_ids:
+                    domain_sm.append(('production_id', 'in', production_ids))
+                else:
+                    # Si no se encuentra la orden, retornar vacío
+                    return {
+                        "iqf_a_kg": 0,
+                        "retail_kg": 0,
+                        "total_kg": 0,
+                        "detalle": []
+                    }
+            
+            # Campos a obtener de stock.move
+            sm_fields = [
+                'product_id',
+                'quantity_done',
                 'date',
-                'move_id',
-                'production_id'
+                'production_id',
+                'reference'
             ]
             
-            stock_move_lines = self.odoo.search_read(
-                'stock.move.line',
-                domain_sml,
-                sml_fields
+            stock_moves = self.odoo.search_read(
+                'stock.move',
+                domain_sm,
+                sm_fields
             )
             
-            if not stock_move_lines:
+            if not stock_moves:
                 return {
                     "iqf_a_kg": 0,
                     "retail_kg": 0,
@@ -417,8 +432,8 @@ class ProduccionService:
             
             # 2. Obtener IDs únicos de productos para leer default_code
             product_ids = set()
-            for sml in stock_move_lines:
-                product_info = sml.get('product_id')
+            for sm in stock_moves:
+                product_info = sm.get('product_id')
                 if product_info and isinstance(product_info, list) and len(product_info) >= 1:
                     product_ids.add(product_info[0])
             
@@ -441,19 +456,14 @@ class ProduccionService:
             retail_kg = 0
             detalle = []
             
-            for sml in stock_move_lines:
-                # Obtener datos básicos
-                pkg_id = sml.get('result_package_id')
-                if not pkg_id or not isinstance(pkg_id, list) or len(pkg_id) < 2:
-                    continue
-                    
-                pkg_name = pkg_id[1]
-                qty_done = sml.get('qty_done', 0) or 0
-                
+            for sm in stock_moves:
                 # Producto
-                product_info = sml.get('product_id', [False, ''])
+                product_info = sm.get('product_id', [False, ''])
                 product_id = product_info[0] if isinstance(product_info, list) and len(product_info) >= 1 else None
                 product_name = product_info[1] if isinstance(product_info, list) and len(product_info) >= 2 else ''
+                
+                # Cantidad
+                quantity_done = sm.get('quantity_done', 0) or 0
                 
                 # Obtener código del producto
                 product_data = product_codes.get(product_id, {})
@@ -463,18 +473,9 @@ class ProduccionService:
                 if not product_code or len(product_code) < 5:
                     continue
                 
-                # Lote
-                lot_info = sml.get('lot_id', [False, ''])
-                lot_name = lot_info[1] if isinstance(lot_info, list) and len(lot_info) >= 2 else ''
-                
                 # Orden de fabricación
-                production_info = sml.get('production_id', [False, ''])
+                production_info = sm.get('production_id', [False, ''])
                 production_name = production_info[1] if isinstance(production_info, list) and len(production_info) >= 2 else ''
-                
-                # FILTRO POR ORDEN DE FABRICACIÓN
-                if orden_fabricacion and orden_fabricacion.strip():
-                    if orden_fabricacion.lower() not in production_name.lower():
-                        continue
                 
                 # FILTRO POR FRUTA (usar nombre del producto)
                 product_name_lower = product_name.lower()
@@ -500,24 +501,23 @@ class ProduccionService:
                 
                 if grado_digit == '2':
                     clasificacion = 'IQF A'
-                    iqf_a_kg += qty_done
+                    iqf_a_kg += quantity_done
                 elif grado_digit == '7':
                     clasificacion = 'IQF Retail'
-                    retail_kg += qty_done
+                    retail_kg += quantity_done
                 else:
                     # No es IQF A ni IQF Retail, no incluir
                     continue
                 
                 # Agregar al detalle
                 detalle.append({
-                    'pallet': pkg_name,
-                    'clasificacion': clasificacion,
-                    'kg': round(qty_done, 2),
                     'producto': product_name,
                     'codigo_producto': product_code,
-                    'lote': lot_name,
+                    'clasificacion': clasificacion,
+                    'kg': round(quantity_done, 2),
                     'orden_fabricacion': production_name,
-                    'fecha': sml.get('date', '')
+                    'referencia': sm.get('reference', ''),
+                    'fecha': sm.get('date', '')
                 })
             
             total_kg = iqf_a_kg + retail_kg
@@ -533,5 +533,4 @@ class ProduccionService:
             import traceback
             error_detail = traceback.format_exc()
             print(f"❌ ERROR en get_clasificacion_pallets: {error_detail}")
-            raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}") 
-                                  fecha_inicio: str, 
+            raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}")
