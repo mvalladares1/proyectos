@@ -571,7 +571,7 @@ def _render_pallet_card(pallet: dict, index: int = 0):
     # Obtener destino de session_state
     destino_name = st.session_state.mov_camara.get('name', 'N/A') if st.session_state.mov_camara else 'N/A'
     
-    st.markdown(f"""
+    html_content = f"""
     <div class="{card_class}">
         <div class="pallet-card-header">
             <span class="pallet-code">📦 {pallet['code']}</span>
@@ -592,7 +592,8 @@ def _render_pallet_card(pallet: dict, index: int = 0):
             🏷️ {pallet['lote']}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.components.v1.html(html_content, height=200)
 
 
 def _ejecutar_movimiento(username: str, password: str, api_url: str):
@@ -862,17 +863,18 @@ def render(username: str, password: str):
     # === SELECTOR DE CÁMARA DESTINO ===
     st.subheader("1️⃣ Selecciona Cámara Destino")
 
-    with st.form("form_buscar_cam", clear_on_submit=False):
-        camara_input = st.text_input(
-            "Código de cámara",
-            placeholder="Ej: Cam80c",
-            label_visibility="collapsed"
-        )
-        
-        submitted = st.form_submit_button("🔍 Buscar", type="primary")
-        
-        if submitted and camara_input:
-            _buscar_camara(camara_input.strip(), username, password, api_url)
+    # Función callback para búsqueda automática
+    def _on_camara_change():
+        if st.session_state.camara_input:
+            _buscar_camara(st.session_state.camara_input.strip(), username, password, api_url)
+    
+    camara_input = st.text_input(
+        "Código de cámara",
+        placeholder="Ej: Cam80c",
+        label_visibility="collapsed",
+        key="camara_input",
+        on_change=_on_camara_change
+    )
 
     # Historial de cámaras (botones rápidos)
     if st.session_state.mov_historial:
