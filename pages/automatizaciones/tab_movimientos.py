@@ -344,6 +344,16 @@ window.autoFocusTextarea = autoFocusTextarea;
 """
 
 
+def _inject_css():
+    """Inyecta CSS mobile-optimized"""
+    st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+
+
+def _inject_js():
+    """Inyecta JavaScript para sonidos, vibración y shortcuts"""
+    st.components.v1.html(SOUND_JS, height=0)
+
+
 @st.fragment
 def render(username: str, password: str, api_url: str):
     """Renderiza el tab de Movimientos de Pallets (Mobile-Optimized)"""
