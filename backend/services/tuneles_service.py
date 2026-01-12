@@ -11,7 +11,7 @@ from datetime import datetime
 from shared.odoo_client import OdooClient
 
 # Importar desde módulos modularizados
-from backend.services.tuneles.constants import (
+from .tuneles.constants import (
     TUNELES_CONFIG,
     PRODUCTOS_TRANSFORMACION,
     PRODUCTO_ELECTRICIDAD_ID,
@@ -19,7 +19,7 @@ from backend.services.tuneles.constants import (
     UBICACION_VIRTUAL_CONGELADO_ID,
     UBICACION_VIRTUAL_PROCESOS_ID
 )
-from backend.services.tuneles.helpers import (
+from .tuneles.helpers import (
     buscar_o_crear_lotes_batch,
     buscar_o_crear_packages_batch,
     buscar_o_crear_lote

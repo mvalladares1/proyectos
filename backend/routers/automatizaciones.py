@@ -9,7 +9,7 @@ from datetime import datetime
 
 from shared.odoo_client import get_odoo_client, OdooClient
 # Importar desde módulo modularizado
-from backend.services.tuneles import TunelesService, get_tuneles_service
+from backend.services.tuneles_service import TunelesService, get_tuneles_service
 
 
 router = APIRouter(prefix="/api/v1/automatizaciones", tags=["automatizaciones"])
