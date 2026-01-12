@@ -368,21 +368,15 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
         url = f"{api_url}/api/v1/automatizaciones/movimientos/ubicacion-by-barcode"
         params = {"username": username, "password": password, "barcode": code}
         
-        st.write(f"**DEBUG - URL:** `{url}`")
-        st.write(f"**DEBUG - Params:** `barcode={code}`")
-        
-        # Llamada con retry
+        # Llamada
         try:
             resp = requests.get(url, params=params, timeout=20)
         except Exception as e:
             st.error(f"❌ Error de conexión: {str(e)}")
             return
         
-        st.write(f"**DEBUG - Status:** {resp.status_code}")
-        
         if resp.status_code == 404:
-            st.error(f"❌ Endpoint no encontrado. Verifica que el API esté corriendo y el router esté registrado.")
-            st.write(f"URL completa: {resp.url}")
+            st.error(f"❌ Endpoint no encontrado")
             return
         
         if resp.status_code != 200:
@@ -390,40 +384,32 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
             return
             
         data = resp.json()
-        st.write(f"**DEBUG - Respuesta:** {data}")  # DEBUG
-            
-            # Validar respuesta
-            valid, error_msg = _validate_api_response(data, ["found"])
-            if not valid:
-                st.toast(f"❌ Respuesta inválida: {error_msg}", icon="⚠️")
-                return
-            
-            if data.get("found"):
-                # Validar campos requeridos
-                valid, error_msg = _validate_api_response(data, ["id", "name"])
-                if not valid:
-                    st.toast(f"⚠️ Datos incompletos: {error_msg}", icon="⚠️")
-                    return
-                
-                camara = {
-                    "id": data["id"],
-                    "name": data.get("display_name", data["name"]),
-                    "barcode": data.get("barcode", "")
-                }
-                st.session_state.mov_camara = camara
-                
-                # Agregar al historial si no existe
-                if not any(h["id"] == camara["id"] for h in st.session_state.mov_historial):
-                    st.session_state.mov_historial.insert(0, camara)
-                    st.session_state.mov_historial = st.session_state.mov_historial[:5]
-                
-                st.toast(f"✅ {camara['name']}", icon="📍")
-            else:
-                st.toast(f"❌ Cámara no encontrada", icon="⚠️")
-        else:
-            st.toast(f"Error: {resp.status_code}", icon="❌")
+        
+        # Validar respuesta
+        if not data.get("found"):
+            st.warning(f"❌ {data.get('message', 'Cámara no encontrada')}")
+            return
+        
+        # Validar campos requeridos
+        if not data.get("id") or not data.get("name"):
+            st.error("⚠️ Datos incompletos en respuesta")
+            return
+        
+        camara = {
+            "id": data["id"],
+            "name": data.get("display_name", data["name"]),
+            "barcode": data.get("barcode", "")
+        }
+        st.session_state.mov_camara = camara
+        
+        # Agregar al historial si no existe
+        if not any(h["id"] == camara["id"] for h in st.session_state.mov_historial):
+            st.session_state.mov_historial.insert(0, camara)
+            st.session_state.mov_historial = st.session_state.mov_historial[:5]
+        
+        st.success(f"✅ {camara['name']}")
     except Exception as e:
-        st.toast(f"Error: {str(e)}", icon="❌")
+        st.error(f"❌ Error: {str(e)}")
 
 
 def _agregar_pallet(code: str, username: str, password: str, api_url: str):
