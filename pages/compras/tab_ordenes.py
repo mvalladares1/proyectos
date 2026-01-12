@@ -12,6 +12,7 @@ from .shared import API_URL, fmt_numero, fmt_moneda, fmt_fecha, get_approval_col
 from .shared import fetch_compras_overview, fetch_compras_ordenes
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Órdenes de Compra."""
     st.subheader("Gestión de Órdenes de Compra")
@@ -67,7 +68,6 @@ def render(username: str, password: str):
             status_text.text("✅ Fase 4/4: Completado")
             progress_bar.progress(100)
             st.toast("✅ Datos cargados correctamente", icon="✅")
-            st.rerun()
         except Exception as e:
             progress_bar.empty()
             status_text.empty()

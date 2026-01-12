@@ -51,7 +51,6 @@ def render(username: str, password: str):
             fetch_gestion_data.clear()
             fetch_gestion_overview.clear()
             st.toast("✅ Caché limpiado")
-            st.rerun()
 
     # Cargar datos solo cuando el usuario haga clic en consultar
     fecha_inicio_str = fecha_inicio_g.strftime("%Y-%m-%d")

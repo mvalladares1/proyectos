@@ -73,7 +73,6 @@ def render(username: str, password: str, api_url: str):
                                 }
                                 st.session_state.movimientos_input_camara = input_camara.strip()
                                 st.success(f"✅ Cámara encontrada: **{data['display_name']}**")
-                                st.rerun()
                             else:
                                 st.error(f"❌ {data.get('message', 'Cámara no encontrada')}")
                         else:
@@ -142,7 +141,6 @@ def render(username: str, password: str, api_url: str):
                                         st.session_state.movimientos_pallets.append(pallet_info)
                                         st.session_state.movimientos_input_pallet = ""
                                         st.success(f"✅ Pallet agregado: {input_pallet.strip()}")
-                                        st.rerun()
                                     else:
                                         st.error(f"❌ {data.get('message', 'Pallet no encontrado')}")
                                 else:
@@ -186,13 +184,11 @@ def render(username: str, password: str, api_url: str):
                     if st.session_state.movimientos_pallets:
                         removed = st.session_state.movimientos_pallets.pop()
                         st.info(f"Quitado: {removed['code']}")
-                        st.rerun()
             
             with col_btn2:
                 if st.button("🗑️ Limpiar todo", key="btn_limpiar_todo", use_container_width=True):
                     st.session_state.movimientos_pallets = []
                     st.info("Lista limpiada")
-                    st.rerun()
         else:
             st.info("📦 No hay pallets escaneados. Escanea el primer pallet.")
     else:
@@ -260,7 +256,6 @@ def render(username: str, password: str, api_url: str):
                         # Esperar un poco y recargar
                         import time
                         time.sleep(2)
-                        st.rerun()
                     else:
                         st.error(f"Error {resp.status_code}: {resp.text}")
                 except Exception as e:

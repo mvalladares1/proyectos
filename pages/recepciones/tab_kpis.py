@@ -835,7 +835,6 @@ def render(username: str, password: str):
                             # Guardar en session_state
                             st.session_state.excel_detallado_data = (xlsx_bytes, fname)
                             st.success("✅ Excel generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
-                            st.rerun()
                         else:
                             st.error(f"Error al generar Excel detallado: {resp.status_code} - {resp.text}")
                     except Exception as e:
@@ -855,7 +854,6 @@ def render(username: str, password: str):
                     # Botón para limpiar
                     if st.button("🗑️ Limpiar", key="btn_clear_excel_det"):
                         st.session_state.excel_detallado_data = None
-                        st.rerun()
 
             st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 

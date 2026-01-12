@@ -13,7 +13,7 @@ from .shared import (
     API_URL, fmt_numero, fmt_porcentaje, get_alert_color,
     filtrar_mos_por_planta, fetch_dashboard_completo, skeleton_loader
 )
-from .graficos import grafico_congelado_semanal, grafico_vaciado_por_sala
+from .graficos import grafico_congelado_semanal, grafico_vaciado_por_sala, grafico_produccion_consolidado
 
 
 def render(username: str, password: str):
@@ -144,7 +144,6 @@ def render(username: str, password: str):
                 st.toast("✅ Datos de reportería cargados", icon="✅")
             else:
                 st.session_state.prod_reporteria_error = "❌ No se pudieron cargar los datos. Revisa la conexión o intenta nuevamente."
-            st.rerun()
         except Exception as e:
             progress_placeholder.empty()
             st.session_state.prod_reporteria_error = f"Error al cargar reportería: {str(e)}"
@@ -187,6 +186,14 @@ def render(username: str, password: str):
 
 def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
     """Renderiza los sub-tabs de KPIs: Proceso y Congelado."""
+    
+    # === GRÁFICO CONSOLIDADO DE PRODUCCIÓN (Túneles + Salas) ===
+    if mos:
+        st.markdown("### 📊 Visión Consolidada: Túneles y Salas")
+        st.caption("Producción total por período - Túneles (Congelado) + Salas (Proceso, acumulado sin detalle de línea)")
+        grafico_produccion_consolidado(mos, agrupacion)
+        st.markdown("---")
+    
     vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)"])
     
     with vista_tabs[0]:

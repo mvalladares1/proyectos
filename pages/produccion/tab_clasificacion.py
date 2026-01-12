@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from .shared import API_URL, fmt_numero
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Clasificación."""
     

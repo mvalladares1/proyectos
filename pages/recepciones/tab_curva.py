@@ -182,7 +182,6 @@ def render(username: str, password: str):
                 st.toast("✅ Curva de abastecimiento cargada")
             finally:
                 st.session_state.recep_curva_loading = False
-                st.rerun()
 
     # ============ MOSTRAR CURVA CON FILTRO DINÁMICO ============
     # Cargar proyecciones dinámicamente basado en filtro de especies actual

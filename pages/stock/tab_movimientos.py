@@ -148,7 +148,6 @@ def render(username: str, password: str, camaras_data_all: list):
         
         if btn_limpiar:
             st.session_state["pallet_info"] = None
-            st.rerun()
         
         if btn_mover:
             if not dest_id:

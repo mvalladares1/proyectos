@@ -14,6 +14,7 @@ from .shared import (
 )
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Detalle de OF."""
     st.subheader("📋 Detalle de Órdenes de Fabricación")
@@ -85,9 +86,6 @@ def render(username: str, password: str):
                         st.success(f"{len(results)} órdenes encontradas")
                     else:
                         st.info("No se encontraron órdenes en el rango solicitado")
-                    
-                    # Force UI update
-                    st.rerun()
                 except Exception as error:
                     st.session_state["prod_error"] = f"Error al buscar órdenes: {error}"
                     st.error(st.session_state["prod_error"])
@@ -98,7 +96,6 @@ def render(username: str, password: str):
             st.session_state["production_ofs"] = []
             st.session_state["production_current_of"] = None
             st.cache_data.clear()
-            st.rerun()
 
     # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
     content_placeholder = st.container()
@@ -181,7 +178,6 @@ def render(username: str, password: str):
                     st.toast(f"❌ Error: {str(error)[:100]}", icon="❌")
                 finally:
                     st.session_state.prod_detalle_loading = False
-                    st.rerun()
         else:
             st.info("Busca una orden para comenzar")
 
