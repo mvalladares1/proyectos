@@ -861,24 +861,20 @@ def render(username: str, password: str):
     # === SELECTOR DE CÁMARA DESTINO ===
     st.subheader("1️⃣ Selecciona Cámara Destino")
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        camara_input = st.text_input(
-            "Escanea código de cámara",
-            key="camara_input",
-            placeholder="Escanea código...",
-            label_visibility="collapsed"
-        )
-
-    with col2:
-        if st.button("🔍 Buscar", use_container_width=True, type="primary"):
-            if camara_input:
-                _buscar_camara(camara_input.strip(), username, password, api_url)
-
-    # Enter key trigger
-    if camara_input and camara_input != st.session_state.mov_last_scan:
-        _buscar_camara(camara_input.strip(), username, password, api_url)
-        st.session_state.mov_last_scan = camara_input
+    with st.form("buscar_camara_form", clear_on_submit=False):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            camara_input = st.text_input(
+                "Escanea código de cámara",
+                key="camara_input_form",
+                placeholder="Escanea código...",
+                label_visibility="collapsed"
+            )
+        with col2:
+            buscar_btn = st.form_submit_button("🔍 Buscar", use_container_width=True, type="primary")
+        
+        if buscar_btn and camara_input:
+            _buscar_camara(camara_input.strip(), username, password, api_url)
 
     # Historial de cámaras (botones rápidos)
     if st.session_state.mov_historial:
