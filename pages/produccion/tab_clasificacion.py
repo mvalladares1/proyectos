@@ -251,9 +251,8 @@ def render(username: str, password: str):
             return
 
         # --- FILTRADO DINÁMICO DE DATOS PARA KPIs Y TABLA ---
-        grados_raw = data.get('grados', {})
+        # ATENCIÓN: No sobreescribir con data.get(...), usar los ya filtrados arriba
         grados_mostrar = {k: v for k, v in grados_raw.items() if k in active_grades_codes}
-        detalle_raw = data.get('detalle', [])
         detalle_mostrar = [item for item in detalle_raw if item.get('grado') in active_grades_names]
         total_kg_filtrado = sum(grados_mostrar.values())
         
