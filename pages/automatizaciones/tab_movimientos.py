@@ -363,6 +363,8 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
             st.toast(f"❌ Código inválido: {error_msg}", icon="⚠️")
             return
         
+        st.toast(f"🔍 Buscando: {code}...", icon="⏳")
+        
         # Llamada con retry
         resp = _api_call_with_retry(
             lambda: requests.get(
