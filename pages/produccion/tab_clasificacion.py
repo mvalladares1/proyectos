@@ -15,8 +15,8 @@ from .shared import API_URL, fmt_numero
 def render(username: str, password: str):
     """Renderiza el contenido del tab Clasificación."""
     
-    st.markdown("### 📦 Clasificación de Pallets - IQF A & RETAIL")
-    st.caption("Clasifica pallets según observaciones de proceso")
+    st.markdown("### 📦 CLASIFICACIÓN DE PALLETS")
+    st.caption("Grados de producto terminado por planta y orden")
     
     # === FILTROS ===
     with st.container():
@@ -76,27 +76,13 @@ def render(username: str, password: str):
                 key="tipo_operacion_clasificacion"
             )
 
-        # Mapeo de grados para el filtro
-        GRADOS_OPCIONES = {
-            'IQF AA': '1',
-            'IQF A': '2',
-            'PSP': '3',
-            'W&B': '4',
-            'Block': '5',
-            'Jugo': '6',
-            'IQF Retail': '7'
+        # Mapeo de grados por defecto (se muestran todos al inicio)
+        GRADOS_MAP = {
+            'IQF AA': '1', 'IQF A': '2', 'PSP': '3', 'W&B': '4', 
+            'Block': '5', 'Jugo': '6', 'IQF Retail': '7'
         }
-        
-        grados_seleccionados = st.multiselect(
-            "🏷️ Filtrar por Grados",
-            options=list(GRADOS_OPCIONES.keys()),
-            default=list(GRADOS_OPCIONES.keys()),
-            key="grados_filtro_clasificacion",
-            help="Selecciona los grados que deseas visualizar en los resultados"
-        )
-        
-        # Convertir nombres seleccionados a sus códigos numéricos
-        codigos_grados_seleccionados = [GRADOS_OPCIONES[name] for name in grados_seleccionados]
+        codigos_grados_seleccionados = list(GRADOS_MAP.values())
+        grados_seleccionados = list(GRADOS_MAP.keys())
         
         # Botón consultar
         consultar = st.button("🔍 Consultar Clasificación", use_container_width=True, type="primary")
@@ -154,7 +140,7 @@ def render(username: str, password: str):
         # Mostrar datos
         data = st.session_state.clasificacion_data
         
-        # Mapeo de grados
+        # Mapeo de grados e información visual
         GRADOS_INFO = {
             '1': {'nombre': 'IQF AA', 'emoji': '⭐', 'color': '#FFD700'},
             '2': {'nombre': 'IQF A', 'emoji': '🔵', 'color': '#4472C4'},
@@ -164,146 +150,125 @@ def render(username: str, password: str):
             '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF8C00'},
             '7': {'nombre': 'IQF Retail', 'emoji': '🟢', 'color': '#70AD47'}
         }
+        
+        # === GRÁFICO DE BARRAS INTERACTIVO (Control Principal) ===
+        st.markdown("---")
+        st.markdown("#### 📈 Distribución por Grado")
+        st.info("💡 **Gráfico Interactivo:** Haz clic en los cuadros de la leyenda para filtrar los KPIs y la tabla detallada.")
+        
+        # Preparar data para el gráfico
+        base_data_list = []
+        for grado_num, info in GRADOS_INFO.items():
+            kg = data.get('grados', {}).get(grado_num, 0)
+            if kg > 0:
+                base_data_list.append({
+                    'Grado': info['nombre'],
+                    'Kilogramos': kg,
+                    'Color': info['color'],
+                    'grado_num': grado_num
+                })
+        
+        df_chart = pd.DataFrame(base_data_list)
+        
+        if not df_chart.empty:
+            # Selección de Altair (punto bound a leyenda)
+            seleccion_chart = alt.selection_point(fields=['Grado'], bind='legend')
+            
+            # Gráfico de Barras
+            bars = alt.Chart(df_chart).mark_bar(
+                cornerRadiusTopLeft=8,
+                cornerRadiusTopRight=8
+            ).encode(
+                x=alt.X('Grado:N', title='Grado de Producto', axis=alt.Axis(labelAngle=-45, labelFontSize=12)),
+                y=alt.Y('Kilogramos:Q', title='Kilogramos (kg)', axis=alt.Axis(labelFontSize=12)),
+                color=alt.Color('Grado:N',
+                               scale=alt.Scale(
+                                   domain=[info['nombre'] for info in GRADOS_INFO.values()],
+                                   range=[info['color'] for info in GRADOS_INFO.values()]
+                               ),
+                               legend=alt.Legend(title="Click para filtrar", orient="right")),
+                opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0.2)),
+                tooltip=[alt.Tooltip('Grado:N'), alt.Tooltip('Kilogramos:Q', format=',.2f')]
+            )
+            
+            # Etiquetas con el valor en KG sobre las barras
+            text = bars.mark_text(
+                align='center',
+                baseline='bottom',
+                dy=-5,
+                fontSize=13,
+                fontWeight='bold'
+            ).encode(
+                text=alt.Text('Kilogramos:Q', format=',.0f'),
+                opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0))
+            )
+            
+            chart_final = (bars + text).add_params(
+                seleccion_chart
+            ).properties(
+                height=400
+            ).configure_view(
+                strokeWidth=0
+            )
+            
+            # Renderizar gráfico y capturar evento de selección
+            event = st.altair_chart(chart_final, use_container_width=True, on_select="rerun")
+            
+            # Definir qué grados mostrar basado en la selección del gráfico
+            selected_from_chart = event.get('selection', {}).get('Grado', [])
+            
+            if selected_from_chart:
+                active_grades_names = selected_from_chart
+                active_grades_codes = [k for k, v in GRADOS_INFO.items() if v['nombre'] in selected_from_chart]
+            else:
+                # Si no hay selección, mostramos todos los que tienen data
+                active_grades_names = df_chart['Grado'].tolist()
+                active_grades_codes = df_chart['grado_num'].tolist()
+        else:
+            st.warning("⚠️ No hay datos de producción para el período seleccionado.")
+            return
 
-        # --- FILTRADO DINÁMICO EN FRONTEND ---
-        # 1. Filtrar el diccionario de grados (KPIs)
+        # --- FILTRADO DINÁMICO DE DATOS PARA KPIs Y TABLA ---
         grados_raw = data.get('grados', {})
-        grados_mostrar = {k: v for k, v in grados_raw.items() if k in codigos_grados_seleccionados}
-        
-        # 2. Filtrar la lista de detalle (Tabla y Gráfico)
+        grados_mostrar = {k: v for k, v in grados_raw.items() if k in active_grades_codes}
         detalle_raw = data.get('detalle', [])
-        detalle_mostrar = [item for item in detalle_raw if item.get('grado') in grados_seleccionados]
-        
-        # 3. Recalcular total basado en la selección
-        total_kg_mostrar = sum(grados_mostrar.values())
+        detalle_mostrar = [item for item in detalle_raw if item.get('grado') in active_grades_names]
+        total_kg_filtrado = sum(grados_mostrar.values())
         
         # === KPIs ===
         st.markdown("---")
-        st.markdown(f"#### 📊 Totales Filtrados ({len(grados_seleccionados)} grados seleccionados)")
+        st.markdown(f"#### 📊 Totales Filtrados ({len(active_grades_names)} grados)")
         
-        # Primera fila: Grados 1-4
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            st.metric(
-                label=f"{GRADOS_INFO['1']['emoji']} {GRADOS_INFO['1']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('1', 0))} kg"
-            )
-        
+            st.metric(f"{GRADOS_INFO['1']['emoji']} {GRADOS_INFO['1']['nombre']}", f"{fmt_numero(grados_mostrar.get('1', 0))} kg")
         with col2:
-            st.metric(
-                label=f"{GRADOS_INFO['2']['emoji']} {GRADOS_INFO['2']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('2', 0))} kg"
-            )
-        
+            st.metric(f"{GRADOS_INFO['2']['emoji']} {GRADOS_INFO['2']['nombre']}", f"{fmt_numero(grados_mostrar.get('2', 0))} kg")
         with col3:
-            st.metric(
-                label=f"{GRADOS_INFO['3']['emoji']} {GRADOS_INFO['3']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('3', 0))} kg"
-            )
-        
+            st.metric(f"{GRADOS_INFO['3']['emoji']} {GRADOS_INFO['3']['nombre']}", f"{fmt_numero(grados_mostrar.get('3', 0))} kg")
         with col4:
-            st.metric(
-                label=f"{GRADOS_INFO['4']['emoji']} {GRADOS_INFO['4']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('4', 0))} kg"
-            )
-        
-        # Segunda fila: Grados 5-7 + Total
-        col5, col6, col7, col8 = st.columns(4)
-        
-        with col5:
-            st.metric(
-                label=f"{GRADOS_INFO['5']['emoji']} {GRADOS_INFO['5']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('5', 0))} kg"
-            )
-        
-        with col6:
-            st.metric(
-                label=f"{GRADOS_INFO['6']['emoji']} {GRADOS_INFO['6']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('6', 0))} kg"
-            )
-        
-        with col7:
-            st.metric(
-                label=f"{GRADOS_INFO['7']['emoji']} {GRADOS_INFO['7']['nombre']}",
-                value=f"{fmt_numero(grados_mostrar.get('7', 0))} kg"
-            )
-        
-        with col8:
-            st.metric(
-                label="📦 TOTAL FILTRADO",
-                value=f"{fmt_numero(total_kg_mostrar)} kg"
-            )
-        
-        # === GRÁFICO DE BARRAS ===
-        st.markdown("---")
-        st.markdown("#### 📈 Distribución por Grado (Filtrado)")
-        
-        if total_kg_mostrar > 0:
-            # Crear DataFrame para el gráfico con datos filtrados
-            chart_data_list = []
-            for grado_num, info in GRADOS_INFO.items():
-                if grado_num in codigos_grados_seleccionados:
-                    kg = grados_mostrar.get(grado_num, 0)
-                    if kg > 0:
-                        chart_data_list.append({
-                            'Grado': info['nombre'],
-                            'Kilogramos': kg,
-                            'Color': info['color']
-                        })
+            st.metric(f"{GRADOS_INFO['4']['emoji']} {GRADOS_INFO['4']['nombre']}", f"{fmt_numero(grados_mostrar.get('4', 0))} kg")
             
-            if chart_data_list:
-                chart_data = pd.DataFrame(chart_data_list)
-                
-                # Crear gráfico con Altair mejorado
-                chart = alt.Chart(chart_data).mark_bar(
-                    cornerRadiusTopLeft=8,
-                    cornerRadiusTopRight=8
-                ).encode(
-                    x=alt.X('Grado:N', 
-                           title='Grado de Producto',
-                           axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14)),
-                    y=alt.Y('Kilogramos:Q', 
-                           title='Kilogramos (kg)',
-                           axis=alt.Axis(labelFontSize=12, titleFontSize=14)),
-                    color=alt.Color('Grado:N',
-                                   scale=alt.Scale(
-                                       domain=[info['nombre'] for info in GRADOS_INFO.values()],
-                                       range=[info['color'] for info in GRADOS_INFO.values()]
-                                   ),
-                                   legend=alt.Legend(
-                                       title='Grado',
-                                       orient='right',
-                                       titleFontSize=13,
-                                       labelFontSize=12
-                                   )),
-                    tooltip=[
-                        alt.Tooltip('Grado:N', title='Grado'),
-                        alt.Tooltip('Kilogramos:Q', title='Kilogramos', format=',.2f')
-                    ]
-                ).properties(
-                    height=450
-                ).configure_axis(
-                    grid=True,
-                    gridOpacity=0.3
-                ).configure_view(
-                    strokeWidth=0
-                )
-                
-                st.altair_chart(chart, use_container_width=True)
-                
-                # Porcentajes en columnas
-                st.markdown("##### 📊 Detalle de Participación (en lo seleccionado)")
-                cols = st.columns(len(chart_data_list))
-                
-                for idx, (_, row) in enumerate(chart_data.iterrows()):
-                    with cols[idx]:
-                        pct = (row['Kilogramos'] / total_kg_mostrar * 100) if total_kg_mostrar > 0 else 0
-                        st.info(f"**{row['Grado']}**\n\n{pct:.1f}% ({row['Kilogramos']:,.2f} kg)")
-            else:
-                st.info("ℹ️ No hay datos para los grados seleccionados")
-        else:
-            st.info("ℹ️ El total para los grados seleccionados es 0.00 kg")
+        col5, col6, col7, col8 = st.columns(4)
+        with col5:
+            st.metric(f"{GRADOS_INFO['5']['emoji']} {GRADOS_INFO['5']['nombre']}", f"{fmt_numero(grados_mostrar.get('5', 0))} kg")
+        with col6:
+            st.metric(f"{GRADOS_INFO['6']['emoji']} {GRADOS_INFO['6']['nombre']}", f"{fmt_numero(grados_mostrar.get('6', 0))} kg")
+        with col7:
+            st.metric(f"{GRADOS_INFO['7']['emoji']} {GRADOS_INFO['7']['nombre']}", f"{fmt_numero(grados_mostrar.get('7', 0))} kg")
+        with col8:
+            st.metric("📦 TOTAL SELECCIONADO", f"{fmt_numero(total_kg_filtrado)} kg")
+
+        # Porcentajes de participación
+        st.markdown("##### 📊 Participación en Selección")
+        if total_kg_filtrado > 0:
+            cols_pct = st.columns(len(active_grades_names))
+            # Ordenar para que coincidan con los nombres seleccionados
+            selected_data_sorted = df_chart[df_chart['Grado'].isin(active_grades_names)]
+            for idx, (_, row) in enumerate(selected_data_sorted.iterrows()):
+                with cols_pct[idx % len(active_grades_names)]:
+                    pct = (row['Kilogramos'] / total_kg_filtrado * 100)
+                    st.info(f"**{row['Grado']}**\n\n{pct:.1f}%")
         
         # === TABLA DETALLADA ===
         if detalle_mostrar:
