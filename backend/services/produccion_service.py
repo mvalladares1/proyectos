@@ -423,7 +423,8 @@ class ProduccionService:
                 ('date', '<=', fecha_fin + ' 23:59:59'),
                 ('result_package_id', '!=', False),  # Debe tener pallet (CORREGIDO)
                 ('qty_done', '>', 0),  # Debe tener cantidad hecha
-                ('state', '!=', 'cancel')  # Excluir cancelados
+                ('state', '!=', 'cancel'),  # Excluir cancelados
+                ('move_id.production_id', '!=', False)  # IMPORTANTE: Solo SALIDAS (Subproductos/Terminados)
             ]
             
             # Agregar filtro de move_ids si se especificó orden
