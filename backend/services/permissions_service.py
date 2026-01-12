@@ -360,6 +360,31 @@ def clear_page_restriction(module: str, page: str) -> Dict[str, List[str]]:
     return data["pages"]
 
 
+# ============ ADMINISTRADORES ============
+
+def assign_admin(email: str) -> List[str]:
+    """Agrega un email a la lista de administradores."""
+    with permission_transaction() as data:
+        admins = data.setdefault("admins", [])
+        normalized_email = _normalize_email(email)
+        
+        # Evitar duplicados
+        if not any(_normalize_email(existing) == normalized_email for existing in admins):
+            admins.append(email.strip())
+    return data["admins"]
+
+
+def remove_admin(email: str) -> List[str]:
+    """Remueve un email de la lista de administradores."""
+    with permission_transaction() as data:
+        admins = data.setdefault("admins", [])
+        normalized_email = _normalize_email(email)
+        
+        # Filtrar el email
+        data["admins"] = [e for e in admins if _normalize_email(e) != normalized_email]
+    return data["admins"]
+
+
 # ============ BANNER DE MANTENIMIENTO ============
 
 def get_maintenance_config() -> Dict[str, Any]:
