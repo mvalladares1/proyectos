@@ -421,7 +421,7 @@ class ProduccionService:
             domain_sml = [
                 ('date', '>=', fecha_inicio + ' 00:00:00'),
                 ('date', '<=', fecha_fin + ' 23:59:59'),
-                ('package_id', '!=', False),  # Debe tener pallet
+                ('result_package_id', '!=', False),  # Debe tener pallet (CORREGIDO)
                 ('qty_done', '>', 0),  # Debe tener cantidad hecha
                 ('state', '!=', 'cancel')  # Excluir cancelados
             ]
@@ -432,7 +432,7 @@ class ProduccionService:
             
             # Campos a obtener de stock.move.line
             sml_fields = [
-                'package_id',
+                'result_package_id',  # CORREGIDO: era package_id
                 'qty_done',
                 'product_id',
                 'lot_id',
@@ -500,8 +500,8 @@ class ProduccionService:
             detalle = []
             
             for sml in stock_move_lines:
-                # Pallet
-                package_info = sml.get('package_id', [False, ''])
+                # Pallet (CORREGIDO: result_package_id en lugar de package_id)
+                package_info = sml.get('result_package_id', [False, ''])
                 package_name = package_info[1] if isinstance(package_info, list) and len(package_info) >= 2 else ''
                 
                 # Cantidad

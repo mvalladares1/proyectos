@@ -23,13 +23,14 @@ def test_orden_666():
     # Crear servicio
     service = ProduccionService(username=ODOO_USERNAME, password=ODOO_PASSWORD)
     
-    # Consultar clasificación para todo enero 2026 con filtro de orden
-    fecha_inicio = "2026-01-01"
-    fecha_fin = "2026-01-31"
+    # Consultar clasificación SIN FILTRO DE FECHA, solo por orden
+    # Usamos fechas muy amplias que abarquen todo
+    fecha_inicio = "2020-01-01"
+    fecha_fin = "2030-12-31"
     orden = "WH/Transf/00666"
     
-    print(f"\nFecha: {fecha_inicio} a {fecha_fin}")
-    print(f"Orden: {orden}")
+    print(f"\nBuscando SOLO por orden: {orden}")
+    print(f"(Sin filtro de fecha - rango amplio: {fecha_inicio} a {fecha_fin})")
     print(f"Consultando Odoo...\n")
     
     try:
