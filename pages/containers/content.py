@@ -8,8 +8,15 @@ from datetime import datetime
 
 from .shared import (
     fetch_containers, STATE_OPTIONS,
-    get_state_color, get_sale_state_display
+    get_state_color, get_sale_state_display,
+    get_date_urgency_color, get_odoo_link, format_date_with_urgency
 )
+
+# Colores para ODFs
+ODF_COLORS = [
+    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+]
 
 
 def render(username: str, password: str):
@@ -134,6 +141,7 @@ def _render_charts(containers):
         clientes = [c.get("partner_name", "N/A") for c in containers_sorted]
         kg_prod = [c.get("kg_producidos", 0) for c in containers_sorted]
         kg_total_list = [c.get("kg_total", 0) for c in containers_sorted]
+        fechas = [format_date_with_urgency(c.get("date_order", "")) for c in containers_sorted]
         
         fig = go.Figure()
         
@@ -149,9 +157,10 @@ def _render_charts(containers):
                 'Cliente: %{customdata[0]}<br>'
                 'Avance: %{x:.1f}%<br>'
                 'Producido: %{customdata[1]:,.0f} kg<br>'
-                'Total: %{customdata[2]:,.0f} kg<extra></extra>'
+                'Total: %{customdata[2]:,.0f} kg<br>'
+                'Fecha Límite: %{customdata[3]}<extra></extra>'
             ),
-            customdata=list(zip(clientes, kg_prod, kg_total_list))
+            customdata=list(zip(clientes, kg_prod, kg_total_list, fechas))
         ))
         
         fig.add_vline(x=100, line_dash="dash", line_color="rgba(255,255,255,0.3)",
@@ -180,19 +189,101 @@ def _render_charts(containers):
     with col_stats:
         st.subheader("🏆 Top 5 Containers")
         
-        containers_sorted = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:5]
-        for i, c in enumerate(containers_sorted, 1):
+        containers_top5 = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:5]
+        for i, c in enumerate(containers_top5, 1):
             avance = c.get("avance_pct", 0)
-            with st.container():
+            container_id = c.get("id")
+            container_name = c.get("name", "N/A")
+            kg_prod = c.get("kg_producidos", 0)
+            kg_total = c.get("kg_total", 0)
+            date_order = c.get("date_order", "")
+            productions = c.get("productions", [])
+            
+            # Color de fecha
+            date_color, date_emoji, _ = get_date_urgency_color(date_order)
+            date_display = format_date_with_urgency(date_order)
+            
+            with st.container(border=True):
+                # Header con link a Odoo
                 col_num, col_info = st.columns([1, 5])
                 with col_num:
-                    st.markdown(f"**#{i}**")
+                    st.markdown(f"### #{i}")
                 with col_info:
-                    st.markdown(f"**{c.get('name', '')}**")
+                    odoo_link = get_odoo_link("sale.order", container_id)
+                    st.markdown(f"**[🔗 {container_name}]({odoo_link})**")
                     st.caption(f"{c.get('partner_name', 'N/A')}")
+                
+                # Fecha límite con color
+                st.markdown(f"📅 **Fecha Límite:** <span style='color:{date_color}'>{date_display}</span>", unsafe_allow_html=True)
+                
+                # KG breakdown
+                st.markdown(f"⚖️ **{kg_prod:,.0f}** / {kg_total:,.0f} kg ({avance:.1f}%)")
+                
+                # Barra de progreso con ODFs apiladas
+                if productions and kg_total > 0:
+                    # Crear barra apilada por ODF
+                    fig_bar = go.Figure()
+                    
+                    cumulative = 0
+                    for idx, prod in enumerate(productions):
+                        prod_kg = prod.get("qty_produced", 0) or 0
+                        prod_pct = (prod_kg / kg_total * 100) if kg_total > 0 else 0
+                        prod_name = prod.get("name", f"ODF {idx+1}")
+                        prod_id = prod.get("id")
+                        color = ODF_COLORS[idx % len(ODF_COLORS)]
+                        
+                        fig_bar.add_trace(go.Bar(
+                            x=[prod_pct],
+                            y=["Avance"],
+                            orientation='h',
+                            name=prod_name,
+                            marker_color=color,
+                            text=f"{prod_name[:12]}" if prod_pct > 8 else "",
+                            textposition='inside',
+                            hovertemplate=f"<b>{prod_name}</b><br>{prod_kg:,.0f} kg ({prod_pct:.1f}%)<extra></extra>"
+                        ))
+                    
+                    # Espacio restante (pendiente)
+                    pending_pct = max(0, 100 - avance)
+                    if pending_pct > 0:
+                        fig_bar.add_trace(go.Bar(
+                            x=[pending_pct],
+                            y=["Avance"],
+                            orientation='h',
+                            name="Pendiente",
+                            marker_color="rgba(100,100,100,0.3)",
+                            hovertemplate=f"<b>Pendiente</b><br>{kg_total - kg_prod:,.0f} kg ({pending_pct:.1f}%)<extra></extra>"
+                        ))
+                    
+                    fig_bar.update_layout(
+                        barmode='stack',
+                        height=40,
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        showlegend=False,
+                        xaxis=dict(visible=False, range=[0, 100]),
+                        yaxis=dict(visible=False)
+                    )
+                    
+                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
+                    
+                    # Desglose de ODFs
+                    with st.expander(f"🏭 Ver {len(productions)} ODF(s)", expanded=False):
+                        for idx, prod in enumerate(productions):
+                            prod_name = prod.get("name", "N/A")
+                            prod_id = prod.get("id")
+                            prod_kg = prod.get("qty_produced", 0) or 0
+                            prod_state = prod.get("state_display", prod.get("state", ""))
+                            color = ODF_COLORS[idx % len(ODF_COLORS)]
+                            odoo_link = get_odoo_link("mrp.production", prod_id)
+                            st.markdown(
+                                f"<span style='color:{color}'>●</span> [🔗 {prod_name}]({odoo_link}) - {prod_kg:,.0f} kg - {prod_state}",
+                                unsafe_allow_html=True
+                            )
+                else:
                     st.progress(min(avance / 100, 1.0))
-                    st.caption(f"{avance:.1f}% | {c.get('kg_producidos', 0):,.0f} / {c.get('kg_total', 0):,.0f} kg")
-            st.divider()
+
 
 
 def _render_detail(containers, username, password):
@@ -213,9 +304,14 @@ def _render_detail(containers, username, password):
         return
     
     selected = container_options[selected_key]
+    container_id = selected.get("id")
+    
+    # Link a Odoo
+    odoo_link = get_odoo_link("sale.order", container_id)
+    st.markdown(f"[🔗 **Abrir en Odoo**]({odoo_link})")
     
     # Información general
-    col_info1, col_info2, col_info3 = st.columns(3)
+    col_info1, col_info2, col_info3, col_info4 = st.columns(4)
     
     with col_info1:
         st.markdown("**📋 Información General**")
@@ -225,13 +321,22 @@ def _render_detail(containers, username, password):
         st.write(f"**PO Cliente:** {selected.get('origin', 'N/A')}")
     
     with col_info2:
+        st.markdown("**📅 Fechas**")
+        # Fecha límite con color
+        date_order = selected.get('date_order', '')
+        date_color, date_emoji, _ = get_date_urgency_color(date_order)
+        date_display = format_date_with_urgency(date_order)
+        st.markdown(f"**Fecha Límite:**")
+        st.markdown(f"<span style='color:{date_color}; font-size: 1.2em;'>{date_display}</span>", unsafe_allow_html=True)
+    
+    with col_info3:
         st.markdown("**📦 Producción**")
         st.write(f"**Producto Principal:** {selected.get('producto_principal', 'N/A')}")
         st.write(f"**Fabricaciones:** {selected.get('num_fabricaciones', 0)}")
         avance = selected.get('avance_pct', 0)
         st.write(f"**Avance:** :{'green' if avance >= 75 else 'orange' if avance >= 40 else 'red'}[{avance:.1f}%]")
     
-    with col_info3:
+    with col_info4:
         st.markdown("**💰 Cantidades**")
         st.write(f"**Total Pedido:** {selected.get('kg_total', 0):,.2f} kg")
         st.write(f"**Producido:** {selected.get('kg_producidos', 0):,.2f} kg")
@@ -272,39 +377,57 @@ def _render_detail(containers, username, password):
     
     st.divider()
     
-    # Tabla de fabricaciones
+    # Tabla de fabricaciones con links
     productions = selected.get("productions", [])
     st.markdown(f"**🏭 Fabricaciones Vinculadas ({len(productions)})**")
     
     if productions:
-        df_prod = pd.DataFrame([{
-            "OF": p.get("name", ""),
-            "Producto": p.get("product_name", "N/A"),
-            "Estado": p.get("state_display", ""),
-            "KG Plan": p.get("product_qty", 0),
-            "KG Prod": p.get("qty_produced", 0),
-            "Responsable": p.get("user_name", "N/A"),
-            "Sala": p.get("sala_proceso", "N/A"),
-            "Fecha": p.get("date_planned_start", "")[:10] if p.get("date_planned_start") else "N/A"
-        } for p in productions])
+        # Mostrar cada fabricación con link
+        for idx, p in enumerate(productions):
+            prod_id = p.get("id")
+            prod_name = p.get("name", "N/A")
+            prod_product = p.get("product_name", "N/A")
+            prod_state = p.get("state_display", p.get("state", ""))
+            prod_kg_plan = p.get("product_qty", 0)
+            prod_kg_prod = p.get("qty_produced", 0)
+            prod_sala = p.get("sala_proceso", "N/A")
+            prod_fecha = p.get("date_planned_start", "")[:10] if p.get("date_planned_start") else "N/A"
+            
+            color = ODF_COLORS[idx % len(ODF_COLORS)]
+            odoo_link = get_odoo_link("mrp.production", prod_id)
+            
+            with st.container(border=True):
+                col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 2])
+                with col1:
+                    st.markdown(f"<span style='color:{color}'>●</span> [🔗 **{prod_name}**]({odoo_link})", unsafe_allow_html=True)
+                with col2:
+                    st.write(f"📦 {prod_product[:30]}...")
+                with col3:
+                    st.write(f"📊 {prod_state}")
+                with col4:
+                    st.write(f"⚖️ {prod_kg_prod:,.0f} / {prod_kg_plan:,.0f} kg")
+                with col5:
+                    st.write(f"🏭 {prod_sala}")
         
-        st.dataframe(
-            df_prod,
-            use_container_width=True,
-            column_config={
-                "KG Plan": st.column_config.NumberColumn("KG Planif.", format="%,.0f"),
-                "KG Prod": st.column_config.NumberColumn("KG Produc.", format="%,.0f"),
-            },
-            hide_index=True,
-            height=min(400, len(productions) * 40 + 50)
-        )
-        
-        csv = df_prod.to_csv(index=False)
-        st.download_button(
-            "📥 Descargar Fabricaciones",
-            csv,
-            f"fabricaciones_{selected.get('name', 'container')}_{datetime.now().strftime('%Y%m%d')}.csv",
-            "text/csv"
-        )
+        # Tabla descargable
+        with st.expander("📥 Descargar datos", expanded=False):
+            df_prod = pd.DataFrame([{
+                "OF": p.get("name", ""),
+                "Producto": p.get("product_name", "N/A"),
+                "Estado": p.get("state_display", ""),
+                "KG Plan": p.get("product_qty", 0),
+                "KG Prod": p.get("qty_produced", 0),
+                "Responsable": p.get("user_name", "N/A"),
+                "Sala": p.get("sala_proceso", "N/A"),
+                "Fecha": p.get("date_planned_start", "")[:10] if p.get("date_planned_start") else "N/A"
+            } for p in productions])
+            
+            csv = df_prod.to_csv(index=False)
+            st.download_button(
+                "📥 Descargar Fabricaciones",
+                csv,
+                f"fabricaciones_{selected.get('name', 'container')}_{datetime.now().strftime('%Y%m%d')}.csv",
+                "text/csv"
+            )
     else:
         st.info("No hay fabricaciones vinculadas")
