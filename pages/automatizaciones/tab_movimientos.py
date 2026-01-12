@@ -312,6 +312,9 @@ def render(username: str, password: str, api_url: str):
                 code = code.strip()
                 if len(code) >= 5:  # Código válido
                     _agregar_pallet(code, username, password, api_url)
+            
+            # Limpiar input después de procesar
+            st.session_state.pallet_input = ""
         
         st.text_area(
             "📦 Escanear pallet(s)",
@@ -443,26 +446,45 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
         if resp.status_code == 200:
             data = resp.json()
             if data.get("found"):
-                # VALIDACIÓN DE DESTINO: verificar si ya está en la cámara destino
-                current_location = data.get("location_name", "")
-                destino = st.session_state.mov_camara.get("name", "") if st.session_state.mov_camara else ""
+                # VALIDACIÓN DE DESTINO: verificar si ya está en la cámara destino (por ID)
+                current_location_id = data.get("location_id")
+                target_location_id = st.session_state.mov_camara.get("id") if st.session_state.mov_camara else None
                 
-                if destino and current_location and destino.lower() in current_location.lower():
-                    st.toast(f"⚠️ {code} ya está en {destino}", icon="⚠️")
+                if current_location_id and target_location_id and current_location_id == target_location_id:
+                    st.toast(f"⚠️ {code} ya está en destino", icon="⚠️")
                     _play_sound("error")
                     return
                 
+                # Extraer datos del API (estructura correcta)
+                products = data.get("products", [])
+                first_product = products[0] if products else {}
+                pallet_status = data.get("status", "in_stock")
+                
+                # Determinar ubicación según estado
+                if pallet_status == "pending_reception":
+                    ubicacion_display = f"📥 {data.get('destination_name', 'En recepción')}"
+                    location_id = data.get("destination_id")  # Usar destination_id para pending
+                else:
+                    ubicacion_display = data.get("location_name", "N/A")
+                    location_id = data.get("location_id")
+                
                 pallet = {
                     "code": code,
-                    "producto": data.get("product_name", "N/A"),
-                    "kg": data.get("quantity", 0),
-                    "ubicacion": data.get("location_name", "N/A"),
-                    "lote": data.get("lot_name", "N/A"),
-                    "productor": data.get("producer", "N/A"),
-                    "location_id": data.get("location_id")  # Para undo
+                    "producto": first_product.get("name", "N/A"),
+                    "kg": data.get("total_quantity", 0),
+                    "ubicacion": ubicacion_display,
+                    "lote": first_product.get("lot", "N/A"),
+                    "productor": "N/A",
+                    "location_id": location_id,  # Para undo
+                    "status": pallet_status  # Guardar estado
                 }
                 st.session_state.mov_pallets.append(pallet)
-                st.toast(f"✅ {code} agregado", icon="📦")
+                
+                # Mensaje diferenciado según estado
+                if pallet_status == "pending_reception":
+                    st.toast(f"✅ {code} (En recepción - se cambiará ruta)", icon="📥")
+                else:
+                    st.toast(f"✅ {code} agregado", icon="📦")
                 _play_sound("success")
             else:
                 st.toast(f"❌ Pallet no encontrado", icon="⚠️")
@@ -483,13 +505,24 @@ def _play_sound(sound_type: str):
 
 
 def _render_pallet_card(pallet: dict):
-    """Renderiza una tarjeta de pallet"""
+    """Renderiza una tarjeta de pallet con badge de estado"""
+    # Determinar clase CSS según estado
+    card_class = "pallet-card"
+    status_badge = ""
+    
+    if pallet.get("status") == "pending_reception":
+        card_class = "pallet-card warning"
+        status_badge = '<span class="status-badge status-pending">📥 En Recepción</span>'
+    else:
+        status_badge = '<span class="status-badge status-ready">✓ Stock</span>'
+    
     st.markdown(f"""
-    <div class="pallet-card">
+    <div class="{card_class}">
         <div class="pallet-card-header">
             <span class="pallet-code">📦 {pallet['code']}</span>
             <span class="pallet-kg">{fmt_numero(pallet['kg'], 1)} kg</span>
         </div>
+        <div style="margin: 4px 0;">{status_badge}</div>
         <div class="pallet-detail">
             {pallet['producto'][:35]}{'...' if len(pallet['producto']) > 35 else ''}
         </div>
@@ -531,26 +564,30 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
                 if "mov_historial_dia" not in st.session_state:
                     st.session_state.mov_historial_dia = []
                 
+                # API retorna success y failed
+                success_count = result.get("success", 0)
+                error_count = result.get("failed", 0)
+                
                 st.session_state.mov_historial_dia.insert(0, {
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
                     "destino": st.session_state.mov_camara["name"],
                     "cantidad": len(pallet_codes),
                     "kg": sum(p["kg"] for p in st.session_state.mov_pallets),
-                    "success": result["success"],
-                    "failed": result["failed"]
+                    "success": success_count,
+                    "failed": error_count
                 })
                 
                 # Mostrar resultado
-                st.success(f"✅ **{result['success']} pallets movidos correctamente**")
+                st.success(f"✅ **{success_count} pallets movidos correctamente**")
                 
-                if result["failed"] > 0:
-                    st.warning(f"⚠️ {result['failed']} pallets fallaron")
+                if error_count > 0:
+                    st.warning(f"⚠️ {error_count} pallets fallaron")
                     with st.expander("Ver detalles"):
-                        for detail in result["details"]:
-                            if detail["status"] == "ok":
+                        for detail in result.get("details", []):
+                            if detail.get("success"):
                                 st.success(f"✅ {detail['pallet']}")
                             else:
-                                st.error(f"❌ {detail['pallet']}: {detail['message']}")
+                                st.error(f"❌ {detail['pallet']}: {detail.get('message', 'Error')}")
                 
                 # Limpiar estado
                 st.session_state.mov_pallets = []
