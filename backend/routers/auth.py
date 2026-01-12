@@ -172,8 +172,12 @@ async def get_user_permissions(token: str):
     # Obtener páginas permitidas por módulo
     module_pages = get_all_module_pages()
     allowed_pages = {}
-    for module in allowed:
-        allowed_pages[module] = get_allowed_pages(email, module)
+    
+    # Iterar sobre TODOS los módulos, no solo los permitidos
+    # Si el módulo no está en allowed pero tampoco en restricted, es público
+    for module in module_pages.keys():
+        if module in allowed or module not in restricted:
+            allowed_pages[module] = get_allowed_pages(email, module)
     
     return {
         "allowed_dashboards": allowed,
