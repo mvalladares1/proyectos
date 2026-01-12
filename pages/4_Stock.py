@@ -116,6 +116,7 @@ else:
     camaras_data = shared.filtrar_camaras_principales(camaras_data_all) if camaras_data_all else []
 
 # === PRE-CALCULAR PERMISOS ===
+_perm_movimientos = tiene_acceso_pagina("stock", "movimientos")
 _perm_camaras = tiene_acceso_pagina("stock", "camaras")
 _perm_pallets = tiene_acceso_pagina("stock", "pallets")
 _perm_trazabilidad = tiene_acceso_pagina("stock", "trazabilidad")
@@ -132,7 +133,11 @@ tab_mov_ui, tab_cam_ui, tab_pal_ui, tab_tra_ui = st.tabs([
 #           TAB 1: MOVIMIENTOS
 # =====================================================
 with tab_mov_ui:
-    tab_movimientos.render(username, password, camaras_data_all)
+    if _perm_movimientos:
+        tab_movimientos.render(username, password, camaras_data_all)
+    else:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Movimientos'. Contacta al administrador.")
+        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
 
 # =====================================================
 #           TAB 2: CÁMARAS
