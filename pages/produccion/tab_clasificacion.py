@@ -38,6 +38,7 @@ def render(username: str, password: str):
                 key="tipo_fruta_clasificacion"
             )
         
+        
         with col_filtros2:
             fecha_fin_clas = st.date_input(
                 "Fecha Fin",
@@ -54,6 +55,14 @@ def render(username: str, password: str):
                 key="tipo_manejo_clasificacion"
             )
         
+        # Filtro de orden de fabricación (nueva fila)
+        orden_fabricacion_input = st.text_input(
+            "🔍 Filtrar por Orden de Fabricación (opcional)",
+            placeholder="Ej: MO/00123",
+            key="orden_fabricacion_clasificacion",
+            help="Ingresa el nombre o parte del nombre de la orden de fabricación"
+        )
+        
         # Botón consultar
         consultar = st.button("🔍 Consultar Clasificación", use_container_width=True, type="primary")
     
@@ -67,6 +76,7 @@ def render(username: str, password: str):
             # Preparar parámetros opcionales
             tipo_fruta_param = None if tipo_fruta_seleccionado == "Todas" else tipo_fruta_seleccionado
             tipo_manejo_param = None if tipo_manejo_seleccionado == "Todos" else tipo_manejo_seleccionado
+            orden_fab_param = None if not orden_fabricacion_input.strip() else orden_fabricacion_input.strip()
             
             with st.spinner("⏳ Consultando clasificación de pallets..."):
                 try:
@@ -82,6 +92,9 @@ def render(username: str, password: str):
                     
                     if tipo_manejo_param:
                         params["tipo_manejo"] = tipo_manejo_param
+                    
+                    if orden_fab_param:
+                        params["orden_fabricacion"] = orden_fab_param
                     
                     
                     response = requests.get(
