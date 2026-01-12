@@ -20,11 +20,35 @@ class StockService:
     
     def move_pallet(self, pallet_code: str, location_dest_id: int) -> Dict:
         """
-        Mueve un pallet a una ubicación destino.
+        Mueve un pallet a una ubicación destino con validaciones completas.
         Lógica Dual:
         1. Si es Stock Real (Quant): Crea Transferencia Interna para TODOS los quants del paquete.
         2. Si es Pre-Recepción (Moving Line): Actualiza destino en TODAS las líneas de recepción abiertas del paquete.
+        
+        Validaciones implementadas:
+        - Ubicación destino válida (existe, activa, tipo interno)
+        - Stock mínimo (excepto recepciones pendientes)
+        - Movimientos pendientes (excepto recepciones pendientes)
+        - Bloqueos/Cuarentena
         """
+        
+        # VALIDACIÓN 1: Verificar que ubicación destino existe y es válida
+        dest_locations = self.odoo.search_read(
+            "stock.location",
+            [("id", "=", location_dest_id)],
+            ["id", "name", "usage", "active"]
+        )
+        
+        if not dest_locations:
+            return {"success": False, "message": f"❌ Ubicación destino no existe (ID: {location_dest_id})"}
+        
+        dest_location = dest_locations[0]
+        
+        if not dest_location.get("active", True):
+            return {"success": False, "message": f"❌ Ubicación destino está inactiva: {dest_location['name']}"}
+        
+        if dest_location.get("usage") != "internal":
+            return {"success": False, "message": f"❌ Solo se permiten ubicaciones internas. Tipo: {dest_location.get('usage')}"}
         
         # 0. Buscar el record del paquete (necesario para ambos casos)
         packages = self.odoo.search_read(
@@ -42,11 +66,66 @@ class StockService:
         quants = self.odoo.search_read(
             "stock.quant",
             [("package_id", "=", package_id), ("quantity", ">", 0)],
-            ["location_id", "product_id", "quantity", "product_uom_id"]
+            ["location_id", "product_id", "quantity", "product_uom_id", "lot_id"]
         )
         
         if quants:
-            # Agrupar quants por ubicación actual (en teoría deberían estar todos en la misma, pero por seguridad)
+            # VALIDACIÓN 2: Stock mínimo (solo para stock real, no recepciones)
+            total_quantity = sum(q["quantity"] for q in quants)
+            if total_quantity <= 0:
+                return {"success": False, "message": f"❌ Pallet sin stock disponible (cantidad: {total_quantity})"}
+            
+            # VALIDACIÓN 3: Verificar bloqueos/cuarentena en lotes
+            # Obtener todos los lotes de los quants
+            lot_ids = [q["lot_id"][0] for q in quants if q.get("lot_id")]
+            if lot_ids:
+                lots = self.odoo.search_read(
+                    "stock.lot",
+                    [("id", "in", lot_ids)],
+                    ["id", "name", "x_studio_estado_calidad", "x_studio_bloqueado"]
+                )
+                
+                for lot in lots:
+                    # Verificar si está bloqueado
+                    if lot.get("x_studio_bloqueado"):
+                        return {"success": False, "message": f"🚫 Lote {lot['name']} está bloqueado"}
+                    
+                    # Verificar estado de calidad (cuarentena)
+                    estado_calidad = lot.get("x_studio_estado_calidad", "").lower()
+                    if estado_calidad in ["cuarentena", "rechazado", "bloqueado"]:
+                        return {"success": False, "message": f"🚫 Lote {lot['name']} en {estado_calidad}"}
+            
+            # VALIDACIÓN 4: Verificar movimientos pendientes (excepto recepciones)
+            # Buscar pickings en estado draft/waiting/confirmed/assigned que NO sean recepciones
+            pending_moves = self.odoo.search_read(
+                "stock.move",
+                [
+                    ("product_id", "in", [q["product_id"][0] for q in quants]),
+                    ("state", "in", ["draft", "waiting", "confirmed", "assigned"]),
+                    ("picking_id.picking_type_code", "!=", "incoming")  # Excluir recepciones
+                ],
+                ["id", "picking_id", "product_id", "state"]
+            )
+            
+            if pending_moves:
+                # Verificar si alguno de estos movimientos involucra el mismo paquete
+                for move in pending_moves:
+                    move_lines = self.odoo.search_read(
+                        "stock.move.line",
+                        [
+                            ("move_id", "=", move["id"]),
+                            "|",
+                            ("package_id", "=", package_id),
+                            ("result_package_id", "=", package_id)
+                        ],
+                        ["id", "picking_id"]
+                    )
+                    
+                    if move_lines:
+                        picking_name = move_lines[0]["picking_id"][1] if move_lines[0].get("picking_id") else "Desconocido"
+                        return {"success": False, "message": f"⚠️ Pallet tiene movimiento pendiente en: {picking_name}"}
+            
+            # Agrupar quants por ubicación actual
             locations_found = set(q["location_id"][0] for q in quants)
             
             # Si ya están en el destino, informar
@@ -66,7 +145,7 @@ class StockService:
                 picking_type_id = picking_types[0]["id"]
             
             # Crear un único Picking para todos los movimientos
-            # Usamos la primera ubicación encontrada como origen del picking (lo más común)
+            # Usamos la primera ubicación encontrada como origen del picking
             first_loc_id = quants[0]["location_id"][0]
             
             picking_vals = {
