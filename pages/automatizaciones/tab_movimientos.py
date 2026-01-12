@@ -874,13 +874,11 @@ def render(username: str, password: str):
         if st.button("🔍 Buscar", use_container_width=True, type="primary"):
             if camara_input:
                 _buscar_camara(camara_input.strip(), username, password, api_url)
-                st.rerun()
 
     # Enter key trigger
     if camara_input and camara_input != st.session_state.mov_last_scan:
         _buscar_camara(camara_input.strip(), username, password, api_url)
         st.session_state.mov_last_scan = camara_input
-        st.rerun()
 
     # Historial de cámaras (botones rápidos)
     if st.session_state.mov_historial:
