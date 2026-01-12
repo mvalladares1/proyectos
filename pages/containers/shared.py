@@ -5,8 +5,10 @@ Contiene funciones API y utilidades.
 import streamlit as st
 import httpx
 from typing import Dict, List
+from datetime import datetime, timedelta
 
 API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+ODOO_BASE_URL = "https://riofuturo.server98c6e.oerpondemand.net/web"
 
 
 # --------------------- Funciones API ---------------------
@@ -120,3 +122,75 @@ def init_session_state():
     """Inicializa variables de session_state para el módulo Containers."""
     if "containers_loading" not in st.session_state:
         st.session_state.containers_loading = False
+
+
+def get_date_urgency_color(date_str: str) -> tuple:
+    """
+    Retorna color y emoji según la urgencia de la fecha.
+    Returns: (color_hex, emoji, days_remaining)
+    """
+    if not date_str:
+        return "#888888", "⚪", None
+    
+    try:
+        # Parsear fecha
+        if 'T' in str(date_str):
+            fecha = datetime.fromisoformat(str(date_str).replace('Z', '+00:00'))
+        else:
+            fecha = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+        
+        # Si tiene timezone, convertir a naive
+        if fecha.tzinfo:
+            fecha = fecha.replace(tzinfo=None)
+        
+        hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        dias = (fecha - hoy).days
+        
+        if dias < 0:
+            return "#ff4444", "🔴", dias  # Vencido
+        elif dias <= 3:
+            return "#ff4444", "🔴", dias  # Crítico (0-3 días)
+        elif dias <= 7:
+            return "#ff8800", "🟠", dias  # Urgente (4-7 días)
+        elif dias <= 14:
+            return "#ffaa00", "🟡", dias  # Próximo (8-14 días)
+        else:
+            return "#00cc66", "🟢", dias  # Holgado (>14 días)
+    except:
+        return "#888888", "⚪", None
+
+
+def get_odoo_link(model: str, record_id: int) -> str:
+    """Genera link a Odoo para un registro."""
+    if model == "sale.order":
+        return f"{ODOO_BASE_URL}#id={record_id}&menu_id=451&cids=1&action=676&model=sale.order&view_type=form"
+    elif model == "mrp.production":
+        return f"{ODOO_BASE_URL}#id={record_id}&menu_id=390&cids=1&action=604&model=mrp.production&view_type=form"
+    return f"{ODOO_BASE_URL}#id={record_id}&model={model}&view_type=form"
+
+
+def format_date_with_urgency(date_str: str) -> str:
+    """Formatea fecha con indicador de urgencia."""
+    color, emoji, dias = get_date_urgency_color(date_str)
+    
+    if not date_str:
+        return "—"
+    
+    try:
+        if 'T' in str(date_str):
+            fecha = datetime.fromisoformat(str(date_str).replace('Z', '+00:00'))
+        else:
+            fecha = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+        
+        fecha_fmt = fecha.strftime('%d/%m/%Y')
+        
+        if dias is not None:
+            if dias < 0:
+                return f"{emoji} {fecha_fmt} (vencido hace {abs(dias)}d)"
+            elif dias == 0:
+                return f"{emoji} {fecha_fmt} (HOY)"
+            else:
+                return f"{emoji} {fecha_fmt} ({dias}d)"
+        return fecha_fmt
+    except:
+        return str(date_str)[:10] if date_str else "—"
