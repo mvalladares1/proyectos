@@ -61,8 +61,30 @@ def render(username: str, password: str):
             "🔍 Filtrar por Orden de Fabricación (opcional)",
             placeholder="Ej: MO/00123",
             key="orden_fabricacion_clasificacion",
-            help="Ingresa el nombre o parte del nombre de la orden de fabricación"
+            help="Ingresa el nombre o parte del nombre de la orden de fabricación o transferencia"
         )
+
+        # Mapeo de grados para el filtro
+        GRADOS_OPCIONES = {
+            'IQF AA': '1',
+            'IQF A': '2',
+            'PSP': '3',
+            'W&B': '4',
+            'Block': '5',
+            'Jugo': '6',
+            'IQF Retail': '7'
+        }
+        
+        grados_seleccionados = st.multiselect(
+            "🏷️ Filtrar por Grados",
+            options=list(GRADOS_OPCIONES.keys()),
+            default=list(GRADOS_OPCIONES.keys()),
+            key="grados_filtro_clasificacion",
+            help="Selecciona los grados que deseas visualizar en los resultados"
+        )
+        
+        # Convertir nombres seleccionados a sus códigos numéricos
+        codigos_grados_seleccionados = [GRADOS_OPCIONES[name] for name in grados_seleccionados]
         
         # Botón consultar
         consultar = st.button("🔍 Consultar Clasificación", use_container_width=True, type="primary")
@@ -129,38 +151,48 @@ def render(username: str, password: str):
             '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF8C00'},
             '7': {'nombre': 'IQF Retail', 'emoji': '🟢', 'color': '#70AD47'}
         }
+
+        # --- FILTRADO DINÁMICO EN FRONTEND ---
+        # 1. Filtrar el diccionario de grados (KPIs)
+        grados_raw = data.get('grados', {})
+        grados_mostrar = {k: v for k, v in grados_raw.items() if k in codigos_grados_seleccionados}
+        
+        # 2. Filtrar la lista de detalle (Tabla y Gráfico)
+        detalle_raw = data.get('detalle', [])
+        detalle_mostrar = [item for item in detalle_raw if item.get('grado') in grados_seleccionados]
+        
+        # 3. Recalcular total basado en la selección
+        total_kg_mostrar = sum(grados_mostrar.values())
         
         # === KPIs ===
         st.markdown("---")
-        st.markdown("#### 📊 Totales por Grado")
+        st.markdown(f"#### 📊 Totales Filtrados ({len(grados_seleccionados)} grados seleccionados)")
         
         # Primera fila: Grados 1-4
         col1, col2, col3, col4 = st.columns(4)
         
-        grados = data.get('grados', {})
-        
         with col1:
             st.metric(
                 label=f"{GRADOS_INFO['1']['emoji']} {GRADOS_INFO['1']['nombre']}",
-                value=f"{fmt_numero(grados.get('1', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('1', 0))} kg"
             )
         
         with col2:
             st.metric(
                 label=f"{GRADOS_INFO['2']['emoji']} {GRADOS_INFO['2']['nombre']}",
-                value=f"{fmt_numero(grados.get('2', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('2', 0))} kg"
             )
         
         with col3:
             st.metric(
                 label=f"{GRADOS_INFO['3']['emoji']} {GRADOS_INFO['3']['nombre']}",
-value=f"{fmt_numero(grados.get('3', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('3', 0))} kg"
             )
         
         with col4:
             st.metric(
                 label=f"{GRADOS_INFO['4']['emoji']} {GRADOS_INFO['4']['nombre']}",
-                value=f"{fmt_numero(grados.get('4', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('4', 0))} kg"
             )
         
         # Segunda fila: Grados 5-7 + Total
@@ -169,42 +201,43 @@ value=f"{fmt_numero(grados.get('3', 0))} kg"
         with col5:
             st.metric(
                 label=f"{GRADOS_INFO['5']['emoji']} {GRADOS_INFO['5']['nombre']}",
-                value=f"{fmt_numero(grados.get('5', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('5', 0))} kg"
             )
         
         with col6:
             st.metric(
                 label=f"{GRADOS_INFO['6']['emoji']} {GRADOS_INFO['6']['nombre']}",
-                value=f"{fmt_numero(grados.get('6', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('6', 0))} kg"
             )
         
         with col7:
             st.metric(
                 label=f"{GRADOS_INFO['7']['emoji']} {GRADOS_INFO['7']['nombre']}",
-                value=f"{fmt_numero(grados.get('7', 0))} kg"
+                value=f"{fmt_numero(grados_mostrar.get('7', 0))} kg"
             )
         
         with col8:
             st.metric(
-                label="📦 TOTAL",
-                value=f"{fmt_numero(data.get('total_kg', 0))} kg"
+                label="📦 TOTAL FILTRADO",
+                value=f"{fmt_numero(total_kg_mostrar)} kg"
             )
         
         # === GRÁFICO DE BARRAS ===
         st.markdown("---")
-        st.markdown("#### 📈 Distribución por Grado")
+        st.markdown("#### 📈 Distribución por Grado (Filtrado)")
         
-        if data.get('total_kg', 0) > 0:
-            # Crear DataFrame para el gráfico con datos filtrados (solo grados con kg > 0)
+        if total_kg_mostrar > 0:
+            # Crear DataFrame para el gráfico con datos filtrados
             chart_data_list = []
             for grado_num, info in GRADOS_INFO.items():
-                kg = grados.get(grado_num, 0)
-                if kg > 0:  # Solo mostrar grados con datos
-                    chart_data_list.append({
-                        'Grado': info['nombre'],
-                        'Kilogramos': kg,
-                        'Color': info['color']
-                    })
+                if grado_num in codigos_grados_seleccionados:
+                    kg = grados_mostrar.get(grado_num, 0)
+                    if kg > 0:
+                        chart_data_list.append({
+                            'Grado': info['nombre'],
+                            'Kilogramos': kg,
+                            'Color': info['color']
+                        })
             
             if chart_data_list:
                 chart_data = pd.DataFrame(chart_data_list)
@@ -247,26 +280,25 @@ value=f"{fmt_numero(grados.get('3', 0))} kg"
                 st.altair_chart(chart, use_container_width=True)
                 
                 # Porcentajes en columnas
-                st.markdown("##### 📊 Detalle de Participación")
+                st.markdown("##### 📊 Detalle de Participación (en lo seleccionado)")
                 cols = st.columns(len(chart_data_list))
-                total = data.get('total_kg', 0)
                 
                 for idx, (_, row) in enumerate(chart_data.iterrows()):
                     with cols[idx]:
-                        pct = (row['Kilogramos'] / total * 100) if total > 0 else 0
+                        pct = (row['Kilogramos'] / total_kg_mostrar * 100) if total_kg_mostrar > 0 else 0
                         st.info(f"**{row['Grado']}**\n\n{pct:.1f}% ({row['Kilogramos']:,.2f} kg)")
             else:
-                st.info("ℹ️ No hay datos para mostrar con los filtros seleccionados")
+                st.info("ℹ️ No hay datos para los grados seleccionados")
         else:
-            st.info("ℹ️ No hay datos para mostrar con los filtros seleccionados")
+            st.info("ℹ️ El total para los grados seleccionados es 0.00 kg")
         
         # === TABLA DETALLADA ===
-        if data.get('detalle'):
+        if detalle_mostrar:
             st.markdown("---")
-            st.markdown("#### 📋 Detalle de Productos")
+            st.markdown(f"#### 📋 Detalle de Pallets ({len(detalle_mostrar)} registros)")
             
             # Convertir a DataFrame
-            df_detalle = pd.DataFrame(data['detalle'])
+            df_detalle = pd.DataFrame(detalle_mostrar)
             
             # Formatear columnas
             df_detalle['kg'] = df_detalle['kg'].apply(lambda x: f"{x:,.2f}")
@@ -274,14 +306,14 @@ value=f"{fmt_numero(grados.get('3', 0))} kg"
             
             # Renombrar columnas para display
             df_display = df_detalle[[
-                'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'fecha'
+                'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'fecha'
             ]].copy()
             
             df_display.columns = [
-                'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Fecha'
+                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Fecha'
             ]
             
-            # Mostrar tabla con filtros
+            # Mostrar tabla
             st.dataframe(
                 df_display,
                 use_container_width=True,
@@ -290,7 +322,7 @@ value=f"{fmt_numero(grados.get('3', 0))} kg"
             )
             
             # Exportar a Excel
-            if st.button("📥 Exportar a Excel", key="export_clasificacion"):
+            if st.button("📥 Exportar a Excel (Filtrado)", key="export_clasificacion"):
                 try:
                     import io
                     buffer = io.BytesIO()
@@ -301,13 +333,13 @@ value=f"{fmt_numero(grados.get('3', 0))} kg"
                     st.download_button(
                         label="Descargar Excel",
                         data=buffer.getvalue(),
-                        file_name=f"clasificacion_grados_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        file_name=f"clasificacion_filtrada_{datetime.now().strftime('%Y%m%d')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 except ImportError:
-                    st.warning("⚠️ Se requiere 'openpyxl' para exportar a Excel. Instala con: pip install openpyxl")
+                    st.error("⚠️ Error al exportar. Falta la librería 'openpyxl'.")
         else:
-            st.info("ℹ️ No hay productos clasificados en el período seleccionado")
+            st.info("ℹ️ No hay detalle para los grados seleccionados")
     else:
         st.info("👆 Selecciona los filtros y haz clic en **Consultar Clasificación** para ver los datos")
 
