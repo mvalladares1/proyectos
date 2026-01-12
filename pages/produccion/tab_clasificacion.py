@@ -191,19 +191,7 @@ def render(username: str, password: str):
                 tooltip=[alt.Tooltip('Grado:N'), alt.Tooltip('Kilogramos:Q', format=',.2f')]
             )
             
-            # Etiquetas con el valor en KG sobre las barras
-            text = bars.mark_text(
-                align='center',
-                baseline='bottom',
-                dy=-5,
-                fontSize=13,
-                fontWeight='bold'
-            ).encode(
-                text=alt.Text('Kilogramos:Q', format=',.0f'),
-                opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0))
-            )
-            
-            chart_final = (bars + text).add_params(
+            chart_final = bars.add_params(
                 seleccion_chart
             ).properties(
                 height=400
