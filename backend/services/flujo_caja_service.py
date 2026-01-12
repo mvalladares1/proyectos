@@ -367,8 +367,8 @@ class FlujoCajaService:
         errores = []
         info = []  # Alertas informativas (signo)
         
-        neutral = flujos_por_linea.get(self.CATEGORIA_NEUTRAL, 0)
-        sin_clasificar = flujos_por_linea.get(self.CATEGORIA_UNCLASSIFIED, 0)
+        neutral = flujos_por_linea.get(CATEGORIA_NEUTRAL, 0)
+        sin_clasificar = flujos_por_linea.get(CATEGORIA_UNCLASSIFIED, 0)
         
         # 1. Validar NEUTRAL (~0)
         if abs(neutral) > 1000:
@@ -404,7 +404,7 @@ class FlujoCajaService:
                         break  # Una alerta es suficiente
         elif sin_clasificar != 0:
             # Fallback: validación global
-            total_flujos = sum(abs(v) for k, v in flujos_por_linea.items() if k != self.CATEGORIA_NEUTRAL)
+            total_flujos = sum(abs(v) for k, v in flujos_por_linea.items() if k != CATEGORIA_NEUTRAL)
             if total_flujos > 0:
                 proporcion = abs(sin_clasificar) / total_flujos
                 if proporcion > 0.05:
@@ -419,7 +419,7 @@ class FlujoCajaService:
         # 3. Validar signo esperado (INFORMATIVO, no bloqueante)
         if config.get("alertar_signo_inesperado", True):
             for codigo, monto in flujos_por_linea.items():
-                if monto == 0 or codigo in [self.CATEGORIA_NEUTRAL, self.CATEGORIA_UNCLASSIFIED, self.CATEGORIA_FX_EFFECT]:
+                if monto == 0 or codigo in [CATEGORIA_NEUTRAL, CATEGORIA_UNCLASSIFIED, CATEGORIA_FX_EFFECT]:
                     continue
                 cat_info = categorias.get(codigo, {})
                 signo_esperado = cat_info.get("signo_esperado", "variable")
@@ -647,7 +647,7 @@ class FlujoCajaService:
         for c in self.catalogo.get("conceptos", []):
             if c.get("tipo") == "LINEA":
                 montos_por_concepto[c["id"]] = 0.0
-        montos_por_concepto[self.CATEGORIA_NEUTRAL] = 0.0
+        montos_por_concepto[CATEGORIA_NEUTRAL] = 0.0
         
         cuentas_pendientes = {}
         cuentas_por_concepto = {} 
@@ -718,9 +718,9 @@ class FlujoCajaService:
                         continue  # Cuenta sin mapeo, no procesar
                     
                     # NEUTRAL
-                    if concepto_id == self.CATEGORIA_NEUTRAL:
-                        montos_por_concepto[self.CATEGORIA_NEUTRAL] += balance
-                        agregar_cuenta_concepto(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, balance, cantidad=count)
+                    if concepto_id == CATEGORIA_NEUTRAL:
+                        montos_por_concepto[CATEGORIA_NEUTRAL] += balance
+                        agregar_cuenta_concepto(CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, balance, cantidad=count)
                     else:
                         if concepto_id not in montos_por_concepto:
                             montos_por_concepto[concepto_id] = 0.0
@@ -779,11 +779,11 @@ class FlujoCajaService:
                     # Clasificar
                     concepto_id, es_pendiente = self._clasificar_cuenta(codigo)
                     
-                    if concepto_id == self.CATEGORIA_NEUTRAL:
-                         # Neutrales 0 no suelen interesarnos, pero las agregamos igual si el usuario las pide
-                        if self.CATEGORIA_NEUTRAL not in cuentas_por_concepto:
-                            cuentas_por_concepto[self.CATEGORIA_NEUTRAL] = {}
-                        cuentas_por_concepto[self.CATEGORIA_NEUTRAL][codigo] = {'nombre': nombre, 'monto': 0.0, 'cantidad': 0, 'pendiente': False}
+                    if concepto_id == CATEGORIA_NEUTRAL:
+                        # Neutrales 0 no suelen interesarnos, pero las agregamos igual si el usuario las pide
+                        if CATEGORIA_NEUTRAL not in cuentas_por_concepto:
+                            cuentas_por_concepto[CATEGORIA_NEUTRAL] = {}
+                        cuentas_por_concepto[CATEGORIA_NEUTRAL][codigo] = {'nombre': nombre, 'monto': 0.0, 'cantidad': 0, 'pendiente': False}
                     else:
                         if concepto_id not in cuentas_por_concepto:
                              cuentas_por_concepto[concepto_id] = {}
@@ -823,7 +823,7 @@ class FlujoCajaService:
             prefix = nodo_id + "."
             for c_id, monto in montos_por_concepto.items():
                 if c_id == nodo_id or c_id.startswith(prefix):
-                    if c_id == self.CATEGORIA_NEUTRAL:
+                    if c_id == CATEGORIA_NEUTRAL:
                         continue
                     monto_total += monto
             return monto_total
@@ -898,7 +898,7 @@ class FlujoCajaService:
         
         # Montos técnicos/especiales
         efecto_tc = montos_por_concepto.get("3.2.3", 0)  # Efectos variación TC
-        neutral = montos_por_concepto.get(self.CATEGORIA_NEUTRAL, 0)  # NO se suma
+        neutral = montos_por_concepto.get(CATEGORIA_NEUTRAL, 0)  # NO se suma
         
         # Monto de cuentas pendientes de mapeo (ya está en 1.2.6)
         monto_pendientes = sum(c.get('monto', 0) for c in cuentas_pendientes.values())
