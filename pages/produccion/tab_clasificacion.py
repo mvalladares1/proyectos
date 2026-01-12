@@ -140,11 +140,45 @@ def render(username: str, password: str):
         # Mostrar datos
         data = st.session_state.clasificacion_data
         
-        # Mapeo de grados e información visual
+        # --- REGLA DE ORO: FILTRADO DINÁMICO ESTRICTO (Intersección) ---
+        # Filtramos lo que hay en memoria según los widgets actuales de la pantalla
+        detalle_raw = data.get('detalle', [])
+        
+        # 1. Filtrar por Planta (si el usuario cambió el dropdown sin re-consultar)
+        if tipo_operacion_seleccionado != "Todas":
+            detalle_raw = [d for d in detalle_raw if d.get('planta') == tipo_operacion_seleccionado]
+            
+        # 2. Filtrar por Fruta
+        if tipo_fruta_seleccionado != "Todas":
+            detalle_raw = [d for d in detalle_raw if tipo_fruta_seleccionado.lower() in d.get('producto', '').lower()]
+            
+        # 3. Filtrar por Manejo
+        if tipo_manejo_seleccionado != "Todos":
+            # Usar lógica de código si está disponible, o simplemente filtrar detalle
+            for d in detalle_raw:
+                code = d.get('codigo_producto', '')
+                if len(code) >= 4:
+                    m_digit = code[3]
+                    is_org = m_digit == '2'
+                    if tipo_manejo_seleccionado == "Orgánico" and not is_org:
+                        d['_remove'] = True
+                    elif tipo_manejo_seleccionado == "Convencional" and is_org:
+                        d['_remove'] = True
+            detalle_raw = [d for d in detalle_raw if not d.get('_remove')]
+
+        # Re-mapear grados_raw basado en este detalle ultra-filtrado
+        grados_raw = {str(i): 0 for i in range(1, 8)}
+        GRADOS_REVERSE = {'IQF AA': '1', 'IQF A': '2', 'PSP': '3', 'W&B': '4', 'Block': '5', 'Jugo': '6', 'IQF Retail': '7'}
+        for d in detalle_raw:
+            g_code = GRADOS_REVERSE.get(d.get('grado'))
+            if g_code:
+                grados_raw[g_code] += d.get('kg', 0)
+        
+        # Mapeo de información visual
         GRADOS_INFO = {
             '1': {'nombre': 'IQF AA', 'emoji': '⭐', 'color': '#FFD700'},
             '2': {'nombre': 'IQF A', 'emoji': '🔵', 'color': '#4472C4'},
-            '3': {'nombre': 'PSP', 'emoji': '🟣', 'color': '#9966FF'},
+            '3': {'nombre': 'PSP', 'emoji': 'Purple', 'color': '#9966FF'},
             '4': {'nombre': 'W&B', 'emoji': '🟤', 'color': '#8B4513'},
             '5': {'nombre': 'Block', 'emoji': '🟦', 'color': '#1E90FF'},
             '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF8C00'},
@@ -156,10 +190,10 @@ def render(username: str, password: str):
         st.markdown("#### 📈 Distribución por Grado")
         st.info("💡 **Gráfico Interactivo:** Haz clic en los cuadros de la leyenda para filtrar los KPIs y la tabla detallada.")
         
-        # Preparar data para el gráfico
+        # Preparar data para el gráfico (usando grados_raw que ya tiene los filtros aplicados)
         base_data_list = []
         for grado_num, info in GRADOS_INFO.items():
-            kg = data.get('grados', {}).get(grado_num, 0)
+            kg = grados_raw.get(grado_num, 0)
             if kg > 0:
                 base_data_list.append({
                     'Grado': info['nombre'],

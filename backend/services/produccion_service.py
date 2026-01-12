@@ -395,12 +395,24 @@ class ProduccionService:
             # 1. Si hay filtro de orden, buscar stock.move de esa producción primero
             move_ids_filter = None
             if orden_fabricacion and orden_fabricacion.strip():
+                # Domain base para buscar producción
+                prod_search_domain = [('name', 'ilike', orden_fabricacion.strip())]
+                
+                # REGLA ESTRICTA: Si se especificó planta, filtrar la búsqueda de la orden también
+                if tipo_operacion == "VILKUN":
+                    prod_search_domain.append('|')
+                    prod_search_domain.append(('picking_type_id.name', 'ilike', 'VLK'))
+                    prod_search_domain.append(('name', 'ilike', 'VLK/'))
+                elif tipo_operacion == "RIO FUTURO":
+                    prod_search_domain.append(('picking_type_id.name', 'not ilike', 'VLK'))
+                    prod_search_domain.append(('name', 'not ilike', 'VLK/'))
+
                 production_ids = self.odoo.search(
                     'mrp.production',
-                    [('name', 'ilike', orden_fabricacion.strip())]
+                    prod_search_domain
                 )
+                
                 if not production_ids:
-                    # Si no se encuentra la orden, retornar vacío
                     return {
                         "grados": {str(i): 0 for i in range(1, 8)},
                         "total_kg": 0,
@@ -424,12 +436,23 @@ class ProduccionService:
             domain_sml = [
                 ('date', '>=', fecha_inicio + ' 00:00:00'),
                 ('date', '<=', fecha_fin + ' 23:59:59'),
-                ('result_package_id', '!=', False),  # Debe tener pallet (CORREGIDO)
-                ('qty_done', '>', 0),  # Debe tener cantidad hecha
-                ('state', '!=', 'cancel'),  # Excluir cancelados
-                ('move_id.production_id', '!=', False)  # IMPORTANTE: Solo SALIDAS (Subproductos/Terminados)
+                ('result_package_id', '!=', False),
+                ('qty_done', '>', 0),
+                ('state', '!=', 'cancel'),
+                ('move_id.production_id', '!=', False)
             ]
             
+            # Si no hay orden específica, pero hay filtro de planta, 
+            # podemos pre-filtrar lines por el picking_type de su producción
+            if not move_ids_filter and tipo_operacion != "Todas":
+                if tipo_operacion == "VILKUN":
+                    domain_sml.append('|')
+                    domain_sml.append(('move_id.production_id.picking_type_id.name', 'ilike', 'VLK'))
+                    domain_sml.append(('move_id.production_id.name', 'ilike', 'VLK/'))
+                else: # RIO FUTURO
+                    domain_sml.append(('move_id.production_id.picking_type_id.name', 'not ilike', 'VLK'))
+                    domain_sml.append(('move_id.production_id.name', 'not ilike', 'VLK/'))
+
             # Agregar filtro de move_ids si se especificó orden
             if move_ids_filter:
                 domain_sml.append(('move_id', 'in', move_ids_filter))
@@ -513,14 +536,15 @@ class ProduccionService:
                     for p in productions:
                         pk_type = p.get('picking_type_id')
                         pk_name = pk_type[1] if isinstance(pk_type, list) and len(pk_type) >= 2 else ''
+                        p_name = p.get('name', '')
                         
-                        # Clasificar Planta
+                        # Clasificar Planta (REGLA MEJORADA)
                         planta = "RIO FUTURO"
-                        if "VLK" in pk_name.upper() or "VILKUN" in pk_name.upper():
+                        if "VLK" in pk_name.upper() or "VILKUN" in pk_name.upper() or p_name.startswith("VLK"):
                             planta = "VILKUN"
                             
                         prod_data[p['id']] = {
-                            'name': p.get('name', ''),
+                            'name': p_name,
                             'planta': planta
                         }
                 
