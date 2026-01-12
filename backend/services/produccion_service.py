@@ -353,15 +353,20 @@ class ProduccionService:
                                   tipo_manejo: Optional[str] = None,
                                   orden_fabricacion: Optional[str] = None) -> Dict[str, Any]:
         """
-        Obtiene la clasificación de pallets (IQF A y RETAIL) de SUBPRODUCTOS.
+        Obtiene la clasificación de productos de SUBPRODUCTOS por GRADO.
         
         LÓGICA:
         1. Busca en stock.move los movimientos de subproductos
         2. Lee el default_code (Referencia Interna) del producto
         3. Clasifica según el dígito en posición 5:
-           - '2' → IQF A
-           - '7' → IQF Retail
-        4. Suma kg de quantity_done según la clasificación
+           1 = IQF AA
+           2 = IQF A
+           3 = PSP
+           4 = W&B
+           5 = Block
+           6 = Jugo
+           7 = IQF Retail
+        4. Suma kg de quantity_done por cada grado
         
         Estructura del código (ejemplo: 401272000):
         [1] Etapa | [2-3] Familia | [4] Manejo | [5] GRADO | [6] Variedad | [7-9] Retail
@@ -375,12 +380,25 @@ class ProduccionService:
         
         Returns:
             {
-                "iqf_a_kg": float,
-                "retail_kg": float,
+                "grados": {
+                    "1": kg, "2": kg, "3": kg, "4": kg, "5": kg, "6": kg, "7": kg
+                },
                 "total_kg": float,
                 "detalle": [...] # Lista de productos clasificados
             }
         """
+        
+        # Mapeo de dígitos a nombres de grado
+        GRADO_NOMBRES = {
+            '1': 'IQF AA',
+            '2': 'IQF A',
+            '3': 'PSP',
+            '4': 'W&B',
+            '5': 'Block',
+            '6': 'Jugo',
+            '7': 'IQF Retail'
+        }
+        
         try:
             # 1. Construir domain para stock.move (subproductos)
             domain_sm = [
@@ -401,8 +419,7 @@ class ProduccionService:
                 else:
                     # Si no se encuentra la orden, retornar vacío
                     return {
-                        "iqf_a_kg": 0,
-                        "retail_kg": 0,
+                        "grados": {str(i): 0 for i in range(1, 8)},
                         "total_kg": 0,
                         "detalle": []
                     }
@@ -424,8 +441,7 @@ class ProduccionService:
             
             if not stock_moves:
                 return {
-                    "iqf_a_kg": 0,
-                    "retail_kg": 0,
+                    "grados": {str(i): 0 for i in range(1, 8)},
                     "total_kg": 0,
                     "detalle": []
                 }
@@ -452,8 +468,7 @@ class ProduccionService:
                     }
             
             # 4. Procesar y clasificar
-            iqf_a_kg = 0
-            retail_kg = 0
+            grados_kg = {str(i): 0 for i in range(1, 8)}
             detalle = []
             
             for sm in stock_moves:
@@ -495,36 +510,33 @@ class ProduccionService:
                                 continue
                 
                 # CLASIFICACIÓN POR POSICIÓN 5 DEL CÓDIGO
-                # Posición 5 (índice 4): 2 = IQF A, 7 = IQF Retail
                 grado_digit = product_code[4] if len(product_code) >= 5 else ''
-                clasificacion = None
                 
-                if grado_digit == '2':
-                    clasificacion = 'IQF A'
-                    iqf_a_kg += quantity_done
-                elif grado_digit == '7':
-                    clasificacion = 'IQF Retail'
-                    retail_kg += quantity_done
-                else:
-                    # No es IQF A ni IQF Retail, no incluir
+                # Solo procesar si es un grado válido (1-7)
+                if grado_digit not in GRADO_NOMBRES:
                     continue
+                
+                clasificacion = GRADO_NOMBRES[grado_digit]
+                grados_kg[grado_digit] += quantity_done
                 
                 # Agregar al detalle
                 detalle.append({
                     'producto': product_name,
                     'codigo_producto': product_code,
-                    'clasificacion': clasificacion,
+                    'grado': clasificacion,
                     'kg': round(quantity_done, 2),
                     'orden_fabricacion': production_name,
                     'referencia': sm.get('reference', ''),
                     'fecha': sm.get('date', '')
                 })
             
-            total_kg = iqf_a_kg + retail_kg
+            total_kg = sum(grados_kg.values())
+            
+            # Redondear los kg por grado
+            grados_kg_rounded = {k: round(v, 2) for k, v in grados_kg.items()}
             
             return {
-                "iqf_a_kg": round(iqf_a_kg, 2),
-                "retail_kg": round(retail_kg, 2),
+                "grados": grados_kg_rounded,
                 "total_kg": round(total_kg, 2),
                 "detalle": sorted(detalle, key=lambda x: x['fecha'], reverse=True)
             }
@@ -534,3 +546,4 @@ class ProduccionService:
             error_detail = traceback.format_exc()
             print(f"❌ ERROR en get_clasificacion_pallets: {error_detail}")
             raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}")
+ 
