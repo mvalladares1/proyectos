@@ -29,6 +29,7 @@ from automatizaciones import shared
 from automatizaciones import tab_crear
 from automatizaciones import tab_monitor
 from automatizaciones import tab_movimientos
+from automatizaciones import tab_monitor_movimientos
 
 # Requerir autenticación
 proteger_pagina()
@@ -107,7 +108,7 @@ tuneles = shared.get_tuneles(username, password)
 API_URL = shared.API_URL
 
 # === TABS PRINCIPALES ===
-tab1, tab2, tab3 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes", "📦 Movimientos"])
+tab1, tab2, tab3, tab4 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes", "📦 Movimientos", "📊 Monitor Mov."])
 
 # =====================================================
 #           TAB 1: CREAR ORDEN
@@ -135,3 +136,12 @@ with tab3:
         tab_movimientos.render(username, password, API_URL)
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Movimientos'. Contacta al administrador.")
+
+# =====================================================
+#           TAB 4: MONITOR DE MOVIMIENTOS
+# =====================================================
+with tab4:
+    if _perm_movimientos:
+        tab_monitor_movimientos.render(username, password, API_URL)
+    else:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor Movimientos'. Contacta al administrador.")

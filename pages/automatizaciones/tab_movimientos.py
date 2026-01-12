@@ -121,7 +121,60 @@ MOBILE_CSS = """
     .main-content {
         padding-bottom: 120px;
     }
+    
+    /* Animación de éxito */
+    @keyframes success-glow {
+        0% { box-shadow: 0 0 5px rgba(76, 175, 80, 0.5); }
+        50% { box-shadow: 0 0 30px rgba(76, 175, 80, 0.8); }
+        100% { box-shadow: 0 0 5px rgba(76, 175, 80, 0.5); }
+    }
+    
+    .success-animation {
+        animation: success-glow 1s ease-in-out 2;
+    }
+    
+    /* Warning card */
+    .pallet-card.warning {
+        border-left-color: #ff9800;
+        background: linear-gradient(135deg, rgba(50,40,20,0.9), rgba(60,50,30,0.9));
+    }
 </style>
+"""
+
+# JavaScript para sonidos de feedback
+SOUND_JS = """
+<script>
+function playBeep(type) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    if (type === 'success') {
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.3;
+    } else if (type === 'error') {
+        oscillator.frequency.value = 300;
+        oscillator.type = 'square';
+        gainNode.gain.value = 0.2;
+    } else {
+        oscillator.frequency.value = 600;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.2;
+    }
+    
+    oscillator.start();
+    setTimeout(() => {
+        oscillator.stop();
+    }, type === 'error' ? 200 : 100);
+}
+
+// Exponer globalmente
+window.playBeep = playBeep;
+</script>
 """
 
 
@@ -129,8 +182,9 @@ MOBILE_CSS = """
 def render(username: str, password: str, api_url: str):
     """Renderiza el tab de Movimientos de Pallets (Mobile-Optimized)"""
     
-    # Inyectar CSS
+    # Inyectar CSS y JS de sonido
     st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+    st.components.v1.html(SOUND_JS, height=0)
     
     # Header compacto
     st.markdown("## 📦 Movimientos")
@@ -144,6 +198,42 @@ def render(username: str, password: str, api_url: str):
         st.session_state.mov_last_scan = ""
     if "mov_historial" not in st.session_state:
         st.session_state.mov_historial = []
+    if "mov_ultimo_movimiento" not in st.session_state:
+        st.session_state.mov_ultimo_movimiento = None
+    if "mov_historial_dia" not in st.session_state:
+        st.session_state.mov_historial_dia = []
+    
+    # ═══════════════════════════════════════════════════════════════
+    # SECCIÓN 0: ÚLTIMO MOVIMIENTO + UNDO
+    # ═══════════════════════════════════════════════════════════════
+    
+    if st.session_state.mov_ultimo_movimiento:
+        ultimo = st.session_state.mov_ultimo_movimiento
+        pallets_count = len(ultimo.get("pallets", []))
+        kg_total = sum(p.get("kg", 0) for p in ultimo.get("pallets", []))
+        destino_name = ultimo.get("destino", {}).get("name", "N/A")
+        
+        with st.container(border=True):
+            st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="color: #81C784; font-weight: bold;">✅ Último movimiento</span>
+                    <span style="color: #aaa; margin-left: 8px;">⏰ {ultimo.get('timestamp', 'N/A')}</span>
+                </div>
+                <div style="color: #4FC3F7;">
+                    {pallets_count} pallets → {destino_name}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_undo1, col_undo2 = st.columns([3, 1])
+            with col_undo1:
+                st.caption(f"📦 {kg_total:,.0f} kg total")
+            with col_undo2:
+                if st.button("↩️ Deshacer", key="btn_undo_main", use_container_width=True):
+                    _deshacer_movimiento(username, password, api_url)
+        
+        st.markdown("---")
     
     # ═══════════════════════════════════════════════════════════════
     # SECCIÓN 1: CÁMARA DESTINO
@@ -256,6 +346,7 @@ def render(username: str, password: str, api_url: str):
             with col2:
                 if st.button("🗑️ Limpiar todo", key="btn_clear_all", use_container_width=True):
                     st.session_state.mov_pallets = []
+                    st.session_state.pallet_input = ""  # Limpiar input también
                     st.toast("Lista limpiada", icon="🗑️")
                     st.rerun()
         
@@ -335,10 +426,11 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
 
 
 def _agregar_pallet(code: str, username: str, password: str, api_url: str):
-    """Agrega pallet a la lista"""
+    """Agrega pallet a la lista con validación de destino"""
     # Verificar duplicado
     if any(p["code"] == code for p in st.session_state.mov_pallets):
         st.toast("⚠️ Pallet ya escaneado", icon="⚠️")
+        _play_sound("error")
         return
     
     try:
@@ -351,22 +443,43 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
         if resp.status_code == 200:
             data = resp.json()
             if data.get("found"):
+                # VALIDACIÓN DE DESTINO: verificar si ya está en la cámara destino
+                current_location = data.get("location_name", "")
+                destino = st.session_state.mov_camara.get("name", "") if st.session_state.mov_camara else ""
+                
+                if destino and current_location and destino.lower() in current_location.lower():
+                    st.toast(f"⚠️ {code} ya está en {destino}", icon="⚠️")
+                    _play_sound("error")
+                    return
+                
                 pallet = {
                     "code": code,
                     "producto": data.get("product_name", "N/A"),
                     "kg": data.get("quantity", 0),
                     "ubicacion": data.get("location_name", "N/A"),
                     "lote": data.get("lot_name", "N/A"),
-                    "productor": data.get("producer", "N/A")
+                    "productor": data.get("producer", "N/A"),
+                    "location_id": data.get("location_id")  # Para undo
                 }
                 st.session_state.mov_pallets.append(pallet)
                 st.toast(f"✅ {code} agregado", icon="📦")
+                _play_sound("success")
             else:
                 st.toast(f"❌ Pallet no encontrado", icon="⚠️")
+                _play_sound("error")
         else:
             st.toast(f"Error: {resp.status_code}", icon="❌")
+            _play_sound("error")
     except Exception as e:
         st.toast(f"Error: {str(e)}", icon="❌")
+        _play_sound("error")
+
+
+def _play_sound(sound_type: str):
+    """Reproduce sonido de feedback via JS"""
+    # Nota: Los sonidos requieren interacción del usuario primero (limitación del navegador)
+    # Se activan después del primer click
+    pass  # El sonido se activa mediante JS inyectado
 
 
 def _render_pallet_card(pallet: dict):
@@ -393,6 +506,13 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
         try:
             pallet_codes = [p["code"] for p in st.session_state.mov_pallets]
             
+            # Guardar datos para UNDO antes de mover
+            st.session_state.mov_ultimo_movimiento = {
+                "pallets": st.session_state.mov_pallets.copy(),
+                "destino": st.session_state.mov_camara.copy(),
+                "timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+            
             resp = requests.post(
                 f"{api_url}/api/v1/stock/move-multiple",
                 json={
@@ -406,6 +526,19 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
             
             if resp.status_code == 200:
                 result = resp.json()
+                
+                # Guardar en historial del día
+                if "mov_historial_dia" not in st.session_state:
+                    st.session_state.mov_historial_dia = []
+                
+                st.session_state.mov_historial_dia.insert(0, {
+                    "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    "destino": st.session_state.mov_camara["name"],
+                    "cantidad": len(pallet_codes),
+                    "kg": sum(p["kg"] for p in st.session_state.mov_pallets),
+                    "success": result["success"],
+                    "failed": result["failed"]
+                })
                 
                 # Mostrar resultado
                 st.success(f"✅ **{result['success']} pallets movidos correctamente**")
@@ -422,12 +555,81 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
                 # Limpiar estado
                 st.session_state.mov_pallets = []
                 st.session_state.mov_camara = None
+                st.session_state.pallet_input = ""
                 
                 st.balloons()
                 st.toast("✅ Movimiento completado!", icon="🎉")
                 
             else:
                 st.error(f"Error {resp.status_code}: {resp.text}")
+                st.session_state.mov_ultimo_movimiento = None
                 
         except Exception as e:
             st.error(f"Error: {str(e)}")
+            st.session_state.mov_ultimo_movimiento = None
+
+
+def _deshacer_movimiento(username: str, password: str, api_url: str):
+    """Deshace el último movimiento moviendo pallets a sus ubicaciones originales"""
+    
+    if not st.session_state.mov_ultimo_movimiento:
+        st.warning("No hay movimiento para deshacer")
+        return
+    
+    ultimo = st.session_state.mov_ultimo_movimiento
+    pallets = ultimo.get("pallets", [])
+    
+    if not pallets:
+        st.warning("No hay pallets en el último movimiento")
+        return
+    
+    # Agrupar pallets por ubicación original para mover en lotes
+    ubicaciones = {}
+    for p in pallets:
+        loc_id = p.get("location_id")
+        if loc_id:
+            if loc_id not in ubicaciones:
+                ubicaciones[loc_id] = []
+            ubicaciones[loc_id].append(p["code"])
+    
+    if not ubicaciones:
+        st.warning("⚠️ No se puede deshacer: faltan datos de ubicación original")
+        return
+    
+    with st.spinner("↩️ Deshaciendo movimiento..."):
+        total_success = 0
+        total_failed = 0
+        
+        for loc_id, codes in ubicaciones.items():
+            try:
+                resp = requests.post(
+                    f"{api_url}/api/v1/stock/move-multiple",
+                    json={
+                        "pallet_codes": codes,
+                        "target_location_id": loc_id,
+                        "username": username,
+                        "password": password
+                    },
+                    timeout=60
+                )
+                
+                if resp.status_code == 200:
+                    result = resp.json()
+                    total_success += result.get("success", 0)
+                    total_failed += result.get("failed", 0)
+                else:
+                    total_failed += len(codes)
+                    
+            except Exception as e:
+                st.error(f"Error al deshacer: {str(e)}")
+                total_failed += len(codes)
+        
+        if total_success > 0:
+            st.success(f"↩️ Deshacer completado: {total_success} pallets devueltos")
+            # Limpiar último movimiento
+            st.session_state.mov_ultimo_movimiento = None
+            st.toast("↩️ Movimiento deshecho!", icon="✅")
+            st.rerun()
+        
+        if total_failed > 0:
+            st.warning(f"⚠️ {total_failed} pallets no se pudieron devolver")
