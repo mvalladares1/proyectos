@@ -521,9 +521,9 @@ class ProduccionService:
                 if not product_code or len(product_code) < 5:
                     continue
 
-                # FILTRO DE SEGURIDAD: Solo subproductos reales (Empiezan con 1 o 2)
-                # Los componentes nunca empiezan con 1 ni 2.
-                if not (product_code.startswith('1') or product_code.startswith('2')):
+                # FILTRO DE SEGURIDAD: Ignorar materias primas (empiezan con 1 o 2)
+                # Los subproductos reales (terminales) empiezan con otros números (4, 6, etc.)
+                if product_code.startswith('1') or product_code.startswith('2'):
                     continue
                 
                 # Lote
