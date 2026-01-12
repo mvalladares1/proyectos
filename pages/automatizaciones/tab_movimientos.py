@@ -365,7 +365,7 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
         
         st.info(f"🔍 Buscando cámara: {code}...")
         
-        url = f"{api_url}/api/v1/stock/ubicacion-by-barcode"
+        url = f"{api_url}/api/v1/automatizaciones/movimientos/ubicacion-by-barcode"
         params = {"username": username, "password": password, "barcode": code}
         
         st.write(f"**DEBUG - URL:** `{url}`")

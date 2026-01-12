@@ -416,3 +416,39 @@ async def completar_pendientes(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/movimientos/ubicacion-by-barcode")
+async def get_ubicacion_by_barcode(
+    username: str,
+    password: str,
+    barcode: str
+):
+    """
+    Busca una ubicación (cámara) por su código de barras.
+    """
+    try:
+        odoo = get_odoo_client(username=username, password=password)
+        
+        locations = odoo.search_read(
+            "stock.location",
+            [("barcode", "=", barcode), ("usage", "=", "internal")],
+            ["id", "name", "display_name", "barcode"]
+        )
+        
+        if not locations:
+            return {
+                "found": False,
+                "message": f"No se encontró ubicación con código: {barcode}"
+            }
+        
+        loc = locations[0]
+        return {
+            "found": True,
+            "id": loc["id"],
+            "name": loc["name"],
+            "display_name": loc.get("display_name", loc["name"]),
+            "barcode": loc.get("barcode", "")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
