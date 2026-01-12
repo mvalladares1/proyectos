@@ -31,7 +31,20 @@ MOBILE_CSS = """
         padding: 12px !important;
     }
     
-    /* Tarjeta de pallet */
+    /* Contador sticky */
+    .sticky-counter {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(14,17,23,0.98);
+        padding: 12px;
+        margin: -8px -8px 12px -8px;
+        border-radius: 8px;
+        border-bottom: 2px solid #4CAF50;
+        backdrop-filter: blur(10px);
+    }
+    
+    /* Tarjeta de pallet mejorada */
     .pallet-card {
         background: linear-gradient(135deg, rgba(30,30,40,0.9), rgba(40,40,55,0.9));
         border-radius: 12px;
@@ -39,6 +52,7 @@ MOBILE_CSS = """
         margin-bottom: 12px;
         border-left: 4px solid #4CAF50;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        position: relative;
     }
     
     .pallet-card.pending {
@@ -70,38 +84,47 @@ MOBILE_CSS = """
         margin-top: 4px;
     }
     
-    /* Sticky footer para botón confirmar */
-    .sticky-footer {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(0deg, rgba(14,17,23,1) 70%, rgba(14,17,23,0) 100%);
-        padding: 20px 20px 25px 20px;
-        z-index: 999;
+    /* Indicador de movimiento FROM → TO */
+    .move-indicator {
+        background: rgba(33, 150, 243, 0.1);
+        border-radius: 8px;
+        padding: 8px;
+        margin: 8px 0;
+        border-left: 3px solid #2196F3;
     }
     
-    .sticky-btn {
-        width: 100%;
-        padding: 16px 24px !important;
-        font-size: 1.3rem !important;
-        font-weight: bold !important;
-        border-radius: 12px !important;
-        background: linear-gradient(135deg, #4CAF50, #2E7D32) !important;
-        border: none !important;
-        color: white !important;
-        box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4) !important;
+    .location-from {
+        color: #FFA726;
+        font-size: 0.85rem;
     }
     
-    /* Animación pulse para feedback */
-    @keyframes pulse-success {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.02); }
-        100% { transform: scale(1); }
+    .location-to {
+        color: #66BB6A;
+        font-size: 0.9rem;
+        font-weight: 600;
     }
     
-    .pulse-effect {
-        animation: pulse-success 0.3s ease-in-out;
+    .arrow-down {
+        color: #2196F3;
+        font-size: 1.2rem;
+        text-align: center;
+        margin: 4px 0;
+    }
+    
+    /* Botón eliminar en tarjeta */
+    .delete-btn {
+        background: transparent;
+        border: none;
+        color: #f44336;
+        cursor: pointer;
+        font-size: 1.2rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    
+    .delete-btn:hover {
+        background: rgba(244, 67, 54, 0.2);
     }
     
     /* Status badge */
@@ -138,10 +161,27 @@ MOBILE_CSS = """
         border-left-color: #ff9800;
         background: linear-gradient(135deg, rgba(50,40,20,0.9), rgba(60,50,30,0.9));
     }
+    
+    /* Spinner inline */
+    .inline-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: #4CAF50;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
 </style>
 """
 
-# JavaScript para sonidos de feedback
+# JavaScript para sonidos, vibración, shortcuts y auto-focus
 SOUND_JS = """
 <script>
 function playBeep(type) {
@@ -156,10 +196,14 @@ function playBeep(type) {
         oscillator.frequency.value = 800;
         oscillator.type = 'sine';
         gainNode.gain.value = 0.3;
+        // Vibración corta para éxito
+        if (navigator.vibrate) navigator.vibrate(50);
     } else if (type === 'error') {
         oscillator.frequency.value = 300;
         oscillator.type = 'square';
         gainNode.gain.value = 0.2;
+        // Patrón de vibración para error
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     } else {
         oscillator.frequency.value = 600;
         oscillator.type = 'sine';
@@ -172,8 +216,30 @@ function playBeep(type) {
     }, type === 'error' ? 200 : 100);
 }
 
+// Shortcut Ctrl+Enter para confirmar
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+        const confirmBtn = Array.from(document.querySelectorAll('button')).find(
+            btn => btn.textContent.includes('CONFIRMAR MOVIMIENTO')
+        );
+        if (confirmBtn) {
+            confirmBtn.click();
+            e.preventDefault();
+        }
+    }
+});
+
+// Auto-focus helper
+function autoFocusTextarea() {
+    setTimeout(() => {
+        const textarea = document.querySelector('textarea[aria-label="📦 Escanear pallet(s)"]');
+        if (textarea) textarea.focus();
+    }, 100);
+}
+
 // Exponer globalmente
 window.playBeep = playBeep;
+window.autoFocusTextarea = autoFocusTextarea;
 </script>
 """
 
@@ -284,6 +350,7 @@ def render(username: str, password: str, api_url: str):
             <div style="font-size: 0.9rem; color: #90CAF9;">📍 DESTINO SELECCIONADO</div>
             <div style="font-size: 1.4rem; font-weight: bold; color: white;">{st.session_state.mov_camara['name']}</div>
         </div>
+        <script>window.autoFocusTextarea && window.autoFocusTextarea();</script>
         """, unsafe_allow_html=True)
         
         if st.button("✏️ Cambiar destino", key="btn_change_camara", use_container_width=True):
@@ -297,6 +364,22 @@ def render(username: str, password: str, api_url: str):
     if st.session_state.mov_camara:
         st.markdown("---")
         st.markdown("### 📋 Escanear Pallets")
+        
+        # Contador sticky siempre visible
+        total_kg = sum(p["kg"] for p in st.session_state.mov_pallets)
+        st.markdown(f"""
+        <div class="sticky-counter">
+            <div style="text-align: center;">
+                <span style="font-size: 1.3rem; color: #4CAF50; font-weight: bold;">
+                    {len(st.session_state.mov_pallets)}
+                </span>
+                <span style="color: #aaa; margin: 0 8px;">/</span>
+                <span style="font-size: 1rem; color: #81C784;">
+                    {fmt_numero(total_kg, 1)} kg
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Input de pallet - text_area para múltiples líneas
         def on_pallet_change():
@@ -325,21 +408,8 @@ def render(username: str, password: str, api_url: str):
             height=80
         )
         
-        # Contador rápido
+        # Botones de acción rápida
         if st.session_state.mov_pallets:
-            total_kg = sum(p["kg"] for p in st.session_state.mov_pallets)
-            st.markdown(f"""
-            <div style="text-align: center; padding: 12px; background: rgba(76,175,80,0.2); border-radius: 8px; margin: 12px 0;">
-                <span style="font-size: 1.5rem; font-weight: bold; color: #4CAF50;">
-                    {len(st.session_state.mov_pallets)} pallets
-                </span>
-                <span style="color: #aaa; margin-left: 8px;">
-                    ({fmt_numero(total_kg, 1)} kg)
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Botones de acción rápida arriba
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("🚨 Quitar último", key="btn_remove_last", use_container_width=True):
@@ -355,7 +425,7 @@ def render(username: str, password: str, api_url: str):
         
         # Tarjetas de pallets (más reciente arriba)
         for i, pallet in enumerate(reversed(st.session_state.mov_pallets)):
-            _render_pallet_card(pallet)
+            _render_pallet_card(pallet, i)
         
         if not st.session_state.mov_pallets:
             st.info("📦 Escanea el primer pallet para agregarlo")
@@ -391,6 +461,40 @@ def render(username: str, password: str, api_url: str):
         ):
             _ejecutar_movimiento(username, password, api_url)
     
+    # ═══════════════════════════════════════════════════════════════
+    # SECCIÓN 4: HISTORIAL DEL DÍA
+    # ═══════════════════════════════════════════════════════════════
+    
+    if st.session_state.mov_historial_dia:
+        st.markdown("---")
+        with st.expander(f"📊 Resumen del día ({len(st.session_state.mov_historial_dia)} movimientos)"):
+            for mov in st.session_state.mov_historial_dia[:20]:  # Max 20
+                col1, col2, col3, col4 = st.columns([1, 2, 1, 1])
+                with col1:
+                    st.caption(mov['timestamp'])
+                with col2:
+                    st.write(f"{mov['cantidad']} pallets → {mov['destino']}")
+                with col3:
+                    st.caption(f"{fmt_numero(mov['kg'], 0)} kg")
+                with col4:
+                    if mov['failed'] > 0:
+                        st.caption(f"✅ {mov['success']} ❌ {mov['failed']}")
+                    else:
+                        st.caption(f"✅ {mov['success']}")
+            
+            # Botón exportar CSV
+            if len(st.session_state.mov_historial_dia) > 0:
+                import pandas as pd
+                df = pd.DataFrame(st.session_state.mov_historial_dia)
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    "📥 Exportar historial CSV",
+                    csv,
+                    f"movimientos_{datetime.now().strftime('%Y%m%d')}.csv",
+                    "text/csv",
+                    use_container_width=True
+                )
+    
     # Espaciado para sticky footer
     st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
 
@@ -401,7 +505,7 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
         resp = requests.get(
             f"{api_url}/api/v1/stock/ubicacion-by-barcode",
             params={"username": username, "password": password, "barcode": code},
-            timeout=10
+            timeout=20  # Aumentado de 10 a 20
         )
         
         if resp.status_code == 200:
@@ -430,18 +534,30 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
 
 def _agregar_pallet(code: str, username: str, password: str, api_url: str):
     """Agrega pallet a la lista con validación de destino"""
-    # Verificar duplicado
-    if any(p["code"] == code for p in st.session_state.mov_pallets):
-        st.toast("⚠️ Pallet ya escaneado", icon="⚠️")
-        _play_sound("error")
+    # Lock para evitar race conditions
+    if st.session_state.get("processing_scan", False):
         return
     
+    st.session_state.processing_scan = True
+    
     try:
+        # Verificar duplicado
+        if any(p["code"] == code for p in st.session_state.mov_pallets):
+            st.toast("⚠️ Pallet ya escaneado", icon="⚠️")
+            _play_sound("error")
+            return
+        
+        # Mostrar spinner inline
+        toast_placeholder = st.empty()
+        toast_placeholder.info(f"🔍 Buscando {code}...")
+        
         resp = requests.get(
             f"{api_url}/api/v1/stock/pallet-info",
             params={"username": username, "password": password, "pallet_code": code},
-            timeout=10
+            timeout=20  # Aumentado de 10 a 20 segundos
         )
+        
+        toast_placeholder.empty()
         
         if resp.status_code == 200:
             data = resp.json()
@@ -495,6 +611,8 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
     except Exception as e:
         st.toast(f"Error: {str(e)}", icon="❌")
         _play_sound("error")
+    finally:
+        st.session_state.processing_scan = False
 
 
 def _play_sound(sound_type: str):
@@ -504,8 +622,8 @@ def _play_sound(sound_type: str):
     pass  # El sonido se activa mediante JS inyectado
 
 
-def _render_pallet_card(pallet: dict):
-    """Renderiza una tarjeta de pallet con badge de estado"""
+def _render_pallet_card(pallet: dict, index: int = 0):
+    """Renderiza una tarjeta de pallet con badge de estado y FROM → TO"""
     # Determinar clase CSS según estado
     card_class = "pallet-card"
     status_badge = ""
@@ -516,6 +634,9 @@ def _render_pallet_card(pallet: dict):
     else:
         status_badge = '<span class="status-badge status-ready">✓ Stock</span>'
     
+    # Obtener destino de session_state
+    destino_name = st.session_state.mov_camara.get('name', 'N/A') if st.session_state.mov_camara else 'N/A'
+    
     st.markdown(f"""
     <div class="{card_class}">
         <div class="pallet-card-header">
@@ -524,10 +645,17 @@ def _render_pallet_card(pallet: dict):
         </div>
         <div style="margin: 4px 0;">{status_badge}</div>
         <div class="pallet-detail">
-            {pallet['producto'][:35]}{'...' if len(pallet['producto']) > 35 else ''}
+            {pallet['producto'][:40]}{'...' if len(pallet['producto']) > 40 else ''}
         </div>
+        
+        <div class="move-indicator">
+            <div class="location-from">📍 Actual: {pallet['ubicacion']}</div>
+            <div class="arrow-down">⬇️</div>
+            <div class="location-to">🎯 Destino: {destino_name}</div>
+        </div>
+        
         <div class="pallet-detail">
-            📍 {pallet['ubicacion']} • 🏷️ {pallet['lote']}
+            🏷️ {pallet['lote']}
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -576,6 +704,8 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
                     "success": success_count,
                     "failed": error_count
                 })
+                # Limitar a 50 entradas máximo
+                st.session_state.mov_historial_dia = st.session_state.mov_historial_dia[:50]
                 
                 # Mostrar resultado
                 st.success(f"✅ **{success_count} pallets movidos correctamente**")
