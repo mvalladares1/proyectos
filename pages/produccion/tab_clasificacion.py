@@ -119,78 +119,151 @@ def render(username: str, password: str):
         # Mostrar datos
         data = st.session_state.clasificacion_data
         
+        # Mapeo de grados
+        GRADOS_INFO = {
+            '1': {'nombre': 'IQF AA', 'emoji': '⭐', 'color': '#FFD700'},
+            '2': {'nombre': 'IQF A', 'emoji': '🔵', 'color': '#4472C4'},
+            '3': {'nombre': 'PSP', 'emoji': '🟣', 'color': '#9966FF'},
+            '4': {'nombre': 'W&B', 'emoji': '🟤', 'color': '#8B4513'},
+            '5': {'nombre': 'Block', 'emoji': '🟦', 'color': '#1E90FF'},
+            '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF8C00'},
+            '7': {'nombre': 'IQF Retail', 'emoji': '🟢', 'color': '#70AD47'}
+        }
+        
         # === KPIs ===
         st.markdown("---")
-        st.markdown("#### 📊 Totales por Clasificación")
+        st.markdown("#### 📊 Totales por Grado")
         
-        col1, col2, col3 = st.columns(3)
+        # Primera fila: Grados 1-4
+        col1, col2, col3, col4 = st.columns(4)
+        
+        grados = data.get('grados', {})
         
         with col1:
             st.metric(
-                label="🔵 IQF A",
-                value=f"{fmt_numero(data['iqf_a_kg'])} kg",
-                delta=None
+                label=f"{GRADOS_INFO['1']['emoji']} {GRADOS_INFO['1']['nombre']}",
+                value=f"{fmt_numero(grados.get('1', 0))} kg"
             )
         
         with col2:
             st.metric(
-                label="🟢 RETAIL",
-                value=f"{fmt_numero(data['retail_kg'])} kg",
-                delta=None
+                label=f"{GRADOS_INFO['2']['emoji']} {GRADOS_INFO['2']['nombre']}",
+                value=f"{fmt_numero(grados.get('2', 0))} kg"
             )
         
         with col3:
             st.metric(
+                label=f"{GRADOS_INFO['3']['emoji']} {GRADOS_INFO['3']['nombre']}",
+value=f"{fmt_numero(grados.get('3', 0))} kg"
+            )
+        
+        with col4:
+            st.metric(
+                label=f"{GRADOS_INFO['4']['emoji']} {GRADOS_INFO['4']['nombre']}",
+                value=f"{fmt_numero(grados.get('4', 0))} kg"
+            )
+        
+        # Segunda fila: Grados 5-7 + Total
+        col5, col6, col7, col8 = st.columns(4)
+        
+        with col5:
+            st.metric(
+                label=f"{GRADOS_INFO['5']['emoji']} {GRADOS_INFO['5']['nombre']}",
+                value=f"{fmt_numero(grados.get('5', 0))} kg"
+            )
+        
+        with col6:
+            st.metric(
+                label=f"{GRADOS_INFO['6']['emoji']} {GRADOS_INFO['6']['nombre']}",
+                value=f"{fmt_numero(grados.get('6', 0))} kg"
+            )
+        
+        with col7:
+            st.metric(
+                label=f"{GRADOS_INFO['7']['emoji']} {GRADOS_INFO['7']['nombre']}",
+                value=f"{fmt_numero(grados.get('7', 0))} kg"
+            )
+        
+        with col8:
+            st.metric(
                 label="📦 TOTAL",
-                value=f"{fmt_numero(data['total_kg'])} kg",
-                delta=None
+                value=f"{fmt_numero(data.get('total_kg', 0))} kg"
             )
         
         # === GRÁFICO DE BARRAS ===
         st.markdown("---")
-        st.markdown("#### 📈 Distribución por Clasificación")
+        st.markdown("#### 📈 Distribución por Grado")
         
-        if data['total_kg'] > 0:
-            # Crear DataFrame para el gráfico
-            chart_data = pd.DataFrame({
-                'Clasificación': ['IQF A', 'RETAIL'],
-                'Kilogramos': [data['iqf_a_kg'], data['retail_kg']]
-            })
+        if data.get('total_kg', 0) > 0:
+            # Crear DataFrame para el gráfico con datos filtrados (solo grados con kg > 0)
+            chart_data_list = []
+            for grado_num, info in GRADOS_INFO.items():
+                kg = grados.get(grado_num, 0)
+                if kg > 0:  # Solo mostrar grados con datos
+                    chart_data_list.append({
+                        'Grado': info['nombre'],
+                        'Kilogramos': kg,
+                        'Color': info['color']
+                    })
             
-            # Crear gráfico con Altair
-            chart = alt.Chart(chart_data).mark_bar().encode(
-                x=alt.X('Clasificación:N', title='Clasificación'),
-                y=alt.Y('Kilogramos:Q', title='Kilogramos'),
-                color=alt.Color('Clasificación:N', 
-                               scale=alt.Scale(domain=['IQF A', 'RETAIL'], 
-                                              range=['#4472C4', '#70AD47']),
-                               legend=None),
-                tooltip=[
-                    alt.Tooltip('Clasificación:N', title='Clasificación'),
-                    alt.Tooltip('Kilogramos:Q', title='Kilogramos', format=',.2f')
-                ]
-            ).properties(
-                height=400
-            )
-            
-            st.altair_chart(chart, use_container_width=True)
-            
-            # Porcentajes
-            pct_iqf_a = (data['iqf_a_kg'] / data['total_kg'] * 100) if data['total_kg'] > 0 else 0
-            pct_retail = (data['retail_kg'] / data['total_kg'] * 100) if data['total_kg'] > 0 else 0
-            
-            col_pct1, col_pct2 = st.columns(2)
-            with col_pct1:
-                st.info(f"**IQF A:** {pct_iqf_a:.1f}% del total")
-            with col_pct2:
-                st.success(f"**RETAIL:** {pct_retail:.1f}% del total")
+            if chart_data_list:
+                chart_data = pd.DataFrame(chart_data_list)
+                
+                # Crear gráfico con Altair mejorado
+                chart = alt.Chart(chart_data).mark_bar(
+                    cornerRadiusTopLeft=8,
+                    cornerRadiusTopRight=8
+                ).encode(
+                    x=alt.X('Grado:N', 
+                           title='Grado de Producto',
+                           axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14)),
+                    y=alt.Y('Kilogramos:Q', 
+                           title='Kilogramos (kg)',
+                           axis=alt.Axis(labelFontSize=12, titleFontSize=14)),
+                    color=alt.Color('Grado:N',
+                                   scale=alt.Scale(
+                                       domain=[info['nombre'] for info in GRADOS_INFO.values()],
+                                       range=[info['color'] for info in GRADOS_INFO.values()]
+                                   ),
+                                   legend=alt.Legend(
+                                       title='Grado',
+                                       orient='right',
+                                       titleFontSize=13,
+                                       labelFontSize=12
+                                   )),
+                    tooltip=[
+                        alt.Tooltip('Grado:N', title='Grado'),
+                        alt.Tooltip('Kilogramos:Q', title='Kilogramos', format=',.2f')
+                    ]
+                ).properties(
+                    height=450
+                ).configure_axis(
+                    grid=True,
+                    gridOpacity=0.3
+                ).configure_view(
+                    strokeWidth=0
+                )
+                
+                st.altair_chart(chart, use_container_width=True)
+                
+                # Porcentajes en columnas
+                st.markdown("##### 📊 Detalle de Participación")
+                cols = st.columns(len(chart_data_list))
+                total = data.get('total_kg', 0)
+                
+                for idx, (_, row) in enumerate(chart_data.iterrows()):
+                    with cols[idx]:
+                        pct = (row['Kilogramos'] / total * 100) if total > 0 else 0
+                        st.info(f"**{row['Grado']}**\n\n{pct:.1f}% ({row['Kilogramos']:,.2f} kg)")
+            else:
+                st.info("ℹ️ No hay datos para mostrar con los filtros seleccionados")
         else:
             st.info("ℹ️ No hay datos para mostrar con los filtros seleccionados")
         
         # === TABLA DETALLADA ===
-        if data['detalle']:
+        if data.get('detalle'):
             st.markdown("---")
-            st.markdown("#### 📋 Detalle de Pallets")
+            st.markdown("#### 📋 Detalle de Productos")
             
             # Convertir a DataFrame
             df_detalle = pd.DataFrame(data['detalle'])
@@ -201,11 +274,11 @@ def render(username: str, password: str):
             
             # Renombrar columnas para display
             df_display = df_detalle[[
-                'pallet', 'clasificacion', 'kg', 'producto', 'lote', 'fecha'
+                'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'fecha'
             ]].copy()
             
             df_display.columns = [
-                'Pallet', 'Clasificación', 'Kilogramos', 'Producto', 'Lote', 'Fecha'
+                'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Fecha'
             ]
             
             # Mostrar tabla con filtros
@@ -228,12 +301,14 @@ def render(username: str, password: str):
                     st.download_button(
                         label="Descargar Excel",
                         data=buffer.getvalue(),
-                        file_name=f"clasificacion_pallets_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        file_name=f"clasificacion_grados_{datetime.now().strftime('%Y%m%d')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 except ImportError:
                     st.warning("⚠️ Se requiere 'openpyxl' para exportar a Excel. Instala con: pip install openpyxl")
         else:
-            st.info("ℹ️ No hay pallets clasificados en el período seleccionado")
+            st.info("ℹ️ No hay productos clasificados en el período seleccionado")
     else:
         st.info("👆 Selecciona los filtros y haz clic en **Consultar Clasificación** para ver los datos")
+
+        
