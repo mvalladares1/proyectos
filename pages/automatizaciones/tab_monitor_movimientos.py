@@ -7,9 +7,12 @@ import pandas as pd
 from datetime import datetime
 
 
-@st.fragment
-def render(username: str, password: str, api_url: str):
+def render():
     """Renderiza el tab de Monitor de Movimientos"""
+    
+    username = st.session_state.get("username")
+    password = st.session_state.get("password")
+    api_url = st.session_state.get("api_url", "http://localhost:8000")
     
     st.title("📊 Monitor de Movimientos")
     st.markdown("Historial de movimientos realizados hoy")
