@@ -368,17 +368,29 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
         url = f"{api_url}/api/v1/stock/ubicacion-by-barcode"
         params = {"username": username, "password": password, "barcode": code}
         
+        st.write(f"**DEBUG - URL:** `{url}`")
+        st.write(f"**DEBUG - Params:** `barcode={code}`")
+        
         # Llamada con retry
-        resp = _api_call_with_retry(
-            lambda: requests.get(url, params=params, timeout=20),
-            operation_name="Buscar cámara"
-        )
+        try:
+            resp = requests.get(url, params=params, timeout=20)
+        except Exception as e:
+            st.error(f"❌ Error de conexión: {str(e)}")
+            return
         
-        st.write(f"Status: {resp.status_code}")  # DEBUG
+        st.write(f"**DEBUG - Status:** {resp.status_code}")
         
-        if resp.status_code == 200:
-            data = resp.json()
-            st.write(f"Respuesta: {data}")  # DEBUG
+        if resp.status_code == 404:
+            st.error(f"❌ Endpoint no encontrado. Verifica que el API esté corriendo y el router esté registrado.")
+            st.write(f"URL completa: {resp.url}")
+            return
+        
+        if resp.status_code != 200:
+            st.error(f"❌ Error {resp.status_code}: {resp.text}")
+            return
+            
+        data = resp.json()
+        st.write(f"**DEBUG - Respuesta:** {data}")  # DEBUG
             
             # Validar respuesta
             valid, error_msg = _validate_api_response(data, ["found"])
@@ -863,22 +875,17 @@ def render(username: str, password: str):
     # === SELECTOR DE CÁMARA DESTINO ===
     st.subheader("1️⃣ Selecciona Cámara Destino")
 
-    # Usar session_state para tracking
-    if "camara_search_query" not in st.session_state:
-        st.session_state.camara_search_query = ""
-    
-    camara_input = st.text_input(
-        "Escanea código de cámara",
-        key="camara_input_live",
-        placeholder="Escanea código...",
-        label_visibility="collapsed",
-        value=st.session_state.camara_search_query
-    )
-    
-    # Auto-buscar cuando cambia el input
-    if camara_input and camara_input != st.session_state.camara_search_query:
-        st.session_state.camara_search_query = camara_input
-        _buscar_camara(camara_input.strip(), username, password, api_url)
+    with st.form("form_buscar_cam", clear_on_submit=False):
+        camara_input = st.text_input(
+            "Código de cámara",
+            placeholder="Ej: Cam80c",
+            label_visibility="collapsed"
+        )
+        
+        submitted = st.form_submit_button("🔍 Buscar", type="primary")
+        
+        if submitted and camara_input:
+            _buscar_camara(camara_input.strip(), username, password, api_url)
 
     # Historial de cámaras (botones rápidos)
     if st.session_state.mov_historial:
