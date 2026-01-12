@@ -15,6 +15,17 @@ from .shared import API_URL, fmt_numero
 def render(username: str, password: str):
     """Renderiza el contenido del tab Clasificación."""
     
+    # --- CONFIGURACIÓN DE SALAS (Odoo Keys y Labels) ---
+    SALA_MAP_INTERNAL = {
+        "Sala 1 - Línea Retail": "Sala 1 - Linea Retail",
+        "Sala 2 - Línea Granel": "Sala 2 - Linea Granel",
+        "Sala 3 - Línea Granel": "Sala 3 - Linea Granel",
+        "Sala 3 - Línea Retail": "Sala 3 - Linea Retail",
+        "Sala 4 - Línea Retail": "Sala 4 - Linea Retail",
+        "Sala 4 - Línea Chocolate": "Sala 4 - Linea Chocolate",
+        "Sala - Vilkun": "Sala - Vilkun"
+    }
+
     st.markdown("### 📦 CLASIFICACIÓN DE PALLETS")
     st.caption("Grados de producto terminado por planta y orden")
     
@@ -60,11 +71,13 @@ def render(username: str, password: str):
         col_fil_3_1, col_fil_3_2 = st.columns([2, 1])
         
         with col_fil_3_1:
-            sala_proceso_input = st.text_input(
-                "🏢 Filtrar por Sala de Proceso (opcional)",
-                placeholder="Ej: Sala 1, Tunel, etc.",
+            sala_proceso_opciones = ["Todas"] + list(SALA_MAP_INTERNAL.keys())
+            sala_proceso_seleccionada = st.selectbox(
+                "🏢 Sala de Proceso",
+                options=sala_proceso_opciones,
+                index=0,
                 key="sala_proceso_clasificacion",
-                help="Ingresa el nombre o parte del nombre de la sala de proceso (x_studio_sala_de_proceso)"
+                help="Selecciona la sala de proceso donde se fabricó el producto"
             )
             
         with col_fil_3_2:
@@ -97,7 +110,10 @@ def render(username: str, password: str):
             # Preparar parámetros opcionales
             tipo_fruta_param = None if tipo_fruta_seleccionado == "Todas" else tipo_fruta_seleccionado
             tipo_manejo_param = None if tipo_manejo_seleccionado == "Todos" else tipo_manejo_seleccionado
-            sala_param = None if not sala_proceso_input.strip() else sala_proceso_input.strip()
+            
+            # Obtener clave técnica de la sala
+            sala_key = SALA_MAP_INTERNAL.get(sala_proceso_seleccionada)
+            sala_param = sala_key if sala_key else None
             
             with st.spinner("⏳ Consultando clasificación de pallets..."):
                 try:
@@ -152,9 +168,10 @@ def render(username: str, password: str):
         if tipo_fruta_seleccionado != "Todas":
             detalle_raw = [d for d in detalle_raw if tipo_fruta_seleccionado.lower() in d.get('producto', '').lower()]
             
-        # 3. Filtrar por Sala de Proceso (dinámico)
-        if sala_proceso_input.strip():
-            detalle_raw = [d for d in detalle_raw if sala_proceso_input.strip().lower() in (d.get('sala') or '').lower()]
+        # 3. Filtrar por Sala de Proceso (dinámico usando clave técnica)
+        if sala_proceso_seleccionada != "Todas":
+            target_key = SALA_MAP_INTERNAL.get(sala_proceso_seleccionada)
+            detalle_raw = [d for d in detalle_raw if d.get('sala') == target_key]
 
         # 4. Filtrar por Manejo
         tipo_manejo_val = tipo_manejo_seleccionado or "Todos"
@@ -307,6 +324,10 @@ def render(username: str, password: str):
             # Formatear columnas
             df_detalle['kg'] = df_detalle['kg'].apply(lambda x: f"{x:,.2f}")
             df_detalle['fecha'] = pd.to_datetime(df_detalle['fecha']).dt.strftime('%Y-%m-%d %H:%M')
+            
+            # Traducir Sala (Key -> Label)
+            SALA_REVERSE = {v: k for k, v in SALA_MAP_INTERNAL.items()}
+            df_detalle['sala'] = df_detalle['sala'].map(lambda x: SALA_REVERSE.get(x, x))
             
             # Renombrar columnas para display
             df_display = df_detalle[[
