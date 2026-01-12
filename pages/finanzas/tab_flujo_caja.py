@@ -149,15 +149,19 @@ def render(username: str, password: str):
                         progress_placeholder.empty()
                         st.error(f"Error {resp.status_code}: {resp.text}")
                         st.toast(f"❌ Error {resp.status_code}", icon="❌")
+                        st.session_state.finanzas_flujo_loading = False
                         return
             except Exception as e:
                 progress_placeholder.empty()
                 st.error(f"Error de conexión: {e}")
                 st.toast(f"❌ Error: {str(e)[:100]}", icon="❌")
+                st.session_state.finanzas_flujo_loading = False
                 return
             finally:
                 st.session_state.finanzas_flujo_loading = False
-                st.rerun()
+                # Solo hacer rerun si fue exitoso
+                if flujo_cache_key in st.session_state:
+                    st.rerun()
         
         flujo_data = st.session_state.get(flujo_cache_key, {})
         
