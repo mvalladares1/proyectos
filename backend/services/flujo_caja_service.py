@@ -37,12 +37,21 @@ class FlujoCajaService:
     """Servicio para generar Estado de Flujo de Efectivo NIIF IAS 7."""
     
     def __init__(self, username: str = None, password: str = None):
-        self.odoo = OdooClient(username=username, password=password)
+        self.username = username
+        self.password = password
+        self._odoo = None
         self.catalogo = self._cargar_catalogo()
         self.mapeo_cuentas = self._cargar_mapeo()
         self.cuentas_monitoreadas = self._cargar_cuentas_monitoreadas()
         self._cache_cuentas_efectivo = None
         self._migracion_codigos = self.catalogo.get("migracion_codigos", {})
+    
+    @property
+    def odoo(self):
+        """Lazy initialization de OdooClient."""
+        if self._odoo is None:
+            self._odoo = OdooClient(username=self.username, password=self.password)
+        return self._odoo
     
     def _get_catalogo_path(self) -> str:
         """Retorna la ruta al archivo de catálogo."""
