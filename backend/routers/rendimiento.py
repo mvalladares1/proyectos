@@ -5,7 +5,7 @@ Incluye trazabilidad inversa y endpoints para el módulo de Producción
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
-from backend.services.rendimiento import RendimientoService
+from backend.services.rendimiento_service import RendimientoService
 
 router = APIRouter(prefix="/api/v1/rendimiento", tags=["rendimiento"])
 

@@ -3,7 +3,7 @@ from typing import Optional, List
 
 from backend.services.recepcion_service import get_recepciones_mp, validar_recepciones
 from backend.services.recepciones_gestion_service import RecepcionesGestionService
-from backend.services.report import generate_recepcion_report_pdf
+from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
 from backend.cache import get_cache
 from fastapi.responses import StreamingResponse

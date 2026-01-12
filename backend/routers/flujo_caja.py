@@ -6,7 +6,7 @@ from typing import Optional
 import json
 
 # Importar desde módulo modularizado
-from backend.services.flujo_caja import FlujoCajaService
+from backend.services.flujo_caja_service import FlujoCajaService
 
 router = APIRouter(prefix="/api/v1/flujo-caja", tags=["Flujo de Caja"])
 

@@ -15,7 +15,7 @@ import os
 from shared.odoo_client import OdooClient
 
 # Importar desde módulos modularizados
-from backend.services.flujo_caja.constants import (
+from .flujo_caja.constants import (
     CONCEPTO_FALLBACK,
     ESTRUCTURA_FLUJO,
     CUENTAS_FIJAS_FINANCIAMIENTO,
@@ -25,7 +25,7 @@ from backend.services.flujo_caja.constants import (
     CATEGORIA_FX_EFFECT,
     EMOJIS_ACTIVIDAD
 )
-from backend.services.flujo_caja.helpers import (
+from .flujo_caja.helpers import (
     sumar_hijos,
     migrar_codigo_antiguo,
     build_categorias_dropdown,
