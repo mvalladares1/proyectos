@@ -571,7 +571,7 @@ def _render_pallet_card(pallet: dict, index: int = 0):
     # Obtener destino de session_state
     destino_name = st.session_state.mov_camara.get('name', 'N/A') if st.session_state.mov_camara else 'N/A'
     
-    html_content = f"""
+    st.markdown(f"""
     <div class="{card_class}">
         <div class="pallet-card-header">
             <span class="pallet-code">📦 {pallet['code']}</span>
@@ -592,8 +592,7 @@ def _render_pallet_card(pallet: dict, index: int = 0):
             🏷️ {pallet['lote']}
         </div>
     </div>
-    """
-    st.components.v1.html(html_content, height=200)
+    """, unsafe_allow_html=True)
 
 
 def _ejecutar_movimiento(username: str, password: str, api_url: str):
@@ -924,9 +923,19 @@ def render(username: str, password: str):
             key="pallet_input",
             height=120,
             placeholder="Escanea pallets...\n(uno por línea)",
-            label_visibility="collapsed",
-            on_change=lambda: _on_pallet_change(username, password, api_url)
+            label_visibility="collapsed"
         )
+        
+        # Procesar input cuando hay algo nuevo
+        if pallet_input:
+            lines = [line.strip() for line in pallet_input.split("\n") if line.strip()]
+            for code in lines:
+                if code and code != st.session_state.mov_last_scan:
+                    _agregar_pallet(code, username, password, api_url)
+                    st.session_state.mov_last_scan = code
+            # Limpiar textarea
+            st.session_state.pallet_input = ""
+            st.rerun()
 
         # Botones de acción (táctiles, 50px altura)
         col1, col2, col3 = st.columns([2, 2, 1])
