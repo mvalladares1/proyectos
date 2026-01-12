@@ -96,6 +96,8 @@ def render(username: str, password: str):
                 with col_b:
                     if st.button("✓ Entendido", key="btn_close_result", type="primary", use_container_width=True):
                         st.session_state.last_order_result = None
+                        # Asegurar que la lista esté limpia
+                        st.session_state.pallets_list = []
                         st.rerun()
             
             st.divider()
