@@ -842,6 +842,7 @@ def _deshacer_movimiento(username: str, password: str, api_url: str):
             st.warning(f"⚠️ {total_failed} pallets no se pudieron devolver")
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el tab de Movimientos"""
     # Inicializar session state
