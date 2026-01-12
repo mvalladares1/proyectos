@@ -56,15 +56,15 @@ def render(username: str, password: str):
                 key="tipo_manejo_clasificacion"
             )
         
-        # Filtro de orden de fabricación y Planta (nueva fila)
+        # Filtro de Sala de Proceso y Planta (nueva fila)
         col_fil_3_1, col_fil_3_2 = st.columns([2, 1])
         
         with col_fil_3_1:
-            orden_fabricacion_input = st.text_input(
-                "🔍 Filtrar por Orden de Fabricación (opcional)",
-                placeholder="Ej: MO/00123",
-                key="orden_fabricacion_clasificacion",
-                help="Ingresa el nombre o parte del nombre de la orden de fabricación o transferencia"
+            sala_proceso_input = st.text_input(
+                "🏢 Filtrar por Sala de Proceso (opcional)",
+                placeholder="Ej: Sala 1, Tunel, etc.",
+                key="sala_proceso_clasificacion",
+                help="Ingresa el nombre o parte del nombre de la sala de proceso (x_studio_sala_de_proceso)"
             )
             
         with col_fil_3_2:
@@ -97,7 +97,7 @@ def render(username: str, password: str):
             # Preparar parámetros opcionales
             tipo_fruta_param = None if tipo_fruta_seleccionado == "Todas" else tipo_fruta_seleccionado
             tipo_manejo_param = None if tipo_manejo_seleccionado == "Todos" else tipo_manejo_seleccionado
-            orden_fab_param = None if not orden_fabricacion_input.strip() else orden_fabricacion_input.strip()
+            sala_param = None if not sala_proceso_input.strip() else sala_proceso_input.strip()
             
             with st.spinner("⏳ Consultando clasificación de pallets..."):
                 try:
@@ -115,8 +115,8 @@ def render(username: str, password: str):
                     if tipo_manejo_param:
                         params["tipo_manejo"] = tipo_manejo_param
                     
-                    if orden_fab_param:
-                        params["orden_fabricacion"] = orden_fab_param
+                    if sala_param:
+                        params["sala_proceso"] = sala_param
                     
                     
                     response = requests.get(
@@ -152,17 +152,22 @@ def render(username: str, password: str):
         if tipo_fruta_seleccionado != "Todas":
             detalle_raw = [d for d in detalle_raw if tipo_fruta_seleccionado.lower() in d.get('producto', '').lower()]
             
-        # 3. Filtrar por Manejo
-        if tipo_manejo_seleccionado != "Todos":
+        # 3. Filtrar por Sala de Proceso (dinámico)
+        if sala_proceso_input.strip():
+            detalle_raw = [d for d in detalle_raw if sala_proceso_input.strip().lower() in (d.get('sala') or '').lower()]
+
+        # 4. Filtrar por Manejo
+        tipo_manejo_val = tipo_manejo_seleccionado or "Todos"
+        if tipo_manejo_val != "Todos":
             # Usar lógica de código si está disponible, o simplemente filtrar detalle
             for d in detalle_raw:
                 code = d.get('codigo_producto', '')
                 if len(code) >= 4:
                     m_digit = code[3]
                     is_org = m_digit == '2'
-                    if tipo_manejo_seleccionado == "Orgánico" and not is_org:
+                    if tipo_manejo_val == "Orgánico" and not is_org:
                         d['_remove'] = True
-                    elif tipo_manejo_seleccionado == "Convencional" and is_org:
+                    elif tipo_manejo_val == "Convencional" and is_org:
                         d['_remove'] = True
             detalle_raw = [d for d in detalle_raw if not d.get('_remove')]
 
@@ -305,11 +310,11 @@ def render(username: str, password: str):
             
             # Renombrar columnas para display
             df_display = df_detalle[[
-                'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'planta', 'fecha'
+                'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'planta', 'sala', 'fecha'
             ]].copy()
             
             df_display.columns = [
-                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Planta', 'Fecha'
+                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Planta', 'Sala', 'Fecha'
             ]
             
             # Mostrar tabla

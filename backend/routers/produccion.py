@@ -87,7 +87,7 @@ async def get_clasificacion_pallets(
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     tipo_fruta: Optional[str] = Query(None, description="Filtrar por tipo de fruta"),
     tipo_manejo: Optional[str] = Query(None, description="Filtrar por tipo de manejo"),
-    orden_fabricacion: Optional[str] = Query(None, description="Filtrar por orden de fabricación"),
+    sala_proceso: Optional[str] = Query(None, description="Filtrar por sala de proceso"),
     tipo_operacion: Optional[str] = Query("Todas", description="Filtrar por planta (Todas, VILKUN, RIO FUTURO)")
 ):
     """
@@ -100,7 +100,7 @@ async def get_clasificacion_pallets(
             fecha_fin=fecha_fin,
             tipo_fruta=tipo_fruta,
             tipo_manejo=tipo_manejo,
-            orden_fabricacion=orden_fabricacion,
+            sala_proceso=sala_proceso,
             tipo_operacion=tipo_operacion
         )
     except Exception as e:

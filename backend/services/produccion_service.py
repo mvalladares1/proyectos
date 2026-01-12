@@ -351,7 +351,7 @@ class ProduccionService:
                                   fecha_fin: str,
                                   tipo_fruta: Optional[str] = None,
                                   tipo_manejo: Optional[str] = None,
-                                  orden_fabricacion: Optional[str] = None,
+                                  sala_proceso: Optional[str] = None,
                                   tipo_operacion: Optional[str] = "Todas") -> Dict[str, Any]:
         """
         Obtiene la clasificación de pallets por GRADO usando stock.move.line.
@@ -369,7 +369,7 @@ class ProduccionService:
             fecha_fin: Fecha fin (YYYY-MM-DD)
             tipo_fruta: Opcional - Filtrar por tipo de fruta
             tipo_manejo: Opcional - Filtrar por tipo de manejo
-            orden_fabricacion: Opcional - Filtrar por nombre de OF (en mrp.production)
+            sala_proceso: Opcional - Filtrar por Sala de Proceso (x_studio_sala_de_proceso)
             tipo_operacion: Opcional - 'Todas', 'VILKUN', 'RIO FUTURO'
         
         Returns:
@@ -392,13 +392,13 @@ class ProduccionService:
         }
         
         try:
-            # 1. Si hay filtro de orden, buscar stock.move de esa producción primero
+            # 1. Si hay filtro de Sala, buscar primero movimientos de esas producciones
             move_ids_filter = None
-            if orden_fabricacion and orden_fabricacion.strip():
-                # Domain base para buscar producción
-                prod_search_domain = [('name', 'ilike', orden_fabricacion.strip())]
+            if sala_proceso and sala_proceso.strip():
+                # Domain base para buscar producción por sala
+                prod_search_domain = [('x_studio_sala_de_proceso', 'ilike', sala_proceso.strip())]
                 
-                # REGLA ESTRICTA: Si se especificó planta, filtrar la búsqueda de la orden también
+                # REGLA ESTRICTA: Si se especificó planta, filtrar la búsqueda también
                 if tipo_operacion == "VILKUN":
                     prod_search_domain.append('|')
                     prod_search_domain.append(('picking_type_id.name', 'ilike', 'VLK'))
@@ -407,30 +407,16 @@ class ProduccionService:
                     prod_search_domain.append(('picking_type_id.name', 'not ilike', 'VLK'))
                     prod_search_domain.append(('name', 'not ilike', 'VLK/'))
 
-                production_ids = self.odoo.search(
-                    'mrp.production',
-                    prod_search_domain
-                )
+                production_ids = self.odoo.search('mrp.production', prod_search_domain)
                 
                 if not production_ids:
-                    return {
-                        "grados": {str(i): 0 for i in range(1, 8)},
-                        "total_kg": 0,
-                        "detalle": []
-                    }
+                    return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
                 
-                # Buscar stock.move de esa producción
-                move_ids_filter = self.odoo.search(
-                    'stock.move',
-                    [('production_id', 'in', production_ids)]
-                )
+                # Buscar stock.move de esas producciones
+                move_ids_filter = self.odoo.search('stock.move', [('production_id', 'in', production_ids)])
                 
                 if not move_ids_filter:
-                    return {
-                        "grados": {str(i): 0 for i in range(1, 8)},
-                        "total_kg": 0,
-                        "detalle": []
-                    }
+                    return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
             
             # 2. Construir domain para stock.move.line
             domain_sml = [
@@ -442,8 +428,7 @@ class ProduccionService:
                 ('move_id.production_id', '!=', False)
             ]
             
-            # Si no hay orden específica, pero hay filtro de planta, 
-            # podemos pre-filtrar lines por el picking_type de su producción
+            # Si no hay sala específica, pero hay filtro de planta, pre-filtrar lines
             if not move_ids_filter and tipo_operacion != "Todas":
                 if tipo_operacion == "VILKUN":
                     domain_sml.append('|')
@@ -453,70 +438,38 @@ class ProduccionService:
                     domain_sml.append(('move_id.production_id.picking_type_id.name', 'not ilike', 'VLK'))
                     domain_sml.append(('move_id.production_id.name', 'not ilike', 'VLK/'))
 
-            # Agregar filtro de move_ids si se especificó orden
+            # Agregar filtro por los movimientos encontrados antes
             if move_ids_filter:
                 domain_sml.append(('move_id', 'in', move_ids_filter))
             
             # Campos a obtener de stock.move.line
-            sml_fields = [
-                'result_package_id',  # CORREGIDO: era package_id
-                'qty_done',
-                'product_id',
-                'lot_id',
-                'date',
-                'move_id'
-            ]
+            sml_fields = ['result_package_id', 'qty_done', 'product_id', 'lot_id', 'date', 'move_id']
             
-            stock_move_lines = self.odoo.search_read(
-                'stock.move.line',
-                domain_sml,
-                sml_fields
-            )
+            stock_move_lines = self.odoo.search_read('stock.move.line', domain_sml, sml_fields)
             
             if not stock_move_lines:
-                return {
-                    "grados": {str(i): 0 for i in range(1, 8)},
-                    "total_kg": 0,
-                    "detalle": []
-                }
+                return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
             
             # 3. Obtener IDs únicos de productos para leer default_code
-            product_ids = set()
-            for sml in stock_move_lines:
-                product_info = sml.get('product_id')
-                if product_info and isinstance(product_info, list) and len(product_info) >= 1:
-                    product_ids.add(product_info[0])
+            product_ids = {sml.get('product_id')[0] for sml in stock_move_lines if sml.get('product_id')}
             
             # 4. Leer default_code de los productos
             product_codes = {}
             if product_ids:
-                products = self.odoo.read(
-                    'product.product',
-                    list(product_ids),
-                    ['default_code', 'name']
-                )
+                products = self.odoo.read('product.product', list(product_ids), ['default_code', 'name'])
                 for prod in products:
                     product_codes[prod['id']] = {
                         'code': (prod.get('default_code') or '').strip(),
                         'name': prod.get('name', '')
                     }
             
-            # 5. Obtener información de production_id y picking_type_id
-            move_ids = set()
-            for sml in stock_move_lines:
-                move_info = sml.get('move_id')
-                if move_info and isinstance(move_info, list) and len(move_info) >= 1:
-                    move_ids.add(move_info[0])
+            # 5. Obtener información de production_id, picking_type_id y SALA
+            move_ids = {sml.get('move_id')[0] for sml in stock_move_lines if sml.get('move_id')}
             
             move_productions = {}
             if move_ids:
-                moves = self.odoo.read(
-                    'stock.move',
-                    list(move_ids),
-                    ['production_id']
-                )
+                moves = self.odoo.read('stock.move', list(move_ids), ['production_id'])
                 
-                # Obtener IDs de producción únicos para leer su picking_type_id
                 prod_ids = set()
                 move_to_prod_mapping = {}
                 for move in moves:
@@ -525,109 +478,79 @@ class ProduccionService:
                         prod_ids.add(prod_info[0])
                         move_to_prod_mapping[move['id']] = prod_info[0]
                 
-                # Leer picking_type_id de mrp.production
+                # Leer datos de mrp.production (INCLUYE SALA)
                 prod_data = {}
                 if prod_ids:
                     productions = self.odoo.read(
-                        'mrp.production',
-                        list(prod_ids),
-                        ['name', 'picking_type_id']
+                        'mrp.production', 
+                        list(prod_ids), 
+                        ['name', 'picking_type_id', 'x_studio_sala_de_proceso']
                     )
                     for p in productions:
                         pk_type = p.get('picking_type_id')
                         pk_name = pk_type[1] if isinstance(pk_type, list) and len(pk_type) >= 2 else ''
                         p_name = p.get('name', '')
+                        sala = p.get('x_studio_sala_de_proceso', '')
                         
-                        # Clasificar Planta (REGLA MEJORADA)
+                        # Clasificar Planta
                         planta = "RIO FUTURO"
                         if "VLK" in pk_name.upper() or "VILKUN" in pk_name.upper() or p_name.startswith("VLK"):
                             planta = "VILKUN"
                             
                         prod_data[p['id']] = {
                             'name': p_name,
-                            'planta': planta
+                            'planta': planta,
+                            'sala': sala
                         }
                 
-                # Mapear hacia move_productions
                 for move_id, prod_id in move_to_prod_mapping.items():
-                    move_productions[move_id] = prod_data.get(prod_id, {'name': '', 'planta': 'RIO FUTURO'})
+                    move_productions[move_id] = prod_data.get(prod_id, {'name': '', 'planta': 'RIO FUTURO', 'sala': ''})
             
             # 6. Procesar y clasificar
             grados_kg = {str(i): 0 for i in range(1, 8)}
             detalle = []
             
             for sml in stock_move_lines:
-                # Pallet (CORREGIDO: result_package_id en lugar de package_id)
                 package_info = sml.get('result_package_id', [False, ''])
                 package_name = package_info[1] if isinstance(package_info, list) and len(package_info) >= 2 else ''
-                
-                # Cantidad
                 qty_done = sml.get('qty_done', 0) or 0
-                
-                # Producto
                 product_info = sml.get('product_id', [False, ''])
                 product_id = product_info[0] if isinstance(product_info, list) and len(product_info) >= 1 else None
                 product_name = product_info[1] if isinstance(product_info, list) and len(product_info) >= 2 else ''
                 
-                # Obtener código del producto
                 product_data = product_codes.get(product_id, {})
                 product_code = product_data.get('code', '')
                 
-                # Si no hay código con al menos 5 caracteres, saltar
-                if not product_code or len(product_code) < 5:
-                    continue
-
-                # FILTRO DE SEGURIDAD: Ignorar materias primas (empiezan con 1 o 2)
-                # Los subproductos reales (terminales) empiezan con otros números (4, 6, etc.)
-                if product_code.startswith('1') or product_code.startswith('2'):
-                    continue
+                if not product_code or len(product_code) < 5: continue
+                if product_code.startswith('1') or product_code.startswith('2'): continue
                 
-                # Lote
                 lot_info = sml.get('lot_id', [False, ''])
                 lot_name = lot_info[1] if isinstance(lot_info, list) and len(lot_info) >= 2 else ''
                 
-                # Orden de fabricación e info de planta
                 move_info = sml.get('move_id', [False, ''])
                 move_id = move_info[0] if isinstance(move_info, list) and len(move_info) >= 1 else None
-                prod_info = move_productions.get(move_id, {'name': '', 'planta': 'RIO FUTURO'})
-                production_name = prod_info['name']
-                planta_item = prod_info['planta']
+                prod_info = move_productions.get(move_id, {'name': '', 'planta': 'RIO FUTURO', 'sala': ''})
                 
-                # --- FILTROS ---
-                
-                # FILTRO POR PLANTA/OPERACIÓN
+                # --- FILTROS DE SALIDA ---
                 if tipo_operacion and tipo_operacion != "Todas":
-                    if tipo_operacion.upper() != planta_item.upper():
-                        continue
+                    if tipo_operacion.upper() != prod_info['planta'].upper(): continue
                 
-                # FILTRO POR FRUTA
-                product_name_lower = product_name.lower()
                 if tipo_fruta:
-                    if tipo_fruta.lower() not in product_name_lower:
-                        continue
+                    if tipo_fruta.lower() not in product_name.lower(): continue
                 
-                # FILTRO POR MANEJO (posición 4 del código: 1=Convencional, 2=Orgánico)
                 if tipo_manejo:
                     if len(product_code) >= 4:
                         manejo_digit = product_code[3]
-                        if tipo_manejo.lower() in ['orgánico', 'organico']:
-                            if manejo_digit != '2':
-                                continue
-                        elif tipo_manejo.lower() == 'convencional':
-                            if manejo_digit != '1':
-                                continue
+                        if tipo_manejo.lower() in ['orgánico', 'organico'] and manejo_digit != '2': continue
+                        if tipo_manejo.lower() == 'convencional' and manejo_digit != '1': continue
                 
-                # CLASIFICACIÓN POR POSICIÓN 5 DEL CÓDIGO
+                # CLASIFICACIÓN
                 grado_digit = product_code[4] if len(product_code) >= 5 else ''
-                
-                # Solo procesar si es un grado válido (1-7)
-                if grado_digit not in GRADO_NOMBRES:
-                    continue
+                if grado_digit not in GRADO_NOMBRES: continue
                 
                 clasificacion = GRADO_NOMBRES[grado_digit]
                 grados_kg[grado_digit] += qty_done
                 
-                # Agregar al detalle
                 detalle.append({
                     'pallet': package_name,
                     'producto': product_name,
@@ -635,24 +558,19 @@ class ProduccionService:
                     'grado': clasificacion,
                     'kg': round(qty_done, 2),
                     'lote': lot_name,
-                    'orden_fabricacion': production_name,
-                    'planta': planta_item,
+                    'orden_fabricacion': prod_info['name'],
+                    'planta': prod_info['planta'],
+                    'sala': prod_info['sala'],
                     'fecha': sml.get('date', '')
                 })
             
             total_kg = sum(grados_kg.values())
-            
-            # Redondear los kg por grado
-            grados_kg_rounded = {k: round(v, 2) for k, v in grados_kg.items()}
-            
             return {
-                "grados": grados_kg_rounded,
+                "grados": {k: round(v, 2) for k, v in grados_kg.items()},
                 "total_kg": round(total_kg, 2),
                 "detalle": sorted(detalle, key=lambda x: x['fecha'], reverse=True)
             }
-            
         except Exception as e:
             import traceback
-            error_detail = traceback.format_exc()
-            print(f"❌ ERROR en get_clasificacion_pallets: {error_detail}")
-            raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}")
+            print(f"❌ ERROR en get_clasificacion_pallets: {traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail=str(e))
