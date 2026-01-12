@@ -360,23 +360,25 @@ def _buscar_camara(code: str, username: str, password: str, api_url: str):
         # Validar checksum
         valid, error_msg = _validate_barcode_checksum(code)
         if not valid:
-            st.toast(f"❌ Código inválido: {error_msg}", icon="⚠️")
+            st.error(f"❌ Código inválido: {error_msg}")
             return
         
-        st.toast(f"🔍 Buscando: {code}...", icon="⏳")
+        st.info(f"🔍 Buscando cámara: {code}...")
+        
+        url = f"{api_url}/api/v1/stock/ubicacion-by-barcode"
+        params = {"username": username, "password": password, "barcode": code}
         
         # Llamada con retry
         resp = _api_call_with_retry(
-            lambda: requests.get(
-                f"{api_url}/api/v1/stock/ubicacion-by-barcode",
-                params={"username": username, "password": password, "barcode": code},
-                timeout=20
-            ),
+            lambda: requests.get(url, params=params, timeout=20),
             operation_name="Buscar cámara"
         )
         
+        st.write(f"Status: {resp.status_code}")  # DEBUG
+        
         if resp.status_code == 200:
             data = resp.json()
+            st.write(f"Respuesta: {data}")  # DEBUG
             
             # Validar respuesta
             valid, error_msg = _validate_api_response(data, ["found"])
@@ -861,20 +863,22 @@ def render(username: str, password: str):
     # === SELECTOR DE CÁMARA DESTINO ===
     st.subheader("1️⃣ Selecciona Cámara Destino")
 
-    with st.form("buscar_camara_form", clear_on_submit=False):
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            camara_input = st.text_input(
-                "Escanea código de cámara",
-                key="camara_input_form",
-                placeholder="Escanea código...",
-                label_visibility="collapsed"
-            )
-        with col2:
-            buscar_btn = st.form_submit_button("🔍 Buscar", use_container_width=True, type="primary")
-        
-        if buscar_btn and camara_input:
-            _buscar_camara(camara_input.strip(), username, password, api_url)
+    # Usar session_state para tracking
+    if "camara_search_query" not in st.session_state:
+        st.session_state.camara_search_query = ""
+    
+    camara_input = st.text_input(
+        "Escanea código de cámara",
+        key="camara_input_live",
+        placeholder="Escanea código...",
+        label_visibility="collapsed",
+        value=st.session_state.camara_search_query
+    )
+    
+    # Auto-buscar cuando cambia el input
+    if camara_input and camara_input != st.session_state.camara_search_query:
+        st.session_state.camara_search_query = camara_input
+        _buscar_camara(camara_input.strip(), username, password, api_url)
 
     # Historial de cámaras (botones rápidos)
     if st.session_state.mov_historial:
