@@ -358,9 +358,6 @@ def _inject_js():
 def _buscar_camara(code: str, username: str, password: str, api_url: str):
     """Busca cámara por código de barras con retry y validación"""
     try:
-        # Convertir a mayúsculas (los códigos de barras son case-sensitive en Odoo)
-        code = code.upper()
-        
         # Validar checksum
         valid, error_msg = _validate_barcode_checksum(code)
         if not valid:
