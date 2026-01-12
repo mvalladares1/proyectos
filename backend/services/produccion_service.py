@@ -392,33 +392,7 @@ class ProduccionService:
         }
         
         try:
-            # 1. Si hay filtro de Sala, buscar primero movimientos de esas producciones
-            move_ids_filter = None
-            if sala_proceso and sala_proceso.strip():
-                # Domain base para buscar producción por sala
-                prod_search_domain = [('x_studio_sala_de_proceso', 'ilike', sala_proceso.strip())]
-                
-                # REGLA ESTRICTA: Si se especificó planta, filtrar la búsqueda también
-                if tipo_operacion == "VILKUN":
-                    prod_search_domain.append('|')
-                    prod_search_domain.append(('picking_type_id.name', 'ilike', 'VLK'))
-                    prod_search_domain.append(('name', 'ilike', 'VLK/'))
-                elif tipo_operacion == "RIO FUTURO":
-                    prod_search_domain.append(('picking_type_id.name', 'not ilike', 'VLK'))
-                    prod_search_domain.append(('name', 'not ilike', 'VLK/'))
-
-                production_ids = self.odoo.search('mrp.production', prod_search_domain)
-                
-                if not production_ids:
-                    return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
-                
-                # Buscar stock.move de esas producciones
-                move_ids_filter = self.odoo.search('stock.move', [('production_id', 'in', production_ids)])
-                
-                if not move_ids_filter:
-                    return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
-            
-            # 2. Construir domain para stock.move.line
+            # 1. Construir domain para stock.move.line (Búsqueda única y estricta)
             domain_sml = [
                 ('date', '>=', fecha_inicio + ' 00:00:00'),
                 ('date', '<=', fecha_fin + ' 23:59:59'),
@@ -428,8 +402,12 @@ class ProduccionService:
                 ('move_id.production_id', '!=', False)
             ]
             
-            # Si no hay sala específica, pero hay filtro de planta, pre-filtrar lines
-            if not move_ids_filter and tipo_operacion != "Todas":
+            # Filtro por Sala de Proceso (Dot notation para eficiencia y exactitud)
+            if sala_proceso and sala_proceso.strip() and sala_proceso != "Todas":
+                domain_sml.append(('move_id.production_id.x_studio_sala_de_proceso', '=', sala_proceso.strip()))
+            
+            # Filtro por Planta (Determinamos planta a nivel de producción)
+            if tipo_operacion and tipo_operacion != "Todas":
                 if tipo_operacion == "VILKUN":
                     domain_sml.append('|')
                     domain_sml.append(('move_id.production_id.picking_type_id.name', 'ilike', 'VLK'))
@@ -438,10 +416,6 @@ class ProduccionService:
                     domain_sml.append(('move_id.production_id.picking_type_id.name', 'not ilike', 'VLK'))
                     domain_sml.append(('move_id.production_id.name', 'not ilike', 'VLK/'))
 
-            # Agregar filtro por los movimientos encontrados antes
-            if move_ids_filter:
-                domain_sml.append(('move_id', 'in', move_ids_filter))
-            
             # Campos a obtener de stock.move.line
             sml_fields = ['result_package_id', 'qty_done', 'product_id', 'lot_id', 'date', 'move_id']
             
