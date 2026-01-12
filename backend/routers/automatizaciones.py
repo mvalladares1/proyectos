@@ -418,7 +418,7 @@ async def completar_pendientes(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/movimientos/ubicacion-by-barcode")
+@router.get("/tuneles-estaticos/ubicacion-by-barcode")
 async def get_ubicacion_by_barcode(
     username: str,
     password: str,
