@@ -86,13 +86,15 @@ async def get_clasificacion_pallets(
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     tipo_fruta: Optional[str] = Query(None, description="Filtrar por tipo de fruta"),
-    tipo_manejo: Optional[str] = Query(None, description="Filtrar por tipo de manejo")
+    tipo_manejo: Optional[str] = Query(None, description="Filtrar por tipo de manejo"),
+    orden_fabricacion: Optional[str] = Query(None, description="Filtrar por orden de fabricación")
 ):
     """
     Obtiene la clasificación de pallets (IQF A y RETAIL).
     
-    Compara stock.move.line.result_package_id con x_mrp_production_line_d413e.x_name
-    y suma los kg según la clasificación en x_studio_observaciones.
+    Clasifica directamente por el nombre del producto:
+    - Si el producto contiene "IQF A" → IQF A
+    - Si el producto contiene "RETAIL" → RETAIL
     
     Retorna:
         - iqf_a_kg: Kilogramos clasificados como IQF A
@@ -106,7 +108,8 @@ async def get_clasificacion_pallets(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
             tipo_fruta=tipo_fruta,
-            tipo_manejo=tipo_manejo
+            tipo_manejo=tipo_manejo,
+            orden_fabricacion=orden_fabricacion
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

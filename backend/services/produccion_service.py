@@ -350,21 +350,28 @@ class ProduccionService:
                                   fecha_inicio: str, 
                                   fecha_fin: str,
                                   tipo_fruta: Optional[str] = None,
-                                  tipo_manejo: Optional[str] = None) -> Dict[str, Any]:
+                                  tipo_manejo: Optional[str] = None,
+                                  orden_fabricacion: Optional[str] = None) -> Dict[str, Any]:
         """
-        Obtiene la clasificación de pallets (IQF A y RETAIL) filtrando por fecha, fruta y manejo.
+        Obtiene la clasificación de pallets (IQF A y RETAIL) filtrando por fecha, fruta, manejo y OF.
         
-        Lógica:
-        1. Obtiene stock.move.line filtrados por fecha
-        2. Obtiene x_mrp_production_line_d413e 
-        3. Compara result_package_id con x_name
-        4. Suma kg de qty_done según clasificación en x_studio_observaciones
+        Lógica SIMPLIFICADA usando código de producto:
+        1. Obtiene stock.move.line filtrados por fecha y opcionalmente por OF
+        2. Lee el default_code (Referencia Interna) del producto
+        3. Clasifica según el dígito en posición 5:
+           - '2' → IQF A
+           - '7' → IQF Retail
+        4. Suma kg de qty_done según la clasificación
+        
+        Estructura del código (ejemplo: 401272000):
+        [1] Etapa | [2-3] Familia | [4] Manejo | [5] GRADO | [6] Variedad | [7-9] Retail
         
         Args:
             fecha_inicio: Fecha inicio (YYYY-MM-DD)
             fecha_fin: Fecha fin (YYYY-MM-DD)
             tipo_fruta: Opcional - Filtrar por tipo de fruta
-            tipo_manejo: Opcional - Filtrar por tipo de manejo (ej: "Orgánico", "Convencional")
+            tipo_manejo: Opcional - Filtrar por tipo de manejo (ej: "Orgánico", "Convencional")  
+            orden_fabricacion: Opcional - Filtrar por nombre de OF
         
         Returns:
             {
@@ -375,22 +382,23 @@ class ProduccionService:
             }
         """
         try:
-            # 1. Obtener stock.move.line con filtros de fecha
+            # 1. Construir domain para stock.move.line
             domain_sml = [
                 ('date', '>=', fecha_inicio + ' 00:00:00'),
                 ('date', '<=', fecha_fin + ' 23:59:59'),
-                ('result_package_id', '!=', False),  # Solo con paquete resultado
-                ('qty_done', '>', 0)  # Solo con cantidad hecha
+                ('result_package_id', '!=', False),
+                ('qty_done', '>', 0)
             ]
             
-            # Obtener campos de stock.move.line
+            # Campos a obtener
             sml_fields = [
                 'result_package_id', 
                 'qty_done', 
                 'product_id', 
                 'lot_id',
                 'date',
-                'move_id'
+                'move_id',
+                'production_id'
             ]
             
             stock_move_lines = self.odoo.search_read(
@@ -407,106 +415,109 @@ class ProduccionService:
                     "detalle": []
                 }
             
-            # 2. Crear mapa de result_package_id -> kg y info
-            package_map = {}
+            # 2. Obtener IDs únicos de productos para leer default_code
+            product_ids = set()
             for sml in stock_move_lines:
-                pkg_id = sml.get('result_package_id')
-                if pkg_id and isinstance(pkg_id, list) and len(pkg_id) >= 2:
-                    pkg_name = pkg_id[1]  # [id, name]
-                    qty_done = sml.get('qty_done', 0) or 0
-                    
-                    # Obtener info del producto para filtros
-                    product_info = sml.get('product_id', [False, ''])
-                    product_name = product_info[1] if isinstance(product_info, list) and len(product_info) >= 2 else ''
-                    
-                    lot_info = sml.get('lot_id', [False, ''])
-                    lot_name = lot_info[1] if isinstance(lot_info, list) and len(lot_info) >= 2 else ''
-                    
-                    if pkg_name not in package_map:
-                        package_map[pkg_name] = {
-                            'qty_done': qty_done,
-                            'product_name': product_name,
-                            'lot_name': lot_name,
-                            'date': sml.get('date', ''),
-                            'clasificacion': None  # Se llenará después
-                        }
-                    else:
-                        # Si el paquete aparece varias veces, sumar
-                        package_map[pkg_name]['qty_done'] += qty_done
+                product_info = sml.get('product_id')
+                if product_info and isinstance(product_info, list) and len(product_info) >= 1:
+                    product_ids.add(product_info[0])
             
-            # 3. Obtener x_mrp_production_line_d413e para matching
-            # Buscar todos los registros para hacer el match
-            domain_mrp_line = []
+            # 3. Leer default_code de los productos
+            product_codes = {}
+            if product_ids:
+                products = self.odoo.read(
+                    'product.product',
+                    list(product_ids),
+                    ['default_code', 'name']
+                )
+                for prod in products:
+                    product_codes[prod['id']] = {
+                        'code': (prod.get('default_code') or '').strip(),
+                        'name': prod.get('name', '')
+                    }
             
-            mrp_line_fields = [
-                'x_name',
-                'x_studio_observaciones'
-            ]
-            
-            mrp_lines = self.odoo.search_read(
-                'x_mrp_production_line_d413e',
-                domain_mrp_line,
-                mrp_line_fields,
-                limit=10000  # Límite alto para obtener todos los posibles matches
-            )
-            
-            # 4. Crear mapa de x_name -> x_studio_observaciones
-            clasificacion_map = {}
-            for mrp_line in mrp_lines:
-                x_name = (mrp_line.get('x_name') or '').strip()
-                observaciones = (mrp_line.get('x_studio_observaciones') or '').strip().upper()
-                
-                if x_name:
-                    clasificacion_map[x_name] = observaciones
-            
-            # 5. Hacer el matching y clasificar
+            # 4. Procesar y clasificar
             iqf_a_kg = 0
             retail_kg = 0
             detalle = []
             
-            for pkg_name, pkg_data in package_map.items():
-                clasificacion = clasificacion_map.get(pkg_name, '')
+            for sml in stock_move_lines:
+                # Obtener datos básicos
+                pkg_id = sml.get('result_package_id')
+                if not pkg_id or not isinstance(pkg_id, list) or len(pkg_id) < 2:
+                    continue
+                    
+                pkg_name = pkg_id[1]
+                qty_done = sml.get('qty_done', 0) or 0
                 
-                # Aplicar filtros de fruta y manejo si se proporcionaron
-                incluir = True
-                product_name_lower = pkg_data['product_name'].lower()
+                # Producto
+                product_info = sml.get('product_id', [False, ''])
+                product_id = product_info[0] if isinstance(product_info, list) and len(product_info) >= 1 else None
+                product_name = product_info[1] if isinstance(product_info, list) and len(product_info) >= 2 else ''
                 
+                # Obtener código del producto
+                product_data = product_codes.get(product_id, {})
+                product_code = product_data.get('code', '')
+                
+                # Si no hay código, saltar
+                if not product_code or len(product_code) < 5:
+                    continue
+                
+                # Lote
+                lot_info = sml.get('lot_id', [False, ''])
+                lot_name = lot_info[1] if isinstance(lot_info, list) and len(lot_info) >= 2 else ''
+                
+                # Orden de fabricación
+                production_info = sml.get('production_id', [False, ''])
+                production_name = production_info[1] if isinstance(production_info, list) and len(production_info) >= 2 else ''
+                
+                # FILTRO POR ORDEN DE FABRICACIÓN
+                if orden_fabricacion and orden_fabricacion.strip():
+                    if orden_fabricacion.lower() not in production_name.lower():
+                        continue
+                
+                # FILTRO POR FRUTA (usar nombre del producto)
+                product_name_lower = product_name.lower()
                 if tipo_fruta:
                     if tipo_fruta.lower() not in product_name_lower:
-                        incluir = False
+                        continue
                 
+                # FILTRO POR MANEJO (posición 4 del código: 1=Convencional, 2=Orgánico)
                 if tipo_manejo:
-                    # Buscar palabras clave de manejo
-                    if tipo_manejo.lower() == 'orgánico' or tipo_manejo.lower() == 'organico':
-                        if 'org' not in product_name_lower:
-                            incluir = False
-                    elif tipo_manejo.lower() == 'convencional':
-                        if 'org' in product_name_lower:  # Si tiene "org" es orgánico, no convencional
-                            incluir = False
+                    if len(product_code) >= 4:
+                        manejo_digit = product_code[3]  # Posición 4 (índice 3)
+                        if tipo_manejo.lower() in ['orgánico', 'organico']:
+                            if manejo_digit != '2':
+                                continue
+                        elif tipo_manejo.lower() == 'convencional':
+                            if manejo_digit != '1':
+                                continue
                 
-                if not incluir:
-                    continue
+                # CLASIFICACIÓN POR POSICIÓN 5 DEL CÓDIGO
+                # Posición 5 (índice 4): 2 = IQF A, 7 = IQF Retail
+                grado_digit = product_code[4] if len(product_code) >= 5 else ''
+                clasificacion = None
                 
-                # Clasificar según observaciones
-                qty = pkg_data['qty_done']
-                
-                if 'IQF A' in clasificacion or 'IQFA' in clasificacion:
-                    iqf_a_kg += qty
-                    pkg_data['clasificacion'] = 'IQF A'
-                elif 'RETAIL' in clasificacion:
-                    retail_kg += qty
-                    pkg_data['clasificacion'] = 'RETAIL'
+                if grado_digit == '2':
+                    clasificacion = 'IQF A'
+                    iqf_a_kg += qty_done
+                elif grado_digit == '7':
+                    clasificacion = 'IQF Retail'
+                    retail_kg += qty_done
                 else:
-                    # Si no tiene clasificación reconocida, no incluir
+                    # No es IQF A ni IQF Retail, no incluir
                     continue
                 
+                # Agregar al detalle
                 detalle.append({
                     'pallet': pkg_name,
-                    'clasificacion': pkg_data['clasificacion'],
-                    'kg': round(qty, 2),
-                    'producto': pkg_data['product_name'],
-                    'lote': pkg_data['lot_name'],
-                    'fecha': pkg_data['date']
+                    'clasificacion': clasificacion,
+                    'kg': round(qty_done, 2),
+                    'producto': product_name,
+                    'codigo_producto': product_code,
+                    'lote': lot_name,
+                    'orden_fabricacion': production_name,
+                    'fecha': sml.get('date', '')
                 })
             
             total_kg = iqf_a_kg + retail_kg
@@ -522,4 +533,5 @@ class ProduccionService:
             import traceback
             error_detail = traceback.format_exc()
             print(f"❌ ERROR en get_clasificacion_pallets: {error_detail}")
-            raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}") 
+                                  fecha_inicio: str, 
