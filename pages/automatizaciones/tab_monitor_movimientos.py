@@ -7,11 +7,9 @@ import pandas as pd
 from datetime import datetime
 
 
-def render():
+def render(username: str, password: str):
     """Renderiza el tab de Monitor de Movimientos"""
     
-    username = st.session_state.get("username")
-    password = st.session_state.get("password")
     api_url = st.session_state.get("api_url", "http://localhost:8000")
     
     st.title("📊 Monitor de Movimientos")
