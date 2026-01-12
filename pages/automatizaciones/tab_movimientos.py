@@ -917,25 +917,31 @@ def render(username: str, password: str):
         </div>
         """, unsafe_allow_html=True)
 
-        # Textarea para múltiples códigos (mobile-friendly)
+        # Textarea para múltiples códigos (mobile-friendly) - valor controlado
         pallet_input = st.text_area(
             "Escanea códigos (uno por línea)",
-            key="pallet_input",
+            value=st.session_state.get("pallet_textarea_value", ""),
             height=120,
             placeholder="Escanea pallets...\n(uno por línea)",
             label_visibility="collapsed"
         )
         
-        # Procesar input cuando hay algo nuevo
-        if pallet_input:
+        # Procesar input cuando hay algo nuevo (sin re-render innecesario)
+        if pallet_input and pallet_input != st.session_state.get("pallet_textarea_value", ""):
             lines = [line.strip() for line in pallet_input.split("\n") if line.strip()]
+            processed = False
             for code in lines:
-                if code and code != st.session_state.mov_last_scan:
+                # Verificar si el código ya está en la lista
+                if code and not any(p["code"] == code for p in st.session_state.mov_pallets):
                     _agregar_pallet(code, username, password, api_url)
-                    st.session_state.mov_last_scan = code
-            # Limpiar textarea
-            st.session_state.pallet_input = ""
-            st.rerun()
+                    processed = True
+            
+            # Solo limpiar y recargar si se procesó algo
+            if processed:
+                st.session_state.pallet_textarea_value = ""
+                st.rerun()
+            else:
+                st.session_state.pallet_textarea_value = pallet_input
 
         # Botones de acción (táctiles, 50px altura)
         col1, col2, col3 = st.columns([2, 2, 1])
@@ -958,7 +964,7 @@ def render(username: str, password: str):
                 key="btn_limpiar"
             ):
                 st.session_state.mov_pallets = []
-                st.session_state.pallet_input = ""
+                st.session_state.pallet_textarea_value = ""
                 st.toast("🗑️ Lista limpiada", icon="✅")
                 st.rerun()
 
