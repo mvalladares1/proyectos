@@ -4,7 +4,7 @@ Contenido principal del dashboard de Containers.
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .shared import (
     fetch_containers, STATE_OPTIONS,
@@ -22,76 +22,88 @@ ODF_COLORS = [
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
     
-    # Sidebar - Filtros
-    with st.sidebar:
-        st.header("⚙️ Filtros")
-        
-        # Estado (con callback para auto-refresh)
-        def on_state_change():
-            st.session_state["load_containers"] = True
-            st.session_state.pop("containers_data", None)
-
+    # === FILTROS EN ÁREA PRINCIPAL ===
+    st.markdown("### ⚙️ Filtros de Consulta")
+    
+    col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 1])
+    
+    with col_f1:
+        # Fecha inicio
+        hoy = datetime.now().date()
+        fecha_default_inicio = hoy - timedelta(days=30)
+        fecha_inicio = st.date_input(
+            "📅 Fecha Inicio",
+            value=fecha_default_inicio,
+            format="DD/MM/YYYY",
+            key="containers_fecha_inicio"
+        )
+    
+    with col_f2:
+        # Fecha fin
+        fecha_fin = st.date_input(
+            "📅 Fecha Fin",
+            value=hoy,
+            format="DD/MM/YYYY",
+            key="containers_fecha_fin"
+        )
+    
+    with col_f3:
+        # Estado
         selected_state = st.selectbox(
-            "Estado del Pedido",
+            "📋 Estado del Pedido",
             options=list(STATE_OPTIONS.keys()),
-            on_change=on_state_change,
             key="containers_state_filter"
         )
-        
-        st.divider()
-        st.caption("💡 Los cambios se aplican automáticamente.")
     
-    # Cargar datos
-    if st.session_state.get("load_containers", False) or "containers_data" not in st.session_state:
-        # SKELETON LOADER
-        skeleton = st.empty()
-        with skeleton.container():
-            st.markdown("""
-            <div style="animation: pulse 2s infinite;">
-                <div style="height: 200px; background-color: #f0f2f6; border-radius: 10px; margin-bottom: 20px;"></div>
-                <div style="display: flex; gap: 20px;">
-                    <div style="flex: 2; height: 300px; background-color: #f0f2f6; border-radius: 10px;"></div>
-                    <div style="flex: 1; height: 300px; background-color: #f0f2f6; border-radius: 10px;"></div>
-                </div>
-            </div>
-            <style>
-                @keyframes pulse {
-                    0% { opacity: 0.6; }
-                    50% { opacity: 0.3; }
-                    100% { opacity: 0.6; }
-                }
-            </style>
-            """, unsafe_allow_html=True)
-        
-        # Carga real
-        containers = fetch_containers(username, password, state=STATE_OPTIONS[selected_state])
-        st.session_state["containers_data"] = containers
-        st.session_state["load_containers"] = False
-        
-        # LIMPIAR SKELETON antes de mostrar contenido
-        skeleton.empty()
+    with col_f4:
+        st.markdown("<br>", unsafe_allow_html=True)
+        cargar = st.button("🔍 Consultar", type="primary", use_container_width=True)
     
-    # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
-    content_placeholder = st.container()
+    # Validar fechas
+    if fecha_inicio > fecha_fin:
+        st.error("❌ La fecha de inicio no puede ser mayor a la fecha fin")
+        return
     
-    with content_placeholder:
-        containers = st.session_state.get("containers_data", [])
-        
-        if not containers:
-            st.info("📦 No hay containers con fabricaciones vinculadas. Haz clic en 'Cargar Containers' para buscar.")
-            return
-        
-        # KPIs
-        _render_kpis(containers)
-        
-        st.divider()
-        
-        # Gráfico y Top 5
-        _render_charts(containers)
+    st.caption(f"📅 Período: {fecha_inicio.strftime('%d/%m/%Y')} → {fecha_fin.strftime('%d/%m/%Y')} ({(fecha_fin - fecha_inicio).days + 1} días)")
     
     st.divider()
     
-    # Detalle
+    # Cargar datos al hacer click o primera vez
+    if cargar or "containers_data" not in st.session_state:
+        with st.spinner("🔄 Cargando containers..."):
+            containers = fetch_containers(
+                username, 
+                password, 
+                start_date=fecha_inicio.strftime("%Y-%m-%d"),
+                end_date=fecha_fin.strftime("%Y-%m-%d"),
+                state=STATE_OPTIONS[selected_state]
+            )
+            st.session_state["containers_data"] = containers
+            if cargar:
+                st.rerun()
+    
+    containers = st.session_state.get("containers_data", [])
+    
+    if not containers:
+        st.info("📦 No hay containers con fabricaciones vinculadas en el período seleccionado.")
+        return
+    
+    # === 1. KPIs ===
+    _render_kpis(containers)
+    
+    st.divider()
+    
+    # === 2. GRÁFICOS ===
+    _render_charts(containers)
+    
+    st.divider()
+    
+    # === 3. TOP 5 CONTAINERS (DETALLE) ===
+    _render_top5(containers)
+    
+    st.divider()
+    
+    # === 4. DETALLE ===
     _render_detail(containers, username, password)
     
     # Footer
@@ -127,162 +139,205 @@ def _render_kpis(containers):
 
 
 def _render_charts(containers):
-    """Renderiza el gráfico de barras y top 5."""
-    col_chart, col_stats = st.columns([2, 1])
+    """Renderiza el gráfico de barras (Top 20) con mejoras visuales."""
+    st.subheader("📈 Avance Producción (Top 20)")
     
-    with col_chart:
-        st.subheader("📈 Avance por Container")
-        
-        containers_sorted = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:20]
-        
-        names = [f"{c['name']}" for c in containers_sorted]
-        avances = [c.get("avance_pct", 0) for c in containers_sorted]
-        colors = [get_state_color(a) for a in avances]
-        clientes = [c.get("partner_name", "N/A") for c in containers_sorted]
-        kg_prod = [c.get("kg_producidos", 0) for c in containers_sorted]
-        kg_total_list = [c.get("kg_total", 0) for c in containers_sorted]
-        fechas = [format_date_with_urgency(c.get("date_order", "")) for c in containers_sorted]
-        
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            y=names,
-            x=avances,
-            orientation='h',
-            marker_color=colors,
-            text=[f"{a:.1f}%" for a in avances],
-            textposition='outside',
-            hovertemplate=(
-                '<b>%{y}</b><br>'
-                'Cliente: %{customdata[0]}<br>'
-                'Avance: %{x:.1f}%<br>'
-                'Producido: %{customdata[1]:,.0f} kg<br>'
-                'Total: %{customdata[2]:,.0f} kg<br>'
-                'Fecha Límite: %{customdata[3]}<extra></extra>'
-            ),
-            customdata=list(zip(clientes, kg_prod, kg_total_list, fechas))
-        ))
-        
-        fig.add_vline(x=100, line_dash="dash", line_color="rgba(255,255,255,0.3)",
-                      annotation_text="Meta 100%")
-        
-        fig.update_layout(
-            height=max(400, len(containers_sorted) * 30),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font={"color": "white"},
-            xaxis=dict(
-                title="Avance (%)",
-                gridcolor="rgba(255,255,255,0.1)",
-                range=[0, max(110, max(avances) + 15)]
-            ),
-            yaxis=dict(
-                gridcolor="rgba(255,255,255,0.05)",
-                autorange="reversed"
-            ),
-            margin=dict(l=10, r=50, t=20, b=40),
-            showlegend=False
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+    containers_sorted = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:20]
     
-    with col_stats:
-        st.subheader("🏆 Top 5 Containers")
+    if not containers_sorted:
+        st.info("No hay datos para mostrar el gráfico.")
+        return
+
+    names = [c['name'] for c in containers_sorted]
+    avances = [c.get("avance_pct", 0) for c in containers_sorted]
+    colors = [get_state_color(a) for a in avances]
+    clientes = [c.get("partner_name", "N/A") for c in containers_sorted]
+    kg_prod = [c.get("kg_producidos", 0) for c in containers_sorted]
+    kg_total_list = [c.get("kg_total", 0) for c in containers_sorted]
+    
+    # Preparar etiquetas Y con emoji de urgencia y fechas formateadas
+    y_labels = []
+    fechas_display = []
+    
+    for c in containers_sorted:
+        date_order = c.get("date_order", "")
+        _, emoji, _ = get_date_urgency_color(date_order)
+        date_fmt = format_date_with_urgency(date_order)
         
-        containers_top5 = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:5]
-        for i, c in enumerate(containers_top5, 1):
-            avance = c.get("avance_pct", 0)
-            container_id = c.get("id")
-            container_name = c.get("name", "N/A")
-            kg_prod = c.get("kg_producidos", 0)
-            kg_total = c.get("kg_total", 0)
-            date_order = c.get("date_order", "")
-            productions = c.get("productions", [])
+        y_labels.append(f"{emoji} {c['name']}")
+        fechas_display.append(date_fmt)
+
+    fig = go.Figure()
+    
+    # 1. Ghost Bars (Fondo de meta 100%)
+    fig.add_trace(go.Bar(
+        y=y_labels,
+        x=[100] * len(names),
+        orientation='h',
+        marker_color='rgba(255, 255, 255, 0.05)',
+        hoverinfo='skip',
+        showlegend=False,
+        width=0.6  # Un poco más delgadas para elegancia
+    ))
+    
+    # 2. Barras principales
+    fig.add_trace(go.Bar(
+        y=y_labels,
+        x=avances,
+        orientation='h',
+        marker_color=colors,
+        text=[f"<b>{a:.1f}%</b>" for a in avances],
+        textposition='outside',
+        width=0.6,
+        # 3. Tooltip Estilizado (HTML)
+        hovertemplate=(
+            '<b style="font-size: 14px">📦 %{customdata[4]}</b><br>'
+            '<span style="color: #aaaaaa">👤 %{customdata[0]}</span><br>'
+            '<hr>'
+            '📈 Avance: <b>%{x:.1f}%</b><br>'
+            '⚖️ Producción: <b>%{customdata[1]:,.0f}</b> / %{customdata[2]:,.0f} kg<br>'
+            '📅 Límite: %{customdata[3]}<extra></extra>'
+        ),
+        # Pasamos names original en customdata[4] para mostrar nombre limpio en tooltip
+        customdata=list(zip(clientes, kg_prod, kg_total_list, fechas_display, names))
+    ))
+    
+    # 4. Línea de Meta Estilizada
+    fig.add_vline(
+        x=100, 
+        line_dash="dot", 
+        line_color="rgba(255, 255, 255, 0.5)",
+        annotation_text="🏁 Meta 100%", 
+        annotation_position="top right",
+        annotation_font_color="rgba(255, 255, 255, 0.7)"
+    )
+    
+    # 5. Ajustes de Layout "Pro"
+    fig.update_layout(
+        height=max(450, len(containers_sorted) * 35), # Un poco más de altura por barra
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": "white", "family": "Arial"},
+        title_font_size=16,
+        xaxis=dict(
+            title="Porcentaje de Avance (%)",
+            title_font=dict(size=12, color="#aaaaaa"),
+            gridcolor="rgba(255,255,255,0.08)", # Grid muy sutil
+            zeroline=False,
+            showticklabels=True,
+            range=[0, max(115, max(avances) + 20)] # Espacio extra para etiquetas
+        ),
+        yaxis=dict(
+            gridcolor="rgba(0,0,0,0)", # Sin grid en Y
+            autorange="reversed",
+            tickfont=dict(size=13) # Texto un poco más grande
+        ),
+        margin=dict(l=10, r=60, t=30, b=50),
+        showlegend=False,
+        bargap=0.3 # Espacio entre barras
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_top5(containers):
+    """Renderiza el detalle Top 5 Containers."""
+    st.subheader("🏆 Top 5 Containers (Detalle)")
+    
+    containers_top5 = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:5]
+    
+    for i, c in enumerate(containers_top5, 1):
+        avance = c.get("avance_pct", 0)
+        container_id = c.get("id")
+        container_name = c.get("name", "N/A")
+        kg_prod = c.get("kg_producidos", 0)
+        kg_total = c.get("kg_total", 0)
+        date_order = c.get("date_order", "")
+        productions = c.get("productions", [])
+        
+        # Color de fecha
+        date_color, date_emoji, _ = get_date_urgency_color(date_order)
+        date_display = format_date_with_urgency(date_order)
+        
+        with st.container(border=True):
+            # Header con link a Odoo
+            col_num, col_info = st.columns([1, 5])
+            with col_num:
+                st.markdown(f"### #{i}")
+            with col_info:
+                odoo_link = get_odoo_link("sale.order", container_id)
+                st.markdown(f"**[🔗 {container_name}]({odoo_link})**")
+                st.caption(f"{c.get('partner_name', 'N/A')}")
             
-            # Color de fecha
-            date_color, date_emoji, _ = get_date_urgency_color(date_order)
-            date_display = format_date_with_urgency(date_order)
+            # Fecha límite con color
+            st.markdown(f"📅 **Fecha Límite:** <span style='color:{date_color}'>{date_display}</span>", unsafe_allow_html=True)
             
-            with st.container(border=True):
-                # Header con link a Odoo
-                col_num, col_info = st.columns([1, 5])
-                with col_num:
-                    st.markdown(f"### #{i}")
-                with col_info:
-                    odoo_link = get_odoo_link("sale.order", container_id)
-                    st.markdown(f"**[🔗 {container_name}]({odoo_link})**")
-                    st.caption(f"{c.get('partner_name', 'N/A')}")
+            # KG breakdown
+            st.markdown(f"⚖️ **{kg_prod:,.0f}** / {kg_total:,.0f} kg ({avance:.1f}%)")
+            
+            # Barra de progreso con ODFs apiladas
+            if productions and kg_total > 0:
+                # Crear barra apilada por ODF
+                fig_bar = go.Figure()
                 
-                # Fecha límite con color
-                st.markdown(f"📅 **Fecha Límite:** <span style='color:{date_color}'>{date_display}</span>", unsafe_allow_html=True)
-                
-                # KG breakdown
-                st.markdown(f"⚖️ **{kg_prod:,.0f}** / {kg_total:,.0f} kg ({avance:.1f}%)")
-                
-                # Barra de progreso con ODFs apiladas
-                if productions and kg_total > 0:
-                    # Crear barra apilada por ODF
-                    fig_bar = go.Figure()
+                for idx, prod in enumerate(productions):
+                    prod_kg = prod.get("qty_produced", 0) or 0
+                    prod_pct = (prod_kg / kg_total * 100) if kg_total > 0 else 0
+                    prod_name = prod.get("name", f"ODF {idx+1}")
+                    prod_id = prod.get("id")
+                    color = ODF_COLORS[idx % len(ODF_COLORS)]
                     
-                    cumulative = 0
+                    fig_bar.add_trace(go.Bar(
+                        x=[prod_pct],
+                        y=["Avance"],
+                        orientation='h',
+                        name=prod_name,
+                        marker_color=color,
+                        text=f"{prod_name[:12]}" if prod_pct > 8 else "",
+                        textposition='inside',
+                        hovertemplate=f"<b>{prod_name}</b><br>{prod_kg:,.0f} kg ({prod_pct:.1f}%)<extra></extra>"
+                    ))
+                
+                # Espacio restante (pendiente)
+                pending_pct = max(0, 100 - avance)
+                if pending_pct > 0:
+                    fig_bar.add_trace(go.Bar(
+                        x=[pending_pct],
+                        y=["Avance"],
+                        orientation='h',
+                        name="Pendiente",
+                        marker_color="rgba(100,100,100,0.3)",
+                        hovertemplate=f"<b>Pendiente</b><br>{kg_total - kg_prod:,.0f} kg ({pending_pct:.1f}%)<extra></extra>"
+                    ))
+                
+                fig_bar.update_layout(
+                    barmode='stack',
+                    height=40,
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False,
+                    xaxis=dict(visible=False, range=[0, 100]),
+                    yaxis=dict(visible=False)
+                )
+                
+                st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
+                
+                # Desglose de ODFs
+                with st.expander(f"🏭 Ver {len(productions)} ODF(s)", expanded=False):
                     for idx, prod in enumerate(productions):
-                        prod_kg = prod.get("qty_produced", 0) or 0
-                        prod_pct = (prod_kg / kg_total * 100) if kg_total > 0 else 0
-                        prod_name = prod.get("name", f"ODF {idx+1}")
+                        prod_name = prod.get("name", "N/A")
                         prod_id = prod.get("id")
+                        prod_kg = prod.get("qty_produced", 0) or 0
+                        prod_state = prod.get("state_display", prod.get("state", ""))
                         color = ODF_COLORS[idx % len(ODF_COLORS)]
-                        
-                        fig_bar.add_trace(go.Bar(
-                            x=[prod_pct],
-                            y=["Avance"],
-                            orientation='h',
-                            name=prod_name,
-                            marker_color=color,
-                            text=f"{prod_name[:12]}" if prod_pct > 8 else "",
-                            textposition='inside',
-                            hovertemplate=f"<b>{prod_name}</b><br>{prod_kg:,.0f} kg ({prod_pct:.1f}%)<extra></extra>"
-                        ))
-                    
-                    # Espacio restante (pendiente)
-                    pending_pct = max(0, 100 - avance)
-                    if pending_pct > 0:
-                        fig_bar.add_trace(go.Bar(
-                            x=[pending_pct],
-                            y=["Avance"],
-                            orientation='h',
-                            name="Pendiente",
-                            marker_color="rgba(100,100,100,0.3)",
-                            hovertemplate=f"<b>Pendiente</b><br>{kg_total - kg_prod:,.0f} kg ({pending_pct:.1f}%)<extra></extra>"
-                        ))
-                    
-                    fig_bar.update_layout(
-                        barmode='stack',
-                        height=40,
-                        margin=dict(l=0, r=0, t=0, b=0),
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        showlegend=False,
-                        xaxis=dict(visible=False, range=[0, 100]),
-                        yaxis=dict(visible=False)
-                    )
-                    
-                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
-                    
-                    # Desglose de ODFs
-                    with st.expander(f"🏭 Ver {len(productions)} ODF(s)", expanded=False):
-                        for idx, prod in enumerate(productions):
-                            prod_name = prod.get("name", "N/A")
-                            prod_id = prod.get("id")
-                            prod_kg = prod.get("qty_produced", 0) or 0
-                            prod_state = prod.get("state_display", prod.get("state", ""))
-                            color = ODF_COLORS[idx % len(ODF_COLORS)]
-                            odoo_link = get_odoo_link("mrp.production", prod_id)
-                            st.markdown(
-                                f"<span style='color:{color}'>●</span> [🔗 {prod_name}]({odoo_link}) - {prod_kg:,.0f} kg - {prod_state}",
-                                unsafe_allow_html=True
-                            )
-                else:
-                    st.progress(min(avance / 100, 1.0))
+                        odoo_link = get_odoo_link("mrp.production", prod_id)
+                        st.markdown(
+                            f"<span style='color:{color}'>●</span> [🔗 {prod_name}]({odoo_link}) - {prod_kg:,.0f} kg - {prod_state}",
+                            unsafe_allow_html=True
+                        )
+            else:
+                st.progress(min(avance / 100, 1.0))
 
 
 
