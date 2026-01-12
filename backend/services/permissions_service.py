@@ -61,6 +61,7 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "dashboard", "name": "Dashboard"},
     ],
     "stock": [
+        {"slug": "movimientos", "name": "Movimientos"},
         {"slug": "camaras", "name": "Cámaras"},
         {"slug": "pallets", "name": "Pallets"},
         {"slug": "trazabilidad", "name": "Trazabilidad"},
@@ -81,11 +82,13 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "lineas_credito", "name": "Líneas de Crédito"},
     ],
     "rendimiento": [
-        {"slug": "dashboard", "name": "Dashboard"},
+        {"slug": "trazabilidad_pallets", "name": "Trazabilidad por Pallets"},
+        {"slug": "diagrama_sankey", "name": "Diagrama Sankey"},
     ],
     "automatizaciones": [
         {"slug": "crear_orden", "name": "Crear Orden"},
         {"slug": "monitor_ordenes", "name": "Monitor de Órdenes"},
+        {"slug": "movimientos", "name": "Movimientos"},
     ],
     "permisos": [
         {"slug": "modulos", "name": "Módulos"},
