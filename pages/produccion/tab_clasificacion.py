@@ -83,8 +83,9 @@ def render(username: str, password: str):
                     if tipo_manejo_param:
                         params["tipo_manejo"] = tipo_manejo_param
                     
+                    
                     response = requests.get(
-                        f"{API_URL}/produccion/clasificacion",
+                        f"{API_URL}/api/v1/produccion/clasificacion",
                         params=params,
                         timeout=120
                     )
