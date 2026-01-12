@@ -51,6 +51,16 @@ def render(username: str, password: str):
     if 'pallets_list' not in st.session_state:
         st.session_state.pallets_list = []
     
+    # Flag para limpiar textarea (se debe resetear ANTES de renderizar el widget)
+    if 'clear_pallets_input' not in st.session_state:
+        st.session_state.clear_pallets_input = False
+    
+    # Si hay flag de limpieza, resetear ANTES de renderizar el widget
+    if st.session_state.clear_pallets_input:
+        if 'pallets_multiple_input' in st.session_state:
+            st.session_state.pallets_multiple_input = ""
+        st.session_state.clear_pallets_input = False
+    
     # Función callback para convertir a mayúsculas
     def _convert_to_uppercase():
         if 'pallets_multiple_input' in st.session_state:
@@ -339,7 +349,7 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                         
                         # Limpiar lista y textarea
                         st.session_state.pallets_list = []
-                        st.session_state.pallets_multiple_input = ""  # Limpiar textarea
+                        st.session_state.clear_pallets_input = True  # Flag para limpiar en próximo rerun
                         st.session_state.creando_orden = False
                         
                         # Mostrar toast prominente
