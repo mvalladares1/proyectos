@@ -13,7 +13,7 @@ from .shared import (
     API_URL, fmt_numero, fmt_porcentaje, get_alert_color,
     filtrar_mos_por_planta, fetch_dashboard_completo, skeleton_loader
 )
-from .graficos import grafico_congelado_semanal, grafico_vaciado_por_sala, grafico_produccion_consolidado
+from .graficos import grafico_congelado_semanal, grafico_vaciado_por_sala, grafico_salas_consolidado, grafico_tuneles_consolidado
 
 
 def render(username: str, password: str):
@@ -186,14 +186,6 @@ def render(username: str, password: str):
 
 def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
     """Renderiza los sub-tabs de KPIs: Proceso y Congelado."""
-    
-    # === GRÁFICO CONSOLIDADO DE PRODUCCIÓN (Túneles + Salas) ===
-    if mos:
-        st.markdown("### 📊 Visión Consolidada: Túneles y Salas")
-        st.caption("Producción total por período - Túneles (Congelado) + Salas (Proceso, acumulado sin detalle de línea)")
-        grafico_produccion_consolidado(mos, agrupacion)
-        st.markdown("---")
-    
     vista_tabs = st.tabs(["🏭 Proceso (Vaciado)", "❄️ Congelado (Túneles)"])
     
     with vista_tabs[0]:
@@ -234,11 +226,18 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             st.markdown("---")
             _render_resumen_fruta_manejo(consolidado)
         
-        # === GRÁFICO TEMPORAL DE PROCESO/VACIADO POR SALA ===
+        # === GRÁFICO ACUMULADO POR SALA ===
+        if mos:
+            st.markdown("---")
+            st.markdown("### 🏭 Producción Acumulada por Sala")
+            st.caption("Kg procesados por período - Solo salas (sin detalle de líneas)")
+            grafico_salas_consolidado(mos, agrupacion)
+        
+        # === GRÁFICO TEMPORAL DE PROCESO/VACIADO POR SALA (DETALLE POR LÍNEA) ===
         if mos:
             st.markdown("---")
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
-            st.markdown(f"### 📊 Análisis {titulo_agrupacion} por Sala y Línea")
+            st.markdown(f"### 📊 Análisis {titulo_agrupacion} por Sala y Línea (Detalle)")
             grafico_vaciado_por_sala(mos, agrupacion, salas)
 
         
@@ -272,11 +271,18 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
         
         _fragment_kpis_congelado()
         
-        # === GRÁFICO TEMPORAL DE CONGELADO ===
+        # === GRÁFICO ACUMULADO POR TÚNEL ===
+        if mos:
+            st.markdown("---")
+            st.markdown("### ❄️ Congelado Acumulado por Túnel")
+            st.caption("Kg congelados por período - Solo túneles")
+            grafico_tuneles_consolidado(mos, agrupacion)
+        
+        # === GRÁFICO TEMPORAL DE CONGELADO (DETALLE POR TÚNEL) ===
         if mos:
             st.markdown("---")
             titulo_agrupacion = {"Día": "Diario", "Semana": "Semanal", "Mes": "Mensual"}.get(agrupacion, "Semanal")
-            st.markdown(f"### 📊 Análisis {titulo_agrupacion} de Congelado")
+            st.markdown(f"### 📊 Análisis {titulo_agrupacion} de Congelado (Detalle)")
             grafico_congelado_semanal(mos, agrupacion, salas)
 
         
