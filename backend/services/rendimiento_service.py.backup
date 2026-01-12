@@ -7,13 +7,6 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from shared.odoo_client import OdooClient
 from backend.cache import get_cache
-from .rendimiento.helpers import (
-    is_operational_cost,
-    is_excluded_consumo,
-    extract_fruit_type,
-    extract_handling,
-    classify_sala
-)
 
 
 class RendimientoService:
@@ -23,35 +16,132 @@ class RendimientoService:
     - Dashboard consolidado para módulo de Producción
     """
     
+    # Categorías a excluir del consumo MP
+    EXCLUDED_CATEGORIES = ["insumo", "envase", "etiqueta", "embalaje", "merma"]
+    
+    # Salas de proceso (vaciado) - Genera merma real
+    SALAS_PROCESO = [
+        'sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6',
+        'linea retail', 'granel', 'proceso'
+    ]
+    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self._cache = get_cache()
     
     # ===========================================
-    # FUNCIONES AUXILIARES - Delegadas a helpers
+    # FUNCIONES AUXILIARES
     # ===========================================
     
     def _is_operational_cost(self, product_name: str) -> bool:
         """Identifica costos operacionales (electricidad, servicios)"""
-        return is_operational_cost(product_name)
+        if not product_name:
+            return False
+        
+        name_lower = product_name.lower()
+        operational_indicators = [
+            "provisión electricidad", "provisión electr",
+            "túnel estático", "tunel estatico",
+            "electricidad túnel", "costo hora", "($/hr)", "($/h)"
+        ]
+        
+        return any(ind in name_lower for ind in operational_indicators)
     
     def _is_excluded_consumo(self, product_name: str, category_name: str = '') -> bool:
         """Verifica si un producto debe excluirse del consumo MP."""
-        return is_excluded_consumo(product_name, category_name)
+        if not product_name:
+            return True
+        
+        name_lower = product_name.lower()
+        cat_lower = (category_name or '').lower()
+        
+        # Productos con código [3xxxxx] o [1xxxxx] son productos de proceso
+        if product_name.startswith('[3') or product_name.startswith('[1'):
+            return False
+        
+        if self._is_operational_cost(product_name):
+            return True
+        
+        if any(exc in cat_lower for exc in self.EXCLUDED_CATEGORIES):
+            return True
+        
+        pure_packaging = [
+            "caja de exportación", "cajas de exportación", 
+            "insumo", "envase", "pallet", "etiqueta", "doy pe"
+        ]
+        
+        if any(exc in name_lower for exc in pure_packaging):
+            return True
+        
+        if name_lower.startswith('bolsa') or name_lower.startswith('caja'):
+            return True
+        
+        return False
     
     def _extract_fruit_type(self, product_name: str) -> str:
         """Extrae el tipo de fruta del nombre del producto."""
-        return extract_fruit_type(product_name)
+        if not product_name:
+            return 'Otro'
+        
+        name_lower = product_name.lower()
+        
+        fruit_mapping = {
+            'arándano': 'Arándano', 'arandano': 'Arándano', 'blueberr': 'Arándano',
+            'frambuesa': 'Frambuesa', 'raspberry': 'Frambuesa', 'raspberr': 'Frambuesa',
+            'mora': 'Mora', 'blackberr': 'Mora',
+            'frutilla': 'Frutilla', 'fresa': 'Frutilla', 'strawberr': 'Frutilla',
+            'cereza': 'Cereza', 'cherry': 'Cereza', 'guinda': 'Cereza',
+            'kiwi': 'Kiwi',
+            'manzana': 'Manzana', 'apple': 'Manzana',
+        }
+        
+        for key, value in fruit_mapping.items():
+            if key in name_lower:
+                return value
+        
+        return 'Otro'
     
     def _extract_handling(self, product_name: str) -> str:
         """Extrae el manejo (orgánico/convencional) del nombre."""
-        return extract_handling(product_name)
+        if not product_name:
+            return 'Otro'
+        
+        name_lower = product_name.lower()
+        
+        if 'orgánico' in name_lower or 'organico' in name_lower or 'org.' in name_lower:
+            return 'Orgánico'
+        elif 'convencional' in name_lower or 'conv.' in name_lower:
+            return 'Convencional'
+        
+        return 'Otro'
     
     def _classify_sala(self, sala_name: str, product_name: str = '') -> tuple:
         """Clasifica una sala o producto como PROCESO o CONGELADO."""
-        # Helper retorna (tipo, nombre) - Necesitamos invertir para compatibilidad
-        tipo, nombre = classify_sala(sala_name, product_name)
-        return (nombre, tipo)
+        if not sala_name:
+            sala_name = ''
+        if not product_name:
+            product_name = ''
+            
+        sala_lower = sala_name.lower()
+        prod_lower = product_name.lower()
+        
+        # Túneles estáticos o procesos de congelación
+        if 'túnel' in sala_lower or 'tunel' in sala_lower or 'congelado' in sala_lower:
+            return (sala_name or 'Congelado', 'CONGELADO')
+        
+        if 'estático' in prod_lower or 'estatico' in prod_lower or 'túnel' in prod_lower or 'tunel' in prod_lower:
+            return (sala_name or 'Congelado', 'CONGELADO')
+        
+        # Salas de proceso
+        for sp in self.SALAS_PROCESO:
+            if sp in sala_lower:
+                return (sala_name, 'PROCESO')
+        
+        # Si tiene sala pero no es túnel, asumimos proceso
+        if sala_name:
+            return (sala_name, 'PROCESO')
+        
+        return ('SIN SALA', 'SIN_SALA')
     
     # ===========================================
     # FUNCIONES DE BATCH

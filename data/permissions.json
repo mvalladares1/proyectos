@@ -29,15 +29,37 @@
     "mvalladares@riofuturo.cl"
   ],
   "pages": {
-    "recepciones.aprobaciones_mp": [
-      "ctapia@riofuturo.cl",
-      "asesorias@riofuturo.cl"
-    ],
+    "recepciones.kpis_calidad": [],
+    "recepciones.gestion_recepciones": [],
     "recepciones.curva_abastecimiento": [
       "fbravo@riofuturo.cl",
       "jvidaurre@riofuturo.cl",
       "msepulveda@riofuturo.cl"
-    ]
+    ],
+    "recepciones.aprobaciones_mp": [
+      "ctapia@riofuturo.cl",
+      "asesorias@riofuturo.cl"
+    ],
+    "produccion.reporteria_general": [],
+    "produccion.detalle_of": [],
+    "produccion.clasificacion": [],
+    "stock.movimientos": [],
+    "stock.camaras": [],
+    "stock.pallets": [],
+    "stock.trazabilidad": [],
+    "finanzas.agrupado": [],
+    "finanzas.mensualizado": [],
+    "finanzas.ytd": [],
+    "finanzas.cg": [],
+    "finanzas.detalle": [],
+    "finanzas.flujo_caja": [],
+    "compras.ordenes": [],
+    "compras.lineas_credito": [],
+    "automatizaciones.crear_orden": [],
+    "automatizaciones.monitor_ordenes": [],
+    "automatizaciones.movimientos": [],
+    "rendimiento.trazabilidad_pallets": [],
+    "rendimiento.diagrama_sankey": []
   },
   "maintenance": {
     "enabled": true,

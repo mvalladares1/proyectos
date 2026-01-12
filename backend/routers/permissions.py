@@ -180,3 +180,36 @@ def clear_page_permission(
     return {"pages": pages}
 
 
+# ============ ENDPOINTS DE ADMINISTRADORES ============
+
+@router.get("/admins")
+def get_admins_endpoint() -> Dict:
+    """Obtiene la lista de administradores."""
+    from backend.services.permissions_service import get_admins
+    return {"admins": get_admins()}
+
+
+@router.post("/admins/assign")
+def assign_admin_endpoint(
+    email: str = Query(..., description="Email del nuevo admin"),
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Agrega un administrador."""
+    from backend.services.permissions_service import assign_admin
+    _validate_admin(admin_username, admin_password)
+    admins = assign_admin(email)
+    return {"admins": admins}
+
+
+@router.post("/admins/remove")
+def remove_admin_endpoint(
+    email: str = Query(..., description="Email del admin a remover"),
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Remueve un administrador."""
+    from backend.services.permissions_service import remove_admin
+    _validate_admin(admin_username, admin_password)
+    admins = remove_admin(email)
+    return {"admins": admins}

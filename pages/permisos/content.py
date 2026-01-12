@@ -174,6 +174,75 @@ def _fragment_config(username: str, password: str):
     """Fragment para configuración global."""
     st.subheader("Configuración Global")
     
+    # Administradores
+    with st.container(border=True):
+        st.markdown("### 👑 Super Usuarios (Administradores)")
+        st.caption("Los administradores tienen acceso total a todos los módulos y páginas")
+        
+        try:
+            resp_admins = httpx.get(f"{API_URL}/api/v1/permissions/admins", timeout=10.0)
+            if resp_admins.status_code == 200:
+                admins_list = resp_admins.json().get("admins", [])
+            else:
+                admins_list = []
+        except:
+            admins_list = []
+        
+        col_list, col_add = st.columns([2, 1])
+        
+        with col_list:
+            st.markdown("**Administradores actuales:**")
+            if admins_list:
+                for admin_email in admins_list:
+                    ce, cd = st.columns([4, 1])
+                    ce.text(admin_email)
+                    if cd.button("🗑️", key=f"admin_del_{admin_email}"):
+                        try:
+                            resp = httpx.post(
+                                f"{API_URL}/api/v1/permissions/admins/remove",
+                                params={
+                                    "email": admin_email,
+                                    "admin_username": username,
+                                    "admin_password": password
+                                },
+                                timeout=10.0
+                            )
+                            if resp.status_code == 200:
+                                st.toast(f"✅ {admin_email} removido como admin")
+                                st.rerun()
+                            else:
+                                st.error("Error al remover admin")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+            else:
+                st.caption("No hay administradores configurados")
+        
+        with col_add:
+            st.markdown("**Agregar Admin:**")
+            with st.form(key="form_add_admin", clear_on_submit=True):
+                new_admin_email = st.text_input("Email:", placeholder="admin@riofuturo.cl")
+                if st.form_submit_button("➕ Agregar", use_container_width=True):
+                    if new_admin_email:
+                        try:
+                            resp = httpx.post(
+                                f"{API_URL}/api/v1/permissions/admins/assign",
+                                params={
+                                    "email": new_admin_email,
+                                    "admin_username": username,
+                                    "admin_password": password
+                                },
+                                timeout=10.0
+                            )
+                            if resp.status_code == 200:
+                                st.toast(f"✅ {new_admin_email} agregado como admin")
+                                st.rerun()
+                            else:
+                                st.error("Error al agregar admin")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+    
+    st.divider()
+    
     # Mantenimiento
     with st.container(border=True):
         st.markdown("### ⚠️ Modo Mantenimiento")

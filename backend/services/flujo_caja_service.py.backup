@@ -4,8 +4,6 @@ Servicio de Flujo de Caja - Estado de Flujo de Efectivo NIIF IAS 7 (Método Dire
 Este servicio genera el Estado de Flujo de Efectivo obteniendo datos desde Odoo.
 El flujo se construye exclusivamente desde movimientos que afectan cuentas de efectivo.
 Usa el catálogo oficial de conceptos NIIF para clasificación.
-
-REFACTORIZADO: Constantes y helpers extraídos a módulos separados.
 """
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
@@ -14,44 +12,73 @@ import os
 
 from shared.odoo_client import OdooClient
 
-# Importar desde módulos modularizados
-from .flujo_caja.constants import (
-    CONCEPTO_FALLBACK,
-    ESTRUCTURA_FLUJO,
-    CUENTAS_FIJAS_FINANCIAMIENTO,
-    CATEGORIA_NEUTRAL,
-    CATEGORIA_PENDIENTE,
-    CATEGORIA_UNCLASSIFIED,
-    CATEGORIA_FX_EFFECT,
-    EMOJIS_ACTIVIDAD
-)
-from .flujo_caja.helpers import (
-    sumar_hijos,
-    migrar_codigo_antiguo,
-    build_categorias_dropdown,
-    aggregate_montos_by_concepto
-)
+
+# Concepto fallback para cuentas sin mapear
+CONCEPTO_FALLBACK = "1.2.6"  # Otras entradas (salidas) de efectivo
+
+# Estructura IAS 7 para Actividades - FUENTE DE VERDAD
+# Solo Operación por ahora (FASE 1)
+ESTRUCTURA_FLUJO = {
+    "OPERACION": {
+        "nombre": "1. Flujos de efectivo procedentes (utilizados) en actividades de operación",
+        "lineas": [
+            {"codigo": "1.1.1", "nombre": "Cobros procedentes de las ventas de bienes y prestación de servicios", "signo": 1},
+            {"codigo": "1.2.1", "nombre": "Pagos a proveedores por el suministro de bienes y servicios", "signo": -1},
+            {"codigo": "1.2.2", "nombre": "Pagos a y por cuenta de los empleados", "signo": -1},
+            {"codigo": "1.2.3", "nombre": "Intereses pagados", "signo": -1},
+            {"codigo": "1.2.4", "nombre": "Intereses recibidos", "signo": 1},
+            {"codigo": "1.2.5", "nombre": "Impuestos a las ganancias reembolsados (pagados)", "signo": -1},
+            {"codigo": "1.2.6", "nombre": "Otras entradas (salidas) de efectivo", "signo": 1}
+        ],
+        "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados en) actividades de operación"
+    },
+    "INVERSION": {
+        "nombre": "2. Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
+        "lineas": [],
+        "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de inversión"
+    },
+    "FINANCIAMIENTO": {
+        "nombre": "3. Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento",
+        "lineas": [
+            {"codigo": "3.0.1", "nombre": "Importes procedentes de préstamos de largo plazo", "signo": 1},
+            {"codigo": "3.0.2", "nombre": "Importes procedentes de préstamos de corto plazo", "signo": 1},
+            {"codigo": "3.1.1", "nombre": "Préstamos de entidades relacionadas", "signo": 1},
+            {"codigo": "3.1.4", "nombre": "Pagos de pasivos por arrendamientos financieros", "signo": -1}
+        ],
+        "subtotal_nombre": "Flujos de efectivo netos procedentes de (utilizados) en actividades de financiamiento"
+    }
+}
+
+# Mapeo OBLIGATORIO de cuentas de financiamiento (Parametrización Fija)
+CUENTAS_FIJAS_FINANCIAMIENTO = {
+    # 3.0.2 Importes procedentes de préstamos de corto plazo
+    "21010101": "3.0.2", "21010102": "3.0.2", "21010103": "3.0.2", "82010101": "3.0.2",
+    # 3.0.1 Importes procedentes de préstamos de largo plazo
+    "21010213": "3.0.1", "21010223": "3.0.1", "22010101": "3.0.1",
+    # 3.1.1 Préstamos de entidades relacionadas
+    "21030201": "3.1.1", "21030211": "3.1.1", "22020101": "3.1.1",
+    # 3.1.4 Pagos de pasivos por arrendamientos financieros
+    "21010201": "3.1.4", "21010202": "3.1.4", "21010204": "3.1.4",
+    "22010202": "3.1.4", "22010204": "3.1.4", "82010102": "3.1.4"
+}
 
 
 class FlujoCajaService:
     """Servicio para generar Estado de Flujo de Efectivo NIIF IAS 7."""
     
+    # Categorías técnicas especiales (no se muestran en UI pero se procesan internamente)
+    CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
+    CATEGORIA_PENDIENTE = "PENDIENTE"   # Sin clasificar (va a 1.2.6 + lista pendientes)
+    CATEGORIA_UNCLASSIFIED = "1.2.6"    # Otras entradas (salidas) de efectivo - fallback
+    CATEGORIA_FX_EFFECT = "4.2"         # Efectos variación tipo de cambio
+    
     def __init__(self, username: str = None, password: str = None):
-        self.username = username
-        self.password = password
-        self._odoo = None
+        self.odoo = OdooClient(username=username, password=password)
         self.catalogo = self._cargar_catalogo()
         self.mapeo_cuentas = self._cargar_mapeo()
         self.cuentas_monitoreadas = self._cargar_cuentas_monitoreadas()
         self._cache_cuentas_efectivo = None
         self._migracion_codigos = self.catalogo.get("migracion_codigos", {})
-    
-    @property
-    def odoo(self):
-        """Lazy initialization de OdooClient."""
-        if self._odoo is None:
-            self._odoo = OdooClient(username=self.username, password=self.password)
-        return self._odoo
     
     def _get_catalogo_path(self) -> str:
         """Retorna la ruta al archivo de catálogo."""
@@ -159,29 +186,113 @@ class FlujoCajaService:
                           proyeccion_por_linea: Dict[str, float] = None,
                           modo: str = "consolidado") -> List[Dict]:
         """
-        Motor de agregación IAS 7 (delegado a helpers).
+        Motor de agregación IAS 7.
         
         Toma montos de LINEAs y calcula HEADERs/TOTALs automáticamente.
+        
+        Args:
+            montos_por_linea: {concepto_id: monto_real} ej: {"1.1.1": 1000000, "1.2.1": -500000}
+            proyeccion_por_linea: {concepto_id: monto_proyectado} (opcional)
+            modo: "real" | "proyectado" | "consolidado"
+        
+        Returns:
+            Lista de nodos con: id, nombre, tipo, nivel, monto_real, monto_proyectado, monto_display
         """
+        proyeccion_por_linea = proyeccion_por_linea or {}
         conceptos = self.catalogo.get("conceptos", [])
-        return aggregate_montos_by_concepto(conceptos, montos_por_linea, proyeccion_por_linea, modo)
+        sorted_conceptos = sorted(conceptos, key=lambda x: x.get("order", 999))
+        
+        resultado = []
+        
+        for concepto in sorted_conceptos:
+            c_id = concepto.get("id")
+            c_tipo = concepto.get("tipo")
+            
+            if c_tipo == "LINEA":
+                # Montos directos
+                monto_real = montos_por_linea.get(c_id, 0.0)
+                monto_proy = proyeccion_por_linea.get(c_id, 0.0)
+            elif c_tipo in ("HEADER", "TOTAL"):
+                # Sumar hijos (nodos cuyo parent == este ID o que empiezan con este prefijo)
+                monto_real = self._sumar_hijos(c_id, montos_por_linea, conceptos)
+                monto_proy = self._sumar_hijos(c_id, proyeccion_por_linea, conceptos)
+            else:
+                # DATA u otros
+                monto_real = montos_por_linea.get(c_id, 0.0)
+                monto_proy = proyeccion_por_linea.get(c_id, 0.0)
+            
+            # Determinar monto a mostrar según modo
+            if modo == "real":
+                monto_display = monto_real
+            elif modo == "proyectado":
+                monto_display = monto_proy
+            else:  # consolidado
+                monto_display = monto_real + monto_proy
+            
+            resultado.append({
+                "id": c_id,
+                "nombre": concepto.get("nombre"),
+                "tipo": c_tipo,
+                "nivel": concepto.get("nivel", 3),
+                "parent": concepto.get("parent"),
+                "order": concepto.get("order"),
+                "signo": concepto.get("signo", 1),
+                "actividad": concepto.get("actividad"),
+                "monto_real": round(monto_real, 0),
+                "monto_proyectado": round(monto_proy, 0),
+                "monto_display": round(monto_display, 0)
+            })
+        
+        return resultado
     
     def _sumar_hijos(self, parent_id: str, montos: Dict[str, float], conceptos: List[Dict]) -> float:
-        """Delegado a helpers.sumar_hijos."""
-        return sumar_hijos(parent_id, montos, conceptos)
+        """
+        Suma los montos de todos los hijos directos e indirectos de un nodo.
+        Solo suma LINEAs para evitar doble conteo.
+        """
+        total = 0.0
+        prefix = parent_id + "."
+        
+        for concepto in conceptos:
+            c_id = concepto.get("id", "")
+            c_tipo = concepto.get("tipo", "")
+            
+            # Solo sumar LINEAs que son hijos (directos o indirectos)
+            if c_tipo == "LINEA":
+                if c_id.startswith(prefix) or concepto.get("parent") == parent_id:
+                    total += montos.get(c_id, 0.0)
+        
+        return total
     
     def get_categorias_ias7_dropdown(self) -> List[Dict]:
-        """Delegado a helpers.build_categorias_dropdown."""
+        """
+        Retorna las categorías para el dropdown del editor.
+        Formato: {"label": "1.1.1 - Cobros procedentes...", "value": "1.1.1"}
+        Solo incluye LINEAs (donde se pueden mapear cuentas).
+        """
         conceptos = self.catalogo.get("conceptos", [])
-        return build_categorias_dropdown(conceptos, EMOJIS_ACTIVIDAD)
+        lineas = [c for c in conceptos if c.get("tipo") == "LINEA"]
+        sorted_lineas = sorted(lineas, key=lambda x: x.get("order", 999))
+        
+        resultado = []
+        for c in sorted_lineas:
+            actividad = c.get("actividad", "")
+            # Emoji por actividad
+            emoji = {"OPERACION": "🟢", "INVERSION": "🔵", "FINANCIAMIENTO": "🟣", "CONCILIACION": "⚪"}.get(actividad, "⚪")
+            
+            resultado.append({
+                "label": f"{emoji} {c['id']} - {c['nombre'][:60]}",
+                "value": c['id']
+            })
         
         # Agregar NEUTRAL al final
+        resultado.append({"label": "⚪ NEUTRAL - Transferencias internas (no impacta flujo)", "value": "NEUTRAL"})
         
         return resultado
     
     def _migrar_codigo_antiguo(self, codigo_antiguo: str) -> str:
-        """Delegado a helpers.migrar_codigo_antiguo."""
-        return migrar_codigo_antiguo(codigo_antiguo, self._migracion_codigos)
+        """Convierte códigos antiguos (OP01, IN01) a nuevos (1.1.1, 2.1)."""
+        return self._migracion_codigos.get(codigo_antiguo, codigo_antiguo)
     
     def _clasificar_cuenta_explicita(self, codigo_cuenta: str) -> Tuple[str, bool]:
         """
@@ -367,8 +478,8 @@ class FlujoCajaService:
         errores = []
         info = []  # Alertas informativas (signo)
         
-        neutral = flujos_por_linea.get(CATEGORIA_NEUTRAL, 0)
-        sin_clasificar = flujos_por_linea.get(CATEGORIA_UNCLASSIFIED, 0)
+        neutral = flujos_por_linea.get(self.CATEGORIA_NEUTRAL, 0)
+        sin_clasificar = flujos_por_linea.get(self.CATEGORIA_UNCLASSIFIED, 0)
         
         # 1. Validar NEUTRAL (~0)
         if abs(neutral) > 1000:
@@ -404,7 +515,7 @@ class FlujoCajaService:
                         break  # Una alerta es suficiente
         elif sin_clasificar != 0:
             # Fallback: validación global
-            total_flujos = sum(abs(v) for k, v in flujos_por_linea.items() if k != CATEGORIA_NEUTRAL)
+            total_flujos = sum(abs(v) for k, v in flujos_por_linea.items() if k != self.CATEGORIA_NEUTRAL)
             if total_flujos > 0:
                 proporcion = abs(sin_clasificar) / total_flujos
                 if proporcion > 0.05:
@@ -419,7 +530,7 @@ class FlujoCajaService:
         # 3. Validar signo esperado (INFORMATIVO, no bloqueante)
         if config.get("alertar_signo_inesperado", True):
             for codigo, monto in flujos_por_linea.items():
-                if monto == 0 or codigo in [CATEGORIA_NEUTRAL, CATEGORIA_UNCLASSIFIED, CATEGORIA_FX_EFFECT]:
+                if monto == 0 or codigo in [self.CATEGORIA_NEUTRAL, self.CATEGORIA_UNCLASSIFIED, self.CATEGORIA_FX_EFFECT]:
                     continue
                 cat_info = categorias.get(codigo, {})
                 signo_esperado = cat_info.get("signo_esperado", "variable")
@@ -647,7 +758,7 @@ class FlujoCajaService:
         for c in self.catalogo.get("conceptos", []):
             if c.get("tipo") == "LINEA":
                 montos_por_concepto[c["id"]] = 0.0
-        montos_por_concepto[CATEGORIA_NEUTRAL] = 0.0
+        montos_por_concepto[self.CATEGORIA_NEUTRAL] = 0.0
         
         cuentas_pendientes = {}
         cuentas_por_concepto = {} 
@@ -718,9 +829,9 @@ class FlujoCajaService:
                         continue  # Cuenta sin mapeo, no procesar
                     
                     # NEUTRAL
-                    if concepto_id == CATEGORIA_NEUTRAL:
-                        montos_por_concepto[CATEGORIA_NEUTRAL] += balance
-                        agregar_cuenta_concepto(CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, balance, cantidad=count)
+                    if concepto_id == self.CATEGORIA_NEUTRAL:
+                        montos_por_concepto[self.CATEGORIA_NEUTRAL] += balance
+                        agregar_cuenta_concepto(self.CATEGORIA_NEUTRAL, codigo_cuenta, nombre_cuenta, balance, cantidad=count)
                     else:
                         if concepto_id not in montos_por_concepto:
                             montos_por_concepto[concepto_id] = 0.0
@@ -779,11 +890,11 @@ class FlujoCajaService:
                     # Clasificar
                     concepto_id, es_pendiente = self._clasificar_cuenta(codigo)
                     
-                    if concepto_id == CATEGORIA_NEUTRAL:
-                        # Neutrales 0 no suelen interesarnos, pero las agregamos igual si el usuario las pide
-                        if CATEGORIA_NEUTRAL not in cuentas_por_concepto:
-                            cuentas_por_concepto[CATEGORIA_NEUTRAL] = {}
-                        cuentas_por_concepto[CATEGORIA_NEUTRAL][codigo] = {'nombre': nombre, 'monto': 0.0, 'cantidad': 0, 'pendiente': False}
+                    if concepto_id == self.CATEGORIA_NEUTRAL:
+                         # Neutrales 0 no suelen interesarnos, pero las agregamos igual si el usuario las pide
+                        if self.CATEGORIA_NEUTRAL not in cuentas_por_concepto:
+                            cuentas_por_concepto[self.CATEGORIA_NEUTRAL] = {}
+                        cuentas_por_concepto[self.CATEGORIA_NEUTRAL][codigo] = {'nombre': nombre, 'monto': 0.0, 'cantidad': 0, 'pendiente': False}
                     else:
                         if concepto_id not in cuentas_por_concepto:
                              cuentas_por_concepto[concepto_id] = {}
@@ -823,7 +934,7 @@ class FlujoCajaService:
             prefix = nodo_id + "."
             for c_id, monto in montos_por_concepto.items():
                 if c_id == nodo_id or c_id.startswith(prefix):
-                    if c_id == CATEGORIA_NEUTRAL:
+                    if c_id == self.CATEGORIA_NEUTRAL:
                         continue
                     monto_total += monto
             return monto_total
@@ -898,7 +1009,7 @@ class FlujoCajaService:
         
         # Montos técnicos/especiales
         efecto_tc = montos_por_concepto.get("3.2.3", 0)  # Efectos variación TC
-        neutral = montos_por_concepto.get(CATEGORIA_NEUTRAL, 0)  # NO se suma
+        neutral = montos_por_concepto.get(self.CATEGORIA_NEUTRAL, 0)  # NO se suma
         
         # Monto de cuentas pendientes de mapeo (ya está en 1.2.6)
         monto_pendientes = sum(c.get('monto', 0) for c in cuentas_pendientes.values())

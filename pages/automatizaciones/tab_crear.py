@@ -69,30 +69,36 @@ def render(username: str, password: str):
     
     st.divider()
     
-    # ✅ MOSTRAR RESULTADO DE ORDEN CREADA
+    # ✅ MOSTRAR RESULTADO DE ORDEN CREADA (al inicio para que sea visible)
     if st.session_state.get('last_order_result'):
         result = st.session_state.last_order_result
         if result.get('success'):
-            st.success(f"✅ **{result.get('mensaje', 'Orden creada exitosamente')}**")
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Orden", result.get('mo_name', 'N/A'))
-            col2.metric("Total Kg", f"{result.get('total_kg', 0):,.2f}")
-            col3.metric("Pallets", result.get('pallets_count', 0))
-            
-            if result.get('has_pending'):
-                st.warning(f"⚠️ {result.get('pending_count', 0)} pallets pendientes de recepción")
-            
-            for adv in result.get('advertencias', []):
-                st.warning(adv)
-            
-            for adv in result.get('validation_warnings', []):
-                st.warning(adv)
-            
-            # Botón para cerrar mensaje
-            if st.button("✓ Entendido", key="btn_close_result"):
-                st.session_state.last_order_result = None
-                st.rerun()
+            # Container destacado para el mensaje de éxito
+            with st.container(border=True):
+                st.success(f"### ✅ {result.get('mensaje', 'Orden creada exitosamente')}")
+                
+                col1, col2, col3 = st.columns(3)
+                col1.metric("📋 Orden", result.get('mo_name', 'N/A'))
+                col2.metric("⚖️ Total Kg", f"{result.get('total_kg', 0):,.2f}")
+                col3.metric("📦 Pallets", result.get('pallets_count', 0))
+                
+                if result.get('has_pending'):
+                    st.warning(f"⚠️ {result.get('pending_count', 0)} pallets pendientes de recepción")
+                
+                for adv in result.get('advertencias', []):
+                    st.warning(adv)
+                
+                for adv in result.get('validation_warnings', []):
+                    st.warning(adv)
+                
+                # Botón para cerrar mensaje
+                col_a, col_b, col_c = st.columns([1, 1, 1])
+                with col_b:
+                    if st.button("✓ Entendido", key="btn_close_result", type="primary", use_container_width=True):
+                        st.session_state.last_order_result = None
+                        # Asegurar que la lista esté limpia
+                        st.session_state.pallets_list = []
+                        st.rerun()
             
             st.divider()
     
@@ -335,8 +341,13 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                             'pending_count': result.get('pending_count', 0)
                         }
                         
+                        # Limpiar lista y textarea
                         st.session_state.pallets_list = []
+                        st.session_state.pallets_multiple_input = ""  # Limpiar textarea
                         st.session_state.creando_orden = False
+                        
+                        # Mostrar toast prominente
+                        st.toast(f"✅ Orden {result.get('mo_name')} creada con {result.get('pallets_count')} pallets", icon="✅")
                         st.balloons()
                         st.rerun()
                     elif response:

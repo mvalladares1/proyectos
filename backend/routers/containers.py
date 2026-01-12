@@ -4,7 +4,7 @@ Router de Containers/Ventas - Seguimiento de producción por pedido
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
-from backend.services.containers_service import ContainersService
+from backend.services.containers import ContainersService
 
 router = APIRouter(prefix="/api/v1/containers", tags=["containers"])
 

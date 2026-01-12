@@ -4,8 +4,12 @@ Router de Flujo de Caja - API endpoints para Estado de Flujo de Efectivo.
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import Optional
 import json
+import logging
 
+# Importar desde módulo modularizado
 from backend.services.flujo_caja_service import FlujoCajaService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/flujo-caja", tags=["Flujo de Caja"])
 
@@ -40,7 +44,11 @@ async def get_flujo_efectivo(
         )
         return resultado
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_detail = f"{type(e).__name__}: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+        logger.error(f"Error en get_flujo_efectivo: {error_detail}")
+        print(f"ERROR FLUJO CAJA: {error_detail}", flush=True)
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @router.get("/mapeo")
