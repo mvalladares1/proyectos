@@ -5,12 +5,22 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import sys
+import os
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from shared.auth import tiene_acceso_pagina
 
 from .shared import fmt_numero, get_trazabilidad_inversa, get_sankey_data
 
 
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
+    
+    # Pre-calcular permisos
+    _perm_trazabilidad = tiene_acceso_pagina("rendimiento", "trazabilidad_pallets")
+    _perm_sankey = tiene_acceso_pagina("rendimiento", "diagrama_sankey")
     
     # Sidebar - Filtros de fecha para Sankey
     st.sidebar.header("📅 Período para Diagrama")
@@ -32,10 +42,16 @@ def render(username: str, password: str):
     tab1, tab2 = st.tabs(["📦 Trazabilidad por Pallets", "🔗 Diagrama Sankey"])
     
     with tab1:
-        _render_trazabilidad(username, password)
+        if _perm_trazabilidad:
+            _render_trazabilidad(username, password)
+        else:
+            st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Trazabilidad por Pallets'. Contacta al administrador.")
     
     with tab2:
-        _render_sankey(username, password, fecha_inicio, fecha_fin)
+        if _perm_sankey:
+            _render_sankey(username, password, fecha_inicio, fecha_fin)
+        else:
+            st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Diagrama Sankey'. Contacta al administrador.")
 
 
 def _render_trazabilidad(username: str, password: str):

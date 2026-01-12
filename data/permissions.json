@@ -57,7 +57,9 @@
     "compras.lineas_credito": [],
     "automatizaciones.crear_orden": [],
     "automatizaciones.monitor_ordenes": [],
-    "automatizaciones.movimientos": []
+    "automatizaciones.movimientos": [],
+    "rendimiento.trazabilidad_pallets": [],
+    "rendimiento.diagrama_sankey": []
   },
   "maintenance": {
     "enabled": true,
