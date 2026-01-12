@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from produccion import shared
 from produccion import tab_reporteria
 from produccion import tab_detalle
+from produccion import tab_clasificacion
 
 # Configuración de página
 st.set_page_config(page_title="Producción", page_icon="🏭", layout="wide")
@@ -49,9 +50,14 @@ st.caption("Monitorea rendimientos productivos y detalle de órdenes de fabricac
 # === PRE-CALCULAR PERMISOS ===
 _perm_reporteria = tiene_acceso_pagina("produccion", "reporteria_general")
 _perm_detalle = tiene_acceso_pagina("produccion", "detalle_of")
+_perm_clasificacion = tiene_acceso_pagina("produccion", "clasificacion")
 
 # === TABS PRINCIPALES ===
-tab_general, tab_detalle_ui = st.tabs(["📊 Reportería General", "📋 Detalle de OF"])
+tab_general, tab_detalle_ui, tab_clasificacion_ui = st.tabs([
+    "📊 Reportería General", 
+    "📋 Detalle de OF", 
+    "📦 Clasificación"
+])
 
 # =====================================================
 #           TAB 1: REPORTERÍA GENERAL
@@ -70,3 +76,13 @@ with tab_detalle_ui:
         tab_detalle.render(username, password)
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Detalle de OF'. Contacta al administrador.")
+
+# =====================================================
+#           TAB 3: CLASIFICACIÓN
+# =====================================================
+with tab_clasificacion_ui:
+    if _perm_clasificacion:
+        tab_clasificacion.render(username, password)
+    else:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Clasificación'. Contacta al administrador.")
+

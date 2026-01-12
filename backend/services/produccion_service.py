@@ -345,3 +345,181 @@ class ProduccionService:
             'total_ordenes': kpis['total_ordenes'],
             'ordenes_recientes': ordenes
         }
+    
+    def get_clasificacion_pallets(self, 
+                                  fecha_inicio: str, 
+                                  fecha_fin: str,
+                                  tipo_fruta: Optional[str] = None,
+                                  tipo_manejo: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Obtiene la clasificación de pallets (IQF A y RETAIL) filtrando por fecha, fruta y manejo.
+        
+        Lógica:
+        1. Obtiene stock.move.line filtrados por fecha
+        2. Obtiene x_mrp_production_line_d413e 
+        3. Compara result_package_id con x_name
+        4. Suma kg de qty_done según clasificación en x_studio_observaciones
+        
+        Args:
+            fecha_inicio: Fecha inicio (YYYY-MM-DD)
+            fecha_fin: Fecha fin (YYYY-MM-DD)
+            tipo_fruta: Opcional - Filtrar por tipo de fruta
+            tipo_manejo: Opcional - Filtrar por tipo de manejo (ej: "Orgánico", "Convencional")
+        
+        Returns:
+            {
+                "iqf_a_kg": float,
+                "retail_kg": float,
+                "total_kg": float,
+                "detalle": [...] # Lista de pallets clasificados
+            }
+        """
+        try:
+            # 1. Obtener stock.move.line con filtros de fecha
+            domain_sml = [
+                ('date', '>=', fecha_inicio + ' 00:00:00'),
+                ('date', '<=', fecha_fin + ' 23:59:59'),
+                ('result_package_id', '!=', False),  # Solo con paquete resultado
+                ('qty_done', '>', 0)  # Solo con cantidad hecha
+            ]
+            
+            # Obtener campos de stock.move.line
+            sml_fields = [
+                'result_package_id', 
+                'qty_done', 
+                'product_id', 
+                'lot_id',
+                'date',
+                'move_id'
+            ]
+            
+            stock_move_lines = self.odoo.search_read(
+                'stock.move.line',
+                domain_sml,
+                sml_fields
+            )
+            
+            if not stock_move_lines:
+                return {
+                    "iqf_a_kg": 0,
+                    "retail_kg": 0,
+                    "total_kg": 0,
+                    "detalle": []
+                }
+            
+            # 2. Crear mapa de result_package_id -> kg y info
+            package_map = {}
+            for sml in stock_move_lines:
+                pkg_id = sml.get('result_package_id')
+                if pkg_id and isinstance(pkg_id, list) and len(pkg_id) >= 2:
+                    pkg_name = pkg_id[1]  # [id, name]
+                    qty_done = sml.get('qty_done', 0) or 0
+                    
+                    # Obtener info del producto para filtros
+                    product_info = sml.get('product_id', [False, ''])
+                    product_name = product_info[1] if isinstance(product_info, list) and len(product_info) >= 2 else ''
+                    
+                    lot_info = sml.get('lot_id', [False, ''])
+                    lot_name = lot_info[1] if isinstance(lot_info, list) and len(lot_info) >= 2 else ''
+                    
+                    if pkg_name not in package_map:
+                        package_map[pkg_name] = {
+                            'qty_done': qty_done,
+                            'product_name': product_name,
+                            'lot_name': lot_name,
+                            'date': sml.get('date', ''),
+                            'clasificacion': None  # Se llenará después
+                        }
+                    else:
+                        # Si el paquete aparece varias veces, sumar
+                        package_map[pkg_name]['qty_done'] += qty_done
+            
+            # 3. Obtener x_mrp_production_line_d413e para matching
+            # Buscar todos los registros para hacer el match
+            domain_mrp_line = []
+            
+            mrp_line_fields = [
+                'x_name',
+                'x_studio_observaciones'
+            ]
+            
+            mrp_lines = self.odoo.search_read(
+                'x_mrp_production_line_d413e',
+                domain_mrp_line,
+                mrp_line_fields,
+                limit=10000  # Límite alto para obtener todos los posibles matches
+            )
+            
+            # 4. Crear mapa de x_name -> x_studio_observaciones
+            clasificacion_map = {}
+            for mrp_line in mrp_lines:
+                x_name = (mrp_line.get('x_name') or '').strip()
+                observaciones = (mrp_line.get('x_studio_observaciones') or '').strip().upper()
+                
+                if x_name:
+                    clasificacion_map[x_name] = observaciones
+            
+            # 5. Hacer el matching y clasificar
+            iqf_a_kg = 0
+            retail_kg = 0
+            detalle = []
+            
+            for pkg_name, pkg_data in package_map.items():
+                clasificacion = clasificacion_map.get(pkg_name, '')
+                
+                # Aplicar filtros de fruta y manejo si se proporcionaron
+                incluir = True
+                product_name_lower = pkg_data['product_name'].lower()
+                
+                if tipo_fruta:
+                    if tipo_fruta.lower() not in product_name_lower:
+                        incluir = False
+                
+                if tipo_manejo:
+                    # Buscar palabras clave de manejo
+                    if tipo_manejo.lower() == 'orgánico' or tipo_manejo.lower() == 'organico':
+                        if 'org' not in product_name_lower:
+                            incluir = False
+                    elif tipo_manejo.lower() == 'convencional':
+                        if 'org' in product_name_lower:  # Si tiene "org" es orgánico, no convencional
+                            incluir = False
+                
+                if not incluir:
+                    continue
+                
+                # Clasificar según observaciones
+                qty = pkg_data['qty_done']
+                
+                if 'IQF A' in clasificacion or 'IQFA' in clasificacion:
+                    iqf_a_kg += qty
+                    pkg_data['clasificacion'] = 'IQF A'
+                elif 'RETAIL' in clasificacion:
+                    retail_kg += qty
+                    pkg_data['clasificacion'] = 'RETAIL'
+                else:
+                    # Si no tiene clasificación reconocida, no incluir
+                    continue
+                
+                detalle.append({
+                    'pallet': pkg_name,
+                    'clasificacion': pkg_data['clasificacion'],
+                    'kg': round(qty, 2),
+                    'producto': pkg_data['product_name'],
+                    'lote': pkg_data['lot_name'],
+                    'fecha': pkg_data['date']
+                })
+            
+            total_kg = iqf_a_kg + retail_kg
+            
+            return {
+                "iqf_a_kg": round(iqf_a_kg, 2),
+                "retail_kg": round(retail_kg, 2),
+                "total_kg": round(total_kg, 2),
+                "detalle": sorted(detalle, key=lambda x: x['fecha'], reverse=True)
+            }
+            
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"❌ ERROR en get_clasificacion_pallets: {error_detail}")
+            raise HTTPException(status_code=500, detail=f"Error al obtener clasificación: {str(e)}")
