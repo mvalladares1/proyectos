@@ -1,7 +1,7 @@
 """
-Tab: Movimientos de Pallets
-Interfaz simple para mover pallets entre cámaras usando escáner Bluetooth.
-Diseñado para recepcionistas.
+Tab: Movimientos de Pallets (Mobile-Optimized)
+Interfaz ultra-dinámica para celular/tablet con escáner Bluetooth.
+Auto-submit al escanear, tarjetas touch-friendly, feedback instantáneo.
 """
 import streamlit as st
 import requests
@@ -16,252 +16,418 @@ def fmt_numero(num, decimales=0):
     return f"{num:,.{decimales}f}".replace(",", ".")
 
 
+# CSS para diseño mobile-first y botón sticky
+MOBILE_CSS = """
+<style>
+    /* Botones más grandes para touch */
+    .stButton > button {
+        min-height: 50px !important;
+        font-size: 1.1rem !important;
+    }
+    
+    /* Inputs más grandes */
+    .stTextInput > div > div > input {
+        font-size: 1.2rem !important;
+        padding: 12px !important;
+    }
+    
+    /* Tarjeta de pallet */
+    .pallet-card {
+        background: linear-gradient(135deg, rgba(30,30,40,0.9), rgba(40,40,55,0.9));
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border-left: 4px solid #4CAF50;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    .pallet-card.pending {
+        border-left-color: #FFC107;
+    }
+    
+    .pallet-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    
+    .pallet-code {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #4FC3F7;
+    }
+    
+    .pallet-kg {
+        font-size: 1.1rem;
+        color: #81C784;
+        font-weight: 600;
+    }
+    
+    .pallet-detail {
+        font-size: 0.9rem;
+        color: #aaa;
+        margin-top: 4px;
+    }
+    
+    /* Sticky footer para botón confirmar */
+    .sticky-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(0deg, rgba(14,17,23,1) 70%, rgba(14,17,23,0) 100%);
+        padding: 20px 20px 25px 20px;
+        z-index: 999;
+    }
+    
+    .sticky-btn {
+        width: 100%;
+        padding: 16px 24px !important;
+        font-size: 1.3rem !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+        background: linear-gradient(135deg, #4CAF50, #2E7D32) !important;
+        border: none !important;
+        color: white !important;
+        box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4) !important;
+    }
+    
+    /* Animación pulse para feedback */
+    @keyframes pulse-success {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); }
+    }
+    
+    .pulse-effect {
+        animation: pulse-success 0.3s ease-in-out;
+    }
+    
+    /* Status badge */
+    .status-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    
+    .status-ready { background: #4CAF50; color: white; }
+    .status-pending { background: #FFC107; color: #333; }
+    .status-error { background: #f44336; color: white; }
+    
+    /* Espaciado para sticky footer */
+    .main-content {
+        padding-bottom: 120px;
+    }
+</style>
+"""
+
+
 @st.fragment
 def render(username: str, password: str, api_url: str):
-    """Renderiza el tab de Movimientos de Pallets"""
+    """Renderiza el tab de Movimientos de Pallets (Mobile-Optimized)"""
     
-    st.title("📦 Movimientos de Pallets")
-    st.markdown("Escanea la cámara destino y luego los pallets que deseas mover.")
+    # Inyectar CSS
+    st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+    
+    # Header compacto
+    st.markdown("## 📦 Movimientos")
     
     # Inicializar session state
-    if "movimientos_camara_destino" not in st.session_state:
-        st.session_state.movimientos_camara_destino = None
-    if "movimientos_pallets" not in st.session_state:
-        st.session_state.movimientos_pallets = []
-    if "movimientos_input_camara" not in st.session_state:
-        st.session_state.movimientos_input_camara = ""
-    if "movimientos_input_pallet" not in st.session_state:
-        st.session_state.movimientos_input_pallet = ""
+    if "mov_camara" not in st.session_state:
+        st.session_state.mov_camara = None
+    if "mov_pallets" not in st.session_state:
+        st.session_state.mov_pallets = []
+    if "mov_last_scan" not in st.session_state:
+        st.session_state.mov_last_scan = ""
+    if "mov_historial" not in st.session_state:
+        st.session_state.mov_historial = []
     
-    # === SECCIÓN 1: CÁMARA DESTINO ===
-    st.markdown("### 📍 1. Escanear Cámara Destino")
+    # ═══════════════════════════════════════════════════════════════
+    # SECCIÓN 1: CÁMARA DESTINO
+    # ═══════════════════════════════════════════════════════════════
     
-    col_camara1, col_camara2 = st.columns([3, 1])
-    
-    with col_camara1:
-        input_camara = st.text_input(
-            "Código de cámara",
-            value=st.session_state.movimientos_input_camara,
-            key="input_camara_barcode",
-            placeholder="Escanea o escribe el código de barras de la cámara...",
+    if not st.session_state.mov_camara:
+        st.markdown("### 📍 Escanear Cámara Destino")
+        
+        # Historial rápido con nombre visible
+        if st.session_state.mov_historial:
+            st.caption("🕐 Repetir último destino:")
+            last = st.session_state.mov_historial[0]
+            if st.button(f"📍 {last['name']}", key="btn_last_destino", use_container_width=True, type="primary"):
+                st.session_state.mov_camara = last
+                st.toast(f"✅ Destino: {last['name']}", icon="📍")
+                st.rerun()
+            
+            # Otros destinos recientes
+            if len(st.session_state.mov_historial) > 1:
+                with st.expander("Ver más destinos recientes"):
+                    for i, hist in enumerate(st.session_state.mov_historial[1:4]):
+                        if st.button(f"📍 {hist['name']}", key=f"hist_{i+1}", use_container_width=True):
+                            st.session_state.mov_camara = hist
+                            st.toast(f"✅ Destino: {hist['name']}", icon="📍")
+                            st.rerun()
+        
+        st.markdown("---")
+        st.caption("O escanear nuevo código:")
+        
+        # Input de cámara con auto-submit
+        def on_camara_change():
+            code = st.session_state.get("camara_input", "").strip()
+            if len(code) >= 4:  # Código válido
+                _buscar_camara(code, username, password, api_url)
+        
+        st.text_input(
+            "🔍 Escanear código de cámara",
+            key="camara_input",
+            placeholder="Escanea el código de barras...",
+            on_change=on_camara_change,
             label_visibility="collapsed"
         )
-    
-    with col_camara2:
-        if st.button("🔍 Buscar", key="btn_buscar_camara", use_container_width=True):
-            if input_camara.strip():
-                with st.spinner("Buscando cámara..."):
-                    try:
-                        resp = requests.get(
-                            f"{api_url}/api/v1/stock/ubicacion-by-barcode",
-                            params={
-                                "username": username,
-                                "password": password,
-                                "barcode": input_camara.strip()
-                            },
-                            timeout=10
-                        )
-                        
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            if data.get("found"):
-                                st.session_state.movimientos_camara_destino = {
-                                    "id": data["id"],
-                                    "name": data["name"],
-                                    "display_name": data["display_name"],
-                                    "barcode": data["barcode"]
-                                }
-                                st.session_state.movimientos_input_camara = input_camara.strip()
-                                st.success(f"✅ Cámara encontrada: **{data['display_name']}**")
-                            else:
-                                st.error(f"❌ {data.get('message', 'Cámara no encontrada')}")
-                        else:
-                            st.error(f"Error {resp.status_code}: {resp.text}")
-                    except Exception as e:
-                        st.error(f"Error al buscar cámara: {str(e)}")
-            else:
-                st.warning("Ingresa un código de cámara")
-    
-    # Mostrar cámara seleccionada
-    if st.session_state.movimientos_camara_destino:
-        st.success(f"**Cámara destino:** {st.session_state.movimientos_camara_destino['display_name']} ✅")
+        
     else:
-        st.info("⚠️ Escanea primero la cámara destino")
-    
-    st.markdown("---")
-    
-    # === SECCIÓN 2: ESCANEAR PALLETS ===
-    st.markdown("### 📋 2. Escanear Pallets")
-    
-    # Solo permitir escanear pallets si hay cámara destino
-    if st.session_state.movimientos_camara_destino:
-        col_pallet1, col_pallet2 = st.columns([3, 1])
+        # Mostrar cámara seleccionada con opción de cambiar
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #1565C0, #0D47A1); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+            <div style="font-size: 0.9rem; color: #90CAF9;">📍 DESTINO SELECCIONADO</div>
+            <div style="font-size: 1.4rem; font-weight: bold; color: white;">{st.session_state.mov_camara['name']}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col_pallet1:
-            input_pallet = st.text_input(
-                "Código de pallet",
-                value=st.session_state.movimientos_input_pallet,
-                key="input_pallet_code",
-                placeholder="Escanea el código del pallet...",
-                label_visibility="collapsed"
-            )
-        
-        with col_pallet2:
-            if st.button("➕ Agregar", key="btn_agregar_pallet", use_container_width=True, type="primary"):
-                if input_pallet.strip():
-                    # Verificar que no esté duplicado
-                    if any(p["code"] == input_pallet.strip() for p in st.session_state.movimientos_pallets):
-                        st.warning("⚠️ Este pallet ya está en la lista")
-                    else:
-                        with st.spinner("Buscando pallet..."):
-                            try:
-                                resp = requests.get(
-                                    f"{api_url}/api/v1/stock/pallet-info",
-                                    params={
-                                        "username": username,
-                                        "password": password,
-                                        "pallet_code": input_pallet.strip()
-                                    },
-                                    timeout=10
-                                )
-                                
-                                if resp.status_code == 200:
-                                    data = resp.json()
-                                    if data.get("found"):
-                                        # Extraer información relevante
-                                        pallet_info = {
-                                            "code": input_pallet.strip(),
-                                            "producto": data.get("product_name", "N/A"),
-                                            "kg": data.get("quantity", 0),
-                                            "ubicacion": data.get("location_name", "N/A"),
-                                            "lote": data.get("lot_name", "N/A"),
-                                            "productor": data.get("producer", "N/A"),
-                                            "status": data.get("status", "unknown")
-                                        }
-                                        st.session_state.movimientos_pallets.append(pallet_info)
-                                        st.session_state.movimientos_input_pallet = ""
-                                        st.success(f"✅ Pallet agregado: {input_pallet.strip()}")
-                                    else:
-                                        st.error(f"❌ {data.get('message', 'Pallet no encontrado')}")
-                                else:
-                                    st.error(f"Error {resp.status_code}: {resp.text}")
-                            except Exception as e:
-                                st.error(f"Error al buscar pallet: {str(e)}")
-                else:
-                    st.warning("Ingresa un código de pallet")
-        
-        # Mostrar tabla de pallets escaneados
-        if st.session_state.movimientos_pallets:
-            st.markdown(f"**Pallets escaneados ({len(st.session_state.movimientos_pallets)}):**")
-            
-            # Crear DataFrame para mostrar
-            df_pallets = pd.DataFrame(st.session_state.movimientos_pallets)
-            
-            # Formatear columnas para mejor visualización
-            df_display = df_pallets.copy()
-            df_display["kg"] = df_display["kg"].apply(lambda x: fmt_numero(x, 1))
-            
-            # Mostrar tabla con columnas seleccionadas
-            st.dataframe(
-                df_display[["code", "producto", "kg", "productor", "ubicacion", "lote"]],
-                column_config={
-                    "code": st.column_config.TextColumn("Pallet", width="small"),
-                    "producto": st.column_config.TextColumn("Producto", width="medium"),
-                    "kg": st.column_config.TextColumn("Kg", width="small"),
-                    "productor": st.column_config.TextColumn("Productor", width="medium"),
-                    "ubicacion": st.column_config.TextColumn("Ubicación Actual", width="medium"),
-                    "lote": st.column_config.TextColumn("Lote", width="small")
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            # Botones de acción
-            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-            
-            with col_btn1:
-                if st.button("🚨 Quitar último", key="btn_quitar_ultimo", use_container_width=True):
-                    if st.session_state.movimientos_pallets:
-                        removed = st.session_state.movimientos_pallets.pop()
-                        st.info(f"Quitado: {removed['code']}")
-            
-            with col_btn2:
-                if st.button("🗑️ Limpiar todo", key="btn_limpiar_todo", use_container_width=True):
-                    st.session_state.movimientos_pallets = []
-                    st.info("Lista limpiada")
-        else:
-            st.info("📦 No hay pallets escaneados. Escanea el primer pallet.")
-    else:
-        st.warning("⚠️ Primero debes seleccionar una cámara destino")
+        if st.button("✏️ Cambiar destino", key="btn_change_camara", use_container_width=True):
+            st.session_state.mov_camara = None
+            st.rerun()
     
-    st.markdown("---")
+    # ═══════════════════════════════════════════════════════════════
+    # SECCIÓN 2: ESCANEAR PALLETS
+    # ═══════════════════════════════════════════════════════════════
     
-    # === SECCIÓN 3: CONFIRMAR MOVIMIENTOS ===
-    st.markdown("### ✅ 3. Confirmar Movimientos")
+    if st.session_state.mov_camara:
+        st.markdown("---")
+        st.markdown("### 📋 Escanear Pallets")
+        
+        # Input de pallet - text_area para múltiples líneas
+        def on_pallet_change():
+            raw_input = st.session_state.get("pallet_input", "").strip()
+            if not raw_input:
+                return
+            
+            # Separar por líneas, espacios o tabs
+            import re
+            codes = re.split(r'[\n\r\t]+', raw_input)
+            
+            for code in codes:
+                code = code.strip()
+                if len(code) >= 5:  # Código válido
+                    _agregar_pallet(code, username, password, api_url)
+        
+        st.text_area(
+            "📦 Escanear pallet(s)",
+            key="pallet_input",
+            placeholder="Escanea uno o varios códigos (uno por línea)...",
+            on_change=on_pallet_change,
+            label_visibility="collapsed",
+            height=80
+        )
+        
+        # Contador rápido
+        if st.session_state.mov_pallets:
+            total_kg = sum(p["kg"] for p in st.session_state.mov_pallets)
+            st.markdown(f"""
+            <div style="text-align: center; padding: 12px; background: rgba(76,175,80,0.2); border-radius: 8px; margin: 12px 0;">
+                <span style="font-size: 1.5rem; font-weight: bold; color: #4CAF50;">
+                    {len(st.session_state.mov_pallets)} pallets
+                </span>
+                <span style="color: #aaa; margin-left: 8px;">
+                    ({fmt_numero(total_kg, 1)} kg)
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Botones de acción rápida arriba
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🚨 Quitar último", key="btn_remove_last", use_container_width=True):
+                    removed = st.session_state.mov_pallets.pop()
+                    st.toast(f"❌ Quitado: {removed['code']}", icon="🗑️")
+                    st.rerun()
+            with col2:
+                if st.button("🗑️ Limpiar todo", key="btn_clear_all", use_container_width=True):
+                    st.session_state.mov_pallets = []
+                    st.toast("Lista limpiada", icon="🗑️")
+                    st.rerun()
+        
+        # Tarjetas de pallets (más reciente arriba)
+        for i, pallet in enumerate(reversed(st.session_state.mov_pallets)):
+            _render_pallet_card(pallet)
+        
+        if not st.session_state.mov_pallets:
+            st.info("📦 Escanea el primer pallet para agregarlo")
     
-    if st.session_state.movimientos_camara_destino and st.session_state.movimientos_pallets:
-        total_pallets = len(st.session_state.movimientos_pallets)
-        total_kg = sum(p["kg"] for p in st.session_state.movimientos_pallets)
+    # ═══════════════════════════════════════════════════════════════
+    # SECCIÓN 3: BOTÓN CONFIRMAR
+    # ═══════════════════════════════════════════════════════════════
+    
+    if st.session_state.mov_camara and st.session_state.mov_pallets:
+        st.markdown("---")
         
-        st.info(f"**{total_pallets} pallets** ({fmt_numero(total_kg, 1)} kg) → **{st.session_state.movimientos_camara_destino['display_name']}**")
+        total_pallets = len(st.session_state.mov_pallets)
+        total_kg = sum(p["kg"] for p in st.session_state.mov_pallets)
+        destino = st.session_state.mov_camara['name']
         
+        # Resumen visual
+        st.markdown(f"""
+        <div style="text-align: center; padding: 16px; background: rgba(76,175,80,0.15); border-radius: 12px; margin-bottom: 16px;">
+            <div style="font-size: 1rem; color: #aaa;">Mover a</div>
+            <div style="font-size: 1.4rem; font-weight: bold; color: #4FC3F7;">{destino}</div>
+            <div style="font-size: 1.1rem; color: #81C784; margin-top: 8px;">
+                {total_pallets} pallets • {fmt_numero(total_kg, 1)} kg
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Botón de confirmación grande
         if st.button(
-            f"✅ CONFIRMAR MOVIMIENTOS ({total_pallets} pallets)",
-            key="btn_confirmar_movimientos",
+            f"✅ CONFIRMAR MOVIMIENTO",
+            key="btn_confirm",
             type="primary",
             use_container_width=True
         ):
-            with st.spinner("Moviendo pallets..."):
-                try:
-                    # Preparar lista de códigos de pallets
-                    pallet_codes = [p["code"] for p in st.session_state.movimientos_pallets]
-                    
-                    # Llamar al endpoint de movimiento múltiple
-                    resp = requests.post(
-                        f"{api_url}/api/v1/stock/move-multiple",
-                        json={
-                            "pallet_codes": pallet_codes,
-                            "target_location_id": st.session_state.movimientos_camara_destino["id"],
-                            "username": username,
-                            "password": password
-                        },
-                        timeout=60
-                    )
-                    
-                    if resp.status_code == 200:
-                        result = resp.json()
-                        
-                        # Mostrar resumen
-                        st.success(f"✅ **{result['success']} pallets movidos correctamente**")
-                        
-                        if result["failed"] > 0:
-                            st.warning(f"⚠️ **{result['failed']} pallets fallaron**")
-                        
-                        # Mostrar detalles
-                        with st.expander("Ver detalles", expanded=result["failed"] > 0):
-                            for detail in result["details"]:
-                                if detail["status"] == "ok":
-                                    st.success(f"✅ {detail['pallet']}: {detail['message']}")
-                                else:
-                                    st.error(f"❌ {detail['pallet']}: {detail['message']}")
-                        
-                        # Limpiar datos
-                        st.session_state.movimientos_pallets = []
-                        st.session_state.movimientos_camara_destino = None
-                        st.session_state.movimientos_input_camara = ""
-                        st.session_state.movimientos_input_pallet = ""
-                        
-                        st.balloons()
-                        
-                        # Esperar un poco y recargar
-                        import time
-                        time.sleep(2)
-                    else:
-                        st.error(f"Error {resp.status_code}: {resp.text}")
-                except Exception as e:
-                    st.error(f"Error al mover pallets: {str(e)}")
-    else:
-        if not st.session_state.movimientos_camara_destino:
-            st.warning("⚠️ Selecciona una cámara destino")
-        elif not st.session_state.movimientos_pallets:
-            st.warning("⚠️ Escanea al menos un pallet")
+            _ejecutar_movimiento(username, password, api_url)
+    
+    # Espaciado para sticky footer
+    st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+
+
+def _buscar_camara(code: str, username: str, password: str, api_url: str):
+    """Busca cámara por código de barras"""
+    try:
+        resp = requests.get(
+            f"{api_url}/api/v1/stock/ubicacion-by-barcode",
+            params={"username": username, "password": password, "barcode": code},
+            timeout=10
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("found"):
+                camara = {
+                    "id": data["id"],
+                    "name": data["display_name"],
+                    "barcode": data["barcode"]
+                }
+                st.session_state.mov_camara = camara
+                
+                # Agregar al historial si no existe
+                if not any(h["id"] == camara["id"] for h in st.session_state.mov_historial):
+                    st.session_state.mov_historial.insert(0, camara)
+                    st.session_state.mov_historial = st.session_state.mov_historial[:5]  # Max 5
+                
+                st.toast(f"✅ {camara['name']}", icon="📍")
+            else:
+                st.toast(f"❌ Cámara no encontrada", icon="⚠️")
+        else:
+            st.toast(f"Error: {resp.status_code}", icon="❌")
+    except Exception as e:
+        st.toast(f"Error: {str(e)}", icon="❌")
+
+
+def _agregar_pallet(code: str, username: str, password: str, api_url: str):
+    """Agrega pallet a la lista"""
+    # Verificar duplicado
+    if any(p["code"] == code for p in st.session_state.mov_pallets):
+        st.toast("⚠️ Pallet ya escaneado", icon="⚠️")
+        return
+    
+    try:
+        resp = requests.get(
+            f"{api_url}/api/v1/stock/pallet-info",
+            params={"username": username, "password": password, "pallet_code": code},
+            timeout=10
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("found"):
+                pallet = {
+                    "code": code,
+                    "producto": data.get("product_name", "N/A"),
+                    "kg": data.get("quantity", 0),
+                    "ubicacion": data.get("location_name", "N/A"),
+                    "lote": data.get("lot_name", "N/A"),
+                    "productor": data.get("producer", "N/A")
+                }
+                st.session_state.mov_pallets.append(pallet)
+                st.toast(f"✅ {code} agregado", icon="📦")
+            else:
+                st.toast(f"❌ Pallet no encontrado", icon="⚠️")
+        else:
+            st.toast(f"Error: {resp.status_code}", icon="❌")
+    except Exception as e:
+        st.toast(f"Error: {str(e)}", icon="❌")
+
+
+def _render_pallet_card(pallet: dict):
+    """Renderiza una tarjeta de pallet"""
+    st.markdown(f"""
+    <div class="pallet-card">
+        <div class="pallet-card-header">
+            <span class="pallet-code">📦 {pallet['code']}</span>
+            <span class="pallet-kg">{fmt_numero(pallet['kg'], 1)} kg</span>
+        </div>
+        <div class="pallet-detail">
+            {pallet['producto'][:35]}{'...' if len(pallet['producto']) > 35 else ''}
+        </div>
+        <div class="pallet-detail">
+            📍 {pallet['ubicacion']} • 🏷️ {pallet['lote']}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _ejecutar_movimiento(username: str, password: str, api_url: str):
+    """Ejecuta el movimiento de pallets"""
+    with st.spinner("🔄 Moviendo pallets..."):
+        try:
+            pallet_codes = [p["code"] for p in st.session_state.mov_pallets]
+            
+            resp = requests.post(
+                f"{api_url}/api/v1/stock/move-multiple",
+                json={
+                    "pallet_codes": pallet_codes,
+                    "target_location_id": st.session_state.mov_camara["id"],
+                    "username": username,
+                    "password": password
+                },
+                timeout=60
+            )
+            
+            if resp.status_code == 200:
+                result = resp.json()
+                
+                # Mostrar resultado
+                st.success(f"✅ **{result['success']} pallets movidos correctamente**")
+                
+                if result["failed"] > 0:
+                    st.warning(f"⚠️ {result['failed']} pallets fallaron")
+                    with st.expander("Ver detalles"):
+                        for detail in result["details"]:
+                            if detail["status"] == "ok":
+                                st.success(f"✅ {detail['pallet']}")
+                            else:
+                                st.error(f"❌ {detail['pallet']}: {detail['message']}")
+                
+                # Limpiar estado
+                st.session_state.mov_pallets = []
+                st.session_state.mov_camara = None
+                
+                st.balloons()
+                st.toast("✅ Movimiento completado!", icon="🎉")
+                
+            else:
+                st.error(f"Error {resp.status_code}: {resp.text}")
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
