@@ -829,6 +829,7 @@ def _deshacer_movimiento(username: str, password: str, api_url: str):
             st.warning(f"⚠️ {total_failed} pallets no se pudieron devolver")
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el tab de Movimientos"""
     # Inicializar session state
@@ -851,7 +852,7 @@ def render(username: str, password: str):
     if "confirm_cross_location" not in st.session_state:
         st.session_state.confirm_cross_location = False
 
-    # Cargar CSS
+    # Cargar CSS y JS AL INICIO (antes de todo)
     _inject_css()
     _inject_js()
 
@@ -862,18 +863,18 @@ def render(username: str, password: str):
     # === SELECTOR DE CÁMARA DESTINO ===
     st.subheader("1️⃣ Selecciona Cámara Destino")
 
-    # Función callback para búsqueda automática
-    def _on_camara_change():
-        if st.session_state.camara_input:
-            _buscar_camara(st.session_state.camara_input.strip(), username, password, api_url)
-    
+    # Input de cámara sin callback automático
     camara_input = st.text_input(
         "Código de cámara",
         placeholder="Ej: Cam80c",
         label_visibility="collapsed",
-        key="camara_input",
-        on_change=_on_camara_change
+        key="camara_input_main"
     )
+    
+    # Buscar cuando se presiona Enter (sin rerun)
+    if camara_input and camara_input != st.session_state.get("last_camara_search", ""):
+        _buscar_camara(camara_input.strip(), username, password, api_url)
+        st.session_state.last_camara_search = camara_input
 
     # Historial de cámaras (botones rápidos)
     if st.session_state.mov_historial:
@@ -887,7 +888,6 @@ def render(username: str, password: str):
                     use_container_width=True
                 ):
                     st.session_state.mov_camara = cam
-                    st.rerun()
 
     # Mostrar cámara seleccionada
     if st.session_state.mov_camara:
@@ -929,19 +929,13 @@ def render(username: str, password: str):
         # Procesar input cuando hay algo nuevo (sin re-render innecesario)
         if pallet_input and pallet_input != st.session_state.get("pallet_textarea_value", ""):
             lines = [line.strip() for line in pallet_input.split("\n") if line.strip()]
-            processed = False
             for code in lines:
                 # Verificar si el código ya está en la lista
                 if code and not any(p["code"] == code for p in st.session_state.mov_pallets):
                     _agregar_pallet(code, username, password, api_url)
-                    processed = True
             
-            # Solo limpiar y recargar si se procesó algo
-            if processed:
-                st.session_state.pallet_textarea_value = ""
-                st.rerun()
-            else:
-                st.session_state.pallet_textarea_value = pallet_input
+            # Limpiar textarea después de procesar
+            st.session_state.pallet_textarea_value = ""
 
         # Botones de acción (táctiles, 50px altura)
         col1, col2, col3 = st.columns([2, 2, 1])
@@ -954,7 +948,6 @@ def render(username: str, password: str):
                 key="btn_confirmar"
             ):
                 _ejecutar_movimiento(username, password, api_url)
-                st.rerun()
 
         with col2:
             if st.button(
@@ -966,12 +959,10 @@ def render(username: str, password: str):
                 st.session_state.mov_pallets = []
                 st.session_state.pallet_textarea_value = ""
                 st.toast("🗑️ Lista limpiada", icon="✅")
-                st.rerun()
 
         with col3:
             if st.button("📋", use_container_width=True, help="Ver historial del día"):
                 st.session_state.show_historial = not st.session_state.get("show_historial", False)
-                st.rerun()
 
         # Tarjetas de pallets escaneados
         if st.session_state.mov_pallets:
@@ -984,7 +975,6 @@ def render(username: str, password: str):
                     if st.button("❌", key=f"remove_{idx}", help="Eliminar"):
                         st.session_state.mov_pallets.pop(idx)
                         st.toast("🗑️ Pallet eliminado", icon="✅")
-                        st.rerun()
 
     # === HISTORIAL DEL DÍA ===
     if st.session_state.get("show_historial", False) and st.session_state.mov_historial_dia:
