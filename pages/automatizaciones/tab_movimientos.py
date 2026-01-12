@@ -826,7 +826,7 @@ def _deshacer_movimiento(username: str, password: str, api_url: str):
             st.warning(f"⚠️ {total_failed} pallets no se pudieron devolver")
 
 
-def render():
+def render(username: str, password: str):
     """Renderiza el tab de Movimientos"""
     # Inicializar session state
     if "mov_camara" not in st.session_state:
@@ -852,13 +852,7 @@ def render():
     _inject_css()
     _inject_js()
 
-    username = st.session_state.get("username")
-    password = st.session_state.get("password")
     api_url = st.session_state.get("api_url", "http://localhost:8000")
-
-    if not username or not password:
-        st.warning("⚠️ Inicia sesión primero")
-        return
 
     st.title("📦 Movimientos de Pallets")
 
