@@ -10,6 +10,7 @@ from .shared import (
 )
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Crear Orden."""
     st.header("Crear Orden de Fabricación")
@@ -98,7 +99,6 @@ def render(username: str, password: str):
                         st.session_state.last_order_result = None
                         # Asegurar que la lista esté limpia
                         st.session_state.pallets_list = []
-                        st.rerun()
             
             st.divider()
     
@@ -205,8 +205,6 @@ def _procesar_pallets(username, password, pallets_textarea, buscar_ubicacion_aut
                                 p['duplicado_en'] = ordenes
                     except:
                         pass
-                
-            st.rerun()
         else:
             st.error("❌ Ningún pallet fue encontrado: " + ", ".join(no_encontrados))
 
@@ -270,7 +268,6 @@ def _mostrar_pallets_lista():
             with col2:
                 if st.button("🗑️", key=f"delete_{idx}", help="Eliminar pallet"):
                     st.session_state.pallets_list.pop(idx)
-                    st.rerun()
             
             if pallet.get('odoo_url'):
                 st.markdown(f"[🔗 Abrir Recepción en Odoo]({pallet['odoo_url']})")
@@ -283,7 +280,6 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
     with col1:
         if st.button("🗑️ Limpiar Todo", use_container_width=True):
             st.session_state.pallets_list = []
-            st.rerun()
     
     if 'creando_orden' not in st.session_state:
         st.session_state.creando_orden = False
@@ -349,7 +345,6 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                         # Mostrar toast prominente
                         st.toast(f"✅ Orden {result.get('mo_name')} creada con {result.get('pallets_count')} pallets", icon="✅")
                         st.balloons()
-                        st.rerun()
                     elif response:
                         error_detail = response.json().get('detail', 'Error desconocido')
                         st.error(f"❌ Error al crear orden: {error_detail}")

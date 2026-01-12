@@ -14,6 +14,7 @@ from .shared import (
 )
 
 
+@st.fragment
 def render(username: str, password: str, tuneles: list):
     """Renderiza el contenido del tab Monitor de Órdenes."""
     st.header("Monitor de Órdenes")
@@ -45,7 +46,6 @@ def render(username: str, password: str, tuneles: list):
     with col3:
         if st.button("🔄 Actualizar", use_container_width=True):
             st.cache_data.clear()
-            st.rerun()
     
     # Obtener órdenes
     ordenes = get_ordenes(
@@ -157,7 +157,6 @@ def _render_pendientes(orden, username, password):
                         if resp and resp.status_code == 200:
                             result = resp.json()
                             st.success(f"✅ {result.get('mensaje')}")
-                            st.rerun()
                         elif resp:
                             try:
                                 error_data = resp.json()
@@ -260,7 +259,6 @@ def _render_pendientes(orden, username, password):
                             result = resp.json()
                             st.success(f"✅ {result.get('mensaje')}")
                             st.cache_data.clear()
-                            st.rerun()
                         elif resp:
                             error_data = resp.json() if resp.headers.get('content-type') == 'application/json' else {}
                             st.error(f"❌ Error: {error_data.get('detail', resp.text)}")
@@ -278,7 +276,6 @@ def _render_pendientes(orden, username, password):
                             result = resp.json()
                             st.success(f"✅ {result.get('mensaje', 'Pendientes completados!')}")
                             st.cache_data.clear()
-                            st.rerun()
                         elif resp:
                             try:
                                 error_data = resp.json()

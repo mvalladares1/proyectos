@@ -159,4 +159,3 @@ def render(username: str, password: str, camaras_data: list):
                 st.warning("No se encontraron lotes para la categoría seleccionada")
         finally:
             st.session_state.stock_lotes_loading = False
-            st.rerun()

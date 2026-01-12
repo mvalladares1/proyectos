@@ -129,7 +129,6 @@ def _fragment_main_aprobaciones(username: str, password: str):
                 st.error(f"Error: {e}")
         finally:
             st.session_state.recep_aprob_cargar_loading = False
-            st.rerun()
 
     # --- MOSTRAR DATOS SI EXISTEN ---
     if st.session_state.aprob_data:
@@ -386,7 +385,6 @@ def _fragment_main_aprobaciones(username: str, password: str):
                             st.warning("Selecciona al menos una recepción con ID válido.")
                     finally:
                         st.session_state.recep_aprob_aprobar_loading = False
-                        st.rerun()
             with col_b:
                 if estado_filtro != "Pendientes":
                     if st.button("↩️ Quitar Aprobación", use_container_width=True):
@@ -394,7 +392,6 @@ def _fragment_main_aprobaciones(username: str, password: str):
                         if ids_del:
                             if remove_aprobaciones(ids_del):
                                 st.warning(f"Se quitó aprobación a {len(ids_del)} recepciones.")
-                                st.rerun()
         else:
             st.info("No hay datos con los filtros seleccionados.")
     else:
@@ -468,7 +465,6 @@ def _fragment_pdf_reports(username: str, password: str):
                     st.error(f"Error: {e}")
             finally:
                 st.session_state.recep_aprob_productores_loading = False
-                st.rerun()
 
         # Si hay datos cargados para reporte
         if 'reporte_recepciones' in st.session_state and st.session_state.reporte_recepciones:

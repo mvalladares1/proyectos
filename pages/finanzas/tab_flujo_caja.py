@@ -159,9 +159,6 @@ def render(username: str, password: str):
                 return
             finally:
                 st.session_state.finanzas_flujo_loading = False
-                # Solo hacer rerun si fue exitoso
-                if flujo_cache_key in st.session_state:
-                    st.rerun()
         
         flujo_data = st.session_state.get(flujo_cache_key, {})
         
@@ -310,7 +307,6 @@ def render(username: str, password: str):
                                     # Limpiar caché para refrescar
                                     if flujo_cache_key in st.session_state:
                                         del st.session_state[flujo_cache_key]
-                                    st.rerun()
                                 else:
                                     st.error(f"Error al guardar: {save_msg}")
 
@@ -455,7 +451,6 @@ def render(username: str, password: str):
                                         st.success(f"✓ {codigo}")
                                         if flujo_cache_key in st.session_state:
                                             del st.session_state[flujo_cache_key]
-                                        st.rerun()
                                     else:
                                         st.error(err)
                 
@@ -496,6 +491,5 @@ def render(username: str, password: str):
                                  st.success("Mapeo reseteado. Recarga la página.")
                                  if flujo_cache_key in st.session_state:
                                      del st.session_state[flujo_cache_key]
-                                 st.rerun()
                              else:
                                  st.error(f"Error: {msg_reset}")

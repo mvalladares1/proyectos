@@ -112,7 +112,172 @@ def _agrupar_por_periodo(fecha: datetime, agrupacion: str):
         )
 
 
+def grafico_produccion_consolidado(mos_data: list, agrupacion: str = "Semana"):
+    """
+    Gráfico consolidado de producción con barras apiladas por túnel/sala.
+    Combina todos los túneles (detalle) y salas (acumulado, sin líneas).
+    
+    Args:
+        mos_data: Lista de órdenes de fabricación (MOs)
+        agrupacion: "Día", "Semana" o "Mes"
+    """
+    if not mos_data:
+        st.info("No hay datos de producción disponibles")
+        return
+    
+    periodo_label = {"Día": "Día", "Semana": "Semana ISO", "Mes": "Mes"}.get(agrupacion, "Semana ISO")
+    
+    # Preparar datos consolidados
+    datos_consolidados = []
+    
+    for mo in mos_data:
+        sala_completa = mo.get('sala', '').strip()
+        sala_tipo = mo.get('sala_tipo', '').strip()
+        product_name = mo.get('product_name', '').strip()
+        kg_pt = mo.get('kg_pt', 0) or 0
+        
+        if kg_pt <= 0 or not sala_completa or sala_completa == 'SIN SALA':
+            continue
+        
+        # Obtener fecha
+        fecha_str = mo.get('fecha') or mo.get('fecha_inicio') or mo.get('fecha_fin')
+        if not fecha_str:
+            continue
+        
+        try:
+            fecha = datetime.fromisoformat(fecha_str.replace('Z', '+00:00'))
+        except:
+            try:
+                fecha = datetime.strptime(fecha_str[:10], '%Y-%m-%d')
+            except:
+                continue
+        
+        # Obtener período de agrupación
+        periodo_label_str, sort_year, sort_value = _agrupar_por_periodo(fecha, agrupacion)
+        
+        # Clasificar: Túnel o Sala
+        sala_lower = sala_completa.lower()
+        es_tunel_continuo = '[1.4]' in product_name and 'TÚNEL CONTÍNUO' in product_name.upper()
+        es_tunel_estatico = sala_tipo == 'CONGELADO' and ('tunel' in sala_lower or 'túnel' in sala_lower)
+        
+        if es_tunel_continuo:
+            categoria = 'Túnel Continuo'
+            tipo = 'CONGELADO'
+        elif es_tunel_estatico:
+            categoria = sala_completa
+            tipo = 'CONGELADO'
+        elif sala_tipo == 'PROCESO':
+            # Para salas: usar solo el nombre de sala (sin línea)
+            if ' - ' in sala_completa:
+                categoria = sala_completa.split(' - ', 1)[0].strip()
+            else:
+                categoria = sala_completa
+            tipo = 'PROCESO'
+        else:
+            continue  # Ignorar otros tipos
+        
+        datos_consolidados.append({
+            'Periodo': periodo_label_str,
+            'Categoria': categoria,
+            'Tipo': tipo,
+            'Kg': kg_pt,
+            'sort_year': sort_year,
+            'sort_value': sort_value
+        })
+    
+    if not datos_consolidados:
+        st.info("No hay datos consolidados para mostrar")
+        return
+    
+    df = pd.DataFrame(datos_consolidados)
+    
+    # Agrupar por período y categoría
+    df_grouped = df.groupby(['Periodo', 'Categoria', 'Tipo', 'sort_year', 'sort_value'], as_index=False).agg({
+        'Kg': 'sum'
+    })
+    
+    # Ordenar por año y valor
+    df_grouped = df_grouped.sort_values(['sort_year', 'sort_value'])
+    
+    # Definir colores: Túneles en azules, Salas en naranjas/verdes
+    categorias = df_grouped['Categoria'].unique().tolist()
+    
+    # Asignar colores manualmente
+    colores_tunel = ['#1f77b4', '#2ca02c', '#17becf', '#9467bd', '#8c564b']  # Azules/verdes
+    colores_sala = ['#ff7f0e', '#d62728', '#e377c2', '#bcbd22', '#7f7f7f', '#98df8a']  # Naranjas/rojos
+    
+    color_map = {}
+    idx_tunel = 0
+    idx_sala = 0
+    
+    for cat in categorias:
+        tipo_cat = df_grouped[df_grouped['Categoria'] == cat]['Tipo'].iloc[0]
+        if tipo_cat == 'CONGELADO':
+            color_map[cat] = colores_tunel[idx_tunel % len(colores_tunel)]
+            idx_tunel += 1
+        else:
+            color_map[cat] = colores_sala[idx_sala % len(colores_sala)]
+            idx_sala += 1
+    
+    # Crear gráfico de barras apiladas
+    chart = alt.Chart(df_grouped).mark_bar().encode(
+        x=alt.X('Periodo:N', 
+                title=periodo_label,
+                sort=df_grouped['Periodo'].unique().tolist(),
+                axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y('Kg:Q', 
+                title='Kg Procesados',
+                axis=alt.Axis(format=',.0f'),
+                stack='zero'),
+        color=alt.Color('Categoria:N',
+                       title='Túnel/Sala',
+                       scale=alt.Scale(domain=list(color_map.keys()), 
+                                      range=list(color_map.values()))),
+        order=alt.Order('Tipo:N', sort='descending'),  # Túneles primero
+        tooltip=[
+            alt.Tooltip('Periodo:N', title=periodo_label),
+            alt.Tooltip('Categoria:N', title='Túnel/Sala'),
+            alt.Tooltip('Tipo:N', title='Tipo'),
+            alt.Tooltip('Kg:Q', title='Kg Procesados', format=',.0f')
+        ]
+    ).properties(
+        title=f'📊 Producción Consolidada por {agrupacion} (Túneles + Salas)',
+        height=400,
+        width='container'
+    )
+    
+    st.altair_chart(chart, use_container_width=True)
+    
+    # Mostrar resumen por categoría
+    with st.expander("📋 Ver detalle por Túnel/Sala", expanded=False):
+        resumen = df_grouped.groupby(['Categoria', 'Tipo']).agg({'Kg': 'sum'}).reset_index()
+        resumen = resumen.sort_values('Kg', ascending=False)
+        resumen['Kg'] = resumen['Kg'].apply(lambda x: fmt_numero(x, 0))
+        
+        # Separar en dos columnas: Túneles vs Salas
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**❄️ Túneles (Congelado)**")
+            tuneles = resumen[resumen['Tipo'] == 'CONGELADO'][['Categoria', 'Kg']]
+            if not tuneles.empty:
+                tuneles.columns = ['Túnel', 'Kg']
+                st.dataframe(tuneles, hide_index=True, use_container_width=True)
+            else:
+                st.info("Sin datos de túneles")
+        
+        with col2:
+            st.markdown("**🏭 Salas (Proceso)**")
+            salas = resumen[resumen['Tipo'] == 'PROCESO'][['Categoria', 'Kg']]
+            if not salas.empty:
+                salas.columns = ['Sala', 'Kg']
+                st.dataframe(salas, hide_index=True, use_container_width=True)
+            else:
+                st.info("Sin datos de salas")
+
+
 def grafico_congelado_semanal(mos_data: list, agrupacion: str = "Semana", salas_data: list = None):
+
     """
     Gráficos de barras separados por túnel de congelado.
     Muestra Kg congelados por período (día/semana/mes) para cada túnel.

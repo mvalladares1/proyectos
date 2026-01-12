@@ -12,6 +12,7 @@ from .shared import API_URL, fmt_numero, fmt_moneda, fmt_fecha
 from .shared import fetch_lineas_credito_resumen, fetch_lineas_credito
 
 
+@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Líneas de Crédito."""
     st.subheader("💳 Monitoreo de Líneas de Crédito")
@@ -62,7 +63,6 @@ def render(username: str, password: str):
             st.toast(f"❌ Error al cargar líneas: {str(e)[:100]}", icon="❌")
         finally:
             st.session_state.lineas_loading = False
-            st.rerun()
     
     resumen = st.session_state.get('lineas_resumen')
     lineas = st.session_state.get('lineas_credito')
