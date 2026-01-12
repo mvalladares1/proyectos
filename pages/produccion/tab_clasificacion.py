@@ -56,13 +56,25 @@ def render(username: str, password: str):
                 key="tipo_manejo_clasificacion"
             )
         
-        # Filtro de orden de fabricación (nueva fila)
-        orden_fabricacion_input = st.text_input(
-            "🔍 Filtrar por Orden de Fabricación (opcional)",
-            placeholder="Ej: MO/00123",
-            key="orden_fabricacion_clasificacion",
-            help="Ingresa el nombre o parte del nombre de la orden de fabricación o transferencia"
-        )
+        # Filtro de orden de fabricación y Planta (nueva fila)
+        col_fil_3_1, col_fil_3_2 = st.columns([2, 1])
+        
+        with col_fil_3_1:
+            orden_fabricacion_input = st.text_input(
+                "🔍 Filtrar por Orden de Fabricación (opcional)",
+                placeholder="Ej: MO/00123",
+                key="orden_fabricacion_clasificacion",
+                help="Ingresa el nombre o parte del nombre de la orden de fabricación o transferencia"
+            )
+            
+        with col_fil_3_2:
+            tipo_operacion_opciones = ["Todas", "VILKUN", "RIO FUTURO"]
+            tipo_operacion_seleccionado = st.selectbox(
+                "🏢 Planta / Operación",
+                options=tipo_operacion_opciones,
+                index=0,
+                key="tipo_operacion_clasificacion"
+            )
 
         # Mapeo de grados para el filtro
         GRADOS_OPCIONES = {
@@ -107,7 +119,8 @@ def render(username: str, password: str):
                         "username": username,
                         "password": password,
                         "fecha_inicio": fecha_inicio_str,
-                        "fecha_fin": fecha_fin_str
+                        "fecha_fin": fecha_fin_str,
+                        "tipo_operacion": tipo_operacion_seleccionado
                     }
                     
                     if tipo_fruta_param:
@@ -129,7 +142,7 @@ def render(username: str, password: str):
                     if response.status_code == 200:
                         data = response.json()
                         st.session_state.clasificacion_data = data
-                        st.success("✅ Datos cargados correctamente")
+                        st.success(f"✅ Datos cargados correctamente ({tipo_operacion_seleccionado})")
                     else:
                         st.error(f"❌ Error al obtener datos: {response.status_code} - {response.text}")
                         return
@@ -306,11 +319,11 @@ def render(username: str, password: str):
             
             # Renombrar columnas para display
             df_display = df_detalle[[
-                'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'fecha'
+                'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'planta', 'fecha'
             ]].copy()
             
             df_display.columns = [
-                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Fecha'
+                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Planta', 'Fecha'
             ]
             
             # Mostrar tabla

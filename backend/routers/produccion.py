@@ -87,20 +87,11 @@ async def get_clasificacion_pallets(
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     tipo_fruta: Optional[str] = Query(None, description="Filtrar por tipo de fruta"),
     tipo_manejo: Optional[str] = Query(None, description="Filtrar por tipo de manejo"),
-    orden_fabricacion: Optional[str] = Query(None, description="Filtrar por orden de fabricación")
+    orden_fabricacion: Optional[str] = Query(None, description="Filtrar por orden de fabricación"),
+    tipo_operacion: Optional[str] = Query("Todas", description="Filtrar por planta (Todas, VILKUN, RIO FUTURO)")
 ):
     """
-    Obtiene la clasificación de pallets (IQF A y RETAIL).
-    
-    Clasifica directamente por el nombre del producto:
-    - Si el producto contiene "IQF A" → IQF A
-    - Si el producto contiene "RETAIL" → RETAIL
-    
-    Retorna:
-        - iqf_a_kg: Kilogramos clasificados como IQF A
-        - retail_kg: Kilogramos clasificados como RETAIL
-        - total_kg: Total de kilogramos
-        - detalle: Lista de pallets con su clasificación
+    Obtiene la clasificación de pallets por grado (1-7).
     """
     try:
         service = ProduccionService(username=username, password=password)
@@ -109,7 +100,8 @@ async def get_clasificacion_pallets(
             fecha_fin=fecha_fin,
             tipo_fruta=tipo_fruta,
             tipo_manejo=tipo_manejo,
-            orden_fabricacion=orden_fabricacion
+            orden_fabricacion=orden_fabricacion,
+            tipo_operacion=tipo_operacion
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

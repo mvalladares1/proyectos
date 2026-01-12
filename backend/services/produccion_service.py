@@ -351,7 +351,8 @@ class ProduccionService:
                                   fecha_fin: str,
                                   tipo_fruta: Optional[str] = None,
                                   tipo_manejo: Optional[str] = None,
-                                  orden_fabricacion: Optional[str] = None) -> Dict[str, Any]:
+                                  orden_fabricacion: Optional[str] = None,
+                                  tipo_operacion: Optional[str] = "Todas") -> Dict[str, Any]:
         """
         Obtiene la clasificación de pallets por GRADO usando stock.move.line.
         
@@ -361,6 +362,7 @@ class ProduccionService:
         3. Clasifica según el dígito en posición 5 del código:
            1 = IQF AA, 2 = IQF A, 3 = PSP, 4 = W&B, 5 = Block, 6 = Jugo, 7 = IQF Retail
         4. Suma qty_done (kg) por cada grado
+        5. Filtra por Planta (VILKUN o RIO FUTURO) basado en picking_type_id
         
         Args:
             fecha_inicio: Fecha inicio (YYYY-MM-DD)
@@ -368,6 +370,7 @@ class ProduccionService:
             tipo_fruta: Opcional - Filtrar por tipo de fruta
             tipo_manejo: Opcional - Filtrar por tipo de manejo
             orden_fabricacion: Opcional - Filtrar por nombre de OF (en mrp.production)
+            tipo_operacion: Opcional - 'Todas', 'VILKUN', 'RIO FUTURO'
         
         Returns:
             {
@@ -475,7 +478,7 @@ class ProduccionService:
                         'name': prod.get('name', '')
                     }
             
-            # 5. Obtener información de production_id si es necesario
+            # 5. Obtener información de production_id y picking_type_id
             move_ids = set()
             for sml in stock_move_lines:
                 move_info = sml.get('move_id')
@@ -489,12 +492,41 @@ class ProduccionService:
                     list(move_ids),
                     ['production_id']
                 )
+                
+                # Obtener IDs de producción únicos para leer su picking_type_id
+                prod_ids = set()
+                move_to_prod_mapping = {}
                 for move in moves:
                     prod_info = move.get('production_id')
-                    if prod_info and isinstance(prod_info, list) and len(prod_info) >= 2:
-                        move_productions[move['id']] = prod_info[1]
-                    else:
-                        move_productions[move['id']] = ''
+                    if prod_info and isinstance(prod_info, list) and len(prod_info) >= 1:
+                        prod_ids.add(prod_info[0])
+                        move_to_prod_mapping[move['id']] = prod_info[0]
+                
+                # Leer picking_type_id de mrp.production
+                prod_data = {}
+                if prod_ids:
+                    productions = self.odoo.read(
+                        'mrp.production',
+                        list(prod_ids),
+                        ['name', 'picking_type_id']
+                    )
+                    for p in productions:
+                        pk_type = p.get('picking_type_id')
+                        pk_name = pk_type[1] if isinstance(pk_type, list) and len(pk_type) >= 2 else ''
+                        
+                        # Clasificar Planta
+                        planta = "RIO FUTURO"
+                        if "VLK" in pk_name.upper() or "VILKUN" in pk_name.upper():
+                            planta = "VILKUN"
+                            
+                        prod_data[p['id']] = {
+                            'name': p.get('name', ''),
+                            'planta': planta
+                        }
+                
+                # Mapear hacia move_productions
+                for move_id, prod_id in move_to_prod_mapping.items():
+                    move_productions[move_id] = prod_data.get(prod_id, {'name': '', 'planta': 'RIO FUTURO'})
             
             # 6. Procesar y clasificar
             grados_kg = {str(i): 0 for i in range(1, 8)}
@@ -530,10 +562,19 @@ class ProduccionService:
                 lot_info = sml.get('lot_id', [False, ''])
                 lot_name = lot_info[1] if isinstance(lot_info, list) and len(lot_info) >= 2 else ''
                 
-                # Orden de fabricación
+                # Orden de fabricación e info de planta
                 move_info = sml.get('move_id', [False, ''])
                 move_id = move_info[0] if isinstance(move_info, list) and len(move_info) >= 1 else None
-                production_name = move_productions.get(move_id, '')
+                prod_info = move_productions.get(move_id, {'name': '', 'planta': 'RIO FUTURO'})
+                production_name = prod_info['name']
+                planta_item = prod_info['planta']
+                
+                # --- FILTROS ---
+                
+                # FILTRO POR PLANTA/OPERACIÓN
+                if tipo_operacion and tipo_operacion != "Todas":
+                    if tipo_operacion.upper() != planta_item.upper():
+                        continue
                 
                 # FILTRO POR FRUTA
                 product_name_lower = product_name.lower()
@@ -571,6 +612,7 @@ class ProduccionService:
                     'kg': round(qty_done, 2),
                     'lote': lot_name,
                     'orden_fabricacion': production_name,
+                    'planta': planta_item,
                     'fecha': sml.get('date', '')
                 })
             
