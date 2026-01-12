@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Body
 from typing import Optional
 from pydantic import BaseModel
 
-from backend.services.stock_service import StockService
+from backend.services.stock import StockService
 
 router = APIRouter(prefix="/api/v1/stock", tags=["stock"])
 

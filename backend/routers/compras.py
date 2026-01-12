@@ -4,7 +4,7 @@ Router de Compras - Endpoints para gestión de Órdenes de Compra
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
-from backend.services.compras_service import ComprasService
+from backend.services.compras import ComprasService
 
 router = APIRouter(prefix="/api/v1/compras", tags=["compras"])
 

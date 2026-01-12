@@ -14,7 +14,7 @@ from .shared import fmt_fecha, fmt_numero, load_in_data, load_out_data, load_sto
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from backend.services.report_service import generate_bandejas_report_pdf
+from backend.services.report import generate_bandejas_report_pdf
 
 
 def render(username: str, password: str):

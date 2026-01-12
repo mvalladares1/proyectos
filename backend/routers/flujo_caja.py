@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import Optional
 import json
 
-from backend.services.flujo_caja_service import FlujoCajaService
+# Importar desde módulo modularizado
+from backend.services.flujo_caja import FlujoCajaService
 
 router = APIRouter(prefix="/api/v1/flujo-caja", tags=["Flujo de Caja"])
 
