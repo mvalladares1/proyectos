@@ -392,7 +392,7 @@ class ProduccionService:
         }
         
         try:
-            # 1. Construir domain para stock.move.line (Búsqueda única y estricta)
+            # 1. Construir domain para stock.move.line (Identificación de Sala por Orden)
             domain_sml = [
                 ('date', '>=', fecha_inicio + ' 00:00:00'),
                 ('date', '<=', fecha_fin + ' 23:59:59'),
@@ -402,11 +402,22 @@ class ProduccionService:
                 ('move_id.production_id', '!=', False)
             ]
             
-            # Filtro por Sala de Proceso (Dot notation para eficiencia y exactitud)
+            # FILTRO DE SALA: Identificamos primero las órdenes de esa sala
             if sala_proceso and sala_proceso.strip() and sala_proceso != "Todas":
-                domain_sml.append(('move_id.production_id.x_studio_sala_de_proceso', '=', sala_proceso.strip()))
+                # Buscamos las órdenes (mrp.production) que tienen asignada esa sala
+                prod_ids_sala = self.odoo.search(
+                    'mrp.production', 
+                    [('x_studio_sala_de_proceso', '=', sala_proceso.strip())]
+                )
+                
+                if not prod_ids_sala:
+                    # Si no hay órdenes para esa sala, no hay nada que mostrar
+                    return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
+                
+                # Ahora restringimos los movimientos de stock a esas órdenes específicas
+                domain_sml.append(('move_id.production_id', 'in', prod_ids_sala))
             
-            # Filtro por Planta (Determinamos planta a nivel de producción)
+            # FILTRO DE PLANTA (A nivel de picking_type de la producción)
             if tipo_operacion and tipo_operacion != "Todas":
                 if tipo_operacion == "VILKUN":
                     domain_sml.append('|')
