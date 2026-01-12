@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import time
 import re
+from .shared import API_URL
 
 # CONFIGURACIÓN DE VALIDACIONES
 MAX_PALLETS_PER_MOVE = 50  # Límite máximo de pallets por movimiento
@@ -858,7 +859,7 @@ def render(username: str, password: str):
     _inject_css()
     _inject_js()
 
-    api_url = st.session_state.get("api_url", "http://localhost:8000")
+    api_url = API_URL
 
     st.title("📦 Movimientos de Pallets")
 
