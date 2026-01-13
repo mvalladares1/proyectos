@@ -41,38 +41,51 @@ EXCEL_STYLE_CSS = """
 .excel-table th,
 .excel-table td {
     padding: 8px 12px;
-    border: 1px solid #2d3748;
+    border: 1px solid #374151;
     white-space: normal; /* Permitir wrap en títulos largos */
     text-align: right;
 }
 
 /* Headers */
 .excel-table thead th {
-    background: #2d3748 !important;
-    color: #e2e8f0;
-    font-weight: 600;
+    background: linear-gradient(180deg, #374151 0%, #1f2937 100%) !important;
+    color: #f3f4f6;
+    font-weight: 700;
     position: sticky;
     top: 0;
     z-index: 50;
     white-space: nowrap;
+    border-bottom: 2px solid #4b5563;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
 }
 
 .excel-table thead th.frozen {
     z-index: 150;
-    background: #1a365d !important;
+    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
+    color: #ffffff !important;
 }
 
 /* Ensure frozen cells in special rows have solid backgrounds */
 .excel-table tr.activity-header td.frozen {
-    background: #1a365d !important;
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%) !important;
+    color: #ffffff !important;
+}
+
+.excel-table tr.subtotal-interno td.frozen {
+    background: #1e3a5f !important;
+    color: #93c5fd !important;
 }
 
 .excel-table tr.subtotal td.frozen {
-    background: #1e2a38 !important;
+    background: #1e40af !important;
+    color: #dbeafe !important;
 }
 
 .excel-table tr.grand-total td.frozen {
-    background: #1a2f23 !important;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    color: #ffffff !important;
 }
 
 .excel-table tr.data-row td.frozen {
@@ -81,26 +94,43 @@ EXCEL_STYLE_CSS = """
 
 /* Filas de actividad (headers grandes) */
 .excel-table tr.activity-header td {
-    background: #1a365d; /* Solid color matching frozen */
-    color: #63b3ed;
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    color: #ffffff;
     font-weight: 700;
     font-size: 0.95rem;
-    padding: 10px 12px;
+    padding: 12px 16px;
+    border-top: 3px solid #3b82f6;
+    border-bottom: 2px solid #1e40af;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
-/* Subtotales */
-.excel-table tr.subtotal td {
-    background: rgba(99, 179, 237, 0.1);
+/* Subtotales internos (como 3.1) */
+.excel-table tr.subtotal-interno td {
+    background: #1e3a5f;
     font-weight: 600;
-    border-top: 2px solid #4a5568;
+    border-top: 1px solid #3b82f6;
+    font-style: italic;
+    color: #93c5fd;
+}
+
+/* Subtotales de actividad */
+.excel-table tr.subtotal td {
+    background: #1e40af;
+    font-weight: 700;
+    border-top: 2px solid #3b82f6;
+    border-bottom: 2px solid #3b82f6;
+    color: #dbeafe;
 }
 
 /* Totales generales */
 .excel-table tr.grand-total td {
-    background: rgba(72, 187, 120, 0.15);
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
     font-weight: 700;
-    font-size: 0.9rem;
-    border-top: 3px double #48bb78;
+    font-size: 0.95rem;
+    border-top: 3px double #10b981;
+    border-bottom: 3px double #10b981;
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 /* Montos por color */
@@ -110,7 +140,8 @@ EXCEL_STYLE_CSS = """
 
 /* Hover en filas de datos */
 .excel-table tr.data-row:hover td {
-    background: rgba(99, 179, 237, 0.05);
+    background: rgba(59, 130, 246, 0.15) !important;
+    transition: background 0.15s ease;
 }
 
 /* Celda clickeable */
@@ -124,9 +155,10 @@ EXCEL_STYLE_CSS = """
 }
 
 /* Indicador de nivel (indentación) */
-.indent-1 { padding-left: 12px !important; }
-.indent-2 { padding-left: 28px !important; }
-.indent-3 { padding-left: 44px !important; }
+.indent-1 { padding-left: 16px !important; }
+.indent-2 { padding-left: 32px !important; }
+.indent-3 { padding-left: 48px !important; }
+.indent-4 { padding-left: 64px !important; }
 
 /* Badge de tipo */
 .tipo-badge {
@@ -200,8 +232,12 @@ EXCEL_STYLE_CSS = """
 }
 
 /* Zebra stripes para mejor lectura */
-.excel-table tr.data-row:nth-child(even) td:not(.frozen):not(:last-child) {
-    background: rgba(255,255,255,0.02);
+.excel-table tr.data-row:nth-child(even) td {
+    background: rgba(59, 130, 246, 0.03);
+}
+
+.excel-table tr.data-row:nth-child(even) td.frozen {
+    background: #1a1f2e !important;
 }
 
 /* Font monospace para números */
@@ -458,8 +494,14 @@ def render(username: str, password: str):
                 
                 # MOSTRAR TODAS LAS CATEGORÍAS (incluso vacías)
                 
-                indent_class = f"indent-{min(c_nivel, 3)}"
-                row_class = "subtotal" if c_tipo == "TOTAL" else "data-row"
+                indent_class = f"indent-{min(c_nivel, 4)}"
+                # Clasificar el tipo de fila
+                if c_tipo == "SUBTOTAL":
+                    row_class = "subtotal-interno"
+                elif c_tipo == "TOTAL":
+                    row_class = "subtotal"
+                else:
+                    row_class = "data-row"
                 
                 # Si tiene cuentas, hacerlo expandible
                 c_id_safe = c_id.replace(".", "_")
