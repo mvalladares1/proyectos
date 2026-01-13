@@ -178,13 +178,13 @@ EXCEL_STYLE_CSS = """
     transform: rotate(90deg);
 }
 
-/* Detail rows (hidden by default) */
+/* Detail rows - VISIBLES para ver composición de cuentas */
 .detail-row {
-    display: none;
+    display: table-row;
 }
 
-.detail-row.visible {
-    display: table-row;
+.detail-row:hover td {
+    background: #1a1a30 !important;
 }
 
 .detail-row td {
@@ -220,20 +220,36 @@ EXCEL_STYLE_CSS = """
 .excel-table td:not(.frozen) {
     font-family: 'Consolas', 'Monaco', monospace;
 }
-</style>
 
-<script>
-function toggleDetails(conceptId) {
-    const rows = document.querySelectorAll('.detail-' + conceptId);
-    const parent = document.querySelector('.parent-' + conceptId);
-    const isExpanded = parent.classList.contains('expanded');
-    
-    rows.forEach(row => {
-        row.classList.toggle('visible', !isExpanded);
-    });
-    parent.classList.toggle('expanded', !isExpanded);
+/* CSS-only expandable using checkbox hack */
+.toggle-checkbox {
+    display: none;
 }
-</script>
+
+.toggle-label {
+    cursor: pointer;
+    display: inline-block;
+}
+
+.toggle-icon {
+    display: inline-block;
+    width: 16px;
+    transition: transform 0.2s;
+}
+
+.toggle-checkbox:checked + tr .toggle-icon {
+    transform: rotate(90deg);
+}
+
+/* Detail rows hidden by default, shown when checkbox checked */
+.detail-group {
+    display: none;
+}
+
+.toggle-checkbox:checked ~ .detail-group {
+    display: table-row;
+}
+</style>
 """
 
 
