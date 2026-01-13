@@ -283,12 +283,12 @@ ENTERPRISE_CSS = """
 
 /* ============ HEATMAP COLORS ============ */
 .heatmap-very-positive {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(5, 150, 105, 0.2) 100%) !important;
-    box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.4);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%) !important;
+    box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.3);
 }
 
 .heatmap-positive {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%) !important;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(37, 99, 235, 0.08) 100%) !important;
 }
 
 .heatmap-neutral {
@@ -306,9 +306,9 @@ ENTERPRISE_CSS = """
 
 /* ============ AMOUNTS STYLING ============ */
 .monto-positivo { 
-    color: #34d399; 
+    color: #ffffff; 
     font-weight: 700;
-    text-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
+    text-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
 }
 .monto-negativo { 
     color: #fca5a5; 
@@ -722,7 +722,8 @@ function handleDragEnd(e) {
 }
 
 // ============ INITIALIZE ============
-document.addEventListener('DOMContentLoaded', function() {
+// Ejecutar inmediatamente después del render
+setTimeout(function() {
     // Enable drag & drop on draggable rows
     document.querySelectorAll('.draggable').forEach(row => {
         row.addEventListener('dragstart', handleDragStart);
@@ -731,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function() {
         row.addEventListener('drop', handleDrop);
         row.addEventListener('dragend', handleDragEnd);
     });
-});
+}, 100);
 </script>
 """
 
