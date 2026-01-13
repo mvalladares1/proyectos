@@ -449,7 +449,6 @@ def render(username: str, password: str):
                 with col_down2:
                     # INFORME PDF RIO FUTURO
                     try:
-                        import requests
                         from .shared import API_URL
                         
                         # Preparar datos para el PDF
