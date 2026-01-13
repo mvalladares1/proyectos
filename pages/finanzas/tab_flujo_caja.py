@@ -161,7 +161,79 @@ EXCEL_STYLE_CSS = """
     font-size: 0.8rem;
     background: linear-gradient(90deg, transparent, rgba(99,179,237,0.1), transparent);
 }
+
+/* Expandable rows */
+.expandable {
+    cursor: pointer;
+}
+
+.expandable .expand-icon {
+    display: inline-block;
+    width: 16px;
+    margin-right: 4px;
+    transition: transform 0.2s;
+}
+
+.expandable.expanded .expand-icon {
+    transform: rotate(90deg);
+}
+
+/* Detail rows (hidden by default) */
+.detail-row {
+    display: none;
+}
+
+.detail-row.visible {
+    display: table-row;
+}
+
+.detail-row td {
+    background: #151525 !important;
+    font-size: 0.75rem;
+    color: #a0aec0;
+    padding: 4px 12px !important;
+}
+
+.detail-row td.frozen {
+    background: #151525 !important;
+    padding-left: 50px !important;
+    font-style: italic;
+}
+
+/* Columna Total destacada */
+.excel-table td:last-child,
+.excel-table th:last-child {
+    background: rgba(99, 179, 237, 0.08) !important;
+    border-left: 2px solid #4a5568;
+}
+
+.excel-table tr.grand-total td:last-child {
+    background: rgba(72, 187, 120, 0.25) !important;
+}
+
+/* Zebra stripes para mejor lectura */
+.excel-table tr.data-row:nth-child(even) td:not(.frozen):not(:last-child) {
+    background: rgba(255,255,255,0.02);
+}
+
+/* Font monospace para números */
+.excel-table td:not(.frozen) {
+    font-family: 'Consolas', 'Monaco', monospace;
+}
 </style>
+
+<script>
+function toggleDetails(conceptId) {
+    const rows = document.querySelectorAll('.detail-' + conceptId);
+    const parent = document.querySelector('.parent-' + conceptId);
+    const isExpanded = parent.classList.contains('expanded');
+    
+    rows.forEach(row => {
+        row.classList.toggle('visible', !isExpanded);
+    });
+    parent.classList.toggle('expanded', !isExpanded);
+}
+</script>
 """
 
 
@@ -378,6 +450,7 @@ def render(username: str, password: str):
                 c_nivel = concepto.get("nivel", 3)
                 c_total = concepto.get("total", 0)
                 montos_mes = concepto.get("montos_por_mes", {})  # Datos REALES del backend
+                cuentas = concepto.get("cuentas", [])  # Cuentas que componen este concepto
                 
                 if c_tipo == "HEADER":
                     continue  # Skip headers, already have activity header
@@ -387,8 +460,15 @@ def render(username: str, password: str):
                 indent_class = f"indent-{min(c_nivel, 3)}"
                 row_class = "subtotal" if c_tipo == "TOTAL" else "data-row"
                 
-                html_parts.append(f'<tr class="{row_class}">')
-                html_parts.append(f'<td class="frozen {indent_class}">{c_id} - {c_nombre[:50]}</td>')
+                # Si tiene cuentas, hacerlo expandible
+                c_id_safe = c_id.replace(".", "_")
+                has_details = len(cuentas) > 0
+                expandable_class = f"expandable parent-{c_id_safe}" if has_details else ""
+                onclick = f'onclick="toggleDetails(\'{c_id_safe}\')"' if has_details else ""
+                expand_icon = '<span class="expand-icon">▶</span>' if has_details else '<span style="width:20px;display:inline-block;"></span>'
+                
+                html_parts.append(f'<tr class="{row_class} {expandable_class}" {onclick}>')
+                html_parts.append(f'<td class="frozen {indent_class}">{expand_icon}{c_id} - {c_nombre[:45]}</td>')
                 
                 # DATOS REALES por mes
                 for mes in meses_lista:
@@ -397,6 +477,22 @@ def render(username: str, password: str):
                 
                 html_parts.append(f'<td><strong>{_fmt_monto_html(c_total)}</strong></td>')
                 html_parts.append('</tr>')
+                
+                # Sub-filas de detalle (cuentas) - ocultas por defecto
+                for cuenta in cuentas[:10]:  # Máximo 10 cuentas por concepto
+                    cuenta_codigo = cuenta.get("codigo", "")
+                    cuenta_nombre = cuenta.get("nombre", "")[:35]
+                    cuenta_monto = cuenta.get("monto", 0)
+                    
+                    html_parts.append(f'<tr class="detail-row detail-{c_id_safe}">')
+                    html_parts.append(f'<td class="frozen">📄 {cuenta_codigo} - {cuenta_nombre}</td>')
+                    
+                    # Las cuentas solo tienen monto total, no por mes
+                    for _ in meses_lista:
+                        html_parts.append('<td>-</td>')
+                    
+                    html_parts.append(f'<td>{_fmt_monto_html(cuenta_monto)}</td>')
+                    html_parts.append('</tr>')
             
             # Subtotal de actividad CON DATOS REALES
             html_parts.append(f'<tr class="subtotal">')

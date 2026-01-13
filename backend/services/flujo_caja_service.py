@@ -692,6 +692,9 @@ class FlujoCajaService:
                 montos_por_concepto_mes[c["id"]] = {m: 0.0 for m in meses_lista}
         montos_por_concepto_mes[CATEGORIA_NEUTRAL] = {m: 0.0 for m in meses_lista}
         
+        # Diccionario para tracking de cuentas individuales por concepto (para drill-down)
+        cuentas_por_concepto = {}  # {concepto_id: {codigo_cuenta: {nombre, monto, cantidad}}}
+        
         # Procesar en chunks
         chunk_size = 5000
         for i in range(0, len(asientos_ids), chunk_size):
@@ -756,6 +759,19 @@ class FlujoCajaService:
                         montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in meses_lista}
                     
                     montos_por_concepto_mes[concepto_id][mes_str] += balance
+                    
+                    # Trackear cuenta individual para drill-down
+                    if concepto_id not in cuentas_por_concepto:
+                        cuentas_por_concepto[concepto_id] = {}
+                    if codigo_cuenta not in cuentas_por_concepto[concepto_id]:
+                        nombre_cuenta = acc_display.split(' ', 1)[1] if ' ' in acc_display else acc_display
+                        cuentas_por_concepto[concepto_id][codigo_cuenta] = {
+                            'nombre': nombre_cuenta[:50],
+                            'monto': 0.0,
+                            'cantidad': 0
+                        }
+                    cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += balance
+                    cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
                     
             except Exception as e:
                 print(f"[FlujoCaja] Error en agregación mensual: {e}")
@@ -854,6 +870,19 @@ class FlujoCajaService:
                             montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in meses_lista}
                         
                         montos_por_concepto_mes[concepto_id][mes_proy] += monto_efectivo
+                        
+                        # Trackear cuenta para drill-down (facturas draft)
+                        if concepto_id not in cuentas_por_concepto:
+                            cuentas_por_concepto[concepto_id] = {}
+                        if codigo_cuenta not in cuentas_por_concepto[concepto_id]:
+                            nombre_cuenta = acc_display.split(' ', 1)[1] if ' ' in acc_display else acc_display
+                            cuentas_por_concepto[concepto_id][codigo_cuenta] = {
+                                'nombre': nombre_cuenta[:50],
+                                'monto': 0.0,
+                                'cantidad': 0
+                            }
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += monto_efectivo
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
                 
             print(f"[FlujoCaja] Proyección de facturas draft procesada")
             
@@ -881,13 +910,23 @@ class FlujoCajaService:
             montos_mes = montos_por_concepto_mes.get(c_id, {m: 0.0 for m in meses_lista})
             total_concepto = sum(montos_mes.values())
             
+            # Obtener cuentas de este concepto para drill-down
+            cuentas_concepto = []
+            if c_id in cuentas_por_concepto:
+                cuentas_concepto = sorted(
+                    [{"codigo": k, **v} for k, v in cuentas_por_concepto[c_id].items()],
+                    key=lambda x: abs(x.get('monto', 0)),
+                    reverse=True
+                )[:15]  # Top 15 cuentas por monto
+            
             concepto_resultado = {
                 "id": c_id,
                 "nombre": concepto.get("nombre"),
                 "tipo": c_tipo,
                 "nivel": concepto.get("nivel", 3),
                 "montos_por_mes": {m: round(montos_mes.get(m, 0), 0) for m in meses_lista},
-                "total": round(total_concepto, 0)
+                "total": round(total_concepto, 0),
+                "cuentas": cuentas_concepto  # Para drill-down
             }
             
             conceptos_por_actividad[c_actividad].append(concepto_resultado)
