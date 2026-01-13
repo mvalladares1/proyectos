@@ -342,7 +342,7 @@ def render(username: str, password: str):
                 height=500,
                 showlegend=True,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title="<b>Filtrar:</b>", font=dict(size=12, color="#00cc66")),
-                yaxis=dict(title="Kilogramos (kg)", gridcolor='rgba(255,255,255,0.08)', titlefont=dict(color='#8892b0')),
+                yaxis=dict(title=dict(text="Kilogramos (kg)", font=dict(color='#8892b0')), gridcolor='rgba(255,255,255,0.08)'),
                 xaxis=dict(title="", tickfont=dict(size=12, color='#8892b0'))
             )
 
