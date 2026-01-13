@@ -470,13 +470,18 @@ class ProduccionService:
                         prod_ids.add(prod_info[0])
                         move_to_prod_mapping[move['id']] = prod_info[0]
                 
-                # Leer datos de mrp.production (INCLUYE SALA)
+                # Leer datos de mrp.production (INCLUYE SALA Y PRODUCTIVIDAD)
                 prod_data = {}
                 if prod_ids:
                     productions = self.odoo.read(
                         'mrp.production', 
                         list(prod_ids), 
-                        ['name', 'picking_type_id', 'x_studio_sala_de_proceso']
+                        ['name', 'picking_type_id', 'x_studio_sala_de_proceso', 
+                         'x_studio_po_cliente_1', 'x_studio_kg_totales_po', 
+                         'x_studio_kg_consumidos_po', 'x_studio_kg_disponibles_po',
+                         'x_studio_dotacin', 'x_studio_hh', 'x_studio_hh_efectiva',
+                         'x_studio_kghora_efectiva', 'x_studio_kghh_efectiva',
+                         'x_studio_kghh_efectiva_ideal', 'x_studio_horas_detencion_totales']
                     )
                     for p in productions:
                         pk_type = p.get('picking_type_id')
@@ -492,7 +497,20 @@ class ProduccionService:
                         prod_data[p['id']] = {
                             'name': p_name,
                             'planta': planta,
-                            'sala': sala
+                            'sala': sala,
+                            # Datos Productividad
+                            'dotacion': p.get('x_studio_dotacin', 0) or 0,
+                            'hh': p.get('x_studio_hh', 0) or 0,
+                            'hh_efectiva': p.get('x_studio_hh_efectiva', 0) or 0,
+                            'kg_hr_efectiva': p.get('x_studio_kghora_efectiva', 0) or 0,
+                            'kg_hh_efectiva': p.get('x_studio_kghh_efectiva', 0) or 0,
+                            'kg_hh_meta': p.get('x_studio_kghh_efectiva_ideal', 0) or 0,
+                            'hrs_detencion': p.get('x_studio_horas_detencion_totales', 0) or 0,
+                            # Datos PO
+                            'po_cliente': p.get('x_studio_po_cliente_1', ''),
+                            'kg_totales_po': p.get('x_studio_kg_totales_po', 0) or 0,
+                            'kg_consumidos_po': p.get('x_studio_kg_consumidos_po', 0) or 0,
+                            'kg_disponibles_po': p.get('x_studio_kg_disponibles_po', 0) or 0
                         }
                 
                 for move_id, prod_id in move_to_prod_mapping.items():
@@ -553,7 +571,16 @@ class ProduccionService:
                     'orden_fabricacion': prod_info['name'],
                     'planta': prod_info['planta'],
                     'sala': prod_info['sala'],
-                    'fecha': sml.get('date', '')
+                    'fecha': sml.get('date', ''),
+                    # Extra info de productividad para agregados
+                    'dotacion': prod_info.get('dotacion', 0),
+                    'hh': prod_info.get('hh', 0),
+                    'hh_efectiva': prod_info.get('hh_efectiva', 0),
+                    'kg_hh_efectiva': prod_info.get('kg_hh_efectiva', 0),
+                    'kg_hh_meta': prod_info.get('kg_hh_meta', 0),
+                    'po_cliente': prod_info.get('po_cliente', ''),
+                    'kg_totales_po': prod_info.get('kg_totales_po', 0),
+                    'kg_consumidos_po': prod_info.get('kg_consumidos_po', 0)
                 })
             
             total_kg = sum(grados_kg.values())

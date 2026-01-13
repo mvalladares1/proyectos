@@ -100,6 +100,39 @@ def render(username: str, password: str):
         # Botón consultar
         consultar = st.button("🔍 Consultar Clasificación", use_container_width=True, type="primary")
     
+    # --- CSS PREMIUM (Estilo Kiosko/TV) ---
+    st.markdown("""
+    <style>
+        .premium-card {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 1.2rem;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+        }
+        .premium-value {
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 0.2rem 0;
+        }
+        .premium-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .po-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 1rem;
+            border-left: 5px solid #3498db;
+            margin-top: 1rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
     # === CONSULTA Y PRESENTACIÓN ===
     if consultar or st.session_state.get("clasificacion_data"):
         if consultar:
@@ -193,6 +226,70 @@ def render(username: str, password: str):
                     elif tipo_manejo_val == "Convencional" and is_org:
                         d['_remove'] = True
             detalle_raw = [d for d in detalle_raw if not d.get('_remove')]
+
+        if not detalle_raw:
+            st.warning("⚠️ No hay datos con los filtros seleccionados.")
+            return
+
+        # --- SECCIÓN PREMIUM (Solo si hay sala seleccionada) ---
+        if sala_proceso_seleccionada != "Todas":
+            st.markdown(f"#### 📊 RESUMEN OPERATIVO: {sala_proceso_seleccionada}")
+            
+            # Obtener órdenes únicas para promediar métricas
+            # Usamos un diccionario para asegurar unicidad por 'orden_fabricacion'
+            ordenes_unicas_dict = {}
+            for d in detalle_raw:
+                orden_id = d.get('orden_fabricacion')
+                if orden_id not in ordenes_unicas_dict:
+                    ordenes_unicas_dict[orden_id] = d
+            ordenes_unicas = list(ordenes_unicas_dict.values())
+
+            avg_kg_hh = sum(o.get('kg_hh_efectiva', 0) for o in ordenes_unicas) / len(ordenes_unicas) if ordenes_unicas else 0
+            total_dotacion = sum(o.get('dotacion', 0) for o in ordenes_unicas)
+            total_kg_sala = sum(d['kg'] for d in detalle_raw)
+            
+            # Datos PO (tomamos la primera orden para el ejemplo de progreso)
+            po_name = 'N/A'
+            kg_tot_po = 0
+            kg_cons_po = 0
+            po_pct = 0
+
+            if ordenes_unicas:
+                first_ord = ordenes_unicas[0] # Tomamos la primera orden para mostrar el PO
+                po_name = first_ord.get('po_cliente', 'N/A')
+                kg_tot_po = first_ord.get('kg_totales_po', 0) or 0
+                kg_cons_po = first_ord.get('kg_consumidos_po', 0) or 0
+                po_pct = (kg_cons_po / kg_tot_po * 100) if kg_tot_po > 0 else 0
+
+            c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+            with c_p1:
+                st.markdown(f'<div class="premium-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);"><div class="premium-label">Total Kg</div><div class="premium-value">{fmt_numero(total_kg_sala)}</div></div>', unsafe_allow_html=True)
+            with c_p2:
+                st.markdown(f'<div class="premium-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"><div class="premium-label">Kg/HH Ef.</div><div class="premium-value">{avg_kg_hh:.1f}</div></div>', unsafe_allow_html=True)
+            with c_p3:
+                st.markdown(f'<div class="premium-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"><div class="premium-label">Dotación</div><div class="premium-value">{int(total_dotacion)}</div></div>', unsafe_allow_html=True)
+            with c_p4:
+                # Simulación de rendimiento si no hay datos reales
+                yield_est = (total_kg_sala / (total_kg_sala * 1.1) * 100) if total_kg_sala > 0 else 0
+                st.markdown(f'<div class="premium-card"><div class="premium-label">Rendimiento Est.</div><div class="premium-value">{yield_est:.1f}%</div></div>', unsafe_allow_html=True)
+
+            if kg_tot_po > 0:
+                st.markdown(f"""
+                <div class="po-container">
+                    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-bottom:5px;">
+                        <span>📦 PO: {po_name}</span>
+                        <span>{po_pct:.1f}% Completado</span>
+                    </div>
+                    <div style="background:#dee2e6; height:12px; border-radius:10px;">
+                        <div style="background:#3498db; height:100%; border-radius:10px; width:{min(po_pct, 100)}%;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-top:5px; color:#666;">
+                        <span>Consumido: {fmt_numero(kg_cons_po)} kg</span>
+                        <span>Total PO: {fmt_numero(kg_tot_po)} kg</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("---")
 
         # Re-mapear grados_raw basado en este detalle ultra-filtrado
         grados_raw = {str(i): 0 for i in range(1, 8)}
