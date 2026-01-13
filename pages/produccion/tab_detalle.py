@@ -305,6 +305,11 @@ def _render_detalle_of(data_of):
 
     rendimiento_val = (kg_out / kg_in * 100) if kg_in > 0 else 0
 
+    # Análisis de datos faltantes en componentes (Materia Prima)
+    kg_sin_lote = sum([item.get('qty_done', 0) or 0 for item in componentes_fruta if not item.get('lot_id')])
+    kg_sin_pallet = sum([item.get('qty_done', 0) or 0 for item in componentes_fruta if not item.get('package_id')])
+    kg_sin_ambos = sum([item.get('qty_done', 0) or 0 for item in componentes_fruta if not item.get('lot_id') and not item.get('package_id')])
+
     # Header de la OF
     st.markdown(f"### 🏭 Detalle de la Orden: {of.get('name')} {('✅ PSP' if 'PSP' in clean_name(of.get('product_id')).upper() else '')}")
 
@@ -394,6 +399,18 @@ def _render_detalle_of(data_of):
 
     with tab_comp:
         st.markdown("#### Detalle de Materiales Consumidos")
+        
+        # Alerta de integridad de datos
+        if kg_sin_lote > 0 or kg_sin_pallet > 0:
+            st.warning(f"""
+            **⚠️ Integridad de Trazabilidad:**
+            - **{fmt_numero(kg_sin_lote)} kg** sin número de lote.
+            - **{fmt_numero(kg_sin_pallet)} kg** sin folio de pallet.
+            - **{fmt_numero(kg_sin_ambos)} kg** sin lote ni pallet (información incompleta).
+            """, icon="⚠️")
+        else:
+            st.success("✅ Toda la materia prima tiene lote y pallet asignado.")
+
         if componentes:
             df_c = pd.DataFrame([{
                 "Producto": clean_name(c.get("product_id")),
