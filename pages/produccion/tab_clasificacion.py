@@ -400,7 +400,7 @@ def render(username: str, password: str):
             ]].copy()
             
             df_display.columns = [
-                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Planta', 'Sala', 'Fecha'
+                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Planta', 'Sala', 'Inicio Proceso'
             ]
             
             # Mostrar tabla

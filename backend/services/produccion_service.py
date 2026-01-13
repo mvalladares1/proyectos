@@ -392,49 +392,48 @@ class ProduccionService:
         }
         
         try:
-            # 1. Construir domain para stock.move.line (Identificación de Sala por Orden)
-            domain_sml = [
-                ('date', '>=', fecha_inicio + ' 00:00:00'),
-                ('date', '<=', fecha_fin + ' 23:59:59'),
-                ('result_package_id', '!=', False),
-                ('qty_done', '>', 0),
-                ('state', '!=', 'cancel'),
-                ('move_id.production_id', '!=', False)
+            # 1. Buscar las Órdenes de Fabricación (mrp.production) por Fecha de Inicio de Proceso
+            # Este es ahora el filtro principal de fecha solicitado por el usuario
+            prod_domain = [
+                ('x_studio_inicio_de_proceso', '>=', fecha_inicio + ' 00:00:00'),
+                ('x_studio_inicio_de_proceso', '<=', fecha_fin + ' 23:59:59')
             ]
             
-            # FILTRO DE SALA: Identificamos primero las órdenes de esa sala
+            # FILTRO DE SALA: Lo integramos directamente en la búsqueda de producción
             if sala_proceso and sala_proceso.strip() and sala_proceso != "Todas":
-                # Eliminamos filtros de fecha en esta búsqueda inicial para no ser restrictivos
                 sala_busqueda = sala_proceso.strip()
-                
-                # Intentamos buscar por coincidencia parcial para evitar temas de acentos
                 if " - " in sala_busqueda:
                     sala_short = sala_busqueda.split(" - ")[0]
-                    # Buscamos que contenga la parte corta o la parte larga
-                    prod_search_domain = ['|', 
-                        ('x_studio_sala_de_proceso', 'ilike', sala_busqueda),
-                        ('x_studio_sala_de_proceso', 'ilike', sala_short)
-                    ]
+                    prod_domain.append('|')
+                    prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_busqueda))
+                    prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_short))
                 else:
-                    prod_search_domain = [('x_studio_sala_de_proceso', 'ilike', sala_busqueda)]
-                
-                prod_ids_sala = self.odoo.search('mrp.production', prod_search_domain)
-                
-                if not prod_ids_sala:
-                    return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
-                
-                domain_sml.append(('move_id.production_id', 'in', prod_ids_sala))
-            
-            # FILTRO DE PLANTA (A nivel de picking_type de la producción)
+                    prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_busqueda))
+
+            # FILTRO DE PLANTA: Integramos el filtro de Planta en la búsqueda de producción
             if tipo_operacion and tipo_operacion != "Todas":
                 if tipo_operacion == "VILKUN":
-                    domain_sml.append('|')
-                    domain_sml.append(('move_id.production_id.picking_type_id.name', 'ilike', 'VLK'))
-                    domain_sml.append(('move_id.production_id.name', 'ilike', 'VLK/'))
+                    prod_domain.append('|')
+                    prod_domain.append(('picking_type_id.name', 'ilike', 'VLK'))
+                    prod_domain.append(('name', 'ilike', 'VLK/'))
                 else: # RIO FUTURO
-                    domain_sml.append(('move_id.production_id.picking_type_id.name', 'not ilike', 'VLK'))
-                    domain_sml.append(('move_id.production_id.name', 'not ilike', 'VLK/'))
+                    prod_domain.append(('picking_type_id.name', 'not ilike', 'VLK'))
+                    prod_domain.append(('name', 'not ilike', 'VLK/'))
 
+            # Obtener IDs de las producciones que cumplen el criterio
+            prod_ids_filtrados = self.odoo.search('mrp.production', prod_domain)
+            
+            if not prod_ids_filtrados:
+                return {"grados": {str(i): 0 for i in range(1, 8)}, "total_kg": 0, "detalle": []}
+
+            # 2. Ahora buscamos los movimientos de stock (pallets) de ESAS producciones
+            domain_sml = [
+                ('move_id.production_id', 'in', prod_ids_filtrados),
+                ('result_package_id', '!=', False),
+                ('qty_done', '>', 0),
+                ('state', '!=', 'cancel')
+            ]
+            
             # Campos a obtener de stock.move.line
             sml_fields = ['result_package_id', 'qty_done', 'product_id', 'lot_id', 'date', 'move_id']
             
@@ -478,6 +477,7 @@ class ProduccionService:
                         'mrp.production', 
                         list(prod_ids), 
                         ['name', 'picking_type_id', 'x_studio_sala_de_proceso', 
+                         'x_studio_inicio_de_proceso',
                          'x_studio_po_cliente_1', 'x_studio_kg_totales_po', 
                          'x_studio_kg_consumidos_po', 'x_studio_kg_disponibles_po',
                          'x_studio_dotacin', 'x_studio_hh', 'x_studio_hh_efectiva',
@@ -489,6 +489,7 @@ class ProduccionService:
                         pk_name = pk_type[1] if isinstance(pk_type, list) and len(pk_type) >= 2 else ''
                         p_name = p.get('name', '')
                         sala = p.get('x_studio_sala_de_proceso', '')
+                        inicio_proceso = p.get('x_studio_inicio_de_proceso', '')
                         
                         # Clasificar Planta
                         planta = "RIO FUTURO"
@@ -499,6 +500,7 @@ class ProduccionService:
                             'name': p_name,
                             'planta': planta,
                             'sala': sala,
+                            'inicio_proceso': inicio_proceso,
                             # Datos Productividad
                             'dotacion': p.get('x_studio_dotacin', 0) or 0,
                             'hh': p.get('x_studio_hh', 0) or 0,
@@ -542,10 +544,7 @@ class ProduccionService:
                 move_id = move_info[0] if isinstance(move_info, list) and len(move_info) >= 1 else None
                 prod_info = move_productions.get(move_id, {'name': '', 'planta': 'RIO FUTURO', 'sala': ''})
                 
-                # --- FILTROS DE SALIDA ---
-                if tipo_operacion and tipo_operacion != "Todas":
-                    if tipo_operacion.upper() != prod_info['planta'].upper(): continue
-                
+                # --- FILTROS DINÁMICOS RESTANTES (Fruta y Manejo) ---
                 if tipo_fruta:
                     if tipo_fruta.lower() not in product_name.lower(): continue
                 
@@ -572,7 +571,7 @@ class ProduccionService:
                     'orden_fabricacion': prod_info['name'],
                     'planta': prod_info['planta'],
                     'sala': prod_info['sala'],
-                    'fecha': sml.get('date', ''),
+                    'fecha': prod_info.get('inicio_proceso', ''), # Usar Inicio de Proceso como fecha principal
                     # Extra info de productividad para agregados
                     'dotacion': prod_info.get('dotacion', 0),
                     'hh': prod_info.get('hh', 0),
