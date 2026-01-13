@@ -9,6 +9,7 @@ import requests
 from datetime import datetime, timedelta
 
 import plotly.graph_objects as go
+from streamlit_echarts import st_echarts
 from .shared import API_URL, fmt_numero
 
 
@@ -320,42 +321,53 @@ def render(username: str, password: str):
                 </div>
             """, unsafe_allow_html=True)
 
-            # Crear Gráfico en Plotly para etiquetas superiores y sin bordes blancos
-            fig = go.Figure()
-            for row in df_chart.itertuples():
-                fig.add_trace(go.Bar(
-                    x=[row.Grado],
-                    y=[row.Kilogramos],
-                    name=row.Grado,
-                    marker=dict(color=row.Color, line=dict(width=0)),
-                    text=[f"{row.Kilogramos:,.0f}"],
-                    textposition='outside',
-                    textfont=dict(color='#ffffff', size=13, family="Arial Black"),
-                    hovertemplate=f"<b>{row.Grado}</b><br>Peso: {row.Kilogramos:,.2f} kg<br>Participación: {row.Porcentaje}%<extra></extra>"
-                ))
-
-            fig.update_layout(
-                template='plotly_dark' if st.session_state.get('theme_mode', 'Dark') == 'Dark' else 'plotly_white',
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(t=30, b=40, l=40, r=40),
-                height=500,
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title="<b>Filtrar:</b>", font=dict(size=12, color="#00cc66")),
-                yaxis=dict(title=dict(text="Kilogramos (kg)", font=dict(color='#8892b0')), gridcolor='rgba(255,255,255,0.08)'),
-                xaxis=dict(title="", tickfont=dict(size=12, color='#8892b0'))
-            )
+            # Crear Configuración ECharts para Máxima Claridad
+            options = {
+                "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+                "xAxis": {
+                    "type": "category",
+                    "data": df_chart['Grado'].tolist(),
+                    "axisLabel": {"color": "#8892b0", "fontSize": 12, "rotate": 45},
+                },
+                "yAxis": {
+                    "type": "value",
+                    "name": "Kilos",
+                    "axisLabel": {"color": "#8892b0"},
+                    "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.05)"}}
+                },
+                "series": [
+                    {
+                        "data": [
+                            {"value": row.Kilogramos, "itemStyle": {"color": row.Color}}
+                            for row in df_chart.itertuples()
+                        ],
+                        "type": "bar",
+                        "barWidth": "60%",
+                        "label": {
+                            "show": True,
+                            "position": "top",
+                            "color": "#ffffff",
+                            "formatter": "{c} kg"
+                        }
+                    }
+                ],
+                "backgroundColor": "rgba(0,0,0,0)",
+                "grid": {"left": "3%", "right": "4%", "bottom": "15%", "containLabel": True}
+            }
 
             # Selector de KPIs (Contenedor superior)
             kpis_container = st.container()
             
-            # Renderizar gráfico y capturar evento de selección
-            event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="plotly_clas_v2")
+            # Renderizar gráfico ECharts con eventos
+            event = st_echarts(
+                options=options, 
+                height="500px", 
+                events={"click": "function(params) { return params.name; }"},
+                key="echarts_clas_v1"
+            )
             
-            # Definir qué grados mostrar
-            selected_from_chart = []
-            if event and hasattr(event, "selection") and event.selection.get("points"):
-                selected_from_chart = [p["x"] for p in event.selection["points"]]
+            # Definir qué grados mostrar (ECharts devuelve el nombre directamente si se configura el evento)
+            selected_from_chart = [event] if event else []
             
             if selected_from_chart:
                 active_grades_names = selected_from_chart

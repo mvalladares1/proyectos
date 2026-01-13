@@ -5,6 +5,7 @@ Búsqueda y detalle de órdenes de fabricación individuales.
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from streamlit_echarts import st_echarts
 from datetime import date, timedelta
 
 from .shared import (
@@ -200,6 +201,51 @@ def _render_status_group(df_status):
         st.info("No hay órdenes en este estado.")
         return
     
+    # --- Gráfico de Barras ECharts: Órdenes por Día ---
+    st.markdown("##### 📊 Carga de Órdenes Pendientes por Día")
+    
+    df_status['Fecha_Fmt'] = pd.to_datetime(df_status['date_planned_start']).dt.strftime('%d/%m')
+    counts_by_day = df_status['Fecha_Fmt'].value_counts().reset_index()
+    counts_by_day.columns = ['Fecha', 'Cantidad']
+    counts_by_day = counts_by_day.sort_values('Fecha')
+
+    options = {
+        "xAxis": {
+            "type": "category",
+            "data": counts_by_day['Fecha'].tolist(),
+            "axisLabel": {"color": "#8892b0", "fontSize": 12},
+        },
+        "yAxis": {
+            "type": "value",
+            "name": "Órdenes",
+            "axisLabel": {"color": "#8892b0"},
+            "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.05)"}}
+        },
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+        "series": [
+            {
+                "data": counts_by_day['Cantidad'].tolist(),
+                "type": "bar",
+                "itemStyle": {
+                    "color": "#3498db",
+                    "borderRadius": [5, 5, 0, 0]
+                },
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": "#ffffff",
+                    "formatter": "{c} OFs"
+                },
+                "barWidth": "40%"
+            }
+        ],
+        "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
+        "backgroundColor": "rgba(0,0,0,0)"
+    }
+    
+    st_echarts(options=options, height="300px")
+    st.markdown("---")
+
     # Separar por Tipo (Sala vs Congelado)
     df_sala = df_status[df_status['Tipo'] == "Sala"]
     df_congelado = df_status[df_status['Tipo'] == "Congelado"]
