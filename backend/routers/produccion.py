@@ -105,3 +105,32 @@ async def get_clasificacion_pallets(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@router.post("/report_clasificacion")
+async def download_report_clasificacion(
+    data: dict
+):
+    """
+    Genera y descarga el informe de clasificación en PDF.
+    """
+    try:
+        from backend.services.produccion_report_service import generate_clasificacion_report_pdf
+        from fastapi.responses import StreamingResponse
+        import io
+
+        pdf_bytes = generate_clasificacion_report_pdf(
+            resumen_grados=data.get('resumen_grados', []),
+            detalle_pallets=data.get('detalle_pallets', []),
+            fecha_inicio=data.get('fecha_inicio', ''),
+            fecha_fin=data.get('fecha_fin', ''),
+            planta=data.get('planta', ''),
+            sala=data.get('sala', ''),
+            total_kg=data.get('total_kg', 0)
+        )
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=Informe_Clasificacion_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -447,39 +447,47 @@ def render(username: str, password: str):
                         st.error("Error al preparar Excel.")
 
                 with col_down2:
-                    # INFORME SIMPLE RIO FUTURO
+                    # INFORME PDF RIO FUTURO
                     try:
-                        import io
-                        buffer_info = io.BytesIO()
-                        with pd.ExcelWriter(buffer_info, engine='openpyxl') as writer:
-                            resumen_informe = [
-                                ["RIO FUTURO PROCESOS SPA"],
-                                ["INFORME DE CLASIFICACIÓN DE PALLETS"],
-                                [f"Fecha Informe: {datetime.now().strftime('%d/%m/%Y %H:%M')}"],
-                                [f"Periodo: {fecha_inicio_clas.strftime('%d/%m/%Y')} al {fecha_fin_clas.strftime('%d/%m/%Y')}"],
-                                [f"Planta: {tipo_operacion_seleccionado} - Sala: {sala_proceso_seleccionada}"],
-                                [""],
-                                ["RESUMEN DE KILOGRAMOS POR GRADO"]
-                            ]
-                            for g_name in active_grades_names:
-                                g_code = next((k for k, v in GRADOS_INFO.items() if v['nombre'] == g_name), None)
-                                if g_code:
-                                    kilos = grados_mostrar.get(g_code, 0)
-                                    resumen_informe.append([f"{g_name}:", kilos])
-                            
-                            resumen_informe.extend([["TOTAL SELECCIONADO:", total_kg_filtrado], [""]])
-                            pd.DataFrame(resumen_informe).to_excel(writer, index=False, header=False, sheet_name='Informe')
-                            df_display.to_excel(writer, index=False, startrow=len(resumen_informe) + 2, sheet_name='Informe')
-                            
-                        st.download_button(
-                            label="📄 Descargar Informe RIO FUTURO",
-                            data=buffer_info.getvalue(),
-                            file_name=f"Informe_Rio_Futuro_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
+                        import requests
+                        from .shared import API_URL
+                        
+                        # Preparar datos para el PDF
+                        resumen_pdf = []
+                        for g_name in active_grades_names:
+                            g_code = next((k for k, v in GRADOS_INFO.items() if v['nombre'] == g_name), None)
+                            if g_code:
+                                resumen_pdf.append({"nombre": g_name, "kg": grados_mostrar.get(g_code, 0)})
+                        
+                        payload = {
+                            "resumen_grados": resumen_pdf,
+                            "detalle_pallets": df_display.to_dict('records'),
+                            "fecha_inicio": fecha_inicio_clas.strftime('%Y-%m-%d'),
+                            "fecha_fin": fecha_fin_clas.strftime('%Y-%m-%d'),
+                            "planta": tipo_operacion_seleccionado,
+                            "sala": sala_proceso_seleccionada,
+                            "total_kg": total_kg_filtrado
+                        }
+                        
+                        # Para evitar reruns innecesarios, generamos un identificadora en session_state si se desea
+                        if st.button("📄 Preparar Informe PDF", use_container_width=True, key="btn_prep_pdf"):
+                            with st.spinner("Generando documento..."):
+                                resp = requests.post(f"{API_URL}/api/v1/produccion/report_clasificacion", json=payload, timeout=30)
+                                if resp.status_code == 200:
+                                    st.session_state[f"pdf_ready_{datetime.now().minute}"] = resp.content
+                                    st.success("✅ ¡Informe PDF generado!")
+                                    st.download_button(
+                                        label="⬇️ Descargar PDF",
+                                        data=resp.content,
+                                        file_name=f"Informe_Rio_Futuro_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                        mime="application/pdf",
+                                        use_container_width=True,
+                                        key="btn_dl_pdf"
+                                    )
+                                else:
+                                    st.error("Error al generar el PDF.")
                     except Exception as e:
-                        st.error(f"Error al generar informe: {e}")
+                        st.error(f"Error con el servicio de informes: {e}")
         else:
             st.info("ℹ️ No hay datos para la selección actual.")
     else:

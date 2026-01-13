@@ -361,10 +361,142 @@ def generate_produccion_report_pdf(
                 normal_style
             ))
     
+
+def generate_clasificacion_report_pdf(
+    resumen_grados: List[Dict[str, Any]],
+    detalle_pallets: List[Dict[str, Any]],
+    fecha_inicio: str,
+    fecha_fin: str,
+    planta: str,
+    sala: str,
+    total_kg: float
+) -> bytes:
+    """
+    Genera un PDF con el informe de clasificación de pallets.
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=1.5*cm,
+        rightMargin=1.5*cm,
+        topMargin=1.5*cm,
+        bottomMargin=1.5*cm
+    )
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'RioTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        alignment=1, # Center
+        spaceAfter=10,
+        textColor=colors.HexColor('#2c3e50')
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'RioSubtitle',
+        parent=styles['Heading2'],
+        fontSize=12,
+        alignment=1,
+        spaceAfter=20,
+        textColor=colors.HexColor('#34495e')
+    )
+    
+    header_table_style = ParagraphStyle(
+        'HeaderTable',
+        parent=styles['Normal'],
+        fontSize=9,
+        fontWeight='Bold'
+    )
+
+    elements = []
+    
+    # --- ENCABEZADO RIO FUTURO ---
+    elements.append(Paragraph("RIO FUTURO PROCESOS SPA", title_style))
+    elements.append(Paragraph("INFORME DE CLASIFICACIÓN DE PALLETS", subtitle_style))
+    
+    # Meta información
+    meta_data = [
+        [Paragraph(f"<b>Fecha Informe:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']), 
+         Paragraph(f"<b>Periodo:</b> {fmt_fecha(fecha_inicio)} al {fmt_fecha(fecha_fin)}", styles['Normal'])],
+        [Paragraph(f"<b>Planta:</b> {planta}", styles['Normal']), 
+         Paragraph(f"<b>Sala:</b> {sala}", styles['Normal'])]
+    ]
+    
+    meta_table = Table(meta_data, colWidths=[9*cm, 9*cm])
+    meta_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+    ]))
+    elements.append(meta_table)
+    elements.append(Spacer(1, 0.5*cm))
+    
+    # --- CUADRO RESUMEN DE GRADOS ---
+    elements.append(Paragraph("<b>Resumen de Kilogramos por Grado</b>", styles['Heading3']))
+    elements.append(Spacer(1, 0.2*cm))
+    
+    resumen_data = [['Grado de Calidad', 'Kilogramos (kg)']]
+    for g in resumen_grados:
+        resumen_data.append([g['nombre'], fmt_numero(g['kg'], 2)])
+    
+    resumen_data.append([Paragraph("<b>TOTAL SELECCIONADO</b>", styles['Normal']), 
+                         Paragraph(f"<b>{fmt_numero(total_kg, 2)}</b>", styles['Normal'])])
+    
+    res_table = Table(resumen_data, colWidths=[10*cm, 5*cm])
+    res_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f8f9fa')),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+    ]))
+    elements.append(res_table)
+    elements.append(Spacer(1, 1*cm))
+    
+    # --- TABLA DETALLE (Si existe) ---
+    if detalle_pallets:
+        elements.append(Paragraph(f"<b>Detalle de Pallets ({len(detalle_pallets)} registros)</b>", styles['Heading3']))
+        elements.append(Spacer(1, 0.2*cm))
+        
+        # Limitar a los primeros 200 registros en el PDF para evitar archivos pesados
+        max_pdf_rows = 200
+        detalle_to_show = detalle_pallets[:max_pdf_rows]
+        
+        det_data = [['Pallet', 'Producto', 'Grado', 'Kilos', 'OF', 'Inicio Proceso']]
+        for r in detalle_to_show:
+            det_data.append([
+                r.get('Pallet', ''),
+                r.get('Producto', '')[:25],
+                r.get('Grado', ''),
+                r.get('Kilos', ''),
+                r.get('OF', ''),
+                r.get('Inicio Proceso', '')
+            ])
+            
+        det_table = Table(det_data, colWidths=[3*cm, 5*cm, 2*cm, 2*cm, 2*cm, 4*cm], repeatRows=1)
+        det_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f2f2f2')]),
+        ]))
+        elements.append(det_table)
+        
+        if len(detalle_pallets) > max_pdf_rows:
+            elements.append(Spacer(1, 0.3*cm))
+            elements.append(Paragraph(f"<i>* Se muestran los primeros {max_pdf_rows} de {len(detalle_pallets)} registros.</i>", styles['Normal']))
+
     # Generar PDF
     doc.build(elements)
-    
     pdf_bytes = buffer.getvalue()
     buffer.close()
-    
     return pdf_bytes
