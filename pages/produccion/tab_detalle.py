@@ -246,7 +246,7 @@ def _render_of_card(row):
         st.markdown(f"""
         <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border-left: 4px solid {'#00cc66' if row['Estado_Label'] == 'Cerrada' else '#3498db'}; margin-bottom: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <b style="font-size: 1.1em; color: #ffffff;">{row['OF']} {row['PSP']}</b>
+                <b style="font-size: 1.1em; color: #ffffff;">{row['name']} {row['PSP']}</b>
                 <span style="font-size: 0.85em; color: #8892b0;">{row['Planta']}</span>
             </div>
             <div style="font-size: 0.9em; color: #8892b0; margin: 4px 0;">{clean_name(row['product_id'])}</div>
