@@ -339,27 +339,14 @@ def render(username: str, password: str):
                 ]
             )
 
-            # Capa 2: Etiquetas de Texto dinámicas
-            text = bars.mark_text(
-                align='center',
-                baseline='bottom',
-                dy=-10,
-                fontSize=13,
-                fontWeight='bold',
-                color='white'
-            ).encode(
-                text=alt.Text('Kilogramos:Q', format=',.0f'),
-                opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0))
-            )
-
-            # Unir capas
-            chart_final = (bars + text).add_params(
+            # Unir y configurar gráfico Final (SÓLO UNA CAPA para permitir on_select)
+            chart_final = bars.add_params(
                 seleccion_chart
             ).properties(
                 height=450,
                 title=alt.TitleParams(
                     text="Distribución de Producción por Grado",
-                    subtitle=["Porcentajes y Pesos consolidados según selección"],
+                    subtitle=["Haz clic en las barras o la leyenda para filtrar los KPIs detallados"],
                     color='#00cc66',
                     fontSize=18,
                     anchor='start'
