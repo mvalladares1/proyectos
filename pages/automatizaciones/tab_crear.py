@@ -355,6 +355,7 @@ def _botones_accion(username, password, selected_tunel, buscar_ubicacion_auto):
                         # Mostrar toast prominente
                         st.toast(f"✅ Orden {result.get('mo_name')} creada con {result.get('pallets_count')} pallets", icon="✅")
                         st.balloons()
+                        st.rerun()  # Recargar para mostrar el mensaje de éxito en la parte superior
                     elif response:
                         error_detail = response.json().get('detail', 'Error desconocido')
                         st.error(f"❌ Error al crear orden: {error_detail}")
