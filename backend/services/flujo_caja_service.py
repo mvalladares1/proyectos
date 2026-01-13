@@ -986,6 +986,257 @@ class FlujoCajaService:
         
         return resultado
     
+    def get_flujo_semanal(self, fecha_inicio: str, fecha_fin: str, 
+                          company_id: int = None) -> Dict:
+        """
+        Genera el Estado de Flujo de Efectivo con granularidad SEMANAL.
+        
+        Similar a get_flujo_mensualizado pero agrupa los datos por semana ISO (YYYY-WXX).
+        
+        Returns:
+            {
+                "semanas": ["2026-W01", "2026-W02", ...],
+                "actividades": {...},
+                "efectivo_por_semana": {...}
+            }
+        """
+        from datetime import datetime, timedelta
+        
+        resultado = {
+            "meta": {"version": "3.2", "mode": "semanal"},
+            "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+            "generado": datetime.now().isoformat(),
+            "semanas": [],
+            "meses": [],  # Alias para compatibilidad con frontend
+            "actividades": {},
+            "conciliacion": {},
+            "efectivo_por_mes": {}  # Alias para compatibilidad
+        }
+        
+        # 1. Generar lista de semanas en el rango
+        fecha_ini_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d')
+        
+        semanas_lista = []
+        semanas_dict = {}  # {semana_iso: (fecha_inicio_semana, fecha_fin_semana)}
+        
+        current = fecha_ini_dt
+        while current <= fecha_fin_dt:
+            iso_year, iso_week, _ = current.isocalendar()
+            semana_iso = f"{iso_year}-W{iso_week:02d}"
+            
+            if semana_iso not in semanas_dict:
+                # Calcular inicio (lunes) y fin (domingo) de la semana
+                # Encontrar el lunes de esta semana
+                dias_desde_lunes = current.weekday()
+                inicio_semana = current - timedelta(days=dias_desde_lunes)
+                fin_semana = inicio_semana + timedelta(days=6)
+                
+                semanas_dict[semana_iso] = (inicio_semana, fin_semana)
+                semanas_lista.append(semana_iso)
+            
+            current += timedelta(days=1)
+        
+        resultado["semanas"] = semanas_lista
+        resultado["meses"] = semanas_lista  # Alias para frontend
+        
+        # 2. Obtener cuentas de efectivo
+        cuentas_efectivo_ids = self._get_cuentas_efectivo()
+        if not cuentas_efectivo_ids:
+            resultado["error"] = "No se encontraron cuentas de efectivo configuradas"
+            return resultado
+        
+        # 3. Efectivo inicial
+        fecha_anterior = (fecha_ini_dt - timedelta(days=1)).strftime('%Y-%m-%d')
+        efectivo_inicial_global = self._get_saldo_efectivo(fecha_anterior, cuentas_efectivo_ids)
+        resultado["conciliacion"]["efectivo_inicial"] = round(efectivo_inicial_global, 0)
+        
+        # 4. Obtener movimientos de efectivo
+        domain = [
+            ['account_id', 'in', cuentas_efectivo_ids],
+            ['parent_state', 'in', ['posted', 'draft']],
+            ['date', '>=', fecha_inicio],
+            ['date', '<=', fecha_fin]
+        ]
+        if company_id:
+            domain.append(['company_id', '=', company_id])
+        
+        try:
+            movimientos_efectivo = self.odoo.search_read(
+                'account.move.line',
+                domain,
+                ['move_id'],
+                limit=50000
+            )
+        except Exception as e:
+            resultado["error"] = f"Error obteniendo movimientos: {e}"
+            return resultado
+        
+        asientos_ids = list(set(
+            m['move_id'][0] if isinstance(m.get('move_id'), (list, tuple)) else m.get('move_id')
+            for m in movimientos_efectivo if m.get('move_id')
+        ))
+        
+        if not asientos_ids:
+            for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+                resultado["actividades"][act_key] = {
+                    "nombre": self._get_actividad_nombre(act_key),
+                    "subtotal_por_mes": {s: 0 for s in semanas_lista},
+                    "subtotal": 0,
+                    "conceptos": []
+                }
+            return resultado
+        
+        # 5. Procesar contrapartidas por semana
+        montos_por_concepto_semana = {}
+        for c in self.catalogo.get("conceptos", []):
+            if c.get("tipo") == "LINEA":
+                montos_por_concepto_semana[c["id"]] = {s: 0.0 for s in semanas_lista}
+        montos_por_concepto_semana[CATEGORIA_NEUTRAL] = {s: 0.0 for s in semanas_lista}
+        
+        cuentas_por_concepto = {}
+        chunk_size = 5000
+        
+        for i in range(0, len(asientos_ids), chunk_size):
+            chunk_ids = asientos_ids[i:i + chunk_size]
+            
+            domain_contrapartidas = [
+                ['move_id', 'in', chunk_ids],
+                ['account_id', 'not in', cuentas_efectivo_ids]
+            ]
+            
+            try:
+                contrapartidas = self.odoo.search_read(
+                    'account.move.line',
+                    domain_contrapartidas,
+                    ['account_id', 'date', 'balance'],
+                    limit=50000
+                )
+            except Exception as e:
+                continue
+            
+            for cp in contrapartidas:
+                fecha = cp.get('date')
+                if not fecha:
+                    continue
+                
+                try:
+                    fecha_dt = datetime.strptime(str(fecha), '%Y-%m-%d')
+                    iso_year, iso_week, _ = fecha_dt.isocalendar()
+                    semana_iso = f"{iso_year}-W{iso_week:02d}"
+                except:
+                    continue
+                
+                if semana_iso not in semanas_lista:
+                    continue
+                
+                acc_data = cp.get('account_id')
+                if not acc_data:
+                    continue
+                
+                acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
+                codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
+                nombre_cuenta = acc_display.split(' ', 1)[1] if ' ' in acc_display else ""
+                
+                categoria = self.mapeo_cuentas.get(codigo_cuenta, CATEGORIA_PENDIENTE)
+                categoria = migrar_codigo_antiguo(categoria, self._migracion_codigos)
+                
+                if categoria == CATEGORIA_NEUTRAL:
+                    montos_por_concepto_semana[CATEGORIA_NEUTRAL][semana_iso] += cp.get('balance', 0)
+                    continue
+                
+                monto = -1 * cp.get('balance', 0)
+                
+                if categoria not in montos_por_concepto_semana:
+                    montos_por_concepto_semana[categoria] = {s: 0.0 for s in semanas_lista}
+                
+                montos_por_concepto_semana[categoria][semana_iso] += monto
+                
+                if categoria not in cuentas_por_concepto:
+                    cuentas_por_concepto[categoria] = {}
+                if codigo_cuenta not in cuentas_por_concepto[categoria]:
+                    cuentas_por_concepto[categoria][codigo_cuenta] = {
+                        "codigo": codigo_cuenta,
+                        "nombre": nombre_cuenta,
+                        "monto": 0,
+                        "cantidad": 0
+                    }
+                cuentas_por_concepto[categoria][codigo_cuenta]["monto"] += monto
+                cuentas_por_concepto[categoria][codigo_cuenta]["cantidad"] += 1
+        
+        # 6. Construir estructura por actividad
+        conceptos_por_actividad = {"OPERACION": [], "INVERSION": [], "FINANCIAMIENTO": []}
+        subtotales_por_actividad = {
+            "OPERACION": {s: 0.0 for s in semanas_lista},
+            "INVERSION": {s: 0.0 for s in semanas_lista},
+            "FINANCIAMIENTO": {s: 0.0 for s in semanas_lista}
+        }
+        
+        for c in self.catalogo.get("conceptos", []):
+            if c.get("tipo") != "LINEA":
+                continue
+            
+            c_id = c["id"]
+            c_actividad = c.get("actividad")
+            
+            if c_actividad not in conceptos_por_actividad:
+                continue
+            
+            montos_semana = montos_por_concepto_semana.get(c_id, {})
+            total = sum(montos_semana.values())
+            
+            cuentas_list = list(cuentas_por_concepto.get(c_id, {}).values())
+            
+            concepto_data = {
+                "id": c_id,
+                "codigo": c_id,
+                "nombre": c["nombre"],
+                "tipo": "LINEA",
+                "nivel": c.get("nivel", 3),
+                "order": c.get("orden", 999),
+                "montos_por_mes": {s: round(montos_semana.get(s, 0), 0) for s in semanas_lista},
+                "total": round(total, 0),
+                "cuentas": cuentas_list
+            }
+            
+            conceptos_por_actividad[c_actividad].append(concepto_data)
+            
+            for semana in semanas_lista:
+                subtotales_por_actividad[c_actividad][semana] += montos_semana.get(semana, 0)
+        
+        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            subtotal_semana = subtotales_por_actividad[act_key]
+            resultado["actividades"][act_key] = {
+                "nombre": self._get_actividad_nombre(act_key),
+                "subtotal_por_mes": {s: round(subtotal_semana.get(s, 0), 0) for s in semanas_lista},
+                "subtotal": round(sum(subtotal_semana.values()), 0),
+                "conceptos": conceptos_por_actividad[act_key]
+            }
+        
+        # 7. Efectivo por semana
+        efectivo_acumulado = efectivo_inicial_global
+        for semana in semanas_lista:
+            variacion_semana = sum(
+                subtotales_por_actividad[act].get(semana, 0)
+                for act in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]
+            )
+            efectivo_final_semana = efectivo_acumulado + variacion_semana
+            
+            resultado["efectivo_por_mes"][semana] = {
+                "inicial": round(efectivo_acumulado, 0),
+                "variacion": round(variacion_semana, 0),
+                "final": round(efectivo_final_semana, 0)
+            }
+            efectivo_acumulado = efectivo_final_semana
+        
+        resultado["conciliacion"]["efectivo_final"] = round(efectivo_acumulado, 0)
+        resultado["conciliacion"]["variacion_neta"] = round(
+            sum(resultado["actividades"][a]["subtotal"] for a in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]),
+            0
+        )
+        
+        return resultado
+    
     def _get_actividad_nombre(self, key: str) -> str:
         """Retorna el nombre completo de una actividad."""
         nombres = {

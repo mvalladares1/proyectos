@@ -99,6 +99,54 @@ async def get_flujo_mensualizado(
         raise HTTPException(status_code=500, detail=error_detail)
 
 
+@router.get("/semanal")
+async def get_flujo_semanal(
+    fecha_inicio: str,
+    fecha_fin: str,
+    username: str,
+    password: str,
+    company_id: Optional[int] = None
+):
+    """
+    Obtiene el Estado de Flujo de Efectivo con granularidad SEMANAL.
+    
+    Retorna datos agrupados por semana (ISO week) para visualización con columnas por semana.
+    
+    Args:
+        fecha_inicio: Fecha inicio del período (YYYY-MM-DD)
+        fecha_fin: Fecha fin del período (YYYY-MM-DD)
+        username: Usuario Odoo
+        password: Contraseña Odoo
+        company_id: ID de compañía (opcional)
+    
+    Returns:
+        {
+            "semanas": ["2026-W01", "2026-W02", ...],
+            "actividades": {
+                "OPERACION": {
+                    "conceptos": [
+                        {"id": "1.1.1", "nombre": "Ventas", "montos_por_semana": {"2026-W01": 1000, ...}}
+                    ]
+                }
+            },
+            "efectivo_por_semana": {"2026-W01": {...}, ...}
+        }
+    """
+    try:
+        service = FlujoCajaService(username=username, password=password)
+        resultado = service.get_flujo_semanal(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            company_id=company_id
+        )
+        return resultado
+    except Exception as e:
+        import traceback
+        error_detail = f"{type(e).__name__}: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+        logger.error(f"Error en get_flujo_semanal: {error_detail}")
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
 @router.get("/mapeo")
 async def get_mapeo(
     username: str,

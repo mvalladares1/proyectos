@@ -33,788 +33,16 @@ from .shared import (
     sugerir_categoria, guardar_mapeo_cuenta
 )
 
-# ==================== CSS ENTERPRISE LEVEL ====================
-ENTERPRISE_CSS = """
-<style>
-/* ============ CUSTOM SCROLLBAR ============ */
-.excel-container::-webkit-scrollbar {
-    height: 14px;
-    background: #0a0e1a;
-}
-
-.excel-container::-webkit-scrollbar-track {
-    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-    border-radius: 8px;
-    border: 1px solid #1e293b;
-}
-
-.excel-container::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    border-radius: 8px;
-    border: 2px solid #1e293b;
-    box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
-}
-
-.excel-container::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-}
-
-/* ============ CONTAINER & TABLE BASE ============ */
-.excel-container {
-    width: 100%;
-    overflow-x: auto;
-    overflow-y: visible;
-    border: 3px solid #334155;
-    border-radius: 16px;
-    background: linear-gradient(145deg, #0a0e1a 0%, #1e293b 100%);
-    box-shadow: 
-        0 20px 60px rgba(0, 0, 0, 0.5),
-        inset 0 1px 2px rgba(255,255,255,0.05);
-    position: relative;
-}
-
-.excel-table {
-    width: max-content;
-    min-width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'SF Pro Display', sans-serif;
-    font-size: 0.875rem;
-    color: #e2e8f0;
-}
-
-.excel-table th,
-.excel-table td {
-    padding: 16px 24px;
-    border-bottom: 1px solid #334155;
-    border-right: 1px solid #2d3748;
-    text-align: right;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-}
-
-/* ============ TOOLTIPS ============ */
-.tooltip-wrapper {
-    position: relative;
-    display: inline-block;
-}
-
-.tooltip-text {
-    visibility: hidden;
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    color: #f1f5f9;
-    text-align: left;
-    border-radius: 8px;
-    padding: 12px 16px;
-    position: absolute;
-    z-index: 1000;
-    bottom: 125%;
-    left: 50%;
-    transform: translateX(-50%);
-    min-width: 300px;
-    max-width: 500px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    border: 2px solid #3b82f6;
-    opacity: 0;
-    transition: opacity 0.3s, visibility 0.3s;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    white-space: normal;
-}
-
-.tooltip-text::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -8px;
-    border-width: 8px;
-    border-style: solid;
-    border-color: #3b82f6 transparent transparent transparent;
-}
-
-.tooltip-wrapper:hover .tooltip-text {
-    visibility: visible;
-    opacity: 1;
-}
-
-/* ============ SVG ICONS ============ */
-.icon-expand {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    margin-right: 10px;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    vertical-align: middle;
-}
-
-.icon-expand svg {
-    width: 100%;
-    height: 100%;
-    fill: #60a5fa;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-}
-
-.expanded .icon-expand {
-    transform: rotate(90deg);
-}
-
-.expanded .icon-expand svg {
-    fill: #3b82f6;
-}
-
-/* ============ HEADERS ============ */
-.excel-table thead th {
-    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
-    color: #ffffff;
-    font-weight: 700;
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    white-space: nowrap;
-    border-bottom: 4px solid #3b82f6;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 1.5px;
-    padding: 18px 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.excel-table thead th.frozen {
-    z-index: 150;
-    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
-    border-right: 3px solid #1e3a8a;
-    text-align: left !important;
-    font-size: 0.85rem;
-}
-
-/* ============ FROZEN COLUMN ============ */
-.excel-table td.frozen {
-    position: sticky;
-    left: 0;
-    z-index: 10;
-    border-right: 3px solid #475569 !important;
-    text-align: left !important;
-    font-weight: 500;
-    min-width: 480px;
-    max-width: 480px;
-    white-space: normal !important;
-    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
-}
-
-.excel-table tr.activity-header td.frozen {
-    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
-    color: #ffffff !important;
-    font-weight: 700;
-    font-size: 1rem;
-}
-
-.excel-table tr.subtotal-interno td.frozen {
-    background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.3) 100%) !important;
-    color: #dbeafe !important;
-}
-
-.excel-table tr.subtotal td.frozen {
-    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
-    color: #ffffff !important;
-}
-
-.excel-table tr.grand-total td.frozen {
-    background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
-    color: #ffffff !important;
-}
-
-.excel-table tr.data-row td.frozen {
-    background: #1e293b !important;
-    color: #cbd5e1 !important;
-}
-
-/* ============ ACTIVITY HEADERS ============ */
-.excel-table tr.activity-header td {
-    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-    color: #ffffff;
-    font-weight: 700;
-    font-size: 1rem;
-    padding: 18px 24px;
-    border-top: 4px solid #60a5fa;
-    border-bottom: 3px solid #3b82f6;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
-    letter-spacing: 0.8px;
-}
-
-/* ============ SUBTOTALS ============ */
-.excel-table tr.subtotal-interno td {
-    background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.2) 100%);
-    font-weight: 600;
-    border-top: 2px solid #3b82f6;
-    font-style: italic;
-    color: #bfdbfe;
-    padding: 14px 24px;
-}
-
-.excel-table tr.subtotal td {
-    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
-    font-weight: 700;
-    border-top: 3px solid #60a5fa;
-    border-bottom: 3px solid #60a5fa;
-    color: #ffffff;
-    padding: 16px 24px;
-    box-shadow: 
-        inset 0 1px 3px rgba(255,255,255,0.15),
-        0 2px 8px rgba(59, 130, 246, 0.3);
-}
-
-/* ============ GRAND TOTALS ============ */
-.excel-table tr.grand-total td {
-    background: linear-gradient(135deg, #047857 0%, #10b981 100%);
-    font-weight: 700;
-    font-size: 1rem;
-    border-top: 5px double #34d399;
-    border-bottom: 5px double #34d399;
-    color: #ffffff;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
-    padding: 18px 24px;
-    box-shadow: 
-        0 4px 16px rgba(16, 185, 129, 0.4), 
-        inset 0 1px 3px rgba(255,255,255,0.2);
-    letter-spacing: 0.8px;
-}
-
-/* ============ HEATMAP COLORS ============ */
-.heatmap-very-positive {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%) !important;
-    box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.3);
-}
-
-.heatmap-positive {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(37, 99, 235, 0.08) 100%) !important;
-}
-
-.heatmap-neutral {
-    background: rgba(100, 116, 139, 0.1) !important;
-}
-
-.heatmap-negative {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%) !important;
-}
-
-.heatmap-very-negative {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.2) 100%) !important;
-    box-shadow: inset 0 0 10px rgba(239, 68, 68, 0.4);
-}
-
-/* ============ AMOUNTS STYLING ============ */
-.monto-positivo { 
-    color: #ffffff; 
-    font-weight: 700;
-    text-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
-}
-.monto-negativo { 
-    color: #fca5a5; 
-    font-weight: 700;
-    text-shadow: 0 0 10px rgba(252, 165, 165, 0.3);
-}
-.monto-cero { 
-    color: #94a3b8; 
-    font-weight: 400;
-}
-
-/* ============ SPARKLINE ============ */
-.sparkline {
-    display: inline-block;
-    width: 60px;
-    height: 20px;
-    margin-left: 10px;
-    vertical-align: middle;
-}
-
-.sparkline svg {
-    width: 100%;
-    height: 100%;
-}
-
-/* ============ HOVER EFFECTS ============ */
-.excel-table tr.data-row:hover td {
-    background: rgba(59, 130, 246, 0.15) !important;
-    transform: scale(1.001);
-    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
-}
-
-.excel-table tr.data-row:hover td.frozen {
-    background: rgba(37, 99, 235, 0.3) !important;
-}
-
-.excel-table td.clickable {
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.excel-table td.clickable:hover {
-    background: rgba(59, 130, 246, 0.35) !important;
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
-    z-index: 5;
-}
-
-/* ============ INDENTATION ============ */
-.indent-1 { 
-    padding-left: 28px !important; 
-}
-.indent-2 { 
-    padding-left: 56px !important;
-    border-left: 4px solid rgba(59, 130, 246, 0.4);
-}
-.indent-3 { 
-    padding-left: 84px !important;
-    border-left: 3px solid rgba(100, 116, 139, 0.3);
-}
-.indent-4 { 
-    padding-left: 112px !important;
-    border-left: 2px solid rgba(100, 116, 139, 0.2);
-}
-
-/* ============ EXPANDABLE ROWS ============ */
-.expandable {
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.expandable:hover {
-    background: rgba(59, 130, 246, 0.12) !important;
-}
-
-.detail-row {
-    display: table-row;
-    animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.detail-row:hover td {
-    background: rgba(59, 130, 246, 0.15) !important;
-}
-
-.detail-row td {
-    background: #0a0e1a !important;
-    font-size: 0.8rem;
-    color: #94a3b8;
-    padding: 12px 24px !important;
-    border-left: 4px solid #1e40af;
-}
-
-.detail-row td.frozen {
-    background: #0a0e1a !important;
-    padding-left: 120px !important;
-    font-style: italic;
-    color: #cbd5e1;
-}
-
-/* ============ TOTAL COLUMN HIGHLIGHT ============ */
-.excel-table td:last-child,
-.excel-table th:last-child {
-    background: rgba(59, 130, 246, 0.15) !important;
-    border-left: 4px solid #3b82f6;
-    font-weight: 700;
-    box-shadow: 
-        inset 3px 0 8px rgba(0, 0, 0, 0.2),
-        0 0 15px rgba(59, 130, 246, 0.2);
-}
-
-.excel-table th:last-child {
-    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
-}
-
-.excel-table tr.grand-total td:last-child {
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
-    box-shadow: 
-        0 0 25px rgba(16, 185, 129, 0.5), 
-        inset 3px 0 10px rgba(0, 0, 0, 0.3);
-}
-
-/* ============ ZEBRA STRIPES ============ */
-.excel-table tr.data-row:nth-child(even) td {
-    background: rgba(15, 23, 42, 0.6);
-}
-
-.excel-table tr.data-row:nth-child(odd) td {
-    background: rgba(30, 41, 59, 0.4);
-}
-
-.excel-table tr.data-row:nth-child(even) td.frozen {
-    background: #1a2332 !important;
-}
-
-.excel-table tr.data-row:nth-child(odd) td.frozen {
-    background: #1e293b !important;
-}
-
-/* ============ FONTS ============ */
-.excel-table td:not(.frozen) {
-    font-family: 'SF Mono', 'Consolas', 'Monaco', 'Roboto Mono', monospace;
-    font-size: 0.875rem;
-    font-weight: 500;
-}
-
-.excel-table td.frozen {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
-    line-height: 1.6;
-}
-
-/* ============ NOTES/COMMENTS ============ */
-.note-indicator {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 12px;
-    height: 12px;
-    background: #fbbf24;
-    border-radius: 50%;
-    border: 2px solid #1e293b;
-    box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.2); opacity: 0.7; }
-}
-
-/* ============ SEARCH HIGHLIGHT ============ */
-.search-highlight {
-    background: rgba(251, 191, 36, 0.4) !important;
-    box-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
-    animation: highlightPulse 1s;
-}
-
-@keyframes highlightPulse {
-    0% { background: rgba(251, 191, 36, 0.8); }
-    100% { background: rgba(251, 191, 36, 0.4); }
-}
-
-/* ============ DRAG & DROP ============ */
-.draggable {
-    cursor: move;
-}
-
-.dragging {
-    opacity: 0.5;
-    background: rgba(59, 130, 246, 0.3) !important;
-}
-
-.drop-target {
-    border-top: 3px dashed #3b82f6 !important;
-    background: rgba(59, 130, 246, 0.1) !important;
-}
-
-/* ============ SCROLL HINT ============ */
-.scroll-hint {
-    text-align: center;
-    padding: 14px;
-    color: #94a3b8;
-    font-size: 0.75rem;
-    background: linear-gradient(90deg, 
-        transparent, 
-        rgba(59,130,246,0.2) 20%, 
-        rgba(59,130,246,0.2) 80%, 
-        transparent);
-    border-top: 2px solid #334155;
-    font-weight: 600;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-</style>
-"""
-
-# ==================== JAVASCRIPT AVANZADO ====================
-ENTERPRISE_JS = """
-<script>
-// ============ GLOBAL STATE ============
-let expandedConcepts = new Set();
-let searchTerm = '';
-let activeFilters = new Set(['OPERACION', 'INVERSION', 'FINANCIAMIENTO']);
-let notesData = {};
-
-// ============ EXPAND/COLLAPSE ============
-function toggleConcept(conceptId) {
-    const rows = document.querySelectorAll('.detail-' + conceptId);
-    const parent = document.querySelector('.parent-' + conceptId);
-    const icon = parent.querySelector('.icon-expand');
-    
-    const isExpanded = expandedConcepts.has(conceptId);
-    
-    rows.forEach(row => {
-        row.style.display = isExpanded ? 'none' : 'table-row';
-    });
-    
-    if (isExpanded) {
-        expandedConcepts.delete(conceptId);
-        parent.classList.remove('expanded');
-    } else {
-        expandedConcepts.add(conceptId);
-        parent.classList.add('expanded');
-    }
-}
-
-// ============ EXPAND ALL / COLLAPSE ALL ============
-function expandAll() {
-    document.querySelectorAll('.expandable').forEach(parent => {
-        const conceptId = parent.classList[2].replace('parent-', '');
-        if (!expandedConcepts.has(conceptId)) {
-            toggleConcept(conceptId);
-        }
-    });
-}
-
-function collapseAll() {
-    document.querySelectorAll('.expandable').forEach(parent => {
-        const conceptId = parent.classList[2].replace('parent-', '');
-        if (expandedConcepts.has(conceptId)) {
-            toggleConcept(conceptId);
-        }
-    });
-}
-
-// ============ SEARCH ============
-function searchTable(term) {
-    searchTerm = term.toLowerCase();
-    const rows = document.querySelectorAll('.data-row, .detail-row');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        const matches = text.includes(searchTerm);
-        
-        row.style.display = matches || searchTerm === '' ? 'table-row' : 'none';
-        
-        if (matches && searchTerm !== '') {
-            row.classList.add('search-highlight');
-            setTimeout(() => row.classList.remove('search-highlight'), 2000);
-        }
-    });
-}
-
-// ============ FILTER BY ACTIVITY ============
-function toggleFilter(activity) {
-    if (activeFilters.has(activity)) {
-        activeFilters.delete(activity);
-    } else {
-        activeFilters.add(activity);
-    }
-    applyFilters();
-}
-
-function applyFilters() {
-    const activitySections = {
-        'OPERACION': document.querySelectorAll('.tipo-op').parentElement,
-        'INVERSION': document.querySelectorAll('.tipo-inv').parentElement,
-        'FINANCIAMIENTO': document.querySelectorAll('.tipo-fin').parentElement
-    };
-    
-    // Simple show/hide based on filters
-    document.querySelectorAll('.activity-header').forEach((header, idx) => {
-        const activities = ['OPERACION', 'INVERSION', 'FINANCIAMIENTO'];
-        const activity = activities[idx];
-        
-        let currentRow = header.nextElementSibling;
-        const visible = activeFilters.has(activity);
-        
-        header.style.display = visible ? 'table-row' : 'none';
-        
-        while (currentRow && !currentRow.classList.contains('activity-header')) {
-            currentRow.style.display = visible ? 'table-row' : 'none';
-            currentRow = currentRow.nextElementSibling;
-        }
-    });
-}
-
-// ============ DRILL-DOWN MODAL ============
-function showDrillDown(conceptId, conceptName, data) {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>${conceptId} - ${conceptName}</h2>
-                <button onclick="this.closest('.modal-overlay').remove()">✕</button>
-            </div>
-            <div class="modal-body">
-                <h3>Cuentas que componen este concepto:</h3>
-                <div id="drill-down-data"></div>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-
-// ============ NOTES/COMMENTS ============
-function addNote(conceptId, cellId) {
-    const note = prompt('Agregar nota para ' + conceptId + ':');
-    if (note) {
-        notesData[cellId] = note;
-        // Add note indicator
-        const cell = document.getElementById(cellId);
-        if (cell && !cell.querySelector('.note-indicator')) {
-            const indicator = document.createElement('span');
-            indicator.className = 'note-indicator';
-            indicator.title = note;
-            cell.appendChild(indicator);
-        }
-    }
-}
-
-function showNote(cellId) {
-    const note = notesData[cellId];
-    if (note) {
-        alert(note);
-    }
-}
-
-// ============ DRAG & DROP ============
-let draggedRow = null;
-
-function handleDragStart(e) {
-    draggedRow = this;
-    this.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleDragOver(e) {
-    if (e.preventDefault) {
-        e.preventDefault();
-    }
-    e.dataTransfer.dropEffect = 'move';
-    this.classList.add('drop-target');
-    return false;
-}
-
-function handleDragLeave(e) {
-    this.classList.remove('drop-target');
-}
-
-function handleDrop(e) {
-    if (e.stopPropagation) {
-        e.stopPropagation();
-    }
-    
-    if (draggedRow !== this) {
-        const parent = this.parentNode;
-        parent.insertBefore(draggedRow, this);
-    }
-    
-    this.classList.remove('drop-target');
-    return false;
-}
-
-function handleDragEnd(e) {
-    this.classList.remove('dragging');
-    document.querySelectorAll('.drop-target').forEach(el => {
-        el.classList.remove('drop-target');
-    });
-}
-
-// ============ INITIALIZE ============
-document.addEventListener('DOMContentLoaded', function() {
-    // Enable drag & drop on draggable rows
-    document.querySelectorAll('.draggable').forEach(row => {
-        row.addEventListener('dragstart', handleDragStart);
-        row.addEventListener('dragover', handleDragOver);
-        row.addEventListener('dragleave', handleDragLeave);
-        row.addEventListener('drop', handleDrop);
-        row.addEventListener('dragend', handleDragEnd);
-    });
-});
-</script>
-"""
-
-# ==================== SVG ICONS ====================
-SVG_ICONS = {
-    "chevron": '''<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-        <path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/>
-    </svg>''',
-    "chart": '''<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
-    </svg>''',
-    "note": '''<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-    </svg>'''
-}
-
-
-def _generate_sparkline(values: list) -> str:
-    """Genera un mini gráfico SVG de tendencia."""
-    if not values or len(values) < 2:
-        return ""
-    
-    max_val = max(abs(v) for v in values) or 1
-    normalized = [(v / max_val) * 10 + 10 for v in values]
-    
-    points = " ".join([f"{i*10},{20-n}" for i, n in enumerate(normalized)])
-    
-    color = "#34d399" if values[-1] > 0 else "#fca5a5"
-    
-    return f'''<span class="sparkline">
-        <svg viewBox="0 0 {len(values)*10} 20" preserveAspectRatio="none">
-            <polyline points="{points}" 
-                fill="none" 
-                stroke="{color}" 
-                stroke-width="2" 
-                stroke-linecap="round"/>
-        </svg>
-    </span>'''
-
-
-def _get_heatmap_class(value: float, max_abs: float) -> str:
-    """Determina la clase heatmap según el valor."""
-    if max_abs == 0:
-        return "heatmap-neutral"
-    
-    ratio = value / max_abs
-    
-    if ratio > 0.6:
-        return "heatmap-very-positive"
-    elif ratio > 0.2:
-        return "heatmap-positive"
-    elif ratio < -0.6:
-        return "heatmap-very-negative"
-    elif ratio < -0.2:
-        return "heatmap-negative"
-    else:
-        return "heatmap-neutral"
-
-
-def _fmt_monto_html(valor: float, include_class: bool = True) -> str:
-    """Formatea un monto con color según signo."""
-    if valor > 0:
-        cls = "monto-positivo" if include_class else ""
-        return f'<span class="{cls}">${valor:,.0f}</span>'
-    elif valor < 0:
-        cls = "monto-negativo" if include_class else ""
-        return f'<span class="{cls}">-${abs(valor):,.0f}</span>'
-    else:
-        cls = "monto-cero" if include_class else ""
-        return f'<span class="{cls}">$0</span>'
-
-
-def _nombre_mes_corto(mes_str: str) -> str:
-    """Convierte '2026-01' a 'Ene 26'."""
-    meses_nombres = {
-        "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
-        "05": "May", "06": "Jun", "07": "Jul", "08": "Ago",
-        "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic"
-    }
-    parts = mes_str.split("-")
-    if len(parts) == 2:
-        return f"{meses_nombres.get(parts[1], parts[1])} {parts[0][2:]}"
-    return mes_str
+# ==================== IMPORTAR MÓDULOS ====================
+from .flujo_caja import (
+    ENTERPRISE_CSS,
+    ENTERPRISE_JS,
+    SVG_ICONS,
+    generate_sparkline,
+    get_heatmap_class,
+    fmt_monto_html,
+    nombre_mes_corto
+)
 
 
 @st.fragment
@@ -899,7 +127,7 @@ def render(username: str, password: str):
         if cache_key not in st.session_state:
             with st.spinner("🚀 Cargando datos con procesamiento avanzado..."):
                 try:
-                    # Determinar endpoint según agrupación
+                    # Determinar endpoint según agrupación seleccionada
                     endpoint = "semanal" if tipo_periodo == "Semanal" else "mensual"
                     resp = requests.get(
                         f"{FLUJO_CAJA_URL}/{endpoint}",
@@ -1038,7 +266,7 @@ def render(username: str, password: str):
         html_parts.append('<thead><tr>')
         html_parts.append('<th class="frozen">CONCEPTO</th>')
         for mes in meses_lista:
-            html_parts.append(f'<th>{_nombre_mes_corto(mes)}</th>')
+            html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
         html_parts.append('<th><strong>TOTAL</strong></th>')
         html_parts.append('</tr></thead>')
         
@@ -1131,13 +359,13 @@ def render(username: str, password: str):
                 for mes in meses_lista:
                     monto_mes = montos_mes.get(mes, 0)
                     valores_lista.append(monto_mes)
-                    heatmap_class = _get_heatmap_class(monto_mes, max_abs)
+                    heatmap_class = get_heatmap_class(monto_mes, max_abs)
                     cell_id = f"cell_{c_id_safe}_{mes}"
-                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{_fmt_monto_html(monto_mes)}</td>')
+                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
                 
                 # Total con SPARKLINE
-                sparkline = _generate_sparkline(valores_lista)
-                html_parts.append(f'<td><strong>{_fmt_monto_html(c_total)}</strong>{sparkline}</td>')
+                sparkline = generate_sparkline(valores_lista)
+                html_parts.append(f'<td><strong>{fmt_monto_html(c_total)}</strong>{sparkline}</td>')
                 html_parts.append('</tr>')
                 
                 # Detail rows
@@ -1153,9 +381,9 @@ def render(username: str, password: str):
                         
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
-                            html_parts.append(f'<td>{_fmt_monto_html(m_acc)}</td>')
+                            html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
                         
-                        html_parts.append(f'<td>{_fmt_monto_html(cuenta_monto)}</td>')
+                        html_parts.append(f'<td>{fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
             
             # Subtotal de actividad
@@ -1163,8 +391,8 @@ def render(username: str, password: str):
             html_parts.append(f'<td class="frozen"><strong>Subtotal {act_key}</strong></td>')
             for mes in meses_lista:
                 monto_mes_sub = act_subtotal_por_mes.get(mes, 0)
-                html_parts.append(f'<td>{_fmt_monto_html(monto_mes_sub)}</td>')
-            html_parts.append(f'<td><strong>{_fmt_monto_html(act_subtotal)}</strong></td>')
+                html_parts.append(f'<td>{fmt_monto_html(monto_mes_sub)}</td>')
+            html_parts.append(f'<td><strong>{fmt_monto_html(act_subtotal)}</strong></td>')
             html_parts.append('</tr>')
         
         # Grand Totals
@@ -1172,24 +400,24 @@ def render(username: str, password: str):
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
         for mes in meses_lista:
             variacion_mes = EFECTIVO_por_mes.get(mes, {}).get("variacion", 0)
-            html_parts.append(f'<td>{_fmt_monto_html(variacion_mes)}</td>')
-        html_parts.append(f'<td><strong>{_fmt_monto_html(variacion)}</strong></td>')
+            html_parts.append(f'<td>{fmt_monto_html(variacion_mes)}</td>')
+        html_parts.append(f'<td><strong>{fmt_monto_html(variacion)}</strong></td>')
         html_parts.append('</tr>')
         
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
         for mes in meses_lista:
             ef_ini_mes = EFECTIVO_por_mes.get(mes, {}).get("inicial", ef_ini)
-            html_parts.append(f'<td>{_fmt_monto_html(ef_ini_mes)}</td>')
-        html_parts.append(f'<td><strong>{_fmt_monto_html(ef_ini)}</strong></td>')
+            html_parts.append(f'<td>{fmt_monto_html(ef_ini_mes)}</td>')
+        html_parts.append(f'<td><strong>{fmt_monto_html(ef_ini)}</strong></td>')
         html_parts.append('</tr>')
         
         html_parts.append(f'<tr class="grand-total">')
-        html_parts.append(f'<td class="frozen"><strong>�EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
+        html_parts.append('<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
         for mes in meses_lista:
             ef_fin_mes = EFECTIVO_por_mes.get(mes, {}).get("final", ef_fin)
-            html_parts.append(f'<td>{_fmt_monto_html(ef_fin_mes)}</td>')
-        html_parts.append(f'<td><strong>{_fmt_monto_html(ef_fin)}</strong></td>')
+            html_parts.append(f'<td>{fmt_monto_html(ef_fin_mes)}</td>')
+        html_parts.append(f'<td><strong>{fmt_monto_html(ef_fin)}</strong></td>')
         html_parts.append('</tr>')
         
         html_parts.append('</tbody>')
@@ -1213,9 +441,9 @@ def render(username: str, password: str):
             for act in actividades.values()
         )
         altura_base = 150 + (num_conceptos * 60) + (num_cuentas_total * 45) + 250
-        # Usar altura generosa, mínimo 1000px, máximo 5000px
-        altura_final = max(min(altura_base, 5000), 1000)
-        components.html(full_html, height=altura_final, scrolling=True)
+        # Usar altura generosa para mostrar todo sin scroll vertical interno
+        altura_final = max(altura_base + 200, 1500)
+        components.html(full_html, height=altura_final, scrolling=False)
         
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:

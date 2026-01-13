@@ -40,8 +40,58 @@ if not username or not password:
 # Inicializar session state del módulo
 shared.init_session_state()
 
-# Sidebar de configuración
-# (Sin configuración específica para heredar estilo global)
+# CSS Global Forzado (Dark Mode)
+# CSS Global Forzado (Dark Mode) - INLINED to avoid cache issues
+st.markdown("""
+<style>
+    /* Force Dark Theme Main Colors */
+    [data-testid="stAppViewContainer"] { 
+        background-color: #0e1117 !important; 
+        color: #ffffff !important;
+    }
+    [data-testid="stHeader"] { 
+        background-color: rgba(14, 17, 23, 0.9) !important; 
+    }
+    [data-testid="stSidebar"] { 
+        background-color: #262730 !important; 
+        color: #ffffff !important;
+    }
+    
+    /* Text Colors */
+    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown, .stCaption {
+        color: #ffffff !important;
+    }
+    
+    /* Standard Card Style */
+    .info-card {
+        background-color: #1e293b;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+    
+    /* Inputs */
+    .stTextInput input, .stSelectbox, .stDateInput input, .stNumberInput input {
+        color: #ffffff !important; 
+        background-color: #1a1c23 !important;
+        border-color: #334155 !important;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: transparent !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #94a3b8 !important;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: #3b82f6 !important;
+        border-bottom-color: #3b82f6 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # Título principal

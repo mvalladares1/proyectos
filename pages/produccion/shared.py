@@ -40,6 +40,50 @@ ESTADOS_MAP = {
     'cancel': 'Cancelado'
 }
 
+CSS_FORCE_DARK = """
+<style>
+    /* Force Dark Theme Main Colors */
+    [data-testid="stAppViewContainer"] { 
+        background-color: #0e1117 !important; 
+        color: #ffffff !important;
+    }
+    [data-testid="stHeader"] { 
+        background-color: rgba(14, 17, 23, 0.9) !important; 
+    }
+    [data-testid="stSidebar"] { 
+        background-color: #262730 !important; 
+        color: #ffffff !important;
+    }
+    
+    /* Text Colors */
+    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
+        color: #ffffff !important;
+    }
+    
+    /* Standard Card Style (Matches Recepciones/Enterprise) */
+    .info-card {
+        background-color: #1e293b;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+    
+    /* Inputs */
+    .stTextInput input, .stSelectbox, .stDateInput input {
+        color: #ffffff !important; 
+        background-color: #1a1c23 !important;
+    }
+    
+    /* Global Overrides */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+</style>
+"""
+
 
 # --------------------- Funciones de formateo ---------------------
 

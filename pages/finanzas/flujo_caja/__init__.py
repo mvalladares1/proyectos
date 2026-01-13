@@ -1,0 +1,29 @@
+"""
+Módulo de Flujo de Caja - Estado de Flujo de Efectivo NIIF IAS 7
+
+Estructura modular:
+- styles.py: CSS y estilos visuales
+- components.py: Componentes HTML/JS (tooltips, iconos, etc.)
+- formatters.py: Funciones de formateo y utilidades
+- render.py: Lógica principal de renderizado
+"""
+from .styles import ENTERPRISE_CSS
+from .components import ENTERPRISE_JS, SVG_ICONS
+from .formatters import (
+    generate_sparkline,
+    get_heatmap_class,
+    fmt_monto_html,
+    nombre_mes_corto
+)
+
+__all__ = [
+    'ENTERPRISE_CSS',
+    'ENTERPRISE_JS',
+    'SVG_ICONS',
+    'generate_sparkline',
+    'get_heatmap_class',
+    'fmt_monto_html',
+    'nombre_mes_corto'
+]
+
+__all__ = ['render']
