@@ -225,25 +225,25 @@ def _render_status_group(df_status):
         if df_sub.empty:
             return
         
-        # Agrupar por Sala_Clean
-        counts = df_sub['Sala_Clean'].value_counts().reset_index()
-        counts.columns = ['Sala', 'Cantidad']
+        # Agrupar por Sala_Clean y sumar product_qty (Kilogramos)
+        counts = df_sub.groupby('Sala_Clean')['product_qty'].sum().reset_index()
+        counts.columns = ['Sala', 'Kilos']
         counts = counts.sort_values('Sala')
         
         data_bars = []
         for i, row in enumerate(counts.itertuples()):
             color = COLORS[(base_color_index + i) % len(COLORS)]
-            data_bars.append({"value": int(row.Cantidad), "itemStyle": {"color": color}})
+            data_bars.append({"value": int(row.Kilos), "itemStyle": {"color": color}})
 
         options = {
             "title": {"text": title, "textStyle": {"color": label_color, "fontSize": 14}},
             "xAxis": {"type": "category", "data": counts['Sala'].tolist(), "axisLabel": {"color": "#8892b0", "rotate": 30}},
-            "yAxis": {"type": "value", "splitLine": {"lineStyle": {"color": grid_color}}},
-            "tooltip": {"trigger": "item", "formatter": "{b}: <b>{c} OFs</b>"},
+            "yAxis": {"type": "value", "name": "kg", "splitLine": {"lineStyle": {"color": grid_color}}},
+            "tooltip": {"trigger": "item", "formatter": "{b}: <b>{c} kg</b>"},
             "series": [{
                 "data": data_bars,
                 "type": "bar",
-                "label": {"show": True, "position": "top", "color": label_color, "formatter": "{c}"},
+                "label": {"show": True, "position": "top", "color": label_color, "formatter": "{c} kg"},
                 "barWidth": "50%"
             }],
             "backgroundColor": "rgba(0,0,0,0)",
@@ -255,11 +255,11 @@ def _render_status_group(df_status):
     
     if "Salas de Proceso" in vistas_graficos:
         with col_g1 if "Estáticos / Congelación" in vistas_graficos else st.container():
-            _render_echarts_bar_by_room(df_sala, "🏭 OFs por Sala de Proceso", 0)
+            _render_echarts_bar_by_room(df_sala, "🏭 Kilos por Sala de Proceso", 0)
     
     if "Estáticos / Congelación" in vistas_graficos:
         with col_g2 if "Salas de Proceso" in vistas_graficos else st.container():
-            _render_echarts_bar_by_room(df_congelado, "❄️ OFs por Túnel / Estático", 4)
+            _render_echarts_bar_by_room(df_congelado, "❄️ Kilos por Túnel / Estático", 4)
 
     st.markdown("---")
 
