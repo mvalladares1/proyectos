@@ -18,9 +18,59 @@ from .shared import (
 @st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Detalle de OF."""
+    # 1. Estados iniciales y Filtros rápidos (AL TOP)
+    if "production_ofs" not in st.session_state:
+        st.session_state["production_ofs"] = []
+    if "production_current_of" not in st.session_state:
+        st.session_state["production_current_of"] = None
+    if "prod_error" not in st.session_state:
+        st.session_state["prod_error"] = None
+
+    # Filtros de búsqueda (Directamente visibles)
+    st.markdown("##### 🔍 Filtros de Consulta")
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+    start_date = col1.date_input("Desde", value=date.today() - timedelta(days=180), key="prod_filter_start", format="DD/MM/YYYY")
+    end_date = col2.date_input("Hasta", value=date.today(), key="prod_filter_end", format="DD/MM/YYYY")
+    planta_sel = col3.selectbox("Planta", options=["Todas", "RIO FUTURO", "VILKUN"], index=0, key="prod_filter_planta")
+    state_label = col4.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_filter_state")
+    state_filter = STATE_OPTIONS[state_label]
+
+    btn_col1, btn_col2 = st.columns(2)
+    if btn_col1.button("Buscar órdenes", type="primary", key="btn_buscar_ordenes"):
+        st.session_state["prod_error"] = None
+        skeleton = st.empty()
+        with skeleton.container():
+            st.markdown("""
+            <div style="animation: pulse 1.5s infinite;">
+                <div style="height: 40px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px;"></div>
+                <div style="height: 40px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px;"></div>
+                <div style="height: 40px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px;"></div>
+            </div>
+            <style>@keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 0.3; } 100% { opacity: 0.6; } }</style>
+            """, unsafe_allow_html=True)
+        
+        try:
+            results = fetch_ordenes(
+                username, password,
+                start_date.isoformat(), end_date.isoformat(),
+                state_filter
+            )
+            st.session_state["production_ofs"] = results
+        except Exception as error:
+            st.session_state["prod_error"] = f"Error al buscar órdenes: {error}"
+        finally:
+            skeleton.empty()
+    
+    if btn_col2.button("Limpiar resultados", type="secondary", key="btn_limpiar_ordenes"):
+        st.session_state["production_ofs"] = []
+        st.session_state["production_current_of"] = None
+        st.cache_data.clear()
+
+    st.markdown("---")
+
+    # 2. Título e Indicadores principales
     st.subheader("📋 Detalle de Órdenes de Fabricación")
     
-    # KPIs rápidos
     with st.spinner("Cargando indicadores..."):
         try:
             kpis = fetch_kpis(username, password)
@@ -29,75 +79,18 @@ def render(username: str, password: str):
             kpis = {}
 
     if kpis:
-        cols = st.columns(5)
+        cols = st.columns(3)
+        pendientes_total = kpis.get("ordenes_progress", 0) + kpis.get("ordenes_confirmed", 0) + kpis.get("ordenes_to_close", 0)
+        
         metrics = [
-            ("Total órdenes", kpis.get("total_ordenes", 0), ""),
-            ("En progreso", kpis.get("ordenes_progress", 0), ""),
-            ("Confirmadas", kpis.get("ordenes_confirmed", 0), ""),
-            ("Completadas", kpis.get("ordenes_done", 0), ""),
-            ("Por cerrar", kpis.get("ordenes_to_close", 0), ""),
+            ("Total Órdenes", kpis.get("total_ordenes", 0), ""),
+            ("📊 PENDIENTES", pendientes_total, ""),
+            ("✅ COMPLETADAS", kpis.get("ordenes_done", 0), ""),
         ]
         render_metrics_row(cols, metrics)
 
-    st.markdown("---")
-
-    # Estado de sesión
-    if "production_ofs" not in st.session_state:
-        st.session_state["production_ofs"] = []
-    if "production_current_of" not in st.session_state:
-        st.session_state["production_current_of"] = None
-    if "prod_error" not in st.session_state:
-        st.session_state["prod_error"] = None
-
     if st.session_state["prod_error"]:
         st.error(st.session_state["prod_error"])
-
-    # Filtros de búsqueda
-    with st.expander("🔍 Filtros de búsqueda", expanded=True):
-        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-        start_date = col1.date_input("Desde", value=date.today() - timedelta(days=180), key="prod_filter_start", format="DD/MM/YYYY")
-        end_date = col2.date_input("Hasta", value=date.today(), key="prod_filter_end", format="DD/MM/YYYY")
-        planta_sel = col3.selectbox("Planta", options=["Todas", "RIO FUTURO", "VILKUN"], index=0, key="prod_filter_planta")
-        state_label = col4.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_filter_state")
-        state_filter = STATE_OPTIONS[state_label]
-
-        btn_col1, btn_col2 = st.columns(2)
-        if btn_col1.button("Buscar órdenes", type="primary", key="btn_buscar_ordenes"):
-            st.session_state["prod_error"] = None  # Limpiar error
-            # SKELETON LOADER
-            skeleton = st.empty()
-            with skeleton.container():
-                st.markdown("""
-                <div style="animation: pulse 1.5s infinite;">
-                    <div style="height: 40px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px;"></div>
-                    <div style="height: 40px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px;"></div>
-                    <div style="height: 40px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px;"></div>
-                </div>
-                <style>@keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 0.3; } 100% { opacity: 0.6; } }</style>
-                """, unsafe_allow_html=True)
-            
-            # with st.spinner("Consultando órdenes..."):
-                try:
-                    results = fetch_ordenes(
-                        username, password,
-                        start_date.isoformat(), end_date.isoformat(),
-                        state_filter
-                    )
-                    st.session_state["production_ofs"] = results
-                    if results:
-                        st.success(f"{len(results)} órdenes encontradas")
-                    else:
-                        st.info("No se encontraron órdenes en el rango solicitado")
-                except Exception as error:
-                    st.session_state["prod_error"] = f"Error al buscar órdenes: {error}"
-                    st.error(st.session_state["prod_error"])
-                finally:
-                    skeleton.empty()
-        
-        if btn_col2.button("Limpiar resultados", type="secondary", key="btn_limpiar_ordenes"):
-            st.session_state["production_ofs"] = []
-            st.session_state["production_current_of"] = None
-            st.cache_data.clear()
 
     # PLACEHOLDER PARA CONTENIDO - evita que se muestre debajo del skeleton
     content_placeholder = st.container()
@@ -131,18 +124,11 @@ def render(username: str, password: str):
             df_full['Pendiente'] = (df_full['product_qty'] - df_full['qty_produced']).clip(lower=0)
             df_full['% Avance'] = (df_full['qty_produced'] / df_full['product_qty'] * 100).fillna(0).clip(upper=100)
             df_full['PSP'] = df_full['product_id'].apply(lambda x: "✅" if "PSP" in clean_name(x).upper() or clean_name(x).startswith(('[2.', '[2,')) else "")
-            df_full['Estado_Label'] = df_full['state'].apply(lambda x: "Abierta" if x not in ['done', 'cancel'] else "Cerrada")
+            df_full['Estado_Label'] = df_full['state'].apply(lambda x: "Pendiente" if x not in ['done', 'cancel'] else "Cerrada")
             df_full['Sala_Clean'] = df_full['x_studio_sala_de_proceso'].apply(lambda x: x if x and x is not False else "Sin Sala")
 
-            # Selector de Vista
-            view_mode = st.radio("Modo de Visualización", ["📍 Seguimiento por Sala", "📋 Tabla Detallada"], horizontal=True, key="prod_view_mode")
-            
             st.markdown("---")
-
-            if view_mode == "📍 Seguimiento por Sala":
-                _render_grouped_view(df_full)
-            else:
-                _render_table_view(df_full)
+            _render_grouped_view(df_full)
 
             st.markdown("---")
             # Selector para detalle individual
@@ -198,10 +184,10 @@ def render(username: str, password: str):
 
 def _render_grouped_view(df):
     """Renderiza las órdenes agrupadas por Estado, Planta y Sala."""
-    tabs_estado = st.tabs(["🔄 Órdenes Abiertas", "✅ Órdenes Cerradas"])
+    tabs_estado = st.tabs(["🔄 Órdenes Pendientes", "✅ Órdenes Cerradas"])
     
-    with tabs_estado[0]: # ABIERTAS
-        _render_status_group(df[df['Estado_Label'] == "Abierta"])
+    with tabs_estado[0]: # PENDIENTES
+        _render_status_group(df[df['Estado_Label'] == "Pendiente"])
         
     with tabs_estado[1]: # CERRADAS
         _render_status_group(df[df['Estado_Label'] == "Cerrada"])
@@ -258,26 +244,6 @@ def _render_of_card(row):
         """, unsafe_allow_html=True)
         st.progress(row['% Avance']/100)
 
-def _render_table_view(df):
-    """Vista de tabla tradicional mejorada."""
-    display_cols = [
-        "name", "Estado_Label", "Planta", "Sala_Clean", "Tipo", "producto",
-        "product_qty", "qty_produced", "Pendiente", "PSP", "Fecha Planif."
-    ]
-    st.dataframe(
-        df[display_cols].rename(columns={
-            "name": "Orden", "Estado_Label": "Estado", "Sala_Clean": "Sala",
-            "product_qty": "Planificado", "qty_produced": "Producido"
-        }),
-        use_container_width=True,
-        height=500,
-        column_config={
-            "Planificado": st.column_config.NumberColumn(format="%d"),
-            "Producido": st.column_config.NumberColumn(format="%d"),
-            "Pendiente": st.column_config.NumberColumn(format="%d"),
-        },
-        hide_index=True
-    )
 
 def _render_detalle_of(data_of):
     """Renderiza el detalle completo de una orden de fabricación."""
