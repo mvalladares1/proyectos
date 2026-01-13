@@ -321,6 +321,11 @@ def render(username: str, password: str):
                 </div>
             """, unsafe_allow_html=True)
 
+            # Configurar tema dinámico para el gráfico
+            theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+            label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+            grid_color = "rgba(255,255,255,0.05)" if theme_echarts == "dark" else "rgba(0,0,0,0.05)"
+
             # Crear Configuración ECharts para Máxima Claridad
             options = {
                 "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
@@ -333,7 +338,7 @@ def render(username: str, password: str):
                     "type": "value",
                     "name": "Kilos",
                     "axisLabel": {"color": "#8892b0"},
-                    "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.05)"}}
+                    "splitLine": {"lineStyle": {"color": grid_color}}
                 },
                 "series": [
                     {
@@ -346,7 +351,7 @@ def render(username: str, password: str):
                         "label": {
                             "show": True,
                             "position": "top",
-                            "color": "#ffffff",
+                            "color": label_color,
                             "formatter": "{c} kg"
                         }
                     }
@@ -363,7 +368,8 @@ def render(username: str, password: str):
                 options=options, 
                 height="500px", 
                 events={"click": "function(params) { return params.name; }"},
-                key="echarts_clas_v1"
+                key="echarts_clas_v1",
+                theme=theme_echarts
             )
             
             # Definir qué grados mostrar (ECharts devuelve el nombre directamente si se configura el evento)

@@ -207,6 +207,9 @@ def _render_status_group(df_status):
 
     # --- Gráficos Comparativos ECharts ---
     col_g1, col_g2 = st.columns(2)
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    grid_color = "rgba(255,255,255,0.05)" if theme_echarts == "dark" else "rgba(0,0,0,0.05)"
 
     def _render_echarts_bar(df_sub, title, color):
         if df_sub.empty:
@@ -218,21 +221,21 @@ def _render_status_group(df_status):
         counts.columns = ['Fecha', 'Cantidad']
         
         options = {
-            "title": {"text": title, "textStyle": {"color": "#ffffff", "fontSize": 14}},
+            "title": {"text": title, "textStyle": {"color": label_color, "fontSize": 14}},
             "xAxis": {"type": "category", "data": counts['Fecha'].tolist(), "axisLabel": {"color": "#8892b0"}},
-            "yAxis": {"type": "value", "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.05)"}}},
+            "yAxis": {"type": "value", "splitLine": {"lineStyle": {"color": grid_color}}},
             "tooltip": {"trigger": "axis"},
             "series": [{
                 "data": counts['Cantidad'].tolist(),
                 "type": "bar",
                 "itemStyle": {"color": color, "borderRadius": [4, 4, 0, 0]},
-                "label": {"show": True, "position": "top", "color": "#ffffff", "formatter": "{c}"},
+                "label": {"show": True, "position": "top", "color": label_color, "formatter": "{c}"},
                 "barWidth": "50%"
             }],
             "backgroundColor": "rgba(0,0,0,0)",
             "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True}
         }
-        st_echarts(options=options, height="250px")
+        st_echarts(options=options, height="250px", theme=theme_echarts)
 
     with col_g1:
         _render_echarts_bar(df_sala, "🏭 Carga Salas de Proceso", "#3498db")
