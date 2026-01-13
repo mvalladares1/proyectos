@@ -1,6 +1,22 @@
 """
-Tab: Flujo de Caja - Excel-Style Design
-Estado de Flujo de Efectivo NIIF IAS 7 con layout mensualizado tipo Excel.
+Tab: Flujo de Caja - Enterprise Design
+Estado de Flujo de Efectivo NIIF IAS 7 - Nivel Premium con todas las funcionalidades avanzadas.
+
+FEATURES:
+- Tooltips inteligentes
+- SVG Icons modernos
+- Mini sparklines
+- Colores condicionales
+- Búsqueda en tiempo real
+- Filtros por actividad
+- Export Excel con formato
+- Comparación YoY
+- Waterfall chart
+- Heatmap
+- Drill-down modal
+- KPIs animados
+- Comentarios/notas
+- Auditoría de cambios
 """
 import streamlit as st
 import streamlit.components.v1 as components
@@ -9,48 +25,55 @@ import requests
 from datetime import datetime, timedelta
 from calendar import monthrange
 import io
+import json
+import base64
 
 from .shared import (
     FLUJO_CAJA_URL, fmt_flujo, fmt_numero, build_ias7_categories_dropdown,
     sugerir_categoria, guardar_mapeo_cuenta
 )
 
-# CSS para diseño profesional corporativo de alta gama
-EXCEL_STYLE_CSS = """
+# ==================== CSS ENTERPRISE LEVEL ====================
+ENTERPRISE_CSS = """
 <style>
-/* Custom Scrollbar - Oscura y elegante */
+/* ============ CUSTOM SCROLLBAR PREMIUM ============ */
 .excel-container::-webkit-scrollbar {
-    height: 12px;
-    background: #0f172a;
+    height: 14px;
+    background: #0a0e1a;
 }
 
 .excel-container::-webkit-scrollbar-track {
-    background: #1e293b;
-    border-radius: 6px;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 8px;
+    border: 1px solid #1e293b;
 }
 
 .excel-container::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #475569 0%, #334155 100%);
-    border-radius: 6px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 8px;
     border: 2px solid #1e293b;
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
 }
 
 .excel-container::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 }
 
-/* Contenedor principal con scroll horizontal */
+/* ============ CONTAINER & TABLE BASE ============ */
 .excel-container {
     width: 100%;
     overflow-x: auto;
     overflow-y: visible;
-    border: 2px solid #334155;
-    border-radius: 12px;
-    background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    border: 3px solid #334155;
+    border-radius: 16px;
+    background: linear-gradient(145deg, #0a0e1a 0%, #1e293b 100%);
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        inset 0 1px 2px rgba(255,255,255,0.05);
+    position: relative;
 }
 
-/* Tabla principal */
 .excel-table {
     width: max-content;
     min-width: 100%;
@@ -61,85 +84,145 @@ EXCEL_STYLE_CSS = """
     color: #e2e8f0;
 }
 
-/* Celdas base */
 .excel-table th,
 .excel-table td {
-    padding: 14px 20px;
+    padding: 16px 24px;
     border-bottom: 1px solid #334155;
-    border-right: 1px solid #334155;
-    white-space: nowrap;
+    border-right: 1px solid #2d3748;
     text-align: right;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
 }
 
-/* Headers - Estilo corporativo premium */
+/* ============ TOOLTIPS ============ */
+.tooltip-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.tooltip-text {
+    visibility: hidden;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: #f1f5f9;
+    text-align: left;
+    border-radius: 8px;
+    padding: 12px 16px;
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 300px;
+    max-width: 500px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    border: 2px solid #3b82f6;
+    opacity: 0;
+    transition: opacity 0.3s, visibility 0.3s;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: normal;
+}
+
+.tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -8px;
+    border-width: 8px;
+    border-style: solid;
+    border-color: #3b82f6 transparent transparent transparent;
+}
+
+.tooltip-wrapper:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* ============ SVG ICONS ============ */
+.icon-expand {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    vertical-align: middle;
+}
+
+.icon-expand svg {
+    width: 100%;
+    height: 100%;
+    fill: #60a5fa;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+.expanded .icon-expand {
+    transform: rotate(90deg);
+}
+
+.expanded .icon-expand svg {
+    fill: #3b82f6;
+}
+
+/* ============ HEADERS PREMIUM ============ */
 .excel-table thead th {
-    background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%) !important;
+    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
     color: #ffffff;
-    font-weight: 600;
+    font-weight: 700;
     position: sticky;
     top: 0;
     z-index: 50;
     white-space: nowrap;
-    border-bottom: 3px solid #3b82f6;
+    border-bottom: 4px solid #3b82f6;
     text-transform: uppercase;
     font-size: 0.75rem;
-    letter-spacing: 1.2px;
-    padding: 16px 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    letter-spacing: 1.5px;
+    padding: 18px 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .excel-table thead th.frozen {
     z-index: 150;
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
-    color: #ffffff !important;
-    border-right: 2px solid #1e3a8a;
+    border-right: 3px solid #1e3a8a;
     text-align: left !important;
-    font-size: 0.8rem;
-    letter-spacing: 0.8px;
+    font-size: 0.85rem;
 }
 
-/* Columna frozen (Concepto) - Mejorada */
+/* ============ FROZEN COLUMN ============ */
 .excel-table td.frozen {
     position: sticky;
     left: 0;
     z-index: 10;
-    border-right: 2px solid #475569 !important;
+    border-right: 3px solid #475569 !important;
     text-align: left !important;
     font-weight: 500;
-    min-width: 420px;
-    max-width: 420px;
+    min-width: 480px;
+    max-width: 480px;
     white-space: normal !important;
-    overflow: visible;
-    text-overflow: clip;
+    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
-/* Ensure frozen cells in special rows have solid backgrounds */
 .excel-table tr.activity-header td.frozen {
     background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
     color: #ffffff !important;
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 1rem;
 }
 
 .excel-table tr.subtotal-interno td.frozen {
-    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%) !important;
-    color: #dbeafe !important;- Corporativo */
-.excel-table tr.activity-header td {
-    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-    color: #ffffff;
-    font-weight: 700;
-    font-size: 0.95rem;
-    padding: 16px 20px;
-    border-top: 3px solid #60a5fa;
-    border-bottom: 2px solid #3b82f6;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
-    letter-spacing: 0.5px
+    background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.3) 100%) !important;
+    color: #dbeafe !important;
+}
+
+.excel-table tr.subtotal td.frozen {
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
+    color: #ffffff !important;
+}
+
 .excel-table tr.grand-total td.frozen {
     background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
     color: #ffffff !important;
-    font-weight: 700;
-    font-size: 0.95rem;
 }
 
 .excel-table tr.data-row td.frozen {
@@ -147,161 +230,204 @@ EXCEL_STYLE_CSS = """
     color: #cbd5e1 !important;
 }
 
-/* Filas de actividad (headers grandes) */
+/* ============ ACTIVITY HEADERS ============ */
 .excel-table tr.activity-header td {
-    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
     color: #ffffff;
     font-weight: 700;
-    font-size: 0.95rem;
-    padding: 12px 16px;
-    border-top: 3px solid #3b82f6;
-    border-bottom: 2px solid #1e40af;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    font-size: 1rem;
+    padding: 18px 24px;
+    border-top: 4px solid #60a5fa;
+    border-bottom: 3px solid #3b82f6;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    letter-spacing: 0.8px;
 }
-- Elegante */
+
+/* ============ SUBTOTALS ============ */
 .excel-table tr.subtotal-interno td {
     background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.2) 100%);
     font-weight: 600;
     border-top: 2px solid #3b82f6;
     font-style: italic;
     color: #bfdbfe;
-    padding: 12px 20px;
+    padding: 14px 24px;
 }
 
-/* Subtotales de actividad - Más destacado */
 .excel-table tr.subtotal td {
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
     font-weight: 700;
     border-top: 3px solid #60a5fa;
     border-bottom: 3px solid #60a5fa;
     color: #ffffff;
-    padding: 14px 20px;
-    box-shadow: inset 0 1px 3px rgba(255,255,255,0.1) 2px solid #3b82f6;
-    color: #dbeafe;- Premium */
+    padding: 16px 24px;
+    box-shadow: 
+        inset 0 1px 3px rgba(255,255,255,0.15),
+        0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* ============ GRAND TOTALS ============ */
 .excel-table tr.grand-total td {
     background: linear-gradient(135deg, #047857 0%, #10b981 100%);
     font-weight: 700;
-    font-size: 0.95rem;
-    border-top: 4px double #34d399;
-    border-bottom: 4px double #34d399;
+    font-size: 1rem;
+    border-top: 5px double #34d399;
+    border-bottom: 5px double #34d399;
     color: #ffffff;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
-    padding: 16px 20px;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2), inset 0 1px 3px rgba(255,255,255,0.15);
-    letter-spacing: - Más visibles y elegantes */
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    padding: 18px 24px;
+    box-shadow: 
+        0 4px 16px rgba(16, 185, 129, 0.4), 
+        inset 0 1px 3px rgba(255,255,255,0.2);
+    letter-spacing: 0.8px;
+}
+
+/* ============ HEATMAP COLORS ============ */
+.heatmap-very-positive {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(5, 150, 105, 0.2) 100%) !important;
+    box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.heatmap-positive {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%) !important;
+}
+
+.heatmap-neutral {
+    background: rgba(100, 116, 139, 0.1) !important;
+}
+
+.heatmap-negative {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%) !important;
+}
+
+.heatmap-very-negative {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.2) 100%) !important;
+    box-shadow: inset 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* ============ AMOUNTS STYLING ============ */
 .monto-positivo { 
     color: #34d399; 
-    font-weight: 600;
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
 }
 .monto-negativo { 
     color: #fca5a5; 
-    font-weight: 600;
-}- Suave y corporativo */
-.excel-table tr.data-row:hover td {
-    background: rgba(59, 130, 246, 0.12) !important;
-    transition: all 0.2s ease;
-    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(252, 165, 165, 0.3);
 }
-- Feedback visual mejorado */
+.monto-cero { 
+    color: #94a3b8; 
+    font-weight: 400;
+}
+
+/* ============ SPARKLINE ============ */
+.sparkline {
+    display: inline-block;
+    width: 60px;
+    height: 20px;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+.sparkline svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* ============ HOVER EFFECTS ============ */
+.excel-table tr.data-row:hover td {
+    background: rgba(59, 130, 246, 0.15) !important;
+    transform: scale(1.001);
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+
+.excel-table tr.data-row:hover td.frozen {
+    background: rgba(37, 99, 235, 0.3) !important;
+}
+
 .excel-table td.clickable {
     cursor: pointer;
-    transition: all 0.2s ease;
-    position: relative;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .excel-table td.clickable:hover {
-    background: rgba(59, 130, 246, 0.25) !important;
-    transform: scale(1.02);
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3)
-.monto-negativo { color: #fc8181; }
-.monto-cero { color: #718096; }
-- Más espacio y visual */
-.indent-1 { 
-    padding-left: 24px !important; 
-}
-.indent-2 { 
-    padding-left: 48px !important;
-    border-left: - Moderno y limpio */
-.tipo-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    padding: 4px 10px;
-    border-radius: 6px;
-    margin-right: 10px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    background: rgba(59, 130, 246, 0.35) !important;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+    z-index: 5;
 }
 
-.tipo-op { 
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%); 
-    color: #ffffff; 
+/* ============ INDENTATION ============ */
+.indent-1 { 
+    padding-left: 28px !important; 
 }
-.tipo-inv { 
-    background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%); 
-    color: #ffffff; 
+.indent-2 { 
+    padding-left: 56px !important;
+    border-left: 4px solid rgba(59, 130, 246, 0.4);
 }
-.tipo-fin { 
-    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); 
-    color: #ffffff; - Más elegante */
-.scroll-hint {
-    text-align: center;
-    padding: 12px;
-    color: #94a3b8;
-    font-size: 0.75rem;
-    background: linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent);
-    border-top: 1px solid #334155;
-    font-weight: 500;
-    letter-spacing:- Más suave */
+.indent-3 { 
+    padding-left: 84px !important;
+    border-left: 3px solid rgba(100, 116, 139, 0.3);
+}
+.indent-4 { 
+    padding-left: 112px !important;
+    border-left: 2px solid rgba(100, 116, 139, 0.2);
+}
+
+/* ============ EXPANDABLE ROWS ============ */
 .expandable {
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
 }
 
 .expandable:hover {
-    background: rgba(59, 130, 246, 0.08) !important;
+    background: rgba(59, 130, 246, 0.12) !important;
 }
 
-.expandable .expand-icon {
-    display: inline-block;
-    width: 20px;
-    margin-right: 8px;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    color: #60a5fa;
-    font-weight: bold;
-}
-
-.expandable.expanded .expand-icon {
-    transform: rotate(90deg);
-    color: #3b82fElegante y legible */
 .detail-row {
     display: table-row;
-    animation: fadeIn 0.3s ease;
+    animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .detail-row:hover td {
-    background: rgba(59, 130, 246, 0.1) !important;
+    background: rgba(59, 130, 246, 0.15) !important;
 }
 
 .detail-row td {
-    background: #0f172a !important;
+    background: #0a0e1a !important;
     font-size: 0.8rem;
     color: #94a3b8;
-    padding: 10px 20px !important;
-    border-left: 3px solid #1e40af;
+    padding: 12px 24px !important;
+    border-left: 4px solid #1e40af;
 }
-- Premium */
+
+.detail-row td.frozen {
+    background: #0a0e1a !important;
+    padding-left: 120px !important;
+    font-style: italic;
+    color: #cbd5e1;
+}
+
+/* ============ TOTAL COLUMN HIGHLIGHT ============ */
 .excel-table td:last-child,
 .excel-table th:last-child {
-    background: rgba(59, 130, 246, 0.12) !important;
-    border-left: 3px solid #475569;
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-left: 4px solid #3b82f6;
     font-weight: 700;
-    box-shadow: inset 2px 0 6px rgba(0, 0, 0, 0.15);
+    box-shadow: 
+        inset 3px 0 8px rgba(0, 0, 0, 0.2),
+        0 0 15px rgba(59, 130, 246, 0.2);
 }
 
 .excel-table th:last-child {
@@ -309,117 +435,360 @@ EXCEL_STYLE_CSS = """
 }
 
 .excel-table tr.grand-total td:last-child {
-    background: linear-gradient(135d- Sutil y elegante */
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+    box-shadow: 
+        0 0 25px rgba(16, 185, 129, 0.5), 
+        inset 3px 0 10px rgba(0, 0, 0, 0.3);
+}
+
+/* ============ ZEBRA STRIPES ============ */
 .excel-table tr.data-row:nth-child(even) td {
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(15, 23, 42, 0.6);
 }
 
 .excel-table tr.data-row:nth-child(odd) td {
-    background: rgba(30, 41, 59, 0.3);
+    background: rgba(30, 41, 59, 0.4);
 }
 
-.excel-table tr.data-row:nth-ch- Más legible */
+.excel-table tr.data-row:nth-child(even) td.frozen {
+    background: #1a2332 !important;
+}
+
+.excel-table tr.data-row:nth-child(odd) td.frozen {
+    background: #1e293b !important;
+}
+
+/* ============ FONTS ============ */
 .excel-table td:not(.frozen) {
     font-family: 'SF Mono', 'Consolas', 'Monaco', 'Roboto Mono', monospace;
     font-size: 0.875rem;
     font-weight: 500;
 }
 
-/* Mejorar legibilidad de texto en frozen */
 .excel-table td.frozen {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
-    line-height: 1.5
-
-.excel-table tr.data-row:nth-child(odd) td.frozen {
-    background: #1e293b
-.expandable .expand-icon {
-    display: inline-block;
-    width: 16px;
-    margin-right: 4px;
-    transition: transform 0.2s;
+    line-height: 1.6;
 }
 
-.expandable.expanded .expand-icon {
-    transform: rotate(90deg);
+/* ============ NOTES/COMMENTS ============ */
+.note-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 12px;
+    height: 12px;
+    background: #fbbf24;
+    border-radius: 50%;
+    border: 2px solid #1e293b;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+    animation: pulse 2s infinite;
 }
 
-/* Detail rows - VISIBLES para ver composición de cuentas */
-.detail-row {
-    display: table-row;
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.7; }
 }
 
-.detail-row:hover td {
-    background: #1a1a30 !important;
+/* ============ SEARCH HIGHLIGHT ============ */
+.search-highlight {
+    background: rgba(251, 191, 36, 0.4) !important;
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+    animation: highlightPulse 1s;
 }
 
-.detail-row td {
-    background: #151525 !important;
+@keyframes highlightPulse {
+    0% { background: rgba(251, 191, 36, 0.8); }
+    100% { background: rgba(251, 191, 36, 0.4); }
+}
+
+/* ============ DRAG & DROP ============ */
+.draggable {
+    cursor: move;
+}
+
+.dragging {
+    opacity: 0.5;
+    background: rgba(59, 130, 246, 0.3) !important;
+}
+
+.drop-target {
+    border-top: 3px dashed #3b82f6 !important;
+    background: rgba(59, 130, 246, 0.1) !important;
+}
+
+/* ============ SCROLL HINT ============ */
+.scroll-hint {
+    text-align: center;
+    padding: 14px;
+    color: #94a3b8;
     font-size: 0.75rem;
-    color: #a0aec0;
-    padding: 4px 12px !important;
-}
-
-.detail-row td.frozen {
-    background: #151525 !important;
-    padding-left: 50px !important;
-    font-style: italic;
-}
-
-/* Columna Total destacada */
-.excel-table td:last-child,
-.excel-table th:last-child {
-    background: rgba(99, 179, 237, 0.08) !important;
-    border-left: 2px solid #4a5568;
-}
-
-.excel-table tr.grand-total td:last-child {
-    background: rgba(72, 187, 120, 0.25) !important;
-}
-
-/* Zebra stripes para mejor lectura */
-.excel-table tr.data-row:nth-child(even) td {
-    background: rgba(59, 130, 246, 0.03);
-}
-
-.excel-table tr.data-row:nth-child(even) td.frozen {
-    background: #1a1f2e !important;
-}
-
-/* Font monospace para números */
-.excel-table td:not(.frozen) {
-    font-family: 'Consolas', 'Monaco', monospace;
-}
-
-/* CSS-only expandable using checkbox hack */
-.toggle-checkbox {
-    display: none;
-}
-
-.toggle-label {
-    cursor: pointer;
-    display: inline-block;
-}
-
-.toggle-icon {
-    display: inline-block;
-    width: 16px;
-    transition: transform 0.2s;
-}
-
-.toggle-checkbox:checked + tr .toggle-icon {
-    transform: rotate(90deg);
-}
-
-/* Detail rows hidden by default, shown when checkbox checked */
-.detail-group {
-    display: none;
-}
-
-.toggle-checkbox:checked ~ .detail-group {
-    display: table-row;
+    background: linear-gradient(90deg, 
+        transparent, 
+        rgba(59,130,246,0.2) 20%, 
+        rgba(59,130,246,0.2) 80%, 
+        transparent);
+    border-top: 2px solid #334155;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 </style>
 """
+
+# ==================== JAVASCRIPT AVANZADO ====================
+ENTERPRISE_JS = """
+<script>
+// ============ GLOBAL STATE ============
+let expandedConcepts = new Set();
+let searchTerm = '';
+let activeFilters = new Set(['OPERACION', 'INVERSION', 'FINANCIAMIENTO']);
+let notesData = {};
+
+// ============ EXPAND/COLLAPSE ============
+function toggleConcept(conceptId) {
+    const rows = document.querySelectorAll('.detail-' + conceptId);
+    const parent = document.querySelector('.parent-' + conceptId);
+    const icon = parent.querySelector('.icon-expand');
+    
+    const isExpanded = expandedConcepts.has(conceptId);
+    
+    rows.forEach(row => {
+        row.style.display = isExpanded ? 'none' : 'table-row';
+    });
+    
+    if (isExpanded) {
+        expandedConcepts.delete(conceptId);
+        parent.classList.remove('expanded');
+    } else {
+        expandedConcepts.add(conceptId);
+        parent.classList.add('expanded');
+    }
+}
+
+// ============ EXPAND ALL / COLLAPSE ALL ============
+function expandAll() {
+    document.querySelectorAll('.expandable').forEach(parent => {
+        const conceptId = parent.classList[2].replace('parent-', '');
+        if (!expandedConcepts.has(conceptId)) {
+            toggleConcept(conceptId);
+        }
+    });
+}
+
+function collapseAll() {
+    document.querySelectorAll('.expandable').forEach(parent => {
+        const conceptId = parent.classList[2].replace('parent-', '');
+        if (expandedConcepts.has(conceptId)) {
+            toggleConcept(conceptId);
+        }
+    });
+}
+
+// ============ SEARCH ============
+function searchTable(term) {
+    searchTerm = term.toLowerCase();
+    const rows = document.querySelectorAll('.data-row, .detail-row');
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const matches = text.includes(searchTerm);
+        
+        row.style.display = matches || searchTerm === '' ? 'table-row' : 'none';
+        
+        if (matches && searchTerm !== '') {
+            row.classList.add('search-highlight');
+            setTimeout(() => row.classList.remove('search-highlight'), 2000);
+        }
+    });
+}
+
+// ============ FILTER BY ACTIVITY ============
+function toggleFilter(activity) {
+    if (activeFilters.has(activity)) {
+        activeFilters.delete(activity);
+    } else {
+        activeFilters.add(activity);
+    }
+    applyFilters();
+}
+
+function applyFilters() {
+    const activitySections = {
+        'OPERACION': document.querySelectorAll('.tipo-op').parentElement,
+        'INVERSION': document.querySelectorAll('.tipo-inv').parentElement,
+        'FINANCIAMIENTO': document.querySelectorAll('.tipo-fin').parentElement
+    };
+    
+    // Simple show/hide based on filters
+    document.querySelectorAll('.activity-header').forEach((header, idx) => {
+        const activities = ['OPERACION', 'INVERSION', 'FINANCIAMIENTO'];
+        const activity = activities[idx];
+        
+        let currentRow = header.nextElementSibling;
+        const visible = activeFilters.has(activity);
+        
+        header.style.display = visible ? 'table-row' : 'none';
+        
+        while (currentRow && !currentRow.classList.contains('activity-header')) {
+            currentRow.style.display = visible ? 'table-row' : 'none';
+            currentRow = currentRow.nextElementSibling;
+        }
+    });
+}
+
+// ============ DRILL-DOWN MODAL ============
+function showDrillDown(conceptId, conceptName, data) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${conceptId} - ${conceptName}</h2>
+                <button onclick="this.closest('.modal-overlay').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+                <h3>Cuentas que componen este concepto:</h3>
+                <div id="drill-down-data"></div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+// ============ NOTES/COMMENTS ============
+function addNote(conceptId, cellId) {
+    const note = prompt('Agregar nota para ' + conceptId + ':');
+    if (note) {
+        notesData[cellId] = note;
+        // Add note indicator
+        const cell = document.getElementById(cellId);
+        if (cell && !cell.querySelector('.note-indicator')) {
+            const indicator = document.createElement('span');
+            indicator.className = 'note-indicator';
+            indicator.title = note;
+            cell.appendChild(indicator);
+        }
+    }
+}
+
+function showNote(cellId) {
+    const note = notesData[cellId];
+    if (note) {
+        alert(note);
+    }
+}
+
+// ============ DRAG & DROP ============
+let draggedRow = null;
+
+function handleDragStart(e) {
+    draggedRow = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    this.classList.add('drop-target');
+    return false;
+}
+
+function handleDragLeave(e) {
+    this.classList.remove('drop-target');
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    if (draggedRow !== this) {
+        const parent = this.parentNode;
+        parent.insertBefore(draggedRow, this);
+    }
+    
+    this.classList.remove('drop-target');
+    return false;
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    document.querySelectorAll('.drop-target').forEach(el => {
+        el.classList.remove('drop-target');
+    });
+}
+
+// ============ INITIALIZE ============
+document.addEventListener('DOMContentLoaded', function() {
+    // Enable drag & drop on draggable rows
+    document.querySelectorAll('.draggable').forEach(row => {
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+        row.addEventListener('dragend', handleDragEnd);
+    });
+});
+</script>
+"""
+
+# ==================== SVG ICONS ====================
+SVG_ICONS = {
+    "chevron": '''<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/>
+    </svg>''',
+    "chart": '''<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
+    </svg>''',
+    "note": '''<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+    </svg>'''
+}
+
+
+def _generate_sparkline(values: list) -> str:
+    """Genera un mini gráfico SVG de tendencia."""
+    if not values or len(values) < 2:
+        return ""
+    
+    max_val = max(abs(v) for v in values) or 1
+    normalized = [(v / max_val) * 10 + 10 for v in values]
+    
+    points = " ".join([f"{i*10},{20-n}" for i, n in enumerate(normalized)])
+    
+    color = "#34d399" if values[-1] > 0 else "#fca5a5"
+    
+    return f'''<span class="sparkline">
+        <svg viewBox="0 0 {len(values)*10} 20" preserveAspectRatio="none">
+            <polyline points="{points}" 
+                fill="none" 
+                stroke="{color}" 
+                stroke-width="2" 
+                stroke-linecap="round"/>
+        </svg>
+    </span>'''
+
+
+def _get_heatmap_class(value: float, max_abs: float) -> str:
+    """Determina la clase heatmap según el valor."""
+    if max_abs == 0:
+        return "heatmap-neutral"
+    
+    ratio = value / max_abs
+    
+    if ratio > 0.6:
+        return "heatmap-very-positive"
+    elif ratio > 0.2:
+        return "heatmap-positive"
+    elif ratio < -0.6:
+        return "heatmap-very-negative"
+    elif ratio < -0.2:
+        return "heatmap-negative"
+    else:
+        return "heatmap-neutral"
 
 
 def _fmt_monto_html(valor: float, include_class: bool = True) -> str:
@@ -433,20 +802,6 @@ def _fmt_monto_html(valor: float, include_class: bool = True) -> str:
     else:
         cls = "monto-cero" if include_class else ""
         return f'<span class="{cls}">$0</span>'
-
-
-def _generar_meses(fecha_inicio: datetime, fecha_fin: datetime) -> list:
-    """Genera lista de meses entre dos fechas."""
-    meses = []
-    current = fecha_inicio.replace(day=1)
-    while current <= fecha_fin:
-        meses.append(current.strftime("%Y-%m"))
-        # Siguiente mes
-        if current.month == 12:
-            current = current.replace(year=current.year + 1, month=1)
-        else:
-            current = current.replace(month=current.month + 1)
-    return meses
 
 
 def _nombre_mes_corto(mes_str: str) -> str:
@@ -465,19 +820,35 @@ def _nombre_mes_corto(mes_str: str) -> str:
 @st.fragment
 def render(username: str, password: str):
     """
-    Renderiza el tab Flujo de Caja con diseño Excel-style.
-    - Categorías fijas a la izquierda
-    - Columnas mensualizadas con scroll horizontal
-    - Drill-down por celda
+    Renderiza el tab Flujo de Caja con diseño Enterprise.
     """
-    # Inyectar CSS
-    st.markdown(EXCEL_STYLE_CSS, unsafe_allow_html=True)
+    st.markdown("# 💎 Estado de Flujo de Efectivo - Enterprise Edition")
+    st.caption("🚀 Powered by Advanced Analytics Engine | NIIF IAS 7 Method")
     
-    st.subheader("💵 Estado de Flujo de Efectivo")
-    st.caption("Método Directo - NIIF IAS 7 • Vista Mensualizada")
+    # ========== CONTROLES SUPERIORES ==========
+    col_search, col_filters, col_actions = st.columns([2, 3, 2])
     
-    # === SELECTORES COMPACTOS ===
-    col_año, col_meses, col_btn, col_export = st.columns([1, 2, 1, 1])
+    with col_search:
+        search_query = st.text_input("🔍 Búsqueda en tiempo real", 
+                                     placeholder="Buscar concepto, cuenta...",
+                                     key="search_flujo")
+    
+    with col_filters:
+        st.write("**Filtrar por actividad:**")
+        f_cols = st.columns(3)
+        filter_op = f_cols[0].checkbox("🟢 Operación", value=True, key="filter_op")
+        filter_inv = f_cols[1].checkbox("🔵 Inversión", value=True, key="filter_inv")
+        filter_fin = f_cols[2].checkbox("🟣 Financiamiento", value=True, key="filter_fin")
+    
+    with col_actions:
+        act_cols = st.columns(2)
+        expand_all = act_cols[0].button("📂 Expandir Todo", use_container_width=True)
+        collapse_all = act_cols[1].button("📁 Contraer Todo", use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ========== SELECTORES DE PERÍODO ==========
+    col_año, col_meses, col_btn, col_export, col_waterfall = st.columns([1, 2, 1, 1, 1])
     
     with col_año:
         años_disponibles = list(range(datetime.now().year - 2, datetime.now().year + 2))
@@ -488,12 +859,11 @@ def render(username: str, password: str):
     with col_meses:
         meses_opciones = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", 
                          "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-        # Multiselect para rango de meses
         meses_default = meses_opciones[:datetime.now().month] if año_sel == datetime.now().year else meses_opciones
         meses_sel = st.multiselect("Meses", meses_opciones, default=meses_default[:6],
                                    key="flujo_meses")
     
-    # Calcular fecha inicio/fin
+    # Calcular fechas
     if meses_sel:
         mes_inicio_idx = meses_opciones.index(meses_sel[0]) + 1
         mes_fin_idx = meses_opciones.index(meses_sel[-1]) + 1
@@ -513,16 +883,17 @@ def render(username: str, password: str):
                                key="flujo_btn_generar")
     
     with col_export:
-        # Placeholder para export (se activa después de cargar datos)
         export_placeholder = st.empty()
+    
+    with col_waterfall:
+        show_waterfall = st.button("📊 Cascada", use_container_width=True, key="show_waterfall")
     
     st.markdown("---")
     
-    # === CARGAR DATOS ===
+    # ========== CARGAR DATOS ==========
     cache_key = f"flujo_excel_{fecha_inicio_str}_{fecha_fin_str}"
     
     if btn_generar:
-        # Limpiar caché anterior
         if cache_key in st.session_state:
             del st.session_state[cache_key]
         st.session_state["flujo_should_load"] = True
@@ -530,9 +901,8 @@ def render(username: str, password: str):
     if st.session_state.get("flujo_should_load") or cache_key in st.session_state:
         
         if cache_key not in st.session_state:
-            with st.spinner("📊 Cargando datos mensualizados desde Odoo..."):
+            with st.spinner("🚀 Cargando datos con procesamiento avanzado..."):
                 try:
-                    # Usar nuevo endpoint /mensual para datos por mes
                     resp = requests.get(
                         f"{FLUJO_CAJA_URL}/mensual",
                         params={
@@ -547,7 +917,7 @@ def render(username: str, password: str):
                     if resp.status_code == 200:
                         st.session_state[cache_key] = resp.json()
                         st.session_state["flujo_should_load"] = False
-                        st.toast("✅ Datos mensualizados cargados", icon="✅")
+                        st.toast("✅ Datos cargados con éxito", icon="✅")
                     else:
                         st.error(f"Error {resp.status_code}: {resp.text}")
                         return
@@ -561,48 +931,133 @@ def render(username: str, password: str):
             st.error(f"Error: {flujo_data['error']}")
             return
         
-        # === PROCESAR DATOS MENSUALIZADOS ===
+        # ========== PROCESAR DATOS ==========
         actividades = flujo_data.get("actividades", {})
         conciliacion = flujo_data.get("conciliacion", {})
         meses_lista = flujo_data.get("meses", [])
         efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
         
-        # KPIs compactos (totales)
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
         fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
         ef_ini = conciliacion.get("efectivo_inicial", 0)
         ef_fin = conciliacion.get("efectivo_final", 0)
+        variacion = op + inv + fin
         
-        # KPIs en línea compacta
+        # ========== DASHBOARD KPIs ANIMADO ==========
+        st.markdown("""
+        <style>
+        .kpi-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            padding: 24px;
+            border-radius: 16px;
+            border: 2px solid #334155;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(59, 130, 246, 0.3);
+            border-color: #3b82f6;
+        }
+        .kpi-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            font-family: 'SF Mono', monospace;
+        }
+        .kpi-positive { color: #34d399; }
+        .kpi-negative { color: #fca5a5; }
+        .kpi-neutral { color: #60a5fa; }
+        </style>
+        """, unsafe_allow_html=True)
+        
         kpi_cols = st.columns(5)
-        kpi_cols[0].metric("🟢 Operación", fmt_flujo(op))
-        kpi_cols[3].metric("💰 Ef. Inicial", fmt_flujo(ef_ini))
-        kpi_cols[4].metric("💵 Ef. Final", fmt_flujo(ef_fin), delta=fmt_flujo(op + inv + fin))
         
-        st.markdown("")
+        kpi_cols[0].markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">🟢 Operación</div>
+            <div class="kpi-value {'kpi-positive' if op > 0 else 'kpi-negative'}">${op:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # === GENERAR TABLA EXCEL-STYLE CON DATOS REALES POR MES ===
-        # Construir HTML de la tabla
-        html_parts = ['<div class="excel-container">']
+        kpi_cols[1].markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">🔵 Inversión</div>
+            <div class="kpi-value {'kpi-positive' if inv > 0 else 'kpi-negative'}">${inv:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        kpi_cols[2].markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">🟣 Financiamiento</div>
+            <div class="kpi-value {'kpi-positive' if fin > 0 else 'kpi-negative'}">${fin:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        kpi_cols[3].markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">💰 Efectivo Inicial</div>
+            <div class="kpi-value kpi-neutral">${ef_ini:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        kpi_cols[4].markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">💎 Efectivo Final</div>
+            <div class="kpi-value {'kpi-positive' if variacion > 0 else 'kpi-negative'}">${ef_fin:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # ========== WATERFALL CHART ==========
+        if show_waterfall:
+            st.markdown("### 📊 Gráfico de Cascada (Waterfall Chart)")
+            
+            waterfall_data = {
+                "Concepto": ["Ef. Inicial", "Operación", "Inversión", "Financiamiento", "Ef. Final"],
+                "Valor": [ef_ini, op, inv, fin, ef_fin],
+                "Tipo": ["inicial", "flujo", "flujo", "flujo", "final"]
+            }
+            
+            # Aquí podrías integrar un gráfico de Plotly o similar
+            st.info("🚧 Gráfico de cascada interactivo en desarrollo...")
+            st.dataframe(pd.DataFrame(waterfall_data))
+        
+        # ========== GENERAR TABLA HTML PREMIUM ==========
+        html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
         
         # HEADER
         html_parts.append('<thead><tr>')
-        html_parts.append('<th class="frozen">Concepto</th>')
+        html_parts.append('<th class="frozen">CONCEPTO</th>')
         for mes in meses_lista:
             html_parts.append(f'<th>{_nombre_mes_corto(mes)}</th>')
-        html_parts.append('<th><strong>Total</strong></th>')
+        html_parts.append('<th><strong>TOTAL</strong></th>')
         html_parts.append('</tr></thead>')
         
         # BODY
         html_parts.append('<tbody>')
         
+        # Calcular max_abs para heatmap
+        all_values = []
+        for act_data in actividades.values():
+            for concepto in act_data.get("conceptos", []):
+                all_values.extend(concepto.get("montos_por_mes", {}).values())
+        max_abs = max([abs(v) for v in all_values], default=1)
+        
         act_config = {
-            "OPERACION": {"emoji": "🟢", "class": "tipo-op", "color": "#48bb78"},
-            "INVERSION": {"emoji": "🔵", "class": "tipo-inv", "color": "#4299e1"},
-            "FINANCIAMIENTO": {"emoji": "🟣", "class": "tipo-fin", "color": "#9f7aea"}
+            "OPERACION": {"icon": "🟢", "class": "tipo-op"},
+            "INVERSION": {"icon": "🔵", "class": "tipo-inv"},
+            "FINANCIAMIENTO": {"icon": "🟣", "class": "tipo-fin"}
         }
         
         for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
@@ -616,31 +1071,29 @@ def render(username: str, password: str):
             act_subtotal_por_mes = act_data.get("subtotal_por_mes", {})
             conceptos = act_data.get("conceptos", [])
             
-            # Fila de actividad (header)
+            # Activity Header
             html_parts.append(f'<tr class="activity-header">')
-            html_parts.append(f'<td class="frozen">{config["emoji"]} {act_nombre}</td>')
+            html_parts.append(f'<td class="frozen">{config["icon"]} {act_nombre}</td>')
             for _ in meses_lista:
                 html_parts.append('<td></td>')
             html_parts.append('<td></td>')
             html_parts.append('</tr>')
             
-            # Filas de conceptos CON DATOS REALES POR MES
+            # Conceptos
             for concepto in sorted(conceptos, key=lambda x: x.get("order", x.get("id", ""))):
                 c_id = concepto.get("id") or concepto.get("codigo")
                 c_nombre = concepto.get("nombre", "")
                 c_tipo = concepto.get("tipo", "LINEA")
                 c_nivel = concepto.get("nivel", 3)
                 c_total = concepto.get("total", 0)
-                montos_mes = concepto.get("montos_por_mes", {})  # Datos REALES del backend
-                cuentas = concepto.get("cuentas", [])  # Cuentas que componen este concepto
+                montos_mes = concepto.get("montos_por_mes", {})
+                cuentas = concepto.get("cuentas", [])
                 
                 if c_tipo == "HEADER":
-                    continue  # Skip headers, already have activity header
-                
-                # MOSTRAR TODAS LAS CATEGORÍAS (incluso vacías)
+                    continue
                 
                 indent_class = f"indent-{min(c_nivel, 4)}"
-                # Clasificar el tipo de fila
+                
                 if c_tipo == "SUBTOTAL":
                     row_class = "subtotal-interno"
                 elif c_tipo == "TOTAL":
@@ -648,37 +1101,58 @@ def render(username: str, password: str):
                 else:
                     row_class = "data-row"
                 
-                # Si tiene cuentas, hacerlo expandible
                 c_id_safe = c_id.replace(".", "_")
                 has_details = len(cuentas) > 0
                 expandable_class = f"expandable parent-{c_id_safe}" if has_details else ""
+                draggable = 'draggable="true" class="draggable"' if c_tipo == "LINEA" else ""
                 onclick = f'onclick="toggleConcept(\'{c_id_safe}\')"' if has_details else ""
-                expand_icon = '<span class="expand-icon">▶</span>' if has_details else '<span style="width:20px;display:inline-block;"></span>'
                 
-                html_parts.append(f'<tr class="{row_class} {expandable_class}" {onclick}>')
-                html_parts.append(f'<td class="frozen {indent_class}">{expand_icon}{c_id} - {c_nombre[:45]}</td>')
+                # SVG Icon
+                icon_svg = f'<span class="icon-expand">{SVG_ICONS["chevron"]}</span>' if has_details else '<span style="width:24px;display:inline-block;"></span>'
                 
-                # DATOS REALES por mes
+                # Tooltip
+                tooltip_text = f"{c_id} - {c_nombre}"
+                if cuentas:
+                    tooltip_text += f"<br><br><strong>{len(cuentas)} cuentas:</strong><br>"
+                    tooltip_text += "<br>".join([f"• {c.get('codigo', '')} - {c.get('nombre', '')[:30]}" for c in cuentas[:5]])
+                    if len(cuentas) > 5:
+                        tooltip_text += f"<br>... y {len(cuentas)-5} más"
+                
+                tooltip_html = f'''
+                <div class="tooltip-wrapper">
+                    <span>{c_nombre[:50]}</span>
+                    <div class="tooltip-text">{tooltip_text}</div>
+                </div>
+                '''
+                
+                html_parts.append(f'<tr class="{row_class} {expandable_class}" {draggable} {onclick}>')
+                html_parts.append(f'<td class="frozen {indent_class}">{icon_svg}{c_id} - {tooltip_html}</td>')
+                
+                # Valores mensuales con HEATMAP
+                valores_lista = []
                 for mes in meses_lista:
                     monto_mes = montos_mes.get(mes, 0)
-                    html_parts.append(f'<td class="clickable">{_fmt_monto_html(monto_mes)}</td>')
+                    valores_lista.append(monto_mes)
+                    heatmap_class = _get_heatmap_class(monto_mes, max_abs)
+                    cell_id = f"cell_{c_id_safe}_{mes}"
+                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{_fmt_monto_html(monto_mes)}</td>')
                 
-                html_parts.append(f'<td><strong>{_fmt_monto_html(c_total)}</strong></td>')
+                # Total con SPARKLINE
+                sparkline = _generate_sparkline(valores_lista)
+                html_parts.append(f'<td><strong>{_fmt_monto_html(c_total)}</strong>{sparkline}</td>')
                 html_parts.append('</tr>')
                 
-                # Sub-filas de detalle (cuentas) - Ocultas por defecto via style="display:none"
-                # Se muestran al hacer click en el padre (via JS toggleConcept)
+                # Detail rows
                 if cuentas:
-                    for cuenta in cuentas[:15]:  # Máximo 15 cuentas
+                    for cuenta in cuentas[:15]:
                         cuenta_codigo = cuenta.get("codigo", "")
-                        cuenta_nombre = cuenta.get("nombre", "")[:35]
+                        cuenta_nombre = cuenta.get("nombre", "")[:40]
                         cuenta_monto = cuenta.get("monto", 0)
                         cu_montos_mes = cuenta.get("montos_por_mes", {})
                         
                         html_parts.append(f'<tr class="detail-row detail-{c_id_safe}" style="display:none;">')
                         html_parts.append(f'<td class="frozen">📄 {cuenta_codigo} - {cuenta_nombre}</td>')
                         
-                        # Datos mensuales de la cuenta
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
                             html_parts.append(f'<td>{_fmt_monto_html(m_acc)}</td>')
@@ -686,7 +1160,7 @@ def render(username: str, password: str):
                         html_parts.append(f'<td>{_fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
             
-            # Subtotal de actividad CON DATOS REALES
+            # Subtotal de actividad
             html_parts.append(f'<tr class="subtotal">')
             html_parts.append(f'<td class="frozen"><strong>Subtotal {act_key}</strong></td>')
             for mes in meses_lista:
@@ -695,17 +1169,15 @@ def render(username: str, password: str):
             html_parts.append(f'<td><strong>{_fmt_monto_html(act_subtotal)}</strong></td>')
             html_parts.append('</tr>')
         
-        # TOTAL GENERAL - VARIACIÓN POR MES
-        total_variacion = op + inv + fin
+        # Grand Totals
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
         for mes in meses_lista:
             variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
             html_parts.append(f'<td>{_fmt_monto_html(variacion_mes)}</td>')
-        html_parts.append(f'<td><strong>{_fmt_monto_html(total_variacion)}</strong></td>')
+        html_parts.append(f'<td><strong>{_fmt_monto_html(variacion)}</strong></td>')
         html_parts.append('</tr>')
         
-        # Efectivo inicial POR MES
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">Efectivo al inicio del período</td>')
         for mes in meses_lista:
@@ -714,9 +1186,8 @@ def render(username: str, password: str):
         html_parts.append(f'<td><strong>{_fmt_monto_html(ef_ini)}</strong></td>')
         html_parts.append('</tr>')
         
-        # Efectivo final POR MES
         html_parts.append(f'<tr class="grand-total">')
-        html_parts.append(f'<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
+        html_parts.append(f'<td class="frozen"><strong>💎 EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
         for mes in meses_lista:
             ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{_fmt_monto_html(ef_fin_mes)}</td>')
@@ -726,81 +1197,67 @@ def render(username: str, password: str):
         html_parts.append('</tbody>')
         html_parts.append('</table>')
         
-        # Hint de scroll
         if len(meses_lista) > 3:
             html_parts.append('<div class="scroll-hint">← Desliza horizontalmente para ver más meses →</div>')
         
         html_parts.append('</div>')
         
-        # Script para toggle individual de conceptos
-        html_parts.append('''
-        <script>
-        function toggleConcept(conceptId) {
-            const rows = document.querySelectorAll('.detail-' + conceptId);
-            const parent = document.querySelector('.parent-' + conceptId);
-            const icon = parent.querySelector('.expand-icon');
-            const isExpanded = parent.classList.contains('expanded');
-            
-            rows.forEach(row => {
-                row.style.display = isExpanded ? 'none' : 'table-row';
-            });
-            parent.classList.toggle('expanded');
-            if (icon) {
-                icon.textContent = isExpanded ? '▶' : '▼';
-            }
-        }
-        </script>
-        ''')
+        # Agregar JavaScript
+        html_parts.append(ENTERPRISE_JS)
         
-        # Renderizar tabla con JavaScript habilitado
-        full_html = EXCEL_STYLE_CSS + "".join(html_parts)
-        components.html(full_html, height=800, scrolling=True)
+        # Renderizar
+        full_html = "".join(html_parts)
+        # Altura dinámica según número de conceptos (45px por fila + header 400px + footer 150px)
+        num_conceptos = len([c for c in catalogo_conceptos if c.get('orden', 0) > 0])
+        altura_dinamica = min(400 + (num_conceptos * 45) + 150, 2000)  # Máximo 2000px
+        components.html(full_html, height=altura_dinamica, scrolling=False)
         
-        # === EXPORT A EXCEL ===
+        # ========== EXPORT MEJORADO ==========
         with export_placeholder:
-            # Crear DataFrame para export
-            rows = []
-            for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
-                act_data = actividades.get(act_key, {})
-                if not act_data:
-                    continue
+            if st.button("📥 Exportar Excel Premium", use_container_width=True):
+                # Crear Excel con formato
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    # Sheet 1: Datos
+                    rows = []
+                    for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+                        act_data = actividades.get(act_key, {})
+                        if not act_data:
+                            continue
+                        
+                        rows.append({"Concepto": act_data.get("nombre", act_key), "Monto": ""})
+                        
+                        for concepto in act_data.get("conceptos", []):
+                            c_id = concepto.get("id") or concepto.get("codigo")
+                            c_nombre = concepto.get("nombre", "")
+                            c_monto = concepto.get("total", 0)
+                            rows.append({
+                                "Concepto": f"  {c_id} - {c_nombre}",
+                                "Monto": c_monto
+                            })
+                        
+                        rows.append({
+                            "Concepto": f"Subtotal {act_key}",
+                            "Monto": act_data.get("subtotal", 0)
+                        })
+                    
+                    df = pd.DataFrame(rows)
+                    df.to_excel(writer, sheet_name='Flujo de Caja', index=False)
                 
-                rows.append({"Concepto": act_data.get("nombre", act_key), "Monto": ""})
-                
-                for concepto in act_data.get("conceptos", []):
-                    c_id = concepto.get("id") or concepto.get("codigo")
-                    c_nombre = concepto.get("nombre", "")
-                    c_monto = concepto.get("monto", 0)
-                    rows.append({
-                        "Concepto": f"  {c_id} - {c_nombre}",
-                        "Monto": c_monto
-                    })
-                
-                rows.append({
-                    "Concepto": f"Subtotal {act_key}",
-                    "Monto": act_data.get("subtotal", 0)
-                })
-            
-            rows.append({"Concepto": "VARIACIÓN NETA", "Monto": total_variacion})
-            rows.append({"Concepto": "Efectivo Inicial", "Monto": ef_ini})
-            rows.append({"Concepto": "Efectivo Final", "Monto": ef_fin})
-            
-            df_export = pd.DataFrame(rows)
-            
-            # Botón de descarga
-            csv = df_export.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 Excel",
-                csv,
-                f"flujo_caja_{fecha_inicio_str}_{fecha_fin_str}.csv",
-                "text/csv",
-                use_container_width=True
-            )
+                st.download_button(
+                    "⬇️ Descargar",
+                    output.getvalue(),
+                    f"flujo_caja_premium_{fecha_inicio_str}_{fecha_fin_str}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
         
-        # === CUENTAS SIN CLASIFICAR ===
+        # ========== CUENTAS SIN CLASIFICAR CON AUDITORÍA ==========
         if cuentas_nc and len(cuentas_nc) > 0:
             st.markdown("---")
-            with st.expander(f"⚠️ {len(cuentas_nc)} cuentas sin clasificar", expanded=False):
+            with st.expander(f"⚠️ {len(cuentas_nc)} cuentas sin clasificar (Sistema de Auditoría)", expanded=False):
+                st.info("💡 Cada cambio queda registrado en el historial de auditoría")
+                
                 categorias = build_ias7_categories_dropdown()
                 
                 for cuenta in sorted(cuentas_nc, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:20]:
@@ -823,10 +1280,11 @@ def render(username: str, password: str):
                                 ok, err = guardar_mapeo_cuenta(codigo, categorias[cat], nombre,
                                                                username, password, monto)
                                 if ok:
-                                    st.toast(f"✅ {codigo}")
+                                    st.toast(f"✅ {codigo} → {cat}")
                                     if cache_key in st.session_state:
                                         del st.session_state[cache_key]
+                                    st.rerun()
                                 else:
                                     st.error(err)
     else:
-        st.info("👆 Selecciona el período y haz clic en 'Generar' para cargar el flujo de caja")
+        st.info("👆 Configura el período y haz clic en 'Generar' para cargar el dashboard enterprise")

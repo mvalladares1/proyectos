@@ -23,7 +23,6 @@ from finanzas import tab_ytd
 from finanzas import tab_cg
 from finanzas import tab_detalle
 from finanzas import tab_flujo_caja
-from finanzas import tab_flujo_caja_v2  # ENTERPRISE VERSION
 
 # === CONFIGURACIÓN DE PÁGINA ===
 st.set_page_config(page_title="Finanzas", page_icon="💰", layout="wide")
@@ -233,21 +232,9 @@ if datos:
             if not _perm_flujo:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
-                # Selector de versión
-                version_cols = st.columns([1, 3])
-                with version_cols[0]:
-                    use_enterprise = st.checkbox("💎 Enterprise V2", value=True, 
-                                                help="Activa la versión enterprise con todas las funcionalidades avanzadas")
-                
-                if use_enterprise:
-                    @st.fragment
-                    def _frag_flujo_v2():
-                        tab_flujo_caja_v2.render(username, password)
-                    _frag_flujo_v2()
-                else:
-                    @st.fragment
-                    def _frag_flujo():
-                        tab_flujo_caja.render(username, password)
-                    _frag_flujo()
+                @st.fragment
+                def _frag_flujo():
+                    tab_flujo_caja.render(username, password)
+                _frag_flujo()
 else:
     st.info("Selecciona los filtros y haz clic en 'Actualizar datos' para cargar información.")
