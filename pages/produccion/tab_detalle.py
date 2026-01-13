@@ -205,43 +205,61 @@ def _render_status_group(df_status):
     df_sala = df_status[df_status['Tipo'] == "Sala"]
     df_congelado = df_status[df_status['Tipo'] == "Congelado"]
 
-    # --- Gráficos Comparativos ECharts ---
-    col_g1, col_g2 = st.columns(2)
+    # --- Control de Visibilidad de Gráficos ---
+    st.markdown("##### 📈 Monitoreo de Carga por Ubicación")
+    vistas_graficos = st.multiselect(
+        "Selecciona los gráficos a visualizar:",
+        options=["Salas de Proceso", "Estáticos / Congelación"],
+        default=["Salas de Proceso", "Estáticos / Congelación"],
+        key="selector_vistas_graf_v2"
+    )
+
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     grid_color = "rgba(255,255,255,0.05)" if theme_echarts == "dark" else "rgba(0,0,0,0.05)"
+    
+    # Paleta de colores para Salas y Túneles
+    COLORS = ["#3498db", "#e67e22", "#2ecc71", "#9b59b6", "#f1c40f", "#e74c3c", "#1abc9c", "#34495e", "#7f8c8d"]
 
-    def _render_echarts_bar(df_sub, title, color):
+    def _render_echarts_bar_by_room(df_sub, title, base_color_index):
         if df_sub.empty:
-            st.caption(f"No hay órdenes para {title}")
             return
         
-        df_sub['Fecha_Fmt'] = pd.to_datetime(df_sub['date_planned_start']).dt.strftime('%d/%m')
-        counts = df_sub['Fecha_Fmt'].value_counts().sort_index().reset_index()
-        counts.columns = ['Fecha', 'Cantidad']
+        # Agrupar por Sala_Clean
+        counts = df_sub['Sala_Clean'].value_counts().reset_index()
+        counts.columns = ['Sala', 'Cantidad']
+        counts = counts.sort_values('Sala')
         
+        data_bars = []
+        for i, row in enumerate(counts.itertuples()):
+            color = COLORS[(base_color_index + i) % len(COLORS)]
+            data_bars.append({"value": int(row.Cantidad), "itemStyle": {"color": color}})
+
         options = {
             "title": {"text": title, "textStyle": {"color": label_color, "fontSize": 14}},
-            "xAxis": {"type": "category", "data": counts['Fecha'].tolist(), "axisLabel": {"color": "#8892b0"}},
+            "xAxis": {"type": "category", "data": counts['Sala'].tolist(), "axisLabel": {"color": "#8892b0", "rotate": 30}},
             "yAxis": {"type": "value", "splitLine": {"lineStyle": {"color": grid_color}}},
-            "tooltip": {"trigger": "axis"},
+            "tooltip": {"trigger": "item", "formatter": "{b}: <b>{c} OFs</b>"},
             "series": [{
-                "data": counts['Cantidad'].tolist(),
+                "data": data_bars,
                 "type": "bar",
-                "itemStyle": {"color": color, "borderRadius": [4, 4, 0, 0]},
                 "label": {"show": True, "position": "top", "color": label_color, "formatter": "{c}"},
                 "barWidth": "50%"
             }],
             "backgroundColor": "rgba(0,0,0,0)",
-            "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True}
+            "grid": {"left": "3%", "right": "4%", "bottom": "20%", "containLabel": True}
         }
-        st_echarts(options=options, height="250px", theme=theme_echarts)
+        st_echarts(options=options, height="300px", theme=theme_echarts)
 
-    with col_g1:
-        _render_echarts_bar(df_sala, "🏭 Carga Salas de Proceso", "#3498db")
+    col_g1, col_g2 = st.columns(2)
     
-    with col_g2:
-        _render_echarts_bar(df_congelado, "❄️ Carga Estáticos / Cong.", "#e67e22")
+    if "Salas de Proceso" in vistas_graficos:
+        with col_g1 if "Estáticos / Congelación" in vistas_graficos else st.container():
+            _render_echarts_bar_by_room(df_sala, "🏭 OFs por Sala de Proceso", 0)
+    
+    if "Estáticos / Congelación" in vistas_graficos:
+        with col_g2 if "Salas de Proceso" in vistas_graficos else st.container():
+            _render_echarts_bar_by_room(df_congelado, "❄️ OFs por Túnel / Estático", 4)
 
     st.markdown("---")
 

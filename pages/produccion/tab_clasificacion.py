@@ -343,7 +343,7 @@ def render(username: str, password: str):
                 "series": [
                     {
                         "data": [
-                            {"value": row.Kilogramos, "itemStyle": {"color": row.Color}}
+                            {"value": int(row.Kilogramos), "itemStyle": {"color": row.Color}}
                             for row in df_chart.itertuples()
                         ],
                         "type": "bar",
