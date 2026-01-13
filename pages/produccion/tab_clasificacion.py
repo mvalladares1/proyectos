@@ -367,16 +367,6 @@ def render(username: str, password: str):
             </div>
             """, unsafe_allow_html=True)
 
-        # Porcentajes de participación
-        st.markdown("##### 📊 Participación en Selección")
-        if total_kg_filtrado > 0:
-            cols_pct = st.columns(len(active_grades_names))
-            # Ordenar para que coincidan con los nombres seleccionados
-            selected_data_sorted = df_chart[df_chart['Grado'].isin(active_grades_names)]
-            for idx, (_, row) in enumerate(selected_data_sorted.iterrows()):
-                with cols_pct[idx % len(active_grades_names)]:
-                    pct = (row['Kilogramos'] / total_kg_filtrado * 100)
-                    st.info(f"**{row['Grado']}**\n\n{pct:.1f}%")
         
         # === TABLA DETALLADA ===
         if detalle_mostrar:
