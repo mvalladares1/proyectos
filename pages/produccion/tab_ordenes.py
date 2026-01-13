@@ -61,10 +61,14 @@ def render(username: str, password: str):
         if planta_filtro != "Todas" and planta != planta_filtro:
             continue
             
-        product_info = mo.get('product_id', [0, ''])
-        prod_name = product_info[1] if product_info else ''
-        
-        sala_raw = mo.get('x_studio_sala_de_proceso') or ''
+        def get_label(val):
+            if not val: return ""
+            if isinstance(val, dict): return val.get('name', '')
+            if isinstance(val, (list, tuple)) and len(val) > 1: return val[1]
+            return str(val)
+
+        prod_name = get_label(mo.get('product_id'))
+        sala_raw = get_label(mo.get('x_studio_sala_de_proceso'))
         
         # Clasificación Sala vs Congelado
         sala_lower = sala_raw.lower()
