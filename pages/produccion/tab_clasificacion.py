@@ -328,17 +328,8 @@ def render(username: str, password: str):
                 tooltip=[alt.Tooltip('Grado:N'), alt.Tooltip('Kilogramos:Q', format=',.2f')]
             )
 
-            text = bars.mark_text(
-                align='center',
-                baseline='bottom',
-                dy=-5,  # Offset para que el texto esté sobre la barra
-                fontSize=14,
-                fontWeight='bold'
-            ).encode(
-                text=alt.Text('Kilogramos:Q', format=',.0f')
-            )
-            
-            chart_final = (bars + text).add_params(
+            # Gráfico de Barras interactivo (Sin capas para evitar error de Streamlit)
+            chart_final = bars.add_params(
                 seleccion_chart
             ).properties(
                 height=450
