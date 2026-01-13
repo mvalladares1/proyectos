@@ -55,7 +55,7 @@ def render(username: str, password: str):
     # Filtros de búsqueda
     with st.expander("🔍 Filtros de búsqueda", expanded=True):
         col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-        start_date = col1.date_input("Desde", value=date.today() - timedelta(days=30), key="prod_filter_start", format="DD/MM/YYYY")
+        start_date = col1.date_input("Desde", value=date.today() - timedelta(days=90), key="prod_filter_start", format="DD/MM/YYYY")
         end_date = col2.date_input("Hasta", value=date.today(), key="prod_filter_end", format="DD/MM/YYYY")
         planta_sel = col3.selectbox("Planta", options=["Todas", "RIO FUTURO", "VILKUN"], index=0, key="prod_filter_planta")
         state_label = col4.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_filter_state")
@@ -132,7 +132,7 @@ def render(username: str, password: str):
             df_full['% Avance'] = (df_full['qty_produced'] / df_full['product_qty'] * 100).fillna(0).clip(upper=100)
             df_full['PSP'] = df_full['product_id'].apply(lambda x: "✅" if "PSP" in clean_name(x).upper() or clean_name(x).startswith(('[2.', '[2,')) else "")
             df_full['Estado_Label'] = df_full['state'].apply(lambda x: "Abierta" if x in ['confirmed', 'progress', 'planned', 'to_close'] else "Cerrada")
-            df_full['Sala_Clean'] = df_full['x_studio_sala_de_proceso'].fillna("Sin Sala")
+            df_full['Sala_Clean'] = df_full['x_studio_sala_de_proceso'].apply(lambda x: x if x and x is not False else "Sin Sala")
 
             # Selector de Vista
             view_mode = st.radio("Modo de Visualización", ["📍 Seguimiento por Sala", "📋 Tabla Detallada"], horizontal=True, key="prod_view_mode")

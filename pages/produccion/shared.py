@@ -200,11 +200,11 @@ def detectar_planta(mo_name):
     RF/MO/... = RFP (default), VLK/... = VILKUN
     """
     if not mo_name:
-        return "RFP"
+        return "RIO FUTURO"
     mo_upper = str(mo_name).upper()
     if mo_upper.startswith("VLK"):
         return "VILKUN"
-    return "RFP"
+    return "RIO FUTURO"
 
 
 def filtrar_mos_por_planta(lista_mos, filtro_rfp, filtro_vilkun):
