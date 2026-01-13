@@ -178,9 +178,12 @@ def render(username: str, password: str):
                         data = response.json()
                         st.session_state.clasificacion_data = data
                         count = len(data.get('detalle', []))
-                        st.success(f"✅ Se cargaron {count} pallets correctamente ({tipo_operacion_seleccionado})")
+                        if count > 0:
+                            st.success(f"✅ Se cargaron {count} pallets correctamente ({tipo_operacion_seleccionado})")
+                        else:
+                            st.info(f"ℹ️ No se encontraron pallets para el periodo seleccionado en Odoo.")
                     else:
-                        st.error(f"❌ Error al obtener datos: {response.status_code} - {response.text}")
+                        st.error(f"❌ Error al obtener datos: {response.status_code}")
                         return
                         
                 except Exception as e:
@@ -202,14 +205,23 @@ def render(username: str, password: str):
         if tipo_fruta_seleccionado != "Todas":
             detalle_raw = [d for d in detalle_raw if tipo_fruta_seleccionado.lower() in d.get('producto', '').lower()]
             
-        # 3. Filtrar por Sala de Proceso (dinámico usando clave técnica o nombre)
+        # 3. Filtrar por Sala de Proceso (dinámico robusto)
         if sala_proceso_seleccionada != "Todas":
             target_key = SALA_MAP_INTERNAL.get(sala_proceso_seleccionada)
+            
+            def normalize(text):
+                if not text: return ""
+                text = text.lower()
+                replacements = [("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u")]
+                for old, new in replacements:
+                    text = text.replace(old, new)
+                return text
+
+            target_norm = normalize(target_key or sala_proceso_seleccionada)
             detalle_raw = [
                 d for d in detalle_raw 
-                if d.get('sala') == sala_proceso_seleccionada or 
-                   d.get('sala') == target_key or
-                   (target_key and target_key.lower() in (d.get('sala') or '').lower())
+                if normalize(d.get('sala')) == target_norm or 
+                   target_norm in normalize(d.get('sala'))
             ]
 
         # 4. Filtrar por Manejo

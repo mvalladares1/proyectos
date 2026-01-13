@@ -404,18 +404,19 @@ class ProduccionService:
             
             # FILTRO DE SALA: Identificamos primero las órdenes de esa sala
             if sala_proceso and sala_proceso.strip() and sala_proceso != "Todas":
-                # Buscamos las órdenes (mrp.production) que tienen asignada esa sala
-                # Usamos ilike para mayor flexibilidad con acentos/keys
-                prod_search_domain = [('x_studio_sala_de_proceso', 'ilike', sala_proceso.strip())]
+                # Eliminamos filtros de fecha en esta búsqueda inicial para no ser restrictivos
+                sala_busqueda = sala_proceso.strip()
                 
-                # Optimización: Filtrar también producciones por fecha aproximada
-                # (Damos un margen de 2 días antes/después por seguridad)
-                fecha_inicio_margin = (datetime.strptime(fecha_inicio, "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
-                fecha_fin_margin = (datetime.strptime(fecha_fin, "%Y-%m-%d") + timedelta(days=2)).strftime("%Y-%m-%d")
-                
-                prod_search_domain.append('|')
-                prod_search_domain.append(('date_planned_start', '>=', fecha_inicio_margin))
-                prod_search_domain.append(('date_finished', '>=', fecha_inicio_margin))
+                # Intentamos buscar por coincidencia parcial para evitar temas de acentos
+                if " - " in sala_busqueda:
+                    sala_short = sala_busqueda.split(" - ")[0]
+                    # Buscamos que contenga la parte corta o la parte larga
+                    prod_search_domain = ['|', 
+                        ('x_studio_sala_de_proceso', 'ilike', sala_busqueda),
+                        ('x_studio_sala_de_proceso', 'ilike', sala_short)
+                    ]
+                else:
+                    prod_search_domain = [('x_studio_sala_de_proceso', 'ilike', sala_busqueda)]
                 
                 prod_ids_sala = self.odoo.search('mrp.production', prod_search_domain)
                 
