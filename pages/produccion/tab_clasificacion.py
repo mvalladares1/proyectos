@@ -8,6 +8,7 @@ import altair as alt
 import requests
 from datetime import datetime, timedelta
 
+import plotly.graph_objects as go
 from .shared import API_URL, fmt_numero
 
 
@@ -310,59 +311,56 @@ def render(username: str, password: str):
             # Calcular porcentajes para mayor detalle
             total_sum = df_chart['Kilogramos'].sum()
             df_chart['Porcentaje'] = (df_chart['Kilogramos'] / total_sum * 100).round(1)
-            df_chart['Label'] = df_chart.apply(lambda r: f"{fmt_numero(r['Kilogramos'])} kg ({r['Porcentaje']}%)", axis=1)
 
-            # Selección de Altair (punto para capturar clics en las barras)
-            seleccion_chart = alt.selection_point(name='grado_select', fields=['Grado'])
-            
-            # Gráfico de Barras ultra-simple para asegurar compatibilidad con on_select
-            bars = alt.Chart(df_chart).mark_bar(
-                cornerRadiusTopLeft=10,
-                cornerRadiusTopRight=10,
-                strokeWidth=1,
-                stroke="white"
-            ).encode(
-                x=alt.X('Grado:N', title='Categoría de Grado', axis=alt.Axis(labelAngle=-45)),
-                y=alt.Y('Kilogramos:Q', title='Kilogramos (kg)'),
-                color=alt.Color('Grado:N',
-                               scale=alt.Scale(
-                                   domain=[info['nombre'] for info in GRADOS_INFO.values()],
-                                   range=[info['color'] for info in GRADOS_INFO.values()]
-                               ),
-                               legend=alt.Legend(title="Grados")),
-                tooltip=[
-                    alt.Tooltip('Grado:N', title='Grado'), 
-                    alt.Tooltip('Kilogramos:Q', title='Peso Total', format=',.2f'),
-                    alt.Tooltip('Porcentaje:Q', title='% del Total', format='.1f')
-                ]
+            # Header del Gráfico (Sala y Fecha)
+            st.markdown(f"""
+                <div style="background: rgba(0,204,102,0.05); padding: 12px; border-radius: 12px; border-left: 5px solid #00cc66; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 1.1em; color: #ffffff;">🏭 <b>Sala:</b> {sala_proceso_seleccionada}</div>
+                    <div style="font-size: 1.1em; color: #ffffff;">📅 <b>Periodo:</b> {fecha_inicio_clas.strftime('%d/%m/%Y')} - {fecha_fin_clas.strftime('%d/%m/%Y')}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Crear Gráfico en Plotly para etiquetas superiores y sin bordes blancos
+            fig = go.Figure()
+            for row in df_chart.itertuples():
+                fig.add_trace(go.Bar(
+                    x=[row.Grado],
+                    y=[row.Kilogramos],
+                    name=row.Grado,
+                    marker=dict(color=row.Color, line=dict(width=0)),
+                    text=[f"{row.Kilogramos:,.0f}"],
+                    textposition='outside',
+                    textfont=dict(color='#ffffff', size=13, family="Arial Black"),
+                    hovertemplate=f"<b>{row.Grado}</b><br>Peso: {row.Kilogramos:,.2f} kg<br>Participación: {row.Porcentaje}%<extra></extra>"
+                ))
+
+            fig.update_layout(
+                template='plotly_dark' if st.session_state.get('theme_mode', 'Dark') == 'Dark' else 'plotly_white',
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(t=30, b=40, l=40, r=40),
+                height=500,
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title="<b>Filtrar:</b>", font=dict(size=12, color="#00cc66")),
+                yaxis=dict(title="Kilogramos (kg)", gridcolor='rgba(255,255,255,0.08)', titlefont=dict(color='#8892b0')),
+                xaxis=dict(title="", tickfont=dict(size=12, color='#8892b0'))
             )
 
-            # Gráfico Final (Vista única para evitar error de composición)
-            chart_final = bars.add_params(seleccion_chart).properties(height=450)
-
-            # Selector de KPIs (Contenedor superior para que aparezcan arriba del gráfico)
+            # Selector de KPIs (Contenedor superior)
             kpis_container = st.container()
             
-            st.markdown("##### 📊 Distribución de Producción por Grado")
-            
             # Renderizar gráfico y capturar evento de selección
-            event = st.altair_chart(chart_final, use_container_width=True, on_select="rerun")
+            event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="plotly_clas_v2")
             
-            # Definir qué grados mostrar basado en la selección del gráfico
-            # Manejo robusto: Streamlit puede devolver un diccionario o un objeto con atributo .selection
-            try:
-                if isinstance(event, dict):
-                    selected_from_chart = event.get('selection', {}).get('grado_select', {}).get('Grado', [])
-                else:
-                    selected_from_chart = getattr(event, 'selection', {}).get('grado_select', {}).get('Grado', [])
-            except:
-                selected_from_chart = []
+            # Definir qué grados mostrar
+            selected_from_chart = []
+            if event and hasattr(event, "selection") and event.selection.get("points"):
+                selected_from_chart = [p["x"] for p in event.selection["points"]]
             
             if selected_from_chart:
                 active_grades_names = selected_from_chart
                 active_grades_codes = [k for k, v in GRADOS_INFO.items() if v['nombre'] in selected_from_chart]
             else:
-                # Si no hay selección, mostramos todos los que tienen data
                 active_grades_names = df_chart['Grado'].tolist()
                 active_grades_codes = df_chart['grado_num'].tolist()
         else:
@@ -383,13 +381,13 @@ def render(username: str, password: str):
             def render_compact_card(id_grado, col):
                 info = GRADOS_INFO.get(id_grado)
                 kg = grados_mostrar.get(id_grado, 0)
-                # Color de texto dinámico basado en brillo (opcional, aquí usaremos acento de borde)
+                # Recuadros con fondo de color y texto blanco
                 with col:
                     st.markdown(f"""
-                    <div class="premium-card" style="border-top: 5px solid {info['color']};">
-                        <div class="premium-label">{info['emoji']} {info['nombre']}</div>
-                        <div class="premium-value">{fmt_numero(kg)}</div>
-                        <div style="font-size: 0.6rem; color: #95a5a6;">kilos</div>
+                    <div class="premium-card" style="background-color: {info['color']}; border: none; min-height: 100px; display: flex; flex-direction: column; justify-content: center;">
+                        <div class="premium-label" style="color: rgba(255,255,255,0.9); font-size: 0.75rem;">{info['emoji']} {info['nombre']}</div>
+                        <div class="premium-value" style="color: #ffffff; font-size: 1.4rem;">{fmt_numero(kg)}</div>
+                        <div style="font-size: 0.65rem; color: rgba(255,255,255,0.85);">kilogramos</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -403,10 +401,10 @@ def render(username: str, password: str):
             
             with cols[7]:
                 st.markdown(f"""
-                <div class="premium-card" style="border-top: 5px solid #2c3e50; background: #f8f9fa;">
-                    <div class="premium-label">📦 TOTAL</div>
-                    <div class="premium-value">{fmt_numero(total_kg_filtrado)}</div>
-                    <div style="font-size: 0.6rem; color: #95a5a6;">kilos</div>
+                <div class="premium-card" style="background-color: #2c3e50; border: none; min-height: 100px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="premium-label" style="color: rgba(255,255,255,0.9); font-size: 0.75rem;">📦 TOTAL</div>
+                    <div class="premium-value" style="color: #ffffff; font-size: 1.4rem;">{fmt_numero(total_kg_filtrado)}</div>
+                    <div style="font-size: 0.65rem; color: rgba(255,255,255,0.85);">kilogramos</div>
                 </div>
                 """, unsafe_allow_html=True)
             st.markdown("---")
