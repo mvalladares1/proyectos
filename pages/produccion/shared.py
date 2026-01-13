@@ -40,76 +40,49 @@ ESTADOS_MAP = {
     'cancel': 'Cancelado'
 }
 
-CSS_GLOBAL = """
+CSS_DARK = """
 <style>
-    /* Restaurar Tema Oscuro original */
-    [data-testid="stAppViewContainer"] {
-        background-color: #0e1117 !important;
-        color: #ffffff !important;
-    }
-    [data-testid="stHeader"] {
-        background-color: rgba(14, 17, 23, 0.8) !important;
-    }
-    [data-testid="stSidebar"] {
-        background-color: #1a1c23 !important;
-    }
-
-    /* Info Cards en Dark Mode */
+    [data-testid="stAppViewContainer"] { background-color: #0e1117 !important; color: #ffffff !important; }
+    [data-testid="stHeader"] { background-color: rgba(14, 17, 23, 0.8) !important; }
+    [data-testid="stSidebar"] { background-color: #1a1c23 !important; }
     .info-card {
         background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
-        padding: 24px;
-        border-radius: 16px;
-        margin-bottom: 20px;
-        border: 1px solid #2a2a4a;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        padding: 24px; border-radius: 16px; margin-bottom: 20px;
+        border: 1px solid #2a2a4a; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
-    .info-card h4 {
-        margin: 0 0 20px 0;
-        color: #00cc66 !important;
-        font-size: 1.1em;
-        font-weight: 600;
-        padding-bottom: 12px;
-        border-bottom: 2px solid #00cc6633;
-    }
-    .info-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 0;
-        border-bottom: 1px solid #ffffff10;
-    }
-    .info-row:last-child {
-        border-bottom: none;
-    }
-    .info-label {
-        color: #8892b0;
-        font-size: 0.95em;
-    }
-    .info-value {
-        color: #ffffff !important;
-        font-weight: 500;
-        font-size: 0.95em;
-        text-align: right;
-        max-width: 60%;
-    }
-
-    /* Forzar visibilidad de textos en Dark Mode */
-    h1, h2, h3, h4, h5, h6, p, span, label {
-        color: #ffffff !important;
-    }
-    
-    .stCaption {
-        color: #8892b0 !important;
-    }
-    
-    /* HR sutil */
-    hr {
-        border: 0;
-        border-top: 1px solid #ffffff20 !important;
-        margin: 1.5em 0 !important;
-    }
+    .info-card h4 { margin: 0 0 20px 0; color: #00cc66 !important; font-size: 1.1em; font-weight: 600; padding-bottom: 12px; border-bottom: 2px solid #00cc6633; }
+    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #ffffff10; }
+    .info-label { color: #8892b0; font-size: 0.95em; }
+    .info-value { color: #ffffff !important; font-weight: 500; font-size: 0.95em; text-align: right; }
+    h1, h2, h3, h4, h5, h6, p, span, label { color: #ffffff !important; }
+    .stCaption { color: #8892b0 !important; }
+    hr { border: 0; border-top: 1px solid #ffffff20 !important; margin: 1.5em 0 !important; }
 </style>
 """
+
+CSS_LIGHT = """
+<style>
+    [data-testid="stAppViewContainer"] { background-color: #ffffff !important; color: #1a1a1a !important; }
+    [data-testid="stHeader"] { background-color: rgba(255, 255, 255, 0.8) !important; }
+    [data-testid="stSidebar"] { background-color: #f8f9fa !important; }
+    .info-card {
+        background: #ffffff; padding: 24px; border-radius: 16px; margin-bottom: 20px;
+        border: 1px solid #eef2f7; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .info-card h4 { margin: 0 0 20px 0; color: #27ae60 !important; font-size: 1.1em; font-weight: 700; padding-bottom: 12px; border-bottom: 2px solid #27ae6022; }
+    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f2f6; }
+    .info-label { color: #7f8c8d; font-size: 0.95em; font-weight: 500; }
+    .info-value { color: #2c3e50 !important; font-weight: 700; font-size: 0.95em; text-align: right; }
+    h1, h2, h3, h4, h5, h6, p, span, label { color: #1a1a1a !important; }
+    .stCaption { color: #7f8c8d !important; }
+    hr { border: 0; border-top: 1px solid #f0f2f6 !important; margin: 1.5em 0 !important; }
+</style>
+"""
+
+def get_css():
+    """Retorna el CSS actual basado en el tema seleccionado."""
+    mode = st.session_state.get('theme_mode', 'Dark')
+    return CSS_DARK if mode == 'Dark' else CSS_LIGHT
 
 
 # --------------------- Funciones de formateo ---------------------
@@ -445,6 +418,7 @@ def render_metrics_row(columns, metrics):
 def init_session_state():
     """Inicializa variables de session_state para el módulo Producción."""
     defaults = {
+        'theme_mode': 'Dark',
         'prod_dashboard_data': None,
         'production_ofs': [],
         'production_current_of': None,
