@@ -201,54 +201,47 @@ def _render_status_group(df_status):
         st.info("No hay órdenes en este estado.")
         return
     
-    # --- Gráfico de Barras ECharts: Órdenes por Día ---
-    st.markdown("##### 📊 Carga de Órdenes Pendientes por Día")
-    
-    df_status['Fecha_Fmt'] = pd.to_datetime(df_status['date_planned_start']).dt.strftime('%d/%m')
-    counts_by_day = df_status['Fecha_Fmt'].value_counts().reset_index()
-    counts_by_day.columns = ['Fecha', 'Cantidad']
-    counts_by_day = counts_by_day.sort_values('Fecha')
-
-    options = {
-        "xAxis": {
-            "type": "category",
-            "data": counts_by_day['Fecha'].tolist(),
-            "axisLabel": {"color": "#8892b0", "fontSize": 12},
-        },
-        "yAxis": {
-            "type": "value",
-            "name": "Órdenes",
-            "axisLabel": {"color": "#8892b0"},
-            "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.05)"}}
-        },
-        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
-        "series": [
-            {
-                "data": counts_by_day['Cantidad'].tolist(),
-                "type": "bar",
-                "itemStyle": {
-                    "color": "#3498db",
-                    "borderRadius": [5, 5, 0, 0]
-                },
-                "label": {
-                    "show": True,
-                    "position": "top",
-                    "color": "#ffffff",
-                    "formatter": "{c} OFs"
-                },
-                "barWidth": "40%"
-            }
-        ],
-        "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True},
-        "backgroundColor": "rgba(0,0,0,0)"
-    }
-    
-    st_echarts(options=options, height="300px")
-    st.markdown("---")
-
     # Separar por Tipo (Sala vs Congelado)
     df_sala = df_status[df_status['Tipo'] == "Sala"]
     df_congelado = df_status[df_status['Tipo'] == "Congelado"]
+
+    # --- Gráficos Comparativos ECharts ---
+    col_g1, col_g2 = st.columns(2)
+
+    def _render_echarts_bar(df_sub, title, color):
+        if df_sub.empty:
+            st.caption(f"No hay órdenes para {title}")
+            return
+        
+        df_sub['Fecha_Fmt'] = pd.to_datetime(df_sub['date_planned_start']).dt.strftime('%d/%m')
+        counts = df_sub['Fecha_Fmt'].value_counts().sort_index().reset_index()
+        counts.columns = ['Fecha', 'Cantidad']
+        
+        options = {
+            "title": {"text": title, "textStyle": {"color": "#ffffff", "fontSize": 14}},
+            "xAxis": {"type": "category", "data": counts['Fecha'].tolist(), "axisLabel": {"color": "#8892b0"}},
+            "yAxis": {"type": "value", "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.05)"}}},
+            "tooltip": {"trigger": "axis"},
+            "series": [{
+                "data": counts['Cantidad'].tolist(),
+                "type": "bar",
+                "itemStyle": {"color": color, "borderRadius": [4, 4, 0, 0]},
+                "label": {"show": True, "position": "top", "color": "#ffffff", "formatter": "{c}"},
+                "barWidth": "50%"
+            }],
+            "backgroundColor": "rgba(0,0,0,0)",
+            "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True}
+        }
+        st_echarts(options=options, height="250px")
+
+    with col_g1:
+        _render_echarts_bar(df_sala, "🏭 Carga Salas de Proceso", "#3498db")
+    
+    with col_g2:
+        _render_echarts_bar(df_congelado, "❄️ Carga Estáticos / Cong.", "#e67e22")
+
+    st.markdown("---")
+
 
     c1, c2 = st.columns(2)
     with c1:
