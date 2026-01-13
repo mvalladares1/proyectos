@@ -40,7 +40,8 @@ class ProduccionService:
             'mrp.production',
             domain,
             ['name', 'product_id', 'product_qty', 'qty_produced', 'state', 
-             'date_start', 'date_finished', 'date_planned_start', 'user_id', 'company_id'],
+             'date_start', 'date_finished', 'date_planned_start', 'user_id', 'company_id',
+             'x_studio_sala_de_proceso'],
             limit=limit,
             order='date_planned_start desc'
         )

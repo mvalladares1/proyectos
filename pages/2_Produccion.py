@@ -19,6 +19,7 @@ from produccion import shared
 from produccion import tab_reporteria
 from produccion import tab_detalle
 from produccion import tab_clasificacion
+from produccion import tab_ordenes
 
 # Configuración de página
 st.set_page_config(page_title="Producción", page_icon="🏭", layout="wide")
@@ -51,12 +52,14 @@ st.caption("Monitorea rendimientos productivos y detalle de órdenes de fabricac
 _perm_reporteria = tiene_acceso_pagina("produccion", "reporteria_general")
 _perm_detalle = tiene_acceso_pagina("produccion", "detalle_of")
 _perm_clasificacion = tiene_acceso_pagina("produccion", "clasificacion")
+_perm_seguimiento = tiene_acceso_pagina("produccion", "seguimiento_of")
 
 # === TABS PRINCIPALES ===
-tab_general, tab_detalle_ui, tab_clasificacion_ui = st.tabs([
+tab_general, tab_detalle_ui, tab_clasificacion_ui, tab_seguimiento_ui = st.tabs([
     "📊 Reportería General", 
     "📋 Detalle de OF", 
-    "📦 Clasificación"
+    "📦 Clasificación",
+    "🚚 Seguimiento de OF"
 ])
 
 # =====================================================
@@ -85,4 +88,13 @@ with tab_clasificacion_ui:
         tab_clasificacion.render(username, password)
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Clasificación'. Contacta al administrador.")
+
+# =====================================================
+#           TAB 4: SEGUIMIENTO DE OF
+# =====================================================
+with tab_seguimiento_ui:
+    if _perm_seguimiento:
+        tab_ordenes.render(username, password)
+    else:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Seguimiento de OF'. Contacta al administrador.")
 

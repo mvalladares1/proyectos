@@ -56,6 +56,7 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "reporteria_general", "name": "Reportería General"},
         {"slug": "detalle_of", "name": "Detalle de OF"},
         {"slug": "clasificacion", "name": "Clasificación"},
+        {"slug": "seguimiento_of", "name": "Seguimiento de OF"},
     ],
     "bandejas": [
         {"slug": "dashboard", "name": "Dashboard"},
