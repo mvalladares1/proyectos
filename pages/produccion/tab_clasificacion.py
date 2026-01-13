@@ -347,8 +347,14 @@ def render(username: str, password: str):
             event = st.altair_chart(chart_final, use_container_width=True, on_select="rerun")
             
             # Definir qué grados mostrar basado en la selección del gráfico
-            # Estructura de event en on_select="rerun"
-            selected_from_chart = event.get('selection', {}).get('grado_select', {}).get('Grado', [])
+            # Manejo robusto: Streamlit puede devolver un diccionario o un objeto con atributo .selection
+            try:
+                if isinstance(event, dict):
+                    selected_from_chart = event.get('selection', {}).get('grado_select', {}).get('Grado', [])
+                else:
+                    selected_from_chart = getattr(event, 'selection', {}).get('grado_select', {}).get('Grado', [])
+            except:
+                selected_from_chart = []
             
             if selected_from_chart:
                 active_grades_names = selected_from_chart
@@ -361,7 +367,7 @@ def render(username: str, password: str):
             st.warning("⚠️ No hay datos de producción para el período seleccionado.")
             return
 
-        # --- FILTRADO DINÁMICO DE DATOS PARA KPIs Y TABLA ---
+        # --- FILTRADO DINÁMICO DE DATOS PARA KPIs Y EXPORTACIÓN ---
         grados_mostrar = {k: v for k, v in grados_raw.items() if k in active_grades_codes}
         detalle_mostrar = [item for item in detalle_raw if item.get('grado') in active_grades_names]
         total_kg_filtrado = sum(grados_mostrar.values())
@@ -404,98 +410,78 @@ def render(username: str, password: str):
             st.markdown("---")
 
         
-        # === TABLA DETALLADA ===
+        # === OPCIONES DE EXPORTACIÓN (Sin tabla visual) ===
         if detalle_mostrar:
-            st.markdown("---")
-            st.markdown(f"#### 📋 Detalle de Pallets ({len(detalle_mostrar)} registros)")
-            
-            # Convertir a DataFrame
-            df_detalle = pd.DataFrame(detalle_mostrar)
-            
-            # Formatear columnas
-            df_detalle['kg'] = df_detalle['kg'].apply(lambda x: f"{x:,.2f}")
-            df_detalle['fecha'] = pd.to_datetime(df_detalle['fecha']).dt.strftime('%Y-%m-%d %H:%M')
-            
-            # Traducir Sala (Key -> Label)
-            SALA_REVERSE = {v: k for k, v in SALA_MAP_INTERNAL.items()}
-            df_detalle['sala'] = df_detalle['sala'].map(lambda x: SALA_REVERSE.get(x, x))
-            
-            # Renombrar columnas para display
-            df_display = df_detalle[[
-                'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'planta', 'sala', 'fecha'
-            ]].copy()
-            
-            df_display.columns = [
-                'Pallet', 'Producto', 'Código', 'Grado', 'Kilogramos', 'Orden Fabricación', 'Planta', 'Sala', 'Inicio Proceso'
-            ]
-            
-            # Mostrar tabla
-            st.dataframe(
-                df_display,
-                use_container_width=True,
-                height=400,
-                hide_index=True
-            )
-            
-            # Exportar a Excel
-            if st.button("📥 Exportar a Excel (Filtrado)", key="export_clasificacion"):
-                try:
-                    import io
-                    buffer = io.BytesIO()
-                    
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        df_display.to_excel(writer, index=False, sheet_name='Clasificación')
-                    
-                    st.download_button(
-                        label="Descargar Excel",
-                        data=buffer.getvalue(),
-                        file_name=f"clasificacion_filtrada_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                except ImportError:
-                    st.error("⚠️ Error al exportar. Falta la librería 'openpyxl'.")
-            
-            # --- INFORME SIMPLE RIO FUTURO ---
-            if st.button("📋 Descargar Informe Simple (PDF/Excel)", key="export_informe_rio"):
-                try:
-                    import io
-                    buffer = io.BytesIO()
-                    
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        # Crear una hoja de resumen
-                        resumen_informe = []
-                        resumen_informe.append(["RIO FUTURO PROCESOS SPA"])
-                        resumen_informe.append(["INFORME DE CLASIFICACIÓN DE PALLETS"])
-                        resumen_informe.append([f"Fecha Informe: {datetime.now().strftime('%d/%m/%Y %H:%M')}"])
-                        resumen_informe.append([f"Periodo: {fecha_inicio_clas.strftime('%d/%m/%Y')} al {fecha_fin_clas.strftime('%d/%m/%Y')}"])
-                        resumen_informe.append([f"Planta: {tipo_operacion_seleccionado} - Sala: {sala_proceso_seleccionada}"])
-                        resumen_informe.append([""])
-                        resumen_informe.append(["RESUMEN DE KILOGRAMOS POR GRADO"])
+            with st.expander("📥 Descargar Reportes y Datos", expanded=False):
+                st.info(f"Se han procesado {len(detalle_mostrar)} registros para la selección actual.")
+                
+                # Convertir a DataFrame solo para exportar (No se muestra en pantalla)
+                df_detalle = pd.DataFrame(detalle_mostrar)
+                df_detalle['kg'] = df_detalle['kg'].apply(lambda x: round(x, 2))
+                SALA_REVERSE = {v: k for k, v in SALA_MAP_INTERNAL.items()}
+                df_detalle['sala'] = df_detalle['sala'].map(lambda x: SALA_REVERSE.get(x, x))
+                
+                df_display = df_detalle[[
+                    'pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'planta', 'sala', 'fecha'
+                ]].copy()
+                df_display.columns = ['Pallet', 'Producto', 'Código', 'Grado', 'Kilos', 'OF', 'Planta', 'Sala', 'Inicio Proceso']
+
+                col_down1, col_down2 = st.columns(2)
+                
+                with col_down1:
+                    # Exportar a Excel Detallado
+                    try:
+                        import io
+                        buffer = io.BytesIO()
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                            df_display.to_excel(writer, index=False, sheet_name='Detalle_Pallets')
                         
-                        for g_name in active_grades_names:
-                            g_code = GRADOS_REVERSE.get(g_name)
-                            kilos = grados_mostrar.get(g_code, 0)
-                            resumen_informe.append([f"{g_name}:", kilos])
-                        
-                        resumen_informe.append(["TOTAL SELECCIONADO:", total_kg_filtrado])
-                        resumen_informe.append([""])
-                        
-                        df_resumen = pd.DataFrame(resumen_informe)
-                        df_resumen.to_excel(writer, index=False, header=False, sheet_name='Informe Simple')
-                        
-                        # Agregar el detalle en la misma hoja o en otra
-                        df_display.to_excel(writer, index=False, startrow=len(resumen_informe) + 2, sheet_name='Informe Simple')
-                        
-                    st.download_button(
-                        label="📄 Descargar Informe RIO FUTURO",
-                        data=buffer.getvalue(),
-                        file_name=f"Informe_Rio_Futuro_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                except Exception as e:
-                    st.error(f"⚠️ Error al generar el informe: {str(e)}")
+                        st.download_button(
+                            label="📊 Descargar Excel Detallado",
+                            data=buffer.getvalue(),
+                            file_name=f"detalle_pallets_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except:
+                        st.error("Error al preparar Excel.")
+
+                with col_down2:
+                    # INFORME SIMPLE RIO FUTURO
+                    try:
+                        import io
+                        buffer_info = io.BytesIO()
+                        with pd.ExcelWriter(buffer_info, engine='openpyxl') as writer:
+                            resumen_informe = [
+                                ["RIO FUTURO PROCESOS SPA"],
+                                ["INFORME DE CLASIFICACIÓN DE PALLETS"],
+                                [f"Fecha Informe: {datetime.now().strftime('%d/%m/%Y %H:%M')}"],
+                                [f"Periodo: {fecha_inicio_clas.strftime('%d/%m/%Y')} al {fecha_fin_clas.strftime('%d/%m/%Y')}"],
+                                [f"Planta: {tipo_operacion_seleccionado} - Sala: {sala_proceso_seleccionada}"],
+                                [""],
+                                ["RESUMEN DE KILOGRAMOS POR GRADO"]
+                            ]
+                            for g_name in active_grades_names:
+                                g_code = next((k for k, v in GRADOS_INFO.items() if v['nombre'] == g_name), None)
+                                if g_code:
+                                    kilos = grados_mostrar.get(g_code, 0)
+                                    resumen_informe.append([f"{g_name}:", kilos])
+                            
+                            resumen_informe.extend([["TOTAL SELECCIONADO:", total_kg_filtrado], [""]])
+                            pd.DataFrame(resumen_informe).to_excel(writer, index=False, header=False, sheet_name='Informe')
+                            df_display.to_excel(writer, index=False, startrow=len(resumen_informe) + 2, sheet_name='Informe')
+                            
+                        st.download_button(
+                            label="📄 Descargar Informe RIO FUTURO",
+                            data=buffer_info.getvalue(),
+                            file_name=f"Informe_Rio_Futuro_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Error al generar informe: {e}")
         else:
-            st.info("ℹ️ No hay detalle para los grados seleccionados")
+            st.info("ℹ️ No hay datos para la selección actual.")
     else:
         st.info("👆 Selecciona los filtros y haz clic en **Consultar Clasificación** para ver los datos")
 
