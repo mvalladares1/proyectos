@@ -41,17 +41,8 @@ if not username or not password:
 shared.init_session_state()
 
 # Sidebar de configuración
-with st.sidebar:
-    st.markdown("### ⚙️ Configuración")
-    theme = st.selectbox("Tema Visual", ["Dark", "Light"], 
-                         index=0 if st.session_state.theme_mode == "Dark" else 1,
-                         key="theme_selector")
-    if theme != st.session_state.theme_mode:
-        st.session_state.theme_mode = theme
-        st.rerun()
+# (Sin configuración específica para heredar estilo global)
 
-# CSS Global Dinámico
-st.markdown(shared.get_css(), unsafe_allow_html=True)
 
 # Título principal
 st.title("🏭 Dashboard de Producción")

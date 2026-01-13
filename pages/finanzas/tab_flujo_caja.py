@@ -722,8 +722,7 @@ function handleDragEnd(e) {
 }
 
 // ============ INITIALIZE ============
-// Ejecutar inmediatamente después del render
-setTimeout(function() {
+document.addEventListener('DOMContentLoaded', function() {
     // Enable drag & drop on draggable rows
     document.querySelectorAll('.draggable').forEach(row => {
         row.addEventListener('dragstart', handleDragStart);
@@ -732,7 +731,7 @@ setTimeout(function() {
         row.addEventListener('drop', handleDrop);
         row.addEventListener('dragend', handleDragEnd);
     });
-}, 100);
+});
 </script>
 """
 
@@ -1202,9 +1201,19 @@ def render(username: str, password: str):
         # Agregar JavaScript
         html_parts.append(ENTERPRISE_JS)
         
-        # Renderizar directamente con st.markdown para altura completamente dinámica sin iframe
+        # Renderizar con components.html con altura muy generosa
         full_html = "".join(html_parts)
-        st.markdown(full_html, unsafe_allow_html=True)
+        # Calcular altura: 150px header + 60px por concepto + 250px footer + margen
+        num_conceptos = sum(len(act.get("conceptos", [])) for act in actividades.values())
+        # Contar también las filas de detalle (cuentas) para expandidos
+        num_cuentas_total = sum(
+            sum(len(concepto.get("cuentas", [])) for concepto in act.get("conceptos", []))
+            for act in actividades.values()
+        )
+        altura_base = 150 + (num_conceptos * 60) + (num_cuentas_total * 45) + 250
+        # Usar altura generosa, mínimo 1000px, máximo 5000px
+        altura_final = max(min(altura_base, 5000), 1000)
+        components.html(full_html, height=altura_final, scrolling=True)
         
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:
