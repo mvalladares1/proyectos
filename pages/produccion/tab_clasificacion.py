@@ -243,66 +243,6 @@ def render(username: str, password: str):
             st.warning("⚠️ No hay datos con los filtros seleccionados.")
             return
 
-        # --- SECCIÓN PREMIUM (Solo si hay sala seleccionada) ---
-        if sala_proceso_seleccionada != "Todas":
-            st.markdown(f"#### 📊 RESUMEN OPERATIVO: {sala_proceso_seleccionada}")
-            
-            # Obtener órdenes únicas para promediar métricas
-            # Usamos un diccionario para asegurar unicidad por 'orden_fabricacion'
-            ordenes_unicas_dict = {}
-            for d in detalle_raw:
-                orden_id = d.get('orden_fabricacion')
-                if orden_id not in ordenes_unicas_dict:
-                    ordenes_unicas_dict[orden_id] = d
-            ordenes_unicas = list(ordenes_unicas_dict.values())
-
-            avg_kg_hh = sum(o.get('kg_hh_efectiva', 0) for o in ordenes_unicas) / len(ordenes_unicas) if ordenes_unicas else 0
-            total_dotacion = sum(o.get('dotacion', 0) for o in ordenes_unicas)
-            total_kg_sala = sum(d['kg'] for d in detalle_raw)
-            
-            # Datos PO (tomamos la primera orden para el ejemplo de progreso)
-            po_name = 'N/A'
-            kg_tot_po = 0
-            kg_cons_po = 0
-            po_pct = 0
-
-            if ordenes_unicas:
-                first_ord = ordenes_unicas[0] # Tomamos la primera orden para mostrar el PO
-                po_name = first_ord.get('po_cliente', 'N/A')
-                kg_tot_po = first_ord.get('kg_totales_po', 0) or 0
-                kg_cons_po = first_ord.get('kg_consumidos_po', 0) or 0
-                po_pct = (kg_cons_po / kg_tot_po * 100) if kg_tot_po > 0 else 0
-
-            c_p1, c_p2, c_p3, c_p4 = st.columns(4)
-            with c_p1:
-                st.markdown(f'<div class="premium-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);"><div class="premium-label">Total Kg</div><div class="premium-value">{fmt_numero(total_kg_sala)}</div></div>', unsafe_allow_html=True)
-            with c_p2:
-                st.markdown(f'<div class="premium-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"><div class="premium-label">Kg/HH Ef.</div><div class="premium-value">{avg_kg_hh:.1f}</div></div>', unsafe_allow_html=True)
-            with c_p3:
-                st.markdown(f'<div class="premium-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"><div class="premium-label">Dotación</div><div class="premium-value">{int(total_dotacion)}</div></div>', unsafe_allow_html=True)
-            with c_p4:
-                # Simulación de rendimiento si no hay datos reales
-                yield_est = (total_kg_sala / (total_kg_sala * 1.1) * 100) if total_kg_sala > 0 else 0
-                st.markdown(f'<div class="premium-card"><div class="premium-label">Rendimiento Est.</div><div class="premium-value">{yield_est:.1f}%</div></div>', unsafe_allow_html=True)
-
-            if kg_tot_po > 0:
-                st.markdown(f"""
-                <div class="po-container">
-                    <div style="display:flex; justify-content:space-between; font-weight:bold; margin-bottom:5px;">
-                        <span>📦 PO: {po_name}</span>
-                        <span>{po_pct:.1f}% Completado</span>
-                    </div>
-                    <div style="background:#dee2e6; height:12px; border-radius:10px;">
-                        <div style="background:#3498db; height:100%; border-radius:10px; width:{min(po_pct, 100)}%;"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-top:5px; color:#666;">
-                        <span>Consumido: {fmt_numero(kg_cons_po)} kg</span>
-                        <span>Total PO: {fmt_numero(kg_tot_po)} kg</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown("---")
-
         # Re-mapear grados_raw basado en este detalle ultra-filtrado
         grados_raw = {str(i): 0 for i in range(1, 8)}
         GRADOS_REVERSE = {'IQF AA': '1', 'IQF A': '2', 'PSP': '3', 'W&B': '4', 'Block': '5', 'Jugo': '6', 'IQF Retail': '7'}
@@ -398,24 +338,34 @@ def render(username: str, password: str):
         st.markdown(f"#### 📊 Totales Filtrados ({len(active_grades_names)} grados)")
         
         col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric(f"{GRADOS_INFO['1']['emoji']} {GRADOS_INFO['1']['nombre']}", f"{fmt_numero(grados_mostrar.get('1', 0))} kg")
-        with col2:
-            st.metric(f"{GRADOS_INFO['2']['emoji']} {GRADOS_INFO['2']['nombre']}", f"{fmt_numero(grados_mostrar.get('2', 0))} kg")
-        with col3:
-            st.metric(f"{GRADOS_INFO['3']['emoji']} {GRADOS_INFO['3']['nombre']}", f"{fmt_numero(grados_mostrar.get('3', 0))} kg")
-        with col4:
-            st.metric(f"{GRADOS_INFO['4']['emoji']} {GRADOS_INFO['4']['nombre']}", f"{fmt_numero(grados_mostrar.get('4', 0))} kg")
+        
+        def render_compact_card(id_grado, col):
+            info = GRADOS_INFO.get(id_grado)
+            kg = grados_mostrar.get(id_grado, 0)
+            with col:
+                st.markdown(f"""
+                <div class="premium-card" style="background: linear-gradient(135deg, {info['color']}, {info['color']}dd); padding: 0.8rem;">
+                    <div class="premium-label" style="font-size: 0.8rem;">{info['emoji']} {info['nombre']}</div>
+                    <div class="premium-value" style="font-size: 1.5rem;">{fmt_numero(kg)} kg</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        render_compact_card('1', col1)
+        render_compact_card('2', col2)
+        render_compact_card('3', col3)
+        render_compact_card('4', col4)
             
         col5, col6, col7, col8 = st.columns(4)
-        with col5:
-            st.metric(f"{GRADOS_INFO['5']['emoji']} {GRADOS_INFO['5']['nombre']}", f"{fmt_numero(grados_mostrar.get('5', 0))} kg")
-        with col6:
-            st.metric(f"{GRADOS_INFO['6']['emoji']} {GRADOS_INFO['6']['nombre']}", f"{fmt_numero(grados_mostrar.get('6', 0))} kg")
-        with col7:
-            st.metric(f"{GRADOS_INFO['7']['emoji']} {GRADOS_INFO['7']['nombre']}", f"{fmt_numero(grados_mostrar.get('7', 0))} kg")
+        render_compact_card('5', col5)
+        render_compact_card('6', col6)
+        render_compact_card('7', col7)
         with col8:
-            st.metric("📦 TOTAL SELECCIONADO", f"{fmt_numero(total_kg_filtrado)} kg")
+            st.markdown(f"""
+            <div class="premium-card" style="background: linear-gradient(135deg, #2c3e50, #000000); padding: 0.8rem;">
+                <div class="premium-label" style="font-size: 0.8rem;">📦 TOTAL SELECCIONADO</div>
+                <div class="premium-value" style="font-size: 1.5rem;">{fmt_numero(total_kg_filtrado)} kg</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         # Porcentajes de participación
         st.markdown("##### 📊 Participación en Selección")
