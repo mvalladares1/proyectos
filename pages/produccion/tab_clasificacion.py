@@ -449,8 +449,6 @@ def render(username: str, password: str):
                 with col_down2:
                     # INFORME PDF RIO FUTURO
                     try:
-                        from .shared import API_URL
-                        
                         # Preparar datos para el PDF
                         resumen_pdf = []
                         for g_name in active_grades_names:
