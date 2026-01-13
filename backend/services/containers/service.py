@@ -535,7 +535,11 @@ class ContainersService:
                 
                 # PALLETS DE SALIDA (output)
                 for pallet_out in pallets_data.get('salida', []):
-                    p_out_id = f"POUT:{pallet_out['name']}"
+                    # Importante: el nombre del pallet/package puede repetirse entre containers.
+                    # Si el ID del nodo es global (solo por name) Plotly fusiona nodos y los OUT
+                    # dejan de verse "dentro" de su container. Por eso los scopeamos por container.
+                    pallet_out_key = pallet_out.get("id") or pallet_out.get("name")
+                    p_out_id = f"POUT:C{container['id']}:P{pallet_out_key}"
                     if p_out_id not in node_index:
                         node_index[p_out_id] = len(nodes)
                         nodes.append({
