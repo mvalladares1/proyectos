@@ -255,7 +255,7 @@ def render(username: str, password: str):
         GRADOS_INFO = {
             '1': {'nombre': 'IQF AA', 'emoji': '⭐', 'color': '#FFD700'},
             '2': {'nombre': 'IQF A', 'emoji': '🔵', 'color': '#4472C4'},
-            '3': {'nombre': 'PSP', 'emoji': 'Purple', 'color': '#9966FF'},
+            '3': {'nombre': 'PSP', 'emoji': '🟣', 'color': '#9966FF'},
             '4': {'nombre': 'W&B', 'emoji': '🟤', 'color': '#8B4513'},
             '5': {'nombre': 'Block', 'emoji': '🟦', 'color': '#1E90FF'},
             '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF8C00'},
