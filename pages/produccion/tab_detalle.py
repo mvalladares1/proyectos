@@ -112,6 +112,9 @@ def render(username: str, password: str):
             def get_tipo_sala(row):
                 sala = str(row.get('x_studio_sala_de_proceso', '')).lower()
                 prod = clean_name(row.get('product_id')).lower()
+                # SALA VILKUN es Proceso en Sala no túnel
+                if 'vilkun' in sala:
+                    return "Sala"
                 if any(s in sala for s in ['sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6', 'linea retail', 'granel', 'proceso']):
                     return "Sala"
                 if 'congel' in sala or 'tunel' in sala or 'túnel' in sala:
@@ -200,8 +203,40 @@ def _render_status_group(df_status):
     # KPIs rápidos del grupo
     k1, k2, k3 = st.columns(3)
     k1.metric("Órdenes", len(df_status))
-    k2.metric("Pendiente", f"{df_status['Pendiente'].sum():,.0f} kg")
-    k3.metric("Hecho", f"{df_status['qty_produced'].sum():,.0f} kg")
+    k2.metric("Pendiente Total", f"{df_status['Pendiente'].sum():,.0f} kg")
+    k3.metric("Hecho Total", f"{df_status['qty_produced'].sum():,.0f} kg")
+
+    # Gráfico de Torta: Órdenes por Día (Planificación)
+    st.markdown("##### 📅 Distribución de Órdenes Pendientes por Fecha")
+    
+    # Extraer y formatear fechas
+    df_status['Fecha_Fmt'] = pd.to_datetime(df_status['date_planned_start']).dt.strftime('%d/%m/%Y')
+    counts_by_day = df_status['Fecha_Fmt'].value_counts().reset_index()
+    counts_by_day.columns = ['Fecha', 'Cantidad']
+    counts_by_day = counts_by_day.sort_values('Fecha')
+
+    fig_pie = go.Figure(data=[go.Pie(
+        labels=counts_by_day['Fecha'],
+        values=counts_by_day['Cantidad'],
+        hole=.4,
+        textinfo='label+value+percent',
+        insidetextorientation='radial',
+        marker=dict(line=dict(color='#1e1e1e', width=2)),
+        hovertemplate="<b>Fecha: %{label}</b><br>Órdenes: %{value}<br>Porcentaje: %{percent}<extra></extra>"
+    )])
+
+    fig_pie.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        margin=dict(t=30, b=30, l=10, r=10),
+        height=400,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+        font=dict(color="white")
+    )
+
+    st.plotly_chart(fig_pie, use_container_width=True)
+    st.markdown("---")
 
     # Separar por Tipo (Sala vs Congelado)
     df_sala = df_status[df_status['Tipo'] == "Sala"]
