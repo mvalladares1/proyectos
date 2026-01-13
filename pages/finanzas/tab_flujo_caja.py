@@ -3,6 +3,7 @@ Tab: Flujo de Caja - Excel-Style Design
 Estado de Flujo de Efectivo NIIF IAS 7 con layout mensualizado tipo Excel.
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -41,22 +42,8 @@ EXCEL_STYLE_CSS = """
 .excel-table td {
     padding: 8px 12px;
     border: 1px solid #2d3748;
-    white-space: nowrap;
+    white-space: normal; /* Permitir wrap en títulos largos */
     text-align: right;
-}
-
-/* Columna izquierda fija (concepto) */
-.excel-table th.frozen,
-.excel-table td.frozen {
-    position: sticky;
-    left: 0;
-    background: #1e1e32 !important;
-    z-index: 100;
-    text-align: left;
-    min-width: 300px;
-    max-width: 400px;
-    box-shadow: 4px 0 8px rgba(0,0,0,0.5);
-    border-right: 2px solid #4a5568;
 }
 
 /* Headers */
@@ -67,6 +54,7 @@ EXCEL_STYLE_CSS = """
     position: sticky;
     top: 0;
     z-index: 50;
+    white-space: nowrap;
 }
 
 .excel-table thead th.frozen {
@@ -93,7 +81,7 @@ EXCEL_STYLE_CSS = """
 
 /* Filas de actividad (headers grandes) */
 .excel-table tr.activity-header td {
-    background: linear-gradient(90deg, #1a365d, #2a4365);
+    background: #1a365d; /* Solid color matching frozen */
     color: #63b3ed;
     font-weight: 700;
     font-size: 0.95rem;
@@ -409,15 +397,12 @@ def render(username: str, password: str):
         # KPIs en línea compacta
         kpi_cols = st.columns(5)
         kpi_cols[0].metric("🟢 Operación", fmt_flujo(op))
-        kpi_cols[1].metric("🔵 Inversión", fmt_flujo(inv))
-        kpi_cols[2].metric("🟣 Financiamiento", fmt_flujo(fin))
         kpi_cols[3].metric("💰 Ef. Inicial", fmt_flujo(ef_ini))
         kpi_cols[4].metric("💵 Ef. Final", fmt_flujo(ef_fin), delta=fmt_flujo(op + inv + fin))
         
         st.markdown("")
         
         # === GENERAR TABLA EXCEL-STYLE CON DATOS REALES POR MES ===
-        # Construir HTML de la tabla
         # Construir HTML de la tabla
         html_parts = ['<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
@@ -480,7 +465,7 @@ def render(username: str, password: str):
                 c_id_safe = c_id.replace(".", "_")
                 has_details = len(cuentas) > 0
                 expandable_class = f"expandable parent-{c_id_safe}" if has_details else ""
-                onclick = f'onclick="toggleDetails(\'{c_id_safe}\')"' if has_details else ""
+                onclick = f'onclick="toggleConcept(\'{c_id_safe}\')"' if has_details else ""
                 expand_icon = '<span class="expand-icon">▶</span>' if has_details else '<span style="width:20px;display:inline-block;"></span>'
                 
                 html_parts.append(f'<tr class="{row_class} {expandable_class}" {onclick}>')
@@ -494,21 +479,25 @@ def render(username: str, password: str):
                 html_parts.append(f'<td><strong>{_fmt_monto_html(c_total)}</strong></td>')
                 html_parts.append('</tr>')
                 
-                # Sub-filas de detalle (cuentas) - ocultas por defecto
-                for cuenta in cuentas[:10]:  # Máximo 10 cuentas por concepto
-                    cuenta_codigo = cuenta.get("codigo", "")
-                    cuenta_nombre = cuenta.get("nombre", "")[:35]
-                    cuenta_monto = cuenta.get("monto", 0)
-                    
-                    html_parts.append(f'<tr class="detail-row detail-{c_id_safe}">')
-                    html_parts.append(f'<td class="frozen">📄 {cuenta_codigo} - {cuenta_nombre}</td>')
-                    
-                    # Las cuentas solo tienen monto total, no por mes
-                    for _ in meses_lista:
-                        html_parts.append('<td>-</td>')
-                    
-                    html_parts.append(f'<td>{_fmt_monto_html(cuenta_monto)}</td>')
-                    html_parts.append('</tr>')
+                # Sub-filas de detalle (cuentas) - Ocultas por defecto via style="display:none"
+                # Se muestran al hacer click en el padre (via JS toggleConcept)
+                if cuentas:
+                    for cuenta in cuentas[:15]:  # Máximo 15 cuentas
+                        cuenta_codigo = cuenta.get("codigo", "")
+                        cuenta_nombre = cuenta.get("nombre", "")[:35]
+                        cuenta_monto = cuenta.get("monto", 0)
+                        cu_montos_mes = cuenta.get("montos_por_mes", {})
+                        
+                        html_parts.append(f'<tr class="detail-row detail-{c_id_safe}" style="display:none;">')
+                        html_parts.append(f'<td class="frozen">📄 {cuenta_codigo} - {cuenta_nombre}</td>')
+                        
+                        # Datos mensuales de la cuenta
+                        for mes in meses_lista:
+                            m_acc = cu_montos_mes.get(mes, 0)
+                            html_parts.append(f'<td>{_fmt_monto_html(m_acc)}</td>')
+                        
+                        html_parts.append(f'<td>{_fmt_monto_html(cuenta_monto)}</td>')
+                        html_parts.append('</tr>')
             
             # Subtotal de actividad CON DATOS REALES
             html_parts.append(f'<tr class="subtotal">')
@@ -556,8 +545,29 @@ def render(username: str, password: str):
         
         html_parts.append('</div>')
         
-        # Renderizar tabla
-        st.markdown("".join(html_parts), unsafe_allow_html=True)
+        # Script para toggle individual de conceptos
+        html_parts.append('''
+        <script>
+        function toggleConcept(conceptId) {
+            const rows = document.querySelectorAll('.detail-' + conceptId);
+            const parent = document.querySelector('.parent-' + conceptId);
+            const icon = parent.querySelector('.expand-icon');
+            const isExpanded = parent.classList.contains('expanded');
+            
+            rows.forEach(row => {
+                row.style.display = isExpanded ? 'none' : 'table-row';
+            });
+            parent.classList.toggle('expanded');
+            if (icon) {
+                icon.textContent = isExpanded ? '▶' : '▼';
+            }
+        }
+        </script>
+        ''')
+        
+        # Renderizar tabla con JavaScript habilitado
+        full_html = EXCEL_STYLE_CSS + "".join(html_parts)
+        components.html(full_html, height=800, scrolling=True)
         
         # === EXPORT A EXCEL ===
         with export_placeholder:

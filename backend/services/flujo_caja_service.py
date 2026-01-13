@@ -768,10 +768,13 @@ class FlujoCajaService:
                         cuentas_por_concepto[concepto_id][codigo_cuenta] = {
                             'nombre': nombre_cuenta[:50],
                             'monto': 0.0,
-                            'cantidad': 0
+                            'cantidad': 0,
+                            'montos_por_mes': {m: 0.0 for m in meses_lista}
                         }
                     cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += balance
                     cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
+                    if mes_str in meses_lista:
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['montos_por_mes'][mes_str] += balance
                     
             except Exception as e:
                 print(f"[FlujoCaja] Error en agregación mensual: {e}")
@@ -879,10 +882,13 @@ class FlujoCajaService:
                             cuentas_por_concepto[concepto_id][codigo_cuenta] = {
                                 'nombre': nombre_cuenta[:50],
                                 'monto': 0.0,
-                                'cantidad': 0
+                                'cantidad': 0,
+                                'montos_por_mes': {m: 0.0 for m in meses_lista}
                             }
                         cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += monto_efectivo
                         cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
+                        if mes_proy in meses_lista:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['montos_por_mes'][mes_proy] += monto_efectivo
                 
             print(f"[FlujoCaja] Proyección de facturas draft procesada")
             
@@ -911,13 +917,24 @@ class FlujoCajaService:
             total_concepto = sum(montos_mes.values())
             
             # Obtener cuentas de este concepto para drill-down
+            # Obtener cuentas de este concepto para drill-down
             cuentas_concepto = []
             if c_id in cuentas_por_concepto:
-                cuentas_concepto = sorted(
-                    [{"codigo": k, **v} for k, v in cuentas_por_concepto[c_id].items()],
-                    key=lambda x: abs(x.get('monto', 0)),
+                # Ordenar por monto absoluto total
+                sorted_cuentas = sorted(
+                    cuentas_por_concepto[c_id].items(),
+                    key=lambda x: abs(x[1].get('monto', 0)),
                     reverse=True
-                )[:15]  # Top 15 cuentas por monto
+                )[:15]  # Top 15 accounts
+                
+                for k, v in sorted_cuentas:
+                    cuentas_concepto.append({
+                        "codigo": k,
+                        "nombre": v.get("nombre"),
+                        "monto": round(v.get("monto", 0), 0),
+                        "cantidad": v.get("cantidad"),
+                        "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista}
+                    })
             
             concepto_resultado = {
                 "id": c_id,
