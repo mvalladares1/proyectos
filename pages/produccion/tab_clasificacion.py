@@ -463,6 +463,46 @@ def render(username: str, password: str):
                     )
                 except ImportError:
                     st.error("⚠️ Error al exportar. Falta la librería 'openpyxl'.")
+            
+            # --- INFORME SIMPLE RIO FUTURO ---
+            if st.button("📋 Descargar Informe Simple (PDF/Excel)", key="export_informe_rio"):
+                try:
+                    import io
+                    buffer = io.BytesIO()
+                    
+                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                        # Crear una hoja de resumen
+                        resumen_informe = []
+                        resumen_informe.append(["RIO FUTURO PROCESOS SPA"])
+                        resumen_informe.append(["INFORME DE CLASIFICACIÓN DE PALLETS"])
+                        resumen_informe.append([f"Fecha Informe: {datetime.now().strftime('%d/%m/%Y %H:%M')}"])
+                        resumen_informe.append([f"Periodo: {fecha_inicio_clas.strftime('%d/%m/%Y')} al {fecha_fin_clas.strftime('%d/%m/%Y')}"])
+                        resumen_informe.append([f"Planta: {tipo_operacion_seleccionado} - Sala: {sala_proceso_seleccionada}"])
+                        resumen_informe.append([""])
+                        resumen_informe.append(["RESUMEN DE KILOGRAMOS POR GRADO"])
+                        
+                        for g_name in active_grades_names:
+                            g_code = GRADOS_REVERSE.get(g_name)
+                            kilos = grados_mostrar.get(g_code, 0)
+                            resumen_informe.append([f"{g_name}:", kilos])
+                        
+                        resumen_informe.append(["TOTAL SELECCIONADO:", total_kg_filtrado])
+                        resumen_informe.append([""])
+                        
+                        df_resumen = pd.DataFrame(resumen_informe)
+                        df_resumen.to_excel(writer, index=False, header=False, sheet_name='Informe Simple')
+                        
+                        # Agregar el detalle en la misma hoja o en otra
+                        df_display.to_excel(writer, index=False, startrow=len(resumen_informe) + 2, sheet_name='Informe Simple')
+                        
+                    st.download_button(
+                        label="📄 Descargar Informe RIO FUTURO",
+                        data=buffer.getvalue(),
+                        file_name=f"Informe_Rio_Futuro_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                except Exception as e:
+                    st.error(f"⚠️ Error al generar el informe: {str(e)}")
         else:
             st.info("ℹ️ No hay detalle para los grados seleccionados")
     else:
