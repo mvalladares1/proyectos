@@ -161,14 +161,14 @@ def render(username: str, password: str):
         actividades = flujo_data.get("actividades", {})
         conciliacion = flujo_data.get("conciliacion", {})
         meses_lista = flujo_data.get("meses", [])
-        EFECTIVO_por_mes = flujo_data.get("EFECTIVO_por_mes", {})
+        efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
         fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
-        ef_ini = conciliacion.get("EFECTIVO_inicial", 0)
-        ef_fin = conciliacion.get("EFECTIVO_final", 0)
+        ef_ini = conciliacion.get("efectivo_inicial", 0)
+        ef_fin = conciliacion.get("efectivo_final", 0)
         variacion = op + inv + fin
         
         # ========== DASHBOARD KPIs ANIMADO ==========
@@ -237,7 +237,7 @@ def render(username: str, password: str):
         
         kpi_cols[4].markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">� EFECTIVO Final</div>
+            <div class="kpi-label">💎 EFECTIVO Final</div>
             <div class="kpi-value {'kpi-positive' if variacion > 0 else 'kpi-negative'}">${ef_fin:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -399,7 +399,7 @@ def render(username: str, password: str):
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
         for mes in meses_lista:
-            variacion_mes = EFECTIVO_por_mes.get(mes, {}).get("variacion", 0)
+            variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
             html_parts.append(f'<td>{fmt_monto_html(variacion_mes)}</td>')
         html_parts.append(f'<td><strong>{fmt_monto_html(variacion)}</strong></td>')
         html_parts.append('</tr>')
@@ -407,7 +407,7 @@ def render(username: str, password: str):
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
         for mes in meses_lista:
-            ef_ini_mes = EFECTIVO_por_mes.get(mes, {}).get("inicial", ef_ini)
+            ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
             html_parts.append(f'<td>{fmt_monto_html(ef_ini_mes)}</td>')
         html_parts.append(f'<td><strong>{fmt_monto_html(ef_ini)}</strong></td>')
         html_parts.append('</tr>')
@@ -415,7 +415,7 @@ def render(username: str, password: str):
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append('<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
         for mes in meses_lista:
-            ef_fin_mes = EFECTIVO_por_mes.get(mes, {}).get("final", ef_fin)
+            ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{fmt_monto_html(ef_fin_mes)}</td>')
         html_parts.append(f'<td><strong>{fmt_monto_html(ef_fin)}</strong></td>')
         html_parts.append('</tr>')
