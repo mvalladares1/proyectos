@@ -644,10 +644,11 @@ class FlujoCajaService:
         efectivo_inicial_global = self._get_saldo_efectivo(fecha_anterior, cuentas_efectivo_ids)
         resultado["conciliacion"]["efectivo_inicial"] = round(efectivo_inicial_global, 0)
         
-        # 4. Obtener IDs de movimientos de efectivo
+        # 4. Obtener IDs de movimientos de efectivo (posted + draft para proyección)
+        # Incluimos 'draft' para capturar facturas/asientos en borrador como proyección
         domain = [
             ['account_id', 'in', cuentas_efectivo_ids],
-            ['parent_state', '=', 'posted'],
+            ['parent_state', 'in', ['posted', 'draft']],  # INCLUYE BORRADORES
             ['date', '>=', fecha_inicio],
             ['date', '<=', fecha_fin]
         ]
