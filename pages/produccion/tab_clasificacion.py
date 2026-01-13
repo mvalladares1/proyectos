@@ -276,15 +276,15 @@ def render(username: str, password: str):
             if g_code:
                 grados_raw[g_code] += d.get('kg', 0)
         
-        # Mapeo de información visual
+        # Mapeo de información visual con colores más vibrantes
         GRADOS_INFO = {
-            '1': {'nombre': 'IQF AA', 'emoji': '⭐', 'color': '#FFD700'},
-            '2': {'nombre': 'IQF A', 'emoji': '🔵', 'color': '#4472C4'},
-            '3': {'nombre': 'PSP', 'emoji': '🟣', 'color': '#9966FF'},
-            '4': {'nombre': 'W&B', 'emoji': '🟤', 'color': '#8B4513'},
-            '5': {'nombre': 'Block', 'emoji': '🟦', 'color': '#1E90FF'},
-            '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF8C00'},
-            '7': {'nombre': 'IQF Retail', 'emoji': '🟢', 'color': '#70AD47'}
+            '1': {'nombre': 'IQF AA', 'emoji': '⭐', 'color': '#FFB302'}, # Ambar vibrante
+            '2': {'nombre': 'IQF A', 'emoji': '🔵', 'color': '#2196F3'},  # Azul material
+            '3': {'nombre': 'PSP', 'emoji': '🟣', 'color': '#9C27B0'},    # Purpura
+            '4': {'nombre': 'W&B', 'emoji': '🟤', 'color': '#795548'},    # Marrón
+            '5': {'nombre': 'Block', 'emoji': '🟦', 'color': '#00BCD4'},  # Cyan
+            '6': {'nombre': 'Jugo', 'emoji': '🟠', 'color': '#FF5722'},   # Naranja/Rojo
+            '7': {'nombre': 'IQF Retail', 'emoji': '🟢', 'color': '#4CAF50'}  # Verde
         }
         
         # === GRÁFICO DE BARRAS INTERACTIVO (Control Principal) ===
@@ -307,37 +307,65 @@ def render(username: str, password: str):
         df_chart = pd.DataFrame(base_data_list)
         
         if not df_chart.empty:
+            # Calcular porcentajes para mayor detalle
+            total_sum = df_chart['Kilogramos'].sum()
+            df_chart['Porcentaje'] = (df_chart['Kilogramos'] / total_sum * 100).round(1)
+            df_chart['Label'] = df_chart.apply(lambda r: f"{fmt_numero(r['Kilogramos'])} kg ({r['Porcentaje']}%)", axis=1)
+
             # Selección de Altair (punto bound a leyenda)
-            # USAMOS UN NOMBRE EXPLÍCITO para capturar el evento en Streamlit
             seleccion_chart = alt.selection_point(name='grado_select', fields=['Grado'], bind='legend')
             
-            # Gráfico de Barras con Etiquetas de Datos
+            # Capa 1: Barras
             bars = alt.Chart(df_chart).mark_bar(
-                cornerRadiusTopLeft=8,
-                cornerRadiusTopRight=8
+                cornerRadiusTopLeft=10,
+                cornerRadiusTopRight=10,
+                strokeWidth=1,
+                stroke="white",
+                opacity=0.9
             ).encode(
-                x=alt.X('Grado:N', title='Grado de Producto', axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14)),
-                y=alt.Y('Kilogramos:Q', title='Kilogramos (kg)', axis=alt.Axis(labelFontSize=12, titleFontSize=14)),
+                x=alt.X('Grado:N', title='Categoría de Grado', axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14, labelColor='#8892b0', titleColor='#ffffff')),
+                y=alt.Y('Kilogramos:Q', title='Kilogramos Producidos (kg)', axis=alt.Axis(labelFontSize=12, titleFontSize=14, labelColor='#8892b0', titleColor='#ffffff', grid=True, gridDash=[2,2], gridColor='#ffffff22')),
                 color=alt.Color('Grado:N',
                                scale=alt.Scale(
                                    domain=[info['nombre'] for info in GRADOS_INFO.values()],
                                    range=[info['color'] for info in GRADOS_INFO.values()]
                                ),
-                               legend=alt.Legend(title="Click para filtrar", orient="right")),
-                opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0.2)),
-                tooltip=[alt.Tooltip('Grado:N'), alt.Tooltip('Kilogramos:Q', format=',.2f')]
+                               legend=alt.Legend(title="Filtrar Grado", orient="right", labelColor='#ffffff', titleColor='#00cc66')),
+                opacity=alt.condition(seleccion_chart, alt.value(0.9), alt.value(0.2)),
+                tooltip=[
+                    alt.Tooltip('Grado:N', title='Grado'), 
+                    alt.Tooltip('Kilogramos:Q', title='Peso Total', format=',.2f'),
+                    alt.Tooltip('Porcentaje:Q', title='% del Total', format='.1f')
+                ]
             )
 
-            # Gráfico de Barras interactivo (Sin capas para evitar error de Streamlit)
-            chart_final = bars.add_params(
+            # Capa 2: Etiquetas de Texto dinámicas
+            text = bars.mark_text(
+                align='center',
+                baseline='bottom',
+                dy=-10,
+                fontSize=13,
+                fontWeight='bold',
+                color='white'
+            ).encode(
+                text=alt.Text('Kilogramos:Q', format=',.0f'),
+                opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0))
+            )
+
+            # Unir capas
+            chart_final = (bars + text).add_params(
                 seleccion_chart
             ).properties(
-                height=450
+                height=450,
+                title=alt.TitleParams(
+                    text="Distribución de Producción por Grado",
+                    subtitle=["Porcentajes y Pesos consolidados según selección"],
+                    color='#00cc66',
+                    fontSize=18,
+                    anchor='start'
+                )
             ).configure_view(
                 strokeWidth=0
-            ).configure_axis(
-                grid=True,
-                gridColor='#f0f0f0'
             )
 
             # Selector de KPIs (Contenedor superior para que aparezcan arriba del gráfico)
