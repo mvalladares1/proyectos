@@ -15,81 +15,136 @@ from .shared import (
     sugerir_categoria, guardar_mapeo_cuenta
 )
 
-# CSS para diseño Excel-style con columnas fijas
+# CSS para diseño profesional corporativo de alta gama
 EXCEL_STYLE_CSS = """
 <style>
+/* Custom Scrollbar - Oscura y elegante */
+.excel-container::-webkit-scrollbar {
+    height: 12px;
+    background: #0f172a;
+}
+
+.excel-container::-webkit-scrollbar-track {
+    background: #1e293b;
+    border-radius: 6px;
+}
+
+.excel-container::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #475569 0%, #334155 100%);
+    border-radius: 6px;
+    border: 2px solid #1e293b;
+}
+
+.excel-container::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+}
+
 /* Contenedor principal con scroll horizontal */
 .excel-container {
     width: 100%;
     overflow-x: auto;
     overflow-y: visible;
-    border: 1px solid #2d3748;
-    border-radius: 8px;
-    background: #1a1a2e;
+    border: 2px solid #334155;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
 /* Tabla principal */
 .excel-table {
     width: max-content;
     min-width: 100%;
-    border-collapse: collapse;
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    font-size: 0.85rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'SF Pro Display', sans-serif;
+    font-size: 0.875rem;
+    color: #e2e8f0;
 }
 
 /* Celdas base */
 .excel-table th,
 .excel-table td {
-    padding: 8px 12px;
-    border: 1px solid #374151;
-    white-space: normal; /* Permitir wrap en títulos largos */
+    padding: 14px 20px;
+    border-bottom: 1px solid #334155;
+    border-right: 1px solid #334155;
+    white-space: nowrap;
     text-align: right;
+    transition: all 0.2s ease;
 }
 
-/* Headers */
+/* Headers - Estilo corporativo premium */
 .excel-table thead th {
-    background: linear-gradient(180deg, #374151 0%, #1f2937 100%) !important;
-    color: #f3f4f6;
-    font-weight: 700;
+    background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%) !important;
+    color: #ffffff;
+    font-weight: 600;
     position: sticky;
     top: 0;
     z-index: 50;
     white-space: nowrap;
-    border-bottom: 2px solid #4b5563;
+    border-bottom: 3px solid #3b82f6;
     text-transform: uppercase;
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
+    font-size: 0.75rem;
+    letter-spacing: 1.2px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .excel-table thead th.frozen {
     z-index: 150;
-    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
     color: #ffffff !important;
+    border-right: 2px solid #1e3a8a;
+    text-align: left !important;
+    font-size: 0.8rem;
+    letter-spacing: 0.8px;
+}
+
+/* Columna frozen (Concepto) - Mejorada */
+.excel-table td.frozen {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    border-right: 2px solid #475569 !important;
+    text-align: left !important;
+    font-weight: 500;
+    min-width: 420px;
+    max-width: 420px;
+    white-space: normal !important;
+    overflow: visible;
+    text-overflow: clip;
 }
 
 /* Ensure frozen cells in special rows have solid backgrounds */
 .excel-table tr.activity-header td.frozen {
-    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%) !important;
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
     color: #ffffff !important;
+    font-weight: 700;
+    font-size: 0.95rem;
 }
 
 .excel-table tr.subtotal-interno td.frozen {
-    background: #1e3a5f !important;
-    color: #93c5fd !important;
-}
-
-.excel-table tr.subtotal td.frozen {
-    background: #1e40af !important;
-    color: #dbeafe !important;
-}
-
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%) !important;
+    color: #dbeafe !important;- Corporativo */
+.excel-table tr.activity-header td {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 16px 20px;
+    border-top: 3px solid #60a5fa;
+    border-bottom: 2px solid #3b82f6;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    letter-spacing: 0.5px
 .excel-table tr.grand-total td.frozen {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
     color: #ffffff !important;
+    font-weight: 700;
+    font-size: 0.95rem;
 }
 
 .excel-table tr.data-row td.frozen {
-    background: #1e1e32 !important;
+    background: #1e293b !important;
+    color: #cbd5e1 !important;
 }
 
 /* Filas de actividad (headers grandes) */
@@ -103,90 +158,180 @@ EXCEL_STYLE_CSS = """
     border-bottom: 2px solid #1e40af;
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
-
-/* Subtotales internos (como 3.1) */
+- Elegante */
 .excel-table tr.subtotal-interno td {
-    background: #1e3a5f;
+    background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.2) 100%);
     font-weight: 600;
-    border-top: 1px solid #3b82f6;
-    font-style: italic;
-    color: #93c5fd;
-}
-
-/* Subtotales de actividad */
-.excel-table tr.subtotal td {
-    background: #1e40af;
-    font-weight: 700;
     border-top: 2px solid #3b82f6;
-    border-bottom: 2px solid #3b82f6;
-    color: #dbeafe;
+    font-style: italic;
+    color: #bfdbfe;
+    padding: 12px 20px;
 }
 
-/* Totales generales */
+/* Subtotales de actividad - Más destacado */
+.excel-table tr.subtotal td {
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+    font-weight: 700;
+    border-top: 3px solid #60a5fa;
+    border-bottom: 3px solid #60a5fa;
+    color: #ffffff;
+    padding: 14px 20px;
+    box-shadow: inset 0 1px 3px rgba(255,255,255,0.1) 2px solid #3b82f6;
+    color: #dbeafe;- Premium */
 .excel-table tr.grand-total td {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    background: linear-gradient(135deg, #047857 0%, #10b981 100%);
     font-weight: 700;
     font-size: 0.95rem;
-    border-top: 3px double #10b981;
-    border-bottom: 3px double #10b981;
+    border-top: 4px double #34d399;
+    border-bottom: 4px double #34d399;
     color: #ffffff;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    padding: 16px 20px;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2), inset 0 1px 3px rgba(255,255,255,0.15);
+    letter-spacing: - Más visibles y elegantes */
+.monto-positivo { 
+    color: #34d399; 
+    font-weight: 600;
 }
-
-/* Montos por color */
-.monto-positivo { color: #48bb78; }
-.monto-negativo { color: #fc8181; }
-.monto-cero { color: #718096; }
-
-/* Hover en filas de datos */
+.monto-negativo { 
+    color: #fca5a5; 
+    font-weight: 600;
+}- Suave y corporativo */
 .excel-table tr.data-row:hover td {
-    background: rgba(59, 130, 246, 0.15) !important;
-    transition: background 0.15s ease;
+    background: rgba(59, 130, 246, 0.12) !important;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
-
-/* Celda clickeable */
+- Feedback visual mejorado */
 .excel-table td.clickable {
     cursor: pointer;
-    transition: background 0.15s;
+    transition: all 0.2s ease;
+    position: relative;
 }
 
 .excel-table td.clickable:hover {
-    background: rgba(99, 179, 237, 0.2) !important;
+    background: rgba(59, 130, 246, 0.25) !important;
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3)
+.monto-negativo { color: #fc8181; }
+.monto-cero { color: #718096; }
+- Más espacio y visual */
+.indent-1 { 
+    padding-left: 24px !important; 
 }
-
-/* Indicador de nivel (indentación) */
-.indent-1 { padding-left: 16px !important; }
-.indent-2 { padding-left: 32px !important; }
-.indent-3 { padding-left: 48px !important; }
-.indent-4 { padding-left: 64px !important; }
-
-/* Badge de tipo */
+.indent-2 { 
+    padding-left: 48px !important;
+    border-left: - Moderno y limpio */
 .tipo-badge {
     display: inline-block;
     font-size: 0.7rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-right: 8px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-right: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.tipo-op { background: #276749; color: #9ae6b4; }
-.tipo-inv { background: #2b6cb0; color: #90cdf4; }
-.tipo-fin { background: #553c9a; color: #d6bcfa; }
-
-/* Scroll indicator */
+.tipo-op { 
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%); 
+    color: #ffffff; 
+}
+.tipo-inv { 
+    background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%); 
+    color: #ffffff; 
+}
+.tipo-fin { 
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); 
+    color: #ffffff; - Más elegante */
 .scroll-hint {
     text-align: center;
-    padding: 8px;
-    color: #718096;
-    font-size: 0.8rem;
-    background: linear-gradient(90deg, transparent, rgba(99,179,237,0.1), transparent);
-}
-
-/* Expandable rows */
+    padding: 12px;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent);
+    border-top: 1px solid #334155;
+    font-weight: 500;
+    letter-spacing:- Más suave */
 .expandable {
     cursor: pointer;
+    transition: all 0.2s ease;
 }
 
+.expandable:hover {
+    background: rgba(59, 130, 246, 0.08) !important;
+}
+
+.expandable .expand-icon {
+    display: inline-block;
+    width: 20px;
+    margin-right: 8px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #60a5fa;
+    font-weight: bold;
+}
+
+.expandable.expanded .expand-icon {
+    transform: rotate(90deg);
+    color: #3b82fElegante y legible */
+.detail-row {
+    display: table-row;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.detail-row:hover td {
+    background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.detail-row td {
+    background: #0f172a !important;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    padding: 10px 20px !important;
+    border-left: 3px solid #1e40af;
+}
+- Premium */
+.excel-table td:last-child,
+.excel-table th:last-child {
+    background: rgba(59, 130, 246, 0.12) !important;
+    border-left: 3px solid #475569;
+    font-weight: 700;
+    box-shadow: inset 2px 0 6px rgba(0, 0, 0, 0.15);
+}
+
+.excel-table th:last-child {
+    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
+}
+
+.excel-table tr.grand-total td:last-child {
+    background: linear-gradient(135d- Sutil y elegante */
+.excel-table tr.data-row:nth-child(even) td {
+    background: rgba(15, 23, 42, 0.5);
+}
+
+.excel-table tr.data-row:nth-child(odd) td {
+    background: rgba(30, 41, 59, 0.3);
+}
+
+.excel-table tr.data-row:nth-ch- Más legible */
+.excel-table td:not(.frozen) {
+    font-family: 'SF Mono', 'Consolas', 'Monaco', 'Roboto Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Mejorar legibilidad de texto en frozen */
+.excel-table td.frozen {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    line-height: 1.5
+
+.excel-table tr.data-row:nth-child(odd) td.frozen {
+    background: #1e293b
 .expandable .expand-icon {
     display: inline-block;
     width: 16px;
