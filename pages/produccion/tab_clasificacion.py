@@ -312,26 +312,24 @@ def render(username: str, password: str):
             df_chart['Porcentaje'] = (df_chart['Kilogramos'] / total_sum * 100).round(1)
             df_chart['Label'] = df_chart.apply(lambda r: f"{fmt_numero(r['Kilogramos'])} kg ({r['Porcentaje']}%)", axis=1)
 
-            # Selección de Altair (punto bound a leyenda)
-            seleccion_chart = alt.selection_point(name='grado_select', fields=['Grado'], bind='legend')
+            # Selección de Altair (punto para capturar clics en las barras)
+            seleccion_chart = alt.selection_point(name='grado_select', fields=['Grado'])
             
-            # Capa 1: Barras
+            # Gráfico de Barras ultra-simple para asegurar compatibilidad con on_select
             bars = alt.Chart(df_chart).mark_bar(
                 cornerRadiusTopLeft=10,
                 cornerRadiusTopRight=10,
                 strokeWidth=1,
-                stroke="white",
-                opacity=0.9
+                stroke="white"
             ).encode(
-                x=alt.X('Grado:N', title='Categoría de Grado', axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14, labelColor='#8892b0', titleColor='#ffffff')),
-                y=alt.Y('Kilogramos:Q', title='Kilogramos Producidos (kg)', axis=alt.Axis(labelFontSize=12, titleFontSize=14, labelColor='#8892b0', titleColor='#ffffff', grid=True, gridDash=[2,2], gridColor='#ffffff22')),
+                x=alt.X('Grado:N', title='Categoría de Grado', axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y('Kilogramos:Q', title='Kilogramos (kg)'),
                 color=alt.Color('Grado:N',
                                scale=alt.Scale(
                                    domain=[info['nombre'] for info in GRADOS_INFO.values()],
                                    range=[info['color'] for info in GRADOS_INFO.values()]
                                ),
-                               legend=alt.Legend(title="Filtrar Grado", orient="right", labelColor='#ffffff', titleColor='#00cc66')),
-                opacity=alt.condition(seleccion_chart, alt.value(0.9), alt.value(0.2)),
+                               legend=alt.Legend(title="Grados")),
                 tooltip=[
                     alt.Tooltip('Grado:N', title='Grado'), 
                     alt.Tooltip('Kilogramos:Q', title='Peso Total', format=',.2f'),
@@ -339,7 +337,7 @@ def render(username: str, password: str):
                 ]
             )
 
-            # Gráfico Final ultra-simple para evitar error de Streamlit con on_select
+            # Gráfico Final (Vista única para evitar error de composición)
             chart_final = bars.add_params(seleccion_chart).properties(height=450)
 
             # Selector de KPIs (Contenedor superior para que aparezcan arriba del gráfico)
