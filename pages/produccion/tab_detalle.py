@@ -191,12 +191,12 @@ def _render_grouped_view(df):
     tabs_estado = st.tabs(["🔄 Órdenes Pendientes", "✅ Órdenes Cerradas"])
     
     with tabs_estado[0]: # PENDIENTES
-        _render_status_group(df[df['Estado_Label'] == "Pendiente"])
+        _render_status_group(df[df['Estado_Label'] == "Pendiente"], "pendiente")
         
     with tabs_estado[1]: # CERRADAS
-        _render_status_group(df[df['Estado_Label'] == "Cerrada"])
+        _render_status_group(df[df['Estado_Label'] == "Cerrada"], "cerrada")
 
-def _render_status_group(df_status):
+def _render_status_group(df_status, status_key):
     if df_status.empty:
         st.info("No hay órdenes en este estado.")
         return
@@ -211,7 +211,7 @@ def _render_status_group(df_status):
         "Selecciona los gráficos a visualizar:",
         options=["Salas de Proceso", "Estáticos / Congelación"],
         default=["Salas de Proceso", "Estáticos / Congelación"],
-        key="selector_vistas_graf_v2"
+        key=f"selector_vistas_graf_{status_key}"
     )
 
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
