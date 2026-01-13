@@ -5,6 +5,7 @@ Búsqueda y detalle de órdenes de fabricación individuales.
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from streamlit_echarts import st_echarts
 from datetime import date, timedelta
 
 from .shared import (
@@ -200,47 +201,50 @@ def _render_status_group(df_status):
         st.info("No hay órdenes en este estado.")
         return
     
-    # KPIs rápidos del grupo
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Órdenes", len(df_status))
-    k2.metric("Pendiente Total", f"{df_status['Pendiente'].sum():,.0f} kg")
-    k3.metric("Hecho Total", f"{df_status['qty_produced'].sum():,.0f} kg")
-
-    # Gráfico de Torta: Órdenes por Día (Planificación)
-    st.markdown("##### 📅 Distribución de Órdenes Pendientes por Fecha")
-    
-    # Extraer y formatear fechas
-    df_status['Fecha_Fmt'] = pd.to_datetime(df_status['date_planned_start']).dt.strftime('%d/%m/%Y')
-    counts_by_day = df_status['Fecha_Fmt'].value_counts().reset_index()
-    counts_by_day.columns = ['Fecha', 'Cantidad']
-    counts_by_day = counts_by_day.sort_values('Fecha')
-
-    fig_pie = go.Figure(data=[go.Pie(
-        labels=counts_by_day['Fecha'],
-        values=counts_by_day['Cantidad'],
-        hole=.4,
-        textinfo='label+value+percent',
-        insidetextorientation='radial',
-        marker=dict(line=dict(color='#1e1e1e', width=2)),
-        hovertemplate="<b>Fecha: %{label}</b><br>Órdenes: %{value}<br>Porcentaje: %{percent}<extra></extra>"
-    )])
-
-    fig_pie.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        margin=dict(t=30, b=30, l=10, r=10),
-        height=400,
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-        font=dict(color="white")
-    )
-
-    st.plotly_chart(fig_pie, use_container_width=True)
-    st.markdown("---")
-
     # Separar por Tipo (Sala vs Congelado)
     df_sala = df_status[df_status['Tipo'] == "Sala"]
     df_congelado = df_status[df_status['Tipo'] == "Congelado"]
+
+    # --- Gráficos Comparativos ECharts ---
+    col_g1, col_g2 = st.columns(2)
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    grid_color = "rgba(255,255,255,0.05)" if theme_echarts == "dark" else "rgba(0,0,0,0.05)"
+
+    def _render_echarts_bar(df_sub, title, color):
+        if df_sub.empty:
+            st.caption(f"No hay órdenes para {title}")
+            return
+        
+        df_sub['Fecha_Fmt'] = pd.to_datetime(df_sub['date_planned_start']).dt.strftime('%d/%m')
+        counts = df_sub['Fecha_Fmt'].value_counts().sort_index().reset_index()
+        counts.columns = ['Fecha', 'Cantidad']
+        
+        options = {
+            "title": {"text": title, "textStyle": {"color": label_color, "fontSize": 14}},
+            "xAxis": {"type": "category", "data": counts['Fecha'].tolist(), "axisLabel": {"color": "#8892b0"}},
+            "yAxis": {"type": "value", "splitLine": {"lineStyle": {"color": grid_color}}},
+            "tooltip": {"trigger": "axis"},
+            "series": [{
+                "data": counts['Cantidad'].tolist(),
+                "type": "bar",
+                "itemStyle": {"color": color, "borderRadius": [4, 4, 0, 0]},
+                "label": {"show": True, "position": "top", "color": label_color, "formatter": "{c}"},
+                "barWidth": "50%"
+            }],
+            "backgroundColor": "rgba(0,0,0,0)",
+            "grid": {"left": "3%", "right": "4%", "bottom": "3%", "containLabel": True}
+        }
+        st_echarts(options=options, height="250px", theme=theme_echarts)
+
+    with col_g1:
+        _render_echarts_bar(df_sala, "🏭 Carga Salas de Proceso", "#3498db")
+    
+    with col_g2:
+        _render_echarts_bar(df_congelado, "❄️ Carga Estáticos / Cong.", "#e67e22")
+
+    st.markdown("---")
+
 
     c1, c2 = st.columns(2)
     with c1:
