@@ -50,27 +50,45 @@ EXCEL_STYLE_CSS = """
 .excel-table td.frozen {
     position: sticky;
     left: 0;
-    background: #1e1e32;
-    z-index: 10;
+    background: #1e1e32 !important;
+    z-index: 100;
     text-align: left;
-    min-width: 280px;
-    max-width: 350px;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+    min-width: 300px;
+    max-width: 400px;
+    box-shadow: 4px 0 8px rgba(0,0,0,0.5);
+    border-right: 2px solid #4a5568;
 }
 
 /* Headers */
 .excel-table thead th {
-    background: #2d3748;
+    background: #2d3748 !important;
     color: #e2e8f0;
     font-weight: 600;
     position: sticky;
     top: 0;
-    z-index: 20;
+    z-index: 50;
 }
 
 .excel-table thead th.frozen {
-    z-index: 30;
-    background: #1a365d;
+    z-index: 150;
+    background: #1a365d !important;
+}
+
+/* Ensure frozen cells in special rows have solid backgrounds */
+.excel-table tr.activity-header td.frozen {
+    background: #1a365d !important;
+}
+
+.excel-table tr.subtotal td.frozen {
+    background: #1e2a38 !important;
+}
+
+.excel-table tr.grand-total td.frozen {
+    background: #1a2f23 !important;
+}
+
+.excel-table tr.data-row td.frozen {
+    background: #1e1e32 !important;
 }
 
 /* Filas de actividad (headers grandes) */
@@ -364,9 +382,7 @@ def render(username: str, password: str):
                 if c_tipo == "HEADER":
                     continue  # Skip headers, already have activity header
                 
-                # Solo mostrar conceptos con movimiento
-                if c_total == 0:
-                    continue
+                # MOSTRAR TODAS LAS CATEGORÍAS (incluso vacías)
                 
                 indent_class = f"indent-{min(c_nivel, 3)}"
                 row_class = "subtotal" if c_tipo == "TOTAL" else "data-row"

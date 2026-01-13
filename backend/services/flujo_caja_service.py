@@ -719,14 +719,22 @@ class FlujoCajaService:
                 for grupo in grupos:
                     acc_data = grupo.get('account_id')
                     balance = grupo.get('balance', 0)
-                    date_month = grupo.get('date:month', '')  # Formato: "Enero 2026"
+                    date_month = grupo.get('date:month', '')  # Formato esperado: "Enero 2026"
                     
                     if not acc_data or not date_month:
                         continue
                     
+                    # DEBUG: Ver qué formato retorna Odoo
+                    if grupo == grupos[0]:
+                        print(f"[FlujoCaja DEBUG] Primer grupo date:month = '{date_month}' (tipo: {type(date_month).__name__})")
+                    
                     # Parsear date:month a formato "2026-01"
                     mes_str = self._parse_odoo_month(date_month)
-                    if not mes_str or mes_str not in meses_lista:
+                    if not mes_str:
+                        print(f"[FlujoCaja WARNING] No se pudo parsear mes: '{date_month}'")
+                        continue
+                    if mes_str not in meses_lista:
+                        # El mes está fuera del rango solicitado
                         continue
                     
                     acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
