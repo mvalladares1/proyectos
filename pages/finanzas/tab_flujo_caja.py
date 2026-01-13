@@ -822,8 +822,7 @@ def render(username: str, password: str):
     """
     Renderiza el tab Flujo de Caja con diseño Enterprise.
     """
-    st.markdown("# 💎 Estado de Flujo de Efectivo - Enterprise Edition")
-    st.caption("🚀 Powered by Advanced Analytics Engine | NIIF IAS 7 Method")
+    st.markdown("# Estado de Flujo de Efectivo")
     
     # ========== CONTROLES SUPERIORES ==========
     col_search, col_filters, col_actions = st.columns([2, 3, 2])
@@ -848,35 +847,32 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # ========== SELECTORES DE PERÍODO ==========
-    col_año, col_meses, col_btn, col_export, col_waterfall = st.columns([1, 2, 1, 1, 1])
+    col_desde, col_hasta, col_agrupacion, col_btn, col_export, col_waterfall = st.columns([2, 2, 2, 1, 1, 1])
     
-    with col_año:
-        años_disponibles = list(range(datetime.now().year - 2, datetime.now().year + 2))
-        año_sel = st.selectbox("Año", años_disponibles, 
-                               index=años_disponibles.index(datetime.now().year),
-                               key="flujo_año")
+    with col_desde:
+        fecha_inicio = st.date_input(
+            "Fecha Desde",
+            value=datetime(datetime.now().year, 1, 1),
+            key="flujo_fecha_desde"
+        )
     
-    with col_meses:
-        meses_opciones = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", 
-                         "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-        meses_default = meses_opciones[:datetime.now().month] if año_sel == datetime.now().year else meses_opciones
-        meses_sel = st.multiselect("Meses", meses_opciones, default=meses_default[:6],
-                                   key="flujo_meses")
+    with col_hasta:
+        fecha_fin = st.date_input(
+            "Fecha Hasta",
+            value=datetime.now(),
+            key="flujo_fecha_hasta"
+        )
     
-    # Calcular fechas
-    if meses_sel:
-        mes_inicio_idx = meses_opciones.index(meses_sel[0]) + 1
-        mes_fin_idx = meses_opciones.index(meses_sel[-1]) + 1
-        
-        fecha_inicio = datetime(año_sel, mes_inicio_idx, 1)
-        ultimo_dia = monthrange(año_sel, mes_fin_idx)[1]
-        fecha_fin = datetime(año_sel, mes_fin_idx, ultimo_dia)
-        
-        fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
-        fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
-    else:
-        st.warning("Selecciona al menos un mes")
-        return
+    with col_agrupacion:
+        tipo_periodo = st.selectbox(
+            "Agrupación",
+            ["Mensual", "Semanal"],
+            key="flujo_agrupacion"
+        )
+    
+    # Convertir a string para API
+    fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+    fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
     
     with col_btn:
         btn_generar = st.button("🔄 Generar", type="primary", use_container_width=True,
@@ -891,7 +887,7 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # ========== CARGAR DATOS ==========
-    cache_key = f"flujo_excel_{fecha_inicio_str}_{fecha_fin_str}"
+    cache_key = f"flujo_excel_{tipo_periodo}_{fecha_inicio_str}_{fecha_fin_str}"
     
     if btn_generar:
         if cache_key in st.session_state:
@@ -1011,7 +1007,7 @@ def render(username: str, password: str):
         
         kpi_cols[4].markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">💎 Efectivo Final</div>
+            <div class="kpi-label">� Efectivo Final</div>
             <div class="kpi-value {'kpi-positive' if variacion > 0 else 'kpi-negative'}">${ef_fin:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1187,7 +1183,7 @@ def render(username: str, password: str):
         html_parts.append('</tr>')
         
         html_parts.append(f'<tr class="grand-total">')
-        html_parts.append(f'<td class="frozen"><strong>💎 EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
+        html_parts.append(f'<td class="frozen"><strong>� EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
         for mes in meses_lista:
             ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{_fmt_monto_html(ef_fin_mes)}</td>')
@@ -1207,8 +1203,8 @@ def render(username: str, password: str):
         
         # Renderizar
         full_html = "".join(html_parts)
-        # Altura dinámica según número de conceptos (45px por fila + header 400px + footer 150px)
-        num_conceptos = len([c for c in catalogo_conceptos if c.get('orden', 0) > 0])
+        # Altura dinámica según número de conceptos en actividades (45px por fila + header 400px + footer 150px)
+        num_conceptos = sum(len(act.get("conceptos", [])) for act in actividades.values())
         altura_dinamica = min(400 + (num_conceptos * 45) + 150, 2000)  # Máximo 2000px
         components.html(full_html, height=altura_dinamica, scrolling=False)
         
