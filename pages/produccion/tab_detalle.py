@@ -105,88 +105,51 @@ def render(username: str, password: str):
     with content_placeholder:
         # Tabla de órdenes
         if st.session_state["production_ofs"]:
-            df = pd.DataFrame(st.session_state["production_ofs"])
-            st.subheader("📋 Tabla de órdenes encontradas")
+            df_full = pd.DataFrame(st.session_state["production_ofs"])
             
-            if not df.empty:
-                # --- PROCESAMIENTO ADICIONAL ---
-                df['Planta'] = df['name'].apply(detectar_planta)
-                
-                # Filtrar por planta seleccionada en el UI
-                if planta_sel != "Todas":
-                    df = df[df['Planta'] == planta_sel].copy()
-                
-                if df.empty:
-                    st.warning(f"No hay órdenes para la planta {planta_sel}")
-                else:
-                    def get_tipo_sala(row):
-                        sala = str(row.get('x_studio_sala_de_proceso', '')).lower()
-                        prod = clean_name(row.get('product_id')).lower()
-                        if any(s in sala for s in ['sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6', 'linea retail', 'granel', 'proceso']):
-                            return "Sala"
-                        if 'congel' in sala or 'tunel' in sala or 'túnel' in sala:
-                            return "Congelado"
-                        if 'iqf' in sala or 'iqf' in prod:
-                            return "Sala"
-                        return "Congelado"
+            # --- PROCESAMIENTO ---
+            df_full['Planta'] = df_full['name'].apply(detectar_planta)
+            if planta_sel != "Todas":
+                df_full = df_full[df_full['Planta'] == planta_sel].copy()
+            
+            if df_full.empty:
+                st.warning(f"No hay órdenes para la planta {planta_sel}")
+                return
 
-                    df['Tipo'] = df.apply(get_tipo_sala, axis=1)
-                    df['Pendiente'] = (df['product_qty'] - df['qty_produced']).clip(lower=0)
-                    df['PSP'] = df['product_id'].apply(lambda x: "✅" if "PSP" in clean_name(x).upper() or clean_name(x).startswith(('[2.', '[2,')) else "")
-                    
-                    # KPIs de los resultados filtrados
-                    st.markdown("##### 📊 Resumen de Búsqueda")
-                    rkpi1, rkpi2, rkpi3, rkpi4 = st.columns(4)
-                    rkpi1.metric("Cant. Órdenes", len(df))
-                    rkpi2.metric("Total Pendiente", f"{df['Pendiente'].sum():,.0f} kg")
-                    rkpi3.metric("Total Producido", f"{df['qty_produced'].sum():,.0f} kg")
-                    rkpi4.metric("Órdenes PSP", len(df[df['PSP'] == "✅"]))
+            def get_tipo_sala(row):
+                sala = str(row.get('x_studio_sala_de_proceso', '')).lower()
+                prod = clean_name(row.get('product_id')).lower()
+                if any(s in sala for s in ['sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6', 'linea retail', 'granel', 'proceso']):
+                    return "Sala"
+                if 'congel' in sala or 'tunel' in sala or 'túnel' in sala:
+                    return "Congelado"
+                if 'iqf' in sala or 'iqf' in prod:
+                    return "Sala"
+                return "Congelado"
 
-                    display_cols = [col for col in [
-                        "name", "state", "Planta", "x_studio_sala_de_proceso", "Tipo", "product_id",
-                        "product_qty", "qty_produced", "Pendiente", "PSP", "date_planned_start"
-                    ] if col in df.columns]
-                    
-                    df_display = df[display_cols].copy()
-                    
-                    if "product_id" in df_display.columns:
-                        df_display["producto"] = df_display["product_id"].apply(clean_name)
-                        df_display.drop(columns=["product_id"], inplace=True)
-                    
-                    if "date_planned_start" in df_display.columns:
-                        df_display["Fecha Planif."] = df_display["date_planned_start"].apply(lambda x: pd.to_datetime(x).strftime("%d/%m/%Y") if pd.notna(x) and x else "")
-                        df_display.drop(columns=["date_planned_start"], inplace=True)
+            df_full['Tipo'] = df_full.apply(get_tipo_sala, axis=1)
+            df_full['Pendiente'] = (df_full['product_qty'] - df_full['qty_produced']).clip(lower=0)
+            df_full['% Avance'] = (df_full['qty_produced'] / df_full['product_qty'] * 100).fillna(0).clip(upper=100)
+            df_full['PSP'] = df_full['product_id'].apply(lambda x: "✅" if "PSP" in clean_name(x).upper() or clean_name(x).startswith(('[2.', '[2,')) else "")
+            df_full['Estado_Label'] = df_full['state'].apply(lambda x: "Abierta" if x in ['confirmed', 'progress', 'planned', 'to_close'] else "Cerrada")
+            df_full['Sala_Clean'] = df_full['x_studio_sala_de_proceso'].fillna("Sin Sala")
 
-                    df_display = df_display.rename(columns={
-                        "name": "Orden",
-                        "state": "Estado",
-                        "x_studio_sala_de_proceso": "Sala",
-                        "product_qty": "Planificado",
-                        "qty_produced": "Producido",
-                    })
-                    
-                    # Mostrar tabla
-                    st.dataframe(
-                        df_display, 
-                        use_container_width=True, 
-                        height=400,
-                        column_config={
-                            "Planificado": st.column_config.NumberColumn(format="%d"),
-                            "Producido": st.column_config.NumberColumn(format="%d"),
-                            "Pendiente": st.column_config.NumberColumn(format="%d"),
-                        },
-                        hide_index=True
-                    )
-                    
-                    csv = df_display.to_csv(index=False)
-                    st.download_button("📥 Descargar Tabla (CSV)", csv, "ordenes_produccion.csv", "text/csv")
+            # Selector de Vista
+            view_mode = st.radio("Modo de Visualización", ["📍 Seguimiento por Sala", "📋 Tabla Detallada"], horizontal=True, key="prod_view_mode")
+            
+            st.markdown("---")
+
+            if view_mode == "📍 Seguimiento por Sala":
+                _render_grouped_view(df_full)
+            else:
+                _render_table_view(df_full)
 
             st.markdown("---")
-            # Re-filtrar para el selector por si se aplicó filtro de planta
-            ofs_for_selector = df.to_dict('records')
+            # Selector para detalle individual
+            ofs_for_selector = df_full.to_dict('records')
             
             options = {
-                f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))} ({of.get('Planta', '-')})": of["id"]
+                f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))}": of["id"]
                 for of in ofs_for_selector
             }
             selected_label = st.selectbox("Seleccionar orden para detalle", options=list(options.keys()), key="prod_selector")
@@ -229,10 +192,92 @@ def render(username: str, password: str):
         else:
             st.info("Busca una orden para comenzar")
 
-    # Detalle de OF seleccionada
-    if st.session_state["production_current_of"]:
-        _render_detalle_of(st.session_state["production_current_of"])
+    # =============================================================================
+# HELPER RENDERS PARA TAB DETALLE
+# =============================================================================
 
+def _render_grouped_view(df):
+    """Renderiza las órdenes agrupadas por Estado, Planta y Sala."""
+    tabs_estado = st.tabs(["🔄 Órdenes Abiertas", "✅ Órdenes Cerradas"])
+    
+    with tabs_estado[0]: # ABIERTAS
+        _render_status_group(df[df['Estado_Label'] == "Abierta"])
+        
+    with tabs_estado[1]: # CERRADAS
+        _render_status_group(df[df['Estado_Label'] == "Cerrada"])
+
+def _render_status_group(df_status):
+    if df_status.empty:
+        st.info("No hay órdenes en este estado.")
+        return
+    
+    # KPIs rápidos del grupo
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Órdenes", len(df_status))
+    k2.metric("Pendiente", f"{df_status['Pendiente'].sum():,.0f} kg")
+    k3.metric("Hecho", f"{df_status['qty_produced'].sum():,.0f} kg")
+
+    # Separar por Tipo (Sala vs Congelado)
+    df_sala = df_status[df_status['Tipo'] == "Sala"]
+    df_congelado = df_status[df_status['Tipo'] == "Congelado"]
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("#### 🏭 Procesos en Sala")
+        if df_sala.empty: st.caption("No hay órdenes de sala")
+        else:
+            for sala, group in df_sala.groupby("Sala_Clean"):
+                with st.expander(f"📍 {sala} ({len(group)} OFs)"):
+                    for _, row in group.iterrows():
+                        _render_of_card(row)
+
+    with c2:
+        st.markdown("#### ❄️ Congelado / Túneles")
+        if df_congelado.empty: st.caption("No hay órdenes de congelado")
+        else:
+            for sala, group in df_congelado.groupby("Sala_Clean"):
+                with st.expander(f"📍 {sala} ({len(group)} OFs)"):
+                    for _, row in group.iterrows():
+                        _render_of_card(row)
+
+def _render_of_card(row):
+    """Renderiza una card visual para una OF en la vista agrupada."""
+    with st.container():
+        st.markdown(f"""
+        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border-left: 4px solid {'#00cc66' if row['Estado_Label'] == 'Cerrada' else '#3498db'}; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <b style="font-size: 1.1em; color: #ffffff;">{row['OF']} {row['PSP']}</b>
+                <span style="font-size: 0.85em; color: #8892b0;">{row['Planta']}</span>
+            </div>
+            <div style="font-size: 0.9em; color: #8892b0; margin: 4px 0;">{clean_name(row['product_id'])}</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 4px;">
+                <span>Progreso: {row['qty_produced']:,.0f} / {row['product_qty']:,.0f} kg</span>
+                <b style="color: {'#e74c3c' if row['Pendiente'] > 0 else '#00cc66'};">{row['Pendiente']:,.0f} kg pendientes</b>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.progress(row['% Avance']/100)
+
+def _render_table_view(df):
+    """Vista de tabla tradicional mejorada."""
+    display_cols = [
+        "name", "Estado_Label", "Planta", "Sala_Clean", "Tipo", "producto",
+        "product_qty", "qty_produced", "Pendiente", "PSP", "Fecha Planif."
+    ]
+    st.dataframe(
+        df[display_cols].rename(columns={
+            "name": "Orden", "Estado_Label": "Estado", "Sala_Clean": "Sala",
+            "product_qty": "Planificado", "qty_produced": "Producido"
+        }),
+        use_container_width=True,
+        height=500,
+        column_config={
+            "Planificado": st.column_config.NumberColumn(format="%d"),
+            "Producido": st.column_config.NumberColumn(format="%d"),
+            "Pendiente": st.column_config.NumberColumn(format="%d"),
+        },
+        hide_index=True
+    )
 
 def _render_detalle_of(data_of):
     """Renderiza el detalle completo de una orden de fabricación."""
@@ -259,42 +304,20 @@ def _render_detalle_of(data_of):
 
     rendimiento_val = (kg_out / kg_in * 100) if kg_in > 0 else 0
 
-    # Detalle de la orden
-    st.markdown("### 📋 Detalle de la Orden")
+    # Header de la OF
+    st.markdown(f"### 🏭 Detalle de la Orden: {of.get('name')} {('✅ PSP' if 'PSP' in clean_name(of.get('product_id')).upper() else '')}")
 
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
         <div class="info-card">
             <h4>📌 Información General</h4>
-            <div class="info-row">
-                <span class="info-label">Responsable</span>
-                <span class="info-value">{clean_name(of.get('user_id'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Cliente</span>
-                <span class="info-value">{clean_name(of.get('x_studio_clientes')) if clean_name(of.get('x_studio_clientes')) != 'False' else 'N/A'}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Producto</span>
-                <span class="info-value">{clean_name(of.get('product_id'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Estado</span>
-                <span class="info-value">{get_state_label(of.get('state'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Sala</span>
-                <span class="info-value">{clean_name(of.get('x_studio_sala_de_proceso'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Tipo Proceso</span>
-                <span class="info-value">{"Sala" if any(s in str(of.get('x_studio_sala_de_proceso','')).lower() for s in ['sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6', 'linea retail', 'granel', 'proceso']) else "Congelado"}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Planta</span>
-                <span class="info-value">{detectar_planta(of.get('name'))}</span>
-            </div>
+            <div class="info-row"><span class="info-label">Producto</span><span class="info-value">{clean_name(of.get('product_id'))}</span></div>
+            <div class="info-row"><span class="info-label">Cliente</span><span class="info-value">{clean_name(of.get('x_studio_clientes')) if clean_name(of.get('x_studio_clientes')) != 'False' else 'N/A'}</span></div>
+            <div class="info-row"><span class="info-label">Planta</span><span class="info-value">{detectar_planta(of.get('name'))}</span></div>
+            <div class="info-row"><span class="info-label">Sala</span><span class="info-value">{clean_name(of.get('x_studio_sala_de_proceso'))}</span></div>
+            <div class="info-row"><span class="info-label">Responsable</span><span class="info-value">{clean_name(of.get('user_id'))}</span></div>
+            <div class="info-row"><span class="info-label">Estado</span><span class="info-value">{get_state_label(of.get('state'))}</span></div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -302,157 +325,127 @@ def _render_detalle_of(data_of):
         st.markdown(f"""
         <div class="info-card">
             <h4>⏱️ Tiempos y Dotación</h4>
-            <div class="info-row">
-                <span class="info-label">Hora inicio</span>
-                <span class="info-value">{format_fecha(of.get('x_studio_inicio_de_proceso'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Hora término</span>
-                <span class="info-value">{format_fecha(of.get('x_studio_termino_de_proceso'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Horas detención</span>
-                <span class="info-value">{format_num(of.get('x_studio_horas_detencion_totales'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Dotación</span>
-                <span class="info-value">{format_num(of.get('x_studio_dotacin'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Horas hombre</span>
-                <span class="info-value">{format_num(of.get('x_studio_hh'))}</span>
-            </div>
+            <div class="info-row"><span class="info-label">Inicio Proceso</span><span class="info-value">{format_fecha(of.get('x_studio_inicio_de_proceso'))}</span></div>
+            <div class="info-row"><span class="info-label">Término Proceso</span><span class="info-value">{format_fecha(of.get('x_studio_termino_de_proceso'))}</span></div>
+            <div class="info-row"><span class="info-label">Horas Detención</span><span class="info-value">{format_num(of.get('x_studio_horas_detencion_totales'))} hrs</span></div>
+            <div class="info-row"><span class="info-label">Dotación</span><span class="info-value">{format_num(of.get('x_studio_dotacin'))} personas</span></div>
+            <div class="info-row"><span class="info-label">Total HH</span><span class="info-value">{format_num(of.get('x_studio_hh'))} hrs</span></div>
         </div>
         """, unsafe_allow_html=True)
 
-    col3, col4 = st.columns(2)
-    with col3:
+    # Eficiencia y PO en filas compactas
+    ec1, ec2 = st.columns(2)
+    with ec1:
         st.markdown(f"""
         <div class="info-card">
-            <h4>📈 Eficiencia</h4>
-            <div class="info-row">
-                <span class="info-label">HH efectiva</span>
-                <span class="info-value">{format_num(of.get('x_studio_hh_efectiva'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">KG/hora efectiva</span>
-                <span class="info-value">{format_num(of.get('x_studio_kghora_efectiva'))}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">KG/HH efectiva</span>
-                <span class="info-value">{format_num(of.get('x_studio_kghh_efectiva'))}</span>
-            </div>
+            <h4>📈 Eficiencia Operativa</h4>
+            <div class="info-row"><span class="info-label">HH Efectiva</span><span class="info-value">{format_num(of.get('x_studio_hh_efectiva'))} hrs</span></div>
+            <div class="info-row"><span class="info-label">KG / HH Efectiva</span><span class="info-value">{format_num(of.get('x_studio_kghh_efectiva'))} kg/hr</span></div>
         </div>
         """, unsafe_allow_html=True)
-
-    with col4:
+    with ec2:
         po_asociada = clean_name(of.get('x_studio_po_asociada'))
-        po_asociada_display = po_asociada if po_asociada not in ['-', 'False'] else 'N/A'
         st.markdown(f"""
         <div class="info-card">
-            <h4>📦 PO Asociada</h4>
-            <div class="info-row">
-                <span class="info-label">Para PO</span>
-                <span class="info-value">{'Sí' if of.get('x_studio_odf_es_para_una_po_en_particular') else 'No'}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">PO asociada</span>
-                <span class="info-value">{po_asociada_display}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">KG totales PO</span>
-                <span class="info-value">{format_num(of.get('x_studio_kg_totales_po', 0))} kg</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">KG consumidos</span>
-                <span class="info-value">{format_num(of.get('x_studio_kg_consumidos_po', 0))} kg</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">KG disponibles</span>
-                <span class="info-value">{format_num(of.get('x_studio_kg_disponibles_po', 0))} kg</span>
-            </div>
+            <h4>📦 Referencia PO</h4>
+            <div class="info-row"><span class="info-label">PO Asociada</span><span class="info-value">{po_asociada if po_asociada not in ['-', 'False'] else 'N/A'}</span></div>
+            <div class="info-row"><span class="info-label">KG Disponibles PO</span><span class="info-value">{format_num(of.get('x_studio_kg_disponibles_po', 0))} kg</span></div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
 
     # KPIs de Producción
-    st.markdown("### 📊 KPIs de Producción")
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
-    kpi_col1.metric("KG Entrada (Fruta)", f"{kg_in:,.0f} kg")
-    kpi_col2.metric("KG Salida (Producto)", f"{kg_out:,.0f} kg")
-    kpi_col3.metric("Merma", f"{merma:,.0f} kg")
-    kpi_col4.metric("Rendimiento", f"{rendimiento_val:.2f}%")
-    kpi_col5.metric("Total PxQ", f"${total_pxq_comp + total_pxq_sub:,.2f}")
+    st.markdown("### 📊 Balance de Masa y Rendimiento")
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    kpi_col1.metric("KG Entrada (Materia Prima)", f"{kg_in:,.0f} kg")
+    kpi_col2.metric("KG Salida (Terminado)", f"{kg_out:,.0f} kg")
+    kpi_col3.metric("Merma Proceso", f"{merma:,.0f} kg", delta=f"{merma/(kg_in if kg_in>0 else 1)*100:.1f}%", delta_color="inverse")
+    kpi_col4.metric("Rendimiento Final", f"{rendimiento_val:.2f}%")
 
-    # Gauge y resumen PxQ
-    col_gauge, col_pxq = st.columns([2, 1])
-    with col_gauge:
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=rendimiento_val,
-            number={"suffix": "%", "valueformat": ".2f"},
-            gauge={
-                "axis": {"range": [0, 120]},
-                "bar": {"color": "#00cc66"},
-                "steps": [
-                    {"range": [0, 50], "color": "#ff4444"},
-                    {"range": [50, 80], "color": "#ffb347"},
-                    {"range": [80, 100], "color": "#00cc66"},
-                    {"range": [100, 120], "color": "#00ff88"},
-                ],
-            }
-        ))
-        fig_gauge.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=280)
-        st.plotly_chart(fig_gauge, use_container_width=True)
-
-    with col_pxq:
-        st.markdown(f"""
-        <div style='background:#1e1e1e;padding:20px;border-radius:12px;height:260px'>
-            <h4 style='margin:0 0 16px 0;color:#00cc66'>Resumen PxQ</h4>
-            <p style='margin:8px 0;font-size:1.1em'><span style='color:#888'>Componentes:</span> <b>${total_pxq_comp:,.2f}</b></p>
-            <p style='margin:8px 0;font-size:1.1em'><span style='color:#888'>Subproductos:</span> <b>${total_pxq_sub:,.2f}</b></p>
-            <hr style='border-color:#333;margin:16px 0'>
-            <p style='margin:8px 0;font-size:1.3em'><span style='color:#888'>Total:</span> <b style='color:#00cc66'>${total_pxq_comp + total_pxq_sub:,.2f}</b></p>
-        </div>
-        """, unsafe_allow_html=True)
+    # Gráfico de Rendimiento (Gauge)
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=rendimiento_val,
+        number={"suffix": "%", "valueformat": ".2f", "font": {"color": "#ffffff"}},
+        gauge={
+            "axis": {"range": [0, 120], "tickcolor": "#ffffff"},
+            "bar": {"color": "#00cc66"},
+            "bgcolor": "rgba(0,0,0,0)",
+            "steps": [
+                {"range": [0, 80], "color": "#ff444433"},
+                {"range": [80, 100], "color": "#00cc6633"},
+            ],
+        }
+    ))
+    fig_gauge.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=300, margin=dict(t=0, b=0))
+    st.plotly_chart(fig_gauge, use_container_width=True)
 
     st.markdown("---")
 
-    # Tabs de componentes/subproductos/detenciones/consumo
+    # Tabs de Información Detallada
     tab_comp, tab_sub, tab_det, tab_consumo = st.tabs([
-        "Componentes", "Subproductos", "Detenciones", "Consumo"
+        "🌳 Componentes (MP / Insumos)", 
+        "📦 Subproductos (Pallets Producidos)", 
+        "⏱️ Detenciones", 
+        "⚖️ Trazabilidad de Consumo"
     ])
 
     with tab_comp:
-        render_component_tab(componentes, "componentes")
+        st.markdown("#### Detalle de Materiales Consumidos")
+        if componentes:
+            df_c = pd.DataFrame([{
+                "Producto": clean_name(c.get("product_id")),
+                "Lote": clean_name(c.get("lot_id")),
+                "Pallet Origen": clean_name(c.get("package_id")),
+                "Cantidad": c.get("qty_done", 0),
+                "UoM": clean_name(c.get("product_uom_id")),
+                "Categoría": clean_name(c.get("product_category_name"))
+            } for c in componentes])
+            st.dataframe(df_c, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay componentes registrados.")
 
     with tab_sub:
-        render_component_tab(subproductos_filtrados, "subproductos")
+        st.markdown("#### Detalle de Pallets y Productos Resultantes")
+        if subproductos:
+            df_s = pd.DataFrame([{
+                "Producto": clean_name(s.get("product_id")),
+                "Lote": clean_name(s.get("lot_id")),
+                "Pallet Destino": clean_name(s.get("result_package_id")),
+                "Cantidad": s.get("qty_done", 0),
+                "UoM": clean_name(s.get("product_uom_id")),
+                "Categoría": clean_name(s.get("product_category_name"))
+            } for s in subproductos])
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay subproductos registrados.")
 
     with tab_det:
+        st.markdown("#### Registro de Tiempos Muertos")
         if detenciones:
             df_det = pd.DataFrame([{
-                "Responsable": clean_name(det.get("x_studio_responsable")),
                 "Motivo": clean_name(det.get("x_motivodetencion")),
-                "Hora inicio": format_fecha(det.get("x_horainiciodetencion")),
-                "Hora fin": format_fecha(det.get("x_horafindetencion")),
-                "Horas detención": format_num(det.get("x_studio_horas_de_detencin", 0) or 0),
+                "Responsable": clean_name(det.get("x_studio_responsable")),
+                "Inicio": format_fecha(det.get("x_horainiciodetencion")),
+                "Fin": format_fecha(det.get("x_horafindetencion")),
+                "Duración (hrs)": format_num(det.get("x_studio_horas_de_detencin", 0)),
             } for det in detenciones])
-            st.dataframe(df_det, use_container_width=True, height=320)
+            st.dataframe(df_det, use_container_width=True, hide_index=True)
         else:
-            st.info("No hay detenciones registradas")
+            st.info("No se registraron detenciones para esta orden.")
 
     with tab_consumo:
+        st.markdown("#### Historial Cronológico de Consumo de Pallets")
         if consumo:
-            df_consumo = pd.DataFrame([{
+            df_cons = pd.DataFrame([{
                 "Pallet": item.get("x_name", "N/A"),
                 "Producto": item.get("producto", "Desconocido"),
                 "Lote": item.get("lote", ""),
                 "Tipo": item.get("type", "Desconocido"),
-                "Hora inicio": format_fecha(item.get("x_studio_hora_inicio")),
-                "Hora fin": format_fecha(item.get("x_studio_hora_fin")),
+                "Hora Inicio": format_fecha(item.get("x_studio_hora_inicio")),
+                "Hora Fin": format_fecha(item.get("x_studio_hora_fin")),
             } for item in consumo])
-            st.dataframe(df_consumo, use_container_width=True, height=360)
+            st.dataframe(df_cons, use_container_width=True, hide_index=True)
         else:
-            st.info("No hay registros de consumo")
+            st.info("No hay registros detallados de cronología de consumo.")
