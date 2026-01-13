@@ -309,6 +309,9 @@ def render(username: str, password: str):
             ).configure_view(
                 strokeWidth=0
             )
+
+            # Selector de KPIs (Contenedor superior para que aparezcan arriba del gráfico)
+            kpis_container = st.container()
             
             # Renderizar gráfico y capturar evento de selección
             event = st.altair_chart(chart_final, use_container_width=True, on_select="rerun")
@@ -328,44 +331,45 @@ def render(username: str, password: str):
             return
 
         # --- FILTRADO DINÁMICO DE DATOS PARA KPIs Y TABLA ---
-        # ATENCIÓN: No sobreescribir con data.get(...), usar los ya filtrados arriba
         grados_mostrar = {k: v for k, v in grados_raw.items() if k in active_grades_codes}
         detalle_mostrar = [item for item in detalle_raw if item.get('grado') in active_grades_names]
         total_kg_filtrado = sum(grados_mostrar.values())
-        
-        # === KPIs ===
-        st.markdown("---")
-        st.markdown(f"#### 📊 Totales Filtrados ({len(active_grades_names)} grados)")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        def render_compact_card(id_grado, col):
-            info = GRADOS_INFO.get(id_grado)
-            kg = grados_mostrar.get(id_grado, 0)
-            with col:
+
+        # --- KPIs COMPACTOS (Renderizados arriba en el kpis_container) ---
+        with kpis_container:
+            st.markdown(f"#### 📊 Totales Filtrados ({len(active_grades_names)} grados)")
+            
+            cols = st.columns(8)
+            
+            def render_compact_card(id_grado, col):
+                info = GRADOS_INFO.get(id_grado)
+                kg = grados_mostrar.get(id_grado, 0)
+                with col:
+                    st.markdown(f"""
+                    <div class="premium-card" style="background: linear-gradient(135deg, {info['color']}, {info['color']}dd); padding: 0.4rem; min-height: 80px; display: flex; flex-direction: column; justify-content: center;">
+                        <div class="premium-label" style="font-size: 0.65rem; line-height: 1; margin-bottom: 4px;">{info['emoji']} {info['nombre']}</div>
+                        <div class="premium-value" style="font-size: 1.1rem; line-height: 1;">{fmt_numero(kg)}</div>
+                        <div style="font-size: 0.6rem; opacity: 0.8;">kg</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            render_compact_card('1', cols[0])
+            render_compact_card('2', cols[1])
+            render_compact_card('3', cols[2])
+            render_compact_card('4', cols[3])
+            render_compact_card('5', cols[4])
+            render_compact_card('6', cols[5])
+            render_compact_card('7', cols[6])
+            
+            with cols[7]:
                 st.markdown(f"""
-                <div class="premium-card" style="background: linear-gradient(135deg, {info['color']}, {info['color']}dd); padding: 0.8rem;">
-                    <div class="premium-label" style="font-size: 0.8rem;">{info['emoji']} {info['nombre']}</div>
-                    <div class="premium-value" style="font-size: 1.5rem;">{fmt_numero(kg)} kg</div>
+                <div class="premium-card" style="background: linear-gradient(135deg, #2c3e50, #000000); padding: 0.4rem; min-height: 80px; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="premium-label" style="font-size: 0.65rem; line-height: 1; margin-bottom: 4px;">📦 TOTAL</div>
+                    <div class="premium-value" style="font-size: 1.1rem; line-height: 1;">{fmt_numero(total_kg_filtrado)}</div>
+                    <div style="font-size: 0.6rem; opacity: 0.8;">kg</div>
                 </div>
                 """, unsafe_allow_html=True)
-
-        render_compact_card('1', col1)
-        render_compact_card('2', col2)
-        render_compact_card('3', col3)
-        render_compact_card('4', col4)
-            
-        col5, col6, col7, col8 = st.columns(4)
-        render_compact_card('5', col5)
-        render_compact_card('6', col6)
-        render_compact_card('7', col7)
-        with col8:
-            st.markdown(f"""
-            <div class="premium-card" style="background: linear-gradient(135deg, #2c3e50, #000000); padding: 0.8rem;">
-                <div class="premium-label" style="font-size: 0.8rem;">📦 TOTAL SELECCIONADO</div>
-                <div class="premium-value" style="font-size: 1.5rem;">{fmt_numero(total_kg_filtrado)} kg</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("---")
 
         
         # === TABLA DETALLADA ===
