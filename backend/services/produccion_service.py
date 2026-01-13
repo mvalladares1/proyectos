@@ -4,7 +4,7 @@ Migrado del dashboard original de producción
 OPTIMIZADO: Incluye caché para KPIs
 """
 from typing import Optional, Dict, List, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import HTTPException
 
 from shared.odoo_client import OdooClient
