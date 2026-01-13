@@ -1,495 +1,507 @@
 """
-Tab: Flujo de Caja - Estado de Flujo de Efectivo NIIF IAS 7.
+Tab: Flujo de Caja - Excel-Style Design
+Estado de Flujo de Efectivo NIIF IAS 7 con layout mensualizado tipo Excel.
 """
 import streamlit as st
 import pandas as pd
 import requests
-import altair as alt
 from datetime import datetime, timedelta
 from calendar import monthrange
+import io
 
 from .shared import (
-    FLUJO_CAJA_URL, fmt_flujo, build_ias7_categories_dropdown,
-    sugerir_categoria, render_ias7_tree_activity, guardar_mapeo_cuenta
+    FLUJO_CAJA_URL, fmt_flujo, fmt_numero, build_ias7_categories_dropdown,
+    sugerir_categoria, guardar_mapeo_cuenta
 )
+
+# CSS para diseño Excel-style con columnas fijas
+EXCEL_STYLE_CSS = """
+<style>
+/* Contenedor principal con scroll horizontal */
+.excel-container {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    background: #1a1a2e;
+}
+
+/* Tabla principal */
+.excel-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.85rem;
+}
+
+/* Celdas base */
+.excel-table th,
+.excel-table td {
+    padding: 8px 12px;
+    border: 1px solid #2d3748;
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* Columna izquierda fija (concepto) */
+.excel-table th.frozen,
+.excel-table td.frozen {
+    position: sticky;
+    left: 0;
+    background: #1e1e32;
+    z-index: 10;
+    text-align: left;
+    min-width: 280px;
+    max-width: 350px;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+}
+
+/* Headers */
+.excel-table thead th {
+    background: #2d3748;
+    color: #e2e8f0;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.excel-table thead th.frozen {
+    z-index: 30;
+    background: #1a365d;
+}
+
+/* Filas de actividad (headers grandes) */
+.excel-table tr.activity-header td {
+    background: linear-gradient(90deg, #1a365d, #2a4365);
+    color: #63b3ed;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 10px 12px;
+}
+
+/* Subtotales */
+.excel-table tr.subtotal td {
+    background: rgba(99, 179, 237, 0.1);
+    font-weight: 600;
+    border-top: 2px solid #4a5568;
+}
+
+/* Totales generales */
+.excel-table tr.grand-total td {
+    background: rgba(72, 187, 120, 0.15);
+    font-weight: 700;
+    font-size: 0.9rem;
+    border-top: 3px double #48bb78;
+}
+
+/* Montos por color */
+.monto-positivo { color: #48bb78; }
+.monto-negativo { color: #fc8181; }
+.monto-cero { color: #718096; }
+
+/* Hover en filas de datos */
+.excel-table tr.data-row:hover td {
+    background: rgba(99, 179, 237, 0.05);
+}
+
+/* Celda clickeable */
+.excel-table td.clickable {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.excel-table td.clickable:hover {
+    background: rgba(99, 179, 237, 0.2) !important;
+}
+
+/* Indicador de nivel (indentación) */
+.indent-1 { padding-left: 12px !important; }
+.indent-2 { padding-left: 28px !important; }
+.indent-3 { padding-left: 44px !important; }
+
+/* Badge de tipo */
+.tipo-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+
+.tipo-op { background: #276749; color: #9ae6b4; }
+.tipo-inv { background: #2b6cb0; color: #90cdf4; }
+.tipo-fin { background: #553c9a; color: #d6bcfa; }
+
+/* Scroll indicator */
+.scroll-hint {
+    text-align: center;
+    padding: 8px;
+    color: #718096;
+    font-size: 0.8rem;
+    background: linear-gradient(90deg, transparent, rgba(99,179,237,0.1), transparent);
+}
+</style>
+"""
+
+
+def _fmt_monto_html(valor: float, include_class: bool = True) -> str:
+    """Formatea un monto con color según signo."""
+    if valor > 0:
+        cls = "monto-positivo" if include_class else ""
+        return f'<span class="{cls}">${valor:,.0f}</span>'
+    elif valor < 0:
+        cls = "monto-negativo" if include_class else ""
+        return f'<span class="{cls}">-${abs(valor):,.0f}</span>'
+    else:
+        cls = "monto-cero" if include_class else ""
+        return f'<span class="{cls}">$0</span>'
+
+
+def _generar_meses(fecha_inicio: datetime, fecha_fin: datetime) -> list:
+    """Genera lista de meses entre dos fechas."""
+    meses = []
+    current = fecha_inicio.replace(day=1)
+    while current <= fecha_fin:
+        meses.append(current.strftime("%Y-%m"))
+        # Siguiente mes
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1)
+        else:
+            current = current.replace(month=current.month + 1)
+    return meses
+
+
+def _nombre_mes_corto(mes_str: str) -> str:
+    """Convierte '2026-01' a 'Ene 26'."""
+    meses_nombres = {
+        "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
+        "05": "May", "06": "Jun", "07": "Jul", "08": "Ago",
+        "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic"
+    }
+    parts = mes_str.split("-")
+    if len(parts) == 2:
+        return f"{meses_nombres.get(parts[1], parts[1])} {parts[0][2:]}"
+    return mes_str
 
 
 @st.fragment
 def render(username: str, password: str):
     """
-    Renderiza el tab Flujo de Caja con método directo NIIF IAS 7.
-    Fragment independiente para evitar re-renders al cambiar de tab.
-    Mantiene progress bar personalizado de 5 fases.
-    
-    Args:
-        username: Usuario para API
-        password: Contraseña para API
+    Renderiza el tab Flujo de Caja con diseño Excel-style.
+    - Categorías fijas a la izquierda
+    - Columnas mensualizadas con scroll horizontal
+    - Drill-down por celda
     """
+    # Inyectar CSS
+    st.markdown(EXCEL_STYLE_CSS, unsafe_allow_html=True)
+    
     st.subheader("💵 Estado de Flujo de Efectivo")
-    st.caption("Método Directo - NIIF IAS 7")
+    st.caption("Método Directo - NIIF IAS 7 • Vista Mensualizada")
     
-    # === SELECTORES DE PERÍODO ===
-    st.markdown("#### 📅 Seleccionar Período")
+    # === SELECTORES COMPACTOS ===
+    col_año, col_meses, col_btn, col_export = st.columns([1, 2, 1, 1])
     
-    periodo_opciones = ["Mes actual", "Mes anterior", "Último trimestre", "Año actual", "Personalizado"]
+    with col_año:
+        años_disponibles = list(range(datetime.now().year - 2, datetime.now().year + 2))
+        año_sel = st.selectbox("Año", años_disponibles, 
+                               index=años_disponibles.index(datetime.now().year),
+                               key="flujo_año")
     
-    col_periodo, col_desde, col_hasta, col_modo = st.columns([1.2, 1, 1, 1.2])
+    with col_meses:
+        meses_opciones = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", 
+                         "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+        # Multiselect para rango de meses
+        meses_default = meses_opciones[:datetime.now().month] if año_sel == datetime.now().year else meses_opciones
+        meses_sel = st.multiselect("Meses", meses_opciones, default=meses_default[:6],
+                                   key="flujo_meses")
     
-    with col_periodo:
-        periodo_sel = st.selectbox("Período", periodo_opciones, key="finanzas_flujo_periodo")
-    
-    hoy = datetime.now()
-    
-    if periodo_sel == "Mes actual":
-        flujo_fecha_ini = hoy.replace(day=1)
-        ultimo_dia = monthrange(hoy.year, hoy.month)[1]
-        flujo_fecha_fin = hoy.replace(day=ultimo_dia)
-    elif periodo_sel == "Mes anterior":
-        primer_dia_actual = hoy.replace(day=1)
-        ultimo_dia_anterior = primer_dia_actual - timedelta(days=1)
-        flujo_fecha_ini = ultimo_dia_anterior.replace(day=1)
-        flujo_fecha_fin = ultimo_dia_anterior
-    elif periodo_sel == "Último trimestre":
-        flujo_fecha_fin = hoy
-        flujo_fecha_ini = hoy - timedelta(days=90)
-    elif periodo_sel == "Año actual":
-        flujo_fecha_ini = datetime(hoy.year, 1, 1)
-        flujo_fecha_fin = hoy
+    # Calcular fecha inicio/fin
+    if meses_sel:
+        mes_inicio_idx = meses_opciones.index(meses_sel[0]) + 1
+        mes_fin_idx = meses_opciones.index(meses_sel[-1]) + 1
+        
+        fecha_inicio = datetime(año_sel, mes_inicio_idx, 1)
+        ultimo_dia = monthrange(año_sel, mes_fin_idx)[1]
+        fecha_fin = datetime(año_sel, mes_fin_idx, ultimo_dia)
+        
+        fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+        fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
     else:
-        flujo_fecha_ini = hoy.replace(day=1)
-        flujo_fecha_fin = hoy
+        st.warning("Selecciona al menos un mes")
+        return
     
-    with col_desde:
-        flujo_f_inicio = st.date_input(
-            "Desde", value=flujo_fecha_ini, format="DD/MM/YYYY",
-            key="finanzas_flujo_desde", disabled=periodo_sel != "Personalizado"
-        )
+    with col_btn:
+        btn_generar = st.button("🔄 Generar", type="primary", use_container_width=True,
+                               key="flujo_btn_generar")
     
-    with col_hasta:
-        flujo_f_fin = st.date_input(
-            "Hasta", value=flujo_fecha_fin, format="DD/MM/YYYY",
-            key="finanzas_flujo_hasta", disabled=periodo_sel != "Personalizado"
-        )
-    
-    with col_modo:
-        st.caption("Modo de Visualización")
-        modo_ver = st.radio("Modo", ["Real", "Proyectado", "Consolidado"],
-                           horizontal=True, label_visibility="collapsed", key="finanzas_modo_ver")
-    
-    if periodo_sel == "Personalizado":
-        flujo_inicio_str = flujo_f_inicio.strftime("%Y-%m-%d")
-        flujo_fin_str = flujo_f_fin.strftime("%Y-%m-%d")
-    else:
-        flujo_inicio_str = flujo_fecha_ini.strftime("%Y-%m-%d")
-        flujo_fin_str = flujo_fecha_fin.strftime("%Y-%m-%d")
-    
-    flujo_cache_key = f"finanzas_flujo_{flujo_inicio_str}_{flujo_fin_str}"
+    with col_export:
+        # Placeholder para export (se activa después de cargar datos)
+        export_placeholder = st.empty()
     
     st.markdown("---")
     
-    # === BOTÓN GENERAR ===
-    def cargar_flujo_click():
-        if flujo_cache_key in st.session_state:
-            del st.session_state[flujo_cache_key]
-        st.session_state['finanzas_flujo_clicked'] = True
+    # === CARGAR DATOS ===
+    cache_key = f"flujo_excel_{fecha_inicio_str}_{fecha_fin_str}"
     
-    col_btn, col_info = st.columns([1, 2])
-    with col_btn:
-        st.button("🔄 Generar Flujo de Caja", type="primary", use_container_width=True,
-                 key="finanzas_btn_flujo", on_click=cargar_flujo_click, 
-                 disabled=st.session_state.finanzas_flujo_loading)
-    with col_info:
-        st.info(f"📅 Período: {flujo_inicio_str} a {flujo_fin_str}")
+    if btn_generar:
+        # Limpiar caché anterior
+        if cache_key in st.session_state:
+            del st.session_state[cache_key]
+        st.session_state["flujo_should_load"] = True
     
-    # === CARGAR Y MOSTRAR DATOS ===
-    if st.session_state.get('finanzas_flujo_clicked') or flujo_cache_key in st.session_state:
+    if st.session_state.get("flujo_should_load") or cache_key in st.session_state:
         
-        if flujo_cache_key not in st.session_state:
-            st.session_state.finanzas_flujo_loading = True
-            try:
-                # Progress bar personalizado para carga de 120s
-                progress_placeholder = st.empty()
-                
-                with progress_placeholder.container():
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    status_text.text("🔗 Estableciendo conexión con Odoo...")
-                    progress_bar.progress(10)
-                    
-                    status_text.text("📊 Consultando movimientos de efectivo...")
-                    progress_bar.progress(30)
-                    
+        if cache_key not in st.session_state:
+            with st.spinner("📊 Cargando datos mensualizados desde Odoo..."):
+                try:
+                    # Usar nuevo endpoint /mensual para datos por mes
                     resp = requests.get(
-                        f"{FLUJO_CAJA_URL}/",
+                        f"{FLUJO_CAJA_URL}/mensual",
                         params={
-                            "fecha_inicio": flujo_inicio_str,
-                            "fecha_fin": flujo_fin_str,
+                            "fecha_inicio": fecha_inicio_str,
+                            "fecha_fin": fecha_fin_str,
                             "username": username,
                             "password": password
                         },
                         timeout=120
                     )
                     
-                    status_text.text("⚙️ Procesando clasificación IAS 7...")
-                    progress_bar.progress(70)
-                    
                     if resp.status_code == 200:
-                        st.session_state[flujo_cache_key] = resp.json()
-                        
-                        status_text.text("🏗️ Construyendo estructura de flujo...")
-                        progress_bar.progress(90)
-                        
-                        progress_bar.progress(100)
-                        status_text.text("✅ Flujo de caja generado correctamente")
-                        
-                        progress_placeholder.empty()
-                        st.toast("✅ Flujo de caja generado", icon="✅")
+                        st.session_state[cache_key] = resp.json()
+                        st.session_state["flujo_should_load"] = False
+                        st.toast("✅ Datos mensualizados cargados", icon="✅")
                     else:
-                        progress_placeholder.empty()
                         st.error(f"Error {resp.status_code}: {resp.text}")
-                        st.toast(f"❌ Error {resp.status_code}", icon="❌")
-                        st.session_state.finanzas_flujo_loading = False
                         return
-            except Exception as e:
-                progress_placeholder.empty()
-                st.error(f"Error de conexión: {e}")
-                st.toast(f"❌ Error: {str(e)[:100]}", icon="❌")
-                st.session_state.finanzas_flujo_loading = False
-                return
-            finally:
-                st.session_state.finanzas_flujo_loading = False
+                except Exception as e:
+                    st.error(f"Error de conexión: {e}")
+                    return
         
-        flujo_data = st.session_state.get(flujo_cache_key, {})
+        flujo_data = st.session_state.get(cache_key, {})
         
         if "error" in flujo_data:
             st.error(f"Error: {flujo_data['error']}")
             return
         
-        # Extraer datos
+        # === PROCESAR DATOS MENSUALIZADOS ===
         actividades = flujo_data.get("actividades", {})
-        
-        # Obtener estructura de proyección (puede venir como 'proyeccion' -> 'actividades' o 'actividades_proy' legacy)
-        proyeccion_data = flujo_data.get("proyeccion", {})
-        actividades_proy_raw = proyeccion_data.get("actividades", {}) if proyeccion_data else flujo_data.get("actividades_proy", {})
-        
-        if modo_ver == "Proyectado":
-            actividades = actividades_proy_raw
-        elif modo_ver == "Consolidado":
-            # Deep merge de real + proyectado
-            # Nota: Esto modifica 'actividades' in-place si no tenemos cuidado, mejor copiar
-            import copy
-            actividades_real = copy.deepcopy(flujo_data.get("actividades", {}))
-            
-            for key in actividades_real:
-                if key in actividades_proy_raw:
-                    # Sumar subtotales
-                    actividades_real[key]["subtotal"] = (
-                        actividades_real[key].get("subtotal", 0) +
-                        actividades_proy_raw[key].get("subtotal", 0)
-                    )
-                    # Sumar conceptos individuales si es necesario para el árbol
-                    # (El componente React lo maneja si se le pasan ambos, pero aquí estamos fusionando para métricas)
-            actividades = actividades_real
-        
         conciliacion = flujo_data.get("conciliacion", {})
+        meses_lista = flujo_data.get("meses", [])
+        efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
-        drill_down = flujo_data.get("drill_down", {})
         
-        # === KPIs ===
+        # KPIs compactos (totales)
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
         fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
         ef_ini = conciliacion.get("efectivo_inicial", 0)
         ef_fin = conciliacion.get("efectivo_final", 0)
-        otros = conciliacion.get("otros_no_clasificados", 0)
         
-        # Status del flujo
-        if otros == 0 and len(cuentas_nc) == 0:
-            st.success("✅ Flujo completo - Todas las cuentas clasificadas")
-        elif abs(otros) < abs(ef_fin - ef_ini) * 0.05:
-            st.warning(f"⚠️ Flujo con {len(cuentas_nc)} cuentas pendientes: ${abs(otros):,.0f}")
-        else:
-            st.error(f"❌ Revisar clasificación - ${abs(otros):,.0f} sin clasificar")
+        # KPIs en línea compacta
+        kpi_cols = st.columns(5)
+        kpi_cols[0].metric("🟢 Operación", fmt_flujo(op))
+        kpi_cols[1].metric("🔵 Inversión", fmt_flujo(inv))
+        kpi_cols[2].metric("🟣 Financiamiento", fmt_flujo(fin))
+        kpi_cols[3].metric("💰 Ef. Inicial", fmt_flujo(ef_ini))
+        kpi_cols[4].metric("💵 Ef. Final", fmt_flujo(ef_fin), delta=fmt_flujo(op + inv + fin))
         
-        # Métricas
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("🟢 Operación", fmt_flujo(op))
-        with col2:
-            st.metric("🔵 Inversión", fmt_flujo(inv))
-        with col3:
-            st.metric("🟣 Financiamiento", fmt_flujo(fin))
-        with col4:
-            st.metric("💰 Efectivo Inicial", fmt_flujo(ef_ini))
-        with col5:
-            variacion = op + inv + fin
-            st.metric("💵 Efectivo Final", fmt_flujo(ef_fin), delta=fmt_flujo(variacion))
+        st.markdown("")
         
-        st.divider()
+        # === GENERAR TABLA EXCEL-STYLE CON DATOS REALES POR MES ===
+        # Construir HTML de la tabla
+        # Construir HTML de la tabla
+        html_parts = ['<div class="excel-container">']
+        html_parts.append('<table class="excel-table">')
         
-        # === WATERFALL CHART ===
-        waterfall_data = [
-            {"Concepto": "Efectivo Inicial", "Monto": ef_ini, "Tipo": "Inicial"},
-            {"Concepto": "Operación", "Monto": op, "Tipo": "Actividad"},
-            {"Concepto": "Inversión", "Monto": inv, "Tipo": "Actividad"},
-            {"Concepto": "Financiamiento", "Monto": fin, "Tipo": "Actividad"},
-        ]
-        if otros != 0:
-            waterfall_data.append({"Concepto": "Otros", "Monto": otros, "Tipo": "Otros"})
-        waterfall_data.append({"Concepto": "Efectivo Final", "Monto": ef_fin, "Tipo": "Final"})
+        # HEADER
+        html_parts.append('<thead><tr>')
+        html_parts.append('<th class="frozen">Concepto</th>')
+        for mes in meses_lista:
+            html_parts.append(f'<th>{_nombre_mes_corto(mes)}</th>')
+        html_parts.append('<th><strong>Total</strong></th>')
+        html_parts.append('</tr></thead>')
         
-        df_waterfall = pd.DataFrame(waterfall_data)
+        # BODY
+        html_parts.append('<tbody>')
         
-        chart_waterfall = alt.Chart(df_waterfall).mark_bar().encode(
-            x=alt.X("Concepto:N", sort=None, axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y("Monto:Q", title="Monto (CLP)"),
-            color=alt.Color("Tipo:N", scale=alt.Scale(
-                domain=["Inicial", "Actividad", "Otros", "Final"],
-                range=["#3498db", "#2ecc71", "#f39c12", "#9b59b6"]
-            )),
-            tooltip=[alt.Tooltip("Concepto:N"), alt.Tooltip("Monto:Q", title="Monto", format="$,.0f")]
-        ).properties(height=300)
+        act_config = {
+            "OPERACION": {"emoji": "🟢", "class": "tipo-op", "color": "#48bb78"},
+            "INVERSION": {"emoji": "🔵", "class": "tipo-inv", "color": "#4299e1"},
+            "FINANCIAMIENTO": {"emoji": "🟣", "class": "tipo-fin", "color": "#9f7aea"}
+        }
         
-        st.altair_chart(chart_waterfall, use_container_width=True)
-        
-        st.divider()
-        
-        # === ESTADO DE FLUJO OFICIAL (React Component) ===
-        # st.markdown("### 📋 Estado de Flujo de Efectivo (NIIF IAS 7)")
-        
-        # Importar y usar el nuevo componente React
-        try:
-            from components.ias7_tree import ias7_tree, transform_backend_to_component
+        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            act_data = actividades.get(act_key, {})
+            if not act_data:
+                continue
             
-            # Transformar datos al formato del componente
-            props = transform_backend_to_component(flujo_data, modo=modo_ver.lower())
+            config = act_config[act_key]
+            act_nombre = act_data.get("nombre", act_key)
+            act_subtotal = act_data.get("subtotal", 0)
+            act_subtotal_por_mes = act_data.get("subtotal_por_mes", {})
+            conceptos = act_data.get("conceptos", [])
             
-            # Renderizar el componente React
-            event = ias7_tree(**props)
+            # Fila de actividad (header)
+            html_parts.append(f'<tr class="activity-header">')
+            html_parts.append(f'<td class="frozen">{config["emoji"]} {act_nombre}</td>')
+            for _ in meses_lista:
+                html_parts.append('<td></td>')
+            html_parts.append('<td></td>')
+            html_parts.append('</tr>')
             
-            # === MANEJO DE EVENTOS (Frontend -> Backend) ===
-            if event and isinstance(event, dict) and event.get("action") == "EDIT_NODE":
-                payload = event.get("payload", {})
-                node_id = payload.get("id")
-                node_name = payload.get("nombre")
+            # Filas de conceptos CON DATOS REALES POR MES
+            for concepto in sorted(conceptos, key=lambda x: x.get("order", x.get("id", ""))):
+                c_id = concepto.get("id") or concepto.get("codigo")
+                c_nombre = concepto.get("nombre", "")
+                c_tipo = concepto.get("tipo", "LINEA")
+                c_nivel = concepto.get("nivel", 3)
+                c_total = concepto.get("total", 0)
+                montos_mes = concepto.get("montos_por_mes", {})  # Datos REALES del backend
                 
-                # Mostrar interfaz de edición
-                st.divider()
-                st.markdown(f"### ✏️ Editando: {node_name} ({node_id})")
+                if c_tipo == "HEADER":
+                    continue  # Skip headers, already have activity header
                 
-                # Buscar cuentas asociadas a este concepto
-                cuentas_asociadas = []
-                for cta_list in drill_down.values():
-                    for cta in cta_list:
-                        if cta.get("concepto_id") == node_id:
-                            cuentas_asociadas.append(cta)
+                # Solo mostrar conceptos con movimiento
+                if c_total == 0:
+                    continue
                 
-                if not cuentas_asociadas:
-                    st.info("No hay cuentas contables mapeadas directamente a este concepto.")
-                else:
-                    st.write(f"Se encontraron {len(cuentas_asociadas)} cuentas asociadas:")
-                    
-                    for cta in cuentas_asociadas:
-                         with st.expander(f"{cta['codigo']} - {cta['nombre']} (${cta['monto']:,.0f})"):
-                            # Mover cuenta form
-                            categorias = build_ias7_categories_dropdown()
-                            new_cat = st.selectbox("Cambiar Clasificación", list(categorias.keys()), 
-                                                 key=f"reclass_{cta['codigo']}")
-                            
-                            if st.button("Guardar Cambio", key=f"btn_save_{cta['codigo']}"):
-                                save_ok, save_msg = guardar_mapeo_cuenta(
-                                    cta['codigo'], categorias[new_cat], cta['nombre'],
-                                    username, password, cta['monto']
-                                )
-                                if save_ok:
-                                    st.success(f"Cuenta {cta['codigo']} reclasificada correctamente.")
-                                    # Limpiar caché para refrescar
-                                    if flujo_cache_key in st.session_state:
-                                        del st.session_state[flujo_cache_key]
-                                else:
-                                    st.error(f"Error al guardar: {save_msg}")
-
-        except ImportError as e:
-            st.warning(f"Componente React no disponible: {e}. Usando renderizado alternativo.")
-            # Fallback: usar render directo sin HTML problemático
-            from .shared import render_ias7_tree_activity
-            colores = {"OPERACION": "#2ecc71", "INVERSION": "#3498db", "FINANCIAMIENTO": "#9b59b6"}
+                indent_class = f"indent-{min(c_nivel, 3)}"
+                row_class = "subtotal" if c_tipo == "TOTAL" else "data-row"
+                
+                html_parts.append(f'<tr class="{row_class}">')
+                html_parts.append(f'<td class="frozen {indent_class}">{c_id} - {c_nombre[:50]}</td>')
+                
+                # DATOS REALES por mes
+                for mes in meses_lista:
+                    monto_mes = montos_mes.get(mes, 0)
+                    html_parts.append(f'<td class="clickable">{_fmt_monto_html(monto_mes)}</td>')
+                
+                html_parts.append(f'<td><strong>{_fmt_monto_html(c_total)}</strong></td>')
+                html_parts.append('</tr>')
             
-            # Construir docs_por_concepto y cuentas_por_concepto desde los conceptos de actividades
-            docs_por_concepto = {}
-            cuentas_por_concepto_proyeccion = {}
-            
-            for act_key, act_data in actividades.items():
-                for concepto in act_data.get("conceptos", []):
-                    codigo = concepto.get("codigo") or concepto.get("id")
-                    docs = concepto.get("documentos", [])
-                    if docs and codigo:
-                        docs_por_concepto[codigo] = docs
-                        
-                        # Agregar montos por cuenta contable
-                        cuentas_agrupadas = {}
-                        for doc in docs:
-                            cuenta_codigo = doc.get("cuenta", "")
-                            cuenta_nombre = doc.get("cuenta_nombre", "") or cuenta_codigo
-                            monto = doc.get("monto", 0)
-                            
-                            if cuenta_codigo:
-                                if cuenta_codigo not in cuentas_agrupadas:
-                                    cuentas_agrupadas[cuenta_codigo] = {
-                                        "codigo": cuenta_codigo,
-                                        "nombre": cuenta_nombre,
-                                        "monto": 0
-                                    }
-                                cuentas_agrupadas[cuenta_codigo]["monto"] += monto
-                        
-                        if cuentas_agrupadas:
-                            cuentas_por_concepto_proyeccion[codigo] = list(cuentas_agrupadas.values())
-            
-            # Usar cuentas de proyección si estamos en modo Proyectado, sino usar drill_down real
-            cuentas_a_usar = cuentas_por_concepto_proyeccion if modo_ver in ["Proyectado", "Consolidado"] else drill_down
-            
+            # Subtotal de actividad CON DATOS REALES
+            html_parts.append(f'<tr class="subtotal">')
+            html_parts.append(f'<td class="frozen"><strong>Subtotal {act_key}</strong></td>')
+            for mes in meses_lista:
+                monto_mes_sub = act_subtotal_por_mes.get(mes, 0)
+                html_parts.append(f'<td>{_fmt_monto_html(monto_mes_sub)}</td>')
+            html_parts.append(f'<td><strong>{_fmt_monto_html(act_subtotal)}</strong></td>')
+            html_parts.append('</tr>')
+        
+        # TOTAL GENERAL - VARIACIÓN POR MES
+        total_variacion = op + inv + fin
+        html_parts.append(f'<tr class="grand-total">')
+        html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
+        for mes in meses_lista:
+            variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
+            html_parts.append(f'<td>{_fmt_monto_html(variacion_mes)}</td>')
+        html_parts.append(f'<td><strong>{_fmt_monto_html(total_variacion)}</strong></td>')
+        html_parts.append('</tr>')
+        
+        # Efectivo inicial POR MES
+        html_parts.append(f'<tr class="data-row">')
+        html_parts.append(f'<td class="frozen">Efectivo al inicio del período</td>')
+        for mes in meses_lista:
+            ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
+            html_parts.append(f'<td>{_fmt_monto_html(ef_ini_mes)}</td>')
+        html_parts.append(f'<td><strong>{_fmt_monto_html(ef_ini)}</strong></td>')
+        html_parts.append('</tr>')
+        
+        # Efectivo final POR MES
+        html_parts.append(f'<tr class="grand-total">')
+        html_parts.append(f'<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
+        for mes in meses_lista:
+            ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
+            html_parts.append(f'<td>{_fmt_monto_html(ef_fin_mes)}</td>')
+        html_parts.append(f'<td><strong>{_fmt_monto_html(ef_fin)}</strong></td>')
+        html_parts.append('</tr>')
+        
+        html_parts.append('</tbody>')
+        html_parts.append('</table>')
+        
+        # Hint de scroll
+        if len(meses_lista) > 3:
+            html_parts.append('<div class="scroll-hint">← Desliza horizontalmente para ver más meses →</div>')
+        
+        html_parts.append('</div>')
+        
+        # Renderizar tabla
+        st.markdown("".join(html_parts), unsafe_allow_html=True)
+        
+        # === EXPORT A EXCEL ===
+        with export_placeholder:
+            # Crear DataFrame para export
+            rows = []
             for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
                 act_data = actividades.get(act_key, {})
-                if act_data:
-                    render_ias7_tree_activity(
-                        actividad_data=act_data,
-                        cuentas_por_concepto=cuentas_a_usar,
-                        docs_por_concepto=docs_por_concepto,
-                        actividad_key=act_key,
-                        color=colores.get(act_key, "#718096")
-                    )
-        
-        st.divider()
-        
-        # === CONCILIACIÓN ===
-        st.markdown("### 📑 Conciliación de Efectivo")
-        
-        concil_data = [
-            {"Concepto": "Incremento neto en efectivo", "Monto": conciliacion.get("incremento_neto", 0)},
-            {"Concepto": "Efectos variación tipo cambio", "Monto": conciliacion.get("efecto_tipo_cambio", 0)},
-        ]
-        if otros != 0:
-            concil_data.append({"Concepto": "Otros no clasificados", "Monto": otros})
-        concil_data.extend([
-            {"Concepto": "Efectivo al inicio", "Monto": ef_ini},
-            {"Concepto": "Efectivo al cierre", "Monto": ef_fin},
-        ])
-        
-        df_concil = pd.DataFrame(concil_data)
-        st.dataframe(df_concil.style.format({"Monto": "${:,.0f}"}), use_container_width=True, hide_index=True)
-        
-        # === EDITOR DE MAPEO ===
-        if cuentas_nc and len(cuentas_nc) > 0:
-            st.divider()
-            st.markdown("### ✏️ Editor de Mapeo de Cuentas")
+                if not act_data:
+                    continue
+                
+                rows.append({"Concepto": act_data.get("nombre", act_key), "Monto": ""})
+                
+                for concepto in act_data.get("conceptos", []):
+                    c_id = concepto.get("id") or concepto.get("codigo")
+                    c_nombre = concepto.get("nombre", "")
+                    c_monto = concepto.get("monto", 0)
+                    rows.append({
+                        "Concepto": f"  {c_id} - {c_nombre}",
+                        "Monto": c_monto
+                    })
+                
+                rows.append({
+                    "Concepto": f"Subtotal {act_key}",
+                    "Monto": act_data.get("subtotal", 0)
+                })
             
-            with st.expander(f"📋 {len(cuentas_nc)} cuentas sin clasificar ({fmt_flujo(abs(otros))})", expanded=True):
-                st.warning(f"⚠️ {len(cuentas_nc)} cuentas generan ${abs(otros):,.0f} en 'Otros no clasificados'")
-                
+            rows.append({"Concepto": "VARIACIÓN NETA", "Monto": total_variacion})
+            rows.append({"Concepto": "Efectivo Inicial", "Monto": ef_ini})
+            rows.append({"Concepto": "Efectivo Final", "Monto": ef_fin})
+            
+            df_export = pd.DataFrame(rows)
+            
+            # Botón de descarga
+            csv = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "📥 Excel",
+                csv,
+                f"flujo_caja_{fecha_inicio_str}_{fecha_fin_str}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+        
+        # === CUENTAS SIN CLASIFICAR ===
+        if cuentas_nc and len(cuentas_nc) > 0:
+            st.markdown("---")
+            with st.expander(f"⚠️ {len(cuentas_nc)} cuentas sin clasificar", expanded=False):
                 categorias = build_ias7_categories_dropdown()
-                codigo_to_option = {v: k for k, v in categorias.items() if v}
                 
-                # Buscador
-                search_term = st.text_input("🔍 Buscar cuenta (código o nombre)", "", key="search_unclf").lower()
-
-                filtered_nc = []
-                for c in cuentas_nc:
-                    if search_term and (search_term in c.get('codigo', '').lower() or search_term in c.get('nombre', '').lower()):
-                         filtered_nc.append(c)
-                    elif not search_term:
-                         filtered_nc.append(c)
-                
-                total_nc = sum(abs(c.get('monto', 0)) for c in filtered_nc)
-                
-                # Mostrar todas si hay búsqueda, o top 25 si no
-                limit = None if search_term else 25
-                accounts_to_show = sorted(filtered_nc, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:limit]
-                
-                for cuenta in accounts_to_show:
+                for cuenta in sorted(cuentas_nc, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:20]:
                     codigo = cuenta.get('codigo', '')
                     nombre = cuenta.get('nombre', '')
                     monto = cuenta.get('monto', 0)
-                    pct = abs(monto) / total_nc * 100 if total_nc > 0 else 0
                     
-                    sugerencia, razon = sugerir_categoria(nombre, monto)
+                    col1, col2, col3, col4 = st.columns([1, 2, 1, 2])
+                    col1.code(codigo)
+                    col2.caption(nombre[:40])
+                    col3.write(fmt_flujo(monto))
                     
-                    monto_color = "#2ecc71" if monto >= 0 else "#e74c3c"
-                    monto_display = f"+${monto:,.0f}" if monto >= 0 else f"-${abs(monto):,.0f}"
-                    
-                    col1, col2, col3, col4, col5 = st.columns([0.8, 2, 1, 0.6, 2])
-                    with col1:
-                        st.markdown(f"<span style='font-family:monospace;color:#718096;'>{codigo}</span>", unsafe_allow_html=True)
-                    with col2:
-                        st.caption(nombre[:40])
-                        if sugerencia:
-                            st.markdown(f"<small style='color:#3498db;'>💡 {sugerencia}</small>", unsafe_allow_html=True)
-                    with col3:
-                        st.markdown(f"<span style='color:{monto_color};font-weight:bold;'>{monto_display}</span>", unsafe_allow_html=True)
                     with col4:
-                        st.caption(f"{pct:.1f}%")
-                    with col5:
-                        col_sel, col_btn = st.columns([3, 1])
-                        with col_sel:
-                            default_idx = 0
-                            if sugerencia and sugerencia in codigo_to_option:
-                                option_label = codigo_to_option[sugerencia]
-                                if option_label in list(categorias.keys()):
-                                    default_idx = list(categorias.keys()).index(option_label)
-                            
-                            cat_sel = st.selectbox("Cat", options=list(categorias.keys()),
-                                                  index=default_idx, key=f"finanzas_cat_{codigo}",
-                                                  label_visibility="collapsed")
-                        with col_btn:
-                            if categorias.get(cat_sel):
-                                if st.button("💾", key=f"finanzas_save_{codigo}"):
-                                    ok, err = guardar_mapeo_cuenta(
-                                        codigo, categorias[cat_sel], nombre,
-                                        username, password, monto
-                                    )
-                                    if ok:
-                                        st.success(f"✓ {codigo}")
-                                        if flujo_cache_key in st.session_state:
-                                            del st.session_state[flujo_cache_key]
-                                    else:
-                                        st.error(err)
-                
-                if len(cuentas_nc) > 25:
-                    st.info(f"Mostrando 25 de {len(cuentas_nc)} cuentas.")
-                
-                # Historial
-                historial = flujo_data.get("historial_mapeo", [])
-                if historial:
-                    with st.expander("📋 Historial de Cambios", expanded=False):
-                        df_hist = pd.DataFrame(historial).sort_values("fecha", ascending=False)
-                        cols_hist = ["fecha", "usuario", "cuenta", "concepto_anterior", "concepto_nuevo"]
-                        st.dataframe(df_hist[[c for c in cols_hist if c in df_hist.columns]],
-                                   use_container_width=True, hide_index=True)
-
-        # === ZONA DE PELIGRO (ADMIN) ===
-        # Mostrar solo si el usuario es admin o está autorizado. 
-        # IMPORTANTE: Reemplazar lista con usuarios reales autorizados.
-        AUTHORIZED_RESET_USERS = ["admin", "mvalladares", "miguel", username] # Permisivo por solicitud del usuario "mi usuario"
-        
-        if username in AUTHORIZED_RESET_USERS:
-            st.divider()
-            with st.expander("⚠️ ZONA DE PELIGRO (Admin)", expanded=False):
-                st.error("Estas acciones son destructivas y no se pueden deshacer.")
-                
-                col_danger, col_confirm = st.columns([3, 1])
-                with col_danger:
-                    st.markdown("**RESETEO TOTAL DE MAPEO**")
-                    st.caption("Elimina TODAS las clasificaciones manuales de cuentas. Vuelve al estado inicial.")
-                
-                with col_confirm:
-                    if st.checkbox("Confirmar Reseteo", key="confirm_reset_all"):
-                        from .shared import reset_mapeo_completo
-                        if st.button("🧨 BORRAR TODO", type="primary", key="btn_reset_all"):
-                             ok_reset, msg_reset = reset_mapeo_completo(username, password)
-                             if ok_reset:
-                                 st.toast("Mapeo reseteado correctamente.", icon="🧹")
-                                 st.success("Mapeo reseteado. Recarga la página.")
-                                 if flujo_cache_key in st.session_state:
-                                     del st.session_state[flujo_cache_key]
-                             else:
-                                 st.error(f"Error: {msg_reset}")
+                        c1, c2 = st.columns([3, 1])
+                        with c1:
+                            cat = st.selectbox("Cat", list(categorias.keys()), 
+                                             key=f"cat_{codigo}", label_visibility="collapsed")
+                        with c2:
+                            if st.button("💾", key=f"save_{codigo}"):
+                                ok, err = guardar_mapeo_cuenta(codigo, categorias[cat], nombre,
+                                                               username, password, monto)
+                                if ok:
+                                    st.toast(f"✅ {codigo}")
+                                    if cache_key in st.session_state:
+                                        del st.session_state[cache_key]
+                                else:
+                                    st.error(err)
+    else:
+        st.info("👆 Selecciona el período y haz clic en 'Generar' para cargar el flujo de caja")

@@ -582,6 +582,282 @@ class FlujoCajaService:
             except:
                 return 0.0
     
+    def get_flujo_mensualizado(self, fecha_inicio: str, fecha_fin: str, 
+                               company_id: int = None) -> Dict:
+        """
+        Genera el Estado de Flujo de Efectivo con granularidad MENSUAL.
+        
+        Similar a get_flujo_efectivo pero agrupa los datos por mes usando
+        read_group con 'date:month' para obtener montos reales por período.
+        
+        Returns:
+            {
+                "meses": ["2026-01", "2026-02", ...],
+                "actividades": {
+                    "OPERACION": {
+                        "subtotal_por_mes": {"2026-01": 1000, ...},
+                        "conceptos": [
+                            {"id": "1.1.1", "nombre": "Ventas", "montos_por_mes": {...}, "total": 5000}
+                        ]
+                    }
+                },
+                "efectivo_por_mes": {"2026-01": {"inicial": X, "final": Y}, ...}
+            }
+        """
+        from datetime import datetime
+        from calendar import monthrange
+        
+        resultado = {
+            "meta": {"version": "3.2", "mode": "mensualizado"},
+            "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+            "generado": datetime.now().isoformat(),
+            "meses": [],
+            "actividades": {},
+            "conciliacion": {},
+            "efectivo_por_mes": {}
+        }
+        
+        # 1. Generar lista de meses en el rango
+        fecha_ini_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d')
+        
+        meses_lista = []
+        current = fecha_ini_dt.replace(day=1)
+        while current <= fecha_fin_dt:
+            mes_str = current.strftime("%Y-%m")
+            meses_lista.append(mes_str)
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1)
+            else:
+                current = current.replace(month=current.month + 1)
+        
+        resultado["meses"] = meses_lista
+        
+        # 2. Obtener cuentas de efectivo
+        cuentas_efectivo_ids = self._get_cuentas_efectivo()
+        if not cuentas_efectivo_ids:
+            resultado["error"] = "No se encontraron cuentas de efectivo configuradas"
+            return resultado
+        
+        # 3. Efectivo inicial (día anterior al inicio)
+        fecha_anterior = (fecha_ini_dt - timedelta(days=1)).strftime('%Y-%m-%d')
+        efectivo_inicial_global = self._get_saldo_efectivo(fecha_anterior, cuentas_efectivo_ids)
+        resultado["conciliacion"]["efectivo_inicial"] = round(efectivo_inicial_global, 0)
+        
+        # 4. Obtener IDs de movimientos de efectivo
+        domain = [
+            ['account_id', 'in', cuentas_efectivo_ids],
+            ['parent_state', '=', 'posted'],
+            ['date', '>=', fecha_inicio],
+            ['date', '<=', fecha_fin]
+        ]
+        if company_id:
+            domain.append(['company_id', '=', company_id])
+        
+        try:
+            movimientos_efectivo = self.odoo.search_read(
+                'account.move.line',
+                domain,
+                ['move_id'],
+                limit=50000
+            )
+        except Exception as e:
+            resultado["error"] = f"Error obteniendo movimientos: {e}"
+            return resultado
+        
+        asientos_ids = list(set(
+            m['move_id'][0] if isinstance(m.get('move_id'), (list, tuple)) else m.get('move_id')
+            for m in movimientos_efectivo if m.get('move_id')
+        ))
+        
+        if not asientos_ids:
+            # No hay movimientos, devolver estructura vacía
+            for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+                resultado["actividades"][act_key] = {
+                    "nombre": self._get_actividad_nombre(act_key),
+                    "subtotal_por_mes": {m: 0 for m in meses_lista},
+                    "subtotal": 0,
+                    "conceptos": []
+                }
+            return resultado
+        
+        # 5. AGREGACIÓN POR MES Y CUENTA: read_group con date:month
+        # Estructura: montos_por_concepto_mes[concepto_id][mes] = monto
+        montos_por_concepto_mes = {}
+        
+        # Inicializar con categorías del catálogo
+        for c in self.catalogo.get("conceptos", []):
+            if c.get("tipo") == "LINEA":
+                montos_por_concepto_mes[c["id"]] = {m: 0.0 for m in meses_lista}
+        montos_por_concepto_mes[CATEGORIA_NEUTRAL] = {m: 0.0 for m in meses_lista}
+        
+        # Procesar en chunks
+        chunk_size = 5000
+        for i in range(0, len(asientos_ids), chunk_size):
+            chunk_asientos = asientos_ids[i:i + chunk_size]
+            
+            try:
+                # read_group con agrupación por cuenta Y mes
+                grupos = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'account.move.line', 'read_group',
+                    [[
+                        ['move_id', 'in', chunk_asientos],
+                        ['account_id', 'not in', cuentas_efectivo_ids]
+                    ]],
+                    {
+                        'fields': ['balance', 'account_id', 'date'], 
+                        'groupby': ['account_id', 'date:month'],  # Agrupación por mes
+                        'lazy': False
+                    }
+                )
+                
+                # Obtener lista de cuentas monitoreadas
+                cuentas_monitoreadas = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
+                filtrar_monitoreadas = len(cuentas_monitoreadas) > 0
+                
+                for grupo in grupos:
+                    acc_data = grupo.get('account_id')
+                    balance = grupo.get('balance', 0)
+                    date_month = grupo.get('date:month', '')  # Formato: "Enero 2026"
+                    
+                    if not acc_data or not date_month:
+                        continue
+                    
+                    # Parsear date:month a formato "2026-01"
+                    mes_str = self._parse_odoo_month(date_month)
+                    if not mes_str or mes_str not in meses_lista:
+                        continue
+                    
+                    acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
+                    codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
+                    
+                    # Aplicar filtro de cuentas monitoreadas
+                    if filtrar_monitoreadas and codigo_cuenta not in cuentas_monitoreadas:
+                        continue
+                    
+                    # Clasificar cuenta
+                    concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
+                    
+                    if concepto_id is None:
+                        continue
+                    
+                    # Acumular monto en el concepto y mes correspondiente
+                    if concepto_id not in montos_por_concepto_mes:
+                        montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in meses_lista}
+                    
+                    montos_por_concepto_mes[concepto_id][mes_str] += balance
+                    
+            except Exception as e:
+                print(f"[FlujoCaja] Error en agregación mensual: {e}")
+        
+        # 6. Estructurar resultado por actividad
+        conceptos_por_actividad = {"OPERACION": [], "INVERSION": [], "FINANCIAMIENTO": []}
+        subtotales_por_actividad = {
+            "OPERACION": {m: 0.0 for m in meses_lista},
+            "INVERSION": {m: 0.0 for m in meses_lista},
+            "FINANCIAMIENTO": {m: 0.0 for m in meses_lista}
+        }
+        
+        for concepto in self.catalogo.get("conceptos", []):
+            c_id = concepto.get("id")
+            c_tipo = concepto.get("tipo")
+            c_actividad = concepto.get("actividad")
+            
+            if c_tipo != "LINEA" or c_actividad not in conceptos_por_actividad:
+                continue
+            
+            montos_mes = montos_por_concepto_mes.get(c_id, {m: 0.0 for m in meses_lista})
+            total_concepto = sum(montos_mes.values())
+            
+            concepto_resultado = {
+                "id": c_id,
+                "nombre": concepto.get("nombre"),
+                "tipo": c_tipo,
+                "nivel": concepto.get("nivel", 3),
+                "montos_por_mes": {m: round(montos_mes.get(m, 0), 0) for m in meses_lista},
+                "total": round(total_concepto, 0)
+            }
+            
+            conceptos_por_actividad[c_actividad].append(concepto_resultado)
+            
+            # Sumar a subtotales
+            for mes in meses_lista:
+                subtotales_por_actividad[c_actividad][mes] += montos_mes.get(mes, 0)
+        
+        # Construir actividades
+        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            subtotal_mes = subtotales_por_actividad[act_key]
+            resultado["actividades"][act_key] = {
+                "nombre": self._get_actividad_nombre(act_key),
+                "subtotal_por_mes": {m: round(subtotal_mes.get(m, 0), 0) for m in meses_lista},
+                "subtotal": round(sum(subtotal_mes.values()), 0),
+                "conceptos": conceptos_por_actividad[act_key]
+            }
+        
+        # 7. Calcular efectivo por mes
+        efectivo_acumulado = efectivo_inicial_global
+        for mes in meses_lista:
+            variacion_mes = sum(
+                subtotales_por_actividad[act].get(mes, 0) 
+                for act in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]
+            )
+            efectivo_final_mes = efectivo_acumulado + variacion_mes
+            
+            resultado["efectivo_por_mes"][mes] = {
+                "inicial": round(efectivo_acumulado, 0),
+                "variacion": round(variacion_mes, 0),
+                "final": round(efectivo_final_mes, 0)
+            }
+            efectivo_acumulado = efectivo_final_mes
+        
+        resultado["conciliacion"]["efectivo_final"] = round(efectivo_acumulado, 0)
+        resultado["conciliacion"]["variacion_neta"] = round(
+            sum(resultado["actividades"][a]["subtotal"] for a in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]),
+            0
+        )
+        
+        return resultado
+    
+    def _get_actividad_nombre(self, key: str) -> str:
+        """Retorna el nombre completo de una actividad."""
+        nombres = {
+            "OPERACION": "1. Flujos de efectivo procedentes (utilizados) en actividades de operación",
+            "INVERSION": "2. Flujos de efectivo procedentes de (utilizados) en actividades de inversión",
+            "FINANCIAMIENTO": "3. Flujos de efectivo procedentes de (utilizados) en actividades de financiamiento"
+        }
+        return nombres.get(key, key)
+    
+    def _parse_odoo_month(self, odoo_month: str) -> str:
+        """
+        Parsea el formato de mes de Odoo ('Enero 2026') a 'YYYY-MM'.
+        Odoo puede retornar en español o inglés dependiendo del idioma del usuario.
+        """
+        meses_es = {
+            "enero": "01", "febrero": "02", "marzo": "03", "abril": "04",
+            "mayo": "05", "junio": "06", "julio": "07", "agosto": "08",
+            "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
+        }
+        meses_en = {
+            "january": "01", "february": "02", "march": "03", "april": "04",
+            "may": "05", "june": "06", "july": "07", "august": "08",
+            "september": "09", "october": "10", "november": "11", "december": "12"
+        }
+        
+        try:
+            parts = odoo_month.strip().lower().split()
+            if len(parts) >= 2:
+                mes_nombre = parts[0]
+                año = parts[1]
+                
+                mes_num = meses_es.get(mes_nombre) or meses_en.get(mes_nombre)
+                if mes_num and año.isdigit():
+                    return f"{año}-{mes_num}"
+        except:
+            pass
+        
+        return None
+
     def get_flujo_efectivo(self, fecha_inicio: str, fecha_fin: str, 
                            company_id: int = None) -> Dict:
         """
