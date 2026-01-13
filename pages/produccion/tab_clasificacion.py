@@ -283,7 +283,8 @@ def render(username: str, password: str):
         
         if not df_chart.empty:
             # Selección de Altair (punto bound a leyenda)
-            seleccion_chart = alt.selection_point(fields=['Grado'], bind='legend')
+            # USAMOS UN NOMBRE EXPLÍCITO para capturar el evento en Streamlit
+            seleccion_chart = alt.selection_point(name='grado_select', fields=['Grado'], bind='legend')
             
             # Gráfico de Barras
             bars = alt.Chart(df_chart).mark_bar(
@@ -317,7 +318,8 @@ def render(username: str, password: str):
             event = st.altair_chart(chart_final, use_container_width=True, on_select="rerun")
             
             # Definir qué grados mostrar basado en la selección del gráfico
-            selected_from_chart = event.get('selection', {}).get('Grado', [])
+            # Estructura de event en on_select="rerun"
+            selected_from_chart = event.get('selection', {}).get('grado_select', {}).get('Grado', [])
             
             if selected_from_chart:
                 active_grades_names = selected_from_chart
