@@ -10,7 +10,8 @@ from datetime import date, timedelta
 from .shared import (
     STATE_OPTIONS, CSS_GLOBAL, fmt_numero, clean_name, get_state_label,
     format_fecha, format_num, build_pie_chart, build_horizontal_bar,
-    fetch_ordenes, fetch_of_detail, fetch_kpis, render_component_tab, render_metrics_row
+    fetch_ordenes, fetch_of_detail, fetch_kpis, render_component_tab, render_metrics_row,
+    detectar_planta
 )
 
 
@@ -53,10 +54,11 @@ def render(username: str, password: str):
 
     # Filtros de búsqueda
     with st.expander("🔍 Filtros de búsqueda", expanded=True):
-        col1, col2, col3 = st.columns([1, 1, 1])
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
         start_date = col1.date_input("Desde", value=date.today() - timedelta(days=30), key="prod_filter_start", format="DD/MM/YYYY")
         end_date = col2.date_input("Hasta", value=date.today(), key="prod_filter_end", format="DD/MM/YYYY")
-        state_label = col3.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_filter_state")
+        planta_sel = col3.selectbox("Planta", options=["Todas", "RIO FUTURO", "VILKUN"], index=0, key="prod_filter_planta")
+        state_label = col4.selectbox("Estado", options=list(STATE_OPTIONS.keys()), index=0, key="prod_filter_state")
         state_filter = STATE_OPTIONS[state_label]
 
         btn_col1, btn_col2 = st.columns(2)
@@ -107,39 +109,85 @@ def render(username: str, password: str):
             st.subheader("📋 Tabla de órdenes encontradas")
             
             if not df.empty:
-                display_cols = [col for col in [
-                    "name", "state", "date_planned_start", "product_id",
-                    "product_qty", "qty_produced", "date_start", "date_finished", "user_id"
-                ] if col in df.columns]
-                df_display = df[display_cols].copy()
+                # --- PROCESAMIENTO ADICIONAL ---
+                df['Planta'] = df['name'].apply(detectar_planta)
                 
-                if "product_id" in df_display.columns:
-                    df_display["producto"] = df_display["product_id"].apply(clean_name)
-                    df_display.drop(columns=["product_id"], inplace=True)
-                if "user_id" in df_display.columns:
-                    df_display["responsable"] = df_display["user_id"].apply(clean_name)
-                    df_display.drop(columns=["user_id"], inplace=True)
-                for col in ["date_planned_start", "date_start", "date_finished"]:
-                    if col in df_display.columns:
-                        df_display[col] = df_display[col].apply(lambda x: pd.to_datetime(x).strftime("%d/%m/%Y %H:%M") if pd.notna(x) and x else "")
+                # Filtrar por planta seleccionada en el UI
+                if planta_sel != "Todas":
+                    df = df[df['Planta'] == planta_sel].copy()
                 
-                df_display = df_display.rename(columns={
-                    "name": "Orden",
-                    "state": "Estado",
-                    "date_planned_start": "Fecha Planificada",
-                    "product_qty": "Cant. Planificada",
-                    "qty_produced": "Cant. Producida",
-                    "date_start": "Fecha Inicio",
-                    "date_finished": "Fecha Fin"
-                })
-                st.dataframe(df_display, use_container_width=True, height=350)
-                csv = df_display.to_csv(index=False)
-                st.download_button("📥 Descargar órdenes", csv, "ordenes_produccion.csv", "text/csv")
+                if df.empty:
+                    st.warning(f"No hay órdenes para la planta {planta_sel}")
+                else:
+                    def get_tipo_sala(row):
+                        sala = str(row.get('x_studio_sala_de_proceso', '')).lower()
+                        prod = clean_name(row.get('product_id')).lower()
+                        if any(s in sala for s in ['sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6', 'linea retail', 'granel', 'proceso']):
+                            return "Sala"
+                        if 'congel' in sala or 'tunel' in sala or 'túnel' in sala:
+                            return "Congelado"
+                        if 'iqf' in sala or 'iqf' in prod:
+                            return "Sala"
+                        return "Congelado"
+
+                    df['Tipo'] = df.apply(get_tipo_sala, axis=1)
+                    df['Pendiente'] = (df['product_qty'] - df['qty_produced']).clip(lower=0)
+                    df['PSP'] = df['product_id'].apply(lambda x: "✅" if "PSP" in clean_name(x).upper() or clean_name(x).startswith(('[2.', '[2,')) else "")
+                    
+                    # KPIs de los resultados filtrados
+                    st.markdown("##### 📊 Resumen de Búsqueda")
+                    rkpi1, rkpi2, rkpi3, rkpi4 = st.columns(4)
+                    rkpi1.metric("Cant. Órdenes", len(df))
+                    rkpi2.metric("Total Pendiente", f"{df['Pendiente'].sum():,.0f} kg")
+                    rkpi3.metric("Total Producido", f"{df['qty_produced'].sum():,.0f} kg")
+                    rkpi4.metric("Órdenes PSP", len(df[df['PSP'] == "✅"]))
+
+                    display_cols = [col for col in [
+                        "name", "state", "Planta", "x_studio_sala_de_proceso", "Tipo", "product_id",
+                        "product_qty", "qty_produced", "Pendiente", "PSP", "date_planned_start"
+                    ] if col in df.columns]
+                    
+                    df_display = df[display_cols].copy()
+                    
+                    if "product_id" in df_display.columns:
+                        df_display["producto"] = df_display["product_id"].apply(clean_name)
+                        df_display.drop(columns=["product_id"], inplace=True)
+                    
+                    if "date_planned_start" in df_display.columns:
+                        df_display["Fecha Planif."] = df_display["date_planned_start"].apply(lambda x: pd.to_datetime(x).strftime("%d/%m/%Y") if pd.notna(x) and x else "")
+                        df_display.drop(columns=["date_planned_start"], inplace=True)
+
+                    df_display = df_display.rename(columns={
+                        "name": "Orden",
+                        "state": "Estado",
+                        "x_studio_sala_de_proceso": "Sala",
+                        "product_qty": "Planificado",
+                        "qty_produced": "Producido",
+                    })
+                    
+                    # Mostrar tabla
+                    st.dataframe(
+                        df_display, 
+                        use_container_width=True, 
+                        height=400,
+                        column_config={
+                            "Planificado": st.column_config.NumberColumn(format="%d"),
+                            "Producido": st.column_config.NumberColumn(format="%d"),
+                            "Pendiente": st.column_config.NumberColumn(format="%d"),
+                        },
+                        hide_index=True
+                    )
+                    
+                    csv = df_display.to_csv(index=False)
+                    st.download_button("📥 Descargar Tabla (CSV)", csv, "ordenes_produccion.csv", "text/csv")
 
             st.markdown("---")
+            # Re-filtrar para el selector por si se aplicó filtro de planta
+            ofs_for_selector = df.to_dict('records')
+            
             options = {
-                f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))}": of["id"]
-                for of in st.session_state["production_ofs"]
+                f"{of.get('name', 'OF')} — {clean_name(of.get('product_id'))} ({of.get('Planta', '-')})": of["id"]
+                for of in ofs_for_selector
             }
             selected_label = st.selectbox("Seleccionar orden para detalle", options=list(options.keys()), key="prod_selector")
             selected_id = options[selected_label]
@@ -238,6 +286,14 @@ def _render_detalle_of(data_of):
             <div class="info-row">
                 <span class="info-label">Sala</span>
                 <span class="info-value">{clean_name(of.get('x_studio_sala_de_proceso'))}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Tipo Proceso</span>
+                <span class="info-value">{"Sala" if any(s in str(of.get('x_studio_sala_de_proceso','')).lower() for s in ['sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6', 'linea retail', 'granel', 'proceso']) else "Congelado"}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Planta</span>
+                <span class="info-value">{detectar_planta(of.get('name'))}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
