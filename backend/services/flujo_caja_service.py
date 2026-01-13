@@ -760,6 +760,108 @@ class FlujoCajaService:
             except Exception as e:
                 print(f"[FlujoCaja] Error en agregación mensual: {e}")
         
+        # 5b. PROYECCIÓN: Interpretar facturas en borrador como movimientos futuros de efectivo
+        # Para cada factura draft, obtenemos sus líneas y clasificamos según las cuentas contables
+        try:
+            facturas_draft = self.odoo.search_read(
+                'account.move',
+                [
+                    ['state', '=', 'draft'],
+                    ['move_type', 'in', ['out_invoice', 'in_invoice', 'out_refund', 'in_refund']],
+                    ['invoice_date', '>=', fecha_inicio],
+                    ['invoice_date', '<=', fecha_fin]
+                ],
+                ['id', 'move_type', 'invoice_date', 'invoice_date_due', 'line_ids'],
+                limit=5000
+            )
+            
+            print(f"[FlujoCaja] Facturas draft encontradas: {len(facturas_draft)}")
+            
+            if facturas_draft:
+                # Obtener todos los IDs de líneas de todas las facturas draft
+                all_line_ids = []
+                factura_por_linea = {}  # Para mapear línea → factura
+                for factura in facturas_draft:
+                    line_ids = factura.get('line_ids', [])
+                    for lid in line_ids:
+                        all_line_ids.append(lid)
+                        factura_por_linea[lid] = factura
+                
+                if all_line_ids:
+                    # Obtener las líneas con sus cuentas contables
+                    lineas = self.odoo.search_read(
+                        'account.move.line',
+                        [['id', 'in', all_line_ids]],
+                        ['id', 'account_id', 'balance', 'debit', 'credit', 'move_id'],
+                        limit=50000
+                    )
+                    
+                    for linea in lineas:
+                        linea_id = linea.get('id')
+                        factura = factura_por_linea.get(linea_id)
+                        if not factura:
+                            continue
+                        
+                        # Determinar mes de la proyección
+                        fecha_proy = factura.get('invoice_date_due') or factura.get('invoice_date')
+                        if not fecha_proy:
+                            continue
+                        
+                        try:
+                            fecha_dt = datetime.strptime(str(fecha_proy), '%Y-%m-%d')
+                            mes_proy = fecha_dt.strftime('%Y-%m')
+                        except:
+                            continue
+                        
+                        if mes_proy not in meses_lista:
+                            continue
+                        
+                        # Obtener código de cuenta contable
+                        acc_data = linea.get('account_id')
+                        if not acc_data:
+                            continue
+                        
+                        acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
+                        codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
+                        
+                        # Excluir cuentas de efectivo (ya las manejamos en flujo real)
+                        if codigo_cuenta.startswith('110') or codigo_cuenta.startswith('111'):
+                            continue
+                        
+                        # Clasificar usando el mapeo existente
+                        concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
+                        
+                        if concepto_id is None or concepto_id == CATEGORIA_NEUTRAL:
+                            continue
+                        
+                        # Determinar signo según tipo de factura
+                        # Para facturas de venta: los ingresos serán cobros futuros
+                        # Para facturas de compra: los gastos serán pagos futuros
+                        move_type = factura.get('move_type', '')
+                        balance = linea.get('balance', 0)
+                        
+                        # Invertir signo: el balance de account.move.line es desde perspectiva contable
+                        # Para flujo de caja proyectado, interpretamos como movimiento de efectivo
+                        if move_type in ['out_invoice', 'out_refund']:
+                            # Venta/NC: el crédito en ingresos = cobro futuro (+efectivo)
+                            monto_efectivo = -balance  # Invertir porque balance negativo = ingreso
+                        else:
+                            # Compra/NC: el débito en gastos = pago futuro (-efectivo)
+                            monto_efectivo = balance  # Balance positivo = gasto = -efectivo
+                        
+                        # Agregar a montos por concepto
+                        if concepto_id not in montos_por_concepto_mes:
+                            montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in meses_lista}
+                        
+                        montos_por_concepto_mes[concepto_id][mes_proy] += monto_efectivo
+                
+            print(f"[FlujoCaja] Proyección de facturas draft procesada")
+            
+        except Exception as e:
+            print(f"[FlujoCaja] Error procesando facturas draft: {e}")
+            import traceback
+            traceback.print_exc()
+        
         # 6. Estructurar resultado por actividad
         conceptos_por_actividad = {"OPERACION": [], "INVERSION": [], "FINANCIAMIENTO": []}
         subtotales_por_actividad = {
