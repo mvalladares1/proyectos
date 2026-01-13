@@ -100,35 +100,60 @@ def render(username: str, password: str):
         # Botón consultar
         consultar = st.button("🔍 Consultar Clasificación", use_container_width=True, type="primary")
     
-    # --- CSS PREMIUM (Estilo Kiosko/TV) ---
+    # --- CSS PREMIUM (Fondo Blanco y Diseño Limpio) ---
     st.markdown("""
     <style>
+        /* Fondo blanco para toda la página */
+        [data-testid="stAppViewContainer"] {
+            background-color: #ffffff;
+            color: #1a1a1a;
+        }
+        [data-testid="stHeader"] {
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
+        }
+
         .premium-card {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            padding: 1.2rem;
+            background: #ffffff;
+            padding: 0.8rem;
             border-radius: 12px;
             text-align: center;
-            color: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 0.5rem;
+            transition: transform 0.2s ease;
+        }
+        .premium-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .premium-value {
-            font-size: 2rem;
+            font-size: 1.2rem;
             font-weight: 800;
-            margin: 0.2rem 0;
+            margin: 0.1rem 0;
+            color: #2c3e50;
         }
         .premium-label {
-            font-size: 0.9rem;
-            opacity: 0.9;
+            font-size: 0.7rem;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
+            color: #7f8c8d;
         }
         .po-container {
             background: #f8f9fa;
             border-radius: 10px;
             padding: 1rem;
+            border: 1px solid #e0e0e0;
             border-left: 5px solid #3498db;
             margin-top: 1rem;
+        }
+        
+        /* Ajustar títulos */
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50 !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -286,13 +311,13 @@ def render(username: str, password: str):
             # USAMOS UN NOMBRE EXPLÍCITO para capturar el evento en Streamlit
             seleccion_chart = alt.selection_point(name='grado_select', fields=['Grado'], bind='legend')
             
-            # Gráfico de Barras
+            # Gráfico de Barras con Etiquetas de Datos
             bars = alt.Chart(df_chart).mark_bar(
                 cornerRadiusTopLeft=8,
                 cornerRadiusTopRight=8
             ).encode(
-                x=alt.X('Grado:N', title='Grado de Producto', axis=alt.Axis(labelAngle=-45, labelFontSize=12)),
-                y=alt.Y('Kilogramos:Q', title='Kilogramos (kg)', axis=alt.Axis(labelFontSize=12)),
+                x=alt.X('Grado:N', title='Grado de Producto', axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14)),
+                y=alt.Y('Kilogramos:Q', title='Kilogramos (kg)', axis=alt.Axis(labelFontSize=12, titleFontSize=14)),
                 color=alt.Color('Grado:N',
                                scale=alt.Scale(
                                    domain=[info['nombre'] for info in GRADOS_INFO.values()],
@@ -302,13 +327,26 @@ def render(username: str, password: str):
                 opacity=alt.condition(seleccion_chart, alt.value(1), alt.value(0.2)),
                 tooltip=[alt.Tooltip('Grado:N'), alt.Tooltip('Kilogramos:Q', format=',.2f')]
             )
+
+            text = bars.mark_text(
+                align='center',
+                baseline='bottom',
+                dy=-5,  # Offset para que el texto esté sobre la barra
+                fontSize=14,
+                fontWeight='bold'
+            ).encode(
+                text=alt.Text('Kilogramos:Q', format=',.0f')
+            )
             
-            chart_final = bars.add_params(
+            chart_final = (bars + text).add_params(
                 seleccion_chart
             ).properties(
-                height=400
+                height=450
             ).configure_view(
                 strokeWidth=0
+            ).configure_axis(
+                grid=True,
+                gridColor='#f0f0f0'
             )
 
             # Selector de KPIs (Contenedor superior para que aparezcan arriba del gráfico)
@@ -346,12 +384,13 @@ def render(username: str, password: str):
             def render_compact_card(id_grado, col):
                 info = GRADOS_INFO.get(id_grado)
                 kg = grados_mostrar.get(id_grado, 0)
+                # Color de texto dinámico basado en brillo (opcional, aquí usaremos acento de borde)
                 with col:
                     st.markdown(f"""
-                    <div class="premium-card" style="background: linear-gradient(135deg, {info['color']}, {info['color']}dd); padding: 0.4rem; min-height: 80px; display: flex; flex-direction: column; justify-content: center;">
-                        <div class="premium-label" style="font-size: 0.65rem; line-height: 1; margin-bottom: 4px;">{info['emoji']} {info['nombre']}</div>
-                        <div class="premium-value" style="font-size: 1.1rem; line-height: 1;">{fmt_numero(kg)}</div>
-                        <div style="font-size: 0.6rem; opacity: 0.8;">kg</div>
+                    <div class="premium-card" style="border-top: 5px solid {info['color']};">
+                        <div class="premium-label">{info['emoji']} {info['nombre']}</div>
+                        <div class="premium-value">{fmt_numero(kg)}</div>
+                        <div style="font-size: 0.6rem; color: #95a5a6;">kilos</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -365,10 +404,10 @@ def render(username: str, password: str):
             
             with cols[7]:
                 st.markdown(f"""
-                <div class="premium-card" style="background: linear-gradient(135deg, #2c3e50, #000000); padding: 0.4rem; min-height: 80px; display: flex; flex-direction: column; justify-content: center;">
-                    <div class="premium-label" style="font-size: 0.65rem; line-height: 1; margin-bottom: 4px;">📦 TOTAL</div>
-                    <div class="premium-value" style="font-size: 1.1rem; line-height: 1;">{fmt_numero(total_kg_filtrado)}</div>
-                    <div style="font-size: 0.6rem; opacity: 0.8;">kg</div>
+                <div class="premium-card" style="border-top: 5px solid #2c3e50; background: #f8f9fa;">
+                    <div class="premium-label">📦 TOTAL</div>
+                    <div class="premium-value">{fmt_numero(total_kg_filtrado)}</div>
+                    <div style="font-size: 0.6rem; color: #95a5a6;">kilos</div>
                 </div>
                 """, unsafe_allow_html=True)
             st.markdown("---")
