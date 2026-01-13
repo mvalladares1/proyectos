@@ -42,21 +42,100 @@ ESTADOS_MAP = {
 
 CSS_DARK = """
 <style>
-    [data-testid="stAppViewContainer"] { background-color: #0e1117 !important; color: #ffffff !important; }
-    [data-testid="stHeader"] { background-color: rgba(14, 17, 23, 0.8) !important; }
-    [data-testid="stSidebar"] { background-color: #1a1c23 !important; }
-    .info-card {
-        background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
-        padding: 24px; border-radius: 16px; margin-bottom: 20px;
-        border: 1px solid #2a2a4a; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    /* ============ GLOBAL RESET & COLORS ============ */
+    :root {
+        --bg-color: #0e1117;
+        --secondary-bg-color: #1e293b; /* Enterprise slate */
+        --text-color: #e2e8f0;
+        --card-bg: #1e293b;
+        --card-border: #334155;
+        --primary-color: #3b82f6;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --danger-color: #ef4444;
     }
-    .info-card h4 { margin: 0 0 20px 0; color: #00cc66 !important; font-size: 1.1em; font-weight: 600; padding-bottom: 12px; border-bottom: 2px solid #00cc6633; }
-    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #ffffff10; }
-    .info-label { color: #8892b0; font-size: 0.95em; }
-    .info-value { color: #ffffff !important; font-weight: 500; font-size: 0.95em; text-align: right; }
-    h1, h2, h3, h4, h5, h6, p, span, label { color: #ffffff !important; }
-    .stCaption { color: #8892b0 !important; }
-    hr { border: 0; border-top: 1px solid #ffffff20 !important; margin: 1.5em 0 !important; }
+
+    [data-testid="stAppViewContainer"] { 
+        background-color: var(--bg-color) !important; 
+        color: var(--text-color) !important; 
+    }
+    
+    [data-testid="stHeader"] { 
+        background-color: rgba(14, 17, 23, 0.9) !important;
+        backdrop-filter: blur(8px);
+    }
+    
+    [data-testid="stSidebar"] { 
+        background-color: #0f172a !important; 
+        border-right: 1px solid #1e293b;
+    }
+
+    /* ============ INFO CARDS ============ */
+    .info-card {
+        background-color: var(--card-bg);
+        padding: 20px; 
+        border-radius: 12px; 
+        margin-bottom: 16px;
+        border: 1px solid var(--card-border); 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .info-card:hover {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        border-color: var(--primary-color);
+    }
+
+    .info-card h4 { 
+        margin: 0 0 16px 0; 
+        color: var(--primary-color) !important; 
+        font-size: 1rem; 
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid #334155;
+        padding-bottom: 8px;
+    }
+
+    .info-row { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        padding: 10px 0; 
+        border-bottom: 1px solid #334155; 
+        font-size: 0.9rem;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label { 
+        color: #94a3b8; 
+        font-weight: 500;
+    }
+
+    .info-value { 
+        color: #f1f5f9 !important; 
+        font-weight: 600; 
+        text-align: right; 
+        font-family: 'SF Mono', 'Consolas', monospace;
+    }
+
+    /* ============ TYPOGRAPHY ============ */
+    h1, h2, h3, h5, h6, p, span, label, div { color: var(--text-color) !important; }
+    h4 { color: inherit !important; } /* Except specially styled h4 */
+    
+    .stCaption { color: #64748b !important; }
+    
+    hr { margin: 24px 0 !important; border-color: #334155 !important; }
+
+    /* ============ DATAFRAMES ============ */
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
 </style>
 """
 

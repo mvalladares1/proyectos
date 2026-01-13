@@ -1201,13 +1201,9 @@ def render(username: str, password: str):
         # Agregar JavaScript
         html_parts.append(ENTERPRISE_JS)
         
-        # Renderizar con altura dinámica - sin scroll vertical interno, solo horizontal
+        # Renderizar directamente con st.markdown para altura completamente dinámica sin iframe
         full_html = "".join(html_parts)
-        # Calcular altura total: header (100px) + cada concepto (50px) + footer conciliación (200px) + margen (100px)
-        num_conceptos = sum(len(act.get("conceptos", [])) for act in actividades.values())
-        num_headers = 3  # OPERACION, INVERSION, FINANCIAMIENTO
-        altura_total = 100 + (num_conceptos * 50) + (num_headers * 60) + 300
-        components.html(full_html, height=altura_total, scrolling=False)
+        st.markdown(full_html, unsafe_allow_html=True)
         
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:
