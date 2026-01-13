@@ -1,6 +1,6 @@
-"""
+﻿"""
 Tab: Flujo de Caja
-Estado de Flujo de Efectivo NIIF IAS 7 con funcionalidades avanzadas.
+Estado de Flujo de EFECTIVO NIIF IAS 7 con funcionalidades avanzadas.
 
 FEATURES:
 - Tooltips inteligentes
@@ -822,7 +822,7 @@ def render(username: str, password: str):
     """
     Renderiza el tab Flujo de Caja con diseño Enterprise.
     """
-    st.markdown("# Estado de Flujo de Efectivo")
+    st.markdown("# Estado de Flujo de EFECTIVO")
     
     # ========== CONTROLES SUPERIORES ==========
     col_search, col_filters, col_actions = st.columns([2, 3, 2])
@@ -899,8 +899,10 @@ def render(username: str, password: str):
         if cache_key not in st.session_state:
             with st.spinner("🚀 Cargando datos con procesamiento avanzado..."):
                 try:
+                    # Determinar endpoint según agrupación
+                    endpoint = "semanal" if tipo_periodo == "Semanal" else "mensual"
                     resp = requests.get(
-                        f"{FLUJO_CAJA_URL}/mensual",
+                        f"{FLUJO_CAJA_URL}/{endpoint}",
                         params={
                             "fecha_inicio": fecha_inicio_str,
                             "fecha_fin": fecha_fin_str,
@@ -931,14 +933,14 @@ def render(username: str, password: str):
         actividades = flujo_data.get("actividades", {})
         conciliacion = flujo_data.get("conciliacion", {})
         meses_lista = flujo_data.get("meses", [])
-        efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
+        EFECTIVO_por_mes = flujo_data.get("EFECTIVO_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
         fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
-        ef_ini = conciliacion.get("efectivo_inicial", 0)
-        ef_fin = conciliacion.get("efectivo_final", 0)
+        ef_ini = conciliacion.get("EFECTIVO_inicial", 0)
+        ef_fin = conciliacion.get("EFECTIVO_final", 0)
         variacion = op + inv + fin
         
         # ========== DASHBOARD KPIs ANIMADO ==========
@@ -1000,14 +1002,14 @@ def render(username: str, password: str):
         
         kpi_cols[3].markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">💰 Efectivo Inicial</div>
+            <div class="kpi-label">💰 EFECTIVO Inicial</div>
             <div class="kpi-value kpi-neutral">${ef_ini:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
         
         kpi_cols[4].markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">� Efectivo Final</div>
+            <div class="kpi-label">� EFECTIVO Final</div>
             <div class="kpi-value {'kpi-positive' if variacion > 0 else 'kpi-negative'}">${ef_fin:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1169,23 +1171,23 @@ def render(username: str, password: str):
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
         for mes in meses_lista:
-            variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
+            variacion_mes = EFECTIVO_por_mes.get(mes, {}).get("variacion", 0)
             html_parts.append(f'<td>{_fmt_monto_html(variacion_mes)}</td>')
         html_parts.append(f'<td><strong>{_fmt_monto_html(variacion)}</strong></td>')
         html_parts.append('</tr>')
         
         html_parts.append(f'<tr class="data-row">')
-        html_parts.append(f'<td class="frozen">Efectivo al inicio del período</td>')
+        html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
         for mes in meses_lista:
-            ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
+            ef_ini_mes = EFECTIVO_por_mes.get(mes, {}).get("inicial", ef_ini)
             html_parts.append(f'<td>{_fmt_monto_html(ef_ini_mes)}</td>')
         html_parts.append(f'<td><strong>{_fmt_monto_html(ef_ini)}</strong></td>')
         html_parts.append('</tr>')
         
         html_parts.append(f'<tr class="grand-total">')
-        html_parts.append(f'<td class="frozen"><strong>� EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
+        html_parts.append(f'<td class="frozen"><strong>�EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
         for mes in meses_lista:
-            ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
+            ef_fin_mes = EFECTIVO_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{_fmt_monto_html(ef_fin_mes)}</td>')
         html_parts.append(f'<td><strong>{_fmt_monto_html(ef_fin)}</strong></td>')
         html_parts.append('</tr>')
@@ -1217,7 +1219,7 @@ def render(username: str, password: str):
         
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:
-            if st.button("📥 Exportar Excel Premium", use_container_width=True):
+            if st.button("📥 Exportar Excel", use_container_width=True):
                 # Crear Excel con formato
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
