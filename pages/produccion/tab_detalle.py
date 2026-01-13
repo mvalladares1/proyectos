@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from datetime import date, timedelta
 
 from .shared import (
-    STATE_OPTIONS, CSS_GLOBAL, fmt_numero, clean_name, get_state_label,
+    STATE_OPTIONS, fmt_numero, clean_name, get_state_label,
     format_fecha, format_num, build_pie_chart, build_horizontal_bar,
     fetch_ordenes, fetch_of_detail, fetch_kpis, render_component_tab, render_metrics_row,
     detectar_planta
