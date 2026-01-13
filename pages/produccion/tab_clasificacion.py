@@ -339,24 +339,13 @@ def render(username: str, password: str):
                 ]
             )
 
-            # Unir y configurar gráfico Final (SÓLO UNA CAPA para permitir on_select)
-            chart_final = bars.add_params(
-                seleccion_chart
-            ).properties(
-                height=450,
-                title=alt.TitleParams(
-                    text="Distribución de Producción por Grado",
-                    subtitle=["Haz clic en las barras o la leyenda para filtrar los KPIs detallados"],
-                    color='#00cc66',
-                    fontSize=18,
-                    anchor='start'
-                )
-            ).configure_view(
-                strokeWidth=0
-            )
+            # Gráfico Final ultra-simple para evitar error de Streamlit con on_select
+            chart_final = bars.add_params(seleccion_chart).properties(height=450)
 
             # Selector de KPIs (Contenedor superior para que aparezcan arriba del gráfico)
             kpis_container = st.container()
+            
+            st.markdown("##### 📊 Distribución de Producción por Grado")
             
             # Renderizar gráfico y capturar evento de selección
             event = st.altair_chart(chart_final, use_container_width=True, on_select="rerun")

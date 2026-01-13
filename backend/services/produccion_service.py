@@ -25,7 +25,7 @@ class ProduccionService:
     def get_ordenes_fabricacion(self, estado: Optional[str] = None,
                                 fecha_desde: Optional[str] = None,
                                 fecha_hasta: Optional[str] = None,
-                                limit: int = 500) -> List[Dict]:
+                                limit: int = 1000) -> List[Dict]:
         """Obtiene órdenes de fabricación con filtros opcionales."""
         domain = []
         
