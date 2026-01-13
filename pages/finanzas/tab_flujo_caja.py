@@ -1,6 +1,6 @@
 """
-Tab: Flujo de Caja - Enterprise Design
-Estado de Flujo de Efectivo NIIF IAS 7 - Nivel Premium con todas las funcionalidades avanzadas.
+Tab: Flujo de Caja
+Estado de Flujo de Efectivo NIIF IAS 7 con funcionalidades avanzadas.
 
 FEATURES:
 - Tooltips inteligentes
@@ -36,7 +36,7 @@ from .shared import (
 # ==================== CSS ENTERPRISE LEVEL ====================
 ENTERPRISE_CSS = """
 <style>
-/* ============ CUSTOM SCROLLBAR PREMIUM ============ */
+/* ============ CUSTOM SCROLLBAR ============ */
 .excel-container::-webkit-scrollbar {
     height: 14px;
     background: #0a0e1a;
@@ -164,7 +164,7 @@ ENTERPRISE_CSS = """
     fill: #3b82f6;
 }
 
-/* ============ HEADERS PREMIUM ============ */
+/* ============ HEADERS ============ */
 .excel-table thead th {
     background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%) !important;
     color: #ffffff;
@@ -1028,7 +1028,7 @@ def render(username: str, password: str):
             st.info("🚧 Gráfico de cascada interactivo en desarrollo...")
             st.dataframe(pd.DataFrame(waterfall_data))
         
-        # ========== GENERAR TABLA HTML PREMIUM ==========
+        # ========== GENERAR TABLA HTML ==========
         html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
         
@@ -1201,12 +1201,13 @@ def render(username: str, password: str):
         # Agregar JavaScript
         html_parts.append(ENTERPRISE_JS)
         
-        # Renderizar
+        # Renderizar con altura dinámica - sin scroll vertical interno, solo horizontal
         full_html = "".join(html_parts)
-        # Altura dinámica según número de conceptos en actividades (45px por fila + header 400px + footer 150px)
+        # Calcular altura total: header (100px) + cada concepto (50px) + footer conciliación (200px) + margen (100px)
         num_conceptos = sum(len(act.get("conceptos", [])) for act in actividades.values())
-        altura_dinamica = min(400 + (num_conceptos * 45) + 150, 2000)  # Máximo 2000px
-        components.html(full_html, height=altura_dinamica, scrolling=False)
+        num_headers = 3  # OPERACION, INVERSION, FINANCIAMIENTO
+        altura_total = 100 + (num_conceptos * 50) + (num_headers * 60) + 300
+        components.html(full_html, height=altura_total, scrolling=False)
         
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:
@@ -1243,7 +1244,7 @@ def render(username: str, password: str):
                 st.download_button(
                     "⬇️ Descargar",
                     output.getvalue(),
-                    f"flujo_caja_premium_{fecha_inicio_str}_{fecha_fin_str}.xlsx",
+                    f"flujo_caja_{fecha_inicio_str}_{fecha_fin_str}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
