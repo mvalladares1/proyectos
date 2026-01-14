@@ -10,6 +10,7 @@ from datetime import datetime
 from shared.odoo_client import get_odoo_client, OdooClient
 # Importar desde módulo modularizado
 from backend.services.tuneles_service import TunelesService, get_tuneles_service
+from backend.services.revertir_consumo_service import RevertirConsumoService
 
 
 router = APIRouter(prefix="/api/v1/automatizaciones", tags=["automatizaciones"])
@@ -453,5 +454,41 @@ async def get_ubicacion_by_barcode(
             "display_name": loc.get("display_name", loc["name"]),
             "barcode": loc.get("barcode", "")
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============ Revertir Consumo ODF ============
+
+class RevertirConsumoRequest(BaseModel):
+    """Request para revertir consumo de ODF."""
+    odf_name: str = Field(..., description="Nombre de la orden de fabricación (ej: VLK/CongTE109)")
+
+
+@router.post("/revertir-consumo-odf")
+async def revertir_consumo_odf(
+    request: RevertirConsumoRequest,
+    username: str = None,
+    password: str = None,
+    url: str = None,
+    db: str = None
+):
+    """
+    Revierte el consumo de una orden de fabricación de desmontaje.
+    
+    - Recupera componentes (MP) a sus paquetes originales
+    - Elimina subproductos (pone cantidades en 0)
+    """
+    try:
+        service = RevertirConsumoService(
+            username=username, 
+            password=password,
+            url=url,
+            db=db
+        )
+        
+        resultado = service.revertir_consumo_odf(request.odf_name)
+        return resultado
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
