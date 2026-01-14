@@ -459,37 +459,27 @@ class RevertirConsumoService:
         
         picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
         
+        # Buscar UoM "kg" directamente
+        uom_kg = self.odoo.search_read(
+            "uom.uom",
+            [("name", "=", "kg")],
+            ["id"],
+            limit=1
+        )
+        
+        if not uom_kg:
+            raise ValueError("UoM 'kg' no encontrada en el sistema")
+        
+        uom_kg_id = uom_kg[0]["id"]
+        
         # Crear un move por cada componente
         for comp in componentes:
-            # Obtener la UoM del producto desde product.template
-            product_info = self.odoo.search_read(
-                "product.product",
-                [("id", "=", comp["product_id"])],
-                ["product_tmpl_id"]
-            )
-            
-            if not product_info:
-                raise ValueError(f"Producto {comp['product_id']} no encontrado")
-            
-            # Obtener UoM desde el template
-            template_id = product_info[0]["product_tmpl_id"][0]
-            template_info = self.odoo.search_read(
-                "product.template",
-                [("id", "=", template_id)],
-                ["uom_id"]
-            )
-            
-            if not template_info:
-                raise ValueError(f"Template {template_id} no encontrado")
-            
-            product_uom_id = template_info[0]["uom_id"][0]
-            
             move_vals = {
                 "name": f"Recuperar {comp['paquete']}",
                 "picking_id": picking_id,
                 "product_id": comp["product_id"],
                 "product_uom_qty": comp["cantidad"],
-                "product_uom": product_uom_id,
+                "product_uom": uom_kg_id,
                 "location_id": location_id,
                 "location_dest_id": location_id
             }
@@ -616,28 +606,18 @@ class RevertirConsumoService:
         
         picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
         
-        # Obtener la UoM del producto desde product.template
-        product_info = self.odoo.search_read(
-            "product.product",
-            [("id", "=", product_id)],
-            ["product_tmpl_id"]
+        # Buscar UoM "kg" directamente
+        uom_kg = self.odoo.search_read(
+            "uom.uom",
+            [("name", "=", "kg")],
+            ["id"],
+            limit=1
         )
         
-        if not product_info:
-            raise ValueError(f"Producto {product_id} no encontrado")
+        if not uom_kg:
+            raise ValueError("UoM 'kg' no encontrada en el sistema")
         
-        # Obtener UoM desde el template
-        template_id = product_info[0]["product_tmpl_id"][0]
-        template_info = self.odoo.search_read(
-            "product.template",
-            [("id", "=", template_id)],
-            ["uom_id"]
-        )
-        
-        if not template_info:
-            raise ValueError(f"Template {template_id} no encontrado")
-        
-        product_uom_id = template_info[0]["uom_id"][0]
+        uom_kg_id = uom_kg[0]["id"]
         
         # Crear move
         move_vals = {
@@ -645,7 +625,7 @@ class RevertirConsumoService:
             "picking_id": picking_id,
             "product_id": product_id,
             "product_uom_qty": cantidad,
-            "product_uom": product_uom_id,
+            "product_uom": uom_kg_id,
             "location_id": location_id,
             "location_dest_id": location_id
         }
