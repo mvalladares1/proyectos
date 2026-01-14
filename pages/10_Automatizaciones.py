@@ -30,7 +30,7 @@ from automatizaciones import tab_crear
 from automatizaciones import tab_monitor
 from automatizaciones import tab_movimientos
 from automatizaciones import tab_monitor_movimientos
-from automatizaciones import tab_revertir_consumo
+# from automatizaciones import tab_revertir_consumo  # OCULTO TEMPORALMENTE
 
 # Requerir autenticación
 proteger_pagina()
@@ -109,7 +109,8 @@ tuneles = shared.get_tuneles(username, password)
 API_URL = shared.API_URL
 
 # === TABS PRINCIPALES ===
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes", "📦 Movimientos", "📊 Monitor Mov.", "🔄 Revertir Consumo"])
+tab1, tab2, tab3, tab4 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes", "📦 Movimientos", "📊 Monitor Mov."])
+# tab5 = "🔄 Revertir Consumo" OCULTO TEMPORALMENTE
 
 # =====================================================
 #           TAB 1: CREAR ORDEN
@@ -148,10 +149,10 @@ with tab4:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor Movimientos'. Contacta al administrador.")
 
 # =====================================================
-#           TAB 5: REVERTIR CONSUMO DE ODF
+#           TAB 5: REVERTIR CONSUMO DE ODF (OCULTO)
 # =====================================================
-with tab5:
-    if _perm_crear:  # Mismo permiso que crear orden
-        tab_revertir_consumo.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para usar 'Revertir Consumo'. Contacta al administrador.")
+# with tab5:
+#     if _perm_crear:  # Mismo permiso que crear orden
+#         tab_revertir_consumo.render(username, password)
+#     else:
+#         st.error("🚫 **Acceso Restringido** - No tienes permisos para usar 'Revertir Consumo'. Contacta al administrador.")

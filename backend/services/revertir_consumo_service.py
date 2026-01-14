@@ -223,13 +223,25 @@ class RevertirConsumoService:
         
         package_id = packages[0]["id"]
         
+        # Buscar el lote por nombre
+        lots = self.odoo.search_read(
+            "stock.lot",
+            [("name", "=", lote_nombre), ("product_id", "=", producto_id)],
+            ["id"]
+        )
+        
+        if not lots:
+            return True  # Lote no existe, necesita transferencia
+        
+        lot_id = lots[0]["id"]
+        
         # Buscar quants del paquete con ese producto y lote
         quants = self.odoo.search_read(
             "stock.quant",
             [
                 ("package_id", "=", package_id),
                 ("product_id", "=", producto_id),
-                ("lot_id.name", "=", lote_nombre),
+                ("lot_id", "=", lot_id),
                 ("quantity", ">", 0)
             ],
             ["quantity"]
@@ -289,6 +301,7 @@ class RevertirConsumoService:
             )
             
             for ml in move_lines:
+                # Filtrar líneas que ya están en 0 (ya fueron revertidas)
                 if ml["qty_done"] <= 0:
                     continue
                 
@@ -302,7 +315,7 @@ class RevertirConsumoService:
                     "lote": lote_name,
                     "cantidad_actual": ml["qty_done"],
                     "ubicacion": ubicacion_name,
-                    "move_line_id": ml["id"]  # Importante para poder actualizarlo después
+                    "move_line_id": ml["id"]
                 })
         
         return resultado
@@ -695,6 +708,10 @@ class RevertirConsumoService:
         )
         
         for move in finished_moves:
+            # Verificar si ya está en 0 antes de modificar
+            if move["quantity_done"] <= 0:
+                continue  # Ya está en 0, omitir
+            
             try:
                 # Actualizar cantidad a 0
                 self.odoo.execute(
@@ -711,16 +728,18 @@ class RevertirConsumoService:
                 move_lines = self.odoo.search_read(
                     "stock.move.line",
                     [("move_id", "=", move["id"])],
-                    ["id"]
+                    ["id", "qty_done"]
                 )
                 
                 for ml in move_lines:
-                    self.odoo.execute(
-                        "stock.move.line",
-                        "write",
-                        [ml["id"]],
-                        {"qty_done": 0.0}
-                    )
+                    # Solo actualizar si no está ya en 0
+                    if ml["qty_done"] > 0:
+                        self.odoo.execute(
+                            "stock.move.line",
+                            "write",
+                            [ml["id"]],
+                            {"qty_done": 0.0}
+                        )
                 
                 resultado["subproductos"].append({
                     "producto": move["product_id"][1] if move.get("product_id") else "N/A",
