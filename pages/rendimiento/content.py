@@ -275,8 +275,8 @@ def _render_materia_prima(registro: dict, nivel: int):
 
 def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin):
     """Renderiza el tab del diagrama Sankey."""
-    st.subheader("🔗 Diagrama Sankey: Container → Fabricación → Pallets")
-    st.caption("Visualización del flujo de containers, fabricaciones y pallets")
+    st.subheader("🔗 Diagrama Sankey: Pallets IN → Proceso → Pallets OUT")
+    st.caption("OUT se agrupa por container cuando existe; OUT sin container se muestra en amarillo")
     
     if st.button("🔄 Generar Diagrama", type="primary"):
         with st.spinner("Generando diagrama Sankey..."):
@@ -294,26 +294,38 @@ def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin):
                 st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
                 return
             
+            node_x = [n.get("x") for n in sankey_data["nodes"]]
+            node_y = [n.get("y") for n in sankey_data["nodes"]]
+            has_positions = all(v is not None for v in node_x) and all(v is not None for v in node_y)
+
             # Crear figura Sankey
+            node_dict = dict(
+                pad=15,
+                thickness=20,
+                line=dict(color="black", width=0.5),
+                label=[n["label"] for n in sankey_data["nodes"]],
+                color=[n["color"] for n in sankey_data["nodes"]],
+                customdata=[n.get("detail", "") for n in sankey_data["nodes"]],
+                hovertemplate="%{label}<br>%{customdata}<extra></extra>"
+            )
+            sankey_kwargs = {}
+            if has_positions:
+                node_dict["x"] = node_x
+                node_dict["y"] = node_y
+                sankey_kwargs["arrangement"] = "fixed"
+
             fig = go.Figure(data=[go.Sankey(
-                node=dict(
-                    pad=15,
-                    thickness=20,
-                    line=dict(color="black", width=0.5),
-                    label=[n["label"] for n in sankey_data["nodes"]],
-                    color=[n["color"] for n in sankey_data["nodes"]],
-                    customdata=[n.get("detail", "") for n in sankey_data["nodes"]],
-                    hovertemplate="%{label}<br>%{customdata}<extra></extra>"
-                ),
+                node=node_dict,
                 link=dict(
                     source=[l["source"] for l in sankey_data["links"]],
                     target=[l["target"] for l in sankey_data["links"]],
                     value=[l["value"] for l in sankey_data["links"]]
-                )
+                ),
+                **sankey_kwargs
             )])
             
             fig.update_layout(
-                title="Flujo: Container → Fabricación → Pallets",
+                title="Flujo: Pallets IN → Proceso → Pallets OUT",
                 height=700,
                 font=dict(size=10)
             )
@@ -328,11 +340,11 @@ def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin):
             with col2:
                 st.metric("Fabricaciones", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
             with col3:
-                total_pallets = len([n for n in sankey_data["nodes"] if n["color"] in ["#f39c12", "#2ecc71"]])
+                total_pallets = len([n for n in sankey_data["nodes"] if n["color"] in ["#f39c12", "#2ecc71", "#f1c40f"]])
                 st.metric("Pallets", total_pallets)
             
             # Leyenda
             st.markdown("##### Leyenda:")
-            st.markdown("🔵 Containers | 🔴 Fabricaciones | 🟠 Pallets IN | 🟢 Pallets OUT")
+            st.markdown("🔵 Containers | 🔴 Fabricaciones | 🟠 Pallets IN | 🟢 Pallets OUT (en container) | 🟡 Pallets OUT (sin container)")
     else:
         st.info("👆 Selecciona las fechas en el sidebar y haz clic en **Generar Diagrama**")
