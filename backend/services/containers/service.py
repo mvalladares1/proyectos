@@ -574,7 +574,8 @@ class ContainersService:
                 links.append({
                     "source": p_in_idx,
                     "target": f_idx,
-                    "value": pallet_in.get("qty", 1) or 1
+                    "value": pallet_in.get("qty", 1) or 1,
+                    "color": "#f39c12",
                 })
 
             # OUT
@@ -605,7 +606,8 @@ class ContainersService:
                 links.append({
                     "source": f_idx,
                     "target": out_idx,
-                    "value": pallet_out.get("qty", 1) or 1
+                    "value": pallet_out.get("qty", 1) or 1,
+                    "color": out_color,
                 })
 
                 if out_meta.get("type") == "out_orphan":
@@ -635,7 +637,8 @@ class ContainersService:
                     links.append({
                         "source": out_idx,
                         "target": c_idx,
-                        "value": pallet_out.get("qty", 1) or 1
+                        "value": pallet_out.get("qty", 1) or 1,
+                        "color": "#2ecc71",
                     })
                     container_out_nodes.setdefault(c_id, []).append(out_id)
 
@@ -700,7 +703,8 @@ class ContainersService:
 
             orphan_list = fab_orphan_out_nodes.get(fid, [])
             for nid, y in _spread_y(orphan_list, slot["start"], slot["end"]).items():
-                _set_xy(nid, 0.72, y)
+                # Columna separada para OUT sin container (entre rojo y verde)
+                _set_xy(nid, 0.62, y)
 
         # 2) Containers: slots verticales ponderados por #outs, incluye virtuales por origin
         container_node_ids_in_order: List[str] = [f"C:{c.get('id')}" for c in (containers or []) if c.get("id")]
@@ -727,7 +731,7 @@ class ContainersService:
 
             out_node_ids = container_out_nodes.get(cnode_id, [])
             for nid, y in _spread_y(out_node_ids, start, end).items():
-                _set_xy(nid, 0.86, y)
+                _set_xy(nid, 0.82, y)
 
             cursor = end
 
@@ -743,9 +747,9 @@ class ContainersService:
                 elif t == "fab":
                     _set_xy(nid, 0.45, 0.5)
                 elif t == "out_orphan":
-                    _set_xy(nid, 0.72, 0.5)
+                    _set_xy(nid, 0.62, 0.5)
                 elif t == "out_container":
-                    _set_xy(nid, 0.86, 0.5)
+                    _set_xy(nid, 0.82, 0.5)
                 elif t == "container":
                     _set_xy(nid, 0.98, 0.5)
 

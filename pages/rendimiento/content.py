@@ -260,7 +260,7 @@ def _render_materia_prima(registro: dict, nivel: int):
 
 def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama Sankey."""
-    st.subheader("🔗 Diagrama Sankey: Pallets IN → Proceso → Pallets OUT")
+    st.subheader("🔗 Diagrama Sankey")
     st.caption("OUT se agrupa por container cuando existe; OUT sin container se muestra en amarillo")
 
     st.markdown("### 📅 Período para Diagrama")
@@ -350,7 +350,8 @@ def _render_sankey(username: str, password: str):
                 link=dict(
                     source=[l["source"] for l in sankey_data["links"]],
                     target=[l["target"] for l in sankey_data["links"]],
-                    value=[l["value"] for l in sankey_data["links"]]
+                    value=[l["value"] for l in sankey_data["links"]],
+                    color=[l.get("color", "rgba(200,200,200,0.35)") for l in sankey_data["links"]],
                 ),
                 **sankey_kwargs
             )])
