@@ -14,6 +14,8 @@
   "cuentas_efectivo": {
     "efectivo": {
       "prefijos": [
+        "110",
+        "111",
         "1101",
         "1102"
       ],
