@@ -461,12 +461,24 @@ class RevertirConsumoService:
         
         # Crear un move por cada componente
         for comp in componentes:
+            # Obtener la UoM del producto
+            product_info = self.odoo.search_read(
+                "product.product",
+                [("id", "=", comp["product_id"])],
+                ["uom_id"]
+            )
+            
+            if not product_info:
+                raise ValueError(f"Producto {comp['product_id']} no encontrado")
+            
+            product_uom_id = product_info[0]["uom_id"][0]
+            
             move_vals = {
                 "name": f"Recuperar {comp['paquete']}",
                 "picking_id": picking_id,
                 "product_id": comp["product_id"],
                 "product_uom_qty": comp["cantidad"],
-                "product_uom": 1,  # Kg
+                "product_uom": product_uom_id,
                 "location_id": location_id,
                 "location_dest_id": location_id
             }
@@ -593,13 +605,25 @@ class RevertirConsumoService:
         
         picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
         
+        # Obtener la UoM del producto
+        product_info = self.odoo.search_read(
+            "product.product",
+            [("id", "=", product_id)],
+            ["uom_id"]
+        )
+        
+        if not product_info:
+            raise ValueError(f"Producto {product_id} no encontrado")
+        
+        product_uom_id = product_info[0]["uom_id"][0]
+        
         # Crear move
         move_vals = {
             "name": f"Recuperar {paquete_destino}",
             "picking_id": picking_id,
             "product_id": product_id,
             "product_uom_qty": cantidad,
-            "product_uom": 1,  # Kg
+            "product_uom": product_uom_id,
             "location_id": location_id,
             "location_dest_id": location_id
         }
