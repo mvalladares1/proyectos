@@ -499,64 +499,227 @@ class ContainersService:
                        producer_id: Optional[int] = None) -> Dict:
         """
         Genera datos para diagrama Sankey de trazabilidad.
-        Flujo: Container → Fabricación → Pallets Consumidos
-               Fabricación → Pallets de Salida
         
-        Returns:
-            {
-                "nodes": [{"label": "...", "color": "..."}],
-                "links": [{"source": idx, "target": idx, "value": kg}]
-            }
+        - IN: package_id existe AND location_dest_id es virtual (producción)
+        - OUT: result_package_id existe AND location_id es virtual (producción)
+        - PROCESO: agrupado por campo reference (ej: RF/MO/XXXXX)
+        - CLIENTE: OUT con location_dest_id = Partner/Vendors (ID 4)
         """
-        # Layout buscado (como la imagen):
-        # IN (izq) -> Proceso/Fabricación (centro) -> OUT (der)
-        # - OUT con container: se agrupan por container (cliente)
-        # - OUT sin container: quedan en amarillo cerca del proceso
+        print(f"Generando Sankey data...")
+        
+        # Constantes
+        PARTNER_VENDORS_LOCATION_ID = 4  # Partner/Vendors location
+        VIRTUAL_LOCATION_IDS = self._get_virtual_location_ids()
+        
+        # Paso 1: Buscar movimientos con paquetes
+        domain = [
+            "|",
+            ("package_id", "!=", False),
+            ("result_package_id", "!=", False),
+            ("qty_done", ">", 0),
+            ("state", "=", "done"),
+        ]
+        if start_date:
+            domain.append(("date", ">=", start_date))
+        if end_date:
+            domain.append(("date", "<=", end_date))
 
-        containers = self.get_containers(start_date, end_date, partner_id=partner_id)[:limit]
-
-        # Producciones en containers (mantiene el orden actual)
-        production_to_container: Dict[int, Dict] = {}
-        productions_order: List[Dict] = []
-        for container in containers:
-            for fab in container.get("productions", []) or []:
-                # Filtro UX: dejar fuera procesos VLK, enfocarse en RF
-                if (fab.get("name") or "").startswith("VLK"):
-                    continue
-                production_to_container[fab["id"]] = container
-                productions_order.append(fab)
-
-        # Contexto (moves/pallets) SOLO para producciones ya filtradas
-        filtered_production_ids = [p["id"] for p in productions_order if p.get("id")]
-        sankey_context = self._get_sankey_context(filtered_production_ids, include_producers=bool(producer_id))
-        productions_by_id = sankey_context.get("productions", {})
-        pallets_by_production = sankey_context.get("pallets", {})
-
-        # Resolver container por pallet OUT (puede haber mezcla: algunos OUT asociados y otros huérfanos)
-        out_package_ids: List[int] = []
-        for pdata in (pallets_by_production or {}).values():
-            for p in (pdata.get("salida", []) or []):
-                pid = p.get("id")
-                if pid:
-                    out_package_ids.append(pid)
-        package_to_container_ref = self._get_container_refs_by_out_package_ids(
-            list(set(out_package_ids)),
-            containers,
-        )
-
+        fields = [
+            "id", "reference", "package_id", "result_package_id",
+            "qty_done", "product_id", "location_id", "location_dest_id",
+            "date", "picking_id"
+        ]
+        
+        try:
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                domain,
+                fields,
+                limit=5000,
+                order="date desc"
+            )
+        except Exception as e:
+            print(f"Error fetching move lines: {e}")
+            return {"nodes": [], "links": []}
+        
+        if not move_lines:
+            print("No se encontraron movimientos con paquetes")
+            return {"nodes": [], "links": []}
+        
+        print(f"Encontrados {len(move_lines)} movimientos con paquetes")
+        
+        # Paso 2: Clasificar movimientos en IN y OUT
+        in_moves = []  # package_id → virtual location
+        out_moves = []  # result_package_id desde virtual location
+        sale_moves = []  # movimientos hacia Partner/Vendors (ventas)
+        
+        for ml in move_lines:
+            location_id = ml.get("location_id")
+            location_dest_id = ml.get("location_dest_id")
+            
+            loc_id = location_id[0] if isinstance(location_id, (list, tuple)) else location_id
+            loc_dest_id = location_dest_id[0] if isinstance(location_dest_id, (list, tuple)) else location_dest_id
+            
+            package_id = ml.get("package_id")
+            result_package_id = ml.get("result_package_id")
+            
+            # IN: tiene package_id y va a ubicación virtual
+            if package_id and loc_dest_id in VIRTUAL_LOCATION_IDS:
+                in_moves.append(ml)
+            
+            # OUT: tiene result_package_id y sale de ubicación virtual
+            if result_package_id and loc_id in VIRTUAL_LOCATION_IDS:
+                out_moves.append(ml)
+            
+            # VENTA: va hacia Partner/Vendors
+            if loc_dest_id == PARTNER_VENDORS_LOCATION_ID:
+                sale_moves.append(ml)
+        
+        print(f"Clasificados: {len(in_moves)} IN, {len(out_moves)} OUT, {len(sale_moves)} ventas")
+        
+        # Paso 3: Agrupar por reference para crear nodos de proceso
+        references_data = {}  # reference -> {in_packages: [], out_packages: [], dates: []}
+        
+        for ml in in_moves:
+            ref = ml.get("reference") or "Sin Referencia"
+            if ref not in references_data:
+                references_data[ref] = {"in_packages": {}, "out_packages": {}, "dates": [], "products": {}}
+            
+            pkg_rel = ml.get("package_id")
+            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+            pkg_name = pkg_rel[1] if isinstance(pkg_rel, (list, tuple)) and len(pkg_rel) > 1 else str(pkg_id)
+            
+            prod_rel = ml.get("product_id")
+            prod_name = prod_rel[1] if isinstance(prod_rel, (list, tuple)) and len(prod_rel) > 1 else "N/A"
+            
+            qty = ml.get("qty_done", 0) or 0
+            date = ml.get("date", "")
+            
+            if pkg_id not in references_data[ref]["in_packages"]:
+                references_data[ref]["in_packages"][pkg_id] = {
+                    "id": pkg_id,
+                    "name": pkg_name,
+                    "qty": 0,
+                    "products": {}
+                }
+            references_data[ref]["in_packages"][pkg_id]["qty"] += qty
+            
+            # Agregar producto al paquete
+            if prod_name not in references_data[ref]["in_packages"][pkg_id]["products"]:
+                references_data[ref]["in_packages"][pkg_id]["products"][prod_name] = 0
+            references_data[ref]["in_packages"][pkg_id]["products"][prod_name] += qty
+            
+            if date:
+                references_data[ref]["dates"].append(date)
+        
+        for ml in out_moves:
+            ref = ml.get("reference") or "Sin Referencia"
+            if ref not in references_data:
+                references_data[ref] = {"in_packages": {}, "out_packages": {}, "dates": [], "products": {}}
+            
+            pkg_rel = ml.get("result_package_id")
+            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+            pkg_name = pkg_rel[1] if isinstance(pkg_rel, (list, tuple)) and len(pkg_rel) > 1 else str(pkg_id)
+            
+            prod_rel = ml.get("product_id")
+            prod_name = prod_rel[1] if isinstance(prod_rel, (list, tuple)) and len(prod_rel) > 1 else "N/A"
+            
+            qty = ml.get("qty_done", 0) or 0
+            date = ml.get("date", "")
+            
+            if pkg_id not in references_data[ref]["out_packages"]:
+                references_data[ref]["out_packages"][pkg_id] = {
+                    "id": pkg_id,
+                    "name": pkg_name,
+                    "qty": 0,
+                    "products": {}
+                }
+            references_data[ref]["out_packages"][pkg_id]["qty"] += qty
+            
+            # Agregar producto al paquete
+            if prod_name not in references_data[ref]["out_packages"][pkg_id]["products"]:
+                references_data[ref]["out_packages"][pkg_id]["products"][prod_name] = 0
+            references_data[ref]["out_packages"][pkg_id]["products"][prod_name] += qty
+            
+            if date:
+                references_data[ref]["dates"].append(date)
+        
+        # Paso 4: Mapear paquetes OUT a clientes (ventas)
+        out_package_to_customer = {}  # package_id -> {customer_id, customer_name}
+        
+        # Recopilar paquetes de venta
+        sale_package_ids = set()
+        for ml in sale_moves:
+            pkg_rel = ml.get("package_id") or ml.get("result_package_id")
+            if pkg_rel:
+                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                sale_package_ids.add(pkg_id)
+        
+        # Obtener pickings para resolver clientes
+        if sale_package_ids:
+            picking_ids = set()
+            for ml in sale_moves:
+                picking_rel = ml.get("picking_id")
+                if picking_rel:
+                    picking_ids.add(picking_rel[0] if isinstance(picking_rel, (list, tuple)) else picking_rel)
+            
+            if picking_ids:
+                try:
+                    pickings = self.odoo.read(
+                        "stock.picking",
+                        list(picking_ids),
+                        ["id", "partner_id", "origin"]
+                    )
+                    pickings_by_id = {p["id"]: p for p in pickings}
+                    
+                    for ml in sale_moves:
+                        pkg_rel = ml.get("package_id") or ml.get("result_package_id")
+                        if not pkg_rel:
+                            continue
+                        pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                        
+                        picking_rel = ml.get("picking_id")
+                        if not picking_rel:
+                            continue
+                        picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) else picking_rel
+                        picking = pickings_by_id.get(picking_id, {})
+                        
+                        partner_rel = picking.get("partner_id")
+                        if partner_rel:
+                            customer_id = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
+                            customer_name = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
+                            out_package_to_customer[pkg_id] = {
+                                "id": customer_id,
+                                "name": customer_name,
+                                "origin": picking.get("origin", "")
+                            }
+                except Exception as e:
+                    print(f"Error fetching pickings for customers: {e}")
+        
+        # Paso 5: Filtrar referencias con actividad (al menos 1 IN o 1 OUT)
+        active_refs = {
+            ref: data for ref, data in references_data.items()
+            if data["in_packages"] or data["out_packages"]
+        }
+        
+        # Limitar a las primeras N referencias
+        sorted_refs = sorted(
+            active_refs.keys(),
+            key=lambda r: max(active_refs[r]["dates"]) if active_refs[r]["dates"] else "",
+            reverse=True
+        )[:limit]
+        
+        # Paso 6: Construir nodos y links
         nodes: List[Dict] = []
         links: List[Dict] = []
         node_index: Dict[str, int] = {}
-        node_meta: Dict[str, Dict] = {}
-
-        # key = container node id (ej: C:123 o CNAME:SO1234) -> lista de out node ids
-        container_out_nodes: Dict[str, List[str]] = {}
-
-        # Para layout legible: agrupar nodos por fabricación
-        fab_in_nodes: Dict[str, List[str]] = {}
-        fab_orphan_out_nodes: Dict[str, List[str]] = {}
-
-        def _ensure_node(node_id: str, label: str, color: str, detail: Dict, meta: Dict) -> int:
+        
+        # Estructuras para layout
+        ref_in_nodes: Dict[str, List[str]] = {}
+        ref_out_nodes: Dict[str, List[str]] = {}
+        customer_out_nodes: Dict[str, List[str]] = {}
+        
+        def _ensure_node(node_id: str, label: str, color: str, detail: Dict) -> int:
             if node_id not in node_index:
                 node_index[node_id] = len(nodes)
                 nodes.append({
@@ -566,132 +729,119 @@ class ContainersService:
                     "x": None,
                     "y": None,
                 })
-                node_meta[node_id] = meta
             return node_index[node_id]
-
-        # Nodos/links por fabricación
-        for fab in productions_order:
-            prod_id = fab["id"]
-            container = production_to_container.get(prod_id)
-            container_id = container.get("id") if container else None
-
-            f_id = f"F:{prod_id}"
-            f_idx = _ensure_node(
-                f_id,
-                fab.get("name", ""),
+        
+        for ref in sorted_refs:
+            data = active_refs[ref]
+            
+            # Determinar fecha del proceso (más reciente)
+            process_date = max(data["dates"]) if data["dates"] else ""
+            
+            # Nodo PROCESO (rojo)
+            process_id = f"PROC:{ref}"
+            process_idx = _ensure_node(
+                process_id,
+                ref,
                 "#e74c3c",
-                build_fabrication_detail(fab, productions_by_id.get(prod_id, {})),
-                {"type": "fab", "container_id": container_id}
+                {
+                    "reference": ref,
+                    "fecha": process_date,
+                    "in_count": len(data["in_packages"]),
+                    "out_count": len(data["out_packages"])
+                }
             )
-
-            fab_in_nodes.setdefault(f_id, [])
-            fab_orphan_out_nodes.setdefault(f_id, [])
-
-            pallets_data = pallets_by_production.get(prod_id, {"consumidos": [], "salida": []})
-
-            # Si hay filtro por productor: mostrar solo procesos donde exista al menos 1 pallet IN del productor
-            if producer_id:
-                has_match = any(
-                    producer_id in (p.get("producer_ids") or [])
-                    for p in (pallets_data.get("consumidos", []) or [])
-                )
-                if not has_match:
-                    continue
-
-            # IN
-            for pallet_in in pallets_data.get("consumidos", []) or []:
-                if producer_id and producer_id not in (pallet_in.get("producer_ids") or []):
-                    continue
-                pallet_in_key = pallet_in.get("id") or pallet_in.get("name")
-                # Scope por fabricación para evitar merges que empeoran la lectura
-                p_in_id = f"PIN:F{prod_id}:P{pallet_in_key}"
-                p_in_idx = _ensure_node(
-                    p_in_id,
-                    f"IN: {pallet_in.get('name', '')}",
+            
+            ref_in_nodes[process_id] = []
+            ref_out_nodes[process_id] = []
+            
+            # Nodos IN (naranja)
+            for pkg_id, pkg_data in data["in_packages"].items():
+                in_node_id = f"IN:{ref}:{pkg_id}"
+                products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in pkg_data["products"].items()])
+                
+                in_idx = _ensure_node(
+                    in_node_id,
+                    f"IN: {pkg_data['name']}",
                     "#f39c12",
-                    build_pallet_detail(pallet_in),
-                    {"type": "in"}
+                    {
+                        "package_id": pkg_id,
+                        "package_name": pkg_data["name"],
+                        "qty": pkg_data["qty"],
+                        "products": list(pkg_data["products"].keys()),
+                        "products_detail": products_str
+                    }
                 )
-                fab_in_nodes[f_id].append(p_in_id)
+                
+                ref_in_nodes[process_id].append(in_node_id)
+                
+                # Link: IN -> PROCESO
                 links.append({
-                    "source": p_in_idx,
-                    "target": f_idx,
-                    "value": pallet_in.get("qty", 1) or 1,
-                    "color": "#f39c12",
+                    "source": in_idx,
+                    "target": process_idx,
+                    "value": pkg_data["qty"] or 1,
+                    "color": "#f39c12"
                 })
-
-            # OUT
-            for pallet_out in pallets_data.get("salida", []) or []:
-                # IMPORTANT: el container se define por pallet (salida), no por fabricación
-                container_ref = package_to_container_ref.get(pallet_out.get("id")) or {}
-                out_container_id = container_ref.get("container_id")
-                out_container_origin = container_ref.get("origin")
-                pallet_out_key = pallet_out.get("id") or pallet_out.get("name")
-                if out_container_id or out_container_origin:
-                    container_scope = f"C{out_container_id}" if out_container_id else f"O{out_container_origin}"
-                    out_id = f"POUT:{container_scope}:P{pallet_out_key}"
-                    out_color = "#2ecc71"
-                    out_meta = {"type": "out_container", "container_id": out_container_id, "origin": out_container_origin}
-                else:
-                    # Scope por fabricación para evitar merges de huérfanos entre fabricaciones
-                    out_id = f"POUT:F{prod_id}:NONE:P{pallet_out_key}"
-                    out_color = "#f1c40f"  # amarillo sin container
-                    out_meta = {"type": "out_orphan"}
-
+            
+            # Nodos OUT (verde)
+            for pkg_id, pkg_data in data["out_packages"].items():
+                out_node_id = f"OUT:{ref}:{pkg_id}"
+                products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in pkg_data["products"].items()])
+                
                 out_idx = _ensure_node(
-                    out_id,
-                    f"OUT: {pallet_out.get('name', '')}",
-                    out_color,
-                    build_pallet_detail(pallet_out),
-                    out_meta
+                    out_node_id,
+                    f"OUT: {pkg_data['name']}",
+                    "#2ecc71",
+                    {
+                        "package_id": pkg_id,
+                        "package_name": pkg_data["name"],
+                        "qty": pkg_data["qty"],
+                        "products": list(pkg_data["products"].keys()),
+                        "products_detail": products_str
+                    }
                 )
+                
+                ref_out_nodes[process_id].append(out_node_id)
+                
+                # Link: PROCESO -> OUT
                 links.append({
-                    "source": f_idx,
+                    "source": process_idx,
                     "target": out_idx,
-                    "value": pallet_out.get("qty", 1) or 1,
-                    "color": out_color,
+                    "value": pkg_data["qty"] or 1,
+                    "color": "#2ecc71"
                 })
-
-                if out_meta.get("type") == "out_orphan":
-                    fab_orphan_out_nodes[f_id].append(out_id)
-
-                # Agrupar OUT en container (OUT -> Container)
-                if out_container_id or out_container_origin:
-                    if out_container_id:
-                        c_id = f"C:{out_container_id}"
-                        out_container = next((c for c in containers if c.get("id") == out_container_id), None) or {}
-                        c_label = out_container.get("name", "")
-                        c_detail = build_container_detail(out_container)
-                        c_meta = {"type": "container", "container_id": out_container_id}
-                    else:
-                        # Container "virtual" solo por origin (para evitar huérfanos falsos)
-                        c_id = f"CNAME:{out_container_origin}"
-                        c_label = str(out_container_origin)
-                        c_detail = build_container_detail({"name": c_label})
-                        c_meta = {"type": "container", "origin": out_container_origin}
-                    c_idx = _ensure_node(
-                        c_id,
-                        c_label,
+                
+                # Si este paquete tiene un cliente asociado (venta)
+                customer_data = out_package_to_customer.get(pkg_id)
+                if customer_data:
+                    customer_id = f"CUST:{customer_data['id']}"
+                    customer_idx = _ensure_node(
+                        customer_id,
+                        customer_data["name"],
                         "#3498db",
-                        c_detail,
-                        c_meta,
+                        {
+                            "customer_id": customer_data["id"],
+                            "customer_name": customer_data["name"],
+                            "origin": customer_data.get("origin", "")
+                        }
                     )
+                    
+                    customer_out_nodes.setdefault(customer_id, []).append(out_node_id)
+                    
+                    # Link: OUT -> CLIENTE
                     links.append({
                         "source": out_idx,
-                        "target": c_idx,
-                        "value": pallet_out.get("qty", 1) or 1,
-                        "color": "#2ecc71",
+                        "target": customer_idx,
+                        "value": pkg_data["qty"] or 1,
+                        "color": "#3498db"
                     })
-                    container_out_nodes.setdefault(c_id, []).append(out_id)
-
-        # Coordenadas para un layout tipo imagen
+        
+        # Paso 7: Asignar coordenadas para layout
         def _set_xy(node_id: str, x: float, y: float) -> None:
             idx = node_index.get(node_id)
-            if idx is None:
-                return
-            nodes[idx]["x"] = float(x)
-            nodes[idx]["y"] = float(y)
-
+            if idx is not None:
+                nodes[idx]["x"] = float(x)
+                nodes[idx]["y"] = float(y)
+        
         def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
             if not node_ids:
                 return {}
@@ -700,102 +850,72 @@ class ContainersService:
                 return {node_ids[0]: (y0 + y1) / 2}
             step = (y1 - y0) / (n - 1)
             return {nid: y0 + i * step for i, nid in enumerate(node_ids)}
-
-        # -------- Layout legible por bloques (reduce cruces) --------
-        y0 = 0.05
-        y1 = 0.95
-
-        # 1) Fabricaciones: asignar "slots" verticales ponderados por cantidad de nodos asociados
-        fab_node_ids_in_order: List[str] = []
-        for fab in productions_order:
-            pid = fab.get("id")
-            if pid:
-                fid = f"F:{pid}"
-                if fid in node_index:
-                    fab_node_ids_in_order.append(fid)
-
-        fab_weights: Dict[str, int] = {}
-        for fid in fab_node_ids_in_order:
-            w = len(fab_in_nodes.get(fid, [])) + len(fab_orphan_out_nodes.get(fid, []))
-            # siempre dar algo de espacio al nodo fabricación
-            fab_weights[fid] = max(1, w)
-
-        total_fab_w = sum(fab_weights.values())
-        fab_slots: Dict[str, Dict[str, float]] = {}
+        
+        y0, y1 = 0.05, 0.95
+        span = y1 - y0
+        
+        # Layout por bloques de proceso
+        process_ids = [f"PROC:{ref}" for ref in sorted_refs if f"PROC:{ref}" in node_index]
+        
+        # Calcular peso de cada proceso (cantidad de nodos asociados)
+        process_weights = {}
+        for pid in process_ids:
+            w = len(ref_in_nodes.get(pid, [])) + len(ref_out_nodes.get(pid, []))
+            process_weights[pid] = max(1, w)
+        
+        total_weight = sum(process_weights.values())
+        
+        # Asignar slots verticales a cada proceso
         cursor = y0
-        span = (y1 - y0) if (y1 > y0) else 0.9
-        for fid in fab_node_ids_in_order:
-            frac = (fab_weights[fid] / total_fab_w) if total_fab_w else (1 / max(1, len(fab_node_ids_in_order)))
+        for pid in process_ids:
+            frac = process_weights[pid] / total_weight if total_weight else 1 / max(1, len(process_ids))
             slot_h = span * frac
             start = cursor
             end = min(y1, cursor + slot_h)
-            if end <= start:
-                end = min(y1, start + 0.02)
             center = (start + end) / 2
-            fab_slots[fid] = {"start": start, "end": end, "center": center}
-            cursor = end
-
-        # Posicionar nodo fabricación, IN y huérfanos dentro de su slot
-        for fid, slot in fab_slots.items():
-            _set_xy(fid, 0.45, slot["center"])
-
-            in_list = fab_in_nodes.get(fid, [])
-            for nid, y in _spread_y(in_list, slot["start"], slot["end"]).items():
+            
+            # Posicionar proceso
+            _set_xy(pid, 0.45, center)
+            
+            # Posicionar IN (izquierda)
+            for nid, y in _spread_y(ref_in_nodes.get(pid, []), start, end).items():
                 _set_xy(nid, 0.02, y)
-
-            orphan_list = fab_orphan_out_nodes.get(fid, [])
-            for nid, y in _spread_y(orphan_list, slot["start"], slot["end"]).items():
-                # Columna separada para OUT sin container (entre rojo y verde)
-                _set_xy(nid, 0.62, y)
-
-        # 2) Containers: slots verticales ponderados por #outs, incluye virtuales por origin
-        container_node_ids_in_order: List[str] = [f"C:{c.get('id')}" for c in (containers or []) if c.get("id")]
-        virtual_container_node_ids = sorted(
-            [nid for nid in container_out_nodes.keys() if nid.startswith("CNAME:")],
-            key=lambda s: s.lower(),
-        )
-        ordered_container_node_ids = container_node_ids_in_order + [nid for nid in virtual_container_node_ids if nid not in container_node_ids_in_order]
-
-        active_container_node_ids = [nid for nid in ordered_container_node_ids if container_out_nodes.get(nid)]
-        container_weights: Dict[str, int] = {nid: max(1, len(container_out_nodes.get(nid, []))) for nid in active_container_node_ids}
-        total_c_w = sum(container_weights.values())
-        cursor = y0
-        for cnode_id in active_container_node_ids:
-            frac = (container_weights[cnode_id] / total_c_w) if total_c_w else (1 / max(1, len(active_container_node_ids)))
-            slot_h = span * frac
-            start = cursor
-            end = min(y1, cursor + slot_h)
-            if end <= start:
-                end = min(y1, start + 0.02)
-            center = (start + end) / 2
-
-            _set_xy(cnode_id, 0.98, center)
-
-            out_node_ids = container_out_nodes.get(cnode_id, [])
-            for nid, y in _spread_y(out_node_ids, start, end).items():
-                _set_xy(nid, 0.82, y)
-
+            
+            # Posicionar OUT (derecha)
+            for nid, y in _spread_y(ref_out_nodes.get(pid, []), start, end).items():
+                _set_xy(nid, 0.72, y)
+            
             cursor = end
-
-        # 3) Fallback: si quedó algún nodo sin coordenadas, darle una posición estable
-        for nid, meta in (node_meta or {}).items():
-            idx = node_index.get(nid)
-            if idx is None:
-                continue
-            if nodes[idx].get("x") is None or nodes[idx].get("y") is None:
-                t = meta.get("type")
-                if t == "in":
-                    _set_xy(nid, 0.02, 0.5)
-                elif t == "fab":
-                    _set_xy(nid, 0.45, 0.5)
-                elif t == "out_orphan":
-                    _set_xy(nid, 0.62, 0.5)
-                elif t == "out_container":
-                    _set_xy(nid, 0.82, 0.5)
-                elif t == "container":
-                    _set_xy(nid, 0.98, 0.5)
-
+        
+        # Posicionar clientes (extrema derecha)
+        customer_ids = list(customer_out_nodes.keys())
+        for cid, y in _spread_y(customer_ids, y0, y1).items():
+            _set_xy(cid, 0.98, y)
+        
+        print(f"Generados {len(nodes)} nodos y {len(links)} links")
         return {"nodes": nodes, "links": links}
+    
+    def _get_virtual_location_ids(self) -> set:
+        """Obtiene IDs de ubicaciones virtuales/producción."""
+        # IDs conocidos de ubicaciones virtuales
+        known_virtual_ids = {8485, 15}  # Virtual Locations/Ubicación Congelado, Virtual Locations/Ubicación Procesos
+        
+        try:
+            # Buscar ubicaciones de tipo producción
+            virtual_locations = self.odoo.search_read(
+                "stock.location",
+                [("usage", "=", "production")],
+                ["id"],
+                limit=100
+            )
+            for loc in virtual_locations:
+                known_virtual_ids.add(loc["id"])
+        except Exception as e:
+            print(f"Error fetching virtual locations: {e}")
+        
+        return known_virtual_ids
+
+
 
     def _get_container_refs_by_out_package_ids(self, package_ids: List[int], containers: List[Dict]) -> Dict[int, Dict]:
         """Resuelve package_id (pallet OUT) -> {container_id?, origin?} usando pickings outgoing.
