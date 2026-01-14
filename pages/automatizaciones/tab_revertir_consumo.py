@@ -302,7 +302,17 @@ def _mostrar_transferencias(transferencias: list):
         st.info("No se crearon transferencias")
         return
     
-    st.write(f"**Total creadas:** {len(transferencias)}")
+    st.success(f"**✅ Total creadas en BORRADOR:** {len(transferencias)}")
+    st.info("📋 **Las transferencias están en estado BORRADOR. Debes validarlas manualmente en Odoo.**")
     
-    for i, trans in enumerate(transferencias, 1):
-        st.caption(f"{i}. {trans}")
+    # Mostrar tabla con detalles
+    data = []
+    for trans in transferencias:
+        data.append({
+            "N°": trans.get("nombre", "N/A"),
+            "ID": trans.get("id", "N/A"),
+            "Paquete": trans.get("paquete", "N/A"),
+            "Cantidad (Kg)": f"{trans.get('cantidad', 0):.2f}"
+        })
+    
+    st.dataframe(data, use_container_width=True, hide_index=True)

@@ -188,19 +188,15 @@ class RevertirConsumoService:
                     ml["qty_done"]
                 )
                 
-                if not paquete_necesita_transfer:
-                    resultado["errores"].append(
-                        f"Paquete {paquete_consumido} ya tiene {ml['qty_done']} kg del lote {lote_original}, omitiendo transferencia"
-                    )
-                    continue
-                
-                resultado["componentes"].append({
-                    "producto": ml["product_id"][1] if ml.get("product_id") else "N/A",
-                    "lote": lote_original,
-                    "paquete": paquete_consumido,
-                    "cantidad": ml["qty_done"],
-                    "ubicacion": ubicacion_name
-                })
+                # Solo incluir componentes que necesitan transferencia (filtrar ya revertidos)
+                if paquete_necesita_transfer:
+                    resultado["componentes"].append({
+                        "producto": ml["product_id"][1] if ml.get("product_id") else "N/A",
+                        "lote": lote_original,
+                        "paquete": paquete_consumido,
+                        "cantidad": ml["qty_done"],
+                        "ubicacion": ubicacion_name
+                    })
         
         return resultado
     
@@ -381,7 +377,7 @@ class RevertirConsumoService:
                 
                 # Crear transferencia interna para reasignar al paquete
                 try:
-                    transferencia = self._crear_transferencia_recuperacion(
+                    transfer_info = self._crear_transferencia_recuperacion(
                         product_id=ml["product_id"][0],
                         lote_original=lote_original,
                         paquete_destino=paquete_consumido,
@@ -395,10 +391,15 @@ class RevertirConsumoService:
                         "lote": lote_original,
                         "paquete": paquete_consumido,
                         "cantidad": ml["qty_done"],
-                        "transferencia": transferencia
+                        "transferencia": transfer_info["name"]
                     })
                     
-                    resultado["transferencias"].append(transferencia)
+                    resultado["transferencias"].append({
+                        "id": transfer_info["id"],
+                        "nombre": transfer_info["name"],
+                        "paquete": paquete_consumido,
+                        "cantidad": ml["qty_done"]
+                    })
                     
                 except Exception as e:
                     resultado["errores"].append(
@@ -505,14 +506,14 @@ class RevertirConsumoService:
                 }
             )
         
-        # Validar picking
-        self.odoo.execute("stock.picking", "button_validate", [picking_id])
+        # NO validar - dejar en BORRADOR para revisión manual
+        # self.odoo.execute("stock.picking", "button_validate", [picking_id])
         
         # Obtener nombre del picking
         picking = self.odoo.search_read("stock.picking", [("id", "=", picking_id)], ["name"])
         picking_name = picking[0]["name"] if picking else f"ID:{picking_id}"
         
-        return picking_name
+        return {"id": picking_id, "name": picking_name}
     
     def _eliminar_subproductos(self, mo_id: int) -> Dict:
         """
