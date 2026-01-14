@@ -45,8 +45,8 @@ def build_fabrication_detail(fab: Dict, production_detail: Dict) -> Dict:
         "state": fab.get("state_display", fab.get("state", "")),
         "kg_producidos": fab.get("kg_producidos", 0),
         "sala": fab.get("sala_proceso", "N/A"),
-        "moves": production_detail.get("moves", []),
-        "subproducts": production_detail.get("subproducts", []),
+        "componentes": production_detail.get("componentes", []),
+        "subproductos": production_detail.get("subproductos", []),
         "x_studio_total": production_detail.get("x_studio_total", 0),
         "subproducts_totals": production_detail.get("subproducts_totals", {})
     }

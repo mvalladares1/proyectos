@@ -921,44 +921,71 @@ class ContainersService:
             for move_id in move_ids_by_type.get("finished_ids", []):
                 move_to_production[move_id] = prod_id
 
-            moves = []
-            subproducts = []
-            x_studio_total = 0
-            sub_total_qty = 0
-            sub_total_done = 0
-
-            for move_id in move_ids_by_type.get("raw_ids", []) + move_ids_by_type.get("finished_ids", []):
+            # Componentes (inputs): SOLO raw moves, agrupados por producto
+            componentes_by_product: Dict[str, Dict] = {}
+            x_studio_total_componentes = 0
+            for move_id in move_ids_by_type.get("raw_ids", []) or []:
                 move = moves_by_id.get(move_id)
                 if not move:
                     continue
                 product_name = get_name_from_relation(move.get("product_id"))
                 quantity_done = move.get("quantity_done", 0) or 0
                 x_studio_value = move.get("x_studio_float_field_hZJh1", 0) or 0
-                moves.append({
-                    "product": product_name,
-                    "quantity_done": quantity_done,
-                    "x_studio_float_field_hZJh1": x_studio_value
-                })
-                x_studio_total += x_studio_value
-
-                if move_id in move_ids_by_type.get("finished_ids", []):
-                    product_uom_qty = move.get("product_uom_qty", 0) or 0
-                    subproducts.append({
+                rec = componentes_by_product.setdefault(
+                    product_name,
+                    {
                         "product": product_name,
-                        "product_uom_qty": product_uom_qty,
-                        "quantity_done": quantity_done
-                    })
-                    sub_total_qty += product_uom_qty
-                    sub_total_done += quantity_done
+                        "quantity_done": 0,
+                        "x_studio_float_field_hZJh1": 0,
+                    },
+                )
+                rec["quantity_done"] += quantity_done
+                rec["x_studio_float_field_hZJh1"] += x_studio_value
+                x_studio_total_componentes += x_studio_value
+
+            componentes = list(componentes_by_product.values())
+            componentes.sort(key=lambda x: x.get("quantity_done", 0) or 0, reverse=True)
+
+            # Subproductos (outputs): SOLO finished moves, agrupados por producto
+            sub_by_product: Dict[str, Dict] = {}
+            sub_total_qty = 0
+            sub_total_done = 0
+            for move_id in move_ids_by_type.get("finished_ids", []) or []:
+                move = moves_by_id.get(move_id)
+                if not move:
+                    continue
+                product_name = get_name_from_relation(move.get("product_id"))
+                pname_l = (product_name or "").lower()
+                # Evitar "subproductos" que en realidad son productos de proceso o merma
+                if "proceso" in pname_l or "merma" in pname_l:
+                    continue
+                quantity_done = move.get("quantity_done", 0) or 0
+                product_uom_qty = move.get("product_uom_qty", 0) or 0
+
+                rec = sub_by_product.setdefault(
+                    product_name,
+                    {
+                        "product": product_name,
+                        "product_uom_qty": 0,
+                        "quantity_done": 0,
+                    },
+                )
+                rec["product_uom_qty"] += product_uom_qty
+                rec["quantity_done"] += quantity_done
+                sub_total_qty += product_uom_qty
+                sub_total_done += quantity_done
+
+            subproductos = list(sub_by_product.values())
+            subproductos.sort(key=lambda x: x.get("quantity_done", 0) or 0, reverse=True)
 
             production_details[prod_id] = {
-                "moves": moves,
-                "subproducts": subproducts,
-                "x_studio_total": x_studio_total,
+                "componentes": componentes,
+                "subproductos": subproductos,
+                "x_studio_total": x_studio_total_componentes,
                 "subproducts_totals": {
                     "product_uom_qty": sub_total_qty,
-                    "quantity_done": sub_total_done
-                }
+                    "quantity_done": sub_total_done,
+                },
             }
 
         pallets_by_production = {
