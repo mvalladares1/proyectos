@@ -127,44 +127,46 @@ st.markdown("""
 </style>
 
 <script>
-    // Forzar tema oscuro DESPUÉS de que Streamlit cargue
+    // Forzar tema oscuro PERMANENTEMENTE
     function enforceDarkTheme() {
-        const appContainer = document.querySelector('[data-testid="stAppViewContainer"]');
-        if (appContainer) {
-            appContainer.style.setProperty('background-color', '#0e1117', 'important');
-            appContainer.style.setProperty('color', '#fafafa', 'important');
-        }
-        const stApp = document.querySelector('.stApp');
-        if (stApp) {
-            stApp.style.setProperty('background-color', '#0e1117', 'important');
-        }
-        const header = document.querySelector('[data-testid="stHeader"]');
-        if (header) {
-            header.style.setProperty('background-color', '#0e1117', 'important');
-        }
-        const sidebar = document.querySelector('[data-testid="stSidebar"]');
-        if (sidebar) {
-            sidebar.style.setProperty('background-color', '#262730', 'important');
-        }
-        // Forzar texto blanco en todos los elementos visibles
-        document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,label').forEach(el => {
-            el.style.setProperty('color', '#fafafa', 'important');
+        // Backgrounds
+        document.querySelectorAll('.stApp, [data-testid="stAppViewContainer"], .main, .block-container').forEach(el => {
+            el.style.setProperty('background-color', '#0e1117', 'important');
+        });
+        document.querySelectorAll('[data-testid="stHeader"], header').forEach(el => {
+            el.style.setProperty('background-color', '#0e1117', 'important');
+        });
+        document.querySelectorAll('[data-testid="stSidebar"]').forEach(el => {
+            el.style.setProperty('background-color', '#262730', 'important');
+        });
+        
+        // ALL TEXT - muy agresivo
+        document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,label,div,[class*="stMarkdown"],[class*="stText"],[class*="stCaption"]').forEach(el => {
+            const computed = window.getComputedStyle(el);
+            // Solo cambiar si el color es oscuro/gris (no afectar botones rojos, etc)
+            const color = computed.color;
+            if (color && !color.includes('255, 255, 255') && !color.includes('rgb(250') && !color.includes('rgb(59')) {
+                el.style.setProperty('color', '#fafafa', 'important');
+            }
         });
     }
     
-    // Ejecutar inmediatamente
+    // Ejecutar inmediatamente y cada 200ms permanentemente
     enforceDarkTheme();
+    setInterval(enforceDarkTheme, 200);
     
-    // Ejecutar después de que el DOM esté listo
-    document.addEventListener('DOMContentLoaded', enforceDarkTheme);
-    
-    // Ejecutar cada 500ms durante 5 segundos para capturar renders tardíos
-    let counter = 0;
-    const interval = setInterval(() => {
+    // MutationObserver para detectar cambios del DOM
+    const observer = new MutationObserver((mutations) => {
         enforceDarkTheme();
-        counter++;
-        if (counter >= 10) clearInterval(interval);
-    }, 500);
+    });
+    
+    // Observar todo el documento
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class']
+    });
 </script>
 """, unsafe_allow_html=True)
 
