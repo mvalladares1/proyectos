@@ -7,7 +7,7 @@ import streamlit as st
 from datetime import datetime
 
 from .eerr_table import EERR_CSS, EERR_JS, render_eerr_table
-from .eerr_table.constants import MESES_NOMBRES
+from .eerr_table.constants import MESES_NOMBRES, ESTRUCTURA_EERR
 from . import shared
 
 
@@ -98,30 +98,83 @@ def render(username: str, password: str):
         col_expand, col_collapse, col_export = st.columns([1, 1, 2])
         
         with col_expand:
-            if st.button("➕ Expandir Todo", use_container_width=True, key="eerr_expand"):
-                st.markdown('<script>toggleAllEerr(true);</script>', unsafe_allow_html=True)
+            expand_all = st.button("➕ Expandir", use_container_width=True, key="eerr_expand")
         
         with col_collapse:
-            if st.button("➖ Colapsar Todo", use_container_width=True, key="eerr_collapse"):
-                st.markdown('<script>toggleAllEerr(false);</script>', unsafe_allow_html=True)
+            collapse_all = st.button("➖ Colapsar", use_container_width=True, key="eerr_collapse")
         
         with col_export:
             # Export button placeholder
             pass
         
-        # === INYECTAR CSS Y JS ===
-        st.markdown(EERR_CSS, unsafe_allow_html=True)
-        st.markdown(EERR_JS, unsafe_allow_html=True)
-        
-        # === RENDERIZAR TABLA ===
+        # === RENDERIZAR TABLA CON JS FUNCIONAL ===
         if estructura:
+            from streamlit.components.v1 import html as st_html
+            
             tabla_html = render_eerr_table(
                 estructura=estructura,
                 datos_mensuales=datos_mensuales,
                 meses_lista=meses_lista,
                 ppto_mensual=ppto_mensual
             )
-            st.markdown(tabla_html, unsafe_allow_html=True)
+            
+            # Acción de expansión/colapso a ejecutar
+            js_action = ""
+            if expand_all:
+                js_action = "setTimeout(() => toggleAllEerr(true), 100);"
+            elif collapse_all:
+                js_action = "setTimeout(() => toggleAllEerr(false), 100);"
+            
+            # Combinar CSS + JS + Tabla en un solo componente HTML
+            full_html = f"""
+            {EERR_CSS}
+            {tabla_html}
+            <script>
+                // Toggle expansión de filas
+                function toggleEerrRow(rowId) {{
+                    const icon = document.querySelector(`[data-row-id="${{rowId}}"] .expand-icon`);
+                    const childRows = document.querySelectorAll(`.child-of-${{rowId}}`);
+                    
+                    if (icon) {{
+                        icon.classList.toggle('expanded');
+                    }}
+                    
+                    childRows.forEach(row => {{
+                        row.classList.toggle('hidden-row');
+                    }});
+                }}
+                
+                // Expandir/Colapsar todos
+                function toggleAllEerr(expand) {{
+                    const icons = document.querySelectorAll('.expand-icon');
+                    const hiddenRows = document.querySelectorAll('.eerr-table tr[class*="child-of-"]');
+                    
+                    icons.forEach(icon => {{
+                        if (expand) {{
+                            icon.classList.add('expanded');
+                        }} else {{
+                            icon.classList.remove('expanded');
+                        }}
+                    }});
+                    
+                    hiddenRows.forEach(row => {{
+                        if (expand) {{
+                            row.classList.remove('hidden-row');
+                        }} else {{
+                            row.classList.add('hidden-row');
+                        }}
+                    }});
+                }}
+                
+                {js_action}
+            </script>
+            """
+            
+            # Calcular altura basada en filas
+            num_rows = len(ESTRUCTURA_EERR) + sum(1 for c in estructura.values() if isinstance(c, dict))
+            table_height = min(max(num_rows * 45 + 100, 500), 900)
+            
+            st_html(full_html, height=table_height, scrolling=True)
         else:
             st.warning("⚠️ No hay datos disponibles para el período seleccionado.")
             
@@ -131,3 +184,4 @@ def render(username: str, password: str):
                 st.write("Datos recibidos:", list(data.keys()) if data else "Ninguno")
     else:
         st.info("👆 Selecciona el rango de fechas y haz clic en **Generar** para ver el Estado de Resultados")
+
