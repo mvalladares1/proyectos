@@ -40,9 +40,15 @@ if not username or not password:
 # Inicializar session state del módulo
 shared.init_session_state()
 
-# CSS Global Forzado (Dark Mode)
-# Sidebar de configuración
-# (Sin configuración específica para heredar estilo global)
+# CSS Minimal: Fix grey subtitles in dark theme
+st.markdown("""
+<style>
+    /* Subtitles (h3, h4) que Streamlit pone en gris por defecto en dark mode */
+    h3, h4, .stSubheader {
+        color: #ffffff !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # Título principal
