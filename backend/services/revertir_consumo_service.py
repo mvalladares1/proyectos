@@ -310,7 +310,7 @@ class RevertirConsumoService:
     def _revertir_componentes(self, mo_id: int, odf_name: str) -> Dict:
         """
         Recupera componentes consumidos a sus paquetes originales.
-        Busca stock.move de tipo consumo y crea transferencias internas.
+        Crea UNA SOLA transferencia con múltiples líneas (moves).
         """
         resultado = {
             "componentes": [],
@@ -318,7 +318,10 @@ class RevertirConsumoService:
             "errores": []
         }
         
-        # Buscar movimientos de consumo (moves con picking de tipo consumo/producción)
+        # Recolectar todos los componentes que necesitan transferencia
+        componentes_a_transferir = []
+        
+        # Buscar movimientos de consumo
         moves = self.odoo.search_read(
             "stock.move",
             [
@@ -332,7 +335,7 @@ class RevertirConsumoService:
             resultado["errores"].append("No se encontraron movimientos de consumo")
             return resultado
         
-        # Por cada move, buscar sus move.lines (tienen info de paquetes y lotes)
+        # Por cada move, buscar sus move.lines
         for move in moves:
             move_lines = self.odoo.search_read(
                 "stock.move.line",
@@ -347,10 +350,9 @@ class RevertirConsumoService:
                 if ml["qty_done"] <= 0:
                     continue
                 
-                # Extraer info
                 lote_consumido = ml["lot_id"][1] if ml.get("lot_id") else None
                 paquete_consumido = ml["package_id"][1] if ml.get("package_id") else None
-                location_actual_id = ml["location_dest_id"][0] if ml.get("location_dest_id") else None
+                location_id = ml["location_dest_id"][0] if ml.get("location_dest_id") else None
                 
                 if not lote_consumido or not paquete_consumido:
                     resultado["errores"].append(
@@ -358,55 +360,177 @@ class RevertirConsumoService:
                     )
                     continue
                 
-                # Quitar sufijo -C del lote si existe
                 lote_original = lote_consumido.replace("-C", "")
                 
-                # VERIFICAR si el paquete ya tiene estos kg asignados
-                paquete_necesita_transfer = self._verificar_si_necesita_transferencia(
+                # VERIFICAR si necesita transferencia
+                if not self._verificar_si_necesita_transferencia(
                     paquete_consumido,
                     ml["product_id"][0],
                     lote_original,
                     ml["qty_done"]
-                )
-                
-                if not paquete_necesita_transfer:
+                ):
                     resultado["errores"].append(
                         f"⚠️ Paquete {paquete_consumido} ya tiene {ml['qty_done']} kg asignados, omitiendo"
                     )
                     continue
                 
-                # Crear transferencia interna para reasignar al paquete
-                try:
-                    transfer_info = self._crear_transferencia_recuperacion(
-                        product_id=ml["product_id"][0],
-                        lote_original=lote_original,
-                        paquete_destino=paquete_consumido,
-                        cantidad=ml["qty_done"],
-                        location_id=location_actual_id,
-                        odf_name=odf_name
-                    )
-                    
-                    resultado["componentes"].append({
-                        "producto": ml["product_id"][1] if ml.get("product_id") else "N/A",
-                        "lote": lote_original,
-                        "paquete": paquete_consumido,
-                        "cantidad": ml["qty_done"],
-                        "transferencia": transfer_info["name"]
-                    })
-                    
-                    resultado["transferencias"].append({
-                        "id": transfer_info["id"],
-                        "nombre": transfer_info["name"],
-                        "paquete": paquete_consumido,
-                        "cantidad": ml["qty_done"]
-                    })
-                    
-                except Exception as e:
-                    resultado["errores"].append(
-                        f"Error creando transferencia para {paquete_consumido}: {str(e)}"
-                    )
+                # Agregar a la lista de componentes a transferir
+                componentes_a_transferir.append({
+                    "product_id": ml["product_id"][0],
+                    "producto_nombre": ml["product_id"][1] if ml.get("product_id") else "N/A",
+                    "lote_original": lote_original,
+                    "paquete": paquete_consumido,
+                    "cantidad": ml["qty_done"],
+                    "location_id": location_id
+                })
+        
+        # Si no hay componentes a transferir, retornar
+        if not componentes_a_transferir:
+            resultado["errores"].append("No hay componentes que necesiten transferencia")
+            return resultado
+        
+        # Crear UNA SOLA transferencia con todos los componentes
+        try:
+            transfer_info = self._crear_transferencia_unica(
+                componentes_a_transferir,
+                odf_name
+            )
+            
+            # Agregar info de cada componente
+            for comp in componentes_a_transferir:
+                resultado["componentes"].append({
+                    "producto": comp["producto_nombre"],
+                    "lote": comp["lote_original"],
+                    "paquete": comp["paquete"],
+                    "cantidad": comp["cantidad"],
+                    "transferencia": transfer_info["name"]
+                })
+            
+            # Agregar info de la transferencia única
+            resultado["transferencias"].append({
+                "id": transfer_info["id"],
+                "nombre": transfer_info["name"],
+                "total_lineas": len(componentes_a_transferir)
+            })
+            
+        except Exception as e:
+            resultado["errores"].append(f"Error creando transferencia: {str(e)}")
         
         return resultado
+    
+    def _crear_transferencia_unica(self, componentes: list, odf_name: str) -> Dict:
+        """
+        Crea UNA transferencia interna con múltiples moves/lines para todos los componentes.
+        
+        Args:
+            componentes: Lista de dicts con keys: product_id, lote_original, paquete, cantidad, location_id
+            odf_name: Nombre de la ODF para referencia
+        
+        Returns:
+            Dict con id y name de la transferencia creada
+        """
+        if not componentes:
+            raise ValueError("No hay componentes para transferir")
+        
+        # Usar la ubicación del primer componente (normalmente todas son la misma)
+        location_id = componentes[0]["location_id"]
+        
+        # Buscar picking type interno
+        picking_types = self.odoo.search_read(
+            "stock.picking.type",
+            [("code", "=", "internal"), ("warehouse_id", "!=", False)],
+            ["id"],
+            limit=1
+        )
+        
+        if not picking_types:
+            raise ValueError("No se encontró picking type interno")
+        
+        picking_type_id = picking_types[0]["id"]
+        
+        # Crear picking
+        picking_vals = {
+            "picking_type_id": picking_type_id,
+            "location_id": location_id,
+            "location_dest_id": location_id,
+            "origin": f"Reversión {odf_name} ({len(componentes)} componentes)",
+            "move_type": "direct"
+        }
+        
+        picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
+        
+        # Crear un move por cada componente
+        for comp in componentes:
+            move_vals = {
+                "name": f"Recuperar {comp['paquete']}",
+                "picking_id": picking_id,
+                "product_id": comp["product_id"],
+                "product_uom_qty": comp["cantidad"],
+                "product_uom": 1,  # Kg
+                "location_id": location_id,
+                "location_dest_id": location_id
+            }
+            
+            move_id = self.odoo.execute("stock.move", "create", move_vals)
+            comp["move_id"] = move_id  # Guardar para después
+        
+        # Confirmar y asignar picking
+        self.odoo.execute("stock.picking", "action_confirm", [picking_id])
+        self.odoo.execute("stock.picking", "action_assign", [picking_id])
+        
+        # Configurar cada move_line con su paquete y lote
+        for comp in componentes:
+            # Buscar el paquete
+            packages = self.odoo.search_read(
+                "stock.quant.package",
+                [("name", "=", comp["paquete"])],
+                ["id"]
+            )
+            
+            if not packages:
+                raise ValueError(f"Paquete {comp['paquete']} no encontrado")
+            
+            package_id = packages[0]["id"]
+            
+            # Buscar el lote
+            lots = self.odoo.search_read(
+                "stock.lot",
+                [("name", "=", comp["lote_original"]), ("product_id", "=", comp["product_id"])],
+                ["id"]
+            )
+            
+            if not lots:
+                raise ValueError(f"Lote {comp['lote_original']} no encontrado")
+            
+            lot_id = lots[0]["id"]
+            
+            # Buscar la move line del move
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [("move_id", "=", comp["move_id"])],
+                ["id"]
+            )
+            
+            if move_lines:
+                ml_id = move_lines[0]["id"]
+                self.odoo.execute(
+                    "stock.move.line",
+                    "write",
+                    [ml_id],
+                    {
+                        "result_package_id": package_id,
+                        "lot_id": lot_id,
+                        "qty_done": comp["cantidad"]
+                    }
+                )
+        
+        # NO VALIDAR - dejar en BORRADOR
+        
+        # Obtener nombre del picking
+        picking = self.odoo.search_read("stock.picking", [("id", "=", picking_id)], ["name"])
+        picking_name = picking[0]["name"] if picking else f"ID:{picking_id}"
+        
+        return {"id": picking_id, "name": picking_name}
     
     def _crear_transferencia_recuperacion(
         self, 

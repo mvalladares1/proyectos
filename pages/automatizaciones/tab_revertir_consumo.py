@@ -183,7 +183,7 @@ def _mostrar_preview_detallado(preview: Dict):
         f"📊 **Resumen:**\n"
         f"- **Componentes a recuperar:** {len(preview.get('componentes_preview', []))}\n"
         f"- **Subproductos a eliminar:** {len(preview.get('subproductos_preview', []))}\n"
-        f"- **Transferencias a crear:** {preview.get('transferencias_count', 0)}"
+        f"- **Se creará 1 transferencia** con {len(preview.get('componentes_preview', []))} líneas"
     )
     
     # Tabs con detalle
@@ -195,10 +195,10 @@ def _mostrar_preview_detallado(preview: Dict):
         if not componentes:
             st.info("No hay componentes para recuperar")
         else:
-            st.write(f"**Se crearán {preview.get('transferencias_count', 0)} transferencias internas:**")
+            st.write(f"**Se creará 1 transferencia interna con {len(componentes)} líneas:**")
             
             for i, comp in enumerate(componentes, 1):
-                with st.expander(f"**Transferencia #{i}:** {comp.get('paquete', 'N/A')} - {comp.get('cantidad', 0):.2f} Kg"):
+                with st.expander(f"**Línea #{i}:** {comp.get('paquete', 'N/A')} - {comp.get('cantidad', 0):.2f} Kg"):
                     col1, col2 = st.columns(2)
                     
                     with col1:
@@ -302,17 +302,19 @@ def _mostrar_transferencias(transferencias: list):
         st.info("No se crearon transferencias")
         return
     
-    st.success(f"**✅ Total creadas en BORRADOR:** {len(transferencias)}")
-    st.info("📋 **Las transferencias están en estado BORRADOR. Debes validarlas manualmente en Odoo.**")
+    st.success(f"**✅ Transferencia creada en BORRADOR**")
+    st.info("📋 **La transferencia está en estado BORRADOR. Debes validarla manualmente en Odoo.**")
     
-    # Mostrar tabla con detalles
-    data = []
+    # Mostrar info de la transferencia
     for trans in transferencias:
-        data.append({
-            "N°": trans.get("nombre", "N/A"),
-            "ID": trans.get("id", "N/A"),
-            "Paquete": trans.get("paquete", "N/A"),
-            "Cantidad (Kg)": f"{trans.get('cantidad', 0):.2f}"
-        })
-    
-    st.dataframe(data, use_container_width=True, hide_index=True)
+        st.markdown(f"### 🔄 {trans.get('nombre', 'N/A')}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("ID Odoo", trans.get("id", "N/A"))
+        
+        with col2:
+            st.metric("Total Líneas", trans.get("total_lineas", 0))
+        
+        st.caption(f"💡 Busca este número en Odoo → Inventario → Operaciones: **{trans.get('nombre', 'N/A')}**")
