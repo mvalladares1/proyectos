@@ -311,51 +311,6 @@ class RevertirConsumoService:
         
         return resultado
     
-    def _analizar_subproductos(self, mo_id: int) -> Dict:
-        """
-        Analiza subproductos a eliminar SIN modificarlos.
-        Solo retorna información de lo que se haría.
-        """
-        resultado = {
-            "subproductos": [],
-            "errores": []
-        }
-        
-        # Obtener producto principal
-        mo = self.odoo.search_read(
-            "mrp.production",
-            [("id", "=", mo_id)],
-            ["product_id"]
-        )
-        
-        if not mo:
-            resultado["errores"].append("Orden de fabricación no encontrada")
-            return resultado
-        
-        main_product_id = mo[0]["product_id"][0]
-        
-        # Buscar subproductos (productos finished que no son el principal)
-        finished_moves = self.odoo.search_read(
-            "stock.move",
-            [
-                ("production_id", "=", mo_id),
-                ("state", "=", "done"),
-                ("product_id", "!=", main_product_id)
-            ],
-            ["id", "product_id", "product_uom_qty", "quantity_done", "location_dest_id"]
-        )
-        
-        for move in finished_moves:
-            ubicacion_name = move["location_dest_id"][1] if move.get("location_dest_id") else "N/A"
-            
-            resultado["subproductos"].append({
-                "producto": move["product_id"][1] if move.get("product_id") else "N/A",
-                "cantidad_actual": move["quantity_done"],
-                "ubicacion": ubicacion_name
-            })
-        
-        return resultado
-    
     def _revertir_componentes(self, mo_id: int, odf_name: str) -> Dict:
         """
         Recupera componentes consumidos a sus paquetes originales.
