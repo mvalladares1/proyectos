@@ -33,8 +33,8 @@ def render(username: str, password: str):
     odf_name = st.text_input(
         "Código de la ODF",
         placeholder="VLK/CongTE109",
-        help="Nombre completo de la orden de fabricación de desmontaje"
-    ).strip().upper()
+        help="Nombre completo de la orden de fabricación de desmontaje (respeta mayúsculas/minúsculas)"
+    ).strip()
     
     if not odf_name:
         st.warning("⚠️ Ingresa el código de la ODF para continuar")
