@@ -839,6 +839,8 @@ class RendimientoService:
         congelado_kg_mp = 0.0
         congelado_kg_pt = 0.0
         congelado_mos = 0
+        congelado_lotes = set()
+        congelado_proveedores = set()
         
         # Por fruta
         por_fruta = {}
@@ -958,6 +960,13 @@ class RendimientoService:
                     congelado_kg_mp += kg_mp
                     congelado_kg_pt += kg_pt
                     congelado_mos += 1
+                    # Agregar lotes únicos para congelado
+                    for c in consumos:
+                        if c.get('lot_id'):
+                            congelado_lotes.add(c['lot_id'])
+                        # Agregar proveedores únicos
+                        if c.get('proveedor'):
+                            congelado_proveedores.add(c['proveedor'])
                 
                 # Especie y manejo para consolidado
                 especies_en_mo = set()
@@ -1120,6 +1129,8 @@ class RendimientoService:
             'congelado_kg_pt': round(congelado_kg_pt, 2),
             'congelado_rendimiento': round(congelado_rendimiento, 2),
             'congelado_mos': congelado_mos,
+            'congelado_lotes': len(congelado_lotes),
+            'congelado_proveedores': len(congelado_proveedores),
             # Costos
             'total_costo_electricidad': round(total_costo_elec, 2)
         }

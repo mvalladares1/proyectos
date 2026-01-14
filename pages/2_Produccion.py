@@ -4,6 +4,7 @@
 Este archivo es el orquestador principal que importa y renderiza los tabs modulares.
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import sys
 import os
 
@@ -125,50 +126,37 @@ st.markdown("""
         color: #fafafa !important;
     }
 </style>
+""", unsafe_allow_html=True)
 
+# JavaScript para forzar tema oscuro (usando components.html para que ejecute)
+components.html("""
 <script>
-    // Forzar tema oscuro PERMANENTEMENTE
+    // Acceder al documento padre (la app de Streamlit)
+    const parent = window.parent.document;
+    
     function enforceDarkTheme() {
         // Backgrounds
-        document.querySelectorAll('.stApp, [data-testid="stAppViewContainer"], .main, .block-container').forEach(el => {
+        parent.querySelectorAll('.stApp, [data-testid="stAppViewContainer"], .main, .block-container').forEach(el => {
             el.style.setProperty('background-color', '#0e1117', 'important');
         });
-        document.querySelectorAll('[data-testid="stHeader"], header').forEach(el => {
+        parent.querySelectorAll('[data-testid="stHeader"], header').forEach(el => {
             el.style.setProperty('background-color', '#0e1117', 'important');
         });
-        document.querySelectorAll('[data-testid="stSidebar"]').forEach(el => {
+        parent.querySelectorAll('[data-testid="stSidebar"]').forEach(el => {
             el.style.setProperty('background-color', '#262730', 'important');
         });
         
-        // ALL TEXT - muy agresivo
-        document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,label,div,[class*="stMarkdown"],[class*="stText"],[class*="stCaption"]').forEach(el => {
-            const computed = window.getComputedStyle(el);
-            // Solo cambiar si el color es oscuro/gris (no afectar botones rojos, etc)
-            const color = computed.color;
-            if (color && !color.includes('255, 255, 255') && !color.includes('rgb(250') && !color.includes('rgb(59')) {
-                el.style.setProperty('color', '#fafafa', 'important');
-            }
+        // ALL TEXT
+        parent.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,label').forEach(el => {
+            el.style.setProperty('color', '#fafafa', 'important');
         });
     }
     
-    // Ejecutar inmediatamente y cada 200ms permanentemente
+    // Ejecutar cada 100ms permanentemente
     enforceDarkTheme();
-    setInterval(enforceDarkTheme, 200);
-    
-    // MutationObserver para detectar cambios del DOM
-    const observer = new MutationObserver((mutations) => {
-        enforceDarkTheme();
-    });
-    
-    // Observar todo el documento
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['style', 'class']
-    });
+    setInterval(enforceDarkTheme, 100);
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 
 # Título principal

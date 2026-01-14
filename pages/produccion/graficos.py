@@ -163,15 +163,12 @@ def grafico_salas_consolidado(mos_data: list, agrupacion: str = "Semana"):
         # Obtener período de agrupación
         periodo_label_str, sort_year, sort_value = _agrupar_por_periodo(fecha, agrupacion)
         
-        # Para salas: usar solo el nombre de sala (sin línea)
-        if ' - ' in sala_completa:
-            sala_nombre = sala_completa.split(' - ', 1)[0].strip()
-        else:
-            sala_nombre = sala_completa
+        # Usar la sala completa (incluye línea)
+        linea_nombre = sala_completa
         
         datos_salas.append({
             'Periodo': periodo_label_str,
-            'Sala': sala_nombre,
+            'Sala': linea_nombre,
             'Kg': kg_pt,
             'sort_year': sort_year,
             'sort_value': sort_value
@@ -216,7 +213,7 @@ def grafico_salas_consolidado(mos_data: list, agrupacion: str = "Semana"):
             alt.Tooltip('Kg:Q', title='Kg Procesados', format=',.0f')
         ]
     ).properties(
-        title=f'🏭 Producción Acumulada por Sala ({agrupacion})',
+        title=f'🏭 Producción Acumulada por Línea ({agrupacion})',
         height=350,
         width='container'
     )
@@ -224,8 +221,9 @@ def grafico_salas_consolidado(mos_data: list, agrupacion: str = "Semana"):
     st.altair_chart(chart, use_container_width=True)
     
     # Tabla resumen
-    with st.expander("📋 Ver detalle por Sala", expanded=False):
+    with st.expander("📋 Ver detalle por Línea", expanded=False):
         resumen = df_grouped.groupby('Sala').agg({'Kg': 'sum'}).reset_index()
+        resumen = resumen.rename(columns={'Sala': 'Línea'})
         resumen = resumen.sort_values('Kg', ascending=False)
         resumen['Kg'] = resumen['Kg'].apply(lambda x: fmt_numero(x, 0))
         st.dataframe(resumen, hide_index=True, use_container_width=True)

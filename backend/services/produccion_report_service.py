@@ -167,18 +167,19 @@ def generate_produccion_report_pdf(
         elements.append(Spacer(1, 0.2*cm))
         
         congelado_data = [
-            ['Kg Entrada', 'Kg Salida', 'Rendimiento', 'HH', 'MOs', 'Costo Electricidad'],
+            ['Kg Entrada', 'Kg Salida', 'Rendimiento', 'Proveedores', 'Lotes Únicos', 'MOs', 'Costo Electricidad'],
             [
                 fmt_numero(overview.get('congelado_kg_mp', 0)),
                 fmt_numero(overview.get('congelado_kg_pt', 0)),
                 fmt_porcentaje(overview.get('congelado_rendimiento', 0)),
-                fmt_numero(overview.get('congelado_hh', 0), 1),
+                str(overview.get('congelado_proveedores', 0)),
+                str(overview.get('congelado_lotes', 0)),
                 str(overview.get('congelado_mos', 0)),
                 f"${fmt_numero(overview.get('total_costo_electricidad', 0))}"
             ]
         ]
         
-        congelado_table = Table(congelado_data, colWidths=[3.5*cm]*6)
+        congelado_table = Table(congelado_data, colWidths=[3*cm]*7)
         congelado_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0277bd')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
