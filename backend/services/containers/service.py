@@ -510,6 +510,10 @@ class ContainersService:
         # key = container node id (ej: C:123 o CNAME:SO1234) -> lista de out node ids
         container_out_nodes: Dict[str, List[str]] = {}
 
+        # Para layout legible: agrupar nodos por fabricación
+        fab_in_nodes: Dict[str, List[str]] = {}
+        fab_orphan_out_nodes: Dict[str, List[str]] = {}
+
         def _ensure_node(node_id: str, label: str, color: str, detail: Dict, meta: Dict) -> int:
             if node_id not in node_index:
                 node_index[node_id] = len(nodes)
@@ -538,6 +542,9 @@ class ContainersService:
                 {"type": "fab", "container_id": container_id}
             )
 
+            fab_in_nodes.setdefault(f_id, [])
+            fab_orphan_out_nodes.setdefault(f_id, [])
+
             pallets_data = pallets_by_production.get(prod_id, {"consumidos": [], "salida": []})
 
             # Si hay filtro por productor: mostrar solo procesos donde exista al menos 1 pallet IN del productor
@@ -553,7 +560,9 @@ class ContainersService:
             for pallet_in in pallets_data.get("consumidos", []) or []:
                 if producer_id and producer_id not in (pallet_in.get("producer_ids") or []):
                     continue
-                p_in_id = f"PIN:{pallet_in.get('name', '')}"
+                pallet_in_key = pallet_in.get("id") or pallet_in.get("name")
+                # Scope por fabricación para evitar merges que empeoran la lectura
+                p_in_id = f"PIN:F{prod_id}:P{pallet_in_key}"
                 p_in_idx = _ensure_node(
                     p_in_id,
                     f"IN: {pallet_in.get('name', '')}",
@@ -561,6 +570,7 @@ class ContainersService:
                     build_pallet_detail(pallet_in),
                     {"type": "in"}
                 )
+                fab_in_nodes[f_id].append(p_in_id)
                 links.append({
                     "source": p_in_idx,
                     "target": f_idx,
@@ -580,7 +590,8 @@ class ContainersService:
                     out_color = "#2ecc71"
                     out_meta = {"type": "out_container", "container_id": out_container_id, "origin": out_container_origin}
                 else:
-                    out_id = f"POUT:NONE:P{pallet_out_key}"
+                    # Scope por fabricación para evitar merges de huérfanos entre fabricaciones
+                    out_id = f"POUT:F{prod_id}:NONE:P{pallet_out_key}"
                     out_color = "#f1c40f"  # amarillo sin container
                     out_meta = {"type": "out_orphan"}
 
@@ -596,6 +607,9 @@ class ContainersService:
                     "target": out_idx,
                     "value": pallet_out.get("qty", 1) or 1
                 })
+
+                if out_meta.get("type") == "out_orphan":
+                    fab_orphan_out_nodes[f_id].append(out_id)
 
                 # Agrupar OUT en container (OUT -> Container)
                 if out_container_id or out_container_origin:
@@ -642,18 +656,53 @@ class ContainersService:
             step = (y1 - y0) / (n - 1)
             return {nid: y0 + i * step for i, nid in enumerate(node_ids)}
 
-        in_ids = [nid for nid, meta in node_meta.items() if meta.get("type") == "in"]
-        fab_ids = [nid for nid, meta in node_meta.items() if meta.get("type") == "fab"]
-        orphan_out_ids = [nid for nid, meta in node_meta.items() if meta.get("type") == "out_orphan"]
+        # -------- Layout legible por bloques (reduce cruces) --------
+        y0 = 0.05
+        y1 = 0.95
 
-        for nid, y in _spread_y(in_ids, 0.05, 0.95).items():
-            _set_xy(nid, 0.02, y)
-        for nid, y in _spread_y(fab_ids, 0.05, 0.95).items():
-            _set_xy(nid, 0.45, y)
-        for nid, y in _spread_y(orphan_out_ids, 0.10, 0.90).items():
-            _set_xy(nid, 0.72, y)
+        # 1) Fabricaciones: asignar "slots" verticales ponderados por cantidad de nodos asociados
+        fab_node_ids_in_order: List[str] = []
+        for fab in productions_order:
+            pid = fab.get("id")
+            if pid:
+                fid = f"F:{pid}"
+                if fid in node_index:
+                    fab_node_ids_in_order.append(fid)
 
-        # Orden: primero containers reales en orden, luego containers virtuales por origin
+        fab_weights: Dict[str, int] = {}
+        for fid in fab_node_ids_in_order:
+            w = len(fab_in_nodes.get(fid, [])) + len(fab_orphan_out_nodes.get(fid, []))
+            # siempre dar algo de espacio al nodo fabricación
+            fab_weights[fid] = max(1, w)
+
+        total_fab_w = sum(fab_weights.values())
+        fab_slots: Dict[str, Dict[str, float]] = {}
+        cursor = y0
+        span = (y1 - y0) if (y1 > y0) else 0.9
+        for fid in fab_node_ids_in_order:
+            frac = (fab_weights[fid] / total_fab_w) if total_fab_w else (1 / max(1, len(fab_node_ids_in_order)))
+            slot_h = span * frac
+            start = cursor
+            end = min(y1, cursor + slot_h)
+            if end <= start:
+                end = min(y1, start + 0.02)
+            center = (start + end) / 2
+            fab_slots[fid] = {"start": start, "end": end, "center": center}
+            cursor = end
+
+        # Posicionar nodo fabricación, IN y huérfanos dentro de su slot
+        for fid, slot in fab_slots.items():
+            _set_xy(fid, 0.45, slot["center"])
+
+            in_list = fab_in_nodes.get(fid, [])
+            for nid, y in _spread_y(in_list, slot["start"], slot["end"]).items():
+                _set_xy(nid, 0.02, y)
+
+            orphan_list = fab_orphan_out_nodes.get(fid, [])
+            for nid, y in _spread_y(orphan_list, slot["start"], slot["end"]).items():
+                _set_xy(nid, 0.72, y)
+
+        # 2) Containers: slots verticales ponderados por #outs, incluye virtuales por origin
         container_node_ids_in_order: List[str] = [f"C:{c.get('id')}" for c in (containers or []) if c.get("id")]
         virtual_container_node_ids = sorted(
             [nid for nid in container_out_nodes.keys() if nid.startswith("CNAME:")],
@@ -662,22 +711,43 @@ class ContainersService:
         ordered_container_node_ids = container_node_ids_in_order + [nid for nid in virtual_container_node_ids if nid not in container_node_ids_in_order]
 
         active_container_node_ids = [nid for nid in ordered_container_node_ids if container_out_nodes.get(nid)]
-        total_slots = sum(max(1, len(container_out_nodes.get(nid, []))) for nid in active_container_node_ids)
-        if total_slots > 0:
-            slot_cursor = 0
-            for cnode_id in active_container_node_ids:
-                out_node_ids = container_out_nodes.get(cnode_id, [])
-                block_slots = max(1, len(out_node_ids))
+        container_weights: Dict[str, int] = {nid: max(1, len(container_out_nodes.get(nid, []))) for nid in active_container_node_ids}
+        total_c_w = sum(container_weights.values())
+        cursor = y0
+        for cnode_id in active_container_node_ids:
+            frac = (container_weights[cnode_id] / total_c_w) if total_c_w else (1 / max(1, len(active_container_node_ids)))
+            slot_h = span * frac
+            start = cursor
+            end = min(y1, cursor + slot_h)
+            if end <= start:
+                end = min(y1, start + 0.02)
+            center = (start + end) / 2
 
-                center_slot = slot_cursor + (block_slots / 2)
-                center_y = 0.02 + 0.96 * (center_slot / total_slots)
-                _set_xy(cnode_id, 0.98, center_y)
+            _set_xy(cnode_id, 0.98, center)
 
-                for j, out_nid in enumerate(out_node_ids):
-                    y = 0.02 + 0.96 * ((slot_cursor + (j + 0.5)) / total_slots)
-                    _set_xy(out_nid, 0.86, y)
+            out_node_ids = container_out_nodes.get(cnode_id, [])
+            for nid, y in _spread_y(out_node_ids, start, end).items():
+                _set_xy(nid, 0.86, y)
 
-                slot_cursor += block_slots
+            cursor = end
+
+        # 3) Fallback: si quedó algún nodo sin coordenadas, darle una posición estable
+        for nid, meta in (node_meta or {}).items():
+            idx = node_index.get(nid)
+            if idx is None:
+                continue
+            if nodes[idx].get("x") is None or nodes[idx].get("y") is None:
+                t = meta.get("type")
+                if t == "in":
+                    _set_xy(nid, 0.02, 0.5)
+                elif t == "fab":
+                    _set_xy(nid, 0.45, 0.5)
+                elif t == "out_orphan":
+                    _set_xy(nid, 0.72, 0.5)
+                elif t == "out_container":
+                    _set_xy(nid, 0.86, 0.5)
+                elif t == "container":
+                    _set_xy(nid, 0.98, 0.5)
 
         return {"nodes": nodes, "links": links}
 
