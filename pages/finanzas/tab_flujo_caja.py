@@ -144,8 +144,24 @@ def render(username: str, password: str):
                         st.session_state[cache_key] = resp.json()
                         st.session_state["flujo_should_load"] = False
                         st.toast("✅ Datos cargados con éxito", icon="✅")
+                    elif resp.status_code == 401 or "autenticación" in resp.text.lower():
+                        st.error("🔐 **Error de Autenticación**")
+                        st.warning("""
+                        Tu sesión ha expirado o las credenciales de Odoo no son válidas.
+                        
+                        **Por favor:**
+                        1. Cierra sesión usando el botón en la barra lateral
+                        2. Vuelve a iniciar sesión con tus credenciales
+                        
+                        Si el problema persiste, contacta al administrador del sistema.
+                        """)
+                        return
                     else:
-                        st.error(f"Error {resp.status_code}: {resp.text}")
+                        try:
+                            error_detail = resp.json().get("detail", resp.text)
+                        except:
+                            error_detail = resp.text
+                        st.error(f"❌ Error {resp.status_code}: {error_detail}")
                         return
                 except Exception as e:
                     st.error(f"Error de conexión: {e}")
