@@ -154,7 +154,21 @@ def render(username: str, password: str):
         flujo_data = st.session_state.get(cache_key, {})
         
         if "error" in flujo_data:
-            st.error(f"Error: {flujo_data['error']}")
+            error_msg = flujo_data['error']
+            if "cuentas de efectivo" in error_msg.lower():
+                st.warning("⚙️ **Configuración Pendiente**")
+                st.info(f"📋 {error_msg}")
+                st.markdown("""
+                **¿Qué significa esto?**
+                - El sistema necesita que se configuren las cuentas contables que representan efectivo
+                - Estas cuentas se utilizan para calcular el flujo de caja
+                
+                **¿Qué hacer?**
+                - Contacta al administrador para configurar las cuentas de efectivo en el archivo de configuración
+                - Una vez configuradas, podrás ver el flujo de caja completo
+                """)
+            else:
+                st.error(f"❌ Error: {error_msg}")
             return
         
         # ========== PROCESAR DATOS ==========
