@@ -464,110 +464,239 @@ class ContainersService:
                 "links": [{"source": idx, "target": idx, "value": kg}]
             }
         """
-        # Obtener containers con sus fabricaciones
+        # Layout buscado (como la imagen):
+        # IN (izq) -> Proceso/Fabricación (centro) -> OUT (der)
+        # - OUT con container: se agrupan por container (cliente)
+        # - OUT sin container: quedan en amarillo cerca del proceso
+
         containers = self.get_containers(start_date, end_date)[:limit]
-        
-        nodes = []
-        links = []
-        node_index = {}  # id único -> índice en array nodes
-        
-        sankey_context = self._get_sankey_context(containers)
+
+        # Producciones en containers (mantiene el orden actual)
+        production_to_container: Dict[int, Dict] = {}
+        productions_order: List[Dict] = []
+        for container in containers:
+            for fab in container.get("productions", []) or []:
+                production_to_container[fab["id"]] = container
+                productions_order.append(fab)
+
+        # Producciones sin container (x_studio_po_asociada_1 vacío)
+        orphan_productions: List[Dict] = []
+        orphan_domain = [("x_studio_po_asociada_1", "=", False), ("state", "not in", ["cancel"])]
+        if start_date:
+            orphan_domain.append(("date_planned_start", ">=", start_date))
+        if end_date:
+            orphan_domain.append(("date_planned_start", "<=", end_date))
+
+        orphan_fields = [
+            "name", "product_id", "product_qty", "qty_produced",
+            "state", "date_planned_start", "date_start", "date_finished",
+            "user_id", "x_studio_sala_de_proceso", "x_studio_clientes"
+        ]
+
+        try:
+            orphan_ids = self.odoo.search(
+                "mrp.production",
+                orphan_domain,
+                limit=200,
+                order="date_planned_start desc"
+            )
+            if orphan_ids:
+                orphans_raw = self.odoo.read("mrp.production", orphan_ids, orphan_fields)
+                for p in orphans_raw:
+                    product = p.get("product_id")
+                    product_name = product[1] if isinstance(product, (list, tuple)) else "N/A"
+
+                    user = p.get("user_id")
+                    user_name = user[1] if isinstance(user, (list, tuple)) else "N/A"
+
+                    sala = p.get("x_studio_sala_de_proceso")
+                    sala_name = sala[1] if isinstance(sala, (list, tuple)) else "N/A"
+
+                    cliente = p.get("x_studio_clientes")
+                    cliente_name = cliente[1] if isinstance(cliente, (list, tuple)) else "N/A"
+
+                    qty_produced = p.get("qty_produced", 0) or 0
+
+                    orphan_productions.append({
+                        "id": p["id"],
+                        "name": p.get("name", ""),
+                        "product_name": product_name,
+                        "product_qty": p.get("product_qty", 0) or 0,
+                        "qty_produced": qty_produced,
+                        "kg_producidos": qty_produced,
+                        "state": p.get("state", ""),
+                        "state_display": local_get_state_display(p.get("state", "")),
+                        "date_planned_start": p.get("date_planned_start", ""),
+                        "date_start": p.get("date_start", ""),
+                        "date_finished": p.get("date_finished", ""),
+                        "user_name": user_name,
+                        "sala_proceso": sala_name,
+                        "cliente": cliente_name,
+                    })
+        except Exception as e:
+            print(f"Error fetching orphan productions for sankey: {e}")
+
+        productions_order.extend(orphan_productions)
+
+        extra_prod_ids = [p["id"] for p in orphan_productions]
+        sankey_context = self._get_sankey_context(containers, extra_production_ids=extra_prod_ids)
         productions_by_id = sankey_context.get("productions", {})
         pallets_by_production = sankey_context.get("pallets", {})
 
-        for container in containers:
-            # NODO: Container
-            c_id = f"C:{container['id']}"
-            if c_id not in node_index:
-                node_index[c_id] = len(nodes)
+        nodes: List[Dict] = []
+        links: List[Dict] = []
+        node_index: Dict[str, int] = {}
+        node_meta: Dict[str, Dict] = {}
+
+        container_out_nodes: Dict[int, List[str]] = {}
+
+        def _ensure_node(node_id: str, label: str, color: str, detail: Dict, meta: Dict) -> int:
+            if node_id not in node_index:
+                node_index[node_id] = len(nodes)
                 nodes.append({
-                    "label": container['name'],
-                    "detail": build_container_detail(container),
-                    "color": "#3498db"  # Azul
+                    "label": label,
+                    "detail": detail,
+                    "color": color,
+                    "x": None,
+                    "y": None,
                 })
-            
-            c_idx = node_index[c_id]
-            
-            # Para cada fabricación del container
-            for fab in container.get('productions', []):
-                # NODO: Fabricación
-                f_id = f"F:{fab['id']}"
-                if f_id not in node_index:
-                    node_index[f_id] = len(nodes)
-                    nodes.append({
-                        "label": fab['name'],
-                        "detail": build_fabrication_detail(fab, productions_by_id.get(fab['id'], {})),
-                        "color": "#e74c3c"  # Rojo
-                    })
-                
-                f_idx = node_index[f_id]
-                
-                # LINK: Container → Fabricación
-                kg_fab = fab.get('kg_producidos', 0) or 1
+                node_meta[node_id] = meta
+            return node_index[node_id]
+
+        # Nodos/links por fabricación
+        for fab in productions_order:
+            prod_id = fab["id"]
+            container = production_to_container.get(prod_id)
+            container_id = container.get("id") if container else None
+
+            f_id = f"F:{prod_id}"
+            f_idx = _ensure_node(
+                f_id,
+                fab.get("name", ""),
+                "#e74c3c",
+                build_fabrication_detail(fab, productions_by_id.get(prod_id, {})),
+                {"type": "fab", "container_id": container_id}
+            )
+
+            pallets_data = pallets_by_production.get(prod_id, {"consumidos": [], "salida": []})
+
+            # IN
+            for pallet_in in pallets_data.get("consumidos", []) or []:
+                p_in_id = f"PIN:{pallet_in.get('name', '')}"
+                p_in_idx = _ensure_node(
+                    p_in_id,
+                    f"IN: {pallet_in.get('name', '')}",
+                    "#f39c12",
+                    build_pallet_detail(pallet_in),
+                    {"type": "in"}
+                )
                 links.append({
-                    "source": c_idx,
+                    "source": p_in_idx,
                     "target": f_idx,
-                    "value": kg_fab
+                    "value": pallet_in.get("qty", 1) or 1
                 })
-                
-                # Obtener pallets consumidos y de salida
-                pallets_data = pallets_by_production.get(fab['id'], {"consumidos": [], "salida": []})
-                
-                # PALLETS CONSUMIDOS (input)
-                for pallet_in in pallets_data.get('consumidos', []):
-                    p_in_id = f"PIN:{pallet_in['name']}"
-                    if p_in_id not in node_index:
-                        node_index[p_in_id] = len(nodes)
-                        nodes.append({
-                            "label": f"IN: {pallet_in['name']}",
-                            "detail": build_pallet_detail(pallet_in),
-                            "color": "#f39c12"  # Naranja
-                        })
-                    
-                    p_in_idx = node_index[p_in_id]
-                    
-                    # LINK: Pallet Consumido → Fabricación
+
+            # OUT
+            for pallet_out in pallets_data.get("salida", []) or []:
+                pallet_out_key = pallet_out.get("id") or pallet_out.get("name")
+                if container_id:
+                    out_id = f"POUT:C{container_id}:P{pallet_out_key}"
+                    out_color = "#2ecc71"
+                    out_meta = {"type": "out_container", "container_id": container_id}
+                else:
+                    out_id = f"POUT:NONE:P{pallet_out_key}"
+                    out_color = "#f1c40f"  # amarillo sin container
+                    out_meta = {"type": "out_orphan"}
+
+                out_idx = _ensure_node(
+                    out_id,
+                    f"OUT: {pallet_out.get('name', '')}",
+                    out_color,
+                    build_pallet_detail(pallet_out),
+                    out_meta
+                )
+                links.append({
+                    "source": f_idx,
+                    "target": out_idx,
+                    "value": pallet_out.get("qty", 1) or 1
+                })
+
+                # Agrupar OUT en container (OUT -> Container)
+                if container_id:
+                    c_id = f"C:{container_id}"
+                    c_idx = _ensure_node(
+                        c_id,
+                        container.get("name", ""),
+                        "#3498db",
+                        build_container_detail(container),
+                        {"type": "container", "container_id": container_id}
+                    )
                     links.append({
-                        "source": p_in_idx,
-                        "target": f_idx,
-                        "value": pallet_in.get('qty', 1)
+                        "source": out_idx,
+                        "target": c_idx,
+                        "value": pallet_out.get("qty", 1) or 1
                     })
-                
-                # PALLETS DE SALIDA (output)
-                for pallet_out in pallets_data.get('salida', []):
-                    # Importante: el nombre del pallet/package puede repetirse entre containers.
-                    # Si el ID del nodo es global (solo por name) Plotly fusiona nodos y los OUT
-                    # dejan de verse "dentro" de su container. Por eso los scopeamos por container.
-                    pallet_out_key = pallet_out.get("id") or pallet_out.get("name")
-                    p_out_id = f"POUT:C{container['id']}:P{pallet_out_key}"
-                    if p_out_id not in node_index:
-                        node_index[p_out_id] = len(nodes)
-                        nodes.append({
-                            "label": f"OUT: {pallet_out['name']}",
-                            "detail": build_pallet_detail(pallet_out),
-                            "color": "#2ecc71"  # Verde
-                        })
-                    
-                    p_out_idx = node_index[p_out_id]
-                    
-                    # LINK: Fabricación → Pallet de Salida
-                    links.append({
-                        "source": f_idx,
-                        "target": p_out_idx,
-                        "value": pallet_out.get('qty', 1)
-                    })
-        
-        return {
-            "nodes": nodes,
-            "links": links
-        }
+                    container_out_nodes.setdefault(container_id, []).append(out_id)
+
+        # Coordenadas para un layout tipo imagen
+        def _set_xy(node_id: str, x: float, y: float) -> None:
+            idx = node_index.get(node_id)
+            if idx is None:
+                return
+            nodes[idx]["x"] = float(x)
+            nodes[idx]["y"] = float(y)
+
+        def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
+            if not node_ids:
+                return {}
+            n = len(node_ids)
+            if n == 1:
+                return {node_ids[0]: (y0 + y1) / 2}
+            step = (y1 - y0) / (n - 1)
+            return {nid: y0 + i * step for i, nid in enumerate(node_ids)}
+
+        in_ids = [nid for nid, meta in node_meta.items() if meta.get("type") == "in"]
+        fab_ids = [nid for nid, meta in node_meta.items() if meta.get("type") == "fab"]
+        orphan_out_ids = [nid for nid, meta in node_meta.items() if meta.get("type") == "out_orphan"]
+
+        for nid, y in _spread_y(in_ids, 0.05, 0.95).items():
+            _set_xy(nid, 0.02, y)
+        for nid, y in _spread_y(fab_ids, 0.05, 0.95).items():
+            _set_xy(nid, 0.45, y)
+        for nid, y in _spread_y(orphan_out_ids, 0.78, 0.95).items():
+            _set_xy(nid, 0.68, y)
+
+        container_ids_in_order = [c.get("id") for c in containers]
+        active_container_ids = [cid for cid in container_ids_in_order if container_out_nodes.get(cid)]
+        total_slots = sum(max(1, len(container_out_nodes.get(cid, []))) for cid in active_container_ids)
+        if total_slots > 0:
+            slot_cursor = 0
+            for cid in active_container_ids:
+                out_node_ids = container_out_nodes.get(cid, [])
+                block_slots = max(1, len(out_node_ids))
+
+                center_slot = slot_cursor + (block_slots / 2)
+                center_y = 0.02 + 0.96 * (center_slot / total_slots)
+                _set_xy(f"C:{cid}", 0.98, center_y)
+
+                for j, out_nid in enumerate(out_node_ids):
+                    y = 0.02 + 0.96 * ((slot_cursor + (j + 0.5)) / total_slots)
+                    _set_xy(out_nid, 0.86, y)
+
+                slot_cursor += block_slots
+
+        return {"nodes": nodes, "links": links}
     
-    def _get_sankey_context(self, containers: List[Dict]) -> Dict:
+    def _get_sankey_context(self, containers: List[Dict], extra_production_ids: Optional[List[int]] = None) -> Dict:
         """Obtiene contexto de producciones y pallets para Sankey."""
         production_ids = []
         for container in containers:
-            for fab in container.get("productions", []):
-                production_ids.append(fab.get("id"))
+            for fab in container.get("productions", []) or []:
+                if fab.get("id"):
+                    production_ids.append(fab.get("id"))
+
+        if extra_production_ids:
+            production_ids.extend([pid for pid in extra_production_ids if pid])
 
         if not production_ids:
             return {"productions": {}, "pallets": {}}
