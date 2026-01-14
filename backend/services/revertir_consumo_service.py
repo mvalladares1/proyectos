@@ -180,6 +180,20 @@ class RevertirConsumoService:
                 # Quitar sufijo -C del lote
                 lote_original = lote_consumido.replace("-C", "")
                 
+                # VERIFICAR si el paquete ya tiene estos kg asignados
+                paquete_necesita_transfer = self._verificar_si_necesita_transferencia(
+                    paquete_consumido,
+                    ml["product_id"][0],
+                    lote_original,
+                    ml["qty_done"]
+                )
+                
+                if not paquete_necesita_transfer:
+                    resultado["errores"].append(
+                        f"Paquete {paquete_consumido} ya tiene {ml['qty_done']} kg del lote {lote_original}, omitiendo transferencia"
+                    )
+                    continue
+                
                 resultado["componentes"].append({
                     "producto": ml["product_id"][1] if ml.get("product_id") else "N/A",
                     "lote": lote_original,
@@ -189,6 +203,69 @@ class RevertirConsumoService:
                 })
         
         return resultado
+    
+    def _verificar_si_necesita_transferencia(
+        self, 
+        paquete_nombre: str, 
+        producto_id: int, 
+        lote_nombre: str, 
+        cantidad_esperada: float
+    ) -> bool:
+        """
+        Verifica si un paquete necesita transferencia o ya tiene el stock asignado.
+        Retorna True si necesita transferencia, False si ya tiene el stock.
+        """
+        # Buscar el paquete
+        packages = self.odoo.search_read(
+            "stock.quant.package",
+            [("name", "=", paquete_nombre)],
+            ["id"]
+        )
+        
+        if not packages:
+            return True  # Paquete no existe, necesita crearse
+        
+        package_id = packages[0]["id"]
+        
+        # Buscar quants del paquete con ese producto y lote
+        quants = self.odoo.search_read(
+            "stock.quant",
+            [
+                ("package_id", "=", package_id),
+                ("product_id", "=", producto_id),
+                ("lot_id.name", "=", lote_nombre),
+                ("quantity", ">", 0)
+            ],
+            ["quantity"]
+        )
+        # Por cada move, obtener sus move_lines (cada línea tiene un paquete diferente)
+        for move in finished_moves:
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [("move_id", "=", move["id"])],
+                ["id", "qty_done", "result_package_id", "lot_id", "location_dest_id"]
+            )
+            
+            for ml in move_lines:
+                if ml["qty_done"] <= 0:
+                    continue
+                
+                paquete_name = ml["result_package_id"][1] if ml.get("result_package_id") else "Sin paquete"
+                lote_name = ml["lot_id"][1] if ml.get("lot_id") else "Sin lote"
+                ubicacion_name = ml["location_dest_id"][1] if ml.get("location_dest_id") else "N/A"
+                
+                resultado["subproductos"].append({
+                    "producto": move["product_id"][1] if move.get("product_id") else "N/A",
+                    "paquete": paquete_name,
+                    "lote": lote_name,
+                    "cantidad_actual": ml["qty_done"],
+                    "ubicacion": ubicacion_name,
+                    "move_line_id": ml["id"]  # Importante para poder actualizarlo después
+            # Si ya tiene la cantidad esperada (con margen de 0.01), no necesita transferencia
+        if abs(cantidad_actual - cantidad_esperada) < 0.01:
+            return False
+        
+        return True  # Tiene stock pero no la cantidad correcta
     
     def _analizar_subproductos(self, mo_id: int) -> Dict:
         """
@@ -288,6 +365,20 @@ class RevertirConsumoService:
                 
                 # Quitar sufijo -C del lote si existe
                 lote_original = lote_consumido.replace("-C", "")
+                
+                # VERIFICAR si el paquete ya tiene estos kg asignados
+                paquete_necesita_transfer = self._verificar_si_necesita_transferencia(
+                    paquete_consumido,
+                    ml["product_id"][0],
+                    lote_original,
+                    ml["qty_done"]
+                )
+                
+                if not paquete_necesita_transfer:
+                    resultado["errores"].append(
+                        f"⚠️ Paquete {paquete_consumido} ya tiene {ml['qty_done']} kg asignados, omitiendo"
+                    )
+                    continue
                 
                 # Crear transferencia interna para reasignar al paquete
                 try:
