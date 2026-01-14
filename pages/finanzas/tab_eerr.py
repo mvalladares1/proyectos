@@ -4,14 +4,11 @@ Tabla expandible con formato similar a Flujo de Caja.
 Combina vistas de Agrupado, Mensualizado, Detalle y YTD en una sola tabla.
 """
 import streamlit as st
-import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from .eerr_table import EERR_CSS, EERR_JS, render_eerr_table
 from .eerr_table.constants import MESES_NOMBRES
-
-
-API_URL = st.secrets.get("API_URL", "http://167.114.114.51:8001")
+from . import shared
 
 
 @st.fragment
@@ -68,28 +65,22 @@ def render(username: str, password: str):
         
         if cache_key not in st.session_state:
             with st.spinner("📊 Cargando Estado de Resultados..."):
-                try:
-                    # Llamar al endpoint de Finanzas
-                    resp = requests.get(
-                        f"{API_URL}/api/v1/finanzas/estado-resultados",
-                        params={
-                            "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
-                            "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
-                            "username": username,
-                            "password": password
-                        },
-                        timeout=120
-                    )
-                    
-                    if resp.status_code == 200:
-                        st.session_state[cache_key] = resp.json()
-                        st.session_state["eerr_should_load"] = False
-                        st.toast("✅ Datos cargados", icon="✅")
-                    else:
-                        st.error(f"Error {resp.status_code}: {resp.text}")
-                        return
-                except Exception as e:
-                    st.error(f"Error de conexión: {e}")
+                # Usar la función existente de shared
+                data = shared.fetch_estado_resultado(
+                    fecha_ini=fecha_inicio.strftime("%Y-%m-%d"),
+                    fecha_f=fecha_fin.strftime("%Y-%m-%d"),
+                    centro=None,  # Sin filtro de centro
+                    _username=username,
+                    _password=password
+                )
+                
+                if data and "error" not in data:
+                    st.session_state[cache_key] = data
+                    st.session_state["eerr_should_load"] = False
+                    st.toast("✅ Datos cargados", icon="✅")
+                else:
+                    error_msg = data.get("error", "Error desconocido") if data else "Sin respuesta"
+                    st.error(f"Error: {error_msg}")
                     return
         
         data = st.session_state.get(cache_key, {})
@@ -107,11 +98,11 @@ def render(username: str, password: str):
         col_expand, col_collapse, col_export = st.columns([1, 1, 2])
         
         with col_expand:
-            if st.button("➕ Expandir Todo", use_container_width=True):
+            if st.button("➕ Expandir Todo", use_container_width=True, key="eerr_expand"):
                 st.markdown('<script>toggleAllEerr(true);</script>', unsafe_allow_html=True)
         
         with col_collapse:
-            if st.button("➖ Colapsar Todo", use_container_width=True):
+            if st.button("➖ Colapsar Todo", use_container_width=True, key="eerr_collapse"):
                 st.markdown('<script>toggleAllEerr(false);</script>', unsafe_allow_html=True)
         
         with col_export:
