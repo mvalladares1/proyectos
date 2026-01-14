@@ -1,16 +1,17 @@
 """
 Renderizadores para la tabla de Estado de Resultados expandible.
 Genera HTML con filas expandibles de 3 niveles.
+Texto blanco, sin emojis, alineado.
 """
 from typing import Dict, List, Any
-from .constants import ESTRUCTURA_EERR, MESES_NOMBRES, CATEGORIA_MAP, EERR_COLORS
+from .constants import ESTRUCTURA_EERR, MESES_NOMBRES, CATEGORIA_MAP
 from .styles import SVG_CHEVRON
 
 
 def fmt_monto(valor: float) -> str:
-    """Formatea un monto en formato chileno con color."""
+    """Formatea un monto - texto blanco sin colores."""
     if valor == 0:
-        return '<span class="val-zero">$0</span>'
+        return '$0'
     
     abs_val = abs(valor)
     if abs_val >= 1_000_000_000:
@@ -21,9 +22,9 @@ def fmt_monto(valor: float) -> str:
         formatted = f"${abs_val:,.0f}"
     
     if valor < 0:
-        return f'<span class="val-negative">-{formatted}</span>'
+        return f"-{formatted}"
     else:
-        return f'<span class="val-positive">{formatted}</span>'
+        return formatted
 
 
 def generate_sparkline(valores: List[float]) -> str:
@@ -59,15 +60,7 @@ def render_eerr_table(
 ) -> str:
     """
     Genera la tabla HTML del Estado de Resultados expandible.
-    
-    Args:
-        estructura: Dict con estructura jerárquica de cuentas {categoria: {subcategorias: {...}}}
-        datos_mensuales: Dict con datos reales por mes {YYYY-MM: {categoria: valor}}
-        meses_lista: Lista de meses a mostrar ["2026-01", "2026-02", ...]
-        ppto_mensual: Opcional, Dict con presupuesto mensual
-        
-    Returns:
-        String HTML con la tabla completa
+    Texto blanco, sin emojis, alineado.
     """
     html_parts = []
     
@@ -80,7 +73,7 @@ def render_eerr_table(
     
     # Header
     html_parts.append('<thead><tr>')
-    html_parts.append('<th class="frozen">Concepto</th>')
+    html_parts.append('<th class="frozen">CONCEPTO</th>')
     for mes in meses_lista:
         mes_num = mes.split("-")[1] if "-" in mes else mes
         mes_nombre = MESES_NOMBRES.get(mes_num, mes)
@@ -95,7 +88,6 @@ def render_eerr_table(
         item_id = item["id"]
         item_nombre = item["nombre"]
         item_tipo = item["tipo"]
-        item_icono = item.get("icono", "")
         is_calculado = item.get("calculado", False)
         
         if is_calculado:
@@ -104,16 +96,13 @@ def render_eerr_table(
             valores_mes, total = valores_calculados.get(item_id, ({}, 0))
             
             html_parts.append(f'<tr class="{row_class}">')
-            html_parts.append(f'<td class="frozen">{item_icono} {item_id} - {item_nombre}</td>')
+            html_parts.append(f'<td class="frozen">{item_id} - {item_nombre}</td>')
             
-            valores_lista = []
             for mes in meses_lista:
                 val = valores_mes.get(mes, 0)
-                valores_lista.append(val)
                 html_parts.append(f'<td>{fmt_monto(val)}</td>')
             
-            sparkline = generate_sparkline(valores_lista)
-            html_parts.append(f'<td class="col-total">{fmt_monto(total)}{sparkline}</td>')
+            html_parts.append(f'<td class="col-total">{fmt_monto(total)}</td>')
             html_parts.append('</tr>')
         else:
             # Fila de categoría con expansión
@@ -130,19 +119,16 @@ def render_eerr_table(
                 cat_totales_mes[mes] = datos_mensuales.get(mes_key, {}).get(cat_key, 0)
             
             row_id = f"cat_{item_id}"
-            expand_icon = f'<span class="expand-icon" onclick="toggleEerrRow(\'{row_id}\')">{SVG_CHEVRON}</span>' if has_children else '<span style="width:28px;display:inline-block;"></span>'
+            expand_icon = f'<span class="expand-icon" onclick="toggleEerrRow(\'{row_id}\')">{SVG_CHEVRON}</span>' if has_children else ''
             
             html_parts.append(f'<tr class="cat-row" data-row-id="{row_id}">')
-            html_parts.append(f'<td class="frozen">{expand_icon}{item_icono} {item_id} - {item_nombre}</td>')
+            html_parts.append(f'<td class="frozen">{expand_icon}{item_id} - {item_nombre}</td>')
             
-            valores_lista = []
             for mes in meses_lista:
                 val = cat_totales_mes.get(mes, 0)
-                valores_lista.append(val)
                 html_parts.append(f'<td>{fmt_monto(val)}</td>')
             
-            sparkline = generate_sparkline(valores_lista)
-            html_parts.append(f'<td class="col-total">{fmt_monto(cat_total)}{sparkline}</td>')
+            html_parts.append(f'<td class="col-total">{fmt_monto(cat_total)}</td>')
             html_parts.append('</tr>')
             
             # Subcategorías (nivel 2) - inicialmente ocultas
@@ -153,23 +139,20 @@ def render_eerr_table(
                 has_level3 = len(subcat_subcats) > 0
                 
                 subcat_id = f"{row_id}_{subcat_nombre[:10].replace(' ', '_')}"
-                expand_icon_sub = f'<span class="expand-icon" onclick="toggleEerrRow(\'{subcat_id}\')">{SVG_CHEVRON}</span>' if has_level3 else '<span style="width:28px;display:inline-block;"></span>'
+                expand_icon_sub = f'<span class="expand-icon" onclick="toggleEerrRow(\'{subcat_id}\')">{SVG_CHEVRON}</span>' if has_level3 else ''
                 
                 html_parts.append(f'<tr class="subcat-row hidden-row child-of-{row_id}" data-row-id="{subcat_id}">')
-                html_parts.append(f'<td class="frozen">{expand_icon_sub}↳ {subcat_nombre[:40]}</td>')
+                html_parts.append(f'<td class="frozen level-2">{expand_icon_sub}{subcat_nombre}</td>')
                 
                 # Valores mensuales de subcategoría
                 for mes in meses_lista:
                     val = subcat_montos_mes.get(mes, 0)
-                    if val == 0:
-                        html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
-                    else:
-                        html_parts.append(f'<td>{fmt_monto(val)}</td>')
+                    html_parts.append(f'<td>{fmt_monto(val) if val != 0 else "-"}</td>')
                 
                 html_parts.append(f'<td class="col-total">{fmt_monto(subcat_total)}</td>')
                 html_parts.append('</tr>')
                 
-                # Nivel 3: Subcategorías internas o cuentas
+                # Nivel 3
                 if has_level3:
                     for n3_nombre, n3_data in sorted(subcat_subcats.items()):
                         n3_total = n3_data.get("total", 0)
@@ -178,18 +161,14 @@ def render_eerr_table(
                         has_cuentas = len(n3_cuentas) > 0
                         
                         n3_id = f"{subcat_id}_{n3_nombre[:8].replace(' ', '_')}"
-                        expand_icon_n3 = f'<span class="expand-icon" onclick="toggleEerrRow(\'{n3_id}\')">{SVG_CHEVRON}</span>' if has_cuentas else '<span style="width:28px;display:inline-block;"></span>'
+                        expand_icon_n3 = f'<span class="expand-icon" onclick="toggleEerrRow(\'{n3_id}\')">{SVG_CHEVRON}</span>' if has_cuentas else ''
                         
                         html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{subcat_id}" data-row-id="{n3_id}">')
-                        html_parts.append(f'<td class="frozen">{expand_icon_n3}📁 {n3_nombre[:35]}</td>')
+                        html_parts.append(f'<td class="frozen level-3">{expand_icon_n3}{n3_nombre}</td>')
                         
-                        # Valores mensuales de nivel 3
                         for mes in meses_lista:
                             val = n3_montos_mes.get(mes, 0)
-                            if val == 0:
-                                html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
-                            else:
-                                html_parts.append(f'<td>{fmt_monto(val)}</td>')
+                            html_parts.append(f'<td>{fmt_monto(val) if val != 0 else "-"}</td>')
                         
                         html_parts.append(f'<td class="col-total">{fmt_monto(n3_total)}</td>')
                         html_parts.append('</tr>')
@@ -203,41 +182,15 @@ def render_eerr_table(
                                 cuenta_total = cuenta_data
                                 cuenta_montos_mes = {}
                             
-                            html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{n3_id}" style="font-size:11px;">')
-                            html_parts.append(f'<td class="frozen" style="padding-left:68px;">📄 {cuenta_nombre[:30]}</td>')
+                            html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{n3_id}">')
+                            html_parts.append(f'<td class="frozen level-4">{cuenta_nombre[:40]}</td>')
                             
                             for mes in meses_lista:
                                 val = cuenta_montos_mes.get(mes, 0)
-                                if val == 0:
-                                    html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
-                                else:
-                                    html_parts.append(f'<td>{fmt_monto(val)}</td>')
+                                html_parts.append(f'<td>{fmt_monto(val) if val != 0 else "-"}</td>')
                             
                             html_parts.append(f'<td class="col-total">{fmt_monto(cuenta_total)}</td>')
                             html_parts.append('</tr>')
-                else:
-                    # Cuentas directas en nivel 2 (sin nivel 3)
-                    cuentas = subcat_data.get("cuentas", {})
-                    for cuenta_nombre, cuenta_data in sorted(cuentas.items(), key=lambda x: abs(x[1].get("total", 0) if isinstance(x[1], dict) else x[1]), reverse=True)[:10]:
-                        if isinstance(cuenta_data, dict):
-                            cuenta_total = cuenta_data.get("total", 0)
-                            cuenta_montos_mes = cuenta_data.get("montos_por_mes", {})
-                        else:
-                            cuenta_total = cuenta_data
-                            cuenta_montos_mes = {}
-                        
-                        html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{subcat_id}">')
-                        html_parts.append(f'<td class="frozen">📄 {cuenta_nombre[:35]}</td>')
-                        
-                        for mes in meses_lista:
-                            val = cuenta_montos_mes.get(mes, 0)
-                            if val == 0:
-                                html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
-                            else:
-                                html_parts.append(f'<td>{fmt_monto(val)}</td>')
-                        
-                        html_parts.append(f'<td class="col-total">{fmt_monto(cuenta_total)}</td>')
-                        html_parts.append('</tr>')
     
     html_parts.append('</tbody>')
     html_parts.append('</table>')
@@ -251,15 +204,9 @@ def calcular_subtotales(
     datos_mensuales: Dict[str, Dict[str, float]],
     meses_lista: List[str]
 ) -> Dict[str, tuple]:
-    """
-    Calcula los valores de subtotales (filas calculadas como UTILIDAD BRUTA, etc.).
-    
-    Returns:
-        Dict {id: ({mes: valor}, total)}
-    """
+    """Calcula los valores de subtotales."""
     resultados = {}
     
-    # Obtener valores base por categoría
     def get_cat_value(cat_id: str, mes: str) -> float:
         cat_key = CATEGORIA_MAP.get(cat_id, f"{cat_id} - {ESTRUCTURA_EERR[int(cat_id)-1]['nombre']}")
         mes_key = mes if "-" in mes else f"2026-{mes}"
@@ -274,7 +221,7 @@ def calcular_subtotales(
     ub_total = get_cat_total("1") - get_cat_total("2")
     resultados["3"] = (ub_mes, ub_total)
     
-    # 5 - MARGEN DE CONTRIBUCIÓN = 3 - 4
+    # 5 - MARGEN DE CONTRIBUCION = 3 - 4
     mc_mes = {mes: ub_mes[mes] - get_cat_value("4", mes) for mes in meses_lista}
     mc_total = ub_total - get_cat_total("4")
     resultados["5"] = (mc_mes, mc_total)

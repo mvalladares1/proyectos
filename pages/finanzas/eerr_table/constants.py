@@ -13,23 +13,20 @@ ESTRUCTURA_EERR = [
         "id": "1",
         "nombre": "INGRESOS",
         "tipo": "CATEGORIA",
-        "icono": "💰",
-        "signo": 1,  # Positivo
+        "signo": 1,
         "calculado": False,
     },
     {
         "id": "2",
         "nombre": "COSTOS",
         "tipo": "CATEGORIA",
-        "icono": "📦",
-        "signo": -1,  # Negativo
+        "signo": -1,
         "calculado": False,
     },
     {
         "id": "3",
         "nombre": "UTILIDAD BRUTA",
         "tipo": "SUBTOTAL",
-        "icono": "🟦",
         "formula": "1 - 2",
         "calculado": True,
     },
@@ -37,15 +34,13 @@ ESTRUCTURA_EERR = [
         "id": "4",
         "nombre": "GASTOS DIRECTOS",
         "tipo": "CATEGORIA",
-        "icono": "🔧",
         "signo": -1,
         "calculado": False,
     },
     {
         "id": "5",
-        "nombre": "MARGEN DE CONTRIBUCIÓN",
+        "nombre": "MARGEN DE CONTRIBUCION",
         "tipo": "SUBTOTAL",
-        "icono": "🟦",
         "formula": "3 - 4",
         "calculado": True,
     },
@@ -53,7 +48,6 @@ ESTRUCTURA_EERR = [
         "id": "6",
         "nombre": "GAV",
         "tipo": "CATEGORIA",
-        "icono": "🏢",
         "signo": -1,
         "calculado": False,
     },
@@ -61,7 +55,6 @@ ESTRUCTURA_EERR = [
         "id": "7",
         "nombre": "UTILIDAD OPERACIONAL (EBIT)",
         "tipo": "SUBTOTAL",
-        "icono": "🟦",
         "formula": "5 - 6",
         "calculado": True,
     },
@@ -69,7 +62,6 @@ ESTRUCTURA_EERR = [
         "id": "8",
         "nombre": "INTERESES",
         "tipo": "CATEGORIA",
-        "icono": "🏦",
         "signo": -1,
         "calculado": False,
     },
@@ -77,7 +69,6 @@ ESTRUCTURA_EERR = [
         "id": "9",
         "nombre": "UTILIDAD ANTES DE NO OP.",
         "tipo": "SUBTOTAL",
-        "icono": "🟦",
         "formula": "7 - 8",
         "calculado": True,
     },
@@ -85,7 +76,6 @@ ESTRUCTURA_EERR = [
         "id": "10",
         "nombre": "INGRESOS NO OPERACIONALES",
         "tipo": "CATEGORIA",
-        "icono": "➕",
         "signo": 1,
         "calculado": False,
     },
@@ -93,7 +83,6 @@ ESTRUCTURA_EERR = [
         "id": "11",
         "nombre": "GASTOS NO OPERACIONALES",
         "tipo": "CATEGORIA",
-        "icono": "➖",
         "signo": -1,
         "calculado": False,
     },
@@ -101,7 +90,6 @@ ESTRUCTURA_EERR = [
         "id": "12",
         "nombre": "RESULTADO NO OPERACIONAL",
         "tipo": "SUBTOTAL",
-        "icono": "🟦",
         "formula": "10 - 11",
         "calculado": True,
     },
@@ -109,22 +97,10 @@ ESTRUCTURA_EERR = [
         "id": "13",
         "nombre": "UTILIDAD ANTES DE IMPUESTOS",
         "tipo": "TOTAL",
-        "icono": "🟩",
         "formula": "9 + 12",
         "calculado": True,
     },
 ]
-
-# Colores para valores
-EERR_COLORS = {
-    "positive": "#10b981",      # Verde
-    "negative": "#ef4444",      # Rojo
-    "neutral": "#6b7280",       # Gris
-    "subtotal_bg": "#1e293b",   # Fondo subtotales
-    "total_bg": "#0f172a",      # Fondo totales
-    "hover": "#334155",         # Hover
-    "border": "#374151",        # Bordes
-}
 
 # Mapeo de categorías a claves de datos del backend
 CATEGORIA_MAP = {
