@@ -7,6 +7,7 @@ REFACTORIZADO: Constantes, helpers y Sankey extraídos a módulos separados.
 from typing import List, Dict, Optional
 from shared.odoo_client import OdooClient
 from backend.utils import clean_record, get_name_from_relation, get_state_display
+from backend.services.currency_service import CurrencyService
 
 from .constants import get_state_display as local_get_state_display
 from .helpers import (
@@ -22,6 +23,34 @@ class ContainersService:
 
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
+    
+    def _convert_to_clp(self, amount: float, currency_id: any) -> float:
+        """
+        Convierte el monto a CLP si está en USD.
+        
+        Args:
+            amount: Monto a convertir
+            currency_id: Puede ser tuple (id, name) o dict con 'name'
+            
+        Returns:
+            float: Monto en CLP
+        """
+        if not amount:
+            return 0.0
+        
+        # Obtener nombre de la moneda
+        currency_name = ""
+        if isinstance(currency_id, (list, tuple)) and len(currency_id) > 1:
+            currency_name = currency_id[1]
+        elif isinstance(currency_id, dict):
+            currency_name = currency_id.get("name", "")
+        
+        # Si es USD, convertir a CLP
+        if currency_name and "USD" in currency_name.upper():
+            return CurrencyService.convert_usd_to_clp(amount)
+        
+        # Si es CLP o cualquier otra, retornar el monto original
+        return amount
 
     def get_containers(self, 
                        start_date: Optional[str] = None, 
@@ -228,6 +257,11 @@ class ContainersService:
             client_name = get_name_from_relation(sale_clean.get("client_id"))
             if client_name == "N/A":
                 client_name = partner_name
+            
+            # Convertir monto a CLP si es necesario
+            currency_id = sale_clean.get("currency_id", {})
+            amount_original = sale_clean.get("amount_total", 0)
+            amount_clp = self._convert_to_clp(amount_original, currency_id)
 
             containers.append({
                 "id": sale_id,
@@ -241,8 +275,9 @@ class ContainersService:
                 "validity_date": sale_clean.get("validity_date", ""),
                 "state": sale_clean.get("state", ""),
                 "origin": sale_clean.get("origin", ""),
-                "currency_id": sale_clean.get("currency_id", {}),
-                "amount_total": sale_clean.get("amount_total", 0),
+                "currency_id": currency_id,
+                "amount_total": amount_clp,  # Monto convertido a CLP
+                "amount_original": amount_original,  # Monto original
                 "user_id": sale_clean.get("user_id", {}),
                 "producto_principal": producto_principal,
                 "kg_total": kg_total,
@@ -370,6 +405,11 @@ class ContainersService:
             if isinstance(prod, dict):
                 producto_principal = prod.get("name", "N/A")
         
+        # Convertir monto a CLP si es necesario
+        currency_id = sale_clean.get("currency_id", {})
+        amount_original = sale_clean.get("amount_total", 0)
+        amount_clp = self._convert_to_clp(amount_original, currency_id)
+        
         return {
             "id": sale_id,
             "name": sale_clean.get("name", ""),
@@ -378,7 +418,9 @@ class ContainersService:
             "commitment_date": sale_clean.get("commitment_date", ""),
             "state": sale_clean.get("state", ""),
             "origin": sale_clean.get("origin", ""),
-            "amount_total": sale_clean.get("amount_total", 0),
+            "currency_id": currency_id,
+            "amount_total": amount_clp,  # Monto convertido a CLP
+            "amount_original": amount_original,  # Monto original
             "producto_principal": producto_principal,
             "kg_total": kg_total,
             "kg_producidos": kg_producidos,
