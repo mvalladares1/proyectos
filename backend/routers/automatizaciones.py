@@ -492,3 +492,30 @@ async def revertir_consumo_odf(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/revertir-consumo-odf/preview")
+async def preview_reversion_odf(
+    request: RevertirConsumoRequest,
+    username: str = None,
+    password: str = None,
+    url: str = None,
+    db: str = None
+):
+    """
+    Analiza lo que se haría al revertir una ODF SIN ejecutar cambios.
+    Retorna un preview detallado para confirmación del usuario.
+    """
+    try:
+        service = RevertirConsumoService(
+            username=username, 
+            password=password,
+            url=url,
+            db=db
+        )
+        
+        resultado = service.preview_reversion_odf(request.odf_name)
+        return resultado
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

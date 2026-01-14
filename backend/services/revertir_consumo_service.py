@@ -10,6 +10,54 @@ class RevertirConsumoService:
     def __init__(self, username: str, password: str, url: str = None, db: str = None):
         self.odoo = OdooClient(username=username, password=password, url=url, db=db)
     
+    def preview_reversion_odf(self, odf_name: str) -> Dict:
+        """
+        Analiza lo que se haría al revertir una ODF SIN ejecutar cambios.
+        
+        Args:
+            odf_name: Nombre de la orden (ej: VLK/CongTE109)
+        
+        Returns:
+            Dict con preview detallado de acciones a realizar
+        """
+        # 1. Buscar la orden de fabricación
+        mo = self._buscar_orden_fabricacion(odf_name)
+        if not mo:
+            return {
+                "success": False,
+                "message": f"❌ Orden de fabricación '{odf_name}' no encontrada"
+            }
+        
+        mo_id = mo["id"]
+        resultado = {
+            "success": True,
+            "message": f"✅ Análisis completado para {odf_name}",
+            "odf_name": odf_name,
+            "componentes_preview": [],
+            "subproductos_preview": [],
+            "transferencias_count": 0,
+            "errores": []
+        }
+        
+        # 2. Analizar componentes (sin crear transferencias)
+        try:
+            componentes_preview = self._analizar_componentes(mo_id)
+            resultado["componentes_preview"] = componentes_preview["componentes"]
+            resultado["transferencias_count"] = len(componentes_preview["componentes"])
+            resultado["errores"].extend(componentes_preview.get("errores", []))
+        except Exception as e:
+            resultado["errores"].append(f"Error analizando componentes: {str(e)}")
+        
+        # 3. Analizar subproductos (sin modificar)
+        try:
+            subproductos_preview = self._analizar_subproductos(mo_id)
+            resultado["subproductos_preview"] = subproductos_preview["subproductos"]
+            resultado["errores"].extend(subproductos_preview.get("errores", []))
+        except Exception as e:
+            resultado["errores"].append(f"Error analizando subproductos: {str(e)}")
+        
+        return resultado
+    
     def revertir_consumo_odf(self, odf_name: str) -> Dict:
         """
         Revierte el consumo de una ODF de desmontaje.
@@ -76,6 +124,116 @@ class RevertirConsumoService:
             ["id", "name", "state", "product_id"]
         )
         return ordenes[0] if ordenes else None
+    
+    def _analizar_componentes(self, mo_id: int) -> Dict:
+        """
+        Analiza componentes a recuperar SIN crear transferencias.
+        Solo retorna información de lo que se haría.
+        """
+        resultado = {
+            "componentes": [],
+            "errores": []
+        }
+        
+        # Buscar movimientos de consumo
+        moves = self.odoo.search_read(
+            "stock.move",
+            [
+                ("raw_material_production_id", "=", mo_id),
+                ("state", "=", "done")
+            ],
+            ["id", "product_id", "product_uom_qty", "quantity_done"]
+        )
+        
+        if not moves:
+            resultado["errores"].append("No se encontraron movimientos de consumo")
+            return resultado
+        
+        # Por cada move, analizar sus move.lines
+        for move in moves:
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [("move_id", "=", move["id"])],
+                [
+                    "id", "product_id", "lot_id", "package_id", 
+                    "location_id", "location_dest_id", "qty_done"
+                ]
+            )
+            
+            for ml in move_lines:
+                if ml["qty_done"] <= 0:
+                    continue
+                
+                lote_consumido = ml["lot_id"][1] if ml.get("lot_id") else None
+                paquete_consumido = ml["package_id"][1] if ml.get("package_id") else None
+                location_dest_id = ml["location_dest_id"][0] if ml.get("location_dest_id") else None
+                
+                if not lote_consumido or not paquete_consumido:
+                    resultado["errores"].append(
+                        f"Línea {ml['id']} sin lote o paquete asignado, omitiendo"
+                    )
+                    continue
+                
+                # Obtener nombre de ubicación
+                ubicacion_name = ml["location_dest_id"][1] if ml.get("location_dest_id") else "N/A"
+                
+                # Quitar sufijo -C del lote
+                lote_original = lote_consumido.replace("-C", "")
+                
+                resultado["componentes"].append({
+                    "producto": ml["product_id"][1] if ml.get("product_id") else "N/A",
+                    "lote": lote_original,
+                    "paquete": paquete_consumido,
+                    "cantidad": ml["qty_done"],
+                    "ubicacion": ubicacion_name
+                })
+        
+        return resultado
+    
+    def _analizar_subproductos(self, mo_id: int) -> Dict:
+        """
+        Analiza subproductos a eliminar SIN modificarlos.
+        Solo retorna información de lo que se haría.
+        """
+        resultado = {
+            "subproductos": [],
+            "errores": []
+        }
+        
+        # Obtener producto principal
+        mo = self.odoo.search_read(
+            "mrp.production",
+            [("id", "=", mo_id)],
+            ["product_id"]
+        )
+        
+        if not mo:
+            resultado["errores"].append("Orden de fabricación no encontrada")
+            return resultado
+        
+        main_product_id = mo[0]["product_id"][0]
+        
+        # Buscar subproductos (productos finished que no son el principal)
+        finished_moves = self.odoo.search_read(
+            "stock.move",
+            [
+                ("production_id", "=", mo_id),
+                ("state", "=", "done"),
+                ("product_id", "!=", main_product_id)
+            ],
+            ["id", "product_id", "product_uom_qty", "quantity_done", "location_dest_id"]
+        )
+        
+        for move in finished_moves:
+            ubicacion_name = move["location_dest_id"][1] if move.get("location_dest_id") else "N/A"
+            
+            resultado["subproductos"].append({
+                "producto": move["product_id"][1] if move.get("product_id") else "N/A",
+                "cantidad_actual": move["quantity_done"],
+                "ubicacion": ubicacion_name
+            })
+        
+        return resultado
     
     def _revertir_componentes(self, mo_id: int, odf_name: str) -> Dict:
         """
