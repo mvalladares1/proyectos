@@ -95,6 +95,23 @@ def render(username: str, password: str):
         datos_mensuales = data.get("datos_mensuales", {})
         ppto_mensual = data.get("ppto_mensual", {})
         
+        # === DEBUG: Mostrar estructura de datos ===
+        with st.expander("🔍 DEBUG: Ver estructura de datos", expanded=False):
+            st.write("**Meses consultados:**", meses_lista)
+            st.write("**Categorías en estructura:**", list(estructura.keys()))
+            
+            # Verificar si montos_por_mes existe en subcategorías
+            if "2 - COSTOS" in estructura:
+                costos = estructura["2 - COSTOS"]
+                st.write("**Subcategorías de COSTOS:**", list(costos.get("subcategorias", {}).keys()))
+                
+                for subcat_name, subcat_data in list(costos.get("subcategorias", {}).items())[:2]:
+                    st.write(f"**{subcat_name}:**")
+                    st.write(f"  - total: {subcat_data.get('total', 0)}")
+                    st.write(f"  - tiene montos_por_mes: {'montos_por_mes' in subcat_data}")
+                    if 'montos_por_mes' in subcat_data:
+                        st.write(f"  - montos_por_mes: {subcat_data['montos_por_mes']}")
+        
         # === RENDERIZAR TABLA ===
         if estructura:
             tabla_html = render_eerr_table(
