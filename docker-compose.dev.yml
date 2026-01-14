@@ -11,6 +11,7 @@ services:
     environment:
       - ENV=development
       - PYTHONPATH=/app
+      - MPLCONFIGDIR=/tmp/matplotlib
     volumes:
       - ./data:/app/data
       - ./backend/data:/app/backend/data
