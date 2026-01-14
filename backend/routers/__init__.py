@@ -15,9 +15,10 @@ from . import rendimiento
 from . import compras
 from . import automatizaciones
 from . import comercial
+from . import flujo_caja
 
 __all__ = [
 	'auth', 'produccion', 'bandejas', 'demo', 'containers',
 	'stock', 'estado_resultado', 'presupuesto', 'permissions', 'recepcion',
-	'rendimiento', 'compras', 'automatizaciones', 'comercial'
+	'rendimiento', 'compras', 'automatizaciones', 'comercial', 'flujo_caja'
 ]

@@ -119,3 +119,14 @@ MESES_NOMBRES = {
     "05": "MAY", "06": "JUN", "07": "JUL", "08": "AGO",
     "09": "SEP", "10": "OCT", "11": "NOV", "12": "DIC"
 }
+
+# Colores para diferentes tipos de filas
+EERR_COLORS = {
+    "CATEGORIA": "#e2e8f0",      # Blanco para categorías
+    "SUBCATEGORIA": "#cbd5e1",   # Gris claro para subcategorías
+    "CUENTA": "#94a3b8",         # Gris medio para cuentas
+    "SUBTOTAL": "#60a5fa",       # Azul para subtotales
+    "TOTAL": "#3b82f6",          # Azul fuerte para totales
+    "POSITIVO": "#10b981",       # Verde para valores positivos destacados
+    "NEGATIVO": "#ef4444",       # Rojo para valores negativos destacados
+}
