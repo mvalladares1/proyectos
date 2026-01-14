@@ -7,12 +7,13 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys
 import os
+from typing import Optional
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from shared.auth import tiene_acceso_pagina
 
-from .shared import fmt_numero, get_trazabilidad_inversa, get_sankey_data
+from .shared import fmt_numero, get_trazabilidad_inversa, get_sankey_data, get_container_partners, get_sankey_producers
 
 
 def render(username: str, password: str):
@@ -22,21 +23,55 @@ def render(username: str, password: str):
     _perm_trazabilidad = tiene_acceso_pagina("rendimiento", "trazabilidad_pallets")
     _perm_sankey = tiene_acceso_pagina("rendimiento", "diagrama_sankey")
     
-    # Sidebar - Filtros de fecha para Sankey
-    st.sidebar.header("📅 Período para Diagrama")
-    col1, col2 = st.sidebar.columns(2)
+    # Filtros principales (debajo del título, no en sidebar)
+    st.markdown("### 📅 Período para Diagrama")
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         fecha_inicio = st.date_input(
             "Desde",
             datetime.now() - timedelta(days=30),
-            format="DD/MM/YYYY"
+            format="DD/MM/YYYY",
+            key="sankey_fecha_inicio",
         )
     with col2:
         fecha_fin = st.date_input(
             "Hasta",
             datetime.now(),
-            format="DD/MM/YYYY"
+            format="DD/MM/YYYY",
+            key="sankey_fecha_fin",
         )
+
+    # Filtro Cliente (containers)
+    partners = get_container_partners(username, password) if _perm_sankey else []
+    partner_options = [(None, "Todos")] + [(p.get("id"), p.get("name")) for p in (partners or [])]
+    with col3:
+        selected_partner_id = st.selectbox(
+            "Cliente (container)",
+            options=partner_options,
+            format_func=lambda x: x[1],
+            index=0,
+            key="sankey_partner",
+        )[0]
+
+    # Filtro Productor (pallets IN)
+    # Depende del rango y del cliente seleccionado
+    producers = []
+    if _perm_sankey:
+        producers = get_sankey_producers(
+            username,
+            password,
+            fecha_inicio.strftime("%Y-%m-%d"),
+            fecha_fin.strftime("%Y-%m-%d"),
+            partner_id=selected_partner_id,
+        )
+    producer_options = [(None, "Todos")] + [(p.get("id"), p.get("name")) for p in (producers or [])]
+    selected_producer_id = st.selectbox(
+        "Productor (solo pallets IN)",
+        options=producer_options,
+        format_func=lambda x: x[1],
+        index=0,
+        key="sankey_producer",
+    )[0]
     
     # Tabs
     tab1, tab2 = st.tabs(["📦 Trazabilidad por Pallets", "🔗 Diagrama Sankey"])
@@ -49,7 +84,7 @@ def render(username: str, password: str):
     
     with tab2:
         if _perm_sankey:
-            _render_sankey(username, password, fecha_inicio, fecha_fin)
+            _render_sankey(username, password, fecha_inicio, fecha_fin, selected_partner_id, selected_producer_id)
         else:
             st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Diagrama Sankey'. Contacta al administrador.")
 
@@ -273,7 +308,7 @@ def _render_materia_prima(registro: dict, nivel: int):
 
 
 
-def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin):
+def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin, partner_id: Optional[int], producer_id: Optional[int]):
     """Renderiza el tab del diagrama Sankey."""
     st.subheader("🔗 Diagrama Sankey: Pallets IN → Proceso → Pallets OUT")
     st.caption("OUT se agrupa por container cuando existe; OUT sin container se muestra en amarillo")
@@ -283,7 +318,9 @@ def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin):
             sankey_data = get_sankey_data(
                 username, password,
                 fecha_inicio.strftime("%Y-%m-%d"),
-                fecha_fin.strftime("%Y-%m-%d")
+                fecha_fin.strftime("%Y-%m-%d"),
+                partner_id=partner_id,
+                producer_id=producer_id,
             )
             
             if not sankey_data:

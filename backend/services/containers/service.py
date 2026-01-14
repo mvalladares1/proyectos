@@ -452,7 +452,9 @@ class ContainersService:
     
     def get_sankey_data(self, start_date: Optional[str] = None,
                        end_date: Optional[str] = None,
-                       limit: int = 50) -> Dict:
+                       limit: int = 50,
+                       partner_id: Optional[int] = None,
+                       producer_id: Optional[int] = None) -> Dict:
         """
         Genera datos para diagrama Sankey de trazabilidad.
         Flujo: Container → Fabricación → Pallets Consumidos
@@ -469,13 +471,16 @@ class ContainersService:
         # - OUT con container: se agrupan por container (cliente)
         # - OUT sin container: quedan en amarillo cerca del proceso
 
-        containers = self.get_containers(start_date, end_date)[:limit]
+        containers = self.get_containers(start_date, end_date, partner_id=partner_id)[:limit]
 
         # Producciones en containers (mantiene el orden actual)
         production_to_container: Dict[int, Dict] = {}
         productions_order: List[Dict] = []
         for container in containers:
             for fab in container.get("productions", []) or []:
+                # Filtro UX: dejar fuera procesos VLK, enfocarse en RF
+                if (fab.get("name") or "").startswith("VLK"):
+                    continue
                 production_to_container[fab["id"]] = container
                 productions_order.append(fab)
 
@@ -503,6 +508,9 @@ class ContainersService:
             if orphan_ids:
                 orphans_raw = self.odoo.read("mrp.production", orphan_ids, orphan_fields)
                 for p in orphans_raw:
+                    # Filtro UX: dejar fuera procesos VLK, enfocarse en RF
+                    if (p.get("name") or "").startswith("VLK"):
+                        continue
                     product = p.get("product_id")
                     product_name = product[1] if isinstance(product, (list, tuple)) else "N/A"
 
@@ -538,8 +546,9 @@ class ContainersService:
 
         productions_order.extend(orphan_productions)
 
-        extra_prod_ids = [p["id"] for p in orphan_productions]
-        sankey_context = self._get_sankey_context(containers, extra_production_ids=extra_prod_ids)
+        # Contexto (moves/pallets) SOLO para producciones ya filtradas
+        filtered_production_ids = [p["id"] for p in productions_order if p.get("id")]
+        sankey_context = self._get_sankey_context(filtered_production_ids, include_producers=bool(producer_id))
         productions_by_id = sankey_context.get("productions", {})
         pallets_by_production = sankey_context.get("pallets", {})
 
@@ -580,8 +589,19 @@ class ContainersService:
 
             pallets_data = pallets_by_production.get(prod_id, {"consumidos": [], "salida": []})
 
+            # Si hay filtro por productor: mostrar solo procesos donde exista al menos 1 pallet IN del productor
+            if producer_id:
+                has_match = any(
+                    producer_id in (p.get("producer_ids") or [])
+                    for p in (pallets_data.get("consumidos", []) or [])
+                )
+                if not has_match:
+                    continue
+
             # IN
             for pallet_in in pallets_data.get("consumidos", []) or []:
+                if producer_id and producer_id not in (pallet_in.get("producer_ids") or []):
+                    continue
                 p_in_id = f"PIN:{pallet_in.get('name', '')}"
                 p_in_idx = _ensure_node(
                     p_in_id,
@@ -686,17 +706,64 @@ class ContainersService:
                 slot_cursor += block_slots
 
         return {"nodes": nodes, "links": links}
-    
-    def _get_sankey_context(self, containers: List[Dict], extra_production_ids: Optional[List[int]] = None) -> Dict:
-        """Obtiene contexto de producciones y pallets para Sankey."""
-        production_ids = []
+
+    def get_sankey_producers(self,
+                             start_date: Optional[str] = None,
+                             end_date: Optional[str] = None,
+                             limit: int = 50,
+                             partner_id: Optional[int] = None) -> List[Dict]:
+        """Lista productores disponibles (desde pallets IN) para un rango/cliente."""
+        containers = self.get_containers(start_date, end_date, partner_id=partner_id)[:limit]
+
+        production_ids: List[int] = []
         for container in containers:
             for fab in container.get("productions", []) or []:
+                if (fab.get("name") or "").startswith("VLK"):
+                    continue
                 if fab.get("id"):
-                    production_ids.append(fab.get("id"))
+                    production_ids.append(fab["id"])
 
-        if extra_production_ids:
-            production_ids.extend([pid for pid in extra_production_ids if pid])
+        # También considerar orphans (sin container)
+        orphan_domain = [("x_studio_po_asociada_1", "=", False), ("state", "not in", ["cancel"])]
+        if start_date:
+            orphan_domain.append(("date_planned_start", ">=", start_date))
+        if end_date:
+            orphan_domain.append(("date_planned_start", "<=", end_date))
+
+        try:
+            orphan_ids = self.odoo.search(
+                "mrp.production",
+                orphan_domain,
+                limit=200,
+                order="date_planned_start desc"
+            )
+            if orphan_ids:
+                orphans = self.odoo.read("mrp.production", orphan_ids, ["id", "name"])
+                for o in orphans:
+                    if (o.get("name") or "").startswith("VLK"):
+                        continue
+                    production_ids.append(o["id"])
+        except Exception as e:
+            print(f"Error fetching orphan productions for sankey producers: {e}")
+
+        production_ids = list({pid for pid in production_ids if pid})
+        ctx = self._get_sankey_context(production_ids, include_producers=True)
+        pallets_by_production = ctx.get("pallets", {})
+
+        producers_map: Dict[int, str] = {}
+        for pdata in pallets_by_production.values():
+            for p in (pdata.get("consumidos", []) or []):
+                for prod in (p.get("producers") or []):
+                    pid = prod.get("id")
+                    name = prod.get("name")
+                    if pid and name:
+                        producers_map[pid] = name
+
+        return [{"id": pid, "name": producers_map[pid]} for pid in sorted(producers_map.keys(), key=lambda k: producers_map[k])]
+    
+    def _get_sankey_context(self, production_ids: List[int], include_producers: bool = False) -> Dict:
+        """Obtiene contexto de producciones y pallets para Sankey."""
+        production_ids = [pid for pid in (production_ids or []) if pid]
 
         if not production_ids:
             return {"productions": {}, "pallets": {}}
@@ -883,14 +950,51 @@ class ContainersService:
                 pkg_id = pkg[0] if isinstance(pkg, (list, tuple)) else pkg
                 quants_by_package.setdefault(pkg_id, []).append(quant)
 
+        lot_to_producer = {}
+        if include_producers:
+            # Resolver productor por lote (batch) para permitir filtrar pallets IN
+            # - Solo lo usamos en pallets consumidos (IN)
+            lot_ids: set = set()
+            for (_prod_id, pkg_id, tipo), _data in pallets_by_key.items():
+                if tipo != "consumidos":
+                    continue
+                for q in quants_by_package.get(pkg_id, []) or []:
+                    lot_rel = q.get("lot_id")
+                    lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) and lot_rel else None
+                    if lot_id:
+                        lot_ids.add(lot_id)
+
+            lot_to_producer = self._get_producers_by_lot_ids(list(lot_ids)) if lot_ids else {}
+
         for (prod_id, pkg_id, tipo), data in pallets_by_key.items():
             pkg_info = package_info.get(pkg_id, {})
+            products = build_pallet_products(quants_by_package.get(pkg_id, []))
+
+            # productores detectados desde los lotes dentro del pallet
+            producer_ids = set()
+            producers = []
+            if include_producers:
+                for prod in products:
+                    lot_id = prod.get("lot_id")
+                    if not lot_id:
+                        continue
+                    producer = lot_to_producer.get(lot_id)
+                    if not producer:
+                        continue
+                    pid = producer.get("id")
+                    pname = producer.get("name")
+                    if pid and pid not in producer_ids:
+                        producer_ids.add(pid)
+                        producers.append({"id": pid, "name": pname})
+
             pallet = {
                 "id": pkg_id,
                 "name": pkg_info.get("name", str(pkg_id)),
                 "pack_date": pkg_info.get("pack_date", ""),
                 "qty": data.get("qty", 0),
-                "products": build_pallet_products(quants_by_package.get(pkg_id, []))
+                "products": products,
+                "producer_ids": sorted(list(producer_ids)),
+                "producers": producers,
             }
             pallets_by_production[prod_id][tipo].append(pallet)
 
@@ -898,3 +1002,67 @@ class ContainersService:
             "productions": production_details,
             "pallets": pallets_by_production
         }
+
+    def _get_producers_by_lot_ids(self, lot_ids: List[int]) -> Dict[int, Dict]:
+        """Mapea lot_id -> {id, name} del productor (res.partner) usando recepciones desde ubicación vendor."""
+        if not lot_ids:
+            return {}
+
+        # Buscar move lines por lote
+        try:
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [["lot_id", "in", list(set(lot_ids))]],
+                ["lot_id", "picking_id", "location_id", "date"],
+                limit=5000,
+                order="date asc"
+            )
+        except Exception as e:
+            print(f"Error fetching move lines for lots: {e}")
+            return {}
+
+        # Elegir, por lote, el primer movimiento que venga desde vendor/proveedor
+        lot_to_picking: Dict[int, int] = {}
+        for ml in move_lines or []:
+            lot_rel = ml.get("lot_id")
+            lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) and lot_rel else None
+            if not lot_id or lot_id in lot_to_picking:
+                continue
+            loc_rel = ml.get("location_id")
+            loc_name = loc_rel[1] if isinstance(loc_rel, (list, tuple)) and len(loc_rel) > 1 else str(loc_rel)
+            if not loc_name:
+                continue
+            if "vendor" not in loc_name.lower() and "proveedor" not in loc_name.lower():
+                continue
+            picking_rel = ml.get("picking_id")
+            picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) and picking_rel else None
+            if picking_id:
+                lot_to_picking[lot_id] = picking_id
+
+        if not lot_to_picking:
+            return {}
+
+        # Obtener partner_id de pickings
+        picking_ids = list(set(lot_to_picking.values()))
+        pickings = self.odoo.read("stock.picking", picking_ids, ["id", "partner_id"])
+        picking_to_partner: Dict[int, int] = {}
+        partner_ids: set = set()
+        for p in pickings or []:
+            partner_rel = p.get("partner_id")
+            partner_id = partner_rel[0] if isinstance(partner_rel, (list, tuple)) and partner_rel else None
+            if partner_id:
+                picking_to_partner[p["id"]] = partner_id
+                partner_ids.add(partner_id)
+
+        if not partner_ids:
+            return {}
+
+        partners = self.odoo.read("res.partner", list(partner_ids), ["id", "name"])
+        partner_name = {pp["id"]: pp.get("name", "") for pp in (partners or [])}
+
+        lot_to_producer: Dict[int, Dict] = {}
+        for lot_id, picking_id in lot_to_picking.items():
+            pid = picking_to_partner.get(picking_id)
+            if pid:
+                lot_to_producer[lot_id] = {"id": pid, "name": partner_name.get(pid, "")}
+        return lot_to_producer

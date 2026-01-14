@@ -12,8 +12,11 @@ def build_pallet_products(quants: List[Dict]) -> List[Dict]:
         product_name = quant.get("name")
         if not product_name:
             product_name = get_name_from_relation(quant.get("product_id"))
+        lot_rel = quant.get("lot_id")
+        lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) and lot_rel else None
         products.append({
             "product": product_name,
+            "lot_id": lot_id,
             "lot": get_name_from_relation(quant.get("lot_id")),
             "quantity": quant.get("quantity", 0)
         })
