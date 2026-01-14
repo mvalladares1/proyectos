@@ -8,12 +8,16 @@ import pandas as pd
 import os
 from typing import Optional
 
-# Determinar API_URL basado en ENV
+# Determinar API_URL
+# - Si existe API_URL (por docker-compose/nginx), usarlo.
+# - Si no, fallback por ENV a localhost.
 ENV = os.getenv("ENV", "production")
-if ENV == "development":
-    API_URL = "http://127.0.0.1:8002"  # Puerto DEV
-else:
-    API_URL = "http://127.0.0.1:8000"  # Puerto PROD
+API_URL = os.getenv("API_URL")
+if not API_URL:
+    if ENV == "development":
+        API_URL = "http://127.0.0.1:8002"  # Puerto DEV
+    else:
+        API_URL = "http://127.0.0.1:8000"  # Puerto PROD
 
 
 # --------------------- Funciones de formateo ---------------------
