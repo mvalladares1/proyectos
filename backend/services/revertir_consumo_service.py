@@ -328,7 +328,7 @@ class RevertirConsumoService:
                 ("raw_material_production_id", "=", mo_id),
                 ("state", "=", "done")
             ],
-            ["id", "product_id", "product_uom_qty", "quantity_done"]
+            ["id", "product_id", "product_uom_qty", "quantity_done", "product_uom"]
         )
         
         if not moves:
@@ -381,7 +381,8 @@ class RevertirConsumoService:
                     "lote_original": lote_original,
                     "paquete": paquete_consumido,
                     "cantidad": ml["qty_done"],
-                    "location_id": location_id
+                    "location_id": location_id,
+                    "product_uom": move["product_uom"][0] if move.get("product_uom") else None
                 })
         
         # Si no hay componentes a transferir, retornar
@@ -459,27 +460,19 @@ class RevertirConsumoService:
         
         picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
         
-        # Buscar UoM "kg" directamente
-        uom_kg = self.odoo.search_read(
-            "uom.uom",
-            [("name", "=", "kg")],
-            ["id"],
-            limit=1
-        )
-        
-        if not uom_kg:
-            raise ValueError("UoM 'kg' no encontrada en el sistema")
-        
-        uom_kg_id = uom_kg[0]["id"]
-        
         # Crear un move por cada componente
         for comp in componentes:
+            # Usar la UoM del componente (copiada del move original)
+            uom_id = comp.get("product_uom")
+            if not uom_id:
+                raise ValueError(f"No se encontró UoM para el componente {comp['paquete']}")
+            
             move_vals = {
                 "name": f"Recuperar {comp['paquete']}",
                 "picking_id": picking_id,
                 "product_id": comp["product_id"],
                 "product_uom_qty": comp["cantidad"],
-                "product_uom": uom_kg_id,
+                "product_uom": uom_id,
                 "location_id": location_id,
                 "location_dest_id": location_id
             }
