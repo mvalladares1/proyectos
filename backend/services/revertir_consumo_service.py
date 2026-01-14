@@ -238,6 +238,52 @@ class RevertirConsumoService:
             ],
             ["quantity"]
         )
+        if not quants:
+            return True  # No tiene stock de ese producto/lote, necesita transferencia
+        
+        # Si tiene stock, verificar que sea la cantidad correcta
+        cantidad_actual = sum(q["quantity"] for q in quants)
+        
+        # Si ya tiene la cantidad esperada (con margen de 0.01), no necesita transferencia
+        if abs(cantidad_actual - cantidad_esperada) < 0.01:
+            return False
+        
+        return True  # Tiene stock pero no la cantidad correcta
+    
+    def _analizar_subproductos(self, mo_id: int) -> Dict:
+        """
+        Analiza subproductos a eliminar SIN modificarlos.
+        Solo retorna información de lo que se haría.
+        """
+        resultado = {
+            "subproductos": [],
+            "errores": []
+        }
+        
+        # Obtener producto principal
+        mo = self.odoo.search_read(
+            "mrp.production",
+            [("id", "=", mo_id)],
+            ["product_id"]
+        )
+        
+        if not mo:
+            resultado["errores"].append("Orden de fabricación no encontrada")
+            return resultado
+        
+        main_product_id = mo[0]["product_id"][0]
+        
+        # Buscar subproductos (productos finished que no son el principal)
+        finished_moves = self.odoo.search_read(
+            "stock.move",
+            [
+                ("production_id", "=", mo_id),
+                ("state", "=", "done"),
+                ("product_id", "!=", main_product_id)
+            ],
+            ["id", "product_id", "product_uom_qty", "quantity_done", "location_dest_id"]
+        )
+        
         # Por cada move, obtener sus move_lines (cada línea tiene un paquete diferente)
         for move in finished_moves:
             move_lines = self.odoo.search_read(
