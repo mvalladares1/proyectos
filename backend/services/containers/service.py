@@ -497,7 +497,7 @@ class ContainersService:
                 pid = p.get("id")
                 if pid:
                     out_package_ids.append(pid)
-        package_to_container_id = self._get_container_ids_by_out_package_ids(
+        package_to_container_ref = self._get_container_refs_by_out_package_ids(
             list(set(out_package_ids)),
             containers,
         )
@@ -507,7 +507,8 @@ class ContainersService:
         node_index: Dict[str, int] = {}
         node_meta: Dict[str, Dict] = {}
 
-        container_out_nodes: Dict[int, List[str]] = {}
+        # key = container node id (ej: C:123 o CNAME:SO1234) -> lista de out node ids
+        container_out_nodes: Dict[str, List[str]] = {}
 
         def _ensure_node(node_id: str, label: str, color: str, detail: Dict, meta: Dict) -> int:
             if node_id not in node_index:
@@ -569,12 +570,15 @@ class ContainersService:
             # OUT
             for pallet_out in pallets_data.get("salida", []) or []:
                 # IMPORTANT: el container se define por pallet (salida), no por fabricación
-                out_container_id = package_to_container_id.get(pallet_out.get("id"))
+                container_ref = package_to_container_ref.get(pallet_out.get("id")) or {}
+                out_container_id = container_ref.get("container_id")
+                out_container_origin = container_ref.get("origin")
                 pallet_out_key = pallet_out.get("id") or pallet_out.get("name")
-                if out_container_id:
-                    out_id = f"POUT:C{out_container_id}:P{pallet_out_key}"
+                if out_container_id or out_container_origin:
+                    container_scope = f"C{out_container_id}" if out_container_id else f"O{out_container_origin}"
+                    out_id = f"POUT:{container_scope}:P{pallet_out_key}"
                     out_color = "#2ecc71"
-                    out_meta = {"type": "out_container", "container_id": out_container_id}
+                    out_meta = {"type": "out_container", "container_id": out_container_id, "origin": out_container_origin}
                 else:
                     out_id = f"POUT:NONE:P{pallet_out_key}"
                     out_color = "#f1c40f"  # amarillo sin container
@@ -594,22 +598,32 @@ class ContainersService:
                 })
 
                 # Agrupar OUT en container (OUT -> Container)
-                if out_container_id:
-                    c_id = f"C:{out_container_id}"
-                    out_container = next((c for c in containers if c.get("id") == out_container_id), None)
+                if out_container_id or out_container_origin:
+                    if out_container_id:
+                        c_id = f"C:{out_container_id}"
+                        out_container = next((c for c in containers if c.get("id") == out_container_id), None) or {}
+                        c_label = out_container.get("name", "")
+                        c_detail = build_container_detail(out_container)
+                        c_meta = {"type": "container", "container_id": out_container_id}
+                    else:
+                        # Container "virtual" solo por origin (para evitar huérfanos falsos)
+                        c_id = f"CNAME:{out_container_origin}"
+                        c_label = str(out_container_origin)
+                        c_detail = build_container_detail({"name": c_label})
+                        c_meta = {"type": "container", "origin": out_container_origin}
                     c_idx = _ensure_node(
                         c_id,
-                        (out_container or {}).get("name", ""),
+                        c_label,
                         "#3498db",
-                        build_container_detail(out_container or {}),
-                        {"type": "container", "container_id": out_container_id}
+                        c_detail,
+                        c_meta,
                     )
                     links.append({
                         "source": out_idx,
                         "target": c_idx,
                         "value": pallet_out.get("qty", 1) or 1
                     })
-                    container_out_nodes.setdefault(out_container_id, []).append(out_id)
+                    container_out_nodes.setdefault(c_id, []).append(out_id)
 
         # Coordenadas para un layout tipo imagen
         def _set_xy(node_id: str, x: float, y: float) -> None:
@@ -639,18 +653,25 @@ class ContainersService:
         for nid, y in _spread_y(orphan_out_ids, 0.10, 0.90).items():
             _set_xy(nid, 0.72, y)
 
-        container_ids_in_order = [c.get("id") for c in containers]
-        active_container_ids = [cid for cid in container_ids_in_order if container_out_nodes.get(cid)]
-        total_slots = sum(max(1, len(container_out_nodes.get(cid, []))) for cid in active_container_ids)
+        # Orden: primero containers reales en orden, luego containers virtuales por origin
+        container_node_ids_in_order: List[str] = [f"C:{c.get('id')}" for c in (containers or []) if c.get("id")]
+        virtual_container_node_ids = sorted(
+            [nid for nid in container_out_nodes.keys() if nid.startswith("CNAME:")],
+            key=lambda s: s.lower(),
+        )
+        ordered_container_node_ids = container_node_ids_in_order + [nid for nid in virtual_container_node_ids if nid not in container_node_ids_in_order]
+
+        active_container_node_ids = [nid for nid in ordered_container_node_ids if container_out_nodes.get(nid)]
+        total_slots = sum(max(1, len(container_out_nodes.get(nid, []))) for nid in active_container_node_ids)
         if total_slots > 0:
             slot_cursor = 0
-            for cid in active_container_ids:
-                out_node_ids = container_out_nodes.get(cid, [])
+            for cnode_id in active_container_node_ids:
+                out_node_ids = container_out_nodes.get(cnode_id, [])
                 block_slots = max(1, len(out_node_ids))
 
                 center_slot = slot_cursor + (block_slots / 2)
                 center_y = 0.02 + 0.96 * (center_slot / total_slots)
-                _set_xy(f"C:{cid}", 0.98, center_y)
+                _set_xy(cnode_id, 0.98, center_y)
 
                 for j, out_nid in enumerate(out_node_ids):
                     y = 0.02 + 0.96 * ((slot_cursor + (j + 0.5)) / total_slots)
@@ -660,13 +681,14 @@ class ContainersService:
 
         return {"nodes": nodes, "links": links}
 
-    def _get_container_ids_by_out_package_ids(self, package_ids: List[int], containers: List[Dict]) -> Dict[int, Optional[int]]:
-        """Resuelve package_id (pallet OUT) -> container_id (sale.order) usando pickings outgoing.
+    def _get_container_refs_by_out_package_ids(self, package_ids: List[int], containers: List[Dict]) -> Dict[int, Dict]:
+        """Resuelve package_id (pallet OUT) -> {container_id?, origin?} usando pickings outgoing.
 
         Regla práctica:
         - Considera SOLO pickings `outgoing` (despachos).
-        - Intenta mapear por `stock.picking.origin` contra `sale.order.name` (container.name).
-        - Si no hay match, el pallet se considera huérfano para el Sankey.
+        - Si `origin` coincide con un container ya cargado: retorna container_id.
+        - Si `origin` existe pero no está en los containers cargados: retorna origin (container virtual por nombre).
+        - Si no hay origin/picking usable: el pallet se considera huérfano.
         """
         package_ids = [pid for pid in (package_ids or []) if pid]
         if not package_ids:
@@ -679,8 +701,8 @@ class ContainersService:
             if name and cid:
                 container_name_to_id[str(name)] = int(cid)
 
-        if not container_name_to_id:
-            return {pid: None for pid in package_ids}
+        # Resultado por defecto: huérfano
+        result: Dict[int, Dict] = {pid: {"container_id": None, "origin": None} for pid in package_ids}
 
         try:
             move_lines = self.odoo.search_read(
@@ -697,7 +719,7 @@ class ContainersService:
             )
         except Exception as e:
             print(f"Error fetching move lines for OUT packages: {e}")
-            return {pid: None for pid in package_ids}
+            return result
 
         picking_ids: List[int] = []
         for ml in move_lines or []:
@@ -714,22 +736,26 @@ class ContainersService:
             except Exception as e:
                 print(f"Error fetching pickings for OUT packages: {e}")
 
-        package_to_container_id: Dict[int, Optional[int]] = {pid: None for pid in package_ids}
         # move_lines ya vienen ordenados desc: tomar el primer match por package
         for ml in move_lines or []:
             pkg_rel = ml.get("result_package_id")
             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) and pkg_rel else None
-            if not pkg_id or package_to_container_id.get(pkg_id) is not None:
+            if not pkg_id or result.get(pkg_id, {}).get("origin") is not None or result.get(pkg_id, {}).get("container_id") is not None:
                 continue
 
             picking_rel = ml.get("picking_id")
             picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) and picking_rel else None
             picking = pickings_by_id.get(picking_id, {})
             origin = (picking.get("origin") or "").strip()
-            if origin and origin in container_name_to_id:
-                package_to_container_id[pkg_id] = container_name_to_id[origin]
+            if not origin:
+                continue
+            if origin in container_name_to_id:
+                result[pkg_id] = {"container_id": container_name_to_id[origin], "origin": origin}
+            else:
+                # container no estaba precargado: devolver solo el nombre para crear un nodo virtual
+                result[pkg_id] = {"container_id": None, "origin": origin}
 
-        return package_to_container_id
+        return result
 
     def get_sankey_producers(self,
                              start_date: Optional[str] = None,

@@ -41,82 +41,8 @@ if not username or not password:
 shared.init_session_state()
 
 # CSS Global Forzado (Dark Mode)
-# CSS Global Forzado (Dark Mode) - INLINED with High Specificity
-st.markdown("""
-<style>
-    /* ============ FORCE DARK THEME MAIN CONTAINERS ============ */
-    [data-testid="stAppViewContainer"] { 
-        background-color: #0e1117 !important; 
-        color: #ffffff !important;
-    }
-    [data-testid="stHeader"] { 
-        background-color: rgba(14, 17, 23, 0.9) !important; 
-    }
-    [data-testid="stSidebar"] { 
-        background-color: #262730 !important; 
-        color: #ffffff !important;
-    }
-
-    /* ============ TEXT COLOR OVERRIDES ============ */
-    /* Target all headers specifically */
-    h1, h2, h3, h4, h5, h6, .stHeading, [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3 {
-        color: #ffffff !important;
-    }
-    
-    /* Target regular text and labels */
-    p, label, span, div, .stMarkdown, .stCaption, [data-testid="stMarkdownContainer"] p {
-        color: #ffffff !important;
-    }
-
-    /* Target specific Streamlit components that often default to grey */
-    [data-testid="stMetricLabel"] {
-        color: #cbd5e1 !important; /* Lighter grey for metric label to distinguish from value */
-    }
-    [data-testid="stMetricValue"] {
-        color: #ffffff !important;
-    }
-    
-    /* Input Labels */
-    .stTextInput label, .stSelectbox label, .stDateInput label, .stNumberInput label {
-        color: #ffffff !important;
-    }
-
-    /* ============ WIDGET STYLING ============ */
-    .stTextInput input, .stSelectbox [data-baseweb="select"], .stDateInput input, .stNumberInput input {
-        color: #ffffff !important; 
-        background-color: #1a1c23 !important;
-        border-color: #334155 !important;
-    }
-    
-    /* Dropdown text fix */
-    ul[data-baseweb="menu"] li {
-        background-color: #1e293b !important;
-        color: #ffffff !important;
-    }
-
-    /* ============ CARDS ============ */
-    .info-card {
-        background-color: #1e293b;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #334155;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: transparent !important;
-    }
-    .stTabs [data-baseweb="tab"] {
-        color: #94a3b8 !important;
-    }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        color: #3b82f6 !important;
-        border-bottom-color: #3b82f6 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Sidebar de configuración
+# (Sin configuración específica para heredar estilo global)
 
 
 # Título principal
