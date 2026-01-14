@@ -226,11 +226,11 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             st.markdown("---")
             _render_resumen_fruta_manejo(consolidado)
         
-        # === GRÁFICO ACUMULADO POR SALA ===
+        # === GRÁFICO ACUMULADO POR LÍNEA ===
         if mos:
             st.markdown("---")
-            st.markdown("### 🏭 Producción Acumulada por Sala")
-            st.caption("Kg procesados por período - Solo salas (sin detalle de líneas)")
+            st.markdown("### 🏭 Producción Acumulada por Línea")
+            st.caption("Kg procesados por período - Agrupado por línea de producción")
             grafico_salas_consolidado(mos, agrupacion)
         
         # === GRÁFICO TEMPORAL DE PROCESO/VACIADO POR SALA (DETALLE POR LÍNEA) ===
@@ -252,10 +252,10 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
         @st.fragment
         def _fragment_kpis_congelado():
             """Fragment para KPIs de Congelado - se ejecuta independientemente."""
-            st.subheader("❄️ KPIs de Congelado (Túneles Estáticos)")
-            st.caption("Túneles de congelación - solo congelan, rendimiento ~100%")
+            st.subheader("❄️ KPIs de Congelado")
+            st.caption("Túneles de congelación (Estáticos + Continuo)")
             
-            cong_cols = st.columns(5)
+            cong_cols = st.columns(6)
             with cong_cols[0]:
                 st.metric("Kg Entrada", fmt_numero(data.get('congelado_kg_mp', 0), 0))
             with cong_cols[1]:
@@ -266,8 +266,9 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             with cong_cols[3]:
                 st.metric("MOs Congelado", data.get('congelado_mos', 0))
             with cong_cols[4]:
-                costo_elec = data.get('total_costo_electricidad', 0)
-                st.metric("⚡ Costo Elec.", f"${fmt_numero(costo_elec, 0)}")
+                st.metric("Proveedores", data.get('congelado_proveedores', 0))
+            with cong_cols[5]:
+                st.metric("Lotes Únicos", data.get('congelado_lotes', 0))
         
         _fragment_kpis_congelado()
         

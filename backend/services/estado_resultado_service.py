@@ -195,24 +195,47 @@ def procesar_estado_resultado(movimientos: List[Dict[str, Any]], cuentas: List[D
         if not categoria_principal or categoria_principal not in estructura:
             continue
 
+        # Mes del movimiento
+        fecha_mes = _mes_from_month_label(mov.get("date:month"))
+
+        # --- Nivel 1: Categoría Principal ---
         estructura[categoria_principal]["total"] += monto_eerr
+        
+        # --- Nivel 2: Subcategoría ---
         subcat = cat_ifrs_2 or "SIN CLASIFICAR"
         nivel2 = estructura[categoria_principal]["subcategorias"].setdefault(subcat, {
             "total": 0,
-            "subcategorias": {}
+            "subcategorias": {},
+            "montos_por_mes": {}  # NUEVO: Track mensual
         })
         nivel2["total"] += monto_eerr
+        
+        # Agregar monto mensual a subcategoría
+        if fecha_mes:
+            nivel2["montos_por_mes"][fecha_mes] = nivel2["montos_por_mes"].get(fecha_mes, 0) + monto_eerr
 
+        # --- Nivel 3: Sub-subcategoría o Cuentas ---
         if cat_ifrs_3:
             nivel3 = nivel2["subcategorias"].setdefault(cat_ifrs_3, {
                 "total": 0,
-                "cuentas": {}
+                "cuentas": {},
+                "montos_por_mes": {}  # NUEVO: Track mensual
             })
             nivel3["total"] += monto_eerr
+            
+            # Agregar monto mensual a nivel 3
+            if fecha_mes:
+                nivel3["montos_por_mes"][fecha_mes] = nivel3["montos_por_mes"].get(fecha_mes, 0) + monto_eerr
+            
+            # Cuenta individual con tracking mensual
             cuenta_label = f"{codigo} - {cuenta.get('name', '')}"
-            nivel3["cuentas"][cuenta_label] = nivel3["cuentas"].get(cuenta_label, 0) + monto_eerr
+            if cuenta_label not in nivel3["cuentas"]:
+                nivel3["cuentas"][cuenta_label] = {"total": 0, "montos_por_mes": {}}
+            nivel3["cuentas"][cuenta_label]["total"] += monto_eerr
+            if fecha_mes:
+                nivel3["cuentas"][cuenta_label]["montos_por_mes"][fecha_mes] = nivel3["cuentas"][cuenta_label]["montos_por_mes"].get(fecha_mes, 0) + monto_eerr
 
-        fecha_mes = _mes_from_month_label(mov.get("date:month"))
+        # --- Datos mensuales globales (por categoría principal) ---
         if fecha_mes:
             datos_mensuales.setdefault(fecha_mes, {cat: 0 for cat in estructura.keys()})
             datos_mensuales[fecha_mes][categoria_principal] += monto_eerr

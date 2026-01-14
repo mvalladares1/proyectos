@@ -40,94 +40,6 @@ if not username or not password:
 # Inicializar session state del módulo
 shared.init_session_state()
 
-# ============ CSS DARK THEME COMPLETO ============
-st.markdown("""
-<style>
-    /* === FORZAR TEMA OSCURO EN TODO === */
-    :root {
-        color-scheme: dark !important;
-    }
-    
-    /* Main App Container */
-    .stApp, [data-testid="stAppViewContainer"], .main, .block-container {
-        background-color: #0e1117 !important;
-        color: #fafafa !important;
-    }
-    
-    /* Header */
-    [data-testid="stHeader"], header {
-        background-color: #0e1117 !important;
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"], [data-testid="stSidebarContent"] {
-        background-color: #262730 !important;
-        color: #fafafa !important;
-    }
-    
-    /* ALL Text Elements */
-    h1, h2, h3, h4, h5, h6, p, span, label, div, li, td, th,
-    .stMarkdown, .stText, [data-testid="stMarkdownContainer"],
-    .stCaption, .stSubheader {
-        color: #fafafa !important;
-    }
-    
-    /* Tabs */
-    [data-testid="stTabs"] button, .stTabs button {
-        color: #fafafa !important;
-    }
-    [data-testid="stTabs"] button[aria-selected="true"] {
-        color: #3b82f6 !important;
-        border-bottom-color: #3b82f6 !important;
-    }
-    
-    /* Inputs, Selects, Dates */
-    input, textarea, select, [data-baseweb="input"], [data-baseweb="select"] {
-        background-color: #262730 !important;
-        color: #fafafa !important;
-        border-color: #4a4a5a !important;
-    }
-    
-    /* Buttons */
-    .stButton button {
-        background-color: #262730 !important;
-        color: #fafafa !important;
-        border-color: #4a4a5a !important;
-    }
-    .stButton button[kind="primary"] {
-        background-color: #3b82f6 !important;
-        color: #ffffff !important;
-    }
-    
-    /* Metrics */
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
-        color: #fafafa !important;
-    }
-    
-    /* Expanders */
-    [data-testid="stExpander"], .streamlit-expanderHeader {
-        background-color: #1a1c23 !important;
-        color: #fafafa !important;
-    }
-    
-    /* DataFrames */
-    .stDataFrame, [data-testid="stDataFrame"] {
-        background-color: #1a1c23 !important;
-    }
-    
-    /* Info/Warning/Error boxes */
-    .stAlert, [data-testid="stNotification"] {
-        color: #0e1117 !important;
-    }
-    
-    /* Radio buttons and checkboxes labels */
-    .stRadio label, .stCheckbox label {
-        color: #fafafa !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-
 # Título principal
 st.title("🏭 Dashboard de Producción")
 st.caption("Monitorea rendimientos productivos y detalle de órdenes de fabricación")
@@ -170,5 +82,3 @@ with tab_clasificacion_ui:
         tab_clasificacion.render(username, password)
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Clasificación'. Contacta al administrador.")
-
-

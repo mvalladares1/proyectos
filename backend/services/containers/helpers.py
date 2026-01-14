@@ -1,5 +1,5 @@
 """
-Funciones auxiliares y builders para el módulo de Containers.
+Funciones auxiliares y builders para el módulo de Pedidos de Venta.
 """
 from typing import List, Dict
 from backend.utils import get_name_from_relation

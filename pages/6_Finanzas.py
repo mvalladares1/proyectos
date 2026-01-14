@@ -17,11 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Importar módulos de tabs
 from finanzas import shared
-from finanzas import tab_agrupado
-from finanzas import tab_mensualizado
-from finanzas import tab_ytd
+from finanzas import tab_eerr  # Tab consolidado (reemplaza agrupado/mensualizado/ytd/detalle)
 from finanzas import tab_cg
-from finanzas import tab_detalle
 from finanzas import tab_flujo_caja
 
 # === CONFIGURACIÓN DE PÁGINA ===
@@ -45,12 +42,10 @@ if not username or not password:
 shared.init_session_state()
 
 # === PERMISOS POR TAB ===
-_perm_agrupado = tiene_acceso_pagina("finanzas", "agrupado")
-_perm_mensualizado = tiene_acceso_pagina("finanzas", "mensualizado")
-_perm_ytd = tiene_acceso_pagina("finanzas", "ytd")
+_perm_eerr = tiene_acceso_pagina("finanzas", "agrupado")  # Usa permiso agrupado como base
 _perm_cg = tiene_acceso_pagina("finanzas", "cg")
-_perm_detalle = tiene_acceso_pagina("finanzas", "detalle")
 _perm_flujo = tiene_acceso_pagina("finanzas", "flujo_caja")
+
 
 # === HEADER ===
 col_logo, col_title = st.columns([1, 4])
@@ -178,37 +173,19 @@ if datos:
         ppto_ytd = ppto.get("ytd", {}) if ppto else {}
         ppto_mensual = ppto.get("mensual", {}) if ppto else {}
         
-        # === TABS ===
-        tab_agrupado_ui, tab_mensualizado_ui, tab_ytd_ui, tab_cg_ui, tab_detalle_ui, tab_flujo_ui = st.tabs([
-            "📅 Agrupado", "💰 Mensualizado", "📊 YTD (Acumulado)", "📊 CG", "📋 Detalle", "💵 Flujo de Caja"
+        # === TABS (CONSOLIDADO - 3 TABS) ===
+        tab_eerr_ui, tab_cg_ui, tab_flujo_ui = st.tabs([
+            "📊 Estado de Resultados", "📁 Cuentas (CG)", "💵 Flujo de Caja"
         ])
         
-        with tab_agrupado_ui:
-            if not _perm_agrupado:
+        with tab_eerr_ui:
+            if not _perm_eerr:
                 st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
             else:
                 @st.fragment
-                def _frag_agrupado():
-                    tab_agrupado.render(datos_mensuales, ppto_mensual, meses_seleccionados, meses_opciones, año_seleccionado)
-                _frag_agrupado()
-        
-        with tab_mensualizado_ui:
-            if not _perm_mensualizado:
-                st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
-            else:
-                @st.fragment
-                def _frag_mensualizado():
-                    tab_mensualizado.render(datos_mensuales, ppto_mensual, meses_seleccionados, meses_opciones, año_seleccionado)
-                _frag_mensualizado()
-        
-        with tab_ytd_ui:
-            if not _perm_ytd:
-                st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
-            else:
-                @st.fragment
-                def _frag_ytd():
-                    tab_ytd.render(resultados, ppto_ytd, estructura)
-                _frag_ytd()
+                def _frag_eerr():
+                    tab_eerr.render(username, password)
+                _frag_eerr()
         
         with tab_cg_ui:
             if not _perm_cg:
@@ -218,15 +195,6 @@ if datos:
                 def _frag_cg():
                     tab_cg.render(estructura, fecha_inicio, fecha_fin, centro_seleccionado)
                 _frag_cg()
-        
-        with tab_detalle_ui:
-            if not _perm_detalle:
-                st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
-            else:
-                @st.fragment
-                def _frag_detalle():
-                    tab_detalle.render(estructura, ppto_ytd)
-                _frag_detalle()
         
         with tab_flujo_ui:
             if not _perm_flujo:

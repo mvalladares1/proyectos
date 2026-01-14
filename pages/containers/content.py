@@ -1,5 +1,5 @@
 """
-Contenido principal del dashboard de Containers.
+Contenido principal del dashboard de Pedidos de Venta.
 """
 import streamlit as st
 import pandas as pd
@@ -35,7 +35,7 @@ def render(username: str, password: str):
             "📅 Fecha Inicio",
             value=fecha_default_inicio,
             format="DD/MM/YYYY",
-            key="containers_fecha_inicio"
+            key="pedidos_venta_fecha_inicio"
         )
     
     with col_f2:
@@ -44,7 +44,7 @@ def render(username: str, password: str):
             "📅 Fecha Fin",
             value=hoy,
             format="DD/MM/YYYY",
-            key="containers_fecha_fin"
+            key="pedidos_venta_fecha_fin"
         )
     
     with col_f3:
@@ -52,7 +52,7 @@ def render(username: str, password: str):
         selected_state = st.selectbox(
             "📋 Estado del Pedido",
             options=list(STATE_OPTIONS.keys()),
-            key="containers_state_filter"
+            key="pedidos_venta_state_filter"
         )
     
     with col_f4:
@@ -68,8 +68,8 @@ def render(username: str, password: str):
     
     st.divider()
     
-    # Cargar datos al hacer click o primera vez
-    if cargar or "containers_data" not in st.session_state:
+    # Cargar datos SOLO al hacer click en el botón
+    if cargar:
         with st.spinner("🔄 Cargando containers..."):
             containers = fetch_containers(
                 username, 
@@ -79,13 +79,12 @@ def render(username: str, password: str):
                 state=STATE_OPTIONS[selected_state]
             )
             st.session_state["containers_data"] = containers
-            if cargar:
-                st.rerun()
+            st.rerun()
     
     containers = st.session_state.get("containers_data", [])
     
     if not containers:
-        st.info("📦 No hay containers con fabricaciones vinculadas en el período seleccionado.")
+        st.info("📦 No hay pedidos de venta con fabricaciones vinculadas en el período seleccionado.")
         return
     
     # === 1. KPIs ===
@@ -98,17 +97,22 @@ def render(username: str, password: str):
     
     st.divider()
     
-    # === 3. TOP 5 CONTAINERS (DETALLE) ===
+    # === 3. TOP 5 PEDIDOS (DETALLE) ===
     _render_top5(containers)
     
     st.divider()
     
-    # === 4. DETALLE ===
+    # === 4. VISTA DE TABLA COMPLETA ===
+    _render_table_view(containers)
+    
+    st.divider()
+    
+    # === 5. DETALLE INDIVIDUAL ===
     _render_detail(containers, username, password)
     
     # Footer
     st.divider()
-    st.caption("Rio Futuro - Sistema de Gestión de Containers y Producción")
+    st.caption("Rio Futuro - Sistema de Gestión de Pedidos de Venta y Producción")
 
 
 def _render_kpis(containers):
@@ -125,17 +129,50 @@ def _render_kpis(containers):
     completados = len([c for c in containers if c.get("avance_pct", 0) >= 100])
     sin_iniciar = len([c for c in containers if c.get("avance_pct", 0) == 0])
     
+    # Métricas de pedidos
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Containers", total_containers, help="Pedidos con fabricaciones")
+    col1.metric("Total Pedidos", total_containers, help="Pedidos con fabricaciones")
     col2.metric("En Producción", en_progreso, help="Avance entre 0% y 100%")
     col3.metric("Completados", completados, help="Avance >= 100%")
     col4.metric("Sin Iniciar", sin_iniciar, help="Avance = 0%")
     
+    # Métricas de producción
     col5, col6, col7, col8 = st.columns(4)
     col5.metric("Avance Global", f"{avance_global:.1f}%", help="% de producción completado")
     col6.metric("KG Totales", f"{total_kg:,.0f}", help="Total de kg pedidos")
     col7.metric("KG Producidos", f"{total_producidos:,.0f}", help="KG ya fabricados")
     col8.metric("KG Pendientes", f"{pendientes:,.0f}", help="KG por producir", delta_color="inverse")
+    
+    # Métricas adicionales
+    st.markdown("---")
+    col9, col10, col11, col12 = st.columns(4)
+    
+    # Número de clientes únicos
+    clientes_unicos = len(set([c.get('partner_name', 'N/A') for c in containers]))
+    col9.metric("Clientes Activos", clientes_unicos, help="Clientes con pedidos en período")
+    
+    # Monto total
+    monto_total = sum([c.get("amount_total", 0) for c in containers])
+    col10.metric("Monto Total", f"${monto_total:,.0f}", help="Suma de todos los pedidos")
+    
+    # Promedio de ODFs por pedido
+    total_odfs = sum([c.get("num_fabricaciones", 0) for c in containers])
+    avg_odfs = total_odfs / total_containers if total_containers > 0 else 0
+    col11.metric("Total ODFs", total_odfs, help=f"Promedio: {avg_odfs:.1f} ODFs/pedido")
+    
+    # Pedidos urgentes (menos de 7 días)
+    urgentes = 0
+    for c in containers:
+        date_order = c.get('date_order', '')
+        if date_order:
+            try:
+                fecha_limite = datetime.strptime(date_order[:10], '%Y-%m-%d').date()
+                dias = (fecha_limite - datetime.now().date()).days
+                if dias < 7 and c.get('avance_pct', 0) < 100:
+                    urgentes += 1
+            except:
+                pass
+    col12.metric("⚠️ Urgentes", urgentes, help="Pedidos con menos de 7 días y no completados")
 
 
 def _render_charts(containers):
@@ -241,10 +278,41 @@ def _render_charts(containers):
 
 
 def _render_top5(containers):
-    """Renderiza el detalle Top 5 Containers."""
-    st.subheader("🏆 Top 5 Containers (Detalle)")
+    """Renderiza el detalle Top 5 Pedidos (con opción de ver diferentes rankings)."""
+    st.subheader("🏆 Top 5 Pedidos")
     
-    containers_top5 = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:5]
+    # Selector de criterio de ranking
+    col_rank1, col_rank2 = st.columns([3, 3])
+    with col_rank1:
+        ranking_criterio = st.selectbox(
+            "Criterio de ranking:",
+            options=["Mayor Avance", "Mayor KG Total", "Más Urgentes", "Mayor Monto", "Menor Avance"],
+            index=0
+        )
+    
+    # Ordenar según criterio
+    if ranking_criterio == "Mayor Avance":
+        containers_top5 = sorted(containers, key=lambda x: x.get("avance_pct", 0), reverse=True)[:5]
+    elif ranking_criterio == "Mayor KG Total":
+        containers_top5 = sorted(containers, key=lambda x: x.get("kg_total", 0), reverse=True)[:5]
+    elif ranking_criterio == "Mayor Monto":
+        containers_top5 = sorted(containers, key=lambda x: x.get("amount_total", 0), reverse=True)[:5]
+    elif ranking_criterio == "Menor Avance":
+        containers_top5 = sorted(containers, key=lambda x: x.get("avance_pct", 0))[:5]
+    else:  # Más Urgentes
+        # Calcular urgencia (días restantes)
+        containers_with_urgency = []
+        for c in containers:
+            date_order = c.get('date_order', '')
+            dias = 999
+            if date_order:
+                try:
+                    fecha_limite = datetime.strptime(date_order[:10], '%Y-%m-%d').date()
+                    dias = (fecha_limite - datetime.now().date()).days
+                except:
+                    pass
+            containers_with_urgency.append((c, dias))
+        containers_top5 = [c for c, dias in sorted(containers_with_urgency, key=lambda x: x[1])[:5]]
     
     for i, c in enumerate(containers_top5, 1):
         avance = c.get("avance_pct", 0)
@@ -254,6 +322,8 @@ def _render_top5(containers):
         kg_total = c.get("kg_total", 0)
         date_order = c.get("date_order", "")
         productions = c.get("productions", [])
+        monto = c.get("amount_total", 0)
+        estado = c.get("state", "")
         
         # Color de fecha
         date_color, date_emoji, _ = get_date_urgency_color(date_order)
@@ -261,19 +331,30 @@ def _render_top5(containers):
         
         with st.container(border=True):
             # Header con link a Odoo
-            col_num, col_info = st.columns([1, 5])
+            col_num, col_info, col_monto = st.columns([1, 4, 2])
             with col_num:
                 st.markdown(f"### #{i}")
             with col_info:
                 odoo_link = get_odoo_link("sale.order", container_id)
                 st.markdown(f"**[🔗 {container_name}]({odoo_link})**")
-                st.caption(f"{c.get('partner_name', 'N/A')}")
+                st.caption(f"👥 {c.get('partner_name', 'N/A')} | 📋 {get_sale_state_display(estado)}")
+            with col_monto:
+                st.metric("💰 Monto", f"${monto:,.0f}")
             
-            # Fecha límite con color
-            st.markdown(f"📅 **Fecha Límite:** <span style='color:{date_color}'>{date_display}</span>", unsafe_allow_html=True)
+            # Info adicional en columnas
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                st.markdown(f"📅 **Fecha Límite:** <span style='color:{date_color}'>{date_display}</span>", unsafe_allow_html=True)
+            with col_b:
+                st.markdown(f"⚖️ **Producción:** {kg_prod:,.0f} / {kg_total:,.0f} kg ({avance:.1f}%)")
+            with col_c:
+                st.markdown(f"🏭 **ODFs:** {len(productions)} fabricaciones")
             
-            # KG breakdown
-            st.markdown(f"⚖️ **{kg_prod:,.0f}** / {kg_total:,.0f} kg ({avance:.1f}%)")
+            # PO Cliente si existe
+            if c.get('origin'):
+                st.caption(f"📄 PO Cliente: {c.get('origin', 'N/A')}")
+            
+            st.markdown("---")
             
             # Barra de progreso con ODFs apiladas
             if productions and kg_total > 0:
@@ -341,18 +422,186 @@ def _render_top5(containers):
 
 
 
-def _render_detail(containers, username, password):
-    """Renderiza el detalle del container seleccionado."""
-    st.subheader("🔍 Detalle de Containers")
+def _render_table_view(containers):
+    """Renderiza vista de tabla completa con todos los pedidos de venta."""
+    st.subheader("📋 Vista de Tabla - Todos los Pedidos")
     
+    # Preparar datos para tabla
+    table_data = []
+    for c in containers:
+        # Calcular días hasta fecha límite
+        date_order = c.get('date_order', '')
+        dias_restantes = "N/A"
+        if date_order:
+            try:
+                fecha_limite = datetime.strptime(date_order[:10], '%Y-%m-%d').date()
+                dias = (fecha_limite - datetime.now().date()).days
+                dias_restantes = dias
+            except:
+                pass
+        
+        table_data.append({
+            "Pedido": c.get('name', 'N/A'),
+            "Cliente": c.get('partner_name', 'N/A'),
+            "PO Cliente": c.get('origin', 'N/A')[:20],
+            "Estado": get_sale_state_display(c.get('state', '')),
+            "Fecha Límite": date_order[:10] if date_order else "N/A",
+            "Días Restantes": dias_restantes,
+            "KG Total": c.get('kg_total', 0),
+            "KG Producido": c.get('kg_producidos', 0),
+            "KG Pendiente": c.get('kg_disponibles', 0),
+            "Avance %": c.get('avance_pct', 0),
+            "# ODFs": c.get('num_fabricaciones', 0),
+            "Monto Total": c.get('amount_total', 0),
+            "Producto Principal": c.get('producto_principal', 'N/A')[:30]
+        })
+    
+    df = pd.DataFrame(table_data)
+    
+    # Configurar display
+    if not df.empty:
+        # Formatear columnas numéricas
+        df_display = df.copy()
+        df_display['KG Total'] = df_display['KG Total'].apply(lambda x: f"{x:,.0f}")
+        df_display['KG Producido'] = df_display['KG Producido'].apply(lambda x: f"{x:,.0f}")
+        df_display['KG Pendiente'] = df_display['KG Pendiente'].apply(lambda x: f"{x:,.0f}")
+        df_display['Avance %'] = df_display['Avance %'].apply(lambda x: f"{x:.1f}%")
+        df_display['Monto Total'] = df_display['Monto Total'].apply(lambda x: f"${x:,.0f}")
+        
+        # Mostrar tabla con estilo
+        st.dataframe(
+            df_display,
+            use_container_width=True,
+            height=400,
+            hide_index=True,
+            column_config={
+                "Pedido": st.column_config.TextColumn("Pedido", width="small"),
+                "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
+                "PO Cliente": st.column_config.TextColumn("PO Cliente", width="small"),
+                "Estado": st.column_config.TextColumn("Estado", width="small"),
+                "Fecha Límite": st.column_config.TextColumn("Fecha Límite", width="small"),
+                "Días Restantes": st.column_config.NumberColumn("Días", width="small"),
+                "Avance %": st.column_config.TextColumn("Avance %", width="small"),
+                "# ODFs": st.column_config.NumberColumn("ODFs", width="small"),
+            }
+        )
+        
+        # Opciones de descarga y análisis
+        col_d1, col_d2, col_d3 = st.columns([2, 2, 2])
+        
+        with col_d1:
+            # Descarga CSV
+            csv = df.to_csv(index=False)
+            st.download_button(
+                "📥 Descargar CSV",
+                csv,
+                f"pedidos_venta_{datetime.now().strftime('%Y%m%d')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+        
+        with col_d2:
+            # Estadísticas rápidas
+            st.metric("Total Registros", len(df))
+        
+        with col_d3:
+            # Promedio de avance
+            avg_avance = df['Avance %'].mean() if 'Avance %' in df.columns else 0
+            st.metric("Avance Promedio", f"{avg_avance:.1f}%")
+        
+        # Análisis por cliente
+        with st.expander("📊 Análisis por Cliente", expanded=False):
+            cliente_stats = df.groupby('Cliente').agg({
+                'Pedido': 'count',
+                'KG Total': 'sum',
+                'KG Producido': 'sum',
+                'Avance %': 'mean',
+                'Monto Total': 'sum'
+            }).reset_index()
+            
+            cliente_stats.columns = ['Cliente', 'Cant. Pedidos', 'KG Total', 'KG Producido', 'Avance Prom %', 'Monto Total']
+            cliente_stats = cliente_stats.sort_values('KG Total', ascending=False)
+            
+            # Formatear
+            cliente_stats['KG Total'] = cliente_stats['KG Total'].apply(lambda x: f"{x:,.0f}")
+            cliente_stats['KG Producido'] = cliente_stats['KG Producido'].apply(lambda x: f"{x:,.0f}")
+            cliente_stats['Avance Prom %'] = cliente_stats['Avance Prom %'].apply(lambda x: f"{x:.1f}%")
+            cliente_stats['Monto Total'] = cliente_stats['Monto Total'].apply(lambda x: f"${x:,.0f}")
+            
+            st.dataframe(cliente_stats, use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay datos para mostrar")
+
+
+def _render_detail(containers, username, password):
+    """Renderiza el detalle del pedido de venta seleccionado con filtros mejorados."""
+    st.subheader("🔍 Detalle de Pedidos de Venta")
+    
+    # FILTROS INTELIGENTES
+    col_f1, col_f2, col_f3 = st.columns([2, 2, 2])
+    
+    with col_f1:
+        # Filtro por cliente
+        clientes = sorted(set([c['partner_name'] for c in containers]))
+        cliente_filter = st.multiselect(
+            "👥 Filtrar por Cliente",
+            options=clientes,
+            default=None,
+            placeholder="Todos los clientes"
+        )
+    
+    with col_f2:
+        # Filtro por estado de avance
+        avance_filter = st.selectbox(
+            "📊 Estado de Avance",
+            options=["Todos", "Sin Iniciar (0%)", "En Proceso (1-99%)", "Completados (100%)"],
+            index=0
+        )
+    
+    with col_f3:
+        # Búsqueda por texto
+        search_text = st.text_input(
+            "🔍 Buscar por Nombre/PO",
+            placeholder="Ej: S00687, PO N°2574..."
+        )
+    
+    # Aplicar filtros
+    containers_filtered = containers.copy()
+    
+    if cliente_filter:
+        containers_filtered = [c for c in containers_filtered if c['partner_name'] in cliente_filter]
+    
+    if avance_filter == "Sin Iniciar (0%)":
+        containers_filtered = [c for c in containers_filtered if c.get('avance_pct', 0) == 0]
+    elif avance_filter == "En Proceso (1-99%)":
+        containers_filtered = [c for c in containers_filtered if 0 < c.get('avance_pct', 0) < 100]
+    elif avance_filter == "Completados (100%)":
+        containers_filtered = [c for c in containers_filtered if c.get('avance_pct', 0) >= 100]
+    
+    if search_text:
+        search_lower = search_text.lower()
+        containers_filtered = [
+            c for c in containers_filtered 
+            if search_lower in c.get('name', '').lower() 
+            or search_lower in c.get('origin', '').lower()
+        ]
+    
+    st.caption(f"📦 Mostrando {len(containers_filtered)} de {len(containers)} pedidos")
+    
+    if not containers_filtered:
+        st.warning("No hay pedidos que coincidan con los filtros seleccionados")
+        return
+    
+    # Selector mejorado con opciones limitadas
     container_options = {
         f"{c['name']} - {c['partner_name']} ({c['avance_pct']:.1f}%)": c
-        for c in sorted(containers, key=lambda x: x.get("name", ""))
+        for c in sorted(containers_filtered, key=lambda x: x.get("name", ""))
     }
     
     selected_key = st.selectbox(
-        "Seleccionar container:",
-        options=list(container_options.keys())
+        "Seleccionar pedido de venta:",
+        options=list(container_options.keys()),
+        help=f"Mostrando {len(container_options)} pedidos filtrados"
     )
     
     if not selected_key:

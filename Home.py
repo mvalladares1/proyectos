@@ -65,7 +65,7 @@ if is_user_authenticated():
             st.Page("pages/2_Produccion.py", title="Producción", icon="🏭"),
             st.Page("pages/3_Bandejas.py", title="Bandejas", icon="📊"),
             st.Page("pages/4_Stock.py", title="Stock", icon="📦"),
-            st.Page("pages/5_Containers.py", title="Containers", icon="🚢"),
+            st.Page("pages/5_Pedidos_Venta.py", title="Pedidos de Venta", icon="🚢"),
             st.Page("pages/7_Rendimiento.py", title="Trazabilidad", icon="🔍"),
             st.Page("pages/11_Relacion_Comercial.py", title="Relación Comercial", icon="🤝"),
             st.Page("pages/10_Automatizaciones.py", title="Automatizaciones", icon="🦾"),
