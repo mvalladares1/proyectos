@@ -102,60 +102,43 @@ def render(username: str, password: str):
         # Botón consultar
         consultar = st.button("🔍 Consultar Clasificación", use_container_width=True, type="primary")
     
-    # --- CSS PREMIUM (Fondo Blanco y Diseño Limpio) ---
+    # --- CSS PREMIUM (Compatible con Dark Theme) ---
     st.markdown("""
     <style>
-        /* Fondo blanco para toda la página */
-        [data-testid="stAppViewContainer"] {
-            background-color: #ffffff;
-            color: #1a1a1a;
-        }
-        [data-testid="stHeader"] {
-            background-color: rgba(255, 255, 255, 0.8);
-        }
-        [data-testid="stSidebar"] {
-            background-color: #f8f9fa;
-        }
-
         .premium-card {
-            background: #ffffff;
+            background: #1e293b;
             padding: 0.8rem;
             border-radius: 12px;
             text-align: center;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid #334155;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             margin-bottom: 0.5rem;
             transition: transform 0.2s ease;
         }
         .premium-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
         .premium-value {
             font-size: 1.2rem;
             font-weight: 800;
             margin: 0.1rem 0;
-            color: #2c3e50;
+            color: #ffffff;
         }
         .premium-label {
             font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            color: #7f8c8d;
+            color: #cbd5e1;
         }
         .po-container {
-            background: #f8f9fa;
+            background: #1e293b;
             border-radius: 10px;
             padding: 1rem;
-            border: 1px solid #e0e0e0;
+            border: 1px solid #334155;
             border-left: 5px solid #3498db;
             margin-top: 1rem;
-        }
-        
-        /* Ajustar títulos */
-        h1, h2, h3, h4, h5, h6 {
-            color: #2c3e50 !important;
         }
     </style>
     """, unsafe_allow_html=True)

@@ -68,8 +68,8 @@ def render(username: str, password: str):
     
     st.divider()
     
-    # Cargar datos al hacer click o primera vez
-    if cargar or "containers_data" not in st.session_state:
+    # Cargar datos SOLO al hacer click en el botón
+    if cargar:
         with st.spinner("🔄 Cargando containers..."):
             containers = fetch_containers(
                 username, 
@@ -79,8 +79,7 @@ def render(username: str, password: str):
                 state=STATE_OPTIONS[selected_state]
             )
             st.session_state["containers_data"] = containers
-            if cargar:
-                st.rerun()
+            st.rerun()
     
     containers = st.session_state.get("containers_data", [])
     
