@@ -6,6 +6,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
+from typing import Optional
 
 # Determinar API_URL basado en ENV
 ENV = os.getenv("ENV", "production")
@@ -50,7 +51,15 @@ def get_trazabilidad_inversa(username: str, password: str, lote_pt: str):
         return {"error": str(e)}
 
 
-def get_sankey_data(username: str, password: str, fecha_inicio: str, fecha_fin: str, limit: int = 30):
+def get_sankey_data(
+    username: str,
+    password: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    limit: int = 30,
+    partner_id: Optional[int] = None,
+    producer_id: Optional[int] = None,
+):
     """Obtiene datos para diagrama Sankey."""
     try:
         params = {
@@ -60,6 +69,10 @@ def get_sankey_data(username: str, password: str, fecha_inicio: str, fecha_fin: 
             "end_date": fecha_fin,
             "limit": limit
         }
+        if partner_id:
+            params["partner_id"] = partner_id
+        if producer_id:
+            params["producer_id"] = producer_id
         resp = requests.get(
             f"{API_URL}/api/v1/containers/sankey",
             params=params,
@@ -71,6 +84,55 @@ def get_sankey_data(username: str, password: str, fecha_inicio: str, fecha_fin: 
     except Exception as e:
         st.error(f"Error: {str(e)}")
         return None
+
+
+@st.cache_data(ttl=300)
+def get_sankey_producers(
+    username: str,
+    password: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    partner_id: Optional[int] = None,
+    limit: int = 50,
+):
+    """Lista productores disponibles (desde pallets IN) para el rango/cliente."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "start_date": fecha_inicio,
+            "end_date": fecha_fin,
+            "limit": limit
+        }
+        if partner_id:
+            params["partner_id"] = partner_id
+        resp = requests.get(
+            f"{API_URL}/api/v1/containers/sankey/producers",
+            params=params,
+            timeout=120
+        )
+        if resp.status_code == 200:
+            return resp.json() or []
+        return []
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=600)
+def get_container_partners(username: str, password: str):
+    """Lista clientes (partners) que tienen pedidos con fabricaciones."""
+    try:
+        params = {"username": username, "password": password}
+        resp = requests.get(
+            f"{API_URL}/api/v1/containers/partners/list",
+            params=params,
+            timeout=60
+        )
+        if resp.status_code == 200:
+            return resp.json() or []
+        return []
+    except Exception:
+        return []
 
 
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):

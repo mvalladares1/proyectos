@@ -70,6 +70,8 @@ async def get_sankey_data(
     password: str = Query(..., description="API Key Odoo"),
     start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro containers)"),
+    producer_id: Optional[int] = Query(None, description="ID del productor (filtro pallets IN)"),
     limit: int = Query(50, description="Número máximo de containers")
 ):
     """
@@ -78,7 +80,35 @@ async def get_sankey_data(
     """
     try:
         service = ContainersService(username=username, password=password)
-        return service.get_sankey_data(start_date=start_date, end_date=end_date, limit=limit)
+        return service.get_sankey_data(
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            partner_id=partner_id,
+            producer_id=producer_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sankey/producers")
+async def get_sankey_producers(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro containers)"),
+    limit: int = Query(50, description="Número máximo de containers")
+):
+    """Obtiene productores disponibles (desde pallets IN) para poblar filtros del Sankey."""
+    try:
+        service = ContainersService(username=username, password=password)
+        return service.get_sankey_producers(
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            partner_id=partner_id,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
