@@ -41,10 +41,10 @@ if not username or not password:
 shared.init_session_state()
 
 # CSS Global Forzado (Dark Mode)
-# CSS Global Forzado (Dark Mode) - INLINED to avoid cache issues
+# CSS Global Forzado (Dark Mode) - INLINED with High Specificity
 st.markdown("""
 <style>
-    /* Force Dark Theme Main Colors */
+    /* ============ FORCE DARK THEME MAIN CONTAINERS ============ */
     [data-testid="stAppViewContainer"] { 
         background-color: #0e1117 !important; 
         color: #ffffff !important;
@@ -56,13 +56,45 @@ st.markdown("""
         background-color: #262730 !important; 
         color: #ffffff !important;
     }
-    
-    /* Text Colors */
-    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown, .stCaption {
+
+    /* ============ TEXT COLOR OVERRIDES ============ */
+    /* Target all headers specifically */
+    h1, h2, h3, h4, h5, h6, .stHeading, [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3 {
         color: #ffffff !important;
     }
     
-    /* Standard Card Style */
+    /* Target regular text and labels */
+    p, label, span, div, .stMarkdown, .stCaption, [data-testid="stMarkdownContainer"] p {
+        color: #ffffff !important;
+    }
+
+    /* Target specific Streamlit components that often default to grey */
+    [data-testid="stMetricLabel"] {
+        color: #cbd5e1 !important; /* Lighter grey for metric label to distinguish from value */
+    }
+    [data-testid="stMetricValue"] {
+        color: #ffffff !important;
+    }
+    
+    /* Input Labels */
+    .stTextInput label, .stSelectbox label, .stDateInput label, .stNumberInput label {
+        color: #ffffff !important;
+    }
+
+    /* ============ WIDGET STYLING ============ */
+    .stTextInput input, .stSelectbox [data-baseweb="select"], .stDateInput input, .stNumberInput input {
+        color: #ffffff !important; 
+        background-color: #1a1c23 !important;
+        border-color: #334155 !important;
+    }
+    
+    /* Dropdown text fix */
+    ul[data-baseweb="menu"] li {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+    }
+
+    /* ============ CARDS ============ */
     .info-card {
         background-color: #1e293b;
         padding: 20px;
@@ -70,13 +102,6 @@ st.markdown("""
         border: 1px solid #334155;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
-    }
-    
-    /* Inputs */
-    .stTextInput input, .stSelectbox, .stDateInput input, .stNumberInput input {
-        color: #ffffff !important; 
-        background-color: #1a1c23 !important;
-        border-color: #334155 !important;
     }
     
     /* Tabs */

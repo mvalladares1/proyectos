@@ -461,17 +461,28 @@ class RevertirConsumoService:
         
         # Crear un move por cada componente
         for comp in componentes:
-            # Obtener la UoM del producto
+            # Obtener la UoM del producto desde product.template
             product_info = self.odoo.search_read(
                 "product.product",
                 [("id", "=", comp["product_id"])],
-                ["uom_id"]
+                ["product_tmpl_id"]
             )
             
             if not product_info:
                 raise ValueError(f"Producto {comp['product_id']} no encontrado")
             
-            product_uom_id = product_info[0]["uom_id"][0]
+            # Obtener UoM desde el template
+            template_id = product_info[0]["product_tmpl_id"][0]
+            template_info = self.odoo.search_read(
+                "product.template",
+                [("id", "=", template_id)],
+                ["uom_id"]
+            )
+            
+            if not template_info:
+                raise ValueError(f"Template {template_id} no encontrado")
+            
+            product_uom_id = template_info[0]["uom_id"][0]
             
             move_vals = {
                 "name": f"Recuperar {comp['paquete']}",
@@ -605,17 +616,28 @@ class RevertirConsumoService:
         
         picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
         
-        # Obtener la UoM del producto
+        # Obtener la UoM del producto desde product.template
         product_info = self.odoo.search_read(
             "product.product",
             [("id", "=", product_id)],
-            ["uom_id"]
+            ["product_tmpl_id"]
         )
         
         if not product_info:
             raise ValueError(f"Producto {product_id} no encontrado")
         
-        product_uom_id = product_info[0]["uom_id"][0]
+        # Obtener UoM desde el template
+        template_id = product_info[0]["product_tmpl_id"][0]
+        template_info = self.odoo.search_read(
+            "product.template",
+            [("id", "=", template_id)],
+            ["uom_id"]
+        )
+        
+        if not template_info:
+            raise ValueError(f"Template {template_id} no encontrado")
+        
+        product_uom_id = template_info[0]["uom_id"][0]
         
         # Crear move
         move_vals = {
