@@ -261,11 +261,9 @@ class RevertirConsumoService:
                     "cantidad_actual": ml["qty_done"],
                     "ubicacion": ubicacion_name,
                     "move_line_id": ml["id"]  # Importante para poder actualizarlo después
-            # Si ya tiene la cantidad esperada (con margen de 0.01), no necesita transferencia
-        if abs(cantidad_actual - cantidad_esperada) < 0.01:
-            return False
+                })
         
-        return True  # Tiene stock pero no la cantidad correcta
+        return resultado
     
     def _analizar_subproductos(self, mo_id: int) -> Dict:
         """
