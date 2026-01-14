@@ -58,6 +58,7 @@
     "automatizaciones.crear_orden": [],
     "automatizaciones.monitor_ordenes": [],
     "automatizaciones.movimientos": [],
+    "automatizaciones.monitor_movimientos": [],
     "rendimiento.trazabilidad_pallets": [],
     "rendimiento.diagrama_sankey": []
   },
