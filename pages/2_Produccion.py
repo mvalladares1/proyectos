@@ -125,6 +125,47 @@ st.markdown("""
         color: #fafafa !important;
     }
 </style>
+
+<script>
+    // Forzar tema oscuro DESPUÉS de que Streamlit cargue
+    function enforceDarkTheme() {
+        const appContainer = document.querySelector('[data-testid="stAppViewContainer"]');
+        if (appContainer) {
+            appContainer.style.setProperty('background-color', '#0e1117', 'important');
+            appContainer.style.setProperty('color', '#fafafa', 'important');
+        }
+        const stApp = document.querySelector('.stApp');
+        if (stApp) {
+            stApp.style.setProperty('background-color', '#0e1117', 'important');
+        }
+        const header = document.querySelector('[data-testid="stHeader"]');
+        if (header) {
+            header.style.setProperty('background-color', '#0e1117', 'important');
+        }
+        const sidebar = document.querySelector('[data-testid="stSidebar"]');
+        if (sidebar) {
+            sidebar.style.setProperty('background-color', '#262730', 'important');
+        }
+        // Forzar texto blanco en todos los elementos visibles
+        document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,label').forEach(el => {
+            el.style.setProperty('color', '#fafafa', 'important');
+        });
+    }
+    
+    // Ejecutar inmediatamente
+    enforceDarkTheme();
+    
+    // Ejecutar después de que el DOM esté listo
+    document.addEventListener('DOMContentLoaded', enforceDarkTheme);
+    
+    // Ejecutar cada 500ms durante 5 segundos para capturar renders tardíos
+    let counter = 0;
+    const interval = setInterval(() => {
+        enforceDarkTheme();
+        counter++;
+        if (counter >= 10) clearInterval(interval);
+    }, 500);
+</script>
 """, unsafe_allow_html=True)
 
 
