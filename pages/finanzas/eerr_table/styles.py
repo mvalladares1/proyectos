@@ -1,6 +1,6 @@
 """
 Estilos CSS para la tabla de Estado de Resultados expandible.
-Basado en el diseño de Flujo de Caja con columna frozen y filas expandibles.
+Texto blanco, sin colores, alineado.
 """
 
 EERR_CSS = """
@@ -20,6 +20,7 @@ EERR_CSS = """
         border-spacing: 0;
         font-size: 13px;
         font-family: 'Inter', -apple-system, sans-serif;
+        color: #e2e8f0;
     }
     
     .eerr-table th,
@@ -28,6 +29,7 @@ EERR_CSS = """
         text-align: right;
         border-bottom: 1px solid #1e293b;
         white-space: nowrap;
+        color: #e2e8f0;
     }
     
     .eerr-table th {
@@ -49,7 +51,7 @@ EERR_CSS = """
         background: #0f172a;
         text-align: left;
         min-width: 280px;
-        max-width: 320px;
+        max-width: 360px;
         z-index: 5;
         border-right: 2px solid #334155;
     }
@@ -59,22 +61,10 @@ EERR_CSS = """
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
     }
     
-    /* Filas de datos */
-    .eerr-table .data-row {
-        background: #0f172a;
-        color: #e2e8f0;
-        transition: background 0.15s ease;
-    }
-    
-    .eerr-table .data-row:hover {
-        background: #1e293b;
-    }
-    
     /* Filas de categoría principal (nivel 1) */
     .eerr-table .cat-row {
         background: #1e293b;
         font-weight: 600;
-        color: #f1f5f9;
         cursor: pointer;
     }
     
@@ -85,47 +75,42 @@ EERR_CSS = """
     /* Filas de subcategoría (nivel 2) */
     .eerr-table .subcat-row {
         background: #172231;
-        color: #cbd5e1;
         font-size: 12px;
     }
     
-    .eerr-table .subcat-row .frozen {
-        padding-left: 28px;
+    .eerr-table .level-2 {
+        padding-left: 28px !important;
     }
     
     /* Filas de cuenta (nivel 3) */
     .eerr-table .cuenta-row {
         background: #0f1a27;
-        color: #94a3b8;
         font-size: 11px;
     }
     
-    .eerr-table .cuenta-row .frozen {
-        padding-left: 48px;
+    .eerr-table .level-3 {
+        padding-left: 48px !important;
+    }
+    
+    .eerr-table .level-4 {
+        padding-left: 68px !important;
     }
     
     /* Filas de subtotal calculado */
     .eerr-table .subtotal-row {
         background: linear-gradient(90deg, #1e3a5f 0%, #1e293b 100%);
         font-weight: 700;
-        color: #60a5fa;
         border-top: 1px solid #3b82f6;
-        border-bottom: 2px solid #3b82f6;
+        border-bottom: 1px solid #3b82f6;
     }
     
     /* Fila de total final */
     .eerr-table .total-row {
         background: linear-gradient(90deg, #064e3b 0%, #0f172a 100%);
         font-weight: 800;
-        color: #10b981;
         font-size: 14px;
         border-top: 2px solid #10b981;
     }
-    
-    /* Valores positivos/negativos */
-    .val-positive { color: #10b981; }
-    .val-negative { color: #ef4444; }
-    .val-zero { color: #6b7280; }
     
     /* Icono de expansión */
     .expand-icon {
@@ -167,38 +152,6 @@ EERR_CSS = """
         vertical-align: middle;
     }
     
-    /* Tooltip */
-    .eerr-tooltip {
-        position: relative;
-        display: inline-block;
-    }
-    
-    .eerr-tooltip .tooltip-text {
-        visibility: hidden;
-        width: 200px;
-        background: #1e293b;
-        color: #e2e8f0;
-        text-align: left;
-        border-radius: 8px;
-        padding: 10px;
-        position: absolute;
-        z-index: 100;
-        bottom: 125%;
-        left: 50%;
-        transform: translateX(-50%);
-        opacity: 0;
-        transition: opacity 0.2s;
-        font-size: 11px;
-        line-height: 1.4;
-        border: 1px solid #334155;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    
-    .eerr-tooltip:hover .tooltip-text {
-        visibility: visible;
-        opacity: 1;
-    }
-    
     /* Responsive */
     @media (max-width: 768px) {
         .eerr-table .frozen {
@@ -214,7 +167,6 @@ EERR_CSS = """
 
 EERR_JS = """
 <script>
-    // Toggle expansión de filas
     function toggleEerrRow(rowId) {
         const icon = document.querySelector(`[data-row-id="${rowId}"] .expand-icon`);
         const childRows = document.querySelectorAll(`.child-of-${rowId}`);
@@ -225,28 +177,6 @@ EERR_JS = """
         
         childRows.forEach(row => {
             row.classList.toggle('hidden-row');
-        });
-    }
-    
-    // Expandir/Colapsar todos
-    function toggleAllEerr(expand) {
-        const icons = document.querySelectorAll('.expand-icon');
-        const hiddenRows = document.querySelectorAll('.eerr-table tr[class*="child-of-"]');
-        
-        icons.forEach(icon => {
-            if (expand) {
-                icon.classList.add('expanded');
-            } else {
-                icon.classList.remove('expanded');
-            }
-        });
-        
-        hiddenRows.forEach(row => {
-            if (expand) {
-                row.classList.remove('hidden-row');
-            } else {
-                row.classList.add('hidden-row');
-            }
         });
     }
 </script>
