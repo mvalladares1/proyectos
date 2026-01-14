@@ -1,5 +1,5 @@
 """
-Módulo compartido para Containers.
+Módulo compartido para Pedidos de Venta.
 Contiene funciones API y utilidades.
 """
 import streamlit as st

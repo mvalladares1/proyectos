@@ -1,5 +1,5 @@
 """
-Constantes para el módulo de Containers.
+Constantes para el módulo de Pedidos de Venta.
 """
 
 # Mapeo de estados técnicos a texto legible

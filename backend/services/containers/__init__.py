@@ -1,5 +1,5 @@
 """
-Módulo de Containers/Ventas.
+Módulo de Pedidos de Venta.
 """
 from .service import ContainersService
 

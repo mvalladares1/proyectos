@@ -1,5 +1,5 @@
 """
-Servicio para gestión de Ventas/Containers y su seguimiento de producción
+Servicio para gestión de Pedidos de Venta y su seguimiento de producción
 OPTIMIZADO: Parte desde fabricaciones con PO asociada para evitar consultas lentas
 Código original del dashboard funcional
 """
@@ -9,7 +9,7 @@ from backend.utils import clean_record, get_name_from_relation, get_state_displa
 
 
 class ContainersService:
-    """Servicio para operaciones de Ventas (Containers) y seguimiento de fabricación"""
+    """Servicio para operaciones de Pedidos de Venta y seguimiento de fabricación"""
 
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
@@ -20,7 +20,7 @@ class ContainersService:
                        partner_id: Optional[int] = None,
                        state: Optional[str] = None) -> List[Dict]:
         """
-        Obtiene lista de ventas/containers con su avance de producción.
+        Obtiene lista de pedidos de venta con su avance de producción.
         OPTIMIZADO: Busca desde fabricaciones que tienen x_studio_po_asociada_1
         """
         # PASO 1: Buscar TODAS las fabricaciones que tienen una PO asociada
@@ -441,7 +441,7 @@ class ContainersService:
             return []
 
     def get_containers_summary(self) -> Dict:
-        """Obtiene resumen global de containers para KPIs"""
+        """Obtiene resumen global de pedidos de venta para KPIs"""
         containers = self.get_containers()
         
         total_containers = len(containers)

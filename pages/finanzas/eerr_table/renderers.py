@@ -149,6 +149,7 @@ def render_eerr_table(
             for subcat_nombre, subcat_data in sorted(subcats.items()):
                 subcat_total = subcat_data.get("total", 0)
                 subcat_subcats = subcat_data.get("subcategorias", {})
+                subcat_montos_mes = subcat_data.get("montos_por_mes", {})
                 has_level3 = len(subcat_subcats) > 0
                 
                 subcat_id = f"{row_id}_{subcat_nombre[:10].replace(' ', '_')}"
@@ -157,9 +158,13 @@ def render_eerr_table(
                 html_parts.append(f'<tr class="subcat-row hidden-row child-of-{row_id}" data-row-id="{subcat_id}">')
                 html_parts.append(f'<td class="frozen">{expand_icon_sub}↳ {subcat_nombre[:40]}</td>')
                 
-                # Valores mensuales de subcategoría (simplificado - solo total)
+                # Valores mensuales de subcategoría
                 for mes in meses_lista:
-                    html_parts.append('<td>-</td>')
+                    val = subcat_montos_mes.get(mes, 0)
+                    if val == 0:
+                        html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
+                    else:
+                        html_parts.append(f'<td>{fmt_monto(val)}</td>')
                 
                 html_parts.append(f'<td class="col-total">{fmt_monto(subcat_total)}</td>')
                 html_parts.append('</tr>')
@@ -168,26 +173,70 @@ def render_eerr_table(
                 if has_level3:
                     for n3_nombre, n3_data in sorted(subcat_subcats.items()):
                         n3_total = n3_data.get("total", 0)
+                        n3_montos_mes = n3_data.get("montos_por_mes", {})
+                        n3_cuentas = n3_data.get("cuentas", {})
+                        has_cuentas = len(n3_cuentas) > 0
                         
-                        html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{subcat_id}">')
-                        html_parts.append(f'<td class="frozen">📄 {n3_nombre[:35]}</td>')
+                        n3_id = f"{subcat_id}_{n3_nombre[:8].replace(' ', '_')}"
+                        expand_icon_n3 = f'<span class="expand-icon" onclick="toggleEerrRow(\'{n3_id}\')">{SVG_CHEVRON}</span>' if has_cuentas else '<span style="width:28px;display:inline-block;"></span>'
                         
+                        html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{subcat_id}" data-row-id="{n3_id}">')
+                        html_parts.append(f'<td class="frozen">{expand_icon_n3}📁 {n3_nombre[:35]}</td>')
+                        
+                        # Valores mensuales de nivel 3
                         for mes in meses_lista:
-                            html_parts.append('<td>-</td>')
+                            val = n3_montos_mes.get(mes, 0)
+                            if val == 0:
+                                html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
+                            else:
+                                html_parts.append(f'<td>{fmt_monto(val)}</td>')
                         
                         html_parts.append(f'<td class="col-total">{fmt_monto(n3_total)}</td>')
                         html_parts.append('</tr>')
+                        
+                        # Cuentas dentro de nivel 3
+                        for cuenta_nombre, cuenta_data in sorted(n3_cuentas.items(), key=lambda x: abs(x[1].get("total", 0) if isinstance(x[1], dict) else x[1]), reverse=True)[:15]:
+                            if isinstance(cuenta_data, dict):
+                                cuenta_total = cuenta_data.get("total", 0)
+                                cuenta_montos_mes = cuenta_data.get("montos_por_mes", {})
+                            else:
+                                cuenta_total = cuenta_data
+                                cuenta_montos_mes = {}
+                            
+                            html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{n3_id}" style="font-size:11px;">')
+                            html_parts.append(f'<td class="frozen" style="padding-left:68px;">📄 {cuenta_nombre[:30]}</td>')
+                            
+                            for mes in meses_lista:
+                                val = cuenta_montos_mes.get(mes, 0)
+                                if val == 0:
+                                    html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
+                                else:
+                                    html_parts.append(f'<td>{fmt_monto(val)}</td>')
+                            
+                            html_parts.append(f'<td class="col-total">{fmt_monto(cuenta_total)}</td>')
+                            html_parts.append('</tr>')
                 else:
-                    # Cuentas directas en nivel 2
+                    # Cuentas directas en nivel 2 (sin nivel 3)
                     cuentas = subcat_data.get("cuentas", {})
-                    for cuenta_nombre, cuenta_monto in sorted(cuentas.items(), key=lambda x: abs(x[1]), reverse=True)[:10]:
+                    for cuenta_nombre, cuenta_data in sorted(cuentas.items(), key=lambda x: abs(x[1].get("total", 0) if isinstance(x[1], dict) else x[1]), reverse=True)[:10]:
+                        if isinstance(cuenta_data, dict):
+                            cuenta_total = cuenta_data.get("total", 0)
+                            cuenta_montos_mes = cuenta_data.get("montos_por_mes", {})
+                        else:
+                            cuenta_total = cuenta_data
+                            cuenta_montos_mes = {}
+                        
                         html_parts.append(f'<tr class="cuenta-row hidden-row child-of-{subcat_id}">')
                         html_parts.append(f'<td class="frozen">📄 {cuenta_nombre[:35]}</td>')
                         
                         for mes in meses_lista:
-                            html_parts.append('<td>-</td>')
+                            val = cuenta_montos_mes.get(mes, 0)
+                            if val == 0:
+                                html_parts.append('<td style="color:#4a5568;text-align:center;">-</td>')
+                            else:
+                                html_parts.append(f'<td>{fmt_monto(val)}</td>')
                         
-                        html_parts.append(f'<td class="col-total">{fmt_monto(cuenta_monto)}</td>')
+                        html_parts.append(f'<td class="col-total">{fmt_monto(cuenta_total)}</td>')
                         html_parts.append('</tr>')
     
     html_parts.append('</tbody>')

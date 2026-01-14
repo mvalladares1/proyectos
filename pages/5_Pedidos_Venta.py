@@ -1,5 +1,5 @@
 """
-Seguimiento de ventas y despachos: pedidos, containers y avance de producción por cliente.
+Seguimiento de ventas y despachos: pedidos de venta y avance de producción por cliente.
 
 Este archivo es el orquestador principal que importa y renderiza el contenido modular.
 """
@@ -20,16 +20,16 @@ from containers import content, shared
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Containers",
+    page_title="Pedidos de Venta",
     page_icon="🚢",
     layout="wide"
 )
 
 # Proteger la página
-if not proteger_modulo("containers"):
+if not proteger_modulo("pedidos_venta"):
     st.stop()
 
-if not tiene_acceso_dashboard("containers"):
+if not tiene_acceso_dashboard("pedidos_venta"):
     st.error("No tienes permisos para ver este dashboard.")
     st.stop()
 
@@ -37,7 +37,7 @@ if not tiene_acceso_dashboard("containers"):
 shared.init_session_state()
 
 # Título
-st.title("🚢 Dashboard de Containers")
+st.title("🚢 Dashboard de Pedidos de Venta")
 st.markdown("Seguimiento de producción por pedido de venta")
 
 # Obtener credenciales

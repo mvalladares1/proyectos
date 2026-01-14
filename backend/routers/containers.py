@@ -1,5 +1,5 @@
 """
-Router de Containers/Ventas - Seguimiento de producción por pedido
+Router de Pedidos de Venta - Seguimiento de producción por pedido
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
@@ -19,7 +19,7 @@ async def get_containers(
     state: Optional[str] = Query(None, description="Estado del pedido")
 ):
     """
-    Obtiene lista de containers/ventas con su avance de producción.
+    Obtiene lista de pedidos de venta con su avance de producción.
     Busca desde fabricaciones que tienen PO asociada (x_studio_po_asociada_1).
     """
     try:
@@ -40,7 +40,7 @@ async def get_containers_summary(
     password: str = Query(..., description="API Key Odoo")
 ):
     """
-    Obtiene resumen global de containers para KPIs.
+    Obtiene resumen global de pedidos de venta para KPIs.
     """
     try:
         service = ContainersService(username=username, password=password)
@@ -70,13 +70,13 @@ async def get_sankey_data(
     password: str = Query(..., description="API Key Odoo"),
     start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
-    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro containers)"),
+    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro pedidos de venta)"),
     producer_id: Optional[int] = Query(None, description="ID del productor (filtro pallets IN)"),
-    limit: int = Query(50, description="Número máximo de containers")
+    limit: int = Query(50, description="Número máximo de pedidos de venta")
 ):
     """
     Obtiene datos para diagrama Sankey de trazabilidad.
-    Muestra Container → Fabricación → Pallets (consumidos y de salida).
+    Muestra Pedido de Venta → Fabricación → Pallets (consumidos y de salida).
     """
     try:
         service = ContainersService(username=username, password=password)
@@ -97,8 +97,8 @@ async def get_sankey_producers(
     password: str = Query(..., description="API Key Odoo"),
     start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
-    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro containers)"),
-    limit: int = Query(50, description="Número máximo de containers")
+    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro pedidos de venta)"),
+    limit: int = Query(50, description="Número máximo de pedidos de venta")
 ):
     """Obtiene productores disponibles (desde pallets IN) para poblar filtros del Sankey."""
     try:
@@ -119,14 +119,14 @@ async def get_container_detail(
     password: str = Query(..., description="API Key Odoo")
 ):
     """
-    Obtiene detalle completo de un container/venta específico.
+    Obtiene detalle completo de un pedido de venta específico.
     Incluye todas las fabricaciones vinculadas y líneas de pedido.
     """
     try:
         service = ContainersService(username=username, password=password)
         container = service.get_container_detail(sale_id)
         if not container:
-            raise HTTPException(status_code=404, detail="Container no encontrado")
+            raise HTTPException(status_code=404, detail="Pedido de venta no encontrado")
         return container
     except HTTPException:
         raise

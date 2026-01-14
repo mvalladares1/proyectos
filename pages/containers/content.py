@@ -1,5 +1,5 @@
 """
-Contenido principal del dashboard de Containers.
+Contenido principal del dashboard de Pedidos de Venta.
 """
 import streamlit as st
 import pandas as pd
@@ -35,7 +35,7 @@ def render(username: str, password: str):
             "📅 Fecha Inicio",
             value=fecha_default_inicio,
             format="DD/MM/YYYY",
-            key="containers_fecha_inicio"
+            key="pedidos_venta_fecha_inicio"
         )
     
     with col_f2:
@@ -44,7 +44,7 @@ def render(username: str, password: str):
             "📅 Fecha Fin",
             value=hoy,
             format="DD/MM/YYYY",
-            key="containers_fecha_fin"
+            key="pedidos_venta_fecha_fin"
         )
     
     with col_f3:
@@ -52,7 +52,7 @@ def render(username: str, password: str):
         selected_state = st.selectbox(
             "📋 Estado del Pedido",
             options=list(STATE_OPTIONS.keys()),
-            key="containers_state_filter"
+            key="pedidos_venta_state_filter"
         )
     
     with col_f4:
