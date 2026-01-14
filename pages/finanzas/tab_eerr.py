@@ -5,8 +5,9 @@ Combina vistas de Agrupado, Mensualizado, Detalle y YTD en una sola tabla.
 """
 import streamlit as st
 from datetime import datetime
+from streamlit.components.v1 import html as st_html
 
-from .eerr_table import EERR_CSS, EERR_JS, render_eerr_table
+from .eerr_table import EERR_CSS, render_eerr_table
 from .eerr_table.constants import MESES_NOMBRES, ESTRUCTURA_EERR
 from . import shared
 
@@ -69,7 +70,7 @@ def render(username: str, password: str):
                 data = shared.fetch_estado_resultado(
                     fecha_ini=fecha_inicio.strftime("%Y-%m-%d"),
                     fecha_f=fecha_fin.strftime("%Y-%m-%d"),
-                    centro=None,  # Sin filtro de centro
+                    centro=None,
                     _username=username,
                     _password=password
                 )
@@ -94,23 +95,8 @@ def render(username: str, password: str):
         datos_mensuales = data.get("datos_mensuales", {})
         ppto_mensual = data.get("ppto_mensual", {})
         
-        # === CONTROLES DE EXPANSIÓN ===
-        col_expand, col_collapse, col_export = st.columns([1, 1, 2])
-        
-        with col_expand:
-            expand_all = st.button("➕ Expandir", use_container_width=True, key="eerr_expand")
-        
-        with col_collapse:
-            collapse_all = st.button("➖ Colapsar", use_container_width=True, key="eerr_collapse")
-        
-        with col_export:
-            # Export button placeholder
-            pass
-        
-        # === RENDERIZAR TABLA CON JS FUNCIONAL ===
+        # === RENDERIZAR TABLA ===
         if estructura:
-            from streamlit.components.v1 import html as st_html
-            
             tabla_html = render_eerr_table(
                 estructura=estructura,
                 datos_mensuales=datos_mensuales,
@@ -118,61 +104,30 @@ def render(username: str, password: str):
                 ppto_mensual=ppto_mensual
             )
             
-            # Acción de expansión/colapso a ejecutar
-            js_action = ""
-            if expand_all:
-                js_action = "setTimeout(() => toggleAllEerr(true), 100);"
-            elif collapse_all:
-                js_action = "setTimeout(() => toggleAllEerr(false), 100);"
-            
-            # Combinar CSS + JS + Tabla en un solo componente HTML
-            full_html = f"""
-            {EERR_CSS}
-            {tabla_html}
+            # JavaScript para expansión
+            js_code = """
             <script>
-                // Toggle expansión de filas
-                function toggleEerrRow(rowId) {{
-                    const icon = document.querySelector(`[data-row-id="${{rowId}}"] .expand-icon`);
-                    const childRows = document.querySelectorAll(`.child-of-${{rowId}}`);
+                function toggleEerrRow(rowId) {
+                    const icon = document.querySelector(`[data-row-id="${rowId}"] .expand-icon`);
+                    const childRows = document.querySelectorAll(`.child-of-${rowId}`);
                     
-                    if (icon) {{
+                    if (icon) {
                         icon.classList.toggle('expanded');
-                    }}
+                    }
                     
-                    childRows.forEach(row => {{
+                    childRows.forEach(row => {
                         row.classList.toggle('hidden-row');
-                    }});
-                }}
-                
-                // Expandir/Colapsar todos
-                function toggleAllEerr(expand) {{
-                    const icons = document.querySelectorAll('.expand-icon');
-                    const hiddenRows = document.querySelectorAll('.eerr-table tr[class*="child-of-"]');
-                    
-                    icons.forEach(icon => {{
-                        if (expand) {{
-                            icon.classList.add('expanded');
-                        }} else {{
-                            icon.classList.remove('expanded');
-                        }}
-                    }});
-                    
-                    hiddenRows.forEach(row => {{
-                        if (expand) {{
-                            row.classList.remove('hidden-row');
-                        }} else {{
-                            row.classList.add('hidden-row');
-                        }}
-                    }});
-                }}
-                
-                {js_action}
+                    });
+                }
             </script>
             """
             
-            # Calcular altura basada en filas
-            num_rows = len(ESTRUCTURA_EERR) + sum(1 for c in estructura.values() if isinstance(c, dict))
-            table_height = min(max(num_rows * 45 + 100, 500), 900)
+            # Combinar todo en un solo HTML
+            full_html = f"{EERR_CSS}\n{tabla_html}\n{js_code}"
+            
+            # Calcular altura basada en filas visibles
+            num_visible_rows = len(ESTRUCTURA_EERR)
+            table_height = min(max(num_visible_rows * 50 + 80, 450), 850)
             
             st_html(full_html, height=table_height, scrolling=True)
         else:
@@ -184,4 +139,3 @@ def render(username: str, password: str):
                 st.write("Datos recibidos:", list(data.keys()) if data else "Ninguno")
     else:
         st.info("👆 Selecciona el rango de fechas y haz clic en **Generar** para ver el Estado de Resultados")
-
