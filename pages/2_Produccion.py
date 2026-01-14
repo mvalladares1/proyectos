@@ -128,33 +128,58 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# JavaScript para forzar tema oscuro (usando components.html para que ejecute)
+# JavaScript para inyectar CSS directamente en el HEAD del documento padre
 components.html("""
 <script>
-    // Acceder al documento padre (la app de Streamlit)
-    const parent = window.parent.document;
-    
-    function enforceDarkTheme() {
-        // Backgrounds
-        parent.querySelectorAll('.stApp, [data-testid="stAppViewContainer"], .main, .block-container').forEach(el => {
-            el.style.setProperty('background-color', '#0e1117', 'important');
-        });
-        parent.querySelectorAll('[data-testid="stHeader"], header').forEach(el => {
-            el.style.setProperty('background-color', '#0e1117', 'important');
-        });
-        parent.querySelectorAll('[data-testid="stSidebar"]').forEach(el => {
-            el.style.setProperty('background-color', '#262730', 'important');
-        });
+    (function() {
+        const parent = window.parent.document;
         
-        // ALL TEXT
-        parent.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,label').forEach(el => {
-            el.style.setProperty('color', '#fafafa', 'important');
-        });
-    }
-    
-    // Ejecutar cada 100ms permanentemente
-    enforceDarkTheme();
-    setInterval(enforceDarkTheme, 100);
+        // Verificar si ya inyectamos el CSS (evitar duplicados)
+        if (parent.getElementById('dark-theme-override')) return;
+        
+        // Crear style tag con máxima prioridad
+        const style = parent.createElement('style');
+        style.id = 'dark-theme-override';
+        style.innerHTML = `
+            /* OVERRIDE TOTAL - Inyectado por JS */
+            :root { color-scheme: dark !important; }
+            
+            .stApp, [data-testid="stAppViewContainer"], .main, .block-container,
+            [data-testid="stHeader"], header {
+                background-color: #0e1117 !important;
+                color: #fafafa !important;
+            }
+            
+            [data-testid="stSidebar"], [data-testid="stSidebarContent"] {
+                background-color: #262730 !important;
+            }
+            
+            /* TEXTO - Selector ultra específico */
+            .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
+            .stApp p, .stApp span, .stApp label, .stApp div,
+            [data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] *,
+            .stMarkdown, .stMarkdown *, .stCaption, .stText,
+            [class*="emotion"] {
+                color: #fafafa !important;
+            }
+            
+            /* Inputs */
+            input, textarea, select, [data-baseweb] {
+                background-color: #262730 !important;
+                color: #fafafa !important;
+            }
+        `;
+        
+        // Inyectar al final del HEAD para máxima prioridad
+        parent.head.appendChild(style);
+        
+        // Re-inyectar cada 2 segundos por si Streamlit lo borra
+        setInterval(() => {
+            if (!parent.getElementById('dark-theme-override')) {
+                parent.head.appendChild(style.cloneNode(true));
+            }
+        }, 2000);
+    })();
 </script>
 """, height=0)
 
