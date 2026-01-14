@@ -484,73 +484,23 @@ class ContainersService:
                 production_to_container[fab["id"]] = container
                 productions_order.append(fab)
 
-        # Producciones sin container (x_studio_po_asociada_1 vacío)
-        orphan_productions: List[Dict] = []
-        orphan_domain = [("x_studio_po_asociada_1", "=", False), ("state", "not in", ["cancel"])]
-        if start_date:
-            orphan_domain.append(("date_planned_start", ">=", start_date))
-        if end_date:
-            orphan_domain.append(("date_planned_start", "<=", end_date))
-
-        orphan_fields = [
-            "name", "product_id", "product_qty", "qty_produced",
-            "state", "date_planned_start", "date_start", "date_finished",
-            "user_id", "x_studio_sala_de_proceso", "x_studio_clientes"
-        ]
-
-        try:
-            orphan_ids = self.odoo.search(
-                "mrp.production",
-                orphan_domain,
-                limit=200,
-                order="date_planned_start desc"
-            )
-            if orphan_ids:
-                orphans_raw = self.odoo.read("mrp.production", orphan_ids, orphan_fields)
-                for p in orphans_raw:
-                    # Filtro UX: dejar fuera procesos VLK, enfocarse en RF
-                    if (p.get("name") or "").startswith("VLK"):
-                        continue
-                    product = p.get("product_id")
-                    product_name = product[1] if isinstance(product, (list, tuple)) else "N/A"
-
-                    user = p.get("user_id")
-                    user_name = user[1] if isinstance(user, (list, tuple)) else "N/A"
-
-                    sala = p.get("x_studio_sala_de_proceso")
-                    sala_name = sala[1] if isinstance(sala, (list, tuple)) else "N/A"
-
-                    cliente = p.get("x_studio_clientes")
-                    cliente_name = cliente[1] if isinstance(cliente, (list, tuple)) else "N/A"
-
-                    qty_produced = p.get("qty_produced", 0) or 0
-
-                    orphan_productions.append({
-                        "id": p["id"],
-                        "name": p.get("name", ""),
-                        "product_name": product_name,
-                        "product_qty": p.get("product_qty", 0) or 0,
-                        "qty_produced": qty_produced,
-                        "kg_producidos": qty_produced,
-                        "state": p.get("state", ""),
-                        "state_display": local_get_state_display(p.get("state", "")),
-                        "date_planned_start": p.get("date_planned_start", ""),
-                        "date_start": p.get("date_start", ""),
-                        "date_finished": p.get("date_finished", ""),
-                        "user_name": user_name,
-                        "sala_proceso": sala_name,
-                        "cliente": cliente_name,
-                    })
-        except Exception as e:
-            print(f"Error fetching orphan productions for sankey: {e}")
-
-        productions_order.extend(orphan_productions)
-
         # Contexto (moves/pallets) SOLO para producciones ya filtradas
         filtered_production_ids = [p["id"] for p in productions_order if p.get("id")]
         sankey_context = self._get_sankey_context(filtered_production_ids, include_producers=bool(producer_id))
         productions_by_id = sankey_context.get("productions", {})
         pallets_by_production = sankey_context.get("pallets", {})
+
+        # Resolver container por pallet OUT (puede haber mezcla: algunos OUT asociados y otros huérfanos)
+        out_package_ids: List[int] = []
+        for pdata in (pallets_by_production or {}).values():
+            for p in (pdata.get("salida", []) or []):
+                pid = p.get("id")
+                if pid:
+                    out_package_ids.append(pid)
+        package_to_container_id = self._get_container_ids_by_out_package_ids(
+            list(set(out_package_ids)),
+            containers,
+        )
 
         nodes: List[Dict] = []
         links: List[Dict] = []
@@ -618,11 +568,13 @@ class ContainersService:
 
             # OUT
             for pallet_out in pallets_data.get("salida", []) or []:
+                # IMPORTANT: el container se define por pallet (salida), no por fabricación
+                out_container_id = package_to_container_id.get(pallet_out.get("id"))
                 pallet_out_key = pallet_out.get("id") or pallet_out.get("name")
-                if container_id:
-                    out_id = f"POUT:C{container_id}:P{pallet_out_key}"
+                if out_container_id:
+                    out_id = f"POUT:C{out_container_id}:P{pallet_out_key}"
                     out_color = "#2ecc71"
-                    out_meta = {"type": "out_container", "container_id": container_id}
+                    out_meta = {"type": "out_container", "container_id": out_container_id}
                 else:
                     out_id = f"POUT:NONE:P{pallet_out_key}"
                     out_color = "#f1c40f"  # amarillo sin container
@@ -642,21 +594,22 @@ class ContainersService:
                 })
 
                 # Agrupar OUT en container (OUT -> Container)
-                if container_id:
-                    c_id = f"C:{container_id}"
+                if out_container_id:
+                    c_id = f"C:{out_container_id}"
+                    out_container = next((c for c in containers if c.get("id") == out_container_id), None)
                     c_idx = _ensure_node(
                         c_id,
-                        container.get("name", ""),
+                        (out_container or {}).get("name", ""),
                         "#3498db",
-                        build_container_detail(container),
-                        {"type": "container", "container_id": container_id}
+                        build_container_detail(out_container or {}),
+                        {"type": "container", "container_id": out_container_id}
                     )
                     links.append({
                         "source": out_idx,
                         "target": c_idx,
                         "value": pallet_out.get("qty", 1) or 1
                     })
-                    container_out_nodes.setdefault(container_id, []).append(out_id)
+                    container_out_nodes.setdefault(out_container_id, []).append(out_id)
 
         # Coordenadas para un layout tipo imagen
         def _set_xy(node_id: str, x: float, y: float) -> None:
@@ -683,8 +636,8 @@ class ContainersService:
             _set_xy(nid, 0.02, y)
         for nid, y in _spread_y(fab_ids, 0.05, 0.95).items():
             _set_xy(nid, 0.45, y)
-        for nid, y in _spread_y(orphan_out_ids, 0.78, 0.95).items():
-            _set_xy(nid, 0.68, y)
+        for nid, y in _spread_y(orphan_out_ids, 0.10, 0.90).items():
+            _set_xy(nid, 0.72, y)
 
         container_ids_in_order = [c.get("id") for c in containers]
         active_container_ids = [cid for cid in container_ids_in_order if container_out_nodes.get(cid)]
@@ -707,6 +660,77 @@ class ContainersService:
 
         return {"nodes": nodes, "links": links}
 
+    def _get_container_ids_by_out_package_ids(self, package_ids: List[int], containers: List[Dict]) -> Dict[int, Optional[int]]:
+        """Resuelve package_id (pallet OUT) -> container_id (sale.order) usando pickings outgoing.
+
+        Regla práctica:
+        - Considera SOLO pickings `outgoing` (despachos).
+        - Intenta mapear por `stock.picking.origin` contra `sale.order.name` (container.name).
+        - Si no hay match, el pallet se considera huérfano para el Sankey.
+        """
+        package_ids = [pid for pid in (package_ids or []) if pid]
+        if not package_ids:
+            return {}
+
+        container_name_to_id: Dict[str, int] = {}
+        for c in containers or []:
+            name = c.get("name")
+            cid = c.get("id")
+            if name and cid:
+                container_name_to_id[str(name)] = int(cid)
+
+        if not container_name_to_id:
+            return {pid: None for pid in package_ids}
+
+        try:
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [
+                    ("result_package_id", "in", package_ids),
+                    ("picking_id", "!=", False),
+                    ("picking_id.picking_type_code", "=", "outgoing"),
+                    ("picking_id.state", "in", ["done", "assigned"]),
+                ],
+                ["result_package_id", "picking_id", "date"],
+                limit=5000,
+                order="date desc"
+            )
+        except Exception as e:
+            print(f"Error fetching move lines for OUT packages: {e}")
+            return {pid: None for pid in package_ids}
+
+        picking_ids: List[int] = []
+        for ml in move_lines or []:
+            picking_rel = ml.get("picking_id")
+            if picking_rel:
+                picking_ids.append(picking_rel[0] if isinstance(picking_rel, (list, tuple)) else picking_rel)
+        picking_ids = list({pid for pid in picking_ids if pid})
+
+        pickings_by_id: Dict[int, Dict] = {}
+        if picking_ids:
+            try:
+                pickings = self.odoo.read("stock.picking", picking_ids, ["id", "origin", "state", "picking_type_code"])
+                pickings_by_id = {p.get("id"): p for p in (pickings or []) if p.get("id")}
+            except Exception as e:
+                print(f"Error fetching pickings for OUT packages: {e}")
+
+        package_to_container_id: Dict[int, Optional[int]] = {pid: None for pid in package_ids}
+        # move_lines ya vienen ordenados desc: tomar el primer match por package
+        for ml in move_lines or []:
+            pkg_rel = ml.get("result_package_id")
+            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) and pkg_rel else None
+            if not pkg_id or package_to_container_id.get(pkg_id) is not None:
+                continue
+
+            picking_rel = ml.get("picking_id")
+            picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) and picking_rel else None
+            picking = pickings_by_id.get(picking_id, {})
+            origin = (picking.get("origin") or "").strip()
+            if origin and origin in container_name_to_id:
+                package_to_container_id[pkg_id] = container_name_to_id[origin]
+
+        return package_to_container_id
+
     def get_sankey_producers(self,
                              start_date: Optional[str] = None,
                              end_date: Optional[str] = None,
@@ -723,28 +747,7 @@ class ContainersService:
                 if fab.get("id"):
                     production_ids.append(fab["id"])
 
-        # También considerar orphans (sin container)
-        orphan_domain = [("x_studio_po_asociada_1", "=", False), ("state", "not in", ["cancel"])]
-        if start_date:
-            orphan_domain.append(("date_planned_start", ">=", start_date))
-        if end_date:
-            orphan_domain.append(("date_planned_start", "<=", end_date))
-
-        try:
-            orphan_ids = self.odoo.search(
-                "mrp.production",
-                orphan_domain,
-                limit=200,
-                order="date_planned_start desc"
-            )
-            if orphan_ids:
-                orphans = self.odoo.read("mrp.production", orphan_ids, ["id", "name"])
-                for o in orphans:
-                    if (o.get("name") or "").startswith("VLK"):
-                        continue
-                    production_ids.append(o["id"])
-        except Exception as e:
-            print(f"Error fetching orphan productions for sankey producers: {e}")
+        # Regla: SOLO fabricaciones con container asociado (sin orphans)
 
         production_ids = list({pid for pid in production_ids if pid})
         ctx = self._get_sankey_context(production_ids, include_producers=True)

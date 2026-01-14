@@ -382,6 +382,6 @@ def _render_sankey(username: str, password: str, fecha_inicio, fecha_fin, partne
             
             # Leyenda
             st.markdown("##### Leyenda:")
-            st.markdown("🔵 Containers | 🔴 Fabricaciones | 🟠 Pallets IN | 🟢 Pallets OUT (en container) | 🟡 Pallets OUT (sin container)")
+            st.markdown("🔵 Containers | 🔴 Fabricaciones | 🟠 Pallets IN | 🟢 Pallets OUT (con container) | 🟡 Pallets OUT (sin container)")
     else:
         st.info("👆 Selecciona las fechas en el sidebar y haz clic en **Generar Diagrama**")
