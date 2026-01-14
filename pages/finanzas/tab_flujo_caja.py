@@ -129,8 +129,10 @@ def render(username: str, password: str):
                 try:
                     # Determinar endpoint según agrupación seleccionada
                     endpoint = "semanal" if tipo_periodo == "Semanal" else "mensual"
+                    url_completa = f"{FLUJO_CAJA_URL}/{endpoint}"
+                    st.info(f"🔍 DEBUG: Conectando a {url_completa}")
                     resp = requests.get(
-                        f"{FLUJO_CAJA_URL}/{endpoint}",
+                        url_completa,
                         params={
                             "fecha_inicio": fecha_inicio_str,
                             "fecha_fin": fecha_fin_str,
@@ -139,6 +141,7 @@ def render(username: str, password: str):
                         },
                         timeout=120
                     )
+                    st.info(f"📊 DEBUG: Status {resp.status_code}, URL final: {resp.url}")
                     
                     if resp.status_code == 200:
                         st.session_state[cache_key] = resp.json()
