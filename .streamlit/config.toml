@@ -1,5 +1,4 @@
 [server]
-baseUrlPath = "dashboards"
 headless = true
 
 [theme]

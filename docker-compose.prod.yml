@@ -34,6 +34,8 @@ services:
     environment:
       - ENV=production
       - API_URL=http://127.0.0.1:8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_BASE_URL_PATH=/dashboards
     network_mode: "host"
     depends_on:
       api-prod:
