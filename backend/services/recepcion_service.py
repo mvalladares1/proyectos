@@ -73,17 +73,18 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     # Mapeo de origen a picking_type_id
     ORIGEN_PICKING_MAP = {
         "RFP": 1,
-        "VILKUN": 217
+        "VILKUN": 217,
+        "SAN JOSE": 218
     }
     
     # Determinar picking_type_ids a consultar
     if origen and len(origen) > 0:
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
     else:
-        picking_type_ids = [1, 217]  # Ambos por defecto
+        picking_type_ids = [1, 217, 218]  # Todos por defecto
     
     if not picking_type_ids:
-        picking_type_ids = [1, 217]
+        picking_type_ids = [1, 217, 218]
     
     
     # ============ PASO 1: Obtener todas las recepciones ============
@@ -403,7 +404,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         # Determinar origen basado en picking_type_id
         picking_type = rec.get("picking_type_id")
         picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
-        origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "OTRO"
+        origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 218 else "OTRO"
         
         fecha = rec.get("scheduled_date", "")
         albaran = rec.get("name", "")
@@ -711,17 +712,18 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     # Mapeo de origen a picking_type_id
     ORIGEN_PICKING_MAP = {
         "RFP": 1,
-        "VILKUN": 217
+        "VILKUN": 217,
+        "SAN JOSE": 218
     }
     
     # Determinar picking_type_ids a consultar
     if origen_filtros:
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
     else:
-        picking_type_ids = [1, 217]
+        picking_type_ids = [1, 217, 218]
         
     if not picking_type_ids:
-        picking_type_ids = [1, 217]
+        picking_type_ids = [1, 217, 218]
 
     # 1. Buscar pickings de MP en el rango (solo validados)
     domain = [
@@ -800,7 +802,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         # Determinar planta
         pt_id = p.get("picking_type_id", [0, ""])
         pt_id_val = pt_id[0] if isinstance(pt_id, (list, tuple)) else pt_id
-        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "OTRO"
+        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 218 else "OTRO"
 
         # Enriquecer líneas con info de producto
         filtered_ml = []
@@ -844,6 +846,140 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
             "manejo": ", ".join(manejos_presentes),
             "tipo_fruta": ", ".join(frutas_presentes),
             "origen": origen_val
+        })
+        
+    return resultado
+
+
+def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio: str, fecha_fin: str, 
+                                      manejo_filtros: Optional[List[str]] = None, 
+                                      tipo_fruta_filtros: Optional[List[str]] = None,
+                                      origen_filtros: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """
+    Retorna una lista donde cada elemento es UN PALLET (un package), con su info de recepción.
+    Usado para generar el Excel detallado.
+    """
+    client = OdooClient(username=username, password=password)
+    
+    # Mapeo de origen a picking_type_id
+    ORIGEN_PICKING_MAP = {
+        "RFP": 1,
+        "VILKUN": 217,
+        "SAN JOSE": 218
+    }
+    
+    # Determinar picking_type_ids a consultar
+    if origen_filtros:
+        if isinstance(origen_filtros, str):
+            origen_filtros = [origen_filtros]
+        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
+    else:
+        picking_type_ids = [1, 217, 218]
+        
+    if not picking_type_ids:
+        picking_type_ids = [1, 217, 218]
+
+    domain = [
+        ("picking_type_id", "in", picking_type_ids),
+        ("x_studio_categora_de_producto", "=", "MP"),
+        ("scheduled_date", ">=", fecha_inicio),
+        ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+        ("state", "=", "done")
+    ]
+    
+    pickings = client.search_read(
+        "stock.picking",
+        domain,
+        ["id", "name", "scheduled_date", "partner_id", "x_studio_gua_de_despacho", "picking_type_id"],
+        order="scheduled_date desc",
+        limit=2000
+    )
+    
+    if not pickings:
+        return []
+        
+    picking_ids = [p["id"] for p in pickings]
+    picking_map = {p["id"]: p for p in pickings}
+    
+    # Obtener move lines
+    move_lines = client.search_read(
+        "stock.move.line",
+        [("picking_id", "in", picking_ids)],
+        ["picking_id", "product_id", "qty_done", "result_package_id"]
+    )
+    
+    # Info de productos
+    all_product_ids = list(set(ml["product_id"][0] for ml in move_lines if ml.get("product_id")))
+    product_info = {}
+    
+    if all_product_ids:
+        products = client.read("product.product", all_product_ids, ["id", "product_tmpl_id", "display_name"])
+        template_ids = list(set(p["product_tmpl_id"][0] for p in products if p.get("product_tmpl_id")))
+        
+        templates = client.read(
+            "product.template", 
+            template_ids, 
+            ["id", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
+        )
+        
+        template_map = {}
+        for t in templates:
+            manejo = t.get("x_studio_categora_tipo_de_manejo", "")
+            if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                manejo = manejo[1]
+            tipo_fruta = t.get("x_studio_sub_categora", "")
+            if isinstance(tipo_fruta, (list, tuple)) and len(tipo_fruta) > 1:
+                tipo_fruta = tipo_fruta[1]
+            
+            template_map[t["id"]] = {
+                "manejo": manejo or "N/A",
+                "tipo_fruta": tipo_fruta or "N/A"
+            }
+            
+        for p in products:
+            tmpl_id = p["product_tmpl_id"][0] if p.get("product_tmpl_id") else None
+            info = template_map.get(tmpl_id, {"manejo": "N/A", "tipo_fruta": "N/A"})
+            info["display_name"] = p.get("display_name", "")
+            product_info[p["id"]] = info
+
+    resultado = []
+    
+    for ml in move_lines:
+        pk_id = ml["picking_id"][0] if ml.get("picking_id") else None
+        if not pk_id:
+            continue
+        p = picking_map.get(pk_id)
+        if not p:
+            continue
+        
+        p_id = ml["product_id"][0] if ml.get("product_id") else None
+        info = product_info.get(p_id, {"manejo": "N/A", "tipo_fruta": "N/A", "display_name": ""})
+        
+        # Filtros
+        if manejo_filtros and info["manejo"] not in manejo_filtros:
+            continue
+        if tipo_fruta_filtros and info["tipo_fruta"] not in tipo_fruta_filtros:
+            continue
+            
+        # Determinar planta
+        pt_id_val = p["picking_type_id"][0] if isinstance(p["picking_type_id"], (list, tuple)) else p["picking_type_id"]
+        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 218 else "OTRO"
+        
+        # Pallet (Package)
+        pkg = ml.get("result_package_id")
+        pallet_name = pkg[1] if isinstance(pkg, (list, tuple)) else str(pkg) if pkg else "S/P"
+
+        resultado.append({
+            "fecha": str(p["scheduled_date"])[:10],
+            "origen": origen_val,
+            "albaran": p["name"],
+            "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",
+            "guia_despacho": p.get("x_studio_gua_de_despacho") or "",
+            "pallet_name": pallet_name,
+            "producto_name": info["display_name"],
+            "manejo": info["manejo"],
+            "tipo_fruta": info["tipo_fruta"],
+            "kg": round(ml.get("qty_done", 0) or 0, 2)
         })
         
     return resultado
