@@ -74,17 +74,17 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     ORIGEN_PICKING_MAP = {
         "RFP": 1,
         "VILKUN": 217,
-        "SAN JOSE": 218
+        "SAN JOSE": 164  # ID correcto verificado en Odoo
     }
     
     # Determinar picking_type_ids a consultar
     if origen and len(origen) > 0:
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
     else:
-        picking_type_ids = [1, 217, 218]  # Todos por defecto
+        picking_type_ids = [1, 217, 164]  # Todos por defecto
     
     if not picking_type_ids:
-        picking_type_ids = [1, 217, 218]
+        picking_type_ids = [1, 217, 164]
     
     
     # ============ PASO 1: Obtener todas las recepciones ============
@@ -404,7 +404,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         # Determinar origen basado en picking_type_id
         picking_type = rec.get("picking_type_id")
         picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
-        origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 218 else "OTRO"
+        origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
         
         fecha = rec.get("scheduled_date", "")
         albaran = rec.get("name", "")
@@ -713,17 +713,17 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     ORIGEN_PICKING_MAP = {
         "RFP": 1,
         "VILKUN": 217,
-        "SAN JOSE": 218
+        "SAN JOSE": 164  # ID correcto verificado en Odoo
     }
     
     # Determinar picking_type_ids a consultar
     if origen_filtros:
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
     else:
-        picking_type_ids = [1, 217, 218]
+        picking_type_ids = [1, 217, 164]
         
     if not picking_type_ids:
-        picking_type_ids = [1, 217, 218]
+        picking_type_ids = [1, 217, 164]
 
     # 1. Buscar pickings de MP en el rango (solo validados)
     domain = [
@@ -802,7 +802,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         # Determinar planta
         pt_id = p.get("picking_type_id", [0, ""])
         pt_id_val = pt_id[0] if isinstance(pt_id, (list, tuple)) else pt_id
-        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 218 else "OTRO"
+        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
 
         # Enriquecer líneas con info de producto
         filtered_ml = []
@@ -865,7 +865,7 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     ORIGEN_PICKING_MAP = {
         "RFP": 1,
         "VILKUN": 217,
-        "SAN JOSE": 218
+        "SAN JOSE": 164  # ID correcto verificado en Odoo
     }
     
     # Determinar picking_type_ids a consultar
@@ -874,10 +874,10 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
             origen_filtros = [origen_filtros]
         picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
     else:
-        picking_type_ids = [1, 217, 218]
+        picking_type_ids = [1, 217, 164]
         
     if not picking_type_ids:
-        picking_type_ids = [1, 217, 218]
+        picking_type_ids = [1, 217, 164]
 
     domain = [
         ("picking_type_id", "in", picking_type_ids),
@@ -963,7 +963,7 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
             
         # Determinar planta
         pt_id_val = p["picking_type_id"][0] if isinstance(p["picking_type_id"], (list, tuple)) else p["picking_type_id"]
-        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 218 else "OTRO"
+        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
         
         # Pallet (Package)
         pkg = ml.get("result_package_id")
