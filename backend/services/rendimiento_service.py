@@ -256,7 +256,7 @@ class RendimientoService:
                 templates = self.odoo.read(
                     'product.template',
                     list(template_ids),
-                    ['id', 'x_studio_categora_tipo_de_manejo', 'x_studio_sub_categora']
+                    ['id', 'x_studio_categora_tipo_de_manejo', 'x_studio_sub_categora', 'categ_id']
                 )
                 for t in templates:
                     manejo = t.get('x_studio_categora_tipo_de_manejo', '')
@@ -267,9 +267,14 @@ class RendimientoService:
                     if isinstance(tipo_fruta, (list, tuple)) and len(tipo_fruta) > 1:
                         tipo_fruta = tipo_fruta[1]
                     
+                    # Obtener categoría para identificar merma
+                    categ = t.get('categ_id')
+                    categ_name = categ[1] if isinstance(categ, (list, tuple)) and len(categ) > 1 else ''
+                    
                     template_map[t['id']] = {
                         'manejo': manejo or 'Otro',
-                        'tipo_fruta': tipo_fruta or 'Otro'
+                        'tipo_fruta': tipo_fruta or 'Otro',
+                        'categ_name': categ_name
                     }
             
             # Mapear product_id -> especie/manejo
@@ -304,8 +309,15 @@ class RendimientoService:
                 prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
                 lot = ml.get('lot_id')
                 
-                # Obtener especie y manejo reales desde product.template
-                prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
+                # Obtener especie, manejo y categoría desde product.template
+                prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro', 'categ_name': ''})
+                categ_name = prod_info.get('categ_name', '')
+                
+                # Identificar si es merma (categoría contiene "MERMA")
+                is_merma = 'MERMA' in categ_name.upper() if categ_name else False
+                
+                # Identificar si es proceso intermedio (producto [3] o categoría PROCESO)
+                is_proceso = prod_name.startswith('[3]') or 'PROCESO' in categ_name.upper()
                 
                 result[mo_id].append({
                     'product_id': prod_id,
@@ -314,7 +326,10 @@ class RendimientoService:
                     'lot_name': lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else None,
                     'qty_done': ml.get('qty_done', 0) or 0,
                     'especie': prod_info['tipo_fruta'],
-                    'manejo': prod_info['manejo']
+                    'manejo': prod_info['manejo'],
+                    'categ_name': categ_name,
+                    'is_merma': is_merma,
+                    'is_proceso': is_proceso
                 })
         
         return result
@@ -827,6 +842,7 @@ class RendimientoService:
         # Acumuladores
         total_kg_mp = 0.0
         total_kg_pt = 0.0
+        total_kg_merma = 0.0  # Nueva: Total de merma
         total_hh = 0.0
         total_costo_elec = 0.0
         lotes_set = set()
@@ -834,11 +850,13 @@ class RendimientoService:
         # Por tipo (proceso vs congelado)
         proceso_kg_mp = 0.0
         proceso_kg_pt = 0.0
+        proceso_kg_merma = 0.0  # Nueva: Merma en proceso
         proceso_hh = 0.0
         proceso_mos = 0
         
         congelado_kg_mp = 0.0
         congelado_kg_pt = 0.0
+        congelado_kg_merma = 0.0  # Nueva: Merma en congelado
         congelado_mos = 0
         congelado_lotes = set()
         congelado_proveedores = set()
@@ -869,54 +887,26 @@ class RendimientoService:
                 
                 kg_mp = sum(c.get('qty_done', 0) or 0 for c in consumos)
                 
-                # FILTRAR kg_pt: Excluir subproductos intermedios E INSUMOS
-                # Los productos intermedios son:
-                # - [1.x] PROCESO/TÚNEL (Congelado)
-                # - [2.x] PROCESO PSP (Proceso)
-                # - [3] Proceso de Vaciado (Vaciado)
-                # - [4] Proceso Retail
-                # Además, solo contar productos que tengan especie y manejo válidos desde product.template
+                # FILTRAR kg_pt: Usar is_merma e is_proceso de categ_id
+                # - is_merma: Categoría contiene "MERMA" (PRODUCTOS / MERMA DE PROCESOS)
+                # - is_proceso: Producto [3] o categoría PROCESO (productos intermedios)
                 kg_pt = 0.0
-                kg_pt_debug = []  # Debug temporal
+                kg_merma = 0.0
+                kg_proceso = 0.0
                 for p in produccion:
                     product_name = p.get('product_name', '')
-                    product_upper = product_name.upper()
                     qty = p.get('qty_done', 0) or 0
                     
-                    # Obtener especie y manejo REALES desde product.template
-                    especie = p.get('especie', 'Otro')
-                    manejo = p.get('manejo', 'Otro')
+                    # Usar flags de categoría
+                    is_merma = p.get('is_merma', False)
+                    is_proceso = p.get('is_proceso', False)
                     
-                    # Excluir productos intermedios
-                    is_intermediate = False
-                    
-                    # [1.x] productos de congelado que contengan PROCESO/TÚNEL
-                    if product_name.startswith('[1.') or product_name.startswith('[1,'):
-                        if 'PROCESO' in product_upper or 'TUNEL' in product_upper or 'TÚNEL' in product_upper:
-                            is_intermediate = True
-                    
-                    # [2.x] PROCESO PSP
-                    if product_name.startswith('[2.') or product_name.startswith('[2,'):
-                        if 'PROCESO' in product_upper and 'PSP' in product_upper:
-                            is_intermediate = True
-                    
-                    # [3] Proceso de Vaciado
-                    if product_name.startswith('[3]') and 'PROCESO' in product_upper and 'VACIADO' in product_upper:
-                        is_intermediate = True
-                    
-                    # [4] Proceso Retail
-                    if product_name.startswith('[4]') and 'PROCESO' in product_upper and 'RETAIL' in product_upper:
-                        is_intermediate = True
-                    
-                    # Verificar que el producto tenga especie y manejo válidos (no insumos)
-                    is_valid_product = especie != 'Otro' and manejo != 'Otro'
-                    
-                    if is_intermediate:
-                        kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (EXCLUIDO - intermedio)")
-                    elif not is_valid_product:
-                        kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (EXCLUIDO - insumo: {especie}/{manejo})")
+                    if is_merma:
+                        kg_merma += qty
+                    elif is_proceso:
+                        kg_proceso += qty
                     else:
-                        kg_pt_debug.append(f"{product_name[:50]}: {qty} kg (INCLUIDO - {especie}/{manejo})")
+                        # PT válido
                         kg_pt += qty
                 
                 
@@ -924,6 +914,12 @@ class RendimientoService:
                 
                 if kg_mp == 0:
                     continue
+                
+                # Fallback: si no hay merma identificada por categ_id Y kg_pt < kg_mp, usar diferencia
+                # Si kg_pt >= kg_mp (rendimiento >= 100%), NO agregar merma calculada
+                if kg_merma == 0 and kg_pt < kg_mp:
+                    merma_calculada = kg_mp - kg_pt - kg_proceso
+                    kg_merma = max(0, merma_calculada)  # Solo si es positiva
                 
                 rendimiento = (kg_pt / kg_mp * 100)
                 
@@ -944,6 +940,7 @@ class RendimientoService:
                 # Totales
                 total_kg_mp += kg_mp
                 total_kg_pt += kg_pt
+                total_kg_merma += kg_merma  # Nueva: acumular merma
                 total_costo_elec += costo_elec
                 
                 # Lotes únicos
@@ -955,11 +952,13 @@ class RendimientoService:
                 if sala_tipo == 'PROCESO':
                     proceso_kg_mp += kg_mp
                     proceso_kg_pt += kg_pt
+                    proceso_kg_merma += kg_merma  # Nueva: merma en proceso
                     proceso_hh += hh if isinstance(hh, (int, float)) else 0
                     proceso_mos += 1
                 elif sala_tipo == 'CONGELADO':
                     congelado_kg_mp += kg_mp
                     congelado_kg_pt += kg_pt
+                    congelado_kg_merma += kg_merma  # Nueva: merma en congelado
                     congelado_mos += 1
                     # Agregar lotes únicos para congelado
                     for c in consumos:
@@ -1077,8 +1076,9 @@ class RendimientoService:
                     'manejo': manejo,
                     'kg_mp': round(kg_mp, 2),
                     'kg_pt': round(kg_pt, 2),
+                    'kg_merma': round(kg_merma, 2),  # Nueva: Merma real identificada por categ_id
                     'rendimiento': round(rendimiento, 2),
-                    'merma': round(kg_mp - kg_pt, 2),
+                    'merma_pct': round((kg_merma / kg_mp * 100) if kg_mp > 0 else 0, 2),  # % de merma
                     'costo_electricidad': costo_elec,
                     'duracion_horas': duracion_horas,
                     'hh': hh if isinstance(hh, (int, float)) else 0,
@@ -1094,23 +1094,24 @@ class RendimientoService:
         
         # Calcular KPIs finales
         rendimiento_promedio = (total_kg_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0
-        merma_total = total_kg_mp - total_kg_pt
-        merma_pct = (merma_total / total_kg_mp * 100) if total_kg_mp > 0 else 0
+        # Usar merma REAL identificada por categ_id (no diferencia calculada)
+        merma_pct = (total_kg_merma / total_kg_mp * 100) if total_kg_mp > 0 else 0
         kg_por_hh = (total_kg_pt / total_hh) if total_hh > 0 else 0
         
         proceso_rendimiento = (proceso_kg_pt / proceso_kg_mp * 100) if proceso_kg_mp > 0 else 0
-        proceso_merma = proceso_kg_mp - proceso_kg_pt
-        proceso_merma_pct = (proceso_merma / proceso_kg_mp * 100) if proceso_kg_mp > 0 else 0
+        proceso_merma_pct = (proceso_kg_merma / proceso_kg_mp * 100) if proceso_kg_mp > 0 else 0
         proceso_kg_por_hh = (proceso_kg_pt / proceso_hh) if proceso_hh > 0 else 0
         
         congelado_rendimiento = (congelado_kg_pt / congelado_kg_mp * 100) if congelado_kg_mp > 0 else 0
+        congelado_merma_pct = (congelado_kg_merma / congelado_kg_mp * 100) if congelado_kg_mp > 0 else 0
         
         # Overview
         overview = {
             'total_kg_mp': round(total_kg_mp, 2),
             'total_kg_pt': round(total_kg_pt, 2),
+            'total_kg_merma': round(total_kg_merma, 2),  # Nueva: Merma real
             'rendimiento_promedio': round(rendimiento_promedio, 2),
-            'merma_total_kg': round(merma_total, 2),
+            'merma_total_kg': round(total_kg_merma, 2),  # Usa merma real
             'merma_pct': round(merma_pct, 2),
             'mos_procesadas': len(mos),
             'lotes_unicos': len(lotes_set),
@@ -1119,8 +1120,9 @@ class RendimientoService:
             # Proceso
             'proceso_kg_mp': round(proceso_kg_mp, 2),
             'proceso_kg_pt': round(proceso_kg_pt, 2),
+            'proceso_kg_merma': round(proceso_kg_merma, 2),  # Nueva: Merma proceso
             'proceso_rendimiento': round(proceso_rendimiento, 2),
-            'proceso_merma_kg': round(proceso_merma, 2),
+            'proceso_merma_kg': round(proceso_kg_merma, 2),  # Usa merma real
             'proceso_merma_pct': round(proceso_merma_pct, 2),
             'proceso_mos': proceso_mos,
             'proceso_hh': round(proceso_hh, 2),
@@ -1128,7 +1130,9 @@ class RendimientoService:
             # Congelado
             'congelado_kg_mp': round(congelado_kg_mp, 2),
             'congelado_kg_pt': round(congelado_kg_pt, 2),
+            'congelado_kg_merma': round(congelado_kg_merma, 2),  # Nueva: Merma congelado
             'congelado_rendimiento': round(congelado_rendimiento, 2),
+            'congelado_merma_pct': round(congelado_merma_pct, 2),  # Nueva: % merma congelado
             'congelado_mos': congelado_mos,
             'congelado_lotes': len(congelado_lotes),
             'congelado_proveedores': len(congelado_proveedores),

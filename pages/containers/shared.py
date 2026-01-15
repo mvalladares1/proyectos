@@ -13,7 +13,7 @@ ODOO_BASE_URL = "https://riofuturo.server98c6e.oerpondemand.net/web"
 
 # --------------------- Funciones API ---------------------
 
-@st.cache_data(ttl=300, show_spinner=False)
+# @st.cache_data(ttl=300, show_spinner=False)  # DESHABILITADO TEMPORALMENTE PARA DEBUG
 def fetch_containers(_username: str, _password: str, start_date: str = None, end_date: str = None,
                      partner_id: int = None, state: str = None) -> List[Dict]:
     """Obtiene containers desde la API."""
@@ -31,20 +31,37 @@ def fetch_containers(_username: str, _password: str, start_date: str = None, end
         if state:
             params["state"] = state
         
+        url = f"{API_URL}/api/v1/containers/"
+        print(f"[DEBUG] Llamando a: {url}")
+        print(f"[DEBUG] Parámetros: start_date={start_date}, end_date={end_date}, state={state}")
+        
         response = httpx.get(
-            f"{API_URL}/api/v1/containers/",
+            url,
             params=params,
             timeout=60.0
         )
+        
+        print(f"[DEBUG] Status code: {response.status_code}")
+        
         response.raise_for_status()
         data = response.json()
+        
+        print(f"[DEBUG] Containers recibidos: {len(data)}")
+        if data:
+            print(f"[DEBUG] Primer container: {data[0].get('name')}")
+        
         return data
     except httpx.HTTPStatusError as e:
-        st.error(f"❌ Error {e.response.status_code}: {e.response.text[:500]}")
+        error_msg = f"❌ Error {e.response.status_code}: {e.response.text[:500]}"
+        print(f"[DEBUG ERROR] {error_msg}")
+        st.error(error_msg)
         return []
     except Exception as e:
-        st.error(f"❌ Error al obtener containers: {str(e)}")
+        error_msg = f"❌ Error al obtener containers: {str(e)}"
+        print(f"[DEBUG ERROR] {error_msg}")
+        st.error(error_msg)
         import traceback
+        traceback.print_exc()
         st.error(traceback.format_exc())
         return []
 
