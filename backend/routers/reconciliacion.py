@@ -1,4 +1,4 @@
-"""
+﻿"""
 Router para Reconciliación de Producción
 =========================================
 
@@ -16,50 +16,26 @@ router = APIRouter(prefix="/api/v1/produccion-reconciliacion", tags=["Produccion
 
 
 def get_reconciliador() -> ProduccionReconciliador:
-    """
-    Dependency para obtener reconciliador autenticado.
-    """
+    """Dependency para obtener reconciliador autenticado."""
     odoo = OdooClient()
     return ProduccionReconciliador(odoo)
 
 
 @router.get("/odf/{odf_id}")
-async def reconciliar_odf(
-    odf_id: int,
-    reconciliador: ProduccionReconciliador = Depends(get_reconciliador)
-) -> Dict:
-    """
-    Reconcilia una ODF completa.
-    
-    **Resuelve el problema de:**
-    - Una ODF que toca múltiples SO
-    - Producción continua con cambios de pedido
-    - Cálculo de eficiencia real por SO
-    
-    **Retorna:**
-    - Segmentos detectados automáticamente
-    - Análisis de eficiencia por SO
-    - Alertas y anomalías
-    - Resumen ejecutivo
-    """
+async def reconciliar_odf(odf_id: int) -> Dict:
+    """Reconcilia una ODF completa."""
+    reconciliador = get_reconciliador()
     try:
         resultado = reconciliador.reconciliar_odf(odf_id)
         return resultado
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al reconciliar ODF {odf_id}: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error al reconciliar ODF {odf_id}: {str(e)}")
 
 
 @router.get("/odf/{odf_id}/resumen")
-async def resumen_odf(
-    odf_id: int,
-    reconciliador: ProduccionReconciliador = Depends(get_reconciliador)
-) -> Dict:
-    """
-    Versión simplificada: solo resumen y alertas.
-    """
+async def resumen_odf(odf_id: int) -> Dict:
+    """Versión simplificada: solo resumen y alertas."""
+    reconciliador = get_reconciliador()
     try:
         resultado = reconciliador.reconciliar_odf(odf_id)
         return {
@@ -68,49 +44,25 @@ async def resumen_odf(
             'analisis_so': resultado['analisis_so']
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al obtener resumen ODF {odf_id}: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error al obtener resumen ODF {odf_id}: {str(e)}")
 
 
 @router.get("/odf/{odf_id}/segmentos")
-async def segmentos_odf(
-    odf_id: int,
-    reconciliador: ProduccionReconciliador = Depends(get_reconciliador)
-) -> List[Dict]:
-    """
-    Solo los segmentos de SO detectados (sin análisis completo).
-    Útil para visualizaciones de timeline.
-    """
+async def segmentos_odf(odf_id: int) -> List[Dict]:
+    """Solo los segmentos de SO detectados."""
+    reconciliador = get_reconciliador()
     try:
         consumos = reconciliador.get_consumos_odf(odf_id)
         segmentos = reconciliador.detectar_transiciones_so(consumos)
         return segmentos
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al detectar segmentos ODF {odf_id}: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error al detectar segmentos ODF {odf_id}: {str(e)}")
 
 
 @router.post("/odf/batch")
-async def reconciliar_batch(
-    odf_ids: List[int],
-    reconciliador: ProduccionReconciliador = Depends(get_reconciliador)
-) -> Dict:
-    """
-    Reconcilia múltiples ODFs.
-    Útil para análisis histórico.
-    
-    **Ejemplo uso:**
-    ```
-    POST /api/v1/produccion-reconciliacion/odf/batch
-    {
-        "odf_ids": [123, 124, 125]
-    }
-    ```
-    """
+async def reconciliar_batch(odf_ids: List[int]) -> Dict:
+    """Reconcilia múltiples ODFs en batch."""
+    reconciliador = get_reconciliador()
     resultados = []
     errores = []
     
@@ -119,10 +71,7 @@ async def reconciliar_batch(
             resultado = reconciliador.reconciliar_odf(odf_id)
             resultados.append(resultado)
         except Exception as e:
-            errores.append({
-                'odf_id': odf_id,
-                'error': str(e)
-            })
+            errores.append({'odf_id': odf_id, 'error': str(e)})
     
     return {
         'procesadas': len(resultados),
