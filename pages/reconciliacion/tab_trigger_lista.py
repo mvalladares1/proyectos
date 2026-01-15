@@ -2,7 +2,7 @@
 Tab de Lista de ODFs Pendientes.
 """
 import streamlit as st
-from . import shared_reconciliacion as shared
+from . import shared
 
 
 def render():

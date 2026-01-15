@@ -2,7 +2,7 @@
 Tab de Ejecución del Trigger.
 """
 import streamlit as st
-from . import shared_reconciliacion as shared
+from . import shared
 
 
 def render(wait_seconds: float):

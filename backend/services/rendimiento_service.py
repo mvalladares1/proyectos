@@ -181,25 +181,26 @@ class RendimientoService:
                 prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod
                 prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
                 
+                # Excluir insumos usando la función helper (más preciso que especie/manejo)
+                if is_excluded_consumo(prod_name):
+                    continue
+                
                 # Obtener especie y manejo reales desde product.template
                 prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
                 especie = prod_info['tipo_fruta']
                 manejo = prod_info['manejo']
                 
-                # Solo incluir productos con especie Y manejo válidos (no insumos)
-                # Esto excluye automáticamente cajas, bolsas, electricidad, etc.
-                if especie != 'Otro' and manejo != 'Otro':
-                    lot = ml.get('lot_id')
-                    
-                    result[mo_id].append({
-                        'product_id': prod_id,
-                        'product_name': prod_name,
-                        'lot_id': lot[0] if isinstance(lot, (list, tuple)) and lot else None,
-                        'lot_name': lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else None,
-                        'qty_done': ml.get('qty_done', 0) or 0,
-                        'especie': especie,
-                        'manejo': manejo
-                    })
+                lot = ml.get('lot_id')
+                
+                result[mo_id].append({
+                    'product_id': prod_id,
+                    'product_name': prod_name,
+                    'lot_id': lot[0] if isinstance(lot, (list, tuple)) and lot else None,
+                    'lot_name': lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else None,
+                    'qty_done': ml.get('qty_done', 0) or 0,
+                    'especie': especie,
+                    'manejo': manejo
+                })
         
         return result
     

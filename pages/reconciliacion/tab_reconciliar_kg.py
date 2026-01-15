@@ -2,7 +2,7 @@
 Tab para reconciliación de KG en ODFs.
 """
 import streamlit as st
-from . import shared_reconciliacion as shared
+from . import shared
 import pandas as pd
 
 

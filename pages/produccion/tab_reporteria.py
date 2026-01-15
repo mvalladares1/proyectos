@@ -174,6 +174,9 @@ def render(username: str, password: str):
     
     if data:
         st.markdown("---")
+        # Renderizar resumen de volumen de masa primero (destacado)
+        if mos:
+            _render_volumen_masa(mos, data, agrupacion, filtro_rfp_prod, filtro_vilkun_prod)
         _render_kpis_tabs(data, mos, consolidado, salas, fecha_inicio_rep, fecha_fin_rep, username, password, agrupacion)
         st.markdown("---")
     elif st.session_state.prod_reporteria_loading:
@@ -182,6 +185,196 @@ def render(username: str, password: str):
     else:
         st.info("👆 Selecciona un rango de fechas y haz clic en **Consultar Reportería** para ver los datos consolidados.")
         _render_info_ayuda()
+
+
+def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
+    """Renderiza resumen de volumen de masa con KPIs destacados y gráfico ampliado."""
+    from .shared import detectar_planta
+    
+    st.subheader("📊 Volumen de Masa por Período")
+    
+    # Determinar qué plantas están activas
+    plantas_activas = []
+    if filtro_rfp:
+        plantas_activas.append("RFP")
+    if filtro_vilkun:
+        plantas_activas.append("VILKUN")
+    
+    planta_label = " + ".join(plantas_activas) if plantas_activas else "Todas"
+    st.caption(f"Volumen total de producción agrupado por {agrupacion.lower()} | Plantas: **{planta_label}**")
+    
+    # KPIs destacados de volumen
+    total_kg_mp = sum(mo.get('kg_mp', 0) or 0 for mo in mos)
+    total_kg_pt = sum(mo.get('kg_pt', 0) or 0 for mo in mos)
+    total_mos = len(mos)
+    rendimiento_promedio = (total_kg_pt / total_kg_mp * 100) if total_kg_mp > 0 else 0
+    
+    # Separar por tipo de sala
+    mos_proceso = [mo for mo in mos if mo.get('sala_tipo') == 'PROCESO']
+    mos_congelado = [mo for mo in mos if mo.get('sala_tipo') == 'CONGELADO']
+    
+    kg_proceso = sum(mo.get('kg_pt', 0) or 0 for mo in mos_proceso)
+    kg_congelado = sum(mo.get('kg_pt', 0) or 0 for mo in mos_congelado)
+    
+    # Métricas principales en cards grandes
+    st.markdown("""
+    <style>
+    .volumen-card {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+        margin-bottom: 15px;
+    }
+    .volumen-card h2 {
+        color: #4fd1c5;
+        font-size: 2.5rem;
+        margin: 0;
+    }
+    .volumen-card p {
+        color: #a0aec0;
+        margin: 5px 0 0 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    vol_cols = st.columns(4)
+    with vol_cols[0]:
+        st.metric("📦 Kg MP Total", fmt_numero(total_kg_mp, 0))
+    with vol_cols[1]:
+        st.metric("📤 Kg PT Total", fmt_numero(total_kg_pt, 0))
+    with vol_cols[2]:
+        st.metric("🏭 Kg Proceso", fmt_numero(kg_proceso, 0))
+    with vol_cols[3]:
+        st.metric("❄️ Kg Congelado", fmt_numero(kg_congelado, 0))
+    
+    # Preparar datos para gráfico ampliado
+    df_mos = pd.DataFrame(mos)
+    
+    if df_mos.empty or 'fecha' not in df_mos.columns:
+        st.warning("No hay datos de fabricaciones para mostrar en el gráfico.")
+        return
+    
+    # Convertir fecha
+    df_mos['fecha_dt'] = pd.to_datetime(df_mos['fecha'], errors='coerce')
+    df_mos = df_mos.dropna(subset=['fecha_dt'])
+    
+    if df_mos.empty:
+        st.warning("No hay fechas válidas para graficar.")
+        return
+    
+    # Agrupar por período
+    if agrupacion == "Día":
+        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%Y-%m-%d')
+        df_mos['periodo_sort'] = df_mos['fecha_dt']
+    elif agrupacion == "Semana":
+        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('S%W-%Y')
+        df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.to_period('W').dt.start_time
+    else:  # Mes
+        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%b-%Y')
+        df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.to_period('M').dt.start_time
+    
+    # Clasificar túneles: Estático vs Continuo
+    def clasificar_tunel(sala):
+        if not sala:
+            return sala
+        sala_upper = str(sala).upper()
+        if 'ESTATICO' in sala_upper or 'ESTÁTICO' in sala_upper:
+            return f"{sala} (Estático)"
+        return sala
+    
+    df_mos['sala_clasificada'] = df_mos['sala'].apply(clasificar_tunel)
+    
+    # Agregar columna de planta
+    df_mos['planta'] = df_mos.apply(
+        lambda row: detectar_planta(row.get('mo_name', ''), row.get('sala', '')), 
+        axis=1
+    )
+    
+    # Agrupar por período y sala
+    df_grouped = df_mos.groupby(['periodo', 'periodo_sort', 'sala_clasificada', 'sala_tipo']).agg({
+        'kg_pt': 'sum',
+        'kg_mp': 'sum',
+        'mo_id': 'count'
+    }).reset_index()
+    df_grouped.columns = ['Período', 'periodo_sort', 'Sala', 'Tipo', 'Kg PT', 'Kg MP', 'Órdenes']
+    df_grouped = df_grouped.sort_values('periodo_sort')
+    
+    # Crear tabs para Proceso y Congelado
+    vol_tabs = st.tabs(["🏭 Salas (Proceso)", "❄️ Túneles (Congelado)"])
+    
+    with vol_tabs[0]:
+        df_proceso = df_grouped[df_grouped['Tipo'] == 'PROCESO'].copy()
+        if not df_proceso.empty:
+            chart = alt.Chart(df_proceso).mark_bar().encode(
+                x=alt.X('Período:N', sort=df_proceso['Período'].tolist(), title=f'Período ({agrupacion})'),
+                y=alt.Y('Kg PT:Q', title='Kilogramos Producidos'),
+                color=alt.Color('Sala:N', legend=alt.Legend(title='Sala')),
+                tooltip=[
+                    alt.Tooltip('Período:N', title='Período'),
+                    alt.Tooltip('Sala:N', title='Sala'),
+                    alt.Tooltip('Kg PT:Q', title='Kg Producidos', format=',.0f'),
+                    alt.Tooltip('Kg MP:Q', title='Kg Materia Prima', format=',.0f'),
+                    alt.Tooltip('Órdenes:Q', title='Órdenes')
+                ]
+            ).properties(
+                height=400,
+                title=f"Volumen por {agrupacion} - Salas de Proceso"
+            ).configure_axis(
+                labelFontSize=12,
+                titleFontSize=14
+            )
+            st.altair_chart(chart, use_container_width=True)
+            
+            # Tabla resumen
+            with st.expander("📋 Ver datos detallados"):
+                st.dataframe(
+                    df_proceso[['Período', 'Sala', 'Kg PT', 'Kg MP', 'Órdenes']].style.format({
+                        'Kg PT': '{:,.0f}',
+                        'Kg MP': '{:,.0f}'
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+        else:
+            st.info("No hay datos de proceso para mostrar.")
+    
+    with vol_tabs[1]:
+        df_congelado = df_grouped[df_grouped['Tipo'] == 'CONGELADO'].copy()
+        if not df_congelado.empty:
+            # Separar por tipo de túnel (Estático vs Continuo)
+            chart = alt.Chart(df_congelado).mark_bar().encode(
+                x=alt.X('Período:N', sort=df_congelado['Período'].tolist(), title=f'Período ({agrupacion})'),
+                y=alt.Y('Kg PT:Q', title='Kilogramos Congelados'),
+                color=alt.Color('Sala:N', legend=alt.Legend(title='Túnel')),
+                tooltip=[
+                    alt.Tooltip('Período:N', title='Período'),
+                    alt.Tooltip('Sala:N', title='Túnel'),
+                    alt.Tooltip('Kg PT:Q', title='Kg Congelados', format=',.0f'),
+                    alt.Tooltip('Órdenes:Q', title='Órdenes')
+                ]
+            ).properties(
+                height=400,
+                title=f"Volumen por {agrupacion} - Túneles de Congelado"
+            ).configure_axis(
+                labelFontSize=12,
+                titleFontSize=14
+            )
+            st.altair_chart(chart, use_container_width=True)
+            
+            # Tabla resumen
+            with st.expander("📋 Ver datos detallados"):
+                st.dataframe(
+                    df_congelado[['Período', 'Sala', 'Kg PT', 'Órdenes']].style.format({
+                        'Kg PT': '{:,.0f}'
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+        else:
+            st.info("No hay datos de congelado para mostrar.")
+    
+    st.markdown("---")
 
 
 def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio_rep=None, fecha_fin_rep=None, username=None, password=None, agrupacion="Semana"):
