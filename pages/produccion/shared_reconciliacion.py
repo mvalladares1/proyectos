@@ -6,8 +6,11 @@ import streamlit as st
 import requests
 import os
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetimeimport sys
 
+# Importar get_credenciales desde shared.auth
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from shared.auth import get_credenciales
 # Determinar API_URL basado en ENV
 ENV = os.getenv("ENV", "prod")
 if ENV == "development":
@@ -44,13 +47,6 @@ def get_api_headers() -> Dict[str, str]:
     return {"X-API-Key": st.session_state.get('api_key', '')}
 
 
-def get_credentials() -> tuple[str, str]:
-    """Obtiene las credenciales del usuario actual."""
-    username = st.session_state.get('username', '')
-    password = st.session_state.get('password', '')
-    return username, password
-
-
 # ============================================================================
 # FUNCIONES PARA TRIGGER SO ASOCIADA
 # ============================================================================
@@ -62,7 +58,15 @@ def buscar_odfs_sin_so(
 ) -> Dict:
     """Busca ODFs sin SO Asociada."""
     try:
-        username, password = get_credentials()
+        username, password = get_credenciales()
+        if not username or not password:
+            return {
+                "success": False,
+                "error": "No hay credenciales de usuario disponibles",
+                "total": 0,
+                "odfs": []
+            }
+        
         params = {
             "username": username,
             "password": password,
@@ -98,7 +102,13 @@ def buscar_odfs_sin_so(
 def trigger_odf_individual(odf_id: int, wait_seconds: float) -> Dict:
     """Triggea SO Asociada para un ODF."""
     try:
-        username, password = get_credentials()
+        username, password = get_credenciales()
+        if not username or not password:
+            return {
+                "success": False,
+                "error": "No hay credenciales de usuario disponibles"
+            }
+        
         response = requests.post(
             f"{API_ODF_RECONCILIACION}/trigger-so-asociada/{odf_id}",
             params={
@@ -152,8 +162,16 @@ def buscar_odfs_para_reconciliar(
     limit: int
 ) -> Dict:
     """Busca ODFs que necesitan reconciliación de KG."""
-    username, password = get_credentials()
     try:
+        username, password = get_credenciales()
+        if not username or not password:
+            return {
+                "success": False,
+                "error": "No hay credenciales de usuario disponibles",
+                "total": 0,
+                "odfs": []
+            }
+        
         params = {
             "username": username,
             "password": password,
@@ -190,7 +208,13 @@ def buscar_odfs_para_reconciliar(
 def preview_reconciliacion_odf(odf_id: int) -> Dict:
     """Preview de reconciliación sin escribir."""
     try:
-        username, password = get_credentials()
+        username, password = get_credenciales()
+        if not username or not password:
+            return {
+                "success": False,
+                "error": "No hay credenciales de usuario disponibles"
+            }
+        
         response = requests.get(
             f"{API_ODF_RECONCILIACION}/odf/{odf_id}/preview",
             params={
@@ -217,7 +241,13 @@ def preview_reconciliacion_odf(odf_id: int) -> Dict:
 def reconciliar_odf_kg(odf_id: int, dry_run: bool = False) -> Dict:
     """Reconcilia KG de un ODF."""
     try:
-        username, password = get_credentials()
+        username, password = get_credenciales()
+        if not username or not password:
+            return {
+                "success": False,
+                "error": "No hay credenciales de usuario disponibles"
+            }
+        
         response = requests.post(
             f"{API_ODF_RECONCILIACION}/odf/{odf_id}/reconciliar",
             params={
