@@ -129,22 +129,27 @@ def render(username: str, password: str):
                 )
             
             with col_exp2:
-                xlsx = fetch_pallets_excel(
-                    username, password, 
-                    fecha_inicio.strftime("%Y-%m-%d"), 
-                    fecha_fin.strftime("%Y-%m-%d"),
-                    manejo=sel_manejo,
-                    tipo_fruta=sel_fruta,
-                    origen=sel_origen
-                )
-                if xlsx:
-                    st.download_button(
-                        label="📗 Descargar Excel Detallado (Pallet x Fila)",
-                        data=xlsx,
-                        file_name=f'detalle_pallets_{fecha_inicio}_{fecha_fin}.xlsx',
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key="download_pallets_xlsx"
-                    )
+                if st.button("📗 Generar Excel Detallado (Pallet x Fila)", key="btn_generate_excel"):
+                    with st.spinner("Generando Excel detallado..."):
+                        xlsx = fetch_pallets_excel(
+                            username, password, 
+                            fecha_inicio.strftime("%Y-%m-%d"), 
+                            fecha_fin.strftime("%Y-%m-%d"),
+                            manejo=sel_manejo,
+                            tipo_fruta=sel_fruta,
+                            origen=sel_origen
+                        )
+                        if xlsx:
+                            st.download_button(
+                                label="⬇️ Descargar Excel Generado",
+                                data=xlsx,
+                                file_name=f'detalle_pallets_{fecha_inicio}_{fecha_fin}.xlsx',
+                                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                key="download_pallets_xlsx"
+                            )
+                            st.success("✅ Excel generado correctamente")
+                        else:
+                            st.error("❌ Error al generar Excel. Verifica la conexión.")
         else:
             st.warning("No se encontraron datos para el rango seleccionado.")
     else:
