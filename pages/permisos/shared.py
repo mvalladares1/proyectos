@@ -18,15 +18,16 @@ else:
 MODULE_NAMES = {
     "recepciones": "📥 Recepciones",
     "produccion": "🏭 Producción",
+    "reconciliacion": "🔄 Reconciliación",
     "bandejas": "📊 Bandejas",
     "stock": "📦 Stock",
-    "containers": "🚢 Containers",
-    "rendimiento": "📈 Rendimiento",
+    "pedidos_venta": "🚢 Pedidos de Venta",
+    "rendimiento": "🔍 Trazabilidad",
+    "relacion_comercial": "🤝 Relación Comercial",
+    "automatizaciones": "🦾 Automatizaciones",
     "finanzas": "💰 Finanzas",
     "compras": "🛒 Compras",
-    "automatizaciones": "🦾 Automatizaciones",
     "permisos": "⚙️ Permisos",
-    "relacion_comercial": "📊 Relación Comercial",
 }
 
 # --------------------- CSS Global ---------------------
