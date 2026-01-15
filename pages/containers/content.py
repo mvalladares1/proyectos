@@ -71,14 +71,23 @@ def render(username: str, password: str):
     # Cargar datos SOLO al hacer click en el botón
     if cargar:
         with st.spinner("🔄 Cargando containers..."):
-            containers = fetch_containers(
-                username, 
-                password, 
-                start_date=fecha_inicio.strftime("%Y-%m-%d"),
-                end_date=fecha_fin.strftime("%Y-%m-%d"),
-                state=STATE_OPTIONS[selected_state]
-            )
-            st.session_state["containers_data"] = containers
+            try:
+                containers = fetch_containers(
+                    username, 
+                    password, 
+                    start_date=fecha_inicio.strftime("%Y-%m-%d"),
+                    end_date=fecha_fin.strftime("%Y-%m-%d"),
+                    state=STATE_OPTIONS[selected_state]
+                )
+                st.session_state["containers_data"] = containers
+                if containers:
+                    st.success(f"✓ Se cargaron {len(containers)} pedidos de venta")
+                else:
+                    st.warning("No se encontraron pedidos en el período seleccionado")
+            except Exception as e:
+                st.error(f"❌ Error al cargar datos: {str(e)}")
+                import traceback
+                st.error(traceback.format_exc())
             st.rerun()
     
     containers = st.session_state.get("containers_data", [])

@@ -28,53 +28,33 @@ def is_operational_cost(product_name: str) -> bool:
     return any(ind in name_lower for ind in OPERATIONAL_INDICATORS)
 
 
-def is_excluded_consumo(product_name: str, category_name: str = '') -> bool:
+def is_excluded_consumo(product_name: str, category_name: str = '', especie: str = None, manejo: str = None) -> bool:
     """
     Verifica si un producto debe excluirse del consumo MP.
+    
+    Lógica simple:
+    - Si tiene especie Y manejo configurados → ES FRUTA → INCLUIR (return False)
+    - Si NO tiene especie O NO tiene manejo → ES INSUMO → EXCLUIR (return True)
     
     Args:
         product_name: Nombre del producto
         category_name: Nombre de la categoría
+        especie: Especie del producto (de x_studio_sub_categora)
+        manejo: Manejo del producto (de x_studio_categora_tipo_de_manejo)
         
     Returns:
-        True si debe excluirse
+        True si debe excluirse (es insumo), False si debe incluirse (es fruta)
     """
     if not product_name:
         return True
     
-    name_lower = product_name.lower()
-    cat_lower = (category_name or '').lower()
-    
-    # Productos con código [1xxxxx], [2xxxxx], [3xxxxx], [4xxxxx] son productos de proceso
-    # Solo [5xxxxx] y superiores son insumos
-    if product_name.startswith('[1') or product_name.startswith('[2') or \
-       product_name.startswith('[3') or product_name.startswith('[4'):
+    # Si tiene especie Y manejo válidos → es fruta → NO excluir
+    if especie and especie != 'Otro' and especie != 'SIN ESPECIE' and \
+       manejo and manejo != 'Otro' and manejo != 'SIN MANEJO':
         return False
     
-    # Productos con código [5xxxxx] o [6xxxxx] son insumos - EXCLUIR
-    if product_name.startswith('[5') or product_name.startswith('[6'):
-        return True
-    
-    if is_operational_cost(product_name):
-        return True
-    
-    if any(exc in cat_lower for exc in EXCLUDED_CATEGORIES):
-        return True
-    
-    if any(exc in name_lower for exc in PURE_PACKAGING):
-        return True
-    
-    # Detectar cajas/bolsas/film en cualquier parte del nombre
-    if 'bolsa' in name_lower or 'caja' in name_lower:
-        return True
-    
-    if 'film' in name_lower or 'etiqueta' in name_lower:
-        return True
-    
-    if 'merma' in name_lower:
-        return True
-    
-    return False
+    # Si no tiene especie o manejo → es insumo → EXCLUIR
+    return True
 
 
 def extract_fruit_type(product_name: str) -> str:

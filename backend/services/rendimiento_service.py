@@ -181,14 +181,14 @@ class RendimientoService:
                 prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod
                 prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
                 
-                # Excluir insumos usando la función helper (más preciso que especie/manejo)
-                if is_excluded_consumo(prod_name):
-                    continue
-                
                 # Obtener especie y manejo reales desde product.template
                 prod_info = product_info_map.get(prod_id, {'manejo': 'Otro', 'tipo_fruta': 'Otro'})
                 especie = prod_info['tipo_fruta']
                 manejo = prod_info['manejo']
+                
+                # Excluir si no tiene especie Y manejo (es insumo)
+                if is_excluded_consumo(prod_name, especie=especie, manejo=manejo):
+                    continue
                 
                 lot = ml.get('lot_id')
                 
