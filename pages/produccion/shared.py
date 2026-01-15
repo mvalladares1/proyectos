@@ -195,20 +195,41 @@ def format_num(val, decimals=2):
 
 # --------------------- Funciones de planta ---------------------
 
-def detectar_planta(mo_name):
-    """Detecta la planta basándose en el prefijo del nombre de la MO.
-    RF/MO/... = RFP (default), VLK/... = VILKUN
+def detectar_planta(mo_name, sala_name=None):
+    """Detecta la planta basándose en el nombre de la MO y/o la sala.
+    
+    Reglas:
+    - Si el nombre de la MO empieza con "VLK" → VILKUN
+    - Si la sala contiene "VILKUN" o "VLK" → VILKUN
+    - En cualquier otro caso → RIO FUTURO
+    
+    Args:
+        mo_name: Nombre de la orden de fabricación
+        sala_name: Nombre de la sala de proceso (opcional)
+    
+    Returns:
+        "VILKUN" o "RIO FUTURO"
     """
-    if not mo_name:
-        return "RIO FUTURO"
-    mo_upper = str(mo_name).upper()
-    if mo_upper.startswith("VLK"):
-        return "VILKUN"
+    # Verificar por nombre de MO
+    if mo_name:
+        mo_upper = str(mo_name).upper()
+        if mo_upper.startswith("VLK"):
+            return "VILKUN"
+    
+    # Verificar por nombre de sala
+    if sala_name:
+        sala_upper = str(sala_name).upper()
+        if "VILKUN" in sala_upper or "VLK" in sala_upper:
+            return "VILKUN"
+    
     return "RIO FUTURO"
 
 
 def filtrar_mos_por_planta(lista_mos, filtro_rfp, filtro_vilkun):
-    """Filtra una lista de MOs por planta basándose en el nombre de la MO."""
+    """Filtra una lista de MOs por planta basándose en el nombre de la MO y la sala.
+    
+    Ahora considera tanto el nombre de la MO como la sala para determinar la planta.
+    """
     if filtro_rfp and filtro_vilkun:
         return lista_mos
     if not filtro_rfp and not filtro_vilkun:
@@ -217,9 +238,10 @@ def filtrar_mos_por_planta(lista_mos, filtro_rfp, filtro_vilkun):
     resultado = []
     for item in lista_mos:
         mo_name = item.get('mo_name') or item.get('name') or ''
-        planta = detectar_planta(mo_name)
+        sala = item.get('sala') or item.get('sala_name') or ''
+        planta = detectar_planta(mo_name, sala)
         
-        if planta == "RFP" and filtro_rfp:
+        if planta == "RIO FUTURO" and filtro_rfp:
             resultado.append(item)
         elif planta == "VILKUN" and filtro_vilkun:
             resultado.append(item)

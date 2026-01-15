@@ -481,7 +481,6 @@ class ContainersService:
             
             # Buscar sale.order por nombre
             sale_ids = self.odoo.search("sale.order", [("name", "in", sale_names)])
-            ]))
             
             if not sale_ids:
                 return []
