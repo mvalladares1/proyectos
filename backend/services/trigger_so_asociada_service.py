@@ -72,12 +72,20 @@ class TriggerSOAsociadaService:
             'date_planned_start'
         ]
         
-        odfs = self.models.execute_kw(
+        # Buscar IDs primero
+        odf_ids = self.odoo.search(
             'mrp.production',
-            'search_read',
-            [domain],
-            {'fields': fields, 'limit': limit, 'order': 'date_planned_start desc'}
+            domain,
+            limit=limit,
+            order='date_planned_start desc'
         )
+        
+        if not odf_ids:
+            logger.info("No se encontraron ODFs pendientes de cargar SO Asociada")
+            return []
+        
+        # Leer los datos
+        odfs = self.odoo.read('mrp.production', odf_ids, fields)
         
         logger.info(f"Se encontraron {len(odfs)} ODFs pendientes de cargar SO Asociada")
         

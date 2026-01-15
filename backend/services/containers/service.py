@@ -462,12 +462,12 @@ class ContainersService:
         """Obtiene lista de clientes que tienen pedidos con fabricaciones"""
         try:
             prod_domain = [("x_studio_po_asociada", "!=", False)]
-            prods = self.odoo.search_read(
-                "mrp.production",
-                prod_domain,
-                ["x_studio_po_asociada"],
-                limit=500
-            )
+            prod_ids = self.odoo.search("mrp.production", prod_domain, limit=500)
+            
+            if not prod_ids:
+                return []
+            
+            prods = self.odoo.read("mrp.production", prod_ids, ["x_studio_po_asociada"])
             
             # x_studio_po_asociada contiene nombres (strings), no IDs
             sale_names = list(set([

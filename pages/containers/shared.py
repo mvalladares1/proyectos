@@ -37,9 +37,15 @@ def fetch_containers(_username: str, _password: str, start_date: str = None, end
             timeout=60.0
         )
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        return data
+    except httpx.HTTPStatusError as e:
+        st.error(f"❌ Error {e.response.status_code}: {e.response.text[:500]}")
+        return []
     except Exception as e:
-        st.error(f"Error al obtener containers: {str(e)}")
+        st.error(f"❌ Error al obtener containers: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return []
 
 

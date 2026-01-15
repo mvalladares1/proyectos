@@ -45,9 +45,15 @@ def is_excluded_consumo(product_name: str, category_name: str = '') -> bool:
     name_lower = product_name.lower()
     cat_lower = (category_name or '').lower()
     
-    # Productos con código [3xxxxx] o [1xxxxx] son productos de proceso
-    if product_name.startswith('[3') or product_name.startswith('[1'):
+    # Productos con código [1xxxxx], [2xxxxx], [3xxxxx], [4xxxxx] son productos de proceso
+    # Solo [5xxxxx] y superiores son insumos
+    if product_name.startswith('[1') or product_name.startswith('[2') or \
+       product_name.startswith('[3') or product_name.startswith('[4'):
         return False
+    
+    # Productos con código [5xxxxx] o [6xxxxx] son insumos - EXCLUIR
+    if product_name.startswith('[5') or product_name.startswith('[6'):
+        return True
     
     if is_operational_cost(product_name):
         return True
@@ -58,7 +64,14 @@ def is_excluded_consumo(product_name: str, category_name: str = '') -> bool:
     if any(exc in name_lower for exc in PURE_PACKAGING):
         return True
     
-    if name_lower.startswith('bolsa') or name_lower.startswith('caja'):
+    # Detectar cajas/bolsas/film en cualquier parte del nombre
+    if 'bolsa' in name_lower or 'caja' in name_lower:
+        return True
+    
+    if 'film' in name_lower or 'etiqueta' in name_lower:
+        return True
+    
+    if 'merma' in name_lower:
         return True
     
     return False
