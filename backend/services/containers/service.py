@@ -62,7 +62,7 @@ class ContainersService:
         OPTIMIZADO: Busca desde fabricaciones que tienen x_studio_po_asociada_1
         """
         # PASO 1: Buscar TODAS las fabricaciones que tienen una PO asociada
-        prod_domain = [("x_studio_po_asociada_1", "!=", False)]
+        prod_domain = [("x_studio_po_asociada", "!=", False)]
         if start_date:
             prod_domain.append(("date_planned_start", ">=", start_date))
         if end_date:
@@ -71,7 +71,7 @@ class ContainersService:
         prod_fields = [
             "name", "product_id", "product_qty", "qty_produced",
             "state", "date_planned_start", "date_start", "date_finished",
-            "user_id", "x_studio_po_asociada_1", "x_studio_po_cliente_1",
+            "user_id", "x_studio_po_asociada", "x_studio_po_cliente_1",
             "x_studio_kg_totales_po", "x_studio_kg_consumidos_po",
             "x_studio_kg_disponibles_po", "x_studio_sala_de_proceso",
             "x_studio_clientes"
@@ -79,7 +79,7 @@ class ContainersService:
         fallback_prod_fields = [
             "name", "product_id", "product_qty", "qty_produced",
             "state", "date_planned_start", "date_start", "date_finished",
-            "user_id", "x_studio_po_asociada_1", "x_studio_po_cliente_1",
+            "user_id", "x_studio_po_asociada", "x_studio_po_cliente_1",
             "x_studio_kg_totales_po", "x_studio_kg_consumidos_po",
             "x_studio_kg_disponibles_po", "x_studio_sala_de_proceso"
         ]
@@ -105,19 +105,23 @@ class ContainersService:
             return []
         
         # PASO 2: Agrupar fabricaciones por sale.order (PO asociada)
-        sales_map = {}  # sale_id -> {info, productions: []}
-        sale_ids_to_fetch = set()
+        sales_map = {}  # sale_name -> {info, productions: []}
+        sale_names_to_fetch = set()
         
         for p in prods_raw:
-            po_asociada = p.get("x_studio_po_asociada_1")
+            po_asociada = p.get("x_studio_po_asociada")
             if not po_asociada:
                 continue
             
-            sale_id = po_asociada[0] if isinstance(po_asociada, (list, tuple)) else po_asociada
-            sale_ids_to_fetch.add(sale_id)
+            # x_studio_po_asociada contiene el NAME del sale.order (ej: "S00830"), no el ID
+            sale_name = po_asociada.strip() if isinstance(po_asociada, str) else str(po_asociada)
+            if not sale_name:
+                continue
+                
+            sale_names_to_fetch.add(sale_name)
             
-            if sale_id not in sales_map:
-                sales_map[sale_id] = {
+            if sale_name not in sales_map:
+                sales_map[sale_name] = {
                     "productions": [],
                     "kg_producidos_total": 0
                 }
@@ -137,7 +141,7 @@ class ContainersService:
             cliente = p.get("x_studio_clientes")
             cliente_name = cliente[1] if isinstance(cliente, (list, tuple)) else "N/A"
             
-            sales_map[sale_id]["productions"].append({
+            sales_map[sale_name]["productions"].append({
                 "id": p["id"],
                 "name": p.get("name", ""),
                 "product_name": product_name,
@@ -158,9 +162,9 @@ class ContainersService:
                 "cliente": cliente_name
             })
             
-            sales_map[sale_id]["kg_producidos_total"] += qty_produced
+            sales_map[sale_name]["kg_producidos_total"] += qty_produced
         
-        if not sale_ids_to_fetch:
+        if not sale_names_to_fetch:
             return []
         
         # PASO 3: Obtener datos de las ventas (sale.order) en UNA sola llamada
@@ -175,7 +179,7 @@ class ContainersService:
             "user_id", "order_line"
         ]
         
-        sale_domain = [("id", "in", list(sale_ids_to_fetch))]
+        sale_domain = [("name", "in", list(sale_names_to_fetch))]
         if partner_id:
             sale_domain.append(("partner_id", "=", partner_id))
         if state:
@@ -226,6 +230,7 @@ class ContainersService:
         
         for sale in sales_raw:
             sale_id = sale["id"]
+            sale_name = sale.get("name", "")
             
             # Obtener partner name ANTES de clean_record
             partner = sale.get("partner_id")
@@ -239,8 +244,19 @@ class ContainersService:
             # KG totales del pedido (suma de líneas)
             kg_total = sum([l.get("product_uom_qty", 0) or 0 for l in lines_data])
             
-            # Producciones y KG producidos
-            sale_info = sales_map.get(sale_id, {"productions": [], "kg_producidos_total": 0})
+            # KG por producto (agrupado)
+            kg_por_producto = {}
+            for line in lines_data:
+                prod = line.get("product_id", {})
+                prod_name = prod.get("name", "N/A") if isinstance(prod, dict) else "N/A"
+                kg = line.get("product_uom_qty", 0) or 0
+                if prod_name in kg_por_producto:
+                    kg_por_producto[prod_name] += kg
+                else:
+                    kg_por_producto[prod_name] = kg
+            
+            # Producciones y KG producidos - BUSCAR POR NAME no por ID
+            sale_info = sales_map.get(sale_name, {"productions": [], "kg_producidos_total": 0})
             productions = sale_info["productions"]
             kg_producidos = sale_info["kg_producidos_total"]
             
@@ -283,6 +299,7 @@ class ContainersService:
                 "kg_total": kg_total,
                 "kg_producidos": kg_producidos,
                 "kg_disponibles": kg_disponibles,
+                "kg_por_producto": kg_por_producto,
                 "avance_pct": round(avance_pct, 2),
                 "num_fabricaciones": len(productions),
                 "lines": lines_data,

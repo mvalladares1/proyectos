@@ -354,6 +354,13 @@ def _render_top5(containers):
             if c.get('origin'):
                 st.caption(f"📄 PO Cliente: {c.get('origin', 'N/A')}")
             
+            # KG por producto
+            kg_por_producto = c.get('kg_por_producto', {})
+            if kg_por_producto:
+                st.caption("📊 **KG por Producto:**")
+                productos_str = " | ".join([f"{prod[:25]}: {kg:,.0f} kg" for prod, kg in sorted(kg_por_producto.items(), key=lambda x: x[1], reverse=True)])
+                st.caption(productos_str)
+            
             st.markdown("---")
             
             # Barra de progreso con ODFs apiladas
@@ -440,6 +447,13 @@ def _render_table_view(containers):
             except:
                 pass
         
+        # Formatear KG por producto para mostrar en tabla
+        kg_productos_str = ""
+        kg_por_producto = c.get('kg_por_producto', {})
+        if kg_por_producto:
+            productos_list = [f"{prod[:20]}: {kg:,.0f}" for prod, kg in sorted(kg_por_producto.items(), key=lambda x: x[1], reverse=True)]
+            kg_productos_str = " | ".join(productos_list[:3])  # Mostrar solo los 3 principales
+        
         table_data.append({
             "Pedido": c.get('name', 'N/A'),
             "Cliente": c.get('partner_name', 'N/A'),
@@ -453,7 +467,8 @@ def _render_table_view(containers):
             "Avance %": c.get('avance_pct', 0),
             "# ODFs": c.get('num_fabricaciones', 0),
             "Monto Total": c.get('amount_total', 0),
-            "Producto Principal": c.get('producto_principal', 'N/A')[:30]
+            "Producto Principal": c.get('producto_principal', 'N/A')[:30],
+            "KG por Producto": kg_productos_str
         })
     
     df = pd.DataFrame(table_data)
@@ -483,6 +498,7 @@ def _render_table_view(containers):
                 "Días Restantes": st.column_config.NumberColumn("Días", width="small"),
                 "Avance %": st.column_config.TextColumn("Avance %", width="small"),
                 "# ODFs": st.column_config.NumberColumn("ODFs", width="small"),
+                "KG por Producto": st.column_config.TextColumn("KG por Producto", width="large"),
             }
         )
         
@@ -646,6 +662,15 @@ def _render_detail(containers, username, password):
         st.write(f"**Producido:** {selected.get('kg_producidos', 0):,.2f} kg")
         st.write(f"**Pendiente:** {selected.get('kg_disponibles', 0):,.2f} kg")
         st.write(f"**Monto:** ${selected.get('amount_total', 0):,.2f}")
+    
+    # Mostrar KG por producto
+    kg_por_producto = selected.get('kg_por_producto', {})
+    if kg_por_producto:
+        st.markdown("**📊 KG por Producto**")
+        cols_productos = st.columns(min(len(kg_por_producto), 4))
+        for idx, (producto, kg) in enumerate(sorted(kg_por_producto.items(), key=lambda x: x[1], reverse=True)):
+            with cols_productos[idx % 4]:
+                st.metric(producto[:30], f"{kg:,.2f} kg", help=producto)
     
     st.divider()
     
