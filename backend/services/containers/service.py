@@ -59,7 +59,7 @@ class ContainersService:
                        state: Optional[str] = None) -> List[Dict]:
         """
         Obtiene lista de pedidos de venta con su avance de producción.
-        OPTIMIZADO: Busca desde fabricaciones que tienen x_studio_po_asociada_1
+        OPTIMIZADO: Busca desde fabricaciones que tienen x_studio_po_asociada
         """
         # PASO 1: Buscar TODAS las fabricaciones que tienen una PO asociada
         prod_domain = [("x_studio_po_asociada", "!=", False)]
@@ -313,7 +313,17 @@ class ContainersService:
         Obtiene el detalle completo de un container/venta específico.
         OPTIMIZADO: Usa consultas paralelas para producciones y venta.
         """
-        prod_domain = [("x_studio_po_asociada_1", "=", sale_id)]
+        # Primero buscar el sale.order por ID para obtener su nombre
+        try:
+            sale_data = self.odoo.read("sale.order", [sale_id], ["name"])
+            if not sale_data:
+                return {}
+            sale_name = sale_data[0].get("name", "")
+        except Exception as e:
+            print(f"Error getting sale.order name: {e}")
+            return {}
+        
+        prod_domain = [("x_studio_po_asociada", "=", sale_name)]
         
         prod_fields = [
             "name", "product_id", "product_qty", "qty_produced",
@@ -451,18 +461,26 @@ class ContainersService:
     def get_partners_with_orders(self) -> List[Dict]:
         """Obtiene lista de clientes que tienen pedidos con fabricaciones"""
         try:
-            prod_domain = [("x_studio_po_asociada_1", "!=", False)]
+            prod_domain = [("x_studio_po_asociada", "!=", False)]
             prods = self.odoo.search_read(
                 "mrp.production",
                 prod_domain,
-                ["x_studio_po_asociada_1"],
+                ["x_studio_po_asociada"],
                 limit=500
             )
             
-            sale_ids = list(set([
-                p["x_studio_po_asociada_1"][0] 
+            # x_studio_po_asociada contiene nombres (strings), no IDs
+            sale_names = list(set([
+                p["x_studio_po_asociada"].strip()
                 for p in prods 
-                if p.get("x_studio_po_asociada_1")
+                if p.get("x_studio_po_asociada") and isinstance(p.get("x_studio_po_asociada"), str) and p.get("x_studio_po_asociada").strip()
+            ]))
+            
+            if not sale_names:
+                return []
+            
+            # Buscar sale.order por nombre
+            sale_ids = self.odoo.search("sale.order", [("name", "in", sale_names)])
             ]))
             
             if not sale_ids:

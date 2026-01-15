@@ -20,8 +20,8 @@ from shared.auth import proteger_modulo, get_credenciales, tiene_acceso_dashboar
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Importar módulos
-from produccion import shared_reconciliacion as shared
-from produccion import tab_trigger_lista, tab_trigger_ejecutar, tab_reconciliar_kg
+from reconciliacion import shared
+from reconciliacion import tab_trigger_lista, tab_trigger_ejecutar, tab_reconciliar_kg
 
 # Configuración de página
 st.set_page_config(
