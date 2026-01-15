@@ -59,27 +59,53 @@ home_page = st.Page("Home_Content.py", title="Home", icon="🏠", default=True)
 
 # Solo mostrar las demás páginas si el usuario está autenticado
 if is_user_authenticated():
-    pages = {
+    # Obtener información del usuario
+    username = st.session_state.get('username', '')
+    is_admin = st.session_state.get('is_admin', False)
+    restricted_dashboards = st.session_state.get('restricted_dashboards', {})
+    
+    def tiene_acceso(dashboard_key: str) -> bool:
+        """Verifica si el usuario tiene acceso a un dashboard."""
+        if is_admin:
+            return True
+        # Si el dashboard no está en restricted o está vacío, es público
+        if dashboard_key not in restricted_dashboards:
+            return True
+        usuarios_permitidos = restricted_dashboards.get(dashboard_key, [])
+        if not usuarios_permitidos:  # Lista vacía = público
+            return True
+        return username in usuarios_permitidos
+    
+    # Definir todas las páginas posibles
+    all_pages = {
         "Operaciones": [
-            st.Page("pages/1_Recepciones.py", title="Recepciones", icon="📥"),
-            st.Page("pages/2_Produccion.py", title="Producción", icon="🏭"),
-            st.Page("pages/12_Reconciliacion_Produccion.py", title="Reconciliación", icon="🔄"),
-            st.Page("pages/3_Bandejas.py", title="Bandejas", icon="📊"),
-            st.Page("pages/4_Stock.py", title="Stock", icon="📦"),
-            st.Page("pages/5_Pedidos_Venta.py", title="Pedidos de Venta", icon="🚢"),
-            st.Page("pages/7_Rendimiento.py", title="Trazabilidad", icon="🔍"),
-            st.Page("pages/11_Relacion_Comercial.py", title="Relación Comercial", icon="🤝"),
-            st.Page("pages/10_Automatizaciones.py", title="Automatizaciones", icon="🦾"),
+            ("recepciones", st.Page("pages/1_Recepciones.py", title="Recepciones", icon="📥")),
+            ("produccion", st.Page("pages/2_Produccion.py", title="Producción", icon="🏭")),
+            ("reconciliacion", st.Page("pages/12_Reconciliacion_Produccion.py", title="Reconciliación", icon="🔄")),
+            ("bandejas", st.Page("pages/3_Bandejas.py", title="Bandejas", icon="📊")),
+            ("stock", st.Page("pages/4_Stock.py", title="Stock", icon="📦")),
+            ("pedidos_venta", st.Page("pages/5_Pedidos_Venta.py", title="Pedidos de Venta", icon="🚢")),
+            ("rendimiento", st.Page("pages/7_Rendimiento.py", title="Trazabilidad", icon="🔍")),
+            ("relacion_comercial", st.Page("pages/11_Relacion_Comercial.py", title="Relación Comercial", icon="🤝")),
+            ("automatizaciones", st.Page("pages/10_Automatizaciones.py", title="Automatizaciones", icon="🦾")),
         ],
         "Finanzas": [
-            st.Page("pages/6_Finanzas.py", title="Finanzas", icon="💰"),
-            st.Page("pages/8_Compras.py", title="Compras", icon="🛒"),
+            ("finanzas", st.Page("pages/6_Finanzas.py", title="Finanzas", icon="💰")),
+            ("compras", st.Page("pages/8_Compras.py", title="Compras", icon="🛒")),
         ],
         "Administración": [
-            st.Page("pages/9_Permisos.py", title="Permisos", icon="⚙️"),
+            ("permisos", st.Page("pages/9_Permisos.py", title="Permisos", icon="⚙️")),
         ],
     }
-    # Navegación con todas las páginas
+    
+    # Filtrar páginas según permisos
+    pages = {}
+    for category, category_pages in all_pages.items():
+        filtered_pages = [page for dashboard_key, page in category_pages if tiene_acceso(dashboard_key)]
+        if filtered_pages:  # Solo agregar categoría si tiene páginas visibles
+            pages[category] = filtered_pages
+    
+    # Navegación con páginas filtradas
     nav = st.navigation([home_page] + [p for group in pages.values() for p in group])
 else:
     # Usuario no autenticado: solo mostrar Home (login)

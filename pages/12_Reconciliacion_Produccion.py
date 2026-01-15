@@ -10,6 +10,7 @@ import streamlit as st
 import sys
 import os
 from datetime import datetime, timedelta
+from typing import List, Dict, Optional
 
 # Añadir directorios al path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
