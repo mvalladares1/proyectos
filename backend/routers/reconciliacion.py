@@ -5,18 +5,17 @@ Router para Reconciliación de Producción
 Expone endpoints para analizar ODFs con múltiples SO.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException
 from typing import Dict, List
 from datetime import datetime
 
 from backend.services.produccion_reconciliacion_service import ProduccionReconciliador
-from backend.config.settings import settings
 from shared.odoo_client import OdooClient
 
 router = APIRouter(prefix="/api/v1/produccion-reconciliacion", tags=["Produccion Reconciliación"])
 
 
-def get_reconciliador(api_key: str = Depends(settings.verify_api_key)) -> ProduccionReconciliador:
+def get_reconciliador() -> ProduccionReconciliador:
     """
     Dependency para obtener reconciliador autenticado.
     """

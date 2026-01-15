@@ -6,25 +6,24 @@ Endpoints para reconciliar ODFs con Sale Orders y actualizar
 campos de seguimiento (KG totales, consumidos, disponibles).
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Optional, List
 from datetime import datetime, date
 
 from backend.services.odf_reconciliation_service import ODFReconciliationService
 from backend.services.trigger_so_asociada_service import TriggerSOAsociadaService
-from backend.config.settings import settings
 from shared.odoo_client import OdooClient
 
 router = APIRouter(prefix="/api/v1/odf-reconciliation", tags=["ODF Reconciliation"])
 
 
-def get_reconciliation_service(api_key: str = Depends(settings.verify_api_key)) -> ODFReconciliationService:
+def get_reconciliation_service() -> ODFReconciliationService:
     """Dependency para obtener servicio de reconciliación autenticado."""
     odoo = OdooClient()
     return ODFReconciliationService(odoo)
 
 
-def get_trigger_service(api_key: str = Depends(settings.verify_api_key)) -> TriggerSOAsociadaService:
+def get_trigger_service() -> TriggerSOAsociadaService:
     """Dependency para obtener servicio de trigger SO Asociada."""
     odoo = OdooClient()
     return TriggerSOAsociadaService(odoo)
