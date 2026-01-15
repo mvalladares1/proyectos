@@ -6,6 +6,7 @@ Gestión completa de ODFs:
 1. Trigger SO Asociada - Activa automatización de Odoo
 2. Reconciliación KG - Calcula y actualiza campos de seguimiento
 """
+from __future__ import annotations
 import streamlit as st
 import sys
 import os
