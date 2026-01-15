@@ -37,6 +37,8 @@ def _fragment_main_aprobaciones(username: str, password: str):
         st.session_state.aprob_ppto = {}
     if 'aprob_ppto_detalle' not in st.session_state:
         st.session_state.aprob_ppto_detalle = {}
+    if 'recep_aprob_productores_loading' not in st.session_state:
+        st.session_state.recep_aprob_productores_loading = False
 
     # --- FILTROS DE FECHA ---
     col1, col2 = st.columns(2)

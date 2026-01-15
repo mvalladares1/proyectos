@@ -63,6 +63,7 @@ if is_user_authenticated():
         "Operaciones": [
             st.Page("pages/1_Recepciones.py", title="Recepciones", icon="📥"),
             st.Page("pages/2_Produccion.py", title="Producción", icon="🏭"),
+            st.Page("pages/12_Reconciliacion_Produccion.py", title="Reconciliación", icon="🔄"),
             st.Page("pages/3_Bandejas.py", title="Bandejas", icon="📊"),
             st.Page("pages/4_Stock.py", title="Stock", icon="📦"),
             st.Page("pages/5_Pedidos_Venta.py", title="Pedidos de Venta", icon="🚢"),
