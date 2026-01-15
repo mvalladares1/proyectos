@@ -728,7 +728,7 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
         cols_to_show.append('tipo_display')
         col_names.append('Tipo Proceso')
     
-    cols_to_show.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma'])
+    cols_to_show.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'kg_merma'])
     col_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rend %', 'Merma'])
     
     if 'costo_electricidad' in df_mos.columns:
