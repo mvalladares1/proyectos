@@ -180,10 +180,12 @@ else:
     dashboards_op = [
         ("📥", "Recepciones", "KPIs de Kg, costos y calidad por productor", "pages/1_Recepciones.py"),
         ("🏭", "Producción", "Órdenes de fabricación y rendimientos", "pages/2_Produccion.py"),
+        ("�", "Reconciliación", "Gestión de SO Asociada y Campos KG en ODFs", "pages/12_Reconciliacion_Produccion.py"),
         ("📊", "Bandejas", "Control de bandejas por proveedor", "pages/3_Bandejas.py"),
         ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py"),
-        ("🚢", "Containers", "Pedidos y avance de producción", "pages/5_Containers.py"),
+        ("🚢", "Pedidos de Venta", "Pedidos y avance de producción", "pages/5_Pedidos_Venta.py"),
         ("🔍", "Trazabilidad", "Trazabilidad inversa PT → MP y diagrama Sankey", "pages/7_Rendimiento.py"),
+        ("🤝", "Relación Comercial", "Análisis comercial y relaciones con clientes", "pages/11_Relacion_Comercial.py"),
         ("🦾", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py"),
     ]
     
