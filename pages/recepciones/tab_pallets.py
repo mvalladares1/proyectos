@@ -5,7 +5,7 @@ Vista detallada de pallets, pesos y filtros por manejo/fruta.
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from .shared import fmt_numero, fetch_pallets_data
+from .shared import fmt_numero, fetch_pallets_data, fetch_pallets_excel
 
 @st.fragment
 def render(username: str, password: str):
@@ -20,7 +20,7 @@ def render(username: str, password: str):
         fecha_fin = st.date_input("Hasta", datetime.now(), format="DD/MM/YYYY", key="pallets_hasta")
     
     with col3:
-        sel_origen = st.multiselect("Planta / Origen", ["RFP", "VILKUN"], default=["RFP", "VILKUN"], placeholder="Todas", key="pallets_origen")
+        sel_origen = st.multiselect("Planta / Origen", ["RFP", "VILKUN", "SAN JOSE"], default=["RFP", "VILKUN", "SAN JOSE"], placeholder="Todas", key="pallets_origen")
         
     with col4:
         st.write("") # Espaciador
@@ -121,12 +121,30 @@ def render(username: str, password: str):
             with col_exp1:
                 csv = df_filtered.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Descargar CSV",
+                    label="📥 CSV Simple",
                     data=csv,
                     file_name=f'pallets_recepcion_{fecha_inicio}_{fecha_fin}.csv',
                     mime='text/csv',
                     key="download_pallets_csv"
                 )
+            
+            with col_exp2:
+                xlsx = fetch_pallets_excel(
+                    username, password, 
+                    fecha_inicio.strftime("%Y-%m-%d"), 
+                    fecha_fin.strftime("%Y-%m-%d"),
+                    manejo=sel_manejo,
+                    tipo_fruta=sel_fruta,
+                    origen=sel_origen
+                )
+                if xlsx:
+                    st.download_button(
+                        label="📗 Descargar Excel Detallado (Pallet x Fila)",
+                        data=xlsx,
+                        file_name=f'detalle_pallets_{fecha_inicio}_{fecha_fin}.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        key="download_pallets_xlsx"
+                    )
         else:
             st.warning("No se encontraron datos para el rango seleccionado.")
     else:
