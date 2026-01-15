@@ -12,27 +12,21 @@ from datetime import datetime, date
 
 from backend.services.odf_reconciliation_service import ODFReconciliationService
 from backend.services.trigger_so_asociada_service import TriggerSOAsociadaService
-from backend.routers.auth import get_current_user
+from backend.config.settings import settings
 from shared.odoo_client import OdooClient
 
 router = APIRouter(prefix="/api/v1/odf-reconciliation", tags=["ODF Reconciliation"])
 
 
-def get_reconciliation_service(current_user: dict = Depends(get_current_user)) -> ODFReconciliationService:
+def get_reconciliation_service(api_key: str = Depends(settings.verify_api_key)) -> ODFReconciliationService:
     """Dependency para obtener servicio de reconciliación autenticado."""
     odoo = OdooClient()
-    odoo.uid = current_user.get('uid')
-    odoo.username = current_user.get('username')
-    
     return ODFReconciliationService(odoo)
 
 
-def get_trigger_service(current_user: dict = Depends(get_current_user)) -> TriggerSOAsociadaService:
+def get_trigger_service(api_key: str = Depends(settings.verify_api_key)) -> TriggerSOAsociadaService:
     """Dependency para obtener servicio de trigger SO Asociada."""
     odoo = OdooClient()
-    odoo.uid = current_user.get('uid')
-    odoo.username = current_user.get('username')
-    
     return TriggerSOAsociadaService(odoo)
 
 
