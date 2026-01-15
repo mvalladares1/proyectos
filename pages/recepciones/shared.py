@@ -124,6 +124,28 @@ def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
     return None
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None):
+    """Obtiene datos de pallets por recepción."""
+    params = {
+        "username": _username, "password": _password,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin
+    }
+    if manejo:
+        params["manejo"] = manejo
+    if tipo_fruta:
+        params["tipo_fruta"] = tipo_fruta
+    
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/pallets", params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        print(f"Error fetching pallets data: {e}")
+    return None
+
+
 # --------------------- Gestión de Caché ---------------------
 
 def clear_backend_cache():
@@ -170,7 +192,10 @@ def init_session_state():
         'recep_curva_loading': False,
         'recep_aprob_cargar_loading': False,
         'recep_aprob_aprobar_loading': False,
-        'recep_aprob_productores_loading': False,
+        'recep_aprob_ productores_loading': False,
+        'pallets_data': None,
+        'pallets_loaded': False,
+        'pallets_loading': False,
     }
     for key, default in defaults.items():
         if key not in st.session_state:

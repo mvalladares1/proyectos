@@ -698,3 +698,137 @@ def validar_recepciones(username: str, password: str, picking_ids: List[int]) ->
         "errores": errors,
         "n_error": len(error_ids)
     }
+
+def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fecha_fin: str, 
+                             manejo_filtros: Optional[List[str]] = None, 
+                             tipo_fruta_filtros: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """
+    Obtiene la cantidad de pallets y total kg por recepción de MP.
+    """
+    client = OdooClient(username=username, password=password)
+    
+    # 1. Buscar pickings de MP en el rango (solo validados)
+    domain = [
+        ("picking_type_id", "in", [1, 217]),
+        ("x_studio_categora_de_producto", "=", "MP"),
+        ("scheduled_date", ">=", fecha_inicio),
+        ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+        ("state", "=", "done")
+    ]
+    
+    pickings = client.search_read(
+        "stock.picking",
+        domain,
+        ["id", "name", "scheduled_date", "partner_id", "x_studio_gua_de_despacho"],
+        order="scheduled_date desc",
+        limit=2000
+    )
+    
+    if not pickings:
+        return []
+        
+    picking_ids = [p["id"] for p in pickings]
+    
+    # 2. Obtener todas las líneas de movimiento (move lines) en batch
+    # Es muy importante traer result_package_id para contar los pallets
+    move_lines = client.search_read(
+        "stock.move.line",
+        [("picking_id", "in", picking_ids)],
+        ["picking_id", "product_id", "qty_done", "result_package_id"]
+    )
+    
+    # 3. Obtener info de productos para filtrar y mostrar
+    all_product_ids = list(set(ml["product_id"][0] for ml in move_lines if ml.get("product_id")))
+    product_info = {}
+    
+    if all_product_ids:
+        # Usar caché si es posible o hacer batch read
+        products = client.read("product.product", all_product_ids, ["id", "product_tmpl_id"])
+        template_ids = list(set(p["product_tmpl_id"][0] for p in products if p.get("product_tmpl_id")))
+        
+        templates = client.read(
+            "product.template", 
+            template_ids, 
+            ["id", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
+        )
+        
+        template_map = {}
+        for t in templates:
+            manejo = t.get("x_studio_categora_tipo_de_manejo", "")
+            if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                manejo = manejo[1]
+            
+            tipo_fruta = t.get("x_studio_sub_categora", "")
+            if isinstance(tipo_fruta, (list, tuple)) and len(tipo_fruta) > 1:
+                tipo_fruta = tipo_fruta[1]
+                
+            template_map[t["id"]] = {
+                "manejo": manejo or "N/A",
+                "tipo_fruta": tipo_fruta or "N/A"
+            }
+            
+        for p in products:
+            tmpl_id = p["product_tmpl_id"][0] if p.get("product_tmpl_id") else None
+            product_info[p["id"]] = template_map.get(tmpl_id, {"manejo": "N/A", "tipo_fruta": "N/A"})
+
+    # 4. Agrupar y filtrar
+    ml_by_picking = {}
+    for ml in move_lines:
+        pk_id = ml["picking_id"][0]
+        if pk_id not in ml_by_picking:
+            ml_by_picking[pk_id] = []
+        ml_by_picking[pk_id].append(ml)
+        
+    resultado = []
+    for p in pickings:
+        p_ml = ml_by_picking.get(p["id"], [])
+        
+        # Enriquecer líneas con info de producto
+        filtered_ml = []
+        for ml in p_ml:
+            p_id = ml["product_id"][0] if ml.get("product_id") else None
+            info = product_info.get(p_id, {"manejo": "N/A", "tipo_fruta": "N/A"})
+            
+            # Filtros
+            if manejo_filtros and info["manejo"] not in manejo_filtros:
+                continue
+            if tipo_fruta_filtros and info["tipo_fruta"] not in tipo_fruta_filtros:
+                continue
+                
+            ml["manejo"] = info["manejo"]
+            ml["tipo_fruta"] = info["tipo_fruta"]
+            filtered_ml.append(ml)
+            
+        if not filtered_ml:
+            continue
+            
+        # Calcular agregados por recepción
+        total_kg = sum(ml.get("qty_done", 0) or 0 for ml in filtered_ml)
+        
+        # Contar paquetes únicos
+        packages = set()
+        for ml in filtered_ml:
+            pkg = ml.get("result_package_id")
+            if pkg:
+                pkg_id = pkg[0]
+                packages.add(pkg_id)
+        
+        cantidad_pallets = len(packages)
+        
+        # Determinar manejos y tipos de fruta presentes en esta recepción
+        manejos_presentes = list(set(ml["manejo"] for ml in filtered_ml))
+        frutas_presentes = list(set(ml["tipo_fruta"] for ml in filtered_ml))
+        
+        resultado.append({
+            "id": p["id"],
+            "albaran": p["name"],
+            "fecha": str(p["scheduled_date"])[:10],
+            "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",
+            "guia_despacho": p.get("x_studio_gua_de_despacho") or "",
+            "cantidad_pallets": cantidad_pallets,
+            "total_kg": round(total_kg, 2),
+            "manejo": ", ".join(manejos_presentes),
+            "tipo_fruta": ", ".join(frutas_presentes)
+        })
+        
+    return resultado

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 
-from backend.services.recepcion_service import get_recepciones_mp, validar_recepciones
+from backend.services.recepcion_service import get_recepciones_mp, validar_recepciones, get_recepciones_pallets
 from backend.services.recepciones_gestion_service import RecepcionesGestionService
 from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
@@ -274,6 +274,28 @@ async def validate_recepciones(
     try:
         return validar_recepciones(username, password, picking_ids)
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pallets")
+async def get_recepciones_pallets_endpoint(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    manejo: Optional[List[str]] = Query(None, description="Manejos a filtrar"),
+    tipo_fruta: Optional[List[str]] = Query(None, description="Tipos de fruta a filtrar")
+):
+    """
+    Obtiene la cantidad de pallets y total kg por recepción de MP.
+    """
+    try:
+        return get_recepciones_pallets(username, password, fecha_inicio, fecha_fin, manejo, tipo_fruta)
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[ERROR] Error en get_recepciones_pallets: {str(e)}")
+        print(f"[ERROR] Traceback completo:\n{error_trace}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

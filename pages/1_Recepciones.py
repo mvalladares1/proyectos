@@ -20,6 +20,7 @@ from recepciones import tab_kpis
 from recepciones import tab_gestion
 from recepciones import tab_curva
 from recepciones import tab_aprobaciones
+from recepciones import tab_pallets
 
 # Configuración de página
 st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
@@ -46,11 +47,13 @@ _perm_kpis = tiene_acceso_pagina("recepciones", "kpis_calidad")
 _perm_gestion = tiene_acceso_pagina("recepciones", "gestion_recepciones")
 _perm_curva = tiene_acceso_pagina("recepciones", "curva_abastecimiento")
 _perm_aprobaciones = tiene_acceso_pagina("recepciones", "aprobaciones_mp")
+_perm_pallets = tiene_acceso_pagina("recepciones", "pallets_recepcion") # Permiso nuevo o reusado
 
 # === TABS PRINCIPALES ===
-tab_kpis_ui, tab_gestion_ui, tab_curva_ui, tab_aprobaciones_ui = st.tabs([
+tab_kpis_ui, tab_gestion_ui, tab_pallets_ui, tab_curva_ui, tab_aprobaciones_ui = st.tabs([
     "📊 KPIs y Calidad", 
     "📋 Gestión de Recepciones", 
+    "📦 Pallets por Recepción",
     "📈 Curva de Abastecimiento", 
     "📥 Aprobaciones MP"
 ])
@@ -80,6 +83,19 @@ with tab_gestion_ui:
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Gestión de Recepciones'. Contacta al administrador.")
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+
+# =====================================================
+#           TAB 3: PALLETS POR RECEPCIÓN
+# =====================================================
+with tab_pallets_ui:
+    # Por ahora usamos el mismo permiso que gestión o uno específico
+    if _perm_gestion or _perm_pallets:
+        @st.fragment
+        def _frag_pallets():
+            tab_pallets.render(username, password)
+        _frag_pallets()
+    else:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Pallets por Recepción'.")
 
 # =====================================================
 #           TAB 3: CURVA DE ABASTECIMIENTO
