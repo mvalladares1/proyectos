@@ -1,1 +1,1 @@
-# Produccion module
+"""Módulo Trigger SO Asociada."""

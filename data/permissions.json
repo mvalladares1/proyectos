@@ -23,7 +23,8 @@
       "mvalladares@riofuturo.cl"
     ],
     "automatizaciones": [],
-    "rendimiento": []
+    "rendimiento": [],
+    "reconciliacion": []
   },
   "admins": [
     "mvalladares@riofuturo.cl"
@@ -60,7 +61,9 @@
     "automatizaciones.movimientos": [],
     "automatizaciones.monitor_movimientos": [],
     "rendimiento.trazabilidad_pallets": [],
-    "rendimiento.diagrama_sankey": []
+    "rendimiento.diagrama_sankey": [],
+    "reconciliacion.trigger_so": [],
+    "reconciliacion.reconciliar_kg": []
   },
   "maintenance": {
     "enabled": true,
