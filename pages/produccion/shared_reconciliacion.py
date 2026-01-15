@@ -44,6 +44,13 @@ def get_api_headers() -> Dict[str, str]:
     return {"X-API-Key": st.session_state.get('api_key', '')}
 
 
+def get_credentials() -> tuple[str, str]:
+    """Obtiene las credenciales del usuario actual."""
+    username = st.session_state.get('username', '')
+    password = st.session_state.get('password', '')
+    return username, password
+
+
 # ============================================================================
 # FUNCIONES PARA TRIGGER SO ASOCIADA
 # ============================================================================
@@ -55,7 +62,10 @@ def buscar_odfs_sin_so(
 ) -> Dict:
     """Busca ODFs sin SO Asociada."""
     try:
+        username, password = get_credentials()
         params = {
+            "username": username,
+            "password": password,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
             "limit": limit
@@ -64,7 +74,6 @@ def buscar_odfs_sin_so(
         response = requests.get(
             f"{API_ODF_RECONCILIACION}/odfs-sin-so-asociada",
             params=params,
-            headers=get_api_headers(),
             timeout=30
         )
         
@@ -89,10 +98,14 @@ def buscar_odfs_sin_so(
 def trigger_odf_individual(odf_id: int, wait_seconds: float) -> Dict:
     """Triggea SO Asociada para un ODF."""
     try:
+        username, password = get_credentials()
         response = requests.post(
             f"{API_ODF_RECONCILIACION}/trigger-so-asociada/{odf_id}",
-            params={"wait_seconds": wait_seconds},
-            headers=get_api_headers(),
+            params={
+                "username": username,
+                "password": password,
+                "wait_seconds": wait_seconds
+            },
             timeout=30
         )
         
@@ -139,8 +152,11 @@ def buscar_odfs_para_reconciliar(
     limit: int
 ) -> Dict:
     """Busca ODFs que necesitan reconciliación de KG."""
+    username, password = get_credentials()
     try:
         params = {
+            "username": username,
+            "password": password,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": fecha_fin,
             "limit": limit
@@ -150,7 +166,6 @@ def buscar_odfs_para_reconciliar(
         response = requests.get(
             f"{API_ODF_RECONCILIACION}/odfs-sin-so-asociada",
             params=params,
-            headers=get_api_headers(),
             timeout=30
         )
         
@@ -175,9 +190,13 @@ def buscar_odfs_para_reconciliar(
 def preview_reconciliacion_odf(odf_id: int) -> Dict:
     """Preview de reconciliación sin escribir."""
     try:
+        username, password = get_credentials()
         response = requests.get(
             f"{API_ODF_RECONCILIACION}/odf/{odf_id}/preview",
-            headers=get_api_headers(),
+            params={
+                "username": username,
+                "password": password
+            },
             timeout=30
         )
         
@@ -198,10 +217,14 @@ def preview_reconciliacion_odf(odf_id: int) -> Dict:
 def reconciliar_odf_kg(odf_id: int, dry_run: bool = False) -> Dict:
     """Reconcilia KG de un ODF."""
     try:
+        username, password = get_credentials()
         response = requests.post(
             f"{API_ODF_RECONCILIACION}/odf/{odf_id}/reconciliar",
-            params={"dry_run": dry_run},
-            headers=get_api_headers(),
+            params={
+                "username": username,
+                "password": password,
+                "dry_run": dry_run
+            },
             timeout=30
         )
         
