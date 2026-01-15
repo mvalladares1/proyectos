@@ -13,13 +13,16 @@ def render(username: str, password: str):
     st.caption("Consulta la cantidad de pallets y pesos totales por recepción")
 
     # Filtros superiores
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2, col3, col4 = st.columns([1, 1, 1.5, 1])
     with col1:
         fecha_inicio = st.date_input("Desde", datetime.now() - timedelta(days=7), format="DD/MM/YYYY", key="pallets_desde")
     with col2:
         fecha_fin = st.date_input("Hasta", datetime.now(), format="DD/MM/YYYY", key="pallets_hasta")
     
     with col3:
+        sel_origen = st.multiselect("Planta / Origen", ["RFP", "VILKUN"], default=["RFP", "VILKUN"], placeholder="Todas", key="pallets_origen")
+        
+    with col4:
         st.write("") # Espaciador
         st.write("")
         btn_consultar = st.button("🔍 Consultar Pallets", type="primary", key="btn_consultar_pallets")
@@ -31,7 +34,7 @@ def render(username: str, password: str):
         # Carga de datos desde API
         if btn_consultar or st.session_state.pallets_data is None:
             with st.spinner("Cargando información de pallets..."):
-                data = fetch_pallets_data(username, password, fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"))
+                data = fetch_pallets_data(username, password, fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"), origen=sel_origen)
                 st.session_state.pallets_data = data
 
         if st.session_state.pallets_data:
@@ -39,36 +42,33 @@ def render(username: str, password: str):
             
             # Filtros dinámicos sobre el dataframe ya cargado
             st.markdown("---")
-            st.markdown("#### 🔍 Filtros de Selección")
+            st.markdown("#### 🔍 Filtros Adicionales")
             f1, f2, f3 = st.columns(3)
             with f1:
-                # Obtener lista única de manejos (considerando que pueden venir comma-separated)
                 manejos_raw = df['manejo'].unique()
                 manejos_set = set()
                 for m_str in manejos_raw:
                     for part in str(m_str).split(", "):
                         if part: manejos_set.add(part)
                 
-                sel_manejo = st.multiselect("Manejo", sorted(list(manejos_set)), default=[], placeholder="Todos")
+                sel_manejo = st.multiselect("Filtrar Manejo", sorted(list(manejos_set)), default=[], placeholder="Todos")
             
             with f2:
-                # Obtener lista única de frutas
                 frutas_raw = df['tipo_fruta'].unique()
                 frutas_set = set()
                 for f_str in frutas_raw:
                     for part in str(f_str).split(", "):
                         if part: frutas_set.add(part)
                 
-                sel_fruta = st.multiselect("Tipo de Fruta", sorted(list(frutas_set)), default=[], placeholder="Todos")
+                sel_fruta = st.multiselect("Filtrar Tipo de Fruta", sorted(list(frutas_set)), default=[], placeholder="Todos")
             
             with f3:
                 productores = sorted(df['productor'].unique())
-                sel_prod = st.multiselect("Productor", productores, default=[], placeholder="Todos")
+                sel_prod = st.multiselect("Filtrar Productor", productores, default=[], placeholder="Todos")
 
             # Aplicar filtros al DataFrame
             df_filtered = df.copy()
             if sel_manejo:
-                # Filtrar si alguno de los manejos seleccionados está en la cadena 'manejo'
                 df_filtered = df_filtered[df_filtered['manejo'].apply(lambda x: any(m in str(x) for m in sel_manejo))]
             if sel_fruta:
                 df_filtered = df_filtered[df_filtered['tipo_fruta'].apply(lambda x: any(f in str(x) for f in sel_fruta))]
@@ -100,11 +100,12 @@ def render(username: str, password: str):
             df_view = df_view.sort_values(by="fecha", ascending=False)
             
             st.dataframe(
-                df_view[['fecha', 'albaran', 'productor', 'guia_despacho', 'manejo', 'tipo_fruta', 'cantidad_pallets', 'total_kg']],
+                df_view[['fecha', 'origen', 'albaran', 'productor', 'guia_despacho', 'manejo', 'tipo_fruta', 'cantidad_pallets', 'total_kg']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "fecha": st.column_config.TextColumn("Fecha", width="small"),
+                    "origen": st.column_config.TextColumn("Planta", width="small"),
                     "albaran": st.column_config.TextColumn("Albarán", width="medium"),
                     "productor": st.column_config.TextColumn("Productor", width="large"),
                     "guia_despacho": st.column_config.TextColumn("Guía Despacho", width="small"),

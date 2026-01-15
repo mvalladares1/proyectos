@@ -284,13 +284,14 @@ async def get_recepciones_pallets_endpoint(
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     manejo: Optional[List[str]] = Query(None, description="Manejos a filtrar"),
-    tipo_fruta: Optional[List[str]] = Query(None, description="Tipos de fruta a filtrar")
+    tipo_fruta: Optional[List[str]] = Query(None, description="Tipos de fruta a filtrar"),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar (RFP, VILKUN)")
 ):
     """
     Obtiene la cantidad de pallets y total kg por recepción de MP.
     """
     try:
-        return get_recepciones_pallets(username, password, fecha_inicio, fecha_fin, manejo, tipo_fruta)
+        return get_recepciones_pallets(username, password, fecha_inicio, fecha_fin, manejo, tipo_fruta, origen)
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()

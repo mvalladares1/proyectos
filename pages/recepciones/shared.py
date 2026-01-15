@@ -125,7 +125,7 @@ def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None):
+def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None):
     """Obtiene datos de pallets por recepción."""
     params = {
         "username": _username, "password": _password,
@@ -136,6 +136,8 @@ def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=Non
         params["manejo"] = manejo
     if tipo_fruta:
         params["tipo_fruta"] = tipo_fruta
+    if origen:
+        params["origen"] = origen
     
     try:
         resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/pallets", params=params, timeout=120)
