@@ -8,8 +8,8 @@ username = os.getenv("ODOO_USER")
 password = os.getenv("ODOO_PASSWORD")
 
 if not username or not password:
-    print("⚠️ No hay credenciales en .env")
-    print("Por favor, ejecuta este script desde el dashboard con credenciales válidas")
+    print("WARNING: No hay credenciales en .env")
+    print("Por favor, ejecuta este script desde el dashboard con credenciales validas")
 else:
     client = OdooClient(username=username, password=password)
     

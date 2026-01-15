@@ -148,6 +148,29 @@ def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=Non
     return None
 
 
+def fetch_pallets_excel(username, password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None):
+    """Obtiene el archivo Excel de detalle de pallets."""
+    params = {
+        "username": username, "password": password,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin
+    }
+    if manejo:
+        params["manejo"] = manejo
+    if tipo_fruta:
+        params["tipo_fruta"] = tipo_fruta
+    if origen:
+        params["origen"] = origen
+    
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/pallets/report.xlsx", params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.content
+    except Exception as e:
+        print(f"Error fetching pallets excel: {e}")
+    return None
+
+
 # --------------------- Gestión de Caché ---------------------
 
 def clear_backend_cache():
