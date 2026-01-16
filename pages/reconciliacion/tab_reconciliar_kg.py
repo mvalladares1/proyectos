@@ -140,6 +140,8 @@ def render(wait_seconds: float):
     
     with col1:
         if st.button("🔄 Reconciliar Todas (Preview)", use_container_width=True, key="btn_mass_preview"):
+            # Inicializar log
+            log_entries = []
             progress_bar = st.progress(0)
             status = st.empty()
             
@@ -155,16 +157,30 @@ def render(wait_seconds: float):
                 if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                     st.session_state[f'preview_data_{odf["id"]}'] = resultado
                     exitosos += 1
+                    log_entries.append({
+                        'tipo': 'success',
+                        'odf': odf['name'],
+                        'mensaje': f"KG: {resultado.get('kg_totales_po', 0):,.0f} total / {resultado.get('kg_consumidos_po', 0):,.0f} consumido"
+                    })
                 else:
                     fallidos += 1
+                    error_msg = resultado.get('error', 'Error desconocido') if isinstance(resultado, dict) else 'Sin respuesta'
+                    log_entries.append({
+                        'tipo': 'error',
+                        'odf': odf['name'],
+                        'mensaje': error_msg
+                    })
             
             progress_bar.progress(1.0)
             status.success(f"✓ Completado: {exitosos} exitosos, {fallidos} fallidos")
+            st.session_state['log_preview_masivo'] = log_entries
             st.rerun()
     
     with col2:
         if st.button("✅ Reconciliar Todas (Escribir)", type="primary", use_container_width=True, key="btn_mass_recon"):
             if st.session_state.get('confirm_mass_recon'):
+                # Inicializar log
+                log_entries = []
                 progress_bar = st.progress(0)
                 status = st.empty()
                 
@@ -181,20 +197,124 @@ def render(wait_seconds: float):
                     if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                         st.session_state[f'resultado_data_{odf["id"]}'] = resultado
                         exitosos += 1
-                        # Contar limpiezas de inconsistencias
+                        
+                        # Contar y registrar limpiezas de inconsistencias
                         if resultado.get('accion') == 'limpieza_inconsistencia':
                             limpiezas += 1
+                            log_entries.append({
+                                'tipo': 'warning',
+                                'odf': odf['name'],
+                                'mensaje': f"🧹 Inconsistencia limpiada: {resultado.get('mensaje', 'Sin SO pero tenía KG')}"
+                            })
+                        else:
+                            log_entries.append({
+                                'tipo': 'success',
+                                'odf': odf['name'],
+                                'mensaje': f"KG: {resultado.get('kg_totales_po', 0):,.0f} / {resultado.get('kg_consumidos_po', 0):,.0f} / {resultado.get('kg_disponibles_po', 0):,.0f}"
+                            })
                     else:
                         fallidos += 1
+                        error_msg = resultado.get('error', 'Error desconocido') if isinstance(resultado, dict) else 'Sin respuesta'
+                        log_entries.append({
+                            'tipo': 'error',
+                            'odf': odf['name'],
+                            'mensaje': error_msg
+                        })
                 
                 progress_bar.progress(1.0)
                 mensaje_final = f"✓ Completado: {exitosos} exitosos, {fallidos} fallidos"
                 if limpiezas > 0:
                     mensaje_final += f" ({limpiezas} inconsistencias limpiadas)"
                 status.success(mensaje_final)
+                st.session_state['log_reconciliacion_masiva'] = log_entries
                 st.session_state['confirm_mass_recon'] = False
                 st.balloons()
                 st.rerun()
             else:
                 st.session_state['confirm_mass_recon'] = True
                 st.warning("⚠️ Haz clic nuevamente para confirmar la reconciliación masiva")
+    
+    # =========================================================================
+    # LOG DE EJECUCIÓN
+    # =========================================================================
+    st.divider()
+    st.markdown("### 📋 Log de Ejecución")
+    
+    # Mostrar log de preview masivo
+    log_preview = st.session_state.get('log_preview_masivo', [])
+    log_recon = st.session_state.get('log_reconciliacion_masiva', [])
+    
+    if not log_preview and not log_recon:
+        st.info("Ejecuta una acción masiva para ver el log de ejecución aquí.")
+    else:
+        # Tabs para separar logs
+        if log_preview and log_recon:
+            tab_log_prev, tab_log_recon = st.tabs(["📊 Preview Masivo", "✅ Reconciliación Masiva"])
+        elif log_preview:
+            tab_log_prev = st.container()
+            tab_log_recon = None
+        else:
+            tab_log_prev = None
+            tab_log_recon = st.container()
+        
+        # Log de Preview
+        if tab_log_prev and log_preview:
+            with tab_log_prev:
+                # Resumen
+                n_ok = len([e for e in log_preview if e['tipo'] == 'success'])
+                n_err = len([e for e in log_preview if e['tipo'] == 'error'])
+                st.caption(f"✅ {n_ok} exitosos | ❌ {n_err} fallidos")
+                
+                # Botón para limpiar
+                if st.button("🗑️ Limpiar Log Preview", key="clear_log_preview"):
+                    st.session_state['log_preview_masivo'] = []
+                    st.rerun()
+                
+                # Mostrar entradas
+                with st.expander("Ver detalle", expanded=False):
+                    for entry in log_preview:
+                        if entry['tipo'] == 'success':
+                            st.markdown(f"✅ **{entry['odf']}**: {entry['mensaje']}")
+                        elif entry['tipo'] == 'warning':
+                            st.markdown(f"⚠️ **{entry['odf']}**: {entry['mensaje']}")
+                        else:
+                            st.markdown(f"❌ **{entry['odf']}**: {entry['mensaje']}")
+        
+        # Log de Reconciliación
+        if tab_log_recon and log_recon:
+            with tab_log_recon:
+                # Resumen
+                n_ok = len([e for e in log_recon if e['tipo'] == 'success'])
+                n_warn = len([e for e in log_recon if e['tipo'] == 'warning'])
+                n_err = len([e for e in log_recon if e['tipo'] == 'error'])
+                st.caption(f"✅ {n_ok} exitosos | ⚠️ {n_warn} inconsistencias | ❌ {n_err} fallidos")
+                
+                # Botón para limpiar
+                if st.button("🗑️ Limpiar Log Reconciliación", key="clear_log_recon"):
+                    st.session_state['log_reconciliacion_masiva'] = []
+                    st.rerun()
+                
+                # Mostrar solo inconsistencias por defecto
+                inconsistencias = [e for e in log_recon if e['tipo'] == 'warning']
+                if inconsistencias:
+                    st.markdown("#### ⚠️ Inconsistencias Detectadas")
+                    for entry in inconsistencias:
+                        st.warning(f"**{entry['odf']}**: {entry['mensaje']}")
+                
+                # Mostrar errores
+                errores = [e for e in log_recon if e['tipo'] == 'error']
+                if errores:
+                    st.markdown("#### ❌ Errores")
+                    for entry in errores:
+                        st.error(f"**{entry['odf']}**: {entry['mensaje']}")
+                
+                # Mostrar todos en expander
+                with st.expander("Ver todo el log", expanded=False):
+                    for entry in log_recon:
+                        if entry['tipo'] == 'success':
+                            st.markdown(f"✅ **{entry['odf']}**: {entry['mensaje']}")
+                        elif entry['tipo'] == 'warning':
+                            st.markdown(f"⚠️ **{entry['odf']}**: {entry['mensaje']}")
+                        else:
+                            st.markdown(f"❌ **{entry['odf']}**: {entry['mensaje']}")
+

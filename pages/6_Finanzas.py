@@ -74,9 +74,6 @@ if not tabs_disponibles:
 tabs_ui = st.tabs(tabs_nombres)
 tab_index = 0
 
-tabs_ui = st.tabs(tabs_nombres)
-tab_index = 0
-
 # =====================================================================
 # TAB 1: ESTADO DE RESULTADOS (con sus propios filtros)
 # =====================================================================
