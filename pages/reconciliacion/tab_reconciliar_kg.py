@@ -26,11 +26,16 @@ def render(wait_seconds: float):
     st.markdown("### ODFs para Reconciliar")
     
     for i, odf in enumerate(odfs, 1):
+        odf_id = odf['id']
+        # Keys para datos (diferentes de las keys de widgets)
+        preview_data_key = f'preview_data_{odf_id}'
+        resultado_data_key = f'resultado_data_{odf_id}'
+        
         with st.expander(f"**{i}. {odf['name']}** - SO: {odf.get('x_studio_po_asociada', 'Sin SO')}"):
             col1, col2, col3 = st.columns([2, 2, 1])
             
             with col1:
-                st.markdown(f"**ID:** `{odf['id']}`")
+                st.markdown(f"**ID:** `{odf_id}`")
                 product_name = odf.get('product_id', ['N/A'])[1] if isinstance(odf.get('product_id'), list) else 'N/A'
                 st.markdown(f"**Producto:** {product_name}")
                 st.markdown(f"**Estado:** {odf.get('state', 'N/A')}")
@@ -42,37 +47,37 @@ def render(wait_seconds: float):
                 st.markdown(f"**SO Asociada:** {odf.get('x_studio_po_asociada', '-')}")
             
             with col3:
-                # Botón de preview
-                if st.button("👁️ Preview", key=f"preview_{odf['id']}", use_container_width=True):
+                # Botón de preview (key de widget)
+                if st.button("👁️ Preview", key=f"btn_preview_{odf_id}", use_container_width=True):
                     with st.spinner("Calculando..."):
-                        resultado = shared.preview_reconciliacion_odf(odf['id'])
+                        resultado = shared.preview_reconciliacion_odf(odf_id)
                         
                         if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
-                            st.session_state[f'preview_{odf["id"]}'] = resultado
+                            st.session_state[preview_data_key] = resultado
                         else:
                             error_msg = resultado.get('error', 'Sin datos') if isinstance(resultado, dict) else 'Respuesta inválida'
                             st.error(f"Error: {error_msg}")
                 
-                # Botón de reconciliar
-                if st.button("✅ Reconciliar", key=f"recon_{odf['id']}", type="primary", use_container_width=True):
+                # Botón de reconciliar (key de widget)
+                if st.button("✅ Reconciliar", key=f"btn_recon_{odf_id}", type="primary", use_container_width=True):
                     with st.spinner("Reconciliando..."):
-                        resultado = shared.reconciliar_odf_kg(odf['id'], dry_run=False)
+                        resultado = shared.reconciliar_odf_kg(odf_id, dry_run=False)
                         
                         if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                             st.success("✓ Reconciliado")
-                            st.session_state[f'resultado_{odf["id"]}'] = resultado
+                            st.session_state[resultado_data_key] = resultado
                         else:
                             error_msg = resultado.get('error', 'Error desconocido') if isinstance(resultado, dict) else 'Respuesta inválida'
                             st.error(f"Error: {error_msg}")
             
             # Mostrar preview si existe
-            if f'preview_{odf["id"]}' in st.session_state:
-                prev = st.session_state[f'preview_{odf["id"]}']
+            if preview_data_key in st.session_state:
+                prev = st.session_state[preview_data_key]
                 
                 # Validar que prev sea un diccionario válido
                 if not isinstance(prev, dict):
                     st.warning("⚠️ Datos de preview inválidos. Haz clic en Preview nuevamente.")
-                    del st.session_state[f'preview_{odf["id"]}']
+                    del st.session_state[preview_data_key]
                 else:
                     st.divider()
                     st.markdown("**📊 Preview de Cálculos:**")
@@ -86,7 +91,7 @@ def render(wait_seconds: float):
                         kg_disp = prev.get('kg_disponibles_po', 0)
                         st.metric("KG Disponibles PO", f"{kg_disp:,.0f} kg")
                     
-                    # Desglose por producto (dentro del else para validación)
+                    # Desglose por producto
                     if prev.get('desglose_productos'):
                         st.markdown("**Desglose por Producto:**")
                         
@@ -103,8 +108,8 @@ def render(wait_seconds: float):
                         st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Mostrar resultado si existe
-            if f'resultado_{odf["id"]}' in st.session_state:
-                res = st.session_state[f'resultado_{odf["id"]}']
+            if resultado_data_key in st.session_state:
+                res = st.session_state[resultado_data_key]
                 if isinstance(res, dict):
                     st.success(f"""
                     ✅ **Reconciliado Exitosamente**
@@ -120,7 +125,7 @@ def render(wait_seconds: float):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔄 Reconciliar Todas (Preview)", use_container_width=True):
+        if st.button("🔄 Reconciliar Todas (Preview)", use_container_width=True, key="btn_mass_preview"):
             progress_bar = st.progress(0)
             status = st.empty()
             
@@ -134,7 +139,7 @@ def render(wait_seconds: float):
                 resultado = shared.preview_reconciliacion_odf(odf['id'])
                 
                 if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
-                    st.session_state[f'preview_{odf["id"]}'] = resultado
+                    st.session_state[f'preview_data_{odf["id"]}'] = resultado
                     exitosos += 1
                 else:
                     fallidos += 1
@@ -144,7 +149,7 @@ def render(wait_seconds: float):
             st.rerun()
     
     with col2:
-        if st.button("✅ Reconciliar Todas (Escribir)", type="primary", use_container_width=True):
+        if st.button("✅ Reconciliar Todas (Escribir)", type="primary", use_container_width=True, key="btn_mass_recon"):
             if st.session_state.get('confirm_mass_recon'):
                 progress_bar = st.progress(0)
                 status = st.empty()
@@ -159,7 +164,7 @@ def render(wait_seconds: float):
                     resultado = shared.reconciliar_odf_kg(odf['id'], dry_run=False)
                     
                     if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
-                        st.session_state[f'resultado_{odf["id"]}'] = resultado
+                        st.session_state[f'resultado_data_{odf["id"]}'] = resultado
                         exitosos += 1
                     else:
                         fallidos += 1
