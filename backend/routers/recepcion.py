@@ -300,6 +300,47 @@ async def get_recepciones_pallets_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/pallets/report.xlsx")
+async def get_recepciones_pallets_excel(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    manejo: Optional[List[str]] = Query(None, description="Manejos a filtrar"),
+    tipo_fruta: Optional[List[str]] = Query(None, description="Tipos de fruta a filtrar"),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar (RFP, VILKUN, SAN JOSE)")
+):
+    """
+    Genera un archivo Excel con el detalle de cada pallet (una fila por pallet).
+    """
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    from backend.services.excel_service import generate_pallets_excel
+
+    try:
+        xlsx_bytes = generate_pallets_excel(
+            username, password, fecha_inicio, fecha_fin,
+            manejo, tipo_fruta, origen
+        )
+        
+        buffer = BytesIO(xlsx_bytes)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=detalle_pallets_{fecha_inicio}_{fecha_fin}.xlsx"
+            }
+        )
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[ERROR] Error generando Excel de pallets: {str(e)}")
+        print(f"[ERROR] Traceback completo:\n{error_trace}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/clear-cache")
 async def clear_cache():
     """

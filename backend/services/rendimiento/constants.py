@@ -8,7 +8,8 @@ EXCLUDED_CATEGORIES = ["insumo", "envase", "etiqueta", "embalaje", "merma"]
 # Salas de proceso (vaciado) - Genera merma real
 SALAS_PROCESO = [
     'sala 1', 'sala 2', 'sala 3', 'sala 4', 'sala 5', 'sala 6',
-    'linea retail', 'granel', 'proceso'
+    'sala vilkun', 'vilkun',
+    'linea retail', 'granel', 'proceso', 'sin sala'
 ]
 
 # Mapeo de frutas

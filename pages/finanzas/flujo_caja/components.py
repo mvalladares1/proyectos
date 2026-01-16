@@ -32,6 +32,28 @@ function toggleConcept(conceptId) {
     }
 }
 
+// Estado para etiquetas expandidas
+let expandedEtiquetas = new Set();
+
+// ============ TOGGLE ETIQUETAS (Nivel 3) ============
+function toggleEtiquetas(cuentaId) {
+    const rows = document.querySelectorAll('.etiqueta-' + cuentaId);
+    
+    if (!rows.length) return;
+    
+    const isExpanded = expandedEtiquetas.has(cuentaId);
+    
+    rows.forEach(row => {
+        row.style.display = isExpanded ? 'none' : 'table-row';
+    });
+    
+    if (isExpanded) {
+        expandedEtiquetas.delete(cuentaId);
+    } else {
+        expandedEtiquetas.add(cuentaId);
+    }
+}
+
 // ============ EXPAND ALL / COLLAPSE ALL ============
 function expandAll() {
     document.querySelectorAll('.expandable').forEach(parent => {
@@ -122,7 +144,57 @@ document.addEventListener('DOMContentLoaded', function() {
         row.addEventListener('drop', handleDrop);
         row.addEventListener('dragend', handleDragEnd);
     });
+    
+    // Auto-ajustar altura del iframe al contenido
+    updateFrameHeight();
 });
+
+// ============ AUTO-HEIGHT IFRAME ============
+function updateFrameHeight() {
+    // Obtener altura real del contenido
+    const body = document.body;
+    const html = document.documentElement;
+    const height = Math.max(
+        body.scrollHeight, body.offsetHeight,
+        html.clientHeight, html.scrollHeight, html.offsetHeight
+    );
+    
+    // Comunicar altura al padre de Streamlit (con padding extra)
+    if (window.parent && window.parent.postMessage) {
+        window.parent.postMessage({
+            type: 'streamlit:setFrameHeight',
+            height: height + 50
+        }, '*');
+    }
+    
+    // También intentar usar la API de Streamlit directamente si está disponible
+    if (typeof Streamlit !== 'undefined' && Streamlit.setFrameHeight) {
+        Streamlit.setFrameHeight(height + 50);
+    }
+}
+
+// Observar cambios en el DOM para re-calcular altura cuando se expanden/contraen filas
+const resizeObserver = new ResizeObserver(entries => {
+    updateFrameHeight();
+});
+
+// Observar cambios en el body
+if (document.body) {
+    resizeObserver.observe(document.body);
+}
+
+// También actualizar altura después de cada toggle
+const originalToggleConcept = toggleConcept;
+toggleConcept = function(conceptId) {
+    originalToggleConcept(conceptId);
+    setTimeout(updateFrameHeight, 100);
+};
+
+const originalToggleEtiquetas = toggleEtiquetas;
+toggleEtiquetas = function(cuentaId) {
+    originalToggleEtiquetas(cuentaId);
+    setTimeout(updateFrameHeight, 100);
+};
 </script>
 """
 

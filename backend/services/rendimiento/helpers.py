@@ -119,20 +119,22 @@ def classify_sala(sala_name: str, product_name: str = '') -> Tuple[str, str]:
     sala_lower = sala_name.lower().strip()
     product_lower = (product_name or '').lower()
     
-    # Salas de proceso conocidas
+    # PRIORIDAD 1: Congelado explícito - túneles (incluye continuo y estáticos)
+    # DEBE ir ANTES de SALAS_PROCESO para que túneles no se clasifiquen mal
+    if 'congel' in sala_lower or 'tunel' in sala_lower or 'túnel' in sala_lower or 'continuo' in sala_lower:
+        return ('CONGELADO', sala_name)
+    
+    # PRIORIDAD 2: Salas de proceso conocidas (incluye vilkun y sin sala)
     if any(s in sala_lower for s in SALAS_PROCESO):
         return ('PROCESO', sala_name)
     
-    # Congelado por keywords
-    if 'congel' in sala_lower or 'tunel' in sala_lower or 'túnel' in sala_lower:
-        return ('CONGELADO', sala_name)
-    
-    # IQF es proceso
+    # PRIORIDAD 3: IQF es proceso
     if 'iqf' in sala_lower or 'iqf' in product_lower:
         return ('PROCESO', sala_name)
     
-    # Fallback: si tiene número de sala, es proceso
+    # PRIORIDAD 4: Si tiene número de sala, es proceso
     if 'sala' in sala_lower and any(char.isdigit() for char in sala_lower):
         return ('PROCESO', sala_name)
     
-    return ('CONGELADO', sala_name)
+    # FALLBACK: Default es PROCESO para salas no identificadas
+    return ('PROCESO', sala_name if sala_name else 'Sin Sala')

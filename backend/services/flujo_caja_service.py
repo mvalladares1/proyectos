@@ -693,7 +693,9 @@ class FlujoCajaService:
         montos_por_concepto_mes[CATEGORIA_NEUTRAL] = {m: 0.0 for m in meses_lista}
         
         # Diccionario para tracking de cuentas individuales por concepto (para drill-down)
-        cuentas_por_concepto = {}  # {concepto_id: {codigo_cuenta: {nombre, monto, cantidad}}}
+        # Estructura: {concepto_id: {codigo_cuenta: {nombre, monto, cantidad, etiquetas: {name: monto}}}}
+        cuentas_por_concepto = {}
+
         
         # Procesar en chunks
         chunk_size = 5000
@@ -769,15 +771,103 @@ class FlujoCajaService:
                             'nombre': nombre_cuenta[:50],
                             'monto': 0.0,
                             'cantidad': 0,
-                            'montos_por_mes': {m: 0.0 for m in meses_lista}
+                            'montos_por_mes': {m: 0.0 for m in meses_lista},
+                            'etiquetas': {},  # {name_etiqueta: monto}
+                            'account_id': acc_data[0] if acc_data else None  # Guardar ID para consulta posterior
                         }
                     cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += balance
                     cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
                     if mes_str in meses_lista:
                         cuentas_por_concepto[concepto_id][codigo_cuenta]['montos_por_mes'][mes_str] += balance
+
                     
             except Exception as e:
                 print(f"[FlujoCaja] Error en agregación mensual: {e}")
+        
+        # 5a. ETIQUETAS POR CUENTA CON MONTOS POR MES: Obtener campo 'name' agrupado por cuenta y mes
+        # Esto permite ver el desglose como: Concepto → Cuenta → Etiqueta (ej: Leasing Generador) con montos por mes
+        try:
+            # Recopilar todos los account_ids que tenemos en cuentas_por_concepto
+            account_ids_to_query = set()
+            for concepto_id, cuentas in cuentas_por_concepto.items():
+                for codigo, cuenta_data in cuentas.items():
+                    if cuenta_data.get('account_id'):
+                        account_ids_to_query.add(cuenta_data['account_id'])
+            
+            if account_ids_to_query:
+                print(f"[FlujoCaja] Obteniendo etiquetas con montos por mes para {len(account_ids_to_query)} cuentas...")
+                
+                # read_group agrupando por account_id, name (etiqueta) Y date:month
+                grupos_etiquetas = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'account.move.line', 'read_group',
+                    [[
+                        ['move_id', 'in', asientos_ids],
+                        ['account_id', 'in', list(account_ids_to_query)]
+                    ]],
+                    {
+                        'fields': ['balance', 'account_id', 'name', 'date'],
+                        'groupby': ['account_id', 'name', 'date:month'],  # AGREGADO: date:month
+                        'lazy': False
+                    }
+                )
+                
+                print(f"[FlujoCaja] Grupos de etiquetas con mes obtenidos: {len(grupos_etiquetas)}")
+                
+                # Crear un mapeo account_id → codigo_cuenta para asociar
+                account_id_to_codigo = {}
+                for concepto_id, cuentas in cuentas_por_concepto.items():
+                    for codigo, cuenta_data in cuentas.items():
+                        if cuenta_data.get('account_id'):
+                            account_id_to_codigo[cuenta_data['account_id']] = (concepto_id, codigo)
+                
+                # Procesar grupos y agregar etiquetas a las cuentas
+                # Ahora cada grupo tiene account_id, name, date:month y balance
+                for grupo in grupos_etiquetas:
+                    acc_data = grupo.get('account_id')
+                    etiqueta_name = grupo.get('name', '')
+                    balance = grupo.get('balance', 0)
+                    date_month = grupo.get('date:month', '')
+                    
+                    if not acc_data or not etiqueta_name:
+                        continue
+                    
+                    account_id = acc_data[0] if isinstance(acc_data, (list, tuple)) else acc_data
+                    
+                    # Parsear mes
+                    mes_str = self._parse_odoo_month(date_month) if date_month else None
+                    
+                    if account_id in account_id_to_codigo:
+                        concepto_id, codigo_cuenta = account_id_to_codigo[account_id]
+                        
+                        # Agregar etiqueta al diccionario de la cuenta
+                        if 'etiquetas' not in cuentas_por_concepto[concepto_id][codigo_cuenta]:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'] = {}
+                        
+                        # Limpiar nombre de etiqueta (truncar si es muy largo)
+                        etiqueta_limpia = str(etiqueta_name)[:60] if etiqueta_name else "Sin etiqueta"
+                        
+                        # Inicializar estructura de etiqueta si no existe
+                        if etiqueta_limpia not in cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas']:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia] = {
+                                'monto': 0.0,
+                                'montos_por_mes': {m: 0.0 for m in meses_lista}
+                            }
+                        
+                        # Sumar al monto total
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]['monto'] += balance
+                        
+                        # Sumar al monto del mes correspondiente
+                        if mes_str and mes_str in meses_lista:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_str] += balance
+                
+                print(f"[FlujoCaja] Etiquetas con montos por mes procesadas correctamente")
+                
+        except Exception as e:
+            print(f"[FlujoCaja] Error obteniendo etiquetas: {e}")
+            import traceback
+            traceback.print_exc()
+
         
         # 5b. PROYECCIÓN: Interpretar facturas en borrador como movimientos futuros de efectivo
         # Para cada factura draft, obtenemos sus líneas y clasificamos según las cuentas contables
@@ -928,12 +1018,39 @@ class FlujoCajaService:
                 )[:15]  # Top 15 accounts
                 
                 for k, v in sorted_cuentas:
+                    # Ordenar etiquetas por monto absoluto (top 20)
+                    etiquetas_dict = v.get("etiquetas", {})
+                    # Ahora etiquetas_dict es {nombre: {monto, montos_por_mes}}
+                    etiquetas_ordenadas = sorted(
+                        etiquetas_dict.items(),
+                        key=lambda x: abs(x[1].get('monto', 0) if isinstance(x[1], dict) else x[1]),
+                        reverse=True
+                    )[:20]  # Top 20 etiquetas por cuenta
+                    
+                    etiquetas_lista = []
+                    for nombre, datos in etiquetas_ordenadas:
+                        if isinstance(datos, dict):
+                            # Nueva estructura con montos_por_mes
+                            etiquetas_lista.append({
+                                "nombre": nombre[:60],
+                                "monto": round(datos.get("monto", 0), 0),
+                                "montos_por_mes": {m: round(datos.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista}
+                            })
+                        else:
+                            # Retrocompatibilidad: estructura antigua (solo monto)
+                            etiquetas_lista.append({
+                                "nombre": nombre[:60],
+                                "monto": round(datos, 0),
+                                "montos_por_mes": {m: 0 for m in meses_lista}
+                            })
+                    
                     cuentas_concepto.append({
                         "codigo": k,
                         "nombre": v.get("nombre"),
                         "monto": round(v.get("monto", 0), 0),
                         "cantidad": v.get("cantidad"),
-                        "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista}
+                        "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista},
+                        "etiquetas": etiquetas_lista  # NUEVO: Lista de etiquetas para drill-down nivel 3
                     })
             
             concepto_resultado = {
