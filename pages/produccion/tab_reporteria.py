@@ -302,13 +302,28 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     df_grouped.columns = ['Período', 'periodo_sort', 'Sala', 'Tipo', 'Kg PT', 'Kg MP', 'Órdenes']
     df_grouped = df_grouped.sort_values('periodo_sort')
     
+    # IMPORTANTE: Asegurar que Período es string puro para evitar interpretación de Plotly
+    df_grouped['Período'] = df_grouped['Período'].astype(str)
+    
     # Crear tabs para Proceso y Congelado
     vol_tabs = st.tabs(["🏭 Salas (Proceso)", "❄️ Túneles (Congelado)"])
     
     # Modal para mostrar detalles de ODFs al clickear
     @st.dialog("📋 Detalles de Órdenes de Fabricación", width="large")
-    def mostrar_odfs_modal(periodo, sala, tipo):
+    def mostrar_odfs_modal(periodo_raw, sala, tipo):
         """Muestra el modal con las ODFs del período y sala seleccionada."""
+        
+        # NORMALIZAR PERIODO: Plotly puede devolver datetime, convertir a string fecha
+        try:
+            if agrupacion == "Día":
+                periodo = pd.to_datetime(periodo_raw).strftime('%Y-%m-%d')
+            elif agrupacion == "Semana":
+                periodo = pd.to_datetime(periodo_raw).strftime('S%W-%Y') if not isinstance(periodo_raw, str) else periodo_raw
+            else:  # Mes
+                periodo = pd.to_datetime(periodo_raw).strftime('%b-%Y') if not isinstance(periodo_raw, str) else periodo_raw
+        except:
+            periodo = str(periodo_raw).split(' ')[0] if ' ' in str(periodo_raw) else str(periodo_raw)
+        
         st.subheader(f"📊 {tipo.title()} - {sala}")
         st.caption(f"Período: {periodo}")
         
@@ -385,7 +400,7 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                 title=f"Volumen por {agrupacion} - Salas de Proceso",
                 xaxis_title=f'Período ({agrupacion})',
                 yaxis_title='Kilogramos Producidos',
-                barmode='group',
+                barmode='stack',  # Apilar barras por sala
                 height=400,
                 hovermode='closest'
             )
@@ -440,7 +455,7 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                 title=f"Volumen por {agrupacion} - Túneles de Congelado",
                 xaxis_title=f'Período ({agrupacion})',
                 yaxis_title='Kilogramos Congelados',
-                barmode='group',
+                barmode='stack',  # Apilar barras por túnel
                 height=400,
                 hovermode='closest'
             )
