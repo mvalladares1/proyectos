@@ -399,16 +399,27 @@ def render(username: str, password: str):
                 html_parts.append(f'<td><strong>{fmt_monto_html(c_total)}</strong>{sparkline}</td>')
                 html_parts.append('</tr>')
                 
-                # Detail rows
+                # Detail rows (Nivel 2: Cuentas)
                 if cuentas:
-                    for cuenta in cuentas[:15]:
+                    for idx_cu, cuenta in enumerate(cuentas[:15]):
                         cuenta_codigo = cuenta.get("codigo", "")
                         cuenta_nombre = cuenta.get("nombre", "")[:40]
                         cuenta_monto = cuenta.get("monto", 0)
                         cu_montos_mes = cuenta.get("montos_por_mes", {})
+                        etiquetas = cuenta.get("etiquetas", [])
+                        
+                        # ID único para esta cuenta (para expandir etiquetas)
+                        cuenta_id_safe = f"{c_id_safe}_{cuenta_codigo.replace('.', '_')}"
+                        has_etiquetas = len(etiquetas) > 0
+                        
+                        # Icono para expandir/contraer etiquetas
+                        if has_etiquetas:
+                            cuenta_icon = f'<span class="icon-expand" style="cursor:pointer;" onclick="toggleEtiquetas(\'{cuenta_id_safe}\')">{SVG_ICONS["chevron"]}</span>'
+                        else:
+                            cuenta_icon = '<span style="width:24px;display:inline-block;"></span>'
                         
                         html_parts.append(f'<tr class="detail-row detail-{c_id_safe}" style="display:none;">')
-                        html_parts.append(f'<td class="frozen">📄 {cuenta_codigo} - {cuenta_nombre}</td>')
+                        html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre} {"(" + str(len(etiquetas)) + " etiq)" if has_etiquetas else ""}</td>')
                         
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
@@ -416,6 +427,23 @@ def render(username: str, password: str):
                         
                         html_parts.append(f'<td>{fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
+                        
+                        # NIVEL 3: Etiquetas (sub-detalle de cada cuenta)
+                        if has_etiquetas:
+                            for etiqueta in etiquetas[:10]:  # Top 10 etiquetas
+                                et_nombre = etiqueta.get("nombre", "")[:50]
+                                et_monto = etiqueta.get("monto", 0)
+                                
+                                html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: rgba(0,0,0,0.15);">')
+                                html_parts.append(f'<td class="frozen" style="padding-left: 60px; font-size: 12px; color: #aaa;">🏷️ {et_nombre}</td>')
+                                
+                                # Celdas vacías para los meses (las etiquetas solo muestran total)
+                                for _ in meses_lista:
+                                    html_parts.append('<td style="color: #666;">—</td>')
+                                
+                                html_parts.append(f'<td style="font-size: 12px;">{fmt_monto_html(et_monto)}</td>')
+                                html_parts.append('</tr>')
+
             
             # Subtotal de actividad
             html_parts.append(f'<tr class="subtotal">')
@@ -462,19 +490,31 @@ def render(username: str, password: str):
         # Agregar JavaScript
         html_parts.append(ENTERPRISE_JS)
         
-        # Renderizar con components.html con altura muy generosa
+        # Renderizar con components.html con altura dinámica
         full_html = "".join(html_parts)
-        # Calcular altura: 150px header + 60px por concepto + 250px footer + margen
+        # Calcular altura dinámica basada en el contenido visible
         num_conceptos = sum(len(act.get("conceptos", [])) for act in actividades.values())
-        # Contar también las filas de detalle (cuentas) para expandidos
         num_cuentas_total = sum(
             sum(len(concepto.get("cuentas", [])) for concepto in act.get("conceptos", []))
             for act in actividades.values()
         )
-        altura_base = 150 + (num_conceptos * 60) + (num_cuentas_total * 45) + 250
-        # Usar altura generosa para mostrar todo sin scroll vertical interno
-        altura_final = max(altura_base + 200, 1500)
-        components.html(full_html, height=altura_final, scrolling=False)
+        num_etiquetas_total = sum(
+            sum(
+                sum(len(cuenta.get("etiquetas", [])) for cuenta in concepto.get("cuentas", []))
+                for concepto in act.get("conceptos", [])
+            )
+            for act in actividades.values()
+        )
+        
+        # Altura base: filas visibles + headers + totales
+        # Solo contamos conceptos visibles (no expandidos)
+        altura_visible = 200 + (num_conceptos * 50) + 150  # Headers + conceptos + totales
+        # Altura máxima si todo está expandido
+        altura_expandida = altura_visible + (num_cuentas_total * 40) + (num_etiquetas_total * 25)
+        # Usar altura expandida como máximo, con scroll si se necesita
+        altura_final = min(max(altura_expandida, 800), 3000)  # Mínimo 800, máximo 3000
+        
+        components.html(full_html, height=altura_final, scrolling=True)  # scrolling=True permite scroll interno
         
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:

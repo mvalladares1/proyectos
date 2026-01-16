@@ -439,6 +439,11 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     with vol_tabs[0]:
         df_proceso = df_grouped[df_grouped['Tipo'] == 'PROCESO'].copy()
         if not df_proceso.empty:
+            # Ordenar por fecha para mantener secuencia cronológica
+            df_proceso = df_proceso.sort_values('periodo_sort')
+            # Crear lista ordenada de períodos únicos
+            periodos_ordenados = df_proceso.drop_duplicates('Período')['Período'].tolist()
+            
             @st.fragment
             def render_grafico_proceso():
                 # Crear gráfico interactivo con Plotly
@@ -463,14 +468,16 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                     title=f"Volumen por {agrupacion} - Salas de Proceso",
                     xaxis_title=f'Período ({agrupacion})',
                     yaxis_title='Kilogramos Producidos',
-                    barmode='stack',  # Apilar barras por sala
+                    barmode='stack',
                     height=400,
                     hovermode='closest',
                     bargap=0.15,
                     bargroupgap=0.05,
                     xaxis=dict(
                         tickangle=-45,
-                        tickfont=dict(size=10)
+                        tickfont=dict(size=10),
+                        categoryorder='array',
+                        categoryarray=periodos_ordenados
                     )
                 )
                 
@@ -505,6 +512,11 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     with vol_tabs[1]:
         df_congelado = df_grouped[df_grouped['Tipo'] == 'CONGELADO'].copy()
         if not df_congelado.empty:
+            # Ordenar por fecha para mantener secuencia cronológica
+            df_congelado = df_congelado.sort_values('periodo_sort')
+            # Crear lista ordenada de períodos únicos
+            periodos_ordenados_cong = df_congelado.drop_duplicates('Período')['Período'].tolist()
+            
             @st.fragment
             def render_grafico_congelado():
                 # Crear gráfico interactivo con Plotly
@@ -528,14 +540,16 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                     title=f"Volumen por {agrupacion} - Túneles de Congelado",
                     xaxis_title=f'Período ({agrupacion})',
                     yaxis_title='Kilogramos Congelados',
-                    barmode='stack',  # Apilar barras por túnel
+                    barmode='stack',
                     height=400,
                     hovermode='closest',
                     bargap=0.15,
                     bargroupgap=0.05,
                     xaxis=dict(
                         tickangle=-45,
-                        tickfont=dict(size=10)
+                        tickfont=dict(size=10),
+                        categoryorder='array',
+                        categoryarray=periodos_ordenados_cong
                     )
                 )
                 
@@ -651,6 +665,50 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
                 st.metric("Lotes Únicos", data.get('congelado_lotes', 0))
         
         _fragment_kpis_congelado()
+        
+        # === KPIs POR TÚNEL INDIVIDUAL ===
+        if mos:
+            mos_congelado = [mo for mo in mos if mo.get('sala_tipo') == 'CONGELADO']
+            if mos_congelado:
+                st.markdown("---")
+                st.markdown("### 🧊 KPIs por Túnel Individual")
+                st.caption("Rendimiento y producción de cada túnel")
+                
+                # Agrupar por sala/túnel
+                from collections import defaultdict
+                tuneles_data = defaultdict(lambda: {'kg_mp': 0, 'kg_pt': 0, 'mos': 0, 'kg_merma': 0})
+                
+                for mo in mos_congelado:
+                    sala = mo.get('sala', 'Sin Sala')
+                    tuneles_data[sala]['kg_mp'] += mo.get('kg_mp', 0) or 0
+                    tuneles_data[sala]['kg_pt'] += mo.get('kg_pt', 0) or 0
+                    tuneles_data[sala]['kg_merma'] += mo.get('kg_merma', 0) or 0
+                    tuneles_data[sala]['mos'] += 1
+                
+                # Ordenar por volumen
+                tuneles_sorted = sorted(tuneles_data.items(), key=lambda x: x[1]['kg_pt'], reverse=True)
+                
+                # Mostrar cada túnel
+                for tunel_name, tunel_stats in tuneles_sorted:
+                    with st.expander(f"❄️ {tunel_name}", expanded=False):
+                        tunel_cols = st.columns(5)
+                        
+                        kg_mp_tunel = tunel_stats['kg_mp']
+                        kg_pt_tunel = tunel_stats['kg_pt']
+                        kg_merma_tunel = tunel_stats['kg_merma']
+                        rendimiento_tunel = (kg_pt_tunel / kg_mp_tunel * 100) if kg_mp_tunel > 0 else 0
+                        merma_pct_tunel = (kg_merma_tunel / kg_mp_tunel * 100) if kg_mp_tunel > 0 else 0
+                        
+                        with tunel_cols[0]:
+                            st.metric("🔵 Kg Entrada", fmt_numero(kg_mp_tunel, 0))
+                        with tunel_cols[1]:
+                            st.metric("🟢 Kg Salida", fmt_numero(kg_pt_tunel, 0))
+                        with tunel_cols[2]:
+                            st.metric("📊 Rendimiento", fmt_porcentaje(rendimiento_tunel))
+                        with tunel_cols[3]:
+                            st.metric("🗑️ Merma", f"{fmt_numero(kg_merma_tunel, 0)} kg ({fmt_porcentaje(merma_pct_tunel)})")
+                        with tunel_cols[4]:
+                            st.metric("📦 Órdenes", tunel_stats['mos'])
         
         # NOTA: El gráfico acumulado por túnel está en Volumen de Masa arriba
         
