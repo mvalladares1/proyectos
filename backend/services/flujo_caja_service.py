@@ -877,8 +877,8 @@ class FlujoCajaService:
                 [
                     ['state', '=', 'draft'],
                     ['move_type', 'in', ['out_invoice', 'in_invoice', 'out_refund', 'in_refund']],
-                    ['invoice_date', '>=', fecha_inicio],
-                    ['invoice_date', '<=', fecha_fin]
+                    ['date', '>=', fecha_inicio],   # CAMBIO: Usar fecha contable ('date') en vez de invoice_date
+                    ['date', '<=', fecha_fin]
                 ],
                 ['id', 'move_type', 'invoice_date', 'invoice_date_due', 'line_ids'],
                 limit=5000

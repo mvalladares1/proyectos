@@ -704,10 +704,6 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
                 st.markdown("### 🧊 KPIs por Túnel Individual")
                 st.caption("Rendimiento y producción de cada túnel")
                 
-                # DEBUG: Mostrar túneles únicos detectados
-                tuneles_unicos = sorted(set(mo.get('sala', 'N/A') for mo in mos_congelado))
-                st.info(f"🔍 **Túneles detectados:** {', '.join(tuneles_unicos)} ({len(mos_congelado)} MOs de congelado)")
-                
                 # Agrupar por sala/túnel
                 from collections import defaultdict
                 tuneles_data = defaultdict(lambda: {'kg_mp': 0, 'kg_pt': 0, 'mos': 0, 'kg_merma': 0})
