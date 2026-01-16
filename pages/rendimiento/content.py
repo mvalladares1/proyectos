@@ -332,8 +332,8 @@ def _render_sankey(username: str, password: str):
             )])
             
             fig.update_layout(
-                title="Trazabilidad: IN → Proceso → OUT → Cliente",
-                height=700,
+                title="Trazabilidad Completa de Paquetes",
+                height=800,
                 font=dict(size=10)
             )
             
@@ -343,16 +343,22 @@ def _render_sankey(username: str, password: str):
             st.markdown("---")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Pallets IN", len([n for n in sankey_data["nodes"] if n["color"] == "#f39c12"]))
+                st.metric("🟠 Orígenes", len([n for n in sankey_data["nodes"] if n["color"] == "#f39c12"]))
             with col2:
-                st.metric("Procesos", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
+                st.metric("🟣 Intermedios", len([n for n in sankey_data["nodes"] if n["color"] == "#9b59b6"]))
             with col3:
-                st.metric("Pallets OUT", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
+                st.metric("🟢 Destinos", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
             with col4:
-                st.metric("Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
+                st.metric("🔵 Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
             
             # Leyenda
             st.markdown("##### Leyenda:")
-            st.markdown("🟠 Pallets IN (origen) | 🔴 Procesos (reference) | 🟢 Pallets OUT (destino) | 🔵 Clientes (ventas)")
+            st.markdown("""
+            - 🟠 **Origen**: Paquetes que entran (no fueron creados por ningún proceso)
+            - 🟣 **Intermedio**: Paquetes que pasan por múltiples procesos  
+            - 🟢 **Destino**: Paquetes finales (no generan más paquetes)
+            - 🔴 **Proceso**: Referencia/operación que transforma paquetes
+            - 🔵 **Cliente**: Destino de venta (Partner/Vendors)
+            """)
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
