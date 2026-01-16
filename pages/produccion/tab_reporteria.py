@@ -356,24 +356,69 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         
         st.info(f"🔢 Total: **{len(mos_filtradas)}** órdenes de fabricación")
         
-        # Preparar datos para tabla
+        # Preparar datos para tabla con todos los campos disponibles
         df_odfs = pd.DataFrame([{
             'ODF': mo['mo_name'],
             'Fecha': pd.to_datetime(mo['fecha']).strftime('%Y-%m-%d'),
-            'Producto': mo.get('producto', 'N/A'),
+            'Producto': mo.get('producto', ''),
+            'Especie': mo.get('especie', ''),
+            'Manejo': mo.get('manejo', ''),
             'Kg PT': mo.get('kg_pt', 0),
             'Kg MP': mo.get('kg_mp', 0),
-            'Sala': mo.get('sala', 'N/A'),
-            'Estado': mo.get('estado', 'N/A'),
+            'Rendimiento': mo.get('rendimiento', 0),
+            'Sala': mo.get('sala', ''),
+            'Dotación': mo.get('dotacion', 0),
+            'HH Efectiva': mo.get('hh_efectiva', 0),
+            'Kg/HH': mo.get('kg_hh', 0),
+            'Estado': mo.get('estado', ''),
+            'Planta': mo.get('planta', ''),
             'ID': mo['mo_id']
         } for mo in mos_filtradas])
         
+        # Determinar qué columnas mostrar (solo las que tienen datos no vacíos)
+        columnas_mostrar = ['ODF', 'Fecha']
+        
+        # Agregar columnas solo si tienen datos
+        if df_odfs['Producto'].notna().any() and (df_odfs['Producto'] != '').any():
+            columnas_mostrar.append('Producto')
+        if df_odfs['Especie'].notna().any() and (df_odfs['Especie'] != '').any():
+            columnas_mostrar.append('Especie')
+        if df_odfs['Manejo'].notna().any() and (df_odfs['Manejo'] != '').any():
+            columnas_mostrar.append('Manejo')
+        
+        columnas_mostrar.extend(['Kg PT', 'Kg MP'])
+        
+        if (df_odfs['Rendimiento'] > 0).any():
+            columnas_mostrar.append('Rendimiento')
+        if df_odfs['Sala'].notna().any() and (df_odfs['Sala'] != '').any():
+            columnas_mostrar.append('Sala')
+        if (df_odfs['Dotación'] > 0).any():
+            columnas_mostrar.append('Dotación')
+        if (df_odfs['HH Efectiva'] > 0).any():
+            columnas_mostrar.append('HH Efectiva')
+        if (df_odfs['Kg/HH'] > 0).any():
+            columnas_mostrar.append('Kg/HH')
+        if df_odfs['Estado'].notna().any() and (df_odfs['Estado'] != '').any():
+            columnas_mostrar.append('Estado')
+        if df_odfs['Planta'].notna().any() and (df_odfs['Planta'] != '').any():
+            columnas_mostrar.append('Planta')
+        
+        # Formatear números
+        formato_numeros = {
+            'Kg PT': '{:,.2f}',
+            'Kg MP': '{:,.2f}',
+            'Rendimiento': '{:.1f}%',
+            'Dotación': '{:.0f}',
+            'HH Efectiva': '{:.1f}',
+            'Kg/HH': '{:.1f}'
+        }
+        
+        # Filtrar solo formatos de columnas que se mostrarán
+        formato_a_usar = {k: v for k, v in formato_numeros.items() if k in columnas_mostrar}
+        
         # Mostrar tabla con enlaces a Odoo
         st.dataframe(
-            df_odfs[['ODF', 'Fecha', 'Producto', 'Kg PT', 'Kg MP', 'Sala', 'Estado']].style.format({
-                'Kg PT': '{:,.2f}',
-                'Kg MP': '{:,.2f}'
-            }),
+            df_odfs[columnas_mostrar].style.format(formato_a_usar),
             use_container_width=True,
             hide_index=True
         )
