@@ -425,21 +425,6 @@ def render_analisis_detallado(analisis: List[Dict]):
 def main():
     st.title("🔄 Reconciliación de Producción")
     
-    st.markdown("""
-    ### El problema que resolvemos:
-    
-    **Una ODF puede consumir materiales de MÚLTIPLES SO en un flujo continuo.**
-    
-    Odoo registra los hechos (consumos con timestamp).
-    Este dashboard **interpreta** la realidad comercial:
-    - Detecta automáticamente dónde termina una SO y empieza otra
-    - Calcula eficiencia real por pedido
-    - Visualiza la distribución temporal de los pedidos
-    - Genera alertas cuando algo está fuera de rango
-    
-    ---
-    """)
-    
     # Configuración
     api_url = st.session_state.get('api_url', 'http://127.0.0.1:8002')
     
