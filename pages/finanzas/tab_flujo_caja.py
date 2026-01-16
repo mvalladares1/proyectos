@@ -1,6 +1,6 @@
 ﻿"""
 Tab: Flujo de Caja
-Estado de Flujo de EFECTIVO NIIF IAS 7 con funcionalidades avanzadas.
+Flujo de caja NIIF IAS 7 con funcionalidades avanzadas.
 
 FEATURES:
 - Tooltips inteligentes
@@ -50,7 +50,7 @@ def render(username: str, password: str):
     """
     Renderiza el tab Flujo de Caja con diseño Enterprise.
     """
-    st.markdown("# Estado de Flujo de EFECTIVO")
+    st.markdown("# Flujo de Caja")
     
     # ========== CONTROLES SUPERIORES ==========
     col_search, col_filters, col_actions = st.columns([2, 3, 2])
@@ -130,7 +130,6 @@ def render(username: str, password: str):
                     # Determinar endpoint según agrupación seleccionada
                     endpoint = "semanal" if tipo_periodo == "Semanal" else "mensual"
                     url_completa = f"{FLUJO_CAJA_URL}/{endpoint}"
-                    st.info(f"🔍 DEBUG: Conectando a {url_completa}")
                     resp = requests.get(
                         url_completa,
                         params={
@@ -141,7 +140,6 @@ def render(username: str, password: str):
                         },
                         timeout=120
                     )
-                    st.info(f"📊 DEBUG: Status {resp.status_code}, URL final: {resp.url}")
                     
                     if resp.status_code == 200:
                         st.session_state[cache_key] = resp.json()

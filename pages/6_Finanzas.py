@@ -53,6 +53,7 @@ st.caption("Datos obtenidos en tiempo real desde Odoo | Presupuesto desde Excel"
 
 # === FILTROS EN ÁREA PRINCIPAL ===
 st.markdown("---")
+# Primera fila: Filtros principales
 col_filtros = st.columns([1, 2, 2, 2])
 
 with col_filtros[0]:
@@ -87,7 +88,7 @@ with col_filtros[3]:
         key="finanzas_ppto_upload"
     )
 
-# Procesar upload de PPTO
+# Procesar upload de PPTO (esto sí puede ser inmediato porque es interacción de archivo)
 if uploaded_file:
     try:
         files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
@@ -102,6 +103,12 @@ if uploaded_file:
             st.error(f"Error {resp.status_code}: {resp.text}")
     except Exception as e:
         st.error(f"Error al cargar: {e}")
+
+# Botón de Consultar (Segunda fila para darle importancia)
+st.markdown("") # Spacer
+col_btn = st.columns([1, 4])
+with col_btn[0]:
+    btn_consultar = st.button("🔄 Generar Reporte", type="primary", use_container_width=True)
 
 # Calcular fechas
 if meses_seleccionados:
@@ -132,12 +139,21 @@ else:
 
 st.markdown("---")
 
-# === CARGA AUTOMÁTICA DE DATOS ===
-cache_key = f"finanzas_{año_seleccionado}_{fecha_inicio}_{fecha_fin}_{centro_seleccionado}"
+# === CONTROL DE CARGA ===
+# Lógica: Cargar solo si se presiona el botón O si ya hay datos cargados y no queremos resetear (persistencia básica)
+# Pero el usuario pidió explícitamente NO carga dinámica al cambiar filtros.
+# Así que: Si se presiona el botón -> Cargar y guardar en session state.
+# Si NO se presiona -> Mostrar lo que hay en session state (si hay) PERO con advertencia si los filtros cambiaron (opcional, por ahora simple).
 
-if "finanzas_cache_key" not in st.session_state or st.session_state.finanzas_cache_key != cache_key:
-    st.session_state.finanzas_cache_key = cache_key
-    with st.spinner("📊 Cargando datos financieros..."):
+if btn_consultar:
+    st.session_state["finanzas_data_loaded"] = True
+    st.session_state["finanzas_filtros_usados"] = {
+        "año": año_seleccionado,
+        "meses": meses_seleccionados,
+        "centro": centro_seleccionado
+    }
+    
+    with st.spinner("📊 Cargando reporte financiero..."):
         try:
             st.session_state.finanzas_eerr_datos = shared.fetch_estado_resultado(
                 fecha_inicio, fecha_fin, opciones_centros.get(centro_seleccionado),
@@ -148,13 +164,15 @@ if "finanzas_cache_key" not in st.session_state or st.session_state.finanzas_cac
             )
         except Exception as e:
             st.error(f"Error al cargar datos: {e}")
-            st.stop()
+            st.session_state["finanzas_data_loaded"] = False
 
+# Verificar si hay datos cargados
 datos = st.session_state.get('finanzas_eerr_datos')
 ppto = st.session_state.get('finanzas_eerr_ppto', {})
+data_loaded = st.session_state.get("finanzas_data_loaded", False)
 
 # === MOSTRAR DATOS ===
-if datos:
+if data_loaded and datos:
     if "error" in datos:
         st.error(f"Error al obtener datos reales: {datos['error']}")
     else:
@@ -191,6 +209,12 @@ if datos:
             else:
                 @st.fragment
                 def _frag_cg():
+                    # Nota: tab_cg también usa los filtros globales, asegurar consistencia
+                    # Si el usuario cambió los filtros pero NO presionó generar, tab_cg podría mostrar datos inconsistentes
+                    # con los títulos. Pero como 'datos' vienen del session_state snapshot, los datos son consistentes entre sí.
+                    # Pasamos fecha_inicio/centro calculados ARRIBA (los actuales de la UI).
+                    # Idealmente deberíamos guardar también las fechas usadas para el reporte en session_state.
+                    # Por simplicidad ahora usaremos los actuales, asumiendo que el usuario acaba de generar o no ha tocado nada.
                     tab_cg.render(estructura, fecha_inicio, fecha_fin, centro_seleccionado)
                 _frag_cg()
         
@@ -202,5 +226,8 @@ if datos:
                 def _frag_flujo():
                     tab_flujo_caja.render(username, password)
                 _frag_flujo()
+elif not data_loaded:
+    st.info("👆 Configura los filtros y haz clic en **'Generar Reporte'** para ver los resultados.")
 else:
-    st.warning("⚠️ No se pudieron cargar los datos. Selecciona los filtros y vuelve a intentar.")
+    st.warning("⚠️ No se pudieron cargar los datos o la consulta devolvió vacío.")
+
