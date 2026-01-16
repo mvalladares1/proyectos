@@ -98,10 +98,10 @@ def render(wait_seconds: float):
                         desglose_data = []
                         for prod in prev['desglose_productos']:
                             desglose_data.append({
-                                'Producto': prod['producto_nombre'],
-                                'KG en SOs': f"{prod['kg_en_so']:,.2f}",
-                                'KG Producidos': f"{prod['kg_producidos']:,.2f}",
-                                'Match': '✅' if prod['kg_producidos'] > 0 else '❌'
+                                'Producto': prod.get('producto_nombre', 'N/A'),
+                                'KG en SOs': f"{prod.get('kg_en_so', 0):,.2f}",
+                                'KG Producidos': f"{prod.get('kg_producidos', 0):,.2f}",
+                                'Match': '✅' if prod.get('kg_producidos', 0) > 0 else '❌'
                             })
                         
                         df = pd.DataFrame(desglose_data)
