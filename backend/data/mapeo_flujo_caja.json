@@ -1,182 +1,125 @@
 {
     "cuentas_efectivo": {
-        "prefijos": [
-            "110",
-            "111",
-            "1101",
-            "1102",
-            "1103"
+        "prefijos": [],
+        "codigos_especificos": [
+            "10000000",
+            "10000001",
+            "1101001",
+            "1101002",
+            "1101003",
+            "1101004",
+            "11010101",
+            "11010102",
+            "11010201",
+            "11010202",
+            "11010203",
+            "11010204",
+            "11010205",
+            "11010206"
         ],
-        "codigos_especificos": [],
-        "descripcion": "Cuentas de efectivo y equivalentes al efectivo"
+        "descripcion": "Cuentas de efectivo y equivalentes - Solo cuentas tipo asset_cash (cajas y bancos)"
     },
     "mapeo_lineas": {
         "OP01": {
             "prefijos": [
-                "410",
-                "411",
-                "412",
-                "413"
+                "41"
             ],
             "descripcion": "Cobros procedentes de las ventas de bienes y prestación de servicios"
         },
         "OP02": {
             "prefijos": [
-                "510",
-                "511",
-                "512",
-                "210",
-                "211",
-                "212"
+                "51",
+                "52",
+                "53"
             ],
-            "descripcion": "Pagos a proveedores por el suministro de bienes y servicios"
+            "descripcion": "Pagos a proveedores por el suministro de bienes y servicios (Costos)"
         },
         "OP03": {
             "prefijos": [
-                "620",
-                "621",
-                "622",
-                "623",
-                "624",
-                "215",
-                "216"
+                "61",
+                "62"
             ],
             "descripcion": "Pagos a y por cuenta de los empleados"
         },
         "OP04": {
             "prefijos": [
-                "650",
-                "651",
-                "652"
+                "65"
             ],
             "descripcion": "Intereses pagados"
         },
         "OP05": {
             "prefijos": [
-                "420",
-                "421"
+                "42",
+                "77"
             ],
-            "descripcion": "Intereses recibidos"
+            "descripcion": "Intereses recibidos y otros ingresos financieros"
         },
         "OP06": {
             "prefijos": [
-                "640",
-                "641",
-                "642",
-                "217",
-                "218"
+                "91"
             ],
-            "descripcion": "Impuestos a las ganancias reembolsados (pagados)"
+            "descripcion": "Impuestos a las ganancias pagados"
         },
         "OP07": {
-            "prefijos": [],
-            "descripcion": "Otras entradas (salidas) de efectivo"
+            "prefijos": [
+                "63",
+                "64",
+                "66",
+                "67",
+                "68",
+                "69"
+            ],
+            "descripcion": "Otros gastos de operación"
         },
         "IN01": {
             "prefijos": [
-                "130",
-                "131"
+                "13"
             ],
-            "descripcion": "Flujos de efectivo utilizados para obtener el control de subsidiarias"
+            "descripcion": "Pagos por adquisición de intangibles e inversiones"
         },
         "IN02": {
             "prefijos": [
-                "132",
-                "133"
-            ],
-            "descripcion": "Flujos de efectivo utilizados en la compra de participaciones no controladoras"
-        },
-        "IN03": {
-            "prefijos": [
-                "123",
-                "124",
-                "125",
-                "170",
-                "171",
-                "172"
+                "12"
             ],
             "descripcion": "Compras de propiedades, planta y equipo"
         },
+        "IN03": {
+            "prefijos": [
+                "71"
+            ],
+            "descripcion": "Ingresos por venta de activos fijos"
+        },
         "IN04": {
             "prefijos": [
-                "126",
-                "127",
-                "180",
-                "181"
+                "81"
             ],
-            "descripcion": "Compras de activos intangibles"
-        },
-        "IN05": {
-            "prefijos": [
-                "422",
-                "423"
-            ],
-            "descripcion": "Dividendos recibidos"
-        },
-        "IN06": {
-            "prefijos": [
-                "430",
-                "431",
-                "432"
-            ],
-            "descripcion": "Ventas de propiedades, planta y equipo"
+            "descripcion": "Costo de venta de activos fijos"
         },
         "FI01": {
             "prefijos": [
-                "230",
-                "231",
-                "232"
+                "21"
             ],
-            "descripcion": "Importes procedentes de préstamos de largo plazo"
+            "descripcion": "Obtención y pagos de préstamos"
         },
         "FI02": {
             "prefijos": [
-                "220",
-                "221",
-                "222"
+                "22"
             ],
-            "descripcion": "Importes procedentes de préstamos de corto plazo"
+            "descripcion": "Préstamos de largo plazo"
         },
         "FI03": {
             "prefijos": [
-                "233",
-                "234",
-                "240",
-                "241"
+                "31"
             ],
-            "descripcion": "Préstamos de entidades relacionadas"
+            "descripcion": "Aportes de capital y patrimonio"
         },
         "FI04": {
             "prefijos": [
-                "230",
-                "231"
+                "32"
             ],
-            "descripcion": "Pagos de préstamos"
-        },
-        "FI05": {
-            "prefijos": [
-                "233",
-                "234"
-            ],
-            "descripcion": "Pagos de préstamos a entidades relacionadas"
-        },
-        "FI06": {
-            "prefijos": [
-                "235",
-                "236",
-                "250"
-            ],
-            "descripcion": "Pagos de pasivos por arrendamientos financieros"
-        },
-        "FI07": {
-            "prefijos": [
-                "310",
-                "311",
-                "312"
-            ],
-            "descripcion": "Dividendos pagados"
+            "descripcion": "Distribuciones a propietarios"
         }
     },
-    "version": "1.0",
-    "notas": "Mapeo inicial basado en plan de cuentas chileno estándar. Ajustar según estructura específica de la empresa."
+    "version": "2.0",
+    "notas": "Mapeo ajustado basado en análisis forense de la contabilidad real de Río Futuro - Enero 2026"
 }

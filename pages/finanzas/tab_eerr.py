@@ -1,7 +1,7 @@
 """
 Tab: Estado de Resultados Consolidado
 Tabla expandible con formato similar a Flujo de Caja.
-Combina vistas de Agrupado, Mensualizado, Detalle y YTD en una sola tabla.
+Usa los filtros de la sidebar (Año, Mes, Centro de Costos).
 """
 import streamlit as st
 from datetime import datetime
@@ -13,146 +13,65 @@ from . import shared
 
 
 @st.fragment
-def render(username: str, password: str):
+def render(username: str, password: str, estructura: dict, datos_mensuales: dict, 
+           meses_lista: list, ppto_mensual: dict):
     """
     Renderiza el tab de Estado de Resultados Consolidado.
+    
+    Args:
+        username: Usuario para API
+        password: Password para API
+        estructura: Estructura del EERR con categorías y subcategorías
+        datos_mensuales: Datos mensuales del EERR
+        meses_lista: Lista de meses a mostrar (formato YYYY-MM)
+        ppto_mensual: Datos del presupuesto mensual
     """
     st.subheader("📊 Estado de Resultados")
     st.caption("Vista consolidada mensual con detalle expandible")
     
-    # === FILTROS ===
-    col_fecha1, col_fecha2, col_btn = st.columns([2, 2, 1])
-    
-    with col_fecha1:
-        fecha_inicio = st.date_input(
-            "Desde",
-            value=datetime(datetime.now().year, 1, 1),
-            key="eerr_fecha_inicio"
-        )
-    
-    with col_fecha2:
-        fecha_fin = st.date_input(
-            "Hasta",
-            value=datetime.now(),
-            key="eerr_fecha_fin"
-        )
-    
-    with col_btn:
-        st.write("")  # Spacer
-        btn_generar = st.button("🔄 Generar", type="primary", use_container_width=True, key="eerr_btn")
-    
-    # Generar lista de meses entre fechas
-    meses_lista = []
-    current = datetime(fecha_inicio.year, fecha_inicio.month, 1)
-    end = datetime(fecha_fin.year, fecha_fin.month, 1)
-    while current <= end:
-        meses_lista.append(current.strftime("%Y-%m"))
-        if current.month == 12:
-            current = datetime(current.year + 1, 1, 1)
-        else:
-            current = datetime(current.year, current.month + 1, 1)
+    # Mostrar período seleccionado
+    if meses_lista:
+        mes_inicio = meses_lista[0]
+        mes_fin = meses_lista[-1]
+        st.info(f"📅 Período: **{mes_inicio}** a **{mes_fin}** ({len(meses_lista)} meses)")
     
     st.markdown("---")
     
-    # === CARGAR DATOS ===
-    cache_key = f"eerr_consolidado_{fecha_inicio}_{fecha_fin}"
-    
-    if btn_generar:
-        if cache_key in st.session_state:
-            del st.session_state[cache_key]
-        st.session_state["eerr_should_load"] = True
-    
-    if st.session_state.get("eerr_should_load") or cache_key in st.session_state:
+    # === RENDERIZAR TABLA ===
+    if estructura:
+        tabla_html = render_eerr_table(
+            estructura=estructura,
+            datos_mensuales=datos_mensuales,
+            meses_lista=meses_lista,
+            ppto_mensual=ppto_mensual
+        )
         
-        if cache_key not in st.session_state:
-            with st.spinner("📊 Cargando Estado de Resultados..."):
-                # Usar la función existente de shared
-                data = shared.fetch_estado_resultado(
-                    fecha_ini=fecha_inicio.strftime("%Y-%m-%d"),
-                    fecha_f=fecha_fin.strftime("%Y-%m-%d"),
-                    centro=None,
-                    _username=username,
-                    _password=password
-                )
+        # JavaScript para expansión
+        js_code = """
+        <script>
+            function toggleEerrRow(rowId) {
+                const icon = document.querySelector(`[data-row-id="${rowId}"] .expand-icon`);
+                const childRows = document.querySelectorAll(`.child-of-${rowId}`);
                 
-                if data and "error" not in data:
-                    st.session_state[cache_key] = data
-                    st.session_state["eerr_should_load"] = False
-                    st.toast("✅ Datos cargados", icon="✅")
-                else:
-                    error_msg = data.get("error", "Error desconocido") if data else "Sin respuesta"
-                    st.error(f"Error: {error_msg}")
-                    return
-        
-        data = st.session_state.get(cache_key, {})
-        
-        if "error" in data:
-            st.error(f"Error: {data['error']}")
-            return
-        
-        # Extraer datos del response
-        estructura = data.get("estructura", {})
-        datos_mensuales = data.get("datos_mensuales", {})
-        ppto_mensual = data.get("ppto_mensual", {})
-        
-        # === DEBUG: Mostrar estructura de datos ===
-        with st.expander("🔍 DEBUG: Ver estructura de datos", expanded=False):
-            st.write("**Meses consultados:**", meses_lista)
-            st.write("**Categorías en estructura:**", list(estructura.keys()))
-            
-            # Verificar si montos_por_mes existe en subcategorías
-            if "2 - COSTOS" in estructura:
-                costos = estructura["2 - COSTOS"]
-                st.write("**Subcategorías de COSTOS:**", list(costos.get("subcategorias", {}).keys()))
-                
-                for subcat_name, subcat_data in list(costos.get("subcategorias", {}).items())[:2]:
-                    st.write(f"**{subcat_name}:**")
-                    st.write(f"  - total: {subcat_data.get('total', 0)}")
-                    st.write(f"  - tiene montos_por_mes: {'montos_por_mes' in subcat_data}")
-                    if 'montos_por_mes' in subcat_data:
-                        st.write(f"  - montos_por_mes: {subcat_data['montos_por_mes']}")
-        
-        # === RENDERIZAR TABLA ===
-        if estructura:
-            tabla_html = render_eerr_table(
-                estructura=estructura,
-                datos_mensuales=datos_mensuales,
-                meses_lista=meses_lista,
-                ppto_mensual=ppto_mensual
-            )
-            
-            # JavaScript para expansión
-            js_code = """
-            <script>
-                function toggleEerrRow(rowId) {
-                    const icon = document.querySelector(`[data-row-id="${rowId}"] .expand-icon`);
-                    const childRows = document.querySelectorAll(`.child-of-${rowId}`);
-                    
-                    if (icon) {
-                        icon.classList.toggle('expanded');
-                    }
-                    
-                    childRows.forEach(row => {
-                        row.classList.toggle('hidden-row');
-                    });
+                if (icon) {
+                    icon.classList.toggle('expanded');
                 }
-            </script>
-            """
-            
-            # Combinar todo en un solo HTML
-            full_html = f"{EERR_CSS}\n{tabla_html}\n{js_code}"
-            
-            # Calcular altura basada en filas visibles
-            num_visible_rows = len(ESTRUCTURA_EERR)
-            table_height = min(max(num_visible_rows * 50 + 80, 450), 850)
-            
-            st_html(full_html, height=table_height, scrolling=True)
-        else:
-            st.warning("⚠️ No hay datos disponibles para el período seleccionado.")
-            
-            # Debug info
-            with st.expander("🔍 Información de Debug"):
-                st.write("Meses consultados:", meses_lista)
-                st.write("Datos recibidos:", list(data.keys()) if data else "Ninguno")
+                
+                childRows.forEach(row => {
+                    row.classList.toggle('hidden-row');
+                });
+            }
+        </script>
+        """
+        
+        # Combinar todo en un solo HTML
+        full_html = f"{EERR_CSS}\n{tabla_html}\n{js_code}"
+        
+        # Calcular altura basada en filas visibles
+        num_visible_rows = len(ESTRUCTURA_EERR)
+        table_height = min(max(num_visible_rows * 50 + 80, 450), 850)
+        
+        st_html(full_html, height=table_height, scrolling=True)
     else:
-        st.info("👆 Selecciona el rango de fechas y haz clic en **Generar** para ver el Estado de Resultados")
+        st.warning("⚠️ No hay datos disponibles para el período seleccionado.")
+        st.caption("Utiliza los filtros de la barra lateral para cambiar el período.")

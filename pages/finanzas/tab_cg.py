@@ -78,15 +78,26 @@ def _render_todas_cuentas(cuentas_dict: dict):
     
     df_cuentas = []
     for cuenta_name, cuenta_info in sorted(cuentas_dict.items()):
+        # Manejar caso donde monto puede ser dict o número
+        monto = cuenta_info.get("monto", 0)
+        if isinstance(monto, dict):
+            monto = monto.get("total", 0)
+        if not isinstance(monto, (int, float)):
+            monto = 0
+        
         df_cuentas.append({
             "Cuenta": cuenta_name,
-            "Categoría": cuenta_info["categoria"],
+            "Categoría": cuenta_info.get("categoria", ""),
             "Subcategoría": cuenta_info.get("subcat3", cuenta_info.get("subcat2", "")),
-            "Monto": cuenta_info["monto"]
+            "Monto": monto
         })
     
+    if not df_cuentas:
+        st.warning("No hay cuentas para mostrar.")
+        return
+    
     df = pd.DataFrame(df_cuentas)
-    df = df.sort_values("Monto", key=abs, ascending=False)
+    df = df.sort_values("Monto", key=lambda x: x.abs(), ascending=False)
     
     st.dataframe(
         df.style.format({"Monto": "${:,.0f}"}),
@@ -119,7 +130,7 @@ def _render_todas_cuentas(cuentas_dict: dict):
     st.subheader("📊 Distribución por Categoría")
     
     resumen_cat = df.groupby("Categoría")["Monto"].sum().reset_index()
-    resumen_cat = resumen_cat.sort_values("Monto", key=abs, ascending=False)
+    resumen_cat = resumen_cat.sort_values("Monto", key=lambda x: x.abs(), ascending=False)
     
     col_tabla, col_grafico = st.columns([1, 1])
     with col_tabla:
