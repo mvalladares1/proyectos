@@ -341,24 +341,29 @@ def _render_sankey(username: str, password: str):
             
             # Estadísticas
             st.markdown("---")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
-                st.metric("🟠 Orígenes", len([n for n in sankey_data["nodes"] if n["color"] == "#f39c12"]))
+                st.metric("🏭 Proveedores", len([n for n in sankey_data["nodes"] if n["color"] == "#9b59b6"]))
             with col2:
-                st.metric("🟣 Intermedios", len([n for n in sankey_data["nodes"] if n["color"] == "#9b59b6"]))
+                st.metric("📥 Recepciones", len([n for n in sankey_data["nodes"] if n["color"] == "#1abc9c"]))
             with col3:
-                st.metric("🟢 Destinos", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
+                st.metric("🔴 Procesos", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
             with col4:
+                st.metric("🟢 Pallets OUT", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
+            with col5:
                 st.metric("🔵 Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
             
             # Leyenda
             st.markdown("##### Leyenda:")
             st.markdown("""
-            - 🟠 **Origen**: Paquetes que entran (no fueron creados por ningún proceso)
-            - 🟣 **Intermedio**: Paquetes que pasan por múltiples procesos  
-            - 🟢 **Destino**: Paquetes finales (no generan más paquetes)
-            - 🔴 **Proceso**: Referencia/operación que transforma paquetes
-            - 🔵 **Cliente**: Destino de venta (Partner/Vendors)
+            - 🏭 **Proveedor** (morado): Origen de la mercadería
+            - 📥 **Recepción** (turquesa): Entrada desde proveedor (RF/RFP/IN/...)
+            - 📦 **Pallet Recepción** (naranja): Pallet creado en recepción
+            - 🔴 **Proceso** (rojo): Operación/transformación (RF/MO/...)
+            - 🟠 **Pallet IN** (naranja): Pallet que entra a proceso
+            - 🟢 **Pallet OUT** (verde): Pallet que sale de proceso
+            - 🔵 **Cliente** (azul): Destino de venta
+            - 🟣 **Continuidad** (morado): Mismo pallet pasa de recepción/proceso a otro proceso
             """)
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
