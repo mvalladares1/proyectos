@@ -267,7 +267,8 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     # Agrupar por período
     if agrupacion == "Día":
         df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%Y-%m-%d')
-        df_mos['periodo_sort'] = df_mos['fecha_dt']
+        # IMPORTANTE: Normalizar a medianoche para que agrupe bien por día
+        df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.normalize()
     elif agrupacion == "Semana":
         df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('S%W-%Y')
         df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.to_period('W').dt.start_time
