@@ -784,29 +784,37 @@ class ContainersService:
             reverse=True
         )[:100]  # Aumentado de 50 a 100 para mejor trazabilidad
         
-        # Reconstruir lot_to_out_refs y lot_to_in_refs solo con referencias activas
-        # Esto asegura que solo conectamos lotes cuyos nodos existen
-        active_lot_to_out = {}  # lot_id -> [(ref, pkg_id, lot_name)]
-        active_lot_to_in = {}   # lot_id -> [(ref, pkg_id, lot_name)]
+        # Función para normalizar nombre de lote (quitar sufijos como -C, -D, etc.)
+        def normalize_lot_name(lot_name: str) -> str:
+            if not lot_name:
+                return ""
+            # Quitar sufijos comunes: -C, -D, -E, etc.
+            import re
+            return re.sub(r'-[A-Z]$', '', lot_name)
+        
+        # Reconstruir mapeos por NOMBRE DE LOTE NORMALIZADO (no por lot_id)
+        # Esto permite conectar 0006944-C (OUT) con 0006944 (IN)
+        active_lot_to_out = {}  # lot_name_normalizado -> [(ref, pkg_id, lot_name_original)]
+        active_lot_to_in = {}   # lot_name_normalizado -> [(ref, pkg_id, lot_name_original)]
         
         for ref in sorted_refs:
             data = active_refs[ref]
             # Recolectar lotes de paquetes OUT
             for pkg_id, pkg_data in data.get("out_packages", {}).items():
-                lot_id = pkg_data.get("lot_id")
                 lot_name = pkg_data.get("lot_name")
-                if lot_id:
-                    if lot_id not in active_lot_to_out:
-                        active_lot_to_out[lot_id] = []
-                    active_lot_to_out[lot_id].append((ref, pkg_id, lot_name))
+                if lot_name:
+                    lot_key = normalize_lot_name(lot_name)
+                    if lot_key not in active_lot_to_out:
+                        active_lot_to_out[lot_key] = []
+                    active_lot_to_out[lot_key].append((ref, pkg_id, lot_name))
             # Recolectar lotes de paquetes IN
             for pkg_id, pkg_data in data.get("in_packages", {}).items():
-                lot_id = pkg_data.get("lot_id")
                 lot_name = pkg_data.get("lot_name")
-                if lot_id:
-                    if lot_id not in active_lot_to_in:
-                        active_lot_to_in[lot_id] = []
-                    active_lot_to_in[lot_id].append((ref, pkg_id, lot_name))
+                if lot_name:
+                    lot_key = normalize_lot_name(lot_name)
+                    if lot_key not in active_lot_to_in:
+                        active_lot_to_in[lot_key] = []
+                    active_lot_to_in[lot_key].append((ref, pkg_id, lot_name))
         
         # Paso 6: Construir nodos y links
         nodes: List[Dict] = []
@@ -1035,34 +1043,26 @@ class ContainersService:
                         "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad recepción->proceso
                     })
         
-        # Paso 7c: Conectar OUT que continúa como IN por LOT_ID
-        # El mismo LOTE aparece en OUT de Proceso A y en IN de Proceso B
-        # aunque los package_id sean diferentes (pallet cambia de nombre)
-        # Usamos active_lot_to_out/in que solo tienen refs en sorted_refs
+        # Paso 7c: Conectar OUT que continúa como IN por NOMBRE DE LOTE NORMALIZADO
+        # El mismo LOTE base aparece en OUT (ej: 0006944-C) y en IN (ej: 0006944)
+        # Usamos active_lot_to_out/in con claves normalizadas
         continuity_links_added = 0
         
-        # Debug: verificar datos de lot_id (usando diccionarios filtrados)
+        # Debug: verificar datos de lotes normalizados
         common_lots = set(active_lot_to_out.keys()) & set(active_lot_to_in.keys())
-        print(f"Lotes activos en OUT: {len(active_lot_to_out)}, Lotes activos en IN: {len(active_lot_to_in)}, Lotes comunes: {len(common_lots)}")
+        print(f"Lotes normalizados en OUT: {len(active_lot_to_out)}, en IN: {len(active_lot_to_in)}, comunes: {len(common_lots)}")
         
-        # Debug: mostrar ejemplos de lotes en cada lado
-        if not common_lots:
-            out_lot_names = [entries[0][2] for entries in list(active_lot_to_out.values())[:5] if entries and len(entries[0]) > 2]
-            in_lot_names = [entries[0][2] for entries in list(active_lot_to_in.values())[:5] if entries and len(entries[0]) > 2]
-            print(f"  Ejemplos OUT: {out_lot_names}")
-            print(f"  Ejemplos IN: {in_lot_names}")
+        if common_lots:
+            print(f"  Ejemplos de lotes comunes: {list(common_lots)[:5]}")
         
-        # Para cada lote que aparece tanto en OUT como en IN
-        for lot_id in common_lots:
-            out_entries = active_lot_to_out[lot_id]  # [(ref, pkg_id, lot_name), ...]
-            in_entries = active_lot_to_in[lot_id]    # [(ref, pkg_id, lot_name), ...]
+        # Para cada lote normalizado que aparece tanto en OUT como en IN
+        for lot_key in common_lots:
+            out_entries = active_lot_to_out[lot_key]  # [(ref, pkg_id, lot_name_original), ...]
+            in_entries = active_lot_to_in[lot_key]    # [(ref, pkg_id, lot_name_original), ...]
             
-            lot_name = out_entries[0][2] if out_entries and len(out_entries[0]) > 2 else str(lot_id)
-            print(f"  Lote común {lot_name}: OUT en {[e[0] for e in out_entries]}, IN en {list(set([e[0] for e in in_entries]))}")
-            
-            # Conectar cada OUT con cada IN del mismo lote (en diferentes referencias)
-            for out_ref, out_pkg_id, _ in out_entries:
-                for in_ref, in_pkg_id, _ in in_entries:
+            # Conectar cada OUT con cada IN del mismo lote base (en diferentes referencias)
+            for out_ref, out_pkg_id, out_lot_name in out_entries:
+                for in_ref, in_pkg_id, in_lot_name in in_entries:
                     # Solo conectar si son referencias diferentes (diferentes procesos)
                     if out_ref != in_ref:
                         out_node_id = f"OUT:{out_pkg_id}"
