@@ -782,7 +782,31 @@ class ContainersService:
             active_refs.keys(),
             key=lambda r: max(active_refs[r]["dates"]) if active_refs[r]["dates"] else "",
             reverse=True
-        )[:50]
+        )[:100]  # Aumentado de 50 a 100 para mejor trazabilidad
+        
+        # Reconstruir lot_to_out_refs y lot_to_in_refs solo con referencias activas
+        # Esto asegura que solo conectamos lotes cuyos nodos existen
+        active_lot_to_out = {}  # lot_id -> [(ref, pkg_id, lot_name)]
+        active_lot_to_in = {}   # lot_id -> [(ref, pkg_id, lot_name)]
+        
+        for ref in sorted_refs:
+            data = active_refs[ref]
+            # Recolectar lotes de paquetes OUT
+            for pkg_id, pkg_data in data.get("out_packages", {}).items():
+                lot_id = pkg_data.get("lot_id")
+                lot_name = pkg_data.get("lot_name")
+                if lot_id:
+                    if lot_id not in active_lot_to_out:
+                        active_lot_to_out[lot_id] = []
+                    active_lot_to_out[lot_id].append((ref, pkg_id, lot_name))
+            # Recolectar lotes de paquetes IN
+            for pkg_id, pkg_data in data.get("in_packages", {}).items():
+                lot_id = pkg_data.get("lot_id")
+                lot_name = pkg_data.get("lot_name")
+                if lot_id:
+                    if lot_id not in active_lot_to_in:
+                        active_lot_to_in[lot_id] = []
+                    active_lot_to_in[lot_id].append((ref, pkg_id, lot_name))
         
         # Paso 6: Construir nodos y links
         nodes: List[Dict] = []
@@ -1014,19 +1038,20 @@ class ContainersService:
         # Paso 7c: Conectar OUT que continúa como IN por LOT_ID
         # El mismo LOTE aparece en OUT de Proceso A y en IN de Proceso B
         # aunque los package_id sean diferentes (pallet cambia de nombre)
+        # Usamos active_lot_to_out/in que solo tienen refs en sorted_refs
         continuity_links_added = 0
         
-        # Debug: verificar datos de lot_id
-        common_lots = set(lot_to_out_refs.keys()) & set(lot_to_in_refs.keys())
-        print(f"Lotes en OUT: {len(lot_to_out_refs)}, Lotes en IN: {len(lot_to_in_refs)}, Lotes comunes: {len(common_lots)}")
+        # Debug: verificar datos de lot_id (usando diccionarios filtrados)
+        common_lots = set(active_lot_to_out.keys()) & set(active_lot_to_in.keys())
+        print(f"Lotes activos en OUT: {len(active_lot_to_out)}, Lotes activos en IN: {len(active_lot_to_in)}, Lotes comunes: {len(common_lots)}")
         
         # Para cada lote que aparece tanto en OUT como en IN
         for lot_id in common_lots:
-            out_entries = lot_to_out_refs[lot_id]  # [(ref, pkg_id, lot_name), ...]
-            in_entries = lot_to_in_refs[lot_id]    # [(ref, pkg_id, lot_name), ...]
+            out_entries = active_lot_to_out[lot_id]  # [(ref, pkg_id, lot_name), ...]
+            in_entries = active_lot_to_in[lot_id]    # [(ref, pkg_id, lot_name), ...]
             
             lot_name = out_entries[0][2] if out_entries and len(out_entries[0]) > 2 else str(lot_id)
-            print(f"  Lote común {lot_name}: OUT entries={len(out_entries)}, IN entries={len(in_entries)}")
+            print(f"  Lote común {lot_name}: OUT en {[e[0] for e in out_entries]}, IN en {list(set([e[0] for e in in_entries]))}")
             
             # Conectar cada OUT con cada IN del mismo lote (en diferentes referencias)
             for out_ref, out_pkg_id, _ in out_entries:
@@ -1039,14 +1064,6 @@ class ContainersService:
                         out_idx = node_index.get(out_node_id)
                         in_idx = node_index.get(in_node_id)
                         
-                        # Debug: por qué no se encuentra?
-                        if out_idx is None or in_idx is None:
-                            # Buscar nodos similares
-                            out_matches = [k for k in node_index.keys() if str(out_pkg_id) in k]
-                            in_matches = [k for k in node_index.keys() if str(in_pkg_id) in k]
-                            print(f"    Nodo no encontrado: OUT:{out_pkg_id} (matches: {out_matches[:3]}), IN:{in_pkg_id} (matches: {in_matches[:3]})")
-                            print(f"    Refs: OUT de {out_ref}, IN de {in_ref}")
-                        
                         if out_idx is not None and in_idx is not None:
                             # Evitar duplicados
                             existing = any(
@@ -1055,7 +1072,7 @@ class ContainersService:
                             )
                             if not existing:
                                 # Obtener qty del OUT
-                                out_data = references_data.get(out_ref, {}).get("out_packages", {}).get(out_pkg_id, {})
+                                out_data = active_refs.get(out_ref, {}).get("out_packages", {}).get(out_pkg_id, {})
                                 qty = out_data.get("qty", 1)
                                 
                                 links.append({
