@@ -96,11 +96,12 @@ class RendimientoService:
             return {}
         
         # Obtener todos los move lines en batch
+        # Límite alto para evitar truncamiento con muchas MOs
         move_lines = self.odoo.search_read(
             'stock.move.line',
             [['move_id', 'in', all_raw_ids]],
             ['move_id', 'product_id', 'lot_id', 'qty_done'],
-            limit=5000
+            limit=50000
         )
         
         # Obtener info de productos (especie y manejo desde product.template)
@@ -118,7 +119,7 @@ class RendimientoService:
                 'product.product',
                 [['id', 'in', list(product_ids_set)]],
                 ['id', 'product_tmpl_id'],
-                limit=5000
+                limit=20000
             )
             
             # Obtener templates con manejo y tipo de fruta
@@ -316,8 +317,23 @@ class RendimientoService:
                 # Identificar si es merma (categoría contiene "MERMA")
                 is_merma = 'MERMA' in categ_name.upper() if categ_name else False
                 
-                # Identificar si es proceso intermedio (producto [3] o categoría PROCESO)
-                is_proceso = prod_name.startswith('[3]') or 'PROCESO' in categ_name.upper()
+                # Identificar si es proceso intermedio:
+                # - Solo productos con nombre exacto "[X] PROCESO..." o "[X.Y] PROCESO..."  
+                # - NO productos terminados con código de producto (ejemplo: [401274000])
+                is_proceso = False
+                if prod_name:
+                    # Productos intermedios específicos: [3] Proceso de Vaciado, [1.x] PROCESO, etc.
+                    if prod_name.startswith('[3]') and 'PROCESO' in prod_name.upper():
+                        is_proceso = True
+                    elif prod_name.startswith('[1.') and 'PROCESO' in prod_name.upper():
+                        is_proceso = True
+                    elif prod_name.startswith('[2.') and 'PROCESO' in prod_name.upper():
+                        is_proceso = True
+                    elif prod_name.startswith('[4]') and 'PROCESO' in prod_name.upper():
+                        is_proceso = True
+                    # Solo categoría PROCESO (sin código de producto largo)
+                    elif 'PROCESOS' in categ_name.upper() and not any(c.isdigit() for c in prod_name[1:7]):
+                        is_proceso = True
                 
                 result[mo_id].append({
                     'product_id': prod_id,
