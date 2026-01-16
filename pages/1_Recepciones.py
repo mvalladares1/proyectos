@@ -21,7 +21,6 @@ from recepciones import tab_gestion
 from recepciones import tab_curva
 from recepciones import tab_aprobaciones
 from recepciones import tab_pallets
-from recepciones import tab_diagnostic  # Tab temporal de diagnóstico
 
 # Configuración de página
 st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
@@ -51,13 +50,12 @@ _perm_aprobaciones = tiene_acceso_pagina("recepciones", "aprobaciones_mp")
 _perm_pallets = tiene_acceso_pagina("recepciones", "pallets_recepcion") # Permiso nuevo o reusado
 
 # === TABS PRINCIPALES ===
-tab_kpis_ui, tab_gestion_ui, tab_pallets_ui, tab_curva_ui, tab_aprobaciones_ui, tab_diagnostic_ui = st.tabs([
+tab_kpis_ui, tab_gestion_ui, tab_pallets_ui, tab_curva_ui, tab_aprobaciones_ui = st.tabs([
     "📊 KPIs y Calidad", 
     "📋 Gestión de Recepciones", 
     "📦 Pallets por Recepción",
     "📈 Curva de Abastecimiento", 
-    "📥 Aprobaciones MP",
-    "🔍 Diagnóstico IDs"  # Nuevo tab temporal
+    "📥 Aprobaciones MP"
 ])
 
 # =====================================================
@@ -121,10 +119,3 @@ with tab_aprobaciones_ui:
     else:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Aprobaciones MP'. Contacta al administrador.")
         st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
-
-# =====================================================
-#           TAB 6: DIAGNÓSTICO IDs (TEMPORAL)
-# =====================================================
-with tab_diagnostic_ui:
-    # Este tab es temporal y está disponible para todos los usuarios autenticados
-    tab_diagnostic.render(username, password)

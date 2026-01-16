@@ -47,21 +47,23 @@ def render(wait_seconds: float):
                     with st.spinner("Calculando..."):
                         resultado = shared.preview_reconciliacion_odf(odf['id'])
                         
-                        if resultado.get('kg_totales_po') is not None:
+                        if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                             st.session_state[f'preview_{odf["id"]}'] = resultado
                         else:
-                            st.error(f"Error: {resultado.get('error', 'Sin datos')}")
+                            error_msg = resultado.get('error', 'Sin datos') if isinstance(resultado, dict) else 'Respuesta inválida'
+                            st.error(f"Error: {error_msg}")
                 
                 # Botón de reconciliar
                 if st.button("✅ Reconciliar", key=f"recon_{odf['id']}", type="primary", use_container_width=True):
                     with st.spinner("Reconciliando..."):
                         resultado = shared.reconciliar_odf_kg(odf['id'], dry_run=False)
                         
-                        if resultado.get('kg_totales_po') is not None:
+                        if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                             st.success("✓ Reconciliado")
                             st.session_state[f'resultado_{odf["id"]}'] = resultado
                         else:
-                            st.error(f"Error: {resultado.get('error')}")
+                            error_msg = resultado.get('error', 'Error desconocido') if isinstance(resultado, dict) else 'Respuesta inválida'
+                            st.error(f"Error: {error_msg}")
             
             # Mostrar preview si existe
             if f'preview_{odf["id"]}' in st.session_state:
@@ -83,32 +85,33 @@ def render(wait_seconds: float):
                     with col_c:
                         kg_disp = prev.get('kg_disponibles_po', 0)
                         st.metric("KG Disponibles PO", f"{kg_disp:,.0f} kg")
-                
-                # Desglose por producto
-                if prev.get('desglose_productos'):
-                    st.markdown("**Desglose por Producto:**")
                     
-                    desglose_data = []
-                    for prod in prev['desglose_productos']:
-                        desglose_data.append({
-                            'Producto': prod['producto_nombre'],
-                            'KG en SOs': f"{prod['kg_en_so']:,.2f}",
-                            'KG Producidos': f"{prod['kg_producidos']:,.2f}",
-                            'Match': '✅' if prod['kg_producidos'] > 0 else '❌'
-                        })
-                    
-                    df = pd.DataFrame(desglose_data)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    # Desglose por producto (dentro del else para validación)
+                    if prev.get('desglose_productos'):
+                        st.markdown("**Desglose por Producto:**")
+                        
+                        desglose_data = []
+                        for prod in prev['desglose_productos']:
+                            desglose_data.append({
+                                'Producto': prod['producto_nombre'],
+                                'KG en SOs': f"{prod['kg_en_so']:,.2f}",
+                                'KG Producidos': f"{prod['kg_producidos']:,.2f}",
+                                'Match': '✅' if prod['kg_producidos'] > 0 else '❌'
+                            })
+                        
+                        df = pd.DataFrame(desglose_data)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Mostrar resultado si existe
             if f'resultado_{odf["id"]}' in st.session_state:
                 res = st.session_state[f'resultado_{odf["id"]}']
-                st.success(f"""
-                ✅ **Reconciliado Exitosamente**
-                - KG Totales: {res.get('kg_totales_po', 0):,.0f} kg
-                - KG Consumidos: {res.get('kg_consumidos_po', 0):,.0f} kg  
-                - KG Disponibles: {res.get('kg_disponibles_po', 0):,.0f} kg
-                """)
+                if isinstance(res, dict):
+                    st.success(f"""
+                    ✅ **Reconciliado Exitosamente**
+                    - KG Totales: {res.get('kg_totales_po', 0):,.0f} kg
+                    - KG Consumidos: {res.get('kg_consumidos_po', 0):,.0f} kg  
+                    - KG Disponibles: {res.get('kg_disponibles_po', 0):,.0f} kg
+                    """)
     
     # Botón de reconciliar todas
     st.divider()
@@ -130,7 +133,7 @@ def render(wait_seconds: float):
                 
                 resultado = shared.preview_reconciliacion_odf(odf['id'])
                 
-                if resultado.get('kg_totales_po') is not None:
+                if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                     st.session_state[f'preview_{odf["id"]}'] = resultado
                     exitosos += 1
                 else:
@@ -155,7 +158,7 @@ def render(wait_seconds: float):
                     
                     resultado = shared.reconciliar_odf_kg(odf['id'], dry_run=False)
                     
-                    if resultado.get('kg_totales_po') is not None:
+                    if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                         st.session_state[f'resultado_{odf["id"]}'] = resultado
                         exitosos += 1
                     else:
