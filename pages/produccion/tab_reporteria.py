@@ -419,12 +419,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             st.markdown("---")
             _render_resumen_fruta_manejo(consolidado)
         
-        # === GRÁFICO ACUMULADO POR LÍNEA ===
-        if mos:
-            st.markdown("---")
-            st.markdown("### 🏭 Producción Acumulada por Línea")
-            st.caption("Kg procesados por período - Agrupado por línea de producción")
-            grafico_salas_consolidado(mos, agrupacion)
+        # NOTA: El gráfico acumulado por línea está en Volumen de Masa arriba
         
         # === GRÁFICO TEMPORAL DE PROCESO/VACIADO POR SALA (DETALLE POR LÍNEA) ===
         if mos:
@@ -465,12 +460,7 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
         
         _fragment_kpis_congelado()
         
-        # === GRÁFICO ACUMULADO POR TÚNEL ===
-        if mos:
-            st.markdown("---")
-            st.markdown("### ❄️ Congelado Acumulado por Túnel")
-            st.caption("Kg congelados por período - Solo túneles")
-            grafico_tuneles_consolidado(mos, agrupacion)
+        # NOTA: El gráfico acumulado por túnel está en Volumen de Masa arriba
         
         # === GRÁFICO TEMPORAL DE CONGELADO (DETALLE POR TÚNEL) ===
         if mos:

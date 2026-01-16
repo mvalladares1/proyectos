@@ -23,7 +23,6 @@ class TriggerSOAsociadaService:
             odoo_client: Cliente de Odoo ya autenticado
         """
         self.odoo = odoo_client
-        self.models = odoo_client.models
     
     def get_odfs_pendientes(
         self, 
@@ -116,11 +115,10 @@ class TriggerSOAsociadaService:
         """
         try:
             # 1. Leer valor actual de PO Cliente
-            odf = self.models.execute_kw(
+            odf = self.odoo.read(
                 'mrp.production',
-                'read',
-                [[odf_id]],
-                {'fields': ['name', 'x_studio_po_cliente_1', 'x_studio_po_asociada']}
+                [odf_id],
+                ['name', 'x_studio_po_cliente_1', 'x_studio_po_asociada']
             )
             
             if not odf:
@@ -144,10 +142,10 @@ class TriggerSOAsociadaService:
             logger.info(f"Procesando ODF {odf.get('name')} - PO Cliente: {po_cliente}")
             
             # 2. Borrar el campo PO Cliente
-            self.models.execute_kw(
+            self.odoo.write(
                 'mrp.production',
-                'write',
-                [[odf_id], {'x_studio_po_cliente_1': False}]
+                [odf_id],
+                {'x_studio_po_cliente_1': False}
             )
             logger.info(f"  → Campo PO Cliente borrado")
             
@@ -155,10 +153,10 @@ class TriggerSOAsociadaService:
             time.sleep(wait_seconds)
             
             # 4. Reescribir el valor original
-            self.models.execute_kw(
+            self.odoo.write(
                 'mrp.production',
-                'write',
-                [[odf_id], {'x_studio_po_cliente_1': po_cliente}]
+                [odf_id],
+                {'x_studio_po_cliente_1': po_cliente}
             )
             logger.info(f"  → Campo PO Cliente reescrito: {po_cliente}")
             
@@ -166,11 +164,10 @@ class TriggerSOAsociadaService:
             time.sleep(wait_seconds)
             
             # 6. Verificar que SO Asociada se haya cargado
-            odf_updated = self.models.execute_kw(
+            odf_updated = self.odoo.read(
                 'mrp.production',
-                'read',
-                [[odf_id]],
-                {'fields': ['x_studio_po_asociada']}
+                [odf_id],
+                ['x_studio_po_asociada']
             )[0]
             
             so_asociada = odf_updated.get('x_studio_po_asociada')
