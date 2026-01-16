@@ -1019,17 +1019,14 @@ class ContainersService:
         # Debug: verificar datos de lot_id
         common_lots = set(lot_to_out_refs.keys()) & set(lot_to_in_refs.keys())
         print(f"Lotes en OUT: {len(lot_to_out_refs)}, Lotes en IN: {len(lot_to_in_refs)}, Lotes comunes: {len(common_lots)}")
-        if common_lots and len(common_lots) <= 5:
-            for lot_id in list(common_lots)[:5]:
-                out_refs = lot_to_out_refs.get(lot_id, [])
-                in_refs = lot_to_in_refs.get(lot_id, [])
-                lot_name = out_refs[0][2] if out_refs and len(out_refs[0]) > 2 else str(lot_id)
-                print(f"  Lote {lot_name}: OUT en {[r[0] for r in out_refs]}, IN en {[r[0] for r in in_refs]}")
         
         # Para cada lote que aparece tanto en OUT como en IN
         for lot_id in common_lots:
             out_entries = lot_to_out_refs[lot_id]  # [(ref, pkg_id, lot_name), ...]
             in_entries = lot_to_in_refs[lot_id]    # [(ref, pkg_id, lot_name), ...]
+            
+            lot_name = out_entries[0][2] if out_entries and len(out_entries[0]) > 2 else str(lot_id)
+            print(f"  Lote común {lot_name}: OUT entries={len(out_entries)}, IN entries={len(in_entries)}")
             
             # Conectar cada OUT con cada IN del mismo lote (en diferentes referencias)
             for out_ref, out_pkg_id, _ in out_entries:
@@ -1041,6 +1038,14 @@ class ContainersService:
                         
                         out_idx = node_index.get(out_node_id)
                         in_idx = node_index.get(in_node_id)
+                        
+                        # Debug: por qué no se encuentra?
+                        if out_idx is None or in_idx is None:
+                            # Buscar nodos similares
+                            out_matches = [k for k in node_index.keys() if str(out_pkg_id) in k]
+                            in_matches = [k for k in node_index.keys() if str(in_pkg_id) in k]
+                            print(f"    Nodo no encontrado: OUT:{out_pkg_id} (matches: {out_matches[:3]}), IN:{in_pkg_id} (matches: {in_matches[:3]})")
+                            print(f"    Refs: OUT de {out_ref}, IN de {in_ref}")
                         
                         if out_idx is not None and in_idx is not None:
                             # Evitar duplicados
