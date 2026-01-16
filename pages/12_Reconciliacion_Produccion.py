@@ -117,7 +117,7 @@ buscar_kg = st.sidebar.button(
 
 # Manejar búsquedas
 if buscar_trigger:
-    with st.spinner("🔍 Buscando ODFs sin SO Asociada..."):
+    with st.spinner("🔍 Buscando todas las ODFs del periodo..."):
         resultado = shared.buscar_odfs_sin_so(
             fecha_inicio=fecha_inicio.isoformat(),
             fecha_fin=fecha_fin.isoformat(),
@@ -127,7 +127,8 @@ if buscar_trigger:
         if resultado.get('success'):
             st.session_state['trigger_odfs_pendientes'] = resultado.get('odfs', [])
             st.session_state['trigger_total_pendientes'] = resultado.get('total', 0)
-            st.sidebar.success(f"✓ {resultado.get('total', 0)} ODFs encontrados")
+            st.session_state['trigger_total_sin_so'] = resultado.get('total_sin_so', 0)
+            st.sidebar.success(f"✓ {resultado.get('total', 0)} ODFs encontrados ({resultado.get('total_sin_so', 0)} sin SO)")
         else:
             st.sidebar.error(f"❌ {resultado.get('error')}")
             st.session_state['trigger_odfs_pendientes'] = []

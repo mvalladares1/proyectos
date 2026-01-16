@@ -57,7 +57,7 @@ def buscar_odfs_sin_so(
     fecha_fin: str,
     limit: int
 ) -> Dict:
-    """Busca ODFs sin SO Asociada."""
+    """Busca TODAS las ODFs del periodo (con y sin SO Asociada)."""
     try:
         username, password = get_credenciales()
         if not username or not password:
@@ -65,6 +65,7 @@ def buscar_odfs_sin_so(
                 "success": False,
                 "error": "No hay credenciales de usuario disponibles",
                 "total": 0,
+                "total_sin_so": 0,
                 "odfs": []
             }
         
@@ -77,7 +78,7 @@ def buscar_odfs_sin_so(
         }
         
         response = requests.get(
-            f"{API_ODF_RECONCILIACION}/odfs-sin-so-asociada",
+            f"{API_ODF_RECONCILIACION}/todas-odfs",
             params=params,
             timeout=30
         )
@@ -89,6 +90,7 @@ def buscar_odfs_sin_so(
                 "success": False,
                 "error": f"Error {response.status_code}: {response.text}",
                 "total": 0,
+                "total_sin_so": 0,
                 "odfs": []
             }
     except Exception as e:
@@ -96,6 +98,7 @@ def buscar_odfs_sin_so(
             "success": False,
             "error": str(e),
             "total": 0,
+            "total_sin_so": 0,
             "odfs": []
         }
 

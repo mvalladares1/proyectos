@@ -11,14 +11,15 @@ ODOO_BASE_URL = "https://riofuturo.server98c6e.oerpondemand.net/web"
 def render():
     """Renderiza el tab de lista de ODFs."""
     total = st.session_state.get('trigger_total_pendientes', 0)
+    total_sin_so = st.session_state.get('trigger_total_sin_so', 0)
     odfs = st.session_state.get('trigger_odfs_pendientes', [])
     
     if not odfs:
-        st.info("👈 Usa el botón **'Buscar ODFs Pendientes'** en el sidebar para comenzar")
+        st.info("👈 Usa el botón **'Buscar ODFs sin SO'** en el sidebar para comenzar")
         return
     
-    st.subheader(f"📋 ODFs Pendientes ({total})")
-    st.caption("ODFs que tienen PO Cliente pero no SO Asociada cargada")
+    st.subheader(f"📋 ODFs en el Periodo ({total})")
+    st.caption(f"Total: {total} ODFs | Sin SO Asociada: {total_sin_so} ODFs")
     
     # Tabla filtrable con TODOS los ODFs
     st.divider()
@@ -30,6 +31,7 @@ def render():
         product_name = odf.get('product_id', ['', 'N/A'])[1] if isinstance(odf.get('product_id'), list) else 'N/A'
         fecha = odf.get('date_planned_start', '')[:10] if odf.get('date_planned_start') else 'N/A'
         po_cliente = odf.get('x_studio_po_cliente_1', '') or '(Sin PO)'
+        so_asociada = odf.get('x_studio_po_asociada', '') or '-'
         
         tabla_data.append({
             'ODF': odf['name'],
@@ -37,6 +39,7 @@ def render():
             'Producto': product_name,
             'Fecha': fecha,
             'PO Cliente': po_cliente,
+            'SO Asociada': so_asociada,
             'Estado': odf.get('state', 'N/A')
         })
     
@@ -71,12 +74,20 @@ def render():
         height=500
     )
     
-    # Expandibles con detalle
+    # Expandibles con detalle - SOLO ODFs sin SO
     st.divider()
-    st.subheader("📋 Detalle de ODFs")
+    st.subheader("📋 Detalle de ODFs sin SO Asociada")
     
-    # Mostrar ODFs en expandibles
-    for i, odf in enumerate(odfs, 1):
+    # Filtrar solo ODFs sin SO para expandibles
+    odfs_sin_so = [odf for odf in odfs if not odf.get('x_studio_po_asociada')]
+    
+    if not odfs_sin_so:
+        st.success("✅ Todas las ODFs del periodo tienen SO Asociada cargada")
+    else:
+        st.caption(f"Mostrando {len(odfs_sin_so)} ODFs que necesitan trigger")
+    
+    # Mostrar ODFs sin SO en expandibles
+    for i, odf in enumerate(odfs_sin_so, 1):
         po_cliente = odf.get('x_studio_po_cliente_1', 'N/A')
         odf_id = odf['id']
         odf_name = odf['name']
@@ -105,10 +116,11 @@ def render():
                 st.markdown(f"**SO Asociada:** {so_asociada if so_asociada else '*(Vacío)*'}")
     
     # Información adicional
-    st.divider()
-    st.info(f"""
-    💡 **Información:**
-    - Se encontraron **{total}** ODFs que tienen PO Cliente pero no SO Asociada
-    - Estos ODFs necesitan que se triggee la automatización de Odoo
-    - Ve al tab **"Ejecutar Trigger"** para procesarlos
-    """)
+    if odfs_sin_so:
+        st.divider()
+        st.info(f"""
+        💡 **Información:**
+        - Se encontraron **{len(odfs_sin_so)}** ODFs que tienen PO Cliente pero no SO Asociada
+        - Estos ODFs necesitan que se triggee la automatización de Odoo
+        - Ve al tab **"Ejecutar Trigger"** para procesarlos
+        """)

@@ -76,6 +76,34 @@ async def parsear_pos_string(
     return {'input': po_string, 'parsed': pos, 'count': len(pos)}
 
 
+@router.get("/todas-odfs")
+async def listar_todas_odfs(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    limit: Optional[int] = Query(None),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None)
+) -> Dict:
+    """Retorna TODAS las ODFs del periodo (con o sin SO Asociada)."""
+    try:
+        service = get_trigger_service(username, password)
+        todas_odfs = service.get_todas_odfs(
+            limit=limit,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin
+        )
+        # Separar las que tienen SO de las que no
+        sin_so = [odf for odf in todas_odfs if not odf.get('x_studio_po_asociada')]
+        return {
+            "success": True,
+            "total": len(todas_odfs),
+            "total_sin_so": len(sin_so),
+            "odfs": todas_odfs
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/odfs-sin-so-asociada")
 async def listar_odfs_sin_so_asociada(
     username: str = Query(..., description="Usuario Odoo"),

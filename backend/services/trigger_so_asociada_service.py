@@ -24,6 +24,69 @@ class TriggerSOAsociadaService:
         """
         self.odoo = odoo_client
     
+    def get_todas_odfs(
+        self,
+        limit: Optional[int] = None,
+        estados: List[str] = None,
+        fecha_inicio: Optional[str] = None,
+        fecha_fin: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene TODAS las ODFs del periodo (con o sin SO Asociada).
+        
+        Args:
+            limit: Límite de registros (None = sin límite)
+            estados: Lista de estados a filtrar (default: ['confirmed', 'progress', 'to_close'])
+            fecha_inicio: Fecha inicio filtro (YYYY-MM-DD)
+            fecha_fin: Fecha fin filtro (YYYY-MM-DD)
+            
+        Returns:
+            Lista de diccionarios con información de todas las ODFs
+        """
+        if estados is None:
+            estados = ['confirmed', 'progress', 'to_close']
+        
+        # Buscar TODAS las ODFs que tengan PO Cliente (con o sin SO Asociada)
+        domain = [
+            ('x_studio_po_cliente_1', '!=', False),
+            ('x_studio_po_cliente_1', '!=', ''),
+            ('state', 'in', estados)
+        ]
+        
+        # Agregar filtro de fechas si se especifica
+        if fecha_inicio:
+            domain.append(('date_planned_start', '>=', f'{fecha_inicio} 00:00:00'))
+        if fecha_fin:
+            domain.append(('date_planned_start', '<=', f'{fecha_fin} 23:59:59'))
+        
+        fields = [
+            'name',
+            'product_id',
+            'x_studio_po_cliente_1',
+            'x_studio_po_asociada',
+            'state',
+            'date_planned_start'
+        ]
+        
+        # Buscar IDs primero
+        odf_ids = self.odoo.search(
+            'mrp.production',
+            domain,
+            limit=limit,
+            order='date_planned_start desc'
+        )
+        
+        if not odf_ids:
+            logger.info("No se encontraron ODFs en el periodo")
+            return []
+        
+        # Leer los datos
+        odfs = self.odoo.read('mrp.production', odf_ids, fields)
+        
+        logger.info(f"Se encontraron {len(odfs)} ODFs en el periodo")
+        
+        return odfs
+    
     def get_odfs_pendientes(
         self, 
         limit: Optional[int] = None,
