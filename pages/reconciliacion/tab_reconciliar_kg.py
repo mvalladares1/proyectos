@@ -67,17 +67,22 @@ def render(wait_seconds: float):
             if f'preview_{odf["id"]}' in st.session_state:
                 prev = st.session_state[f'preview_{odf["id"]}']
                 
-                st.divider()
-                st.markdown("**📊 Preview de Cálculos:**")
-                
-                col_a, col_b, col_c = st.columns(3)
-                with col_a:
-                    st.metric("KG Totales PO", f"{prev.get('kg_totales_po', 0):,.0f} kg")
-                with col_b:
-                    st.metric("KG Consumidos PO", f"{prev.get('kg_consumidos_po', 0):,.0f} kg")
-                with col_c:
-                    kg_disp = prev.get('kg_disponibles_po', 0)
-                    st.metric("KG Disponibles PO", f"{kg_disp:,.0f} kg")
+                # Validar que prev sea un diccionario válido
+                if not isinstance(prev, dict):
+                    st.warning("⚠️ Datos de preview inválidos. Haz clic en Preview nuevamente.")
+                    del st.session_state[f'preview_{odf["id"]}']
+                else:
+                    st.divider()
+                    st.markdown("**📊 Preview de Cálculos:**")
+                    
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        st.metric("KG Totales PO", f"{prev.get('kg_totales_po', 0):,.0f} kg")
+                    with col_b:
+                        st.metric("KG Consumidos PO", f"{prev.get('kg_consumidos_po', 0):,.0f} kg")
+                    with col_c:
+                        kg_disp = prev.get('kg_disponibles_po', 0)
+                        st.metric("KG Disponibles PO", f"{kg_disp:,.0f} kg")
                 
                 # Desglose por producto
                 if prev.get('desglose_productos'):
