@@ -92,7 +92,11 @@ class ContainersService:
                 order="date_planned_start desc"
             )
             
+            print(f"[CONTAINERS] Domain: {prod_domain}")
+            print(f"[CONTAINERS] Found {len(prod_ids)} productions with PO asociada")
+            
             if not prod_ids:
+                print("[CONTAINERS] No productions found, returning empty list")
                 return []
             
             try:

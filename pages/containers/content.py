@@ -68,8 +68,11 @@ def render(username: str, password: str):
     
     st.divider()
     
+    print(f"[DEBUG CONTENT] cargar={cargar}, selected_state={selected_state}, STATE_OPTIONS[selected_state]={STATE_OPTIONS.get(selected_state)}")
+    
     # Cargar datos SOLO al hacer click en el botón
     if cargar:
+        print(f"[DEBUG CONTENT] Entrando a bloque de carga...")
         with st.spinner("🔄 Cargando containers..."):
             try:
                 containers = fetch_containers(

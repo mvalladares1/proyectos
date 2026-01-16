@@ -219,11 +219,12 @@ class RendimientoService:
         if not all_prod_ids:
             return {}
         
+        # Límite alto para evitar truncamiento con muchas MOs
         move_lines = self.odoo.search_read(
             'stock.move.line',
             [['move_id', 'in', all_prod_ids]],
             ['move_id', 'product_id', 'lot_id', 'qty_done'],
-            limit=5000
+            limit=50000
         )
         
         # Obtener info de productos (especie y manejo desde product.template)
@@ -241,7 +242,7 @@ class RendimientoService:
                 'product.product',
                 [['id', 'in', list(product_ids_set)]],
                 ['id', 'product_tmpl_id'],
-                limit=5000
+                limit=20000
             )
             
             # Obtener templates con manejo y tipo de fruta

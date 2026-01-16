@@ -17,6 +17,7 @@ ODOO_BASE_URL = "https://riofuturo.server98c6e.oerpondemand.net/web"
 def fetch_containers(_username: str, _password: str, start_date: str = None, end_date: str = None,
                      partner_id: int = None, state: str = None) -> List[Dict]:
     """Obtiene containers desde la API."""
+    import time
     try:
         params = {
             "username": _username,
@@ -32,6 +33,7 @@ def fetch_containers(_username: str, _password: str, start_date: str = None, end
             params["state"] = state
         
         url = f"{API_URL}/api/v1/containers/"
+        params["_t"] = int(time.time())  # Timestamp para evitar cache
         print(f"[DEBUG] Llamando a: {url}")
         print(f"[DEBUG] Variables recibidas: start_date={start_date}, end_date={end_date}, state={state}")
         print(f"[DEBUG] Params que se enviarán en HTTP: {params}")
