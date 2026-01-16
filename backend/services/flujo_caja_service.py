@@ -693,7 +693,9 @@ class FlujoCajaService:
         montos_por_concepto_mes[CATEGORIA_NEUTRAL] = {m: 0.0 for m in meses_lista}
         
         # Diccionario para tracking de cuentas individuales por concepto (para drill-down)
-        cuentas_por_concepto = {}  # {concepto_id: {codigo_cuenta: {nombre, monto, cantidad}}}
+        # Estructura: {concepto_id: {codigo_cuenta: {nombre, monto, cantidad, etiquetas: {name: monto}}}}
+        cuentas_por_concepto = {}
+
         
         # Procesar en chunks
         chunk_size = 5000
@@ -769,15 +771,88 @@ class FlujoCajaService:
                             'nombre': nombre_cuenta[:50],
                             'monto': 0.0,
                             'cantidad': 0,
-                            'montos_por_mes': {m: 0.0 for m in meses_lista}
+                            'montos_por_mes': {m: 0.0 for m in meses_lista},
+                            'etiquetas': {},  # {name_etiqueta: monto}
+                            'account_id': acc_data[0] if acc_data else None  # Guardar ID para consulta posterior
                         }
                     cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += balance
                     cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
                     if mes_str in meses_lista:
                         cuentas_por_concepto[concepto_id][codigo_cuenta]['montos_por_mes'][mes_str] += balance
+
                     
             except Exception as e:
                 print(f"[FlujoCaja] Error en agregación mensual: {e}")
+        
+        # 5a. ETIQUETAS POR CUENTA: Obtener campo 'name' agrupado por cuenta para drill-down nivel 3
+        # Esto permite ver el desglose como: Concepto → Cuenta → Etiqueta (ej: Leasing Generador)
+        try:
+            # Recopilar todos los account_ids que tenemos en cuentas_por_concepto
+            account_ids_to_query = set()
+            for concepto_id, cuentas in cuentas_por_concepto.items():
+                for codigo, cuenta_data in cuentas.items():
+                    if cuenta_data.get('account_id'):
+                        account_ids_to_query.add(cuenta_data['account_id'])
+            
+            if account_ids_to_query:
+                print(f"[FlujoCaja] Obteniendo etiquetas para {len(account_ids_to_query)} cuentas...")
+                
+                # read_group agrupando por account_id Y name (etiqueta)
+                grupos_etiquetas = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'account.move.line', 'read_group',
+                    [[
+                        ['move_id', 'in', asientos_ids],
+                        ['account_id', 'in', list(account_ids_to_query)]
+                    ]],
+                    {
+                        'fields': ['balance', 'account_id', 'name'],
+                        'groupby': ['account_id', 'name'],
+                        'lazy': False
+                    }
+                )
+                
+                print(f"[FlujoCaja] Grupos de etiquetas obtenidos: {len(grupos_etiquetas)}")
+                
+                # Crear un mapeo account_id → codigo_cuenta para asociar
+                account_id_to_codigo = {}
+                for concepto_id, cuentas in cuentas_por_concepto.items():
+                    for codigo, cuenta_data in cuentas.items():
+                        if cuenta_data.get('account_id'):
+                            account_id_to_codigo[cuenta_data['account_id']] = (concepto_id, codigo)
+                
+                # Procesar grupos y agregar etiquetas a las cuentas
+                for grupo in grupos_etiquetas:
+                    acc_data = grupo.get('account_id')
+                    etiqueta_name = grupo.get('name', '')
+                    balance = grupo.get('balance', 0)
+                    
+                    if not acc_data or not etiqueta_name:
+                        continue
+                    
+                    account_id = acc_data[0] if isinstance(acc_data, (list, tuple)) else acc_data
+                    
+                    if account_id in account_id_to_codigo:
+                        concepto_id, codigo_cuenta = account_id_to_codigo[account_id]
+                        
+                        # Agregar etiqueta al diccionario de la cuenta
+                        if 'etiquetas' not in cuentas_por_concepto[concepto_id][codigo_cuenta]:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'] = {}
+                        
+                        # Limpiar nombre de etiqueta (truncar si es muy largo)
+                        etiqueta_limpia = str(etiqueta_name)[:60] if etiqueta_name else "Sin etiqueta"
+                        
+                        if etiqueta_limpia not in cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas']:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia] = 0.0
+                        
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia] += balance
+                
+                print(f"[FlujoCaja] Etiquetas procesadas correctamente")
+                
+        except Exception as e:
+            print(f"[FlujoCaja] Error obteniendo etiquetas: {e}")
+            import traceback
+            traceback.print_exc()
         
         # 5b. PROYECCIÓN: Interpretar facturas en borrador como movimientos futuros de efectivo
         # Para cada factura draft, obtenemos sus líneas y clasificamos según las cuentas contables
@@ -928,12 +1003,26 @@ class FlujoCajaService:
                 )[:15]  # Top 15 accounts
                 
                 for k, v in sorted_cuentas:
+                    # Ordenar etiquetas por monto absoluto (top 20)
+                    etiquetas_dict = v.get("etiquetas", {})
+                    etiquetas_ordenadas = sorted(
+                        etiquetas_dict.items(),
+                        key=lambda x: abs(x[1]),
+                        reverse=True
+                    )[:20]  # Top 20 etiquetas por cuenta
+                    
+                    etiquetas_lista = [
+                        {"nombre": nombre[:60], "monto": round(monto, 0)}
+                        for nombre, monto in etiquetas_ordenadas
+                    ]
+                    
                     cuentas_concepto.append({
                         "codigo": k,
                         "nombre": v.get("nombre"),
                         "monto": round(v.get("monto", 0), 0),
                         "cantidad": v.get("cantidad"),
-                        "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista}
+                        "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista},
+                        "etiquetas": etiquetas_lista  # NUEVO: Lista de etiquetas para drill-down nivel 3
                     })
             
             concepto_resultado = {
