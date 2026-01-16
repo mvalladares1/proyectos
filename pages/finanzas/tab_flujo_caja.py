@@ -552,5 +552,120 @@ def render(username: str, password: str):
                                     st.rerun()
                                 else:
                                     st.error(err)
+        
+        # Sección informativa del mapeo de cuentas
+        st.divider()
+        with st.expander("ℹ️ **Configuración de Mapeo de Cuentas - Información para Encargados**", expanded=False):
+            st.markdown("""
+            ### 📋 Cómo se organizaron las cuentas contables para el Flujo de Caja
+            
+            Este mapeo fue generado mediante **análisis forense automático** de la contabilidad en Odoo (Enero 2026).
+            Se analizaron **746 cuentas contables** y se identificó la estructura real del plan de cuentas.
+            
+            ---
+            
+            #### 💵 **CUENTAS DE EFECTIVO** (14 cuentas identificadas)
+            
+            Solo se consideran cuentas de tipo `asset_cash` (cajas y bancos):
+            
+            **Cajas:**
+            - `11010101` - CAJA $
+            - `11010102` - CAJA US$
+            - `10000000` - Remuneraciones Cuenta Transitoria
+            - `10000001` - BANCOS CUENTA TRANSITORIA
+            
+            **Bancos:**
+            - `1101001` - BANCO SCOTIABANK CC CLP
+            - `1101002` - BANCO SCOTIABANK CC USD
+            - `1101003` - BANCO ITAU CC CLP
+            - `1101004` - BANCO ITAU CC USD
+            - `11010201` - BANCO SANTANDER CC CLP
+            - `11010202` - BANCO SANTANDER US$
+            - `11010203` - BANCO BICE CC CLP
+            - `11010204` - BANCO BICE US$
+            - `11010205` - BANCO BCI CC CLP
+            - `11010206` - BANCO BCI US$
+            
+            ---
+            
+            #### 🔄 **ACTIVIDADES DE OPERACIÓN**
+            
+            **OP01 - Cobros por ventas:**
+            - Prefijo `41` → Todas las cuentas de ingresos (Ej: 41010101 INGRESOS POR VENTAS DE PRODUCTOS)
+            
+            **OP02 - Pagos a proveedores:**
+            - Prefijo `51` → Costo de ventas
+            - Prefijo `52` → Gastos directos de producción
+            - Prefijo `53` → Sobrecostos logísticos
+            
+            **OP03 - Pagos a empleados:**
+            - Prefijo `61` → Sueldos y remuneraciones
+            - Prefijo `62` → Bonos, gratificaciones, cargas sociales
+            
+            **OP04 - Intereses pagados:**
+            - Prefijo `65` → Gastos financieros
+            
+            **OP05 - Intereses recibidos:**
+            - Prefijo `42` → Ingresos financieros
+            - Prefijo `77` → Otras ganancias
+            
+            **OP06 - Impuestos pagados:**
+            - Prefijo `91` → Impuesto a la renta y diferidos
+            
+            **OP07 - Otros gastos operacionales:**
+            - Prefijos `63`, `64`, `66`, `67`, `68`, `69` → Gastos de administración, ventas, otros
+            
+            ---
+            
+            #### 🏗️ **ACTIVIDADES DE INVERSIÓN**
+            
+            **IN01 - Adquisición de inversiones:**
+            - Prefijo `13` → Activos intangibles, concesiones, marcas
+            
+            **IN02 - Compra de activos fijos:**
+            - Prefijo `12` → Propiedades, planta y equipo (terrenos, edificios, maquinaria)
+            
+            **IN03 - Venta de activos:**
+            - Prefijo `71` → Ingresos por venta de activos fijos
+            
+            **IN04 - Costo de venta de activos:**
+            - Prefijo `81` → Costo asociado a venta de activos
+            
+            ---
+            
+            #### 💰 **ACTIVIDADES DE FINANCIAMIENTO**
+            
+            **FI01 - Préstamos (corto y largo plazo):**
+            - Prefijo `21` → Pasivos corrientes (préstamos CP, obligaciones)
+            
+            **FI02 - Préstamos largo plazo:**
+            - Prefijo `22` → Pasivos no corrientes
+            
+            **FI03 - Aportes de capital:**
+            - Prefijo `31` → Patrimonio (capital, acciones, reservas)
+            
+            **FI04 - Distribuciones:**
+            - Prefijo `32` → Dividendos, retiros, utilidades distribuidas
+            
+            ---
+            
+            ### 🔧 **¿Necesitas ajustar algo?**
+            
+            Si encuentras que:
+            - Falta alguna cuenta de efectivo
+            - Alguna categoría no está clasificada correctamente
+            - Se necesitan prefijos adicionales
+            
+            **Contacta al equipo técnico** para ajustar el archivo:
+            `backend/data/mapeo_flujo_caja.json`
+            
+            El script de análisis forense está disponible en:
+            `scripts/debug_flujo_caja_forense.py`
+            
+            ---
+            
+            📅 **Última actualización:** Enero 2026 (Análisis automático de 746 cuentas)
+            """)
+            
     else:
         st.info("👆 Configura el período y haz clic en 'Generar' para cargar el dashboard enterprise")
