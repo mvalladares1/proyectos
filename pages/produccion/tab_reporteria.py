@@ -441,8 +441,23 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         if not df_proceso.empty:
             # Ordenar por fecha para mantener secuencia cronológica
             df_proceso = df_proceso.sort_values('periodo_sort')
-            # Crear lista ordenada de períodos únicos
-            periodos_ordenados = df_proceso.drop_duplicates('Período')['Período'].tolist()
+            
+            # Crear rango completo de períodos (incluye días vacíos)
+            min_fecha = df_mos['fecha_dt'].min()
+            max_fecha = df_mos['fecha_dt'].max()
+            
+            if agrupacion == "Día":
+                rango_completo = pd.date_range(start=min_fecha, end=max_fecha, freq='D')
+                periodos_completos = rango_completo.strftime('%d %b %Y').tolist()
+            elif agrupacion == "Semana":
+                rango_completo = pd.date_range(start=min_fecha, end=max_fecha, freq='W')
+                periodos_completos = rango_completo.strftime('S%W-%Y').tolist()
+            else:  # Mes
+                rango_completo = pd.date_range(start=min_fecha, end=max_fecha, freq='MS')
+                periodos_completos = rango_completo.strftime('%b %Y').tolist()
+            
+            # Usar períodos completos para ordenamiento
+            periodos_ordenados = periodos_completos
             
             @st.fragment
             def render_grafico_proceso():
@@ -514,8 +529,23 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         if not df_congelado.empty:
             # Ordenar por fecha para mantener secuencia cronológica
             df_congelado = df_congelado.sort_values('periodo_sort')
-            # Crear lista ordenada de períodos únicos
-            periodos_ordenados_cong = df_congelado.drop_duplicates('Período')['Período'].tolist()
+            
+            # Crear rango completo de períodos (incluye días vacíos)
+            min_fecha = df_mos['fecha_dt'].min()
+            max_fecha = df_mos['fecha_dt'].max()
+            
+            if agrupacion == "Día":
+                rango_completo = pd.date_range(start=min_fecha, end=max_fecha, freq='D')
+                periodos_completos = rango_completo.strftime('%d %b %Y').tolist()
+            elif agrupacion == "Semana":
+                rango_completo = pd.date_range(start=min_fecha, end=max_fecha, freq='W')
+                periodos_completos = rango_completo.strftime('S%W-%Y').tolist()
+            else:  # Mes
+                rango_completo = pd.date_range(start=min_fecha, end=max_fecha, freq='MS')
+                periodos_completos = rango_completo.strftime('%b %Y').tolist()
+            
+            # Usar períodos completos para ordenamiento
+            periodos_ordenados_cong = periodos_completos
             
             @st.fragment
             def render_grafico_congelado():
@@ -673,6 +703,10 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
                 st.markdown("---")
                 st.markdown("### 🧊 KPIs por Túnel Individual")
                 st.caption("Rendimiento y producción de cada túnel")
+                
+                # DEBUG: Mostrar túneles únicos detectados
+                tuneles_unicos = sorted(set(mo.get('sala', 'N/A') for mo in mos_congelado))
+                st.info(f"🔍 **Túneles detectados:** {', '.join(tuneles_unicos)} ({len(mos_congelado)} MOs de congelado)")
                 
                 # Agrupar por sala/túnel
                 from collections import defaultdict

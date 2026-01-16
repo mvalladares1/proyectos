@@ -419,7 +419,7 @@ def render(username: str, password: str):
                             cuenta_icon = '<span style="width:24px;display:inline-block;"></span>'
                         
                         html_parts.append(f'<tr class="detail-row detail-{c_id_safe}" style="display:none;">')
-                        html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre} {"(" + str(len(etiquetas)) + " etiq)" if has_etiquetas else ""}</td>')
+                        html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
                         
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
@@ -434,14 +434,15 @@ def render(username: str, password: str):
                                 et_nombre = etiqueta.get("nombre", "")[:50]
                                 et_monto = etiqueta.get("monto", 0)
                                 
-                                html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: rgba(0,0,0,0.15);">')
-                                html_parts.append(f'<td class="frozen" style="padding-left: 60px; font-size: 12px; color: #aaa;">🏷️ {et_nombre}</td>')
+                                # Fondo sólido oscuro para evitar transparencia al deslizar
+                                html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                html_parts.append(f'<td class="frozen" style="padding-left: 60px; font-size: 12px; color: #ccc; background-color: #1a1a2e;">🏷️ {et_nombre}</td>')
                                 
-                                # Celdas vacías para los meses (las etiquetas solo muestran total)
+                                # Celdas vacías para los meses (las etiquetas solo muestran total del período)
                                 for _ in meses_lista:
-                                    html_parts.append('<td style="color: #666;">—</td>')
+                                    html_parts.append('<td style="color: #555; background-color: #1a1a2e;">—</td>')
                                 
-                                html_parts.append(f'<td style="font-size: 12px;">{fmt_monto_html(et_monto)}</td>')
+                                html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
                                 html_parts.append('</tr>')
 
             
