@@ -60,23 +60,15 @@ def get_sankey_data(
     password: str,
     fecha_inicio: str,
     fecha_fin: str,
-    limit: int = 30,
-    partner_id: Optional[int] = None,
-    producer_id: Optional[int] = None,
 ):
-    """Obtiene datos para diagrama Sankey."""
+    """Obtiene datos para diagrama Sankey basado en stock.move.line."""
     try:
         params = {
             "username": username,
             "password": password,
             "start_date": fecha_inicio,
             "end_date": fecha_fin,
-            "limit": limit
         }
-        if partner_id:
-            params["partner_id"] = partner_id
-        if producer_id:
-            params["producer_id"] = producer_id
         resp = requests.get(
             f"{API_URL}/api/v1/containers/sankey",
             params=params,

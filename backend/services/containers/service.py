@@ -529,10 +529,7 @@ class ContainersService:
         }
     
     def get_sankey_data(self, start_date: Optional[str] = None,
-                       end_date: Optional[str] = None,
-                       limit: int = 50,
-                       partner_id: Optional[int] = None,
-                       producer_id: Optional[int] = None) -> Dict:
+                       end_date: Optional[str] = None) -> Dict:
         """
         Genera datos para diagrama Sankey de trazabilidad.
         
@@ -546,6 +543,7 @@ class ContainersService:
         # Constantes
         PARTNER_VENDORS_LOCATION_ID = 4  # Partner/Vendors location
         VIRTUAL_LOCATION_IDS = self._get_virtual_location_ids()
+        limit = 50  # Límite de referencias a mostrar
         
         # Paso 1: Buscar movimientos con paquetes
         domain = [

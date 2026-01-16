@@ -70,22 +70,16 @@ async def get_sankey_data(
     password: str = Query(..., description="API Key Odoo"),
     start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
-    partner_id: Optional[int] = Query(None, description="ID del cliente (filtro pedidos de venta)"),
-    producer_id: Optional[int] = Query(None, description="ID del productor (filtro pallets IN)"),
-    limit: int = Query(50, description="Número máximo de pedidos de venta")
 ):
     """
-    Obtiene datos para diagrama Sankey de trazabilidad.
-    Muestra Pedido de Venta → Fabricación → Pallets (consumidos y de salida).
+    Obtiene datos para diagrama Sankey de trazabilidad basado en stock.move.line.
+    Muestra IN → Proceso (reference) → OUT → Cliente (ventas).
     """
     try:
         service = ContainersService(username=username, password=password)
         return service.get_sankey_data(
             start_date=start_date,
             end_date=end_date,
-            limit=limit,
-            partner_id=partner_id,
-            producer_id=producer_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -260,15 +260,15 @@ def _render_materia_prima(registro: dict, nivel: int):
 
 def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama Sankey."""
-    st.subheader("🔗 Diagrama Sankey")
-    st.caption("OUT se agrupa por container cuando existe; OUT sin container se muestra en amarillo")
+    st.subheader("🔗 Diagrama Sankey: Trazabilidad de Paquetes")
+    st.caption("IN (paquetes origen) → Proceso (reference) → OUT (paquetes destino) → Cliente (ventas)")
 
     st.markdown("### 📅 Período para Diagrama")
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2 = st.columns(2)
     with col1:
         fecha_inicio = st.date_input(
             "Desde",
-            datetime.now() - timedelta(days=30),
+            datetime(2025, 12, 1),
             format="DD/MM/YYYY",
             key="sankey_fecha_inicio",
         )
@@ -280,32 +280,9 @@ def _render_sankey(username: str, password: str):
             key="sankey_fecha_fin",
         )
 
-    partners = get_container_partners(username, password)
-    partner_options = [(None, "Todos")] + [(p.get("id"), p.get("name")) for p in (partners or [])]
-    with col3:
-        partner_id = st.selectbox(
-            "Cliente (container)",
-            options=partner_options,
-            format_func=lambda x: x[1],
-            index=0,
-            key="sankey_partner",
-        )[0]
-
-    producers = get_sankey_producers(
-        username,
-        password,
-        fecha_inicio.strftime("%Y-%m-%d"),
-        fecha_fin.strftime("%Y-%m-%d"),
-        partner_id=partner_id,
-    )
-    producer_options = [(None, "Todos")] + [(p.get("id"), p.get("name")) for p in (producers or [])]
-    producer_id = st.selectbox(
-        "Productor (solo pallets IN)",
-        options=producer_options,
-        format_func=lambda x: x[1],
-        index=0,
-        key="sankey_producer",
-    )[0]
+    # Filtro de productor (deshabilitado temporalmente)
+    # TODO: Implementar filtro por productor buscando pallet por pallet
+    st.caption("🔒 Filtro de productor disponible próximamente")
     
     if st.button("🔄 Generar Diagrama", type="primary"):
         with st.spinner("Generando diagrama Sankey..."):
@@ -313,8 +290,6 @@ def _render_sankey(username: str, password: str):
                 username, password,
                 fecha_inicio.strftime("%Y-%m-%d"),
                 fecha_fin.strftime("%Y-%m-%d"),
-                partner_id=partner_id,
-                producer_id=producer_id,
             )
             
             if not sankey_data:
@@ -357,7 +332,7 @@ def _render_sankey(username: str, password: str):
             )])
             
             fig.update_layout(
-                title="Flujo: Pallets IN → Proceso → Pallets OUT",
+                title="Trazabilidad: IN → Proceso → OUT → Cliente",
                 height=700,
                 font=dict(size=10)
             )
@@ -366,17 +341,18 @@ def _render_sankey(username: str, password: str):
             
             # Estadísticas
             st.markdown("---")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Containers", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
+                st.metric("Pallets IN", len([n for n in sankey_data["nodes"] if n["color"] == "#f39c12"]))
             with col2:
-                st.metric("Fabricaciones", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
+                st.metric("Procesos", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
             with col3:
-                total_pallets = len([n for n in sankey_data["nodes"] if n["color"] in ["#f39c12", "#2ecc71", "#f1c40f"]])
-                st.metric("Pallets", total_pallets)
+                st.metric("Pallets OUT", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
+            with col4:
+                st.metric("Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
             
             # Leyenda
             st.markdown("##### Leyenda:")
-            st.markdown("🔵 Containers | 🔴 Fabricaciones | 🟠 Pallets IN | 🟢 Pallets OUT (con container) | 🟡 Pallets OUT (sin container)")
+            st.markdown("🟠 Pallets IN (origen) | 🔴 Procesos (reference) | 🟢 Pallets OUT (destino) | 🔵 Clientes (ventas)")
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
