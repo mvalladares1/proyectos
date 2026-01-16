@@ -241,7 +241,44 @@ class ODFReconciliationService:
         po_asociada_str = odf.get('x_studio_po_asociada')
         so_names = self.parse_pos_asociadas(po_asociada_str)
         
+        # VALIDACIÓN DE INCONSISTENCIAS: Si no hay SO pero tiene KG, limpiar
         if not so_names:
+            # Verificar si tiene valores inconsistentes (KG > 0 sin SO)
+            kg_totales_actual = odf.get('x_studio_kg_totales_po', 0) or 0
+            kg_consumidos_actual = odf.get('x_studio_kg_consumidos_po', 0) or 0
+            kg_disponibles_actual = odf.get('x_studio_kg_disponibles_po', 0) or 0
+            
+            tiene_inconsistencia = (kg_totales_actual != 0 or 
+                                   kg_consumidos_actual != 0 or 
+                                   kg_disponibles_actual != 0)
+            
+            if tiene_inconsistencia and not dry_run:
+                # Limpiar inconsistencia: poner todos los campos en 0
+                try:
+                    self.odoo.models.execute_kw(
+                        self.odoo.db, self.odoo.uid, self.odoo.password,
+                        'mrp.production', 'write',
+                        [[odf_id], {
+                            'x_studio_kg_totales_po': 0,
+                            'x_studio_kg_consumidos_po': 0,
+                            'x_studio_kg_disponibles_po': 0
+                        }]
+                    )
+                    return {
+                        'odf_id': odf_id,
+                        'odf_name': odf.get('name'),
+                        'pos_asociadas': [],
+                        'kg_totales_po': 0,
+                        'kg_consumidos_po': 0,
+                        'kg_disponibles_po': 0,
+                        'desglose_productos': [],
+                        'actualizado': True,
+                        'accion': 'limpieza_inconsistencia',
+                        'mensaje': 'Limpiado: ODF sin SO asociada tenía KG registrados'
+                    }
+                except Exception as e:
+                    print(f"Error limpiando inconsistencia: {e}")
+            
             return {
                 'odf_id': odf_id,
                 'odf_name': odf.get('name'),
@@ -250,8 +287,9 @@ class ODFReconciliationService:
                 'kg_consumidos_po': 0,
                 'kg_disponibles_po': 0,
                 'desglose_productos': [],
-                'actualizado': False,
-                'error': 'No hay POs asociadas'
+                'actualizado': tiene_inconsistencia and not dry_run,
+                'accion': 'limpieza_inconsistencia' if tiene_inconsistencia else 'sin_so',
+                'mensaje': 'No hay SO asociada' + (' - Inconsistencia limpiada' if (tiene_inconsistencia and not dry_run) else '')
             }
         
         # 3. Leer líneas de las SOs

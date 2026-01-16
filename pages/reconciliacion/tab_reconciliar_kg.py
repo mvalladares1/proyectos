@@ -54,6 +54,7 @@ def render(wait_seconds: float):
                         
                         if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                             st.session_state[preview_data_key] = resultado
+                            st.success("✓ Preview calculado")
                         else:
                             error_msg = resultado.get('error', 'Sin datos') if isinstance(resultado, dict) else 'Respuesta inválida'
                             st.error(f"Error: {error_msg}")
@@ -64,8 +65,11 @@ def render(wait_seconds: float):
                         resultado = shared.reconciliar_odf_kg(odf_id, dry_run=False)
                         
                         if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
-                            st.success("✓ Reconciliado")
                             st.session_state[resultado_data_key] = resultado
+                            if resultado.get('accion') == 'limpieza_inconsistencia':
+                                st.warning("⚠️ Limpieza de inconsistencia realizada")
+                            else:
+                                st.success("✓ Reconciliado correctamente")
                         else:
                             error_msg = resultado.get('error', 'Error desconocido') if isinstance(resultado, dict) else 'Respuesta inválida'
                             st.error(f"Error: {error_msg}")
@@ -111,12 +115,22 @@ def render(wait_seconds: float):
             if resultado_data_key in st.session_state:
                 res = st.session_state[resultado_data_key]
                 if isinstance(res, dict):
-                    st.success(f"""
-                    ✅ **Reconciliado Exitosamente**
-                    - KG Totales: {res.get('kg_totales_po', 0):,.0f} kg
-                    - KG Consumidos: {res.get('kg_consumidos_po', 0):,.0f} kg  
-                    - KG Disponibles: {res.get('kg_disponibles_po', 0):,.0f} kg
-                    """)
+                    # Verificar si fue limpieza de inconsistencia
+                    if res.get('accion') == 'limpieza_inconsistencia':
+                        st.warning(f"""
+                        🧹 **Inconsistencia Limpiada**
+                        {res.get('mensaje', 'ODF sin SO tenía valores incorrectos')}
+                        - KG Totales: 0 kg (antes: {res.get('kg_totales_anterior', 'N/A')})
+                        - KG Consumidos: 0 kg (antes: {res.get('kg_consumidos_anterior', 'N/A')})
+                        - KG Disponibles: 0 kg (antes: {res.get('kg_disponibles_anterior', 'N/A')})
+                        """)
+                    else:
+                        st.success(f"""
+                        ✅ **Reconciliado Exitosamente**
+                        - KG Totales: {res.get('kg_totales_po', 0):,.0f} kg
+                        - KG Consumidos: {res.get('kg_consumidos_po', 0):,.0f} kg  
+                        - KG Disponibles: {res.get('kg_disponibles_po', 0):,.0f} kg
+                        """)
     
     # Botón de reconciliar todas
     st.divider()
@@ -156,6 +170,7 @@ def render(wait_seconds: float):
                 
                 exitosos = 0
                 fallidos = 0
+                limpiezas = 0
                 
                 for idx, odf in enumerate(odfs, 1):
                     progress_bar.progress(idx / len(odfs))
@@ -166,11 +181,17 @@ def render(wait_seconds: float):
                     if isinstance(resultado, dict) and resultado.get('kg_totales_po') is not None:
                         st.session_state[f'resultado_data_{odf["id"]}'] = resultado
                         exitosos += 1
+                        # Contar limpiezas de inconsistencias
+                        if resultado.get('accion') == 'limpieza_inconsistencia':
+                            limpiezas += 1
                     else:
                         fallidos += 1
                 
                 progress_bar.progress(1.0)
-                status.success(f"✓ Completado: {exitosos} exitosos, {fallidos} fallidos")
+                mensaje_final = f"✓ Completado: {exitosos} exitosos, {fallidos} fallidos"
+                if limpiezas > 0:
+                    mensaje_final += f" ({limpiezas} inconsistencias limpiadas)"
+                status.success(mensaje_final)
                 st.session_state['confirm_mass_recon'] = False
                 st.balloons()
                 st.rerun()
