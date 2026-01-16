@@ -649,8 +649,8 @@ class ContainersService:
                         reception_picking_ids.add(picking_id)
                         references_data[ref]["picking_id"] = picking_id
             
-            # IN: tiene package_id y va a ubicación virtual
-            elif pkg_id and loc_dest_id in VIRTUAL_LOCATION_IDS:
+            # IN: tiene package_id y va a ubicación virtual (no usar elif para permitir múltiples clasificaciones)
+            if pkg_id and loc_dest_id in VIRTUAL_LOCATION_IDS:
                 if pkg_id not in references_data[ref]["in_packages"]:
                     references_data[ref]["in_packages"][pkg_id] = {
                         "id": pkg_id, "name": pkg_name or str(pkg_id), "qty": 0, "products": {}
@@ -746,7 +746,7 @@ class ContainersService:
         # Paso 5: Filtrar referencias con actividad (incluye recepciones)
         active_refs = {
             ref: data for ref, data in references_data.items()
-            if data["in_packages"] or data["out_packages"] or data.get("is_reception")
+            if data["in_packages"] or data["out_packages"] or data.get("reception_packages")
         }
         
         # Ordenar por fecha más reciente y limitar
@@ -848,9 +848,14 @@ class ContainersService:
                             "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad
                         })
                 
-                continue  # No procesar como proceso normal
+                # Si la recepción SOLO tiene reception_packages, no procesar más
+                if not data["in_packages"] and not data["out_packages"]:
+                    continue
             
-            # Nodo PROCESO (rojo) - para no-recepciones
+            # Nodo PROCESO (rojo) - para referencias con in/out packages
+            if not data["in_packages"] and not data["out_packages"]:
+                continue  # Saltar si no hay IN ni OUT
+                
             process_id = f"PROC:{ref}"
             process_idx = _ensure_node(
                 process_id,
