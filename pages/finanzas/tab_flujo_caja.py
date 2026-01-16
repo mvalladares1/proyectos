@@ -418,7 +418,8 @@ def render(username: str, password: str):
                         else:
                             cuenta_icon = '<span style="width:24px;display:inline-block;"></span>'
                         
-                        html_parts.append(f'<tr class="detail-row detail-{c_id_safe}" style="display:none;">')
+                        # Agregar clase cuenta-{cuenta_id_safe} para identificar esta cuenta al colapsar
+                        html_parts.append(f'<tr class="detail-row detail-{c_id_safe} cuenta-{cuenta_id_safe}" style="display:none;">')
                         html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
                         
                         for mes in meses_lista:
@@ -436,8 +437,9 @@ def render(username: str, password: str):
                                 et_montos_mes = etiqueta.get("montos_por_mes", {})
                                 
                                 # Fondo sólido oscuro para evitar transparencia al deslizar
+                                # Indentación aumentada a 100px con borde izquierdo para indicar jerarquía
                                 html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                html_parts.append(f'<td class="frozen" style="padding-left: 60px; font-size: 12px; color: #ccc; background-color: #1a1a2e;">🏷️ {et_nombre}</td>')
+                                html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">🏷️ {et_nombre}</td>')
                                 
                                 # Montos por mes de la etiqueta
                                 for mes in meses_lista:

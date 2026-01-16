@@ -21,6 +21,24 @@ function toggleConcept(conceptId) {
     
     rows.forEach(row => {
         row.style.display = isExpanded ? 'none' : 'table-row';
+        
+        // Si estamos colapsando (isExpanded = true), también ocultar las etiquetas de esta fila
+        if (isExpanded) {
+            // Buscar el ID de cuenta asociado a esta fila detail
+            const classes = Array.from(row.classList);
+            const cuentaClass = classes.find(c => c.startsWith('cuenta-'));
+            
+            if (cuentaClass) {
+                const cuentaId = cuentaClass.replace('cuenta-', '');
+                // Ocultar todas las etiquetas de esta cuenta
+                const etiquetasRows = document.querySelectorAll('.etiqueta-' + cuentaId);
+                etiquetasRows.forEach(etiqRow => {
+                    etiqRow.style.display = 'none';
+                });
+                // Marcar las etiquetas como colapsadas
+                expandedEtiquetas.delete(cuentaId);
+            }
+        }
     });
     
     if (isExpanded) {

@@ -872,8 +872,15 @@ class FlujoCajaService:
                         if 'etiquetas' not in cuentas_por_concepto[concepto_id][codigo_cuenta]:
                             cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'] = {}
                         
-                        # Limpiar nombre de etiqueta (truncar si es muy largo)
-                        etiqueta_limpia = str(etiqueta_name)[:60].strip() if etiqueta_name else "Sin etiqueta"
+                        # Limpiar nombre de etiqueta: eliminar TODOS los espacios (incluyendo \xa0, \t, etc.)
+                        # y truncar a 60 caracteres
+                        etiqueta_limpia = ' '.join(str(etiqueta_name).split())[:60] if etiqueta_name else "Sin etiqueta"
+                        
+                        # Debug para cuenta específica
+                        if codigo_cuenta == "82010102":
+                            print(f"[DEBUG 82010102] Etiqueta original: '{etiqueta_name}' (len={len(str(etiqueta_name))})")
+                            print(f"[DEBUG 82010102] Etiqueta limpia: '{etiqueta_limpia}' (len={len(etiqueta_limpia)})")
+                            print(f"[DEBUG 82010102] Balance: {balance}, Mes: {mes_str}")
                         
                         # Inicializar estructura de etiqueta si no existe
                         if etiqueta_limpia not in cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas']:
@@ -888,6 +895,14 @@ class FlujoCajaService:
                         # Sumar al monto del mes correspondiente
                         if mes_str and mes_str in meses_lista:
                             cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_str] += balance
+                
+                # Debug final para cuenta específica
+                for concepto_id, cuentas in cuentas_por_concepto.items():
+                    if "82010102" in cuentas:
+                        etiquetas_dict = cuentas["82010102"].get("etiquetas", {})
+                        print(f"[DEBUG 82010102] Total etiquetas únicas después de procesar: {len(etiquetas_dict)}")
+                        for nombre_etiq, datos_etiq in etiquetas_dict.items():
+                            print(f"[DEBUG 82010102]   - '{nombre_etiq}': {datos_etiq['monto']}")
                 
                 print(f"[FlujoCaja] Etiquetas con montos por mes procesadas correctamente")
                 
