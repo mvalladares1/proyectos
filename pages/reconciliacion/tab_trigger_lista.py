@@ -20,6 +20,61 @@ def render():
     st.subheader(f"📋 ODFs Pendientes ({total})")
     st.caption("ODFs que tienen PO Cliente pero no SO Asociada cargada")
     
+    # Tabla filtrable con TODOS los ODFs
+    st.divider()
+    st.subheader("📊 Lista Completa de ODFs Pendientes")
+    
+    # Preparar datos para la tabla
+    tabla_data = []
+    for odf in odfs:
+        product_name = odf.get('product_id', ['', 'N/A'])[1] if isinstance(odf.get('product_id'), list) else 'N/A'
+        fecha = odf.get('date_planned_start', '')[:10] if odf.get('date_planned_start') else 'N/A'
+        po_cliente = odf.get('x_studio_po_cliente_1', '') or '(Sin PO)'
+        
+        tabla_data.append({
+            'ODF': odf['name'],
+            'ID': odf['id'],
+            'Producto': product_name,
+            'Fecha': fecha,
+            'PO Cliente': po_cliente,
+            'Estado': odf.get('state', 'N/A')
+        })
+    
+    df = pd.DataFrame(tabla_data)
+    
+    # Filtros interactivos
+    col_f1, col_f2, col_f3 = st.columns(3)
+    
+    with col_f1:
+        search_odf = st.text_input("🔍 Buscar ODF", "", key="filter_odf")
+    with col_f2:
+        search_producto = st.text_input("🔍 Buscar Producto", "", key="filter_producto")  
+    with col_f3:
+        estados_unicos = ['Todos'] + sorted(df['Estado'].unique().tolist())
+        filtro_estado = st.selectbox("Estado", estados_unicos, key="filter_estado")
+    
+    # Aplicar filtros
+    df_filtrado = df.copy()
+    if search_odf:
+        df_filtrado = df_filtrado[df_filtrado['ODF'].str.contains(search_odf, case=False, na=False)]
+    if search_producto:
+        df_filtrado = df_filtrado[df_filtrado['Producto'].str.contains(search_producto, case=False, na=False)]
+    if filtro_estado != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['Estado'] == filtro_estado]
+    
+    st.caption(f"Mostrando {len(df_filtrado)} de {len(df)} ODFs")
+    
+    st.dataframe(
+        df_filtrado,
+        use_container_width=True,
+        hide_index=True,
+        height=500
+    )
+    
+    # Expandibles con detalle
+    st.divider()
+    st.subheader("📋 Detalle de ODFs")
+    
     # Mostrar ODFs en expandibles
     for i, odf in enumerate(odfs, 1):
         po_cliente = odf.get('x_studio_po_cliente_1', 'N/A')
@@ -57,31 +112,3 @@ def render():
     - Estos ODFs necesitan que se triggee la automatización de Odoo
     - Ve al tab **"Ejecutar Trigger"** para procesarlos
     """)
-    
-    # Tabla resumen de todos los ODFs pendientes
-    st.divider()
-    st.subheader("📊 Lista Completa de ODFs Pendientes")
-    
-    # Preparar datos para la tabla
-    tabla_data = []
-    for odf in odfs:
-        product_name = odf.get('product_id', ['', 'N/A'])[1] if isinstance(odf.get('product_id'), list) else 'N/A'
-        fecha = odf.get('date_planned_start', '')[:10] if odf.get('date_planned_start') else 'N/A'
-        
-        tabla_data.append({
-            'ODF': odf['name'],
-            'ID': odf['id'],
-            'Producto': product_name,
-            'Fecha': fecha,
-            'PO Cliente': odf.get('x_studio_po_cliente_1', 'N/A'),
-            'Estado': odf.get('state', 'N/A')
-        })
-    
-    df = pd.DataFrame(tabla_data)
-    
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        height=400
-    )

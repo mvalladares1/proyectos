@@ -98,15 +98,6 @@ wait_seconds = st.sidebar.slider(
     key="wait_seconds"
 )
 
-limit = st.sidebar.number_input(
-    "Límite de ODFs",
-    min_value=1,
-    max_value=200,
-    value=50,
-    help="Máximo de ODFs a buscar",
-    key="limit"
-)
-
 st.sidebar.divider()
 
 # Botones de búsqueda
@@ -130,7 +121,7 @@ if buscar_trigger:
         resultado = shared.buscar_odfs_sin_so(
             fecha_inicio=fecha_inicio.isoformat(),
             fecha_fin=fecha_fin.isoformat(),
-            limit=limit
+            limit=None  # Sin límite
         )
         
         if resultado.get('success'):

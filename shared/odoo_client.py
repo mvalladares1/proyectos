@@ -130,6 +130,23 @@ class OdooClient:
             model, 'search_read', [domain], kwargs
         )
     
+    def write(self, model: str, ids: List[int], vals: Dict) -> bool:
+        """
+        Actualiza registros en Odoo.
+        
+        Args:
+            model: Nombre del modelo
+            ids: Lista de IDs a actualizar
+            vals: Diccionario con valores a escribir
+            
+        Returns:
+            True si fue exitoso
+        """
+        return self.models.execute_kw(
+            self.db, self.uid, self.password,
+            model, 'write', [ids, vals]
+        )
+    
     def execute(self, model: str, method: str, *args, **kwargs) -> Any:
         """
         Ejecuta un método genérico en Odoo.
