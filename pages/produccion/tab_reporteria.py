@@ -775,7 +775,7 @@ def _render_detalle_fabricaciones(mos, fecha_inicio_rep, fecha_fin_rep, username
     if 'manejo' in df_mos.columns:
         export_cols.append('manejo')
         export_names.append('Manejo')
-    export_cols.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'merma'])
+    export_cols.extend(['sala', 'kg_mp', 'kg_pt', 'rendimiento', 'kg_merma'])
     export_names.extend(['Sala', 'Kg MP', 'Kg PT', 'Rendimiento %', 'Merma Kg'])
     if 'sala_tipo' in df_mos.columns:
         export_cols.append('sala_tipo')
