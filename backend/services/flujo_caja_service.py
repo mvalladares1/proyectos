@@ -582,8 +582,7 @@ class FlujoCajaService:
             except:
                 return 0.0
     
-    def get_flujo_mensualizado(self, fecha_inicio: str, fecha_fin: str, 
-                               company_id: int = None) -> Dict:
+    def get_flujo_mensualizado(self, fecha_inicio: str, fecha_fin: str, company_id=None, agrupacion='mensual') -> Dict:
         """
         Genera el Estado de Flujo de Efectivo con granularidad MENSUAL.
         
@@ -622,14 +621,27 @@ class FlujoCajaService:
         fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d')
         
         meses_lista = []
-        current = fecha_ini_dt.replace(day=1)
-        while current <= fecha_fin_dt:
-            mes_str = current.strftime("%Y-%m")
-            meses_lista.append(mes_str)
-            if current.month == 12:
-                current = current.replace(year=current.year + 1, month=1)
-            else:
-                current = current.replace(month=current.month + 1)
+        
+        if agrupacion == 'semanal':
+            # Generar semanas ISO (YYYY-Www)
+            from datetime import timedelta
+            current = fecha_ini_dt
+            while current <= fecha_fin_dt:
+                y, w, d = current.isocalendar()
+                periodo_str = f"{y}-W{w:02d}"
+                if periodo_str not in meses_lista:
+                    meses_lista.append(periodo_str)
+                current += timedelta(days=1)
+        else:
+            # Generar meses (YYYY-MM)
+            current = fecha_ini_dt.replace(day=1)
+            while current <= fecha_fin_dt:
+                mes_str = current.strftime("%Y-%m")
+                meses_lista.append(mes_str)
+                if current.month == 12:
+                    current = current.replace(year=current.year + 1, month=1)
+                else:
+                    current = current.replace(month=current.month + 1)
         
         resultado["meses"] = meses_lista
         
@@ -638,6 +650,26 @@ class FlujoCajaService:
         if not cuentas_efectivo_ids:
             resultado["error"] = "No se encontraron cuentas de efectivo configuradas"
             return resultado
+            
+        # Helper para manejar agrupación
+        groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
+        
+        def get_periodo_from_odoo(val):
+            """Convierte valor de Odoo (W01 2026 o January 2026) a formato (2026-W01 o 2026-01)"""
+            if not val: return None
+            if agrupacion == 'semanal':
+                # Odoo return "W01 2026"
+                try:
+                    parts = val.split(' ')
+                    if len(parts) == 2:
+                        week_str = parts[0] # W01
+                        year_str = parts[1] # 2026
+                        return f"{year_str}-{week_str}"
+                except:
+                    pass
+                return val
+            else:
+                return self._parse_odoo_month(val)
         
         # 3. Efectivo inicial (día anterior al inicio)
         fecha_anterior = (fecha_ini_dt - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -713,7 +745,7 @@ class FlujoCajaService:
                     ]],
                     {
                         'fields': ['balance', 'account_id', 'date'], 
-                        'groupby': ['account_id', 'date:month'],  # Agrupación por mes
+                        'groupby': ['account_id', groupby_key],
                         'lazy': False
                     }
                 )
@@ -725,17 +757,13 @@ class FlujoCajaService:
                 for grupo in grupos:
                     acc_data = grupo.get('account_id')
                     balance = grupo.get('balance', 0)
-                    date_month = grupo.get('date:month', '')  # Formato esperado: "Enero 2026"
+                    periodo_val = grupo.get(groupby_key, '')
                     
-                    if not acc_data or not date_month:
+                    if not acc_data or not periodo_val:
                         continue
                     
-                    # DEBUG: Ver qué formato retorna Odoo
-                    if grupo == grupos[0]:
-                        print(f"[FlujoCaja DEBUG] Primer grupo date:month = '{date_month}' (tipo: {type(date_month).__name__})")
-                    
-                    # Parsear date:month a formato "2026-01"
-                    mes_str = self._parse_odoo_month(date_month)
+                    # Parsear
+                    mes_str = get_periodo_from_odoo(periodo_val)
                     if not mes_str:
                         print(f"[FlujoCaja WARNING] No se pudo parsear mes: '{date_month}'")
                         continue
@@ -807,7 +835,7 @@ class FlujoCajaService:
                     ]],
                     {
                         'fields': ['balance', 'account_id', 'name', 'date'],
-                        'groupby': ['account_id', 'name', 'date:month'],  # AGREGADO: date:month
+                        'groupby': ['account_id', 'name', groupby_key],
                         'lazy': False
                     }
                 )
@@ -827,7 +855,7 @@ class FlujoCajaService:
                     acc_data = grupo.get('account_id')
                     etiqueta_name = grupo.get('name', '')
                     balance = grupo.get('balance', 0)
-                    date_month = grupo.get('date:month', '')
+                    periodo_val = grupo.get(groupby_key, '')
                     
                     if not acc_data or not etiqueta_name:
                         continue
@@ -835,7 +863,7 @@ class FlujoCajaService:
                     account_id = acc_data[0] if isinstance(acc_data, (list, tuple)) else acc_data
                     
                     # Parsear mes
-                    mes_str = self._parse_odoo_month(date_month) if date_month else None
+                    mes_str = get_periodo_from_odoo(periodo_val)
                     
                     if account_id in account_id_to_codigo:
                         concepto_id, codigo_cuenta = account_id_to_codigo[account_id]
@@ -845,7 +873,7 @@ class FlujoCajaService:
                             cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'] = {}
                         
                         # Limpiar nombre de etiqueta (truncar si es muy largo)
-                        etiqueta_limpia = str(etiqueta_name)[:60] if etiqueta_name else "Sin etiqueta"
+                        etiqueta_limpia = str(etiqueta_name)[:60].strip() if etiqueta_name else "Sin etiqueta"
                         
                         # Inicializar estructura de etiqueta si no existe
                         if etiqueta_limpia not in cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas']:
@@ -901,7 +929,7 @@ class FlujoCajaService:
                     lineas = self.odoo.search_read(
                         'account.move.line',
                         [['id', 'in', all_line_ids]],
-                        ['id', 'account_id', 'balance', 'debit', 'credit', 'move_id'],
+                        ['id', 'account_id', 'balance', 'debit', 'credit', 'move_id', 'name'],
                         limit=50000
                     )
                     
@@ -913,12 +941,20 @@ class FlujoCajaService:
                         
                         # Determinar mes de la proyección
                         fecha_proy = factura.get('invoice_date_due') or factura.get('invoice_date')
+                        # Fallback a date (fecha contable) si no hay fecha factura
+                        if not fecha_proy:
+                            fecha_proy = factura.get('date') # Asegurar que esto venga en la factura arriba, o usar el metodo corregido antes
+
                         if not fecha_proy:
                             continue
                         
                         try:
                             fecha_dt = datetime.strptime(str(fecha_proy), '%Y-%m-%d')
-                            mes_proy = fecha_dt.strftime('%Y-%m')
+                            if agrupacion == 'semanal':
+                                y, w, d = fecha_dt.isocalendar()
+                                mes_proy = f"{y}-W{w:02d}"
+                            else:
+                                mes_proy = fecha_dt.strftime('%Y-%m')
                         except:
                             continue
                         
@@ -944,19 +980,15 @@ class FlujoCajaService:
                             continue
                         
                         # Determinar signo según tipo de factura
-                        # Para facturas de venta: los ingresos serán cobros futuros
-                        # Para facturas de compra: los gastos serán pagos futuros
                         move_type = factura.get('move_type', '')
                         balance = linea.get('balance', 0)
                         
                         # Invertir signo: el balance de account.move.line es desde perspectiva contable
                         # Para flujo de caja proyectado, interpretamos como movimiento de efectivo
                         if move_type in ['out_invoice', 'out_refund']:
-                            # Venta/NC: el crédito en ingresos = cobro futuro (+efectivo)
-                            monto_efectivo = -balance  # Invertir porque balance negativo = ingreso
+                            monto_efectivo = -balance
                         else:
-                            # Compra/NC: el débito en gastos = pago futuro (-efectivo)
-                            monto_efectivo = balance  # Balance positivo = gasto = -efectivo
+                            monto_efectivo = balance
                         
                         # Agregar a montos por concepto
                         if concepto_id not in montos_por_concepto_mes:
@@ -969,18 +1001,53 @@ class FlujoCajaService:
                             cuentas_por_concepto[concepto_id] = {}
                         if codigo_cuenta not in cuentas_por_concepto[concepto_id]:
                             nombre_cuenta = acc_display.split(' ', 1)[1] if ' ' in acc_display else acc_display
+                            # Inicializar cuenta
                             cuentas_por_concepto[concepto_id][codigo_cuenta] = {
                                 'nombre': nombre_cuenta[:50],
                                 'monto': 0.0,
                                 'cantidad': 0,
-                                'montos_por_mes': {m: 0.0 for m in meses_lista}
+                                'account_id': acc_data[0], # Guardar account_id por si acaso
+                                'montos_por_mes': {m: 0.0 for m in meses_lista},
+                                'etiquetas': {} # Importante inicializar etiquetas
                             }
+                        
+                        # Asegurar que existan etiquetas (si la cuenta venía de antes sin etiquetas)
+                        if 'etiquetas' not in cuentas_por_concepto[concepto_id][codigo_cuenta]:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'] = {}
+                            
+                        # Actualizar métricas de cuenta
                         cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += monto_efectivo
                         cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
                         if mes_proy in meses_lista:
                             cuentas_por_concepto[concepto_id][codigo_cuenta]['montos_por_mes'][mes_proy] += monto_efectivo
-                
-            print(f"[FlujoCaja] Proyección de facturas draft procesada")
+                            
+                        # === AGREGAR PROCESAMIENTO DE ETIQUETA (campo 'name' de la línea) ===
+                        etiqueta_raw = linea.get('name', '')
+                        etiqueta_limpia = str(etiqueta_raw)[:60].strip() if etiqueta_raw else "Sin etiqueta"
+                        
+                        # Normalizar un poco para evitar duplicados por espacios
+                        # Nota: no hacemos lower() completo porque queremos conservar formato, pero sí strip()
+                        
+                        if etiqueta_limpia not in cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas']:
+                            cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia] = {
+                                'monto': 0.0,
+                                'montos_por_mes': {m: 0.0 for m in meses_lista}
+                            }
+                        elif isinstance(cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia], float):
+                             # Migrar formato antiguo (solo float) a nuevo (dict) si es necesario (defensivo)
+                             val_ant = cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]
+                             cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia] = {
+                                'monto': val_ant,
+                                'montos_por_mes': {m: 0.0 for m in meses_lista}
+                            }
+                        
+                        # Sumar a la etiqueta
+                        dict_etq = cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]
+                        dict_etq['monto'] += monto_efectivo
+                        if mes_proy in meses_lista:
+                            dict_etq['montos_por_mes'][mes_proy] += monto_efectivo
+                        
+            print(f"[FlujoCaja] Proyección de facturas draft procesada con etiquetas")
             
         except Exception as e:
             print(f"[FlujoCaja] Error procesando facturas draft: {e}")

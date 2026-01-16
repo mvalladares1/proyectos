@@ -134,10 +134,11 @@ async def get_flujo_semanal(
     """
     try:
         service = FlujoCajaService(username=username, password=password)
-        resultado = service.get_flujo_semanal(
+        resultado = service.get_flujo_mensualizado(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
-            company_id=company_id
+            company_id=company_id,
+            agrupacion='semanal'
         )
         return resultado
     except Exception as e:
