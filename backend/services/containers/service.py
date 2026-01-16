@@ -985,9 +985,18 @@ class ContainersService:
         
         # Paso 7c: Conectar OUT que continúa como IN en otro proceso (mismo pallet ID)
         # OUT:PACK0014484-C de Proceso A → IN:PACK0014484-C de Proceso B
-        for node_id in list(node_index.keys()):
-            if node_id.startswith("OUT:"):
-                pkg_id_str = node_id.replace("OUT:", "")
+        continuity_links_added = 0
+        out_nodes = [nid for nid in node_index.keys() if nid.startswith("OUT:")]
+        in_nodes = [nid for nid in node_index.keys() if nid.startswith("IN:")]
+        
+        # Crear set de IN pkg_ids para búsqueda rápida
+        in_pkg_ids = {nid.replace("IN:", "") for nid in in_nodes}
+        
+        for node_id in out_nodes:
+            pkg_id_str = node_id.replace("OUT:", "")
+            
+            # Buscar si existe IN con el mismo pkg_id
+            if pkg_id_str in in_pkg_ids:
                 in_node_id = f"IN:{pkg_id_str}"
                 
                 out_idx = node_index.get(node_id)
@@ -1006,6 +1015,18 @@ class ContainersService:
                             "value": 1,
                             "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
                         })
+                        continuity_links_added += 1
+        
+        print(f"Nodos OUT: {len(out_nodes)}, Nodos IN: {len(in_nodes)}, Continuidades agregadas: {continuity_links_added}")
+        
+        # Debug: mostrar algunos OUT y sus posibles IN
+        if continuity_links_added == 0 and out_nodes and in_nodes:
+            print(f"Ejemplo OUT nodes: {out_nodes[:5]}")
+            print(f"Ejemplo IN nodes: {in_nodes[:5]}")
+            # Verificar si hay intersección
+            out_pkg_ids = {nid.replace("OUT:", "") for nid in out_nodes}
+            common = out_pkg_ids & in_pkg_ids
+            print(f"Paquetes comunes (OUT que también son IN): {len(common)}")
         
         # Paso 8: Layout
         def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
@@ -1176,7 +1197,7 @@ class ContainersService:
     def get_sankey_producers(self,
                              start_date: Optional[str] = None,
                              end_date: Optional[str] = None,
-                             limit: int = 50,
+                             limit: int = 100,
                              partner_id: Optional[int] = None) -> List[Dict]:
         """Lista productores disponibles (desde pallets IN) para un rango/cliente."""
         containers = self.get_containers(start_date, end_date, partner_id=partner_id)[:limit]
