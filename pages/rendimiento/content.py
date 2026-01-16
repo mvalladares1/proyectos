@@ -354,16 +354,18 @@ def _render_sankey(username: str, password: str):
                 st.metric("🔵 Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
             
             # Leyenda
-            st.markdown("##### Leyenda:")
+            st.markdown("##### Leyenda de Nodos:")
             st.markdown("""
             - 🏭 **Proveedor** (morado): Origen de la mercadería
-            - 📥 **Recepción** (turquesa): Entrada desde proveedor (RF/RFP/IN/...)
-            - 📦 **Pallet Recepción** (naranja): Pallet creado en recepción
-            - 🔴 **Proceso** (rojo): Operación/transformación (RF/MO/...)
-            - 🟠 **Pallet IN** (naranja): Pallet que entra a proceso
-            - 🟢 **Pallet OUT** (verde): Pallet que sale de proceso
+            - 📥 **Recepción** (turquesa): Entrada desde proveedor
+            - 🔴 **Proceso** (rojo): Operación/transformación
+            - 🟠 **Pallet IN** (naranja): Pallet que entra
+            - 🟢 **Pallet OUT** (verde): Pallet que sale
             - 🔵 **Cliente** (azul): Destino de venta
-            - 🟣 **Continuidad** (morado): Mismo pallet pasa de recepción/proceso a otro proceso
+            """)
+            st.markdown("##### Conexiones:")
+            st.markdown("""
+            - 🟣 **Continuidad** (morado): Pallet OUT → mismo Pallet IN en otro proceso
             """)
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
