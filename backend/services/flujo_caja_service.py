@@ -1020,16 +1020,29 @@ class FlujoCajaService:
                 for k, v in sorted_cuentas:
                     # Ordenar etiquetas por monto absoluto (top 20)
                     etiquetas_dict = v.get("etiquetas", {})
+                    # Ahora etiquetas_dict es {nombre: {monto, montos_por_mes}}
                     etiquetas_ordenadas = sorted(
                         etiquetas_dict.items(),
-                        key=lambda x: abs(x[1]),
+                        key=lambda x: abs(x[1].get('monto', 0) if isinstance(x[1], dict) else x[1]),
                         reverse=True
                     )[:20]  # Top 20 etiquetas por cuenta
                     
-                    etiquetas_lista = [
-                        {"nombre": nombre[:60], "monto": round(monto, 0)}
-                        for nombre, monto in etiquetas_ordenadas
-                    ]
+                    etiquetas_lista = []
+                    for nombre, datos in etiquetas_ordenadas:
+                        if isinstance(datos, dict):
+                            # Nueva estructura con montos_por_mes
+                            etiquetas_lista.append({
+                                "nombre": nombre[:60],
+                                "monto": round(datos.get("monto", 0), 0),
+                                "montos_por_mes": {m: round(datos.get("montos_por_mes", {}).get(m, 0), 0) for m in meses_lista}
+                            })
+                        else:
+                            # Retrocompatibilidad: estructura antigua (solo monto)
+                            etiquetas_lista.append({
+                                "nombre": nombre[:60],
+                                "monto": round(datos, 0),
+                                "montos_por_mes": {m: 0 for m in meses_lista}
+                            })
                     
                     cuentas_concepto.append({
                         "codigo": k,

@@ -433,14 +433,16 @@ def render(username: str, password: str):
                             for etiqueta in etiquetas[:10]:  # Top 10 etiquetas
                                 et_nombre = etiqueta.get("nombre", "")[:50]
                                 et_monto = etiqueta.get("monto", 0)
+                                et_montos_mes = etiqueta.get("montos_por_mes", {})
                                 
                                 # Fondo sólido oscuro para evitar transparencia al deslizar
                                 html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
                                 html_parts.append(f'<td class="frozen" style="padding-left: 60px; font-size: 12px; color: #ccc; background-color: #1a1a2e;">🏷️ {et_nombre}</td>')
                                 
-                                # Celdas vacías para los meses (las etiquetas solo muestran total del período)
-                                for _ in meses_lista:
-                                    html_parts.append('<td style="color: #555; background-color: #1a1a2e;">—</td>')
+                                # Montos por mes de la etiqueta
+                                for mes in meses_lista:
+                                    et_mes_monto = et_montos_mes.get(mes, 0)
+                                    html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
                                 
                                 html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
                                 html_parts.append('</tr>')
