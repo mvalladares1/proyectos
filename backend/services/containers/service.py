@@ -1045,6 +1045,13 @@ class ContainersService:
         common_lots = set(active_lot_to_out.keys()) & set(active_lot_to_in.keys())
         print(f"Lotes activos en OUT: {len(active_lot_to_out)}, Lotes activos en IN: {len(active_lot_to_in)}, Lotes comunes: {len(common_lots)}")
         
+        # Debug: mostrar ejemplos de lotes en cada lado
+        if not common_lots:
+            out_lot_names = [entries[0][2] for entries in list(active_lot_to_out.values())[:5] if entries and len(entries[0]) > 2]
+            in_lot_names = [entries[0][2] for entries in list(active_lot_to_in.values())[:5] if entries and len(entries[0]) > 2]
+            print(f"  Ejemplos OUT: {out_lot_names}")
+            print(f"  Ejemplos IN: {in_lot_names}")
+        
         # Para cada lote que aparece tanto en OUT como en IN
         for lot_id in common_lots:
             out_entries = active_lot_to_out[lot_id]  # [(ref, pkg_id, lot_name), ...]
