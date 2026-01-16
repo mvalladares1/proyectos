@@ -1052,43 +1052,78 @@ class ContainersService:
         common_lots = set(active_lot_to_out.keys()) & set(active_lot_to_in.keys())
         print(f"Lotes normalizados en OUT: {len(active_lot_to_out)}, en IN: {len(active_lot_to_in)}, comunes: {len(common_lots)}")
         
-        if common_lots:
-            print(f"  Ejemplos de lotes comunes: {list(common_lots)[:5]}")
-        
         # Para cada lote normalizado que aparece tanto en OUT como en IN
+        # Conectar de forma SECUENCIAL: OUT de proceso A → IN de proceso B (siguiente en tiempo)
         for lot_key in common_lots:
             out_entries = active_lot_to_out[lot_key]  # [(ref, pkg_id, lot_name_original), ...]
             in_entries = active_lot_to_in[lot_key]    # [(ref, pkg_id, lot_name_original), ...]
             
-            # Conectar cada OUT con cada IN del mismo lote base (en diferentes referencias)
-            for out_ref, out_pkg_id, out_lot_name in out_entries:
-                for in_ref, in_pkg_id, in_lot_name in in_entries:
-                    # Solo conectar si son referencias diferentes (diferentes procesos)
-                    if out_ref != in_ref:
-                        out_node_id = f"OUT:{out_pkg_id}"
-                        in_node_id = f"IN:{in_pkg_id}"
-                        
-                        out_idx = node_index.get(out_node_id)
-                        in_idx = node_index.get(in_node_id)
-                        
-                        if out_idx is not None and in_idx is not None:
-                            # Evitar duplicados
-                            existing = any(
-                                l["source"] == out_idx and l["target"] == in_idx 
-                                for l in links
-                            )
-                            if not existing:
-                                # Obtener qty del OUT
-                                out_data = active_refs.get(out_ref, {}).get("out_packages", {}).get(out_pkg_id, {})
-                                qty = out_data.get("qty", 1)
-                                
-                                links.append({
-                                    "source": out_idx,
-                                    "target": in_idx,
-                                    "value": qty or 1,
-                                    "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
-                                })
-                                continuity_links_added += 1
+            # Obtener fechas de cada referencia para ordenar
+            def get_ref_date(ref):
+                dates = active_refs.get(ref, {}).get("dates", [])
+                return max(dates) if dates else ""
+            
+            # Ordenar OUT por fecha (más antiguo primero)
+            out_sorted = sorted(out_entries, key=lambda e: get_ref_date(e[0]))
+            # Ordenar IN por fecha (más antiguo primero)
+            in_sorted = sorted(in_entries, key=lambda e: get_ref_date(e[0]))
+            
+            # Agrupar por referencia (un proceso puede tener múltiples paquetes del mismo lote)
+            out_by_ref = {}
+            for ref, pkg_id, lot_name in out_sorted:
+                if ref not in out_by_ref:
+                    out_by_ref[ref] = []
+                out_by_ref[ref].append((pkg_id, lot_name))
+            
+            in_by_ref = {}
+            for ref, pkg_id, lot_name in in_sorted:
+                if ref not in in_by_ref:
+                    in_by_ref[ref] = []
+                in_by_ref[ref].append((pkg_id, lot_name))
+            
+            # Conectar solo: cada OUT_ref con el siguiente IN_ref en la secuencia temporal
+            out_refs_ordered = sorted(out_by_ref.keys(), key=get_ref_date)
+            in_refs_ordered = sorted(in_by_ref.keys(), key=get_ref_date)
+            
+            # Para cada referencia OUT, encontrar la siguiente referencia IN
+            for out_ref in out_refs_ordered:
+                out_date = get_ref_date(out_ref)
+                
+                # Buscar el primer IN que sea posterior o igual (y diferente ref)
+                next_in_ref = None
+                for in_ref in in_refs_ordered:
+                    if in_ref != out_ref and get_ref_date(in_ref) >= out_date:
+                        next_in_ref = in_ref
+                        break
+                
+                if next_in_ref:
+                    # Conectar UN paquete OUT representativo con UN paquete IN representativo
+                    out_pkg_id = out_by_ref[out_ref][0][0]  # Primer paquete OUT de esta ref
+                    in_pkg_id = in_by_ref[next_in_ref][0][0]  # Primer paquete IN de la siguiente ref
+                    
+                    out_node_id = f"OUT:{out_pkg_id}"
+                    in_node_id = f"IN:{in_pkg_id}"
+                    
+                    out_idx = node_index.get(out_node_id)
+                    in_idx = node_index.get(in_node_id)
+                    
+                    if out_idx is not None and in_idx is not None:
+                        # Evitar duplicados
+                        existing = any(
+                            l["source"] == out_idx and l["target"] == in_idx 
+                            for l in links
+                        )
+                        if not existing:
+                            out_data = active_refs.get(out_ref, {}).get("out_packages", {}).get(out_pkg_id, {})
+                            qty = out_data.get("qty", 1)
+                            
+                            links.append({
+                                "source": out_idx,
+                                "target": in_idx,
+                                "value": qty or 1,
+                                "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
+                            })
+                            continuity_links_added += 1
         
         print(f"Continuidades entre procesos por LOT_ID agregadas: {continuity_links_added}")
         
