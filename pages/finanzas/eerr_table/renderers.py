@@ -9,22 +9,26 @@ from .styles import SVG_CHEVRON
 
 
 def fmt_monto(valor: float) -> str:
-    """Formatea un monto - texto blanco sin colores."""
+    """
+    Formatea un monto con colores CSS y sin signo $ en celdas.
+    Retorna string HTML: <span class='val-pos'>1,234</span>
+    """
     if valor == 0:
-        return '$0'
+        return '<span class="val-zero">-</span>'
     
     abs_val = abs(valor)
+    # Formato compacto para millones/billones
     if abs_val >= 1_000_000_000:
-        formatted = f"${abs_val / 1_000_000_000:,.1f}B"
+        formatted = f"{abs_val / 1_000_000_000:,.1f}B"
     elif abs_val >= 1_000_000:
-        formatted = f"${abs_val / 1_000_000:,.1f}M"
+        formatted = f"{abs_val / 1_000_000:,.1f}M"
     else:
-        formatted = f"${abs_val:,.0f}"
+        formatted = f"{abs_val:,.0f}"
     
     if valor < 0:
-        return f"-{formatted}"
+        return f'<span class="val-neg">({formatted})</span>'
     else:
-        return formatted
+        return f'<span class="val-pos">{formatted}</span>'
 
 
 def generate_sparkline(valores: List[float]) -> str:
