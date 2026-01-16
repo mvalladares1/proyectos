@@ -8,8 +8,11 @@ import os
 from typing import Dict, List
 from datetime import datetime, timedelta
 
-API_URL = os.getenv("API_URL") or st.secrets.get("API_URL", "http://localhost:8000")
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 ODOO_BASE_URL = "https://riofuturo.server98c6e.oerpondemand.net/web"
+
+print(f"[SHARED.PY] API_URL cargada: {API_URL}")
+print(f"[SHARED.PY] os.getenv('API_URL'): {os.getenv('API_URL')}")
 
 
 # --------------------- Funciones API ---------------------
@@ -35,6 +38,9 @@ def fetch_containers(_username: str, _password: str, start_date: str = None, end
         
         url = f"{API_URL}/api/v1/containers/"
         params["_t"] = int(time.time())  # Timestamp para evitar cache
+        print(f"[DEBUG] API_URL global variable: {API_URL}")
+        print(f"[DEBUG] URL completa: {url}")
+        print(f"[DEBUG] os.getenv('API_URL'): {os.getenv('API_URL')}")
         print(f"[DEBUG] Llamando a: {url}")
         print(f"[DEBUG] Variables recibidas: start_date={start_date}, end_date={end_date}, state={state}")
         print(f"[DEBUG] Params que se enviarán en HTTP: {params}")
