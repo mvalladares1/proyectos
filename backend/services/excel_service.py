@@ -315,3 +315,82 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
     data = buf.getvalue()
     buf.close()
     return data
+
+
+def generate_pallets_excel(username: str, password: str, fecha_inicio: str, fecha_fin: str,
+                            manejo_filtros: Optional[List[str]] = None,
+                            tipo_fruta_filtros: Optional[List[str]] = None,
+                            origen_filtros: Optional[List[str]] = None) -> bytes:
+    """
+    Genera un Excel con el detalle de cada pallet (uno por fila).
+    
+    Args:
+        username: Usuario Odoo
+        password: Contraseña Odoo
+        fecha_inicio: Fecha inicio en formato YYYY-MM-DD
+        fecha_fin: Fecha fin en formato YYYY-MM-DD
+        manejo_filtros: Lista de manejos a filtrar (opcional)
+        tipo_fruta_filtros: Lista de tipos de fruta a filtrar (opcional)
+        origen_filtros: Lista de orígenes a filtrar (RFP, VILKUN, SAN JOSE) (opcional)
+    
+    Returns:
+        bytes: Archivo Excel en formato bytes
+    """
+    from backend.services.recepcion_service import get_recepciones_pallets_detailed
+    
+    # Obtener datos detallados (un pallet por fila)
+    pallets_detail = get_recepciones_pallets_detailed(
+        username, password, fecha_inicio, fecha_fin, 
+        manejo_filtros, tipo_fruta_filtros, origen_filtros
+    )
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Detalle de Pallets"
+    
+    # Encabezados
+    headers = [
+        "Fecha", "Planta/Origen", "Albarán", "Productor", "Guía Despacho", 
+        "Pallet ID", "Producto", "Manejo", "Tipo Fruta", "Kg"
+    ]
+    ws.append(headers)
+    
+    # Formato de encabezados
+    header_font = Font(bold=True)
+    for c_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=c_idx)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Agregar datos
+    for p in pallets_detail:
+        ws.append([
+            p.get("fecha", ""),
+            p.get("origen", ""),
+            p.get("albaran", ""),
+            p.get("productor", ""),
+            p.get("guia_despacho", ""),
+            p.get("pallet_name", ""),
+            p.get("producto_name", ""),
+            p.get("manejo", ""),
+            p.get("tipo_fruta", ""),
+            p.get("kg", 0)
+        ])
+    
+    # Formatear columna de Kg
+    kg_col_idx = headers.index("Kg") + 1
+    for row in ws.iter_rows(min_row=2, min_col=kg_col_idx, max_col=kg_col_idx):
+        row[0].number_format = '#,##0.00'
+    
+    # Aplicar autofiltro y congelar paneles
+    ws.auto_filter.ref = ws.dimensions
+    ws.freeze_panes = 'A2'
+    _auto_fit_columns(ws)
+    
+    # Guardar a bytes
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    data = buf.getvalue()
+    buf.close()
+    return data
