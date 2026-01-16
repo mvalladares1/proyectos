@@ -171,7 +171,7 @@ class ContainersService:
         sale_fields = [
             "name", "partner_id", "date_order", "commitment_date",
             "state", "amount_total", "currency_id", "origin",
-            "user_id", "order_line", "client_id", "validity_date"
+            "user_id", "order_line", "validity_date"
         ]
         fallback_sale_fields = [
             "name", "partner_id", "date_order", "commitment_date",
@@ -270,9 +270,8 @@ class ContainersService:
                 if isinstance(prod, dict):
                     producto_principal = prod.get("name", "N/A")
             
-            client_name = get_name_from_relation(sale_clean.get("client_id"))
-            if client_name == "N/A":
-                client_name = partner_name
+            # partner_id es el cliente en sale.order
+            client_name = partner_name
             
             # Convertir monto a CLP si es necesario
             currency_id = sale_clean.get("currency_id", {})
@@ -284,7 +283,6 @@ class ContainersService:
                 "name": sale_clean.get("name", ""),
                 "partner_id": sale_clean.get("partner_id", {}),
                 "partner_name": partner_name,
-                "client_id": sale_clean.get("client_id", {}),
                 "client_name": client_name,
                 "date_order": sale_clean.get("date_order", ""),
                 "commitment_date": sale_clean.get("commitment_date", ""),

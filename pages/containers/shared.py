@@ -33,7 +33,8 @@ def fetch_containers(_username: str, _password: str, start_date: str = None, end
         
         url = f"{API_URL}/api/v1/containers/"
         print(f"[DEBUG] Llamando a: {url}")
-        print(f"[DEBUG] Parámetros: start_date={start_date}, end_date={end_date}, state={state}")
+        print(f"[DEBUG] Variables recibidas: start_date={start_date}, end_date={end_date}, state={state}")
+        print(f"[DEBUG] Params que se enviarán en HTTP: {params}")
         print(f"[DEBUG] Username: {_username[:10]}... Password: {'*' * 10}{_password[-4:] if _password else 'EMPTY'}")
         
         response = httpx.get(
