@@ -5,6 +5,7 @@ KPIs consolidados de producción, rendimientos por fruta/manejo y salas.
 import streamlit as st
 import pandas as pd
 import altair as alt
+import plotly.graph_objects as go
 import requests
 import io
 from datetime import datetime, timedelta
@@ -303,28 +304,103 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     # Crear tabs para Proceso y Congelado
     vol_tabs = st.tabs(["🏭 Salas (Proceso)", "❄️ Túneles (Congelado)"])
     
+    # Modal para mostrar detalles de ODFs al clickear
+    @st.dialog("📋 Detalles de Órdenes de Fabricación", width="large")
+    def mostrar_odfs_modal(periodo, sala, tipo):
+        """Muestra el modal con las ODFs del período y sala seleccionada."""
+        st.subheader(f"📊 {tipo.title()} - {sala}")
+        st.caption(f"Período: {periodo}")
+        
+        # Filtrar ODFs del período y sala
+        mos_filtradas = [
+            mo for mo in mos
+            if (
+                (agrupacion == "Día" and pd.to_datetime(mo['fecha']).strftime('%Y-%m-%d') == periodo) or
+                (agrupacion == "Semana" and pd.to_datetime(mo['fecha']).strftime('S%W-%Y') == periodo) or
+                (agrupacion == "Mes" and pd.to_datetime(mo['fecha']).strftime('%b-%Y') == periodo)
+            )
+            and clasificar_tunel(mo.get('sala', '')) == sala
+        ]
+        
+        if not mos_filtradas:
+            st.warning("No se encontraron órdenes para este período y sala.")
+            return
+        
+        st.info(f"🔢 Total: **{len(mos_filtradas)}** órdenes de fabricación")
+        
+        # Preparar datos para tabla
+        df_odfs = pd.DataFrame([{
+            'ODF': mo['mo_name'],
+            'Fecha': pd.to_datetime(mo['fecha']).strftime('%Y-%m-%d'),
+            'Producto': mo.get('producto', 'N/A'),
+            'Kg PT': mo.get('kg_pt', 0),
+            'Kg MP': mo.get('kg_mp', 0),
+            'Sala': mo.get('sala', 'N/A'),
+            'Estado': mo.get('estado', 'N/A'),
+            'ID': mo['mo_id']
+        } for mo in mos_filtradas])
+        
+        # Mostrar tabla con enlaces a Odoo
+        st.dataframe(
+            df_odfs[['ODF', 'Fecha', 'Producto', 'Kg PT', 'Kg MP', 'Sala', 'Estado']].style.format({
+                'Kg PT': '{:,.2f}',
+                'Kg MP': '{:,.2f}'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Enlaces a Odoo
+        st.markdown("### 🔗 Enlaces a Odoo")
+        cols_odoo = st.columns(3)
+        for idx, odf in enumerate(df_odfs.itertuples()):
+            col_idx = idx % 3
+            with cols_odoo[col_idx]:
+                odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={odf.ID}&menu_id=390&cids=1&action=604&model=mrp.production&view_type=form"
+                st.markdown(f"🔹 [{odf.ODF}]({odoo_url})")
+    
     with vol_tabs[0]:
         df_proceso = df_grouped[df_grouped['Tipo'] == 'PROCESO'].copy()
         if not df_proceso.empty:
-            chart = alt.Chart(df_proceso).mark_bar().encode(
-                x=alt.X('Período:N', sort=df_proceso['Período'].tolist(), title=f'Período ({agrupacion})'),
-                y=alt.Y('Kg PT:Q', title='Kilogramos Producidos'),
-                color=alt.Color('Sala:N', legend=alt.Legend(title='Sala')),
-                tooltip=[
-                    alt.Tooltip('Período:N', title='Período'),
-                    alt.Tooltip('Sala:N', title='Sala'),
-                    alt.Tooltip('Kg PT:Q', title='Kg Producidos', format=',.0f'),
-                    alt.Tooltip('Kg MP:Q', title='Kg Materia Prima', format=',.0f'),
-                    alt.Tooltip('Órdenes:Q', title='Órdenes')
-                ]
-            ).properties(
+            # Crear gráfico interactivo con Plotly
+            fig = go.Figure()
+            
+            # Agrupar por sala para crear una barra por sala
+            for sala in df_proceso['Sala'].unique():
+                df_sala = df_proceso[df_proceso['Sala'] == sala]
+                fig.add_trace(go.Bar(
+                    x=df_sala['Período'],
+                    y=df_sala['Kg PT'],
+                    name=sala,
+                    customdata=df_sala[['Sala', 'Kg MP', 'Órdenes']],
+                    hovertemplate='<b>Período:</b> %{x}<br>' +
+                                  '<b>Sala:</b> %{customdata[0]}<br>' +
+                                  '<b>Kg Producidos:</b> %{y:,.0f}<br>' +
+                                  '<b>Kg MP:</b> %{customdata[1]:,.0f}<br>' +
+                                  '<b>Órdenes:</b> %{customdata[2]}<extra></extra>'
+                ))
+            
+            fig.update_layout(
+                title=f"Volumen por {agrupacion} - Salas de Proceso",
+                xaxis_title=f'Período ({agrupacion})',
+                yaxis_title='Kilogramos Producidos',
+                barmode='group',
                 height=400,
-                title=f"Volumen por {agrupacion} - Salas de Proceso"
-            ).configure_axis(
-                labelFontSize=12,
-                titleFontSize=14
+                hovermode='closest'
             )
-            st.altair_chart(chart, use_container_width=True)
+            
+            # Mostrar gráfico con evento de clic
+            event = st.plotly_chart(fig, use_container_width=True, key="proceso_chart", on_select="rerun")
+            
+            # Capturar clic
+            if event and "selection" in event and "points" in event["selection"]:
+                points = event["selection"]["points"]
+                if points:
+                    punto = points[0]
+                    periodo_sel = punto.get("x")
+                    trace_idx = punto.get("curve_number", 0)
+                    sala_sel = fig.data[trace_idx].name
+                    mostrar_odfs_modal(periodo_sel, sala_sel, "proceso")
             
             # Tabla resumen
             with st.expander("📋 Ver datos detallados"):
@@ -342,25 +418,44 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     with vol_tabs[1]:
         df_congelado = df_grouped[df_grouped['Tipo'] == 'CONGELADO'].copy()
         if not df_congelado.empty:
-            # Separar por tipo de túnel (Estático vs Continuo)
-            chart = alt.Chart(df_congelado).mark_bar().encode(
-                x=alt.X('Período:N', sort=df_congelado['Período'].tolist(), title=f'Período ({agrupacion})'),
-                y=alt.Y('Kg PT:Q', title='Kilogramos Congelados'),
-                color=alt.Color('Sala:N', legend=alt.Legend(title='Túnel')),
-                tooltip=[
-                    alt.Tooltip('Período:N', title='Período'),
-                    alt.Tooltip('Sala:N', title='Túnel'),
-                    alt.Tooltip('Kg PT:Q', title='Kg Congelados', format=',.0f'),
-                    alt.Tooltip('Órdenes:Q', title='Órdenes')
-                ]
-            ).properties(
+            # Crear gráfico interactivo con Plotly
+            fig = go.Figure()
+            
+            # Agrupar por túnel
+            for tunel in df_congelado['Sala'].unique():
+                df_tunel = df_congelado[df_congelado['Sala'] == tunel]
+                fig.add_trace(go.Bar(
+                    x=df_tunel['Período'],
+                    y=df_tunel['Kg PT'],
+                    name=tunel,
+                    customdata=df_tunel[['Sala', 'Órdenes']],
+                    hovertemplate='<b>Período:</b> %{x}<br>' +
+                                  '<b>Túnel:</b> %{customdata[0]}<br>' +
+                                  '<b>Kg Congelados:</b> %{y:,.0f}<br>' +
+                                  '<b>Órdenes:</b> %{customdata[1]}<extra></extra>'
+                ))
+            
+            fig.update_layout(
+                title=f"Volumen por {agrupacion} - Túneles de Congelado",
+                xaxis_title=f'Período ({agrupacion})',
+                yaxis_title='Kilogramos Congelados',
+                barmode='group',
                 height=400,
-                title=f"Volumen por {agrupacion} - Túneles de Congelado"
-            ).configure_axis(
-                labelFontSize=12,
-                titleFontSize=14
+                hovermode='closest'
             )
-            st.altair_chart(chart, use_container_width=True)
+            
+            # Mostrar gráfico con evento de clic
+            event = st.plotly_chart(fig, use_container_width=True, key="congelado_chart", on_select="rerun")
+            
+            # Capturar clic
+            if event and "selection" in event and "points" in event["selection"]:
+                points = event["selection"]["points"]
+                if points:
+                    punto = points[0]
+                    periodo_sel = punto.get("x")
+                    trace_idx = punto.get("curve_number", 0)
+                    tunel_sel = fig.data[trace_idx].name
+                    mostrar_odfs_modal(periodo_sel, tunel_sel, "congelado")
             
             # Tabla resumen
             with st.expander("📋 Ver datos detallados"):
