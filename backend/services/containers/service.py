@@ -983,6 +983,30 @@ class ContainersService:
                         "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad recepción->proceso
                     })
         
+        # Paso 7c: Conectar OUT que continúa como IN en otro proceso (mismo pallet ID)
+        # OUT:PACK0014484-C de Proceso A → IN:PACK0014484-C de Proceso B
+        for node_id in list(node_index.keys()):
+            if node_id.startswith("OUT:"):
+                pkg_id_str = node_id.replace("OUT:", "")
+                in_node_id = f"IN:{pkg_id_str}"
+                
+                out_idx = node_index.get(node_id)
+                in_idx = node_index.get(in_node_id)
+                
+                if out_idx is not None and in_idx is not None:
+                    # Evitar duplicados
+                    existing = any(
+                        l["source"] == out_idx and l["target"] == in_idx 
+                        for l in links
+                    )
+                    if not existing:
+                        links.append({
+                            "source": out_idx,
+                            "target": in_idx,
+                            "value": 1,
+                            "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
+                        })
+        
         # Paso 8: Layout
         def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
             if not node_ids:
