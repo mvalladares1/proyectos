@@ -592,6 +592,10 @@ class ContainersService:
         package_to_refs = {}  # package_id -> [referencias donde aparece como IN]
         reception_packages = {}  # pkg_id -> ref de recepción (para conectar proveedor -> paquete)
         
+        # Para continuidad por LOT_ID (el lote persiste entre procesos aunque el paquete cambie)
+        lot_to_out_refs = {}  # lot_id -> [(ref, pkg_id)] donde aparece como OUT
+        lot_to_in_refs = {}   # lot_id -> [(ref, pkg_id)] donde aparece como IN
+        
         for ml in move_lines:
             location_id = ml.get("location_id")
             location_dest_id = ml.get("location_dest_id")
@@ -651,14 +655,26 @@ class ContainersService:
             
             # IN: tiene package_id y va a ubicación virtual (no usar elif para permitir múltiples clasificaciones)
             if pkg_id and loc_dest_id in VIRTUAL_LOCATION_IDS:
+                # Extraer lot_id
+                lot_rel = ml.get("lot_id")
+                lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) else lot_rel
+                lot_name = lot_rel[1] if isinstance(lot_rel, (list, tuple)) and len(lot_rel) > 1 else None
+                
                 if pkg_id not in references_data[ref]["in_packages"]:
                     references_data[ref]["in_packages"][pkg_id] = {
-                        "id": pkg_id, "name": pkg_name or str(pkg_id), "qty": 0, "products": {}
+                        "id": pkg_id, "name": pkg_name or str(pkg_id), "qty": 0, "products": {},
+                        "lot_id": lot_id, "lot_name": lot_name
                     }
                 references_data[ref]["in_packages"][pkg_id]["qty"] += qty
                 if prod_name not in references_data[ref]["in_packages"][pkg_id]["products"]:
                     references_data[ref]["in_packages"][pkg_id]["products"][prod_name] = 0
                 references_data[ref]["in_packages"][pkg_id]["products"][prod_name] += qty
+                
+                # Registrar lot_id para continuidad
+                if lot_id:
+                    if lot_id not in lot_to_in_refs:
+                        lot_to_in_refs[lot_id] = []
+                    lot_to_in_refs[lot_id].append((ref, pkg_id, lot_name))
                 
                 # Registrar para continuidad
                 if pkg_id not in package_to_refs:
@@ -667,14 +683,26 @@ class ContainersService:
             
             # OUT: tiene result_package_id y sale de ubicación virtual
             if result_id and loc_id in VIRTUAL_LOCATION_IDS:
+                # Extraer lot_id
+                lot_rel = ml.get("lot_id")
+                lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) else lot_rel
+                lot_name = lot_rel[1] if isinstance(lot_rel, (list, tuple)) and len(lot_rel) > 1 else None
+                
                 if result_id not in references_data[ref]["out_packages"]:
                     references_data[ref]["out_packages"][result_id] = {
-                        "id": result_id, "name": result_name or str(result_id), "qty": 0, "products": {}
+                        "id": result_id, "name": result_name or str(result_id), "qty": 0, "products": {},
+                        "lot_id": lot_id, "lot_name": lot_name
                     }
                 references_data[ref]["out_packages"][result_id]["qty"] += qty
                 if prod_name not in references_data[ref]["out_packages"][result_id]["products"]:
                     references_data[ref]["out_packages"][result_id]["products"][prod_name] = 0
                 references_data[ref]["out_packages"][result_id]["products"][prod_name] += qty
+                
+                # Registrar lot_id para continuidad
+                if lot_id:
+                    if lot_id not in lot_to_out_refs:
+                        lot_to_out_refs[lot_id] = []
+                    lot_to_out_refs[lot_id].append((ref, result_id, lot_name))
                 
                 # Registrar para continuidad
                 if result_id not in result_to_refs:
@@ -983,50 +1011,57 @@ class ContainersService:
                         "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad recepción->proceso
                     })
         
-        # Paso 7c: Conectar OUT que continúa como IN en otro proceso (mismo pallet ID)
-        # OUT:PACK0014484-C de Proceso A → IN:PACK0014484-C de Proceso B
+        # Paso 7c: Conectar OUT que continúa como IN por LOT_ID
+        # El mismo LOTE aparece en OUT de Proceso A y en IN de Proceso B
+        # aunque los package_id sean diferentes (pallet cambia de nombre)
         continuity_links_added = 0
-        out_nodes = [nid for nid in node_index.keys() if nid.startswith("OUT:")]
-        in_nodes = [nid for nid in node_index.keys() if nid.startswith("IN:")]
         
-        # Crear set de IN pkg_ids para búsqueda rápida
-        in_pkg_ids = {nid.replace("IN:", "") for nid in in_nodes}
-        out_pkg_ids = {nid.replace("OUT:", "") for nid in out_nodes}
+        # Debug: verificar datos de lot_id
+        common_lots = set(lot_to_out_refs.keys()) & set(lot_to_in_refs.keys())
+        print(f"Lotes en OUT: {len(lot_to_out_refs)}, Lotes en IN: {len(lot_to_in_refs)}, Lotes comunes: {len(common_lots)}")
+        if common_lots and len(common_lots) <= 5:
+            for lot_id in list(common_lots)[:5]:
+                out_refs = lot_to_out_refs.get(lot_id, [])
+                in_refs = lot_to_in_refs.get(lot_id, [])
+                lot_name = out_refs[0][2] if out_refs and len(out_refs[0]) > 2 else str(lot_id)
+                print(f"  Lote {lot_name}: OUT en {[r[0] for r in out_refs]}, IN en {[r[0] for r in in_refs]}")
         
-        # Debug: verificar intersección
-        common_pkg_ids = in_pkg_ids & out_pkg_ids
-        print(f"Nodos OUT: {len(out_nodes)}, Nodos IN: {len(in_nodes)}, Paquetes comunes: {len(common_pkg_ids)}")
-        if len(common_pkg_ids) < 10:
-            print(f"Paquetes comunes: {common_pkg_ids}")
-        else:
-            print(f"Ejemplos comunes: {list(common_pkg_ids)[:10]}")
-        
-        for node_id in out_nodes:
-            pkg_id_str = node_id.replace("OUT:", "")
+        # Para cada lote que aparece tanto en OUT como en IN
+        for lot_id in common_lots:
+            out_entries = lot_to_out_refs[lot_id]  # [(ref, pkg_id, lot_name), ...]
+            in_entries = lot_to_in_refs[lot_id]    # [(ref, pkg_id, lot_name), ...]
             
-            # Buscar si existe IN con el mismo pkg_id
-            if pkg_id_str in in_pkg_ids:
-                in_node_id = f"IN:{pkg_id_str}"
-                
-                out_idx = node_index.get(node_id)
-                in_idx = node_index.get(in_node_id)
-                
-                if out_idx is not None and in_idx is not None:
-                    # Evitar duplicados
-                    existing = any(
-                        l["source"] == out_idx and l["target"] == in_idx 
-                        for l in links
-                    )
-                    if not existing:
-                        links.append({
-                            "source": out_idx,
-                            "target": in_idx,
-                            "value": 1,
-                            "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
-                        })
-                        continuity_links_added += 1
+            # Conectar cada OUT con cada IN del mismo lote (en diferentes referencias)
+            for out_ref, out_pkg_id, _ in out_entries:
+                for in_ref, in_pkg_id, _ in in_entries:
+                    # Solo conectar si son referencias diferentes (diferentes procesos)
+                    if out_ref != in_ref:
+                        out_node_id = f"OUT:{out_pkg_id}"
+                        in_node_id = f"IN:{in_pkg_id}"
+                        
+                        out_idx = node_index.get(out_node_id)
+                        in_idx = node_index.get(in_node_id)
+                        
+                        if out_idx is not None and in_idx is not None:
+                            # Evitar duplicados
+                            existing = any(
+                                l["source"] == out_idx and l["target"] == in_idx 
+                                for l in links
+                            )
+                            if not existing:
+                                # Obtener qty del OUT
+                                out_data = references_data.get(out_ref, {}).get("out_packages", {}).get(out_pkg_id, {})
+                                qty = out_data.get("qty", 1)
+                                
+                                links.append({
+                                    "source": out_idx,
+                                    "target": in_idx,
+                                    "value": qty or 1,
+                                    "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
+                                })
+                                continuity_links_added += 1
         
-        print(f"Continuidades entre procesos agregadas: {continuity_links_added}")
+        print(f"Continuidades entre procesos por LOT_ID agregadas: {continuity_links_added}")
         
         # Paso 8: Layout
         def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
