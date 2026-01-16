@@ -138,7 +138,7 @@ if buscar_kg:
         resultado = shared.buscar_odfs_para_reconciliar(
             fecha_inicio=fecha_inicio.isoformat(),
             fecha_fin=fecha_fin.isoformat(),
-            limit=limit
+            limit=None  # Sin límite
         )
         
         if resultado.get('success'):
