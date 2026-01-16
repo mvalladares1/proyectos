@@ -603,7 +603,7 @@ class FlujoCajaService:
                 "efectivo_por_mes": {"2026-01": {"inicial": X, "final": Y}, ...}
             }
         """
-        from datetime import datetime
+        from datetime import datetime, timedelta
         from calendar import monthrange
         
         resultado = {
@@ -624,7 +624,6 @@ class FlujoCajaService:
         
         if agrupacion == 'semanal':
             # Generar semanas ISO (YYYY-Www)
-            from datetime import timedelta
             current = fecha_ini_dt
             while current <= fecha_fin_dt:
                 y, w, d = current.isocalendar()
