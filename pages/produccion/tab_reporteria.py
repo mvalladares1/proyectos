@@ -264,16 +264,28 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         st.warning("No hay fechas válidas para graficar.")
         return
     
+    # Configurar locale para fechas en español
+    import locale
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')
+        except:
+            pass  # Si no se puede configurar, continuar con inglés
+    
     # Agrupar por período
     if agrupacion == "Día":
-        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%Y-%m-%d')
+        # Formato: "21 Dic 2025" (día mes año)
+        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%d %b %Y')
         # IMPORTANTE: Normalizar a medianoche para que agrupe bien por día
         df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.normalize()
     elif agrupacion == "Semana":
         df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('S%W-%Y')
         df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.to_period('W').dt.start_time
     else:  # Mes
-        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%b-%Y')
+        # Formato: "Dic 2025"
+        df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%b %Y')
         df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.to_period('M').dt.start_time
     
     # Clasificar túneles: Estático vs Continuo
@@ -402,7 +414,13 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                 yaxis_title='Kilogramos Producidos',
                 barmode='stack',  # Apilar barras por sala
                 height=400,
-                hovermode='closest'
+                hovermode='closest',
+                bargap=0.15,
+                bargroupgap=0.05,
+                xaxis=dict(
+                    tickangle=-45,
+                    tickfont=dict(size=10)
+                )
             )
             
             # Mostrar gráfico con evento de clic
@@ -457,7 +475,13 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                 yaxis_title='Kilogramos Congelados',
                 barmode='stack',  # Apilar barras por túnel
                 height=400,
-                hovermode='closest'
+                hovermode='closest',
+                bargap=0.15,
+                bargroupgap=0.05,
+                xaxis=dict(
+                    tickangle=-45,
+                    tickfont=dict(size=10)
+                )
             )
             
             # Mostrar gráfico con evento de clic
