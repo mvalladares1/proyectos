@@ -4,10 +4,11 @@ Contiene funciones API y utilidades.
 """
 import streamlit as st
 import httpx
+import os
 from typing import Dict, List
 from datetime import datetime, timedelta
 
-API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+API_URL = os.getenv("API_URL") or st.secrets.get("API_URL", "http://localhost:8000")
 ODOO_BASE_URL = "https://riofuturo.server98c6e.oerpondemand.net/web"
 
 
