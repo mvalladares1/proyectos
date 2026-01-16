@@ -991,6 +991,15 @@ class ContainersService:
         
         # Crear set de IN pkg_ids para búsqueda rápida
         in_pkg_ids = {nid.replace("IN:", "") for nid in in_nodes}
+        out_pkg_ids = {nid.replace("OUT:", "") for nid in out_nodes}
+        
+        # Debug: verificar intersección
+        common_pkg_ids = in_pkg_ids & out_pkg_ids
+        print(f"Nodos OUT: {len(out_nodes)}, Nodos IN: {len(in_nodes)}, Paquetes comunes: {len(common_pkg_ids)}")
+        if len(common_pkg_ids) < 10:
+            print(f"Paquetes comunes: {common_pkg_ids}")
+        else:
+            print(f"Ejemplos comunes: {list(common_pkg_ids)[:10]}")
         
         for node_id in out_nodes:
             pkg_id_str = node_id.replace("OUT:", "")
@@ -1017,16 +1026,7 @@ class ContainersService:
                         })
                         continuity_links_added += 1
         
-        print(f"Nodos OUT: {len(out_nodes)}, Nodos IN: {len(in_nodes)}, Continuidades agregadas: {continuity_links_added}")
-        
-        # Debug: mostrar algunos OUT y sus posibles IN
-        if continuity_links_added == 0 and out_nodes and in_nodes:
-            print(f"Ejemplo OUT nodes: {out_nodes[:5]}")
-            print(f"Ejemplo IN nodes: {in_nodes[:5]}")
-            # Verificar si hay intersección
-            out_pkg_ids = {nid.replace("OUT:", "") for nid in out_nodes}
-            common = out_pkg_ids & in_pkg_ids
-            print(f"Paquetes comunes (OUT que también son IN): {len(common)}")
+        print(f"Continuidades entre procesos agregadas: {continuity_links_added}")
         
         # Paso 8: Layout
         def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
