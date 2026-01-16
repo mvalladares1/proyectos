@@ -317,6 +317,10 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     # IMPORTANTE: Asegurar que Período es string puro para evitar interpretación de Plotly
     df_grouped['Período'] = df_grouped['Período'].astype(str)
     
+    # Inicializar session state para el modal
+    if 'modal_data' not in st.session_state:
+        st.session_state.modal_data = None
+    
     # Crear tabs para Proceso y Congelado
     vol_tabs = st.tabs(["🏭 Salas (Proceso)", "❄️ Túneles (Congelado)"])
     
@@ -435,51 +439,55 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     with vol_tabs[0]:
         df_proceso = df_grouped[df_grouped['Tipo'] == 'PROCESO'].copy()
         if not df_proceso.empty:
-            # Crear gráfico interactivo con Plotly
-            fig = go.Figure()
-            
-            # Agrupar por sala para crear una barra por sala
-            for sala in df_proceso['Sala'].unique():
-                df_sala = df_proceso[df_proceso['Sala'] == sala]
-                fig.add_trace(go.Bar(
-                    x=df_sala['Período'],
-                    y=df_sala['Kg PT'],
-                    name=sala,
-                    customdata=df_sala[['Sala', 'Kg MP', 'Órdenes']],
-                    hovertemplate='<b>Período:</b> %{x}<br>' +
-                                  '<b>Sala:</b> %{customdata[0]}<br>' +
-                                  '<b>Kg Producidos:</b> %{y:,.0f}<br>' +
-                                  '<b>Kg MP:</b> %{customdata[1]:,.0f}<br>' +
-                                  '<b>Órdenes:</b> %{customdata[2]}<extra></extra>'
-                ))
-            
-            fig.update_layout(
-                title=f"Volumen por {agrupacion} - Salas de Proceso",
-                xaxis_title=f'Período ({agrupacion})',
-                yaxis_title='Kilogramos Producidos',
-                barmode='stack',  # Apilar barras por sala
-                height=400,
-                hovermode='closest',
-                bargap=0.15,
-                bargroupgap=0.05,
-                xaxis=dict(
-                    tickangle=-45,
-                    tickfont=dict(size=10)
+            @st.fragment
+            def render_grafico_proceso():
+                # Crear gráfico interactivo con Plotly
+                fig = go.Figure()
+                
+                # Agrupar por sala para crear una barra por sala
+                for sala in df_proceso['Sala'].unique():
+                    df_sala = df_proceso[df_proceso['Sala'] == sala]
+                    fig.add_trace(go.Bar(
+                        x=df_sala['Período'],
+                        y=df_sala['Kg PT'],
+                        name=sala,
+                        customdata=df_sala[['Sala', 'Kg MP', 'Órdenes']],
+                        hovertemplate='<b>Período:</b> %{x}<br>' +
+                                      '<b>Sala:</b> %{customdata[0]}<br>' +
+                                      '<b>Kg Producidos:</b> %{y:,.0f}<br>' +
+                                      '<b>Kg MP:</b> %{customdata[1]:,.0f}<br>' +
+                                      '<b>Órdenes:</b> %{customdata[2]}<extra></extra>'
+                    ))
+                
+                fig.update_layout(
+                    title=f"Volumen por {agrupacion} - Salas de Proceso",
+                    xaxis_title=f'Período ({agrupacion})',
+                    yaxis_title='Kilogramos Producidos',
+                    barmode='stack',  # Apilar barras por sala
+                    height=400,
+                    hovermode='closest',
+                    bargap=0.15,
+                    bargroupgap=0.05,
+                    xaxis=dict(
+                        tickangle=-45,
+                        tickfont=dict(size=10)
+                    )
                 )
-            )
+                
+                # Mostrar gráfico con evento de clic
+                event = st.plotly_chart(fig, use_container_width=True, key="proceso_chart", on_select="rerun")
+                
+                # Capturar clic y mostrar modal
+                if event and "selection" in event and "points" in event["selection"]:
+                    points = event["selection"]["points"]
+                    if points:
+                        punto = points[0]
+                        periodo_sel = punto.get("x")
+                        trace_idx = punto.get("curve_number", 0)
+                        sala_sel = fig.data[trace_idx].name
+                        mostrar_odfs_modal(periodo_sel, sala_sel, "proceso")
             
-            # Mostrar gráfico con evento de clic
-            event = st.plotly_chart(fig, use_container_width=True, key="proceso_chart", on_select="rerun")
-            
-            # Capturar clic
-            if event and "selection" in event and "points" in event["selection"]:
-                points = event["selection"]["points"]
-                if points:
-                    punto = points[0]
-                    periodo_sel = punto.get("x")
-                    trace_idx = punto.get("curve_number", 0)
-                    sala_sel = fig.data[trace_idx].name
-                    mostrar_odfs_modal(periodo_sel, sala_sel, "proceso")
+            render_grafico_proceso()
             
             # Tabla resumen
             with st.expander("📋 Ver datos detallados"):
@@ -497,50 +505,54 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     with vol_tabs[1]:
         df_congelado = df_grouped[df_grouped['Tipo'] == 'CONGELADO'].copy()
         if not df_congelado.empty:
-            # Crear gráfico interactivo con Plotly
-            fig = go.Figure()
-            
-            # Agrupar por túnel
-            for tunel in df_congelado['Sala'].unique():
-                df_tunel = df_congelado[df_congelado['Sala'] == tunel]
-                fig.add_trace(go.Bar(
-                    x=df_tunel['Período'],
-                    y=df_tunel['Kg PT'],
-                    name=tunel,
-                    customdata=df_tunel[['Sala', 'Órdenes']],
-                    hovertemplate='<b>Período:</b> %{x}<br>' +
-                                  '<b>Túnel:</b> %{customdata[0]}<br>' +
-                                  '<b>Kg Congelados:</b> %{y:,.0f}<br>' +
-                                  '<b>Órdenes:</b> %{customdata[1]}<extra></extra>'
-                ))
-            
-            fig.update_layout(
-                title=f"Volumen por {agrupacion} - Túneles de Congelado",
-                xaxis_title=f'Período ({agrupacion})',
-                yaxis_title='Kilogramos Congelados',
-                barmode='stack',  # Apilar barras por túnel
-                height=400,
-                hovermode='closest',
-                bargap=0.15,
-                bargroupgap=0.05,
-                xaxis=dict(
-                    tickangle=-45,
-                    tickfont=dict(size=10)
+            @st.fragment
+            def render_grafico_congelado():
+                # Crear gráfico interactivo con Plotly
+                fig = go.Figure()
+                
+                # Agrupar por túnel
+                for tunel in df_congelado['Sala'].unique():
+                    df_tunel = df_congelado[df_congelado['Sala'] == tunel]
+                    fig.add_trace(go.Bar(
+                        x=df_tunel['Período'],
+                        y=df_tunel['Kg PT'],
+                        name=tunel,
+                        customdata=df_tunel[['Sala', 'Órdenes']],
+                        hovertemplate='<b>Período:</b> %{x}<br>' +
+                                      '<b>Túnel:</b> %{customdata[0]}<br>' +
+                                      '<b>Kg Congelados:</b> %{y:,.0f}<br>' +
+                                      '<b>Órdenes:</b> %{customdata[1]}<extra></extra>'
+                    ))
+                
+                fig.update_layout(
+                    title=f"Volumen por {agrupacion} - Túneles de Congelado",
+                    xaxis_title=f'Período ({agrupacion})',
+                    yaxis_title='Kilogramos Congelados',
+                    barmode='stack',  # Apilar barras por túnel
+                    height=400,
+                    hovermode='closest',
+                    bargap=0.15,
+                    bargroupgap=0.05,
+                    xaxis=dict(
+                        tickangle=-45,
+                        tickfont=dict(size=10)
+                    )
                 )
-            )
+                
+                # Mostrar gráfico con evento de clic
+                event = st.plotly_chart(fig, use_container_width=True, key="congelado_chart", on_select="rerun")
+                
+                # Capturar clic y mostrar modal
+                if event and "selection" in event and "points" in event["selection"]:
+                    points = event["selection"]["points"]
+                    if points:
+                        punto = points[0]
+                        periodo_sel = punto.get("x")
+                        trace_idx = punto.get("curve_number", 0)
+                        tunel_sel = fig.data[trace_idx].name
+                        mostrar_odfs_modal(periodo_sel, tunel_sel, "congelado")
             
-            # Mostrar gráfico con evento de clic
-            event = st.plotly_chart(fig, use_container_width=True, key="congelado_chart", on_select="rerun")
-            
-            # Capturar clic
-            if event and "selection" in event and "points" in event["selection"]:
-                points = event["selection"]["points"]
-                if points:
-                    punto = points[0]
-                    periodo_sel = punto.get("x")
-                    trace_idx = punto.get("curve_number", 0)
-                    tunel_sel = fig.data[trace_idx].name
-                    mostrar_odfs_modal(periodo_sel, tunel_sel, "congelado")
+            render_grafico_congelado()
             
             # Tabla resumen
             with st.expander("📋 Ver datos detallados"):

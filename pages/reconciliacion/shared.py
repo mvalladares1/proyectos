@@ -165,7 +165,7 @@ def buscar_odfs_para_reconciliar(
     fecha_fin: str,
     limit: int
 ) -> Dict:
-    """Busca ODFs que necesitan reconciliación de KG."""
+    """Busca ODFs que tienen SO Asociada para reconciliar KG."""
     try:
         username, password = get_credenciales()
         if not username or not password:
@@ -184,9 +184,10 @@ def buscar_odfs_para_reconciliar(
             "limit": limit
         }
         
-        # Por ahora usamos el mismo endpoint, pero podríamos crear uno específico
+        # Usar /todas-odfs que retorna TODAS las ODFs (con y sin SO)
+        # Luego en el frontend se filtran las que tienen SO
         response = requests.get(
-            f"{API_ODF_RECONCILIACION}/odfs-sin-so-asociada",
+            f"{API_ODF_RECONCILIACION}/todas-odfs",
             params=params,
             timeout=30
         )
