@@ -177,32 +177,41 @@ st.divider()
 # TABS PRINCIPALES
 # ============================================================================
 
-tab_trigger_lista_ui, tab_trigger_exec_ui, tab_kg_ui = st.tabs([
-    "📋 Lista ODFs sin SO",
-    "🚀 Trigger SO Asociada",
-    "🔢 Reconciliar KG"
-])
+tabs_disponibles = []
+tabs_nombres = []
 
-# Tab 1: Lista de ODFs sin SO
-with tab_trigger_lista_ui:
-    if _perm_trigger:
+if _perm_trigger:
+    tabs_nombres.append("📋 Lista ODFs sin SO")
+    tabs_disponibles.append("lista")
+    tabs_nombres.append("🚀 Trigger SO Asociada")
+    tabs_disponibles.append("trigger")
+
+if _perm_kg:
+    tabs_nombres.append("🔢 Reconciliar KG")
+    tabs_disponibles.append("kg")
+
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Reconciliación.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
+
+if "lista" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_trigger_lista.render()
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos.")
+    tab_index += 1
 
-# Tab 2: Ejecutar Trigger
-with tab_trigger_exec_ui:
-    if _perm_trigger:
+if "trigger" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_trigger_ejecutar.render(wait_seconds)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos.")
+    tab_index += 1
 
-# Tab 3: Reconciliar KG
-with tab_kg_ui:
-    if _perm_kg:
+if "kg" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_reconciliar_kg.render(wait_seconds)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos.")
+    tab_index += 1
 
 # ============================================================================
 # FOOTER

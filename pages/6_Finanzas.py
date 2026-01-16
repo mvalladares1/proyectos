@@ -46,23 +46,42 @@ _perm_eerr = tiene_acceso_pagina("finanzas", "agrupado")
 _perm_cg = tiene_acceso_pagina("finanzas", "cg")
 _perm_flujo = tiene_acceso_pagina("finanzas", "flujo_caja")
 
-
 # === HEADER ===
 st.title("📈 Control Presupuestario - Estado de Resultado")
 st.caption("Datos obtenidos en tiempo real desde Odoo | Presupuesto desde Excel")
 
-# === TABS PRINCIPALES (SIEMPRE VISIBLES) ===
-tab_eerr_ui, tab_cg_ui, tab_flujo_ui = st.tabs([
-    "📊 Estado de Resultados", "📁 Cuentas (CG)", "💵 Flujo de Caja"
-])
+# === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
+tabs_disponibles = []
+tabs_nombres = []
+
+if _perm_eerr:
+    tabs_nombres.append("📊 Estado de Resultados")
+    tabs_disponibles.append("eerr")
+
+if _perm_cg:
+    tabs_nombres.append("📁 Cuentas (CG)")
+    tabs_disponibles.append("cg")
+
+if _perm_flujo:
+    tabs_nombres.append("💵 Flujo de Caja")
+    tabs_disponibles.append("flujo")
+
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Finanzas.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
 
 # =====================================================================
 # TAB 1: ESTADO DE RESULTADOS (con sus propios filtros)
 # =====================================================================
-with tab_eerr_ui:
-    if not _perm_eerr:
-        st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
-    else:
+if "eerr" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         # === FILTROS DENTRO DEL TAB EERR ===
         st.markdown("### 📅 Configuración del Período")
         
@@ -198,14 +217,13 @@ with tab_eerr_ui:
             st.info("👆 Configura los filtros y haz clic en **'Generar Reporte'** para ver los resultados.")
         else:
             st.warning("⚠️ No se pudieron cargar los datos o la consulta devolvió vacío.")
+    tab_index += 1
 
 # =====================================================================
 # TAB 2: CUENTAS (CG)
 # =====================================================================
-with tab_cg_ui:
-    if not _perm_cg:
-        st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
-    else:
+if "cg" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         # CG depende de los datos de EERR ya cargados
         datos = st.session_state.get('eerr_datos')
         data_loaded = st.session_state.get("eerr_data_loaded", False)
@@ -244,15 +262,15 @@ with tab_cg_ui:
             _frag_cg()
         else:
             st.info("👆 Primero genera el reporte en la pestaña **Estado de Resultados** para ver las cuentas.")
+    tab_index += 1
 
 # =====================================================================
 # TAB 3: FLUJO DE CAJA (totalmente independiente)
 # =====================================================================
-with tab_flujo_ui:
-    if not _perm_flujo:
-        st.error("🚫 **Acceso Restringido** - Contacta al administrador.")
-    else:
+if "flujo" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         @st.fragment
         def _frag_flujo():
             tab_flujo_caja.render(username, password)
         _frag_flujo()
+    tab_index += 1

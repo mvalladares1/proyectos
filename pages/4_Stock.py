@@ -121,53 +121,53 @@ _perm_camaras = tiene_acceso_pagina("stock", "camaras")
 _perm_pallets = tiene_acceso_pagina("stock", "pallets")
 _perm_trazabilidad = tiene_acceso_pagina("stock", "trazabilidad")
 
-# === TABS PRINCIPALES ===
-tab_mov_ui, tab_cam_ui, tab_pal_ui, tab_tra_ui = st.tabs([
-    "📲 Movimientos", 
-    "🏢 Cámaras", 
-    "📦 Pallets", 
-    "🏷️ Trazabilidad"
-])
+# === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
+tabs_disponibles = []
+tabs_nombres = []
 
-# =====================================================
-#           TAB 1: MOVIMIENTOS
-# =====================================================
-with tab_mov_ui:
-    if _perm_movimientos:
+if _perm_movimientos:
+    tabs_nombres.append("📲 Movimientos")
+    tabs_disponibles.append("movimientos")
+
+if _perm_camaras:
+    tabs_nombres.append("🏢 Cámaras")
+    tabs_disponibles.append("camaras")
+
+if _perm_pallets:
+    tabs_nombres.append("📦 Pallets")
+    tabs_disponibles.append("pallets")
+
+if _perm_trazabilidad:
+    tabs_nombres.append("🏷️ Trazabilidad")
+    tabs_disponibles.append("trazabilidad")
+
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Stock.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
+
+if "movimientos" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_movimientos.render(username, password, camaras_data_all)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Movimientos'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 2: CÁMARAS
-# =====================================================
-with tab_cam_ui:
-    if _perm_camaras:
+if "camaras" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_camaras.render(username, password, camaras_data_all)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Cámaras'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 3: PALLETS
-# =====================================================
-with tab_pal_ui:
-    if _perm_pallets:
+if "pallets" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_pallets.render(username, password, camaras_data)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Pallets'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 4: TRAZABILIDAD
-# =====================================================
-with tab_tra_ui:
-    if _perm_trazabilidad:
+if "trazabilidad" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_trazabilidad.render(username, password, camaras_data)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Trazabilidad'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
 # Footer
 st.divider()

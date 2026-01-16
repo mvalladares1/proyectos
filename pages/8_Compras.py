@@ -43,23 +43,32 @@ st.title("🛒 Compras y Líneas de Crédito")
 _perm_ordenes = tiene_acceso_pagina("compras", "ordenes")
 _perm_lineas = tiene_acceso_pagina("compras", "lineas_credito")
 
-# === TABS PRINCIPALES ===
-tab_po, tab_credito = st.tabs(["📋 Órdenes de Compra", "💳 Líneas de Crédito"])
+# === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
+tabs_disponibles = []
+tabs_nombres = []
 
-# =====================================================
-#           TAB 1: ÓRDENES DE COMPRA
-# =====================================================
-with tab_po:
-    if _perm_ordenes:
+if _perm_ordenes:
+    tabs_nombres.append("📋 Órdenes de Compra")
+    tabs_disponibles.append("ordenes")
+
+if _perm_lineas:
+    tabs_nombres.append("💳 Líneas de Crédito")
+    tabs_disponibles.append("lineas")
+
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Compras.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
+
+if "ordenes" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_ordenes.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Órdenes de Compra'. Contacta al administrador.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 2: LÍNEAS DE CRÉDITO
-# =====================================================
-with tab_credito:
-    if _perm_lineas:
+if "lineas" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_lineas_credito.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Líneas de Crédito'. Contacta al administrador.")
+    tab_index += 1

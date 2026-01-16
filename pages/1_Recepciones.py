@@ -49,73 +49,75 @@ _perm_curva = tiene_acceso_pagina("recepciones", "curva_abastecimiento")
 _perm_aprobaciones = tiene_acceso_pagina("recepciones", "aprobaciones_mp")
 _perm_pallets = tiene_acceso_pagina("recepciones", "pallets_recepcion") # Permiso nuevo o reusado
 
-# === TABS PRINCIPALES ===
-tab_kpis_ui, tab_gestion_ui, tab_pallets_ui, tab_curva_ui, tab_aprobaciones_ui = st.tabs([
-    "📊 KPIs y Calidad", 
-    "📋 Gestión de Recepciones", 
-    "📦 Pallets por Recepción",
-    "📈 Curva de Abastecimiento", 
-    "📥 Aprobaciones MP"
-])
+# === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
+tabs_disponibles = []
+tabs_nombres = []
 
-# =====================================================
-#           TAB 1: KPIs Y CALIDAD
-# =====================================================
-with tab_kpis_ui:
-    if _perm_kpis:
+if _perm_kpis:
+    tabs_nombres.append("📊 KPIs y Calidad")
+    tabs_disponibles.append("kpis")
+
+if _perm_gestion:
+    tabs_nombres.append("📋 Gestión de Recepciones")
+    tabs_disponibles.append("gestion")
+
+if _perm_gestion or _perm_pallets:
+    tabs_nombres.append("📦 Pallets por Recepción")
+    tabs_disponibles.append("pallets")
+
+if _perm_curva:
+    tabs_nombres.append("📈 Curva de Abastecimiento")
+    tabs_disponibles.append("curva")
+
+if _perm_aprobaciones:
+    tabs_nombres.append("📥 Aprobaciones MP")
+    tabs_disponibles.append("aprobaciones")
+
+# Si no tiene acceso a ningún tab, mostrar mensaje
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Recepciones.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+# Crear tabs dinámicamente
+tabs_ui = st.tabs(tabs_nombres)
+
+# Mapear tabs a funciones de renderizado
+tab_index = 0
+
+if "kpis" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         @st.fragment
         def _frag_kpis():
             tab_kpis.render(username, password)
         _frag_kpis()
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'KPIs y Calidad'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 2: GESTIÓN DE RECEPCIONES
-# =====================================================
-with tab_gestion_ui:
-    if _perm_gestion:
+if "gestion" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         @st.fragment
         def _frag_gestion():
             tab_gestion.render(username, password)
         _frag_gestion()
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Gestión de Recepciones'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 3: PALLETS POR RECEPCIÓN
-# =====================================================
-with tab_pallets_ui:
-    # Por ahora usamos el mismo permiso que gestión o uno específico
-    if _perm_gestion or _perm_pallets:
+if "pallets" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         @st.fragment
         def _frag_pallets():
             tab_pallets.render(username, password)
         _frag_pallets()
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Pallets por Recepción'.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 3: CURVA DE ABASTECIMIENTO
-# =====================================================
-with tab_curva_ui:
-    if _perm_curva:
+if "curva" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         @st.fragment
         def _frag_curva():
             tab_curva.render(username, password)
         _frag_curva()
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Curva de Abastecimiento'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 4: APROBACIONES MP
-# =====================================================
-with tab_aprobaciones_ui:
-    if _perm_aprobaciones:
+if "aprobaciones" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_aprobaciones.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Aprobaciones MP'. Contacta al administrador.")
-        st.info("💡 Contacta al administrador para solicitar acceso a esta sección.")
+    tab_index += 1

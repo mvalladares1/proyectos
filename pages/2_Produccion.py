@@ -49,36 +49,41 @@ _perm_reporteria = tiene_acceso_pagina("produccion", "reporteria_general")
 _perm_detalle = tiene_acceso_pagina("produccion", "detalle_of")
 _perm_clasificacion = tiene_acceso_pagina("produccion", "clasificacion")
 
-# === TABS PRINCIPALES ===
-tab_general, tab_detalle_ui, tab_clasificacion_ui = st.tabs([
-    "📊 Reportería General", 
-    "📋 Detalle de OF", 
-    "📦 Clasificación"
-])
+# === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
+tabs_disponibles = []
+tabs_nombres = []
 
-# =====================================================
-#           TAB 1: REPORTERÍA GENERAL
-# =====================================================
-with tab_general:
-    if _perm_reporteria:
+if _perm_reporteria:
+    tabs_nombres.append("📊 Reportería General")
+    tabs_disponibles.append("reporteria")
+
+if _perm_detalle:
+    tabs_nombres.append("📋 Detalle de OF")
+    tabs_disponibles.append("detalle")
+
+if _perm_clasificacion:
+    tabs_nombres.append("📦 Clasificación")
+    tabs_disponibles.append("clasificacion")
+
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Producción.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
+
+if "reporteria" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_reporteria.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Reportería General'. Contacta al administrador.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 2: DETALLE DE OF
-# =====================================================
-with tab_detalle_ui:
-    if _perm_detalle:
+if "detalle" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_detalle.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Detalle de OF'. Contacta al administrador.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 3: CLASIFICACIÓN
-# =====================================================
-with tab_clasificacion_ui:
-    if _perm_clasificacion:
+if "clasificacion" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_clasificacion.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Clasificación'. Contacta al administrador.")
+    tab_index += 1

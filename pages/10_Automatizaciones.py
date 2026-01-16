@@ -108,51 +108,48 @@ tuneles = shared.get_tuneles(username, password)
 # Obtener API URL
 API_URL = shared.API_URL
 
-# === TABS PRINCIPALES ===
-tab1, tab2, tab3, tab4 = st.tabs(["📦 Crear Orden", "📊 Monitor de Órdenes", "📦 Movimientos", "📊 Monitor Mov."])
-# tab5 = "🔄 Revertir Consumo" OCULTO TEMPORALMENTE
+# === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
+tabs_disponibles = []
+tabs_nombres = []
 
-# =====================================================
-#           TAB 1: CREAR ORDEN
-# =====================================================
-with tab1:
-    if _perm_crear:
+if _perm_crear:
+    tabs_nombres.append("📦 Crear Orden")
+    tabs_disponibles.append("crear")
+
+if _perm_monitor:
+    tabs_nombres.append("📊 Monitor de Órdenes")
+    tabs_disponibles.append("monitor")
+
+if _perm_movimientos:
+    tabs_nombres.append("📦 Movimientos")
+    tabs_disponibles.append("movimientos")
+    tabs_nombres.append("📊 Monitor Mov.")
+    tabs_disponibles.append("monitor_mov")
+
+if not tabs_disponibles:
+    st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Automatizaciones.")
+    st.info("💡 Contacta al administrador para solicitar acceso.")
+    st.stop()
+
+tabs_ui = st.tabs(tabs_nombres)
+tab_index = 0
+
+if "crear" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_crear.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Crear Orden'. Contacta al administrador.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 2: MONITOR DE ÓRDENES
-# =====================================================
-with tab2:
-    if _perm_monitor:
+if "monitor" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_monitor.render(username, password, tuneles)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor de Órdenes'. Contacta al administrador.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 3: MOVIMIENTOS DE PALLETS
-# =====================================================
-with tab3:
-    if _perm_movimientos:
+if "movimientos" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_movimientos.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Movimientos'. Contacta al administrador.")
+    tab_index += 1
 
-# =====================================================
-#           TAB 4: MONITOR DE MOVIMIENTOS
-# =====================================================
-with tab4:
-    if _perm_movimientos:
+if "monitor_mov" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         tab_monitor_movimientos.render(username, password)
-    else:
-        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Monitor Movimientos'. Contacta al administrador.")
-
-# =====================================================
-#           TAB 5: REVERTIR CONSUMO DE ODF (OCULTO)
-# =====================================================
-# with tab5:
-#     if _perm_crear:  # Mismo permiso que crear orden
-#         tab_revertir_consumo.render(username, password)
-#     else:
-#         st.error("🚫 **Acceso Restringido** - No tienes permisos para usar 'Revertir Consumo'. Contacta al administrador.")
+    tab_index += 1
