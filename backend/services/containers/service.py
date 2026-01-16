@@ -533,13 +533,12 @@ class ContainersService:
         """
         Genera datos para diagrama Sankey de trazabilidad completa.
         
-        Lógica:
-        1. Clasifica IN/OUT según ubicaciones virtuales (producción)
-        2. Agrupa por reference
-        3. Detecta continuidad: result_package de Ref A = package de Ref B
-        4. Conecta paquetes de venta a clientes
+        Flujo visual (según requerimiento):
+        PALLET_A → PROCESO_1 → PALLET_B → PROCESO_2 → PALLET_C → CLIENTE
+        
+        Cada pallet es UN SOLO NODO que puede conectarse a múltiples procesos.
         """
-        print(f"Generando Sankey data con trazabilidad completa...")
+        print(f"Generando Sankey data...")
         
         PARTNER_VENDORS_LOCATION_ID = 4
         VIRTUAL_LOCATION_IDS = self._get_virtual_location_ids()
@@ -576,32 +575,28 @@ class ContainersService:
             return {"nodes": [], "links": []}
         
         if not move_lines:
-            print("No se encontraron movimientos")
             return {"nodes": [], "links": []}
         
         print(f"Encontrados {len(move_lines)} movimientos")
         
-        # Paso 2: Clasificar movimientos y agrupar por reference
-        references_data = {}  # ref -> {in_packages, out_packages, reception_packages, dates, is_reception}
-        sale_packages = {}  # pkg_id -> {picking_id, customer_id, customer_name}
+        # Paso 2: Construir grafo de conexiones
+        # pallet_info[pkg_id] = {name, qty, products, is_reception, supplier_id}
+        # process_info[ref] = {date, qty_in, qty_out}
+        # connections = [(from_type, from_id, to_type, to_id, qty)]
+        
+        pallet_info = {}
+        process_info = {}
+        connections = []  # Lista de (source_type, source_id, target_type, target_id, qty)
+        
+        reception_picking_ids = set()
         sale_picking_ids = set()
-        reception_picking_ids = set()  # Para resolver proveedores
-        
-        # Para detectar continuidad entre referencias
-        result_to_refs = {}  # result_package_id -> [referencias donde aparece como OUT]
-        package_to_refs = {}  # package_id -> [referencias donde aparece como IN]
-        reception_packages = {}  # pkg_id -> ref de recepción (para conectar proveedor -> paquete)
-        
-        # Para continuidad por LOT_ID (el lote persiste entre procesos aunque el paquete cambie)
-        lot_to_out_refs = {}  # lot_id -> [(ref, pkg_id)] donde aparece como OUT
-        lot_to_in_refs = {}   # lot_id -> [(ref, pkg_id)] donde aparece como IN
+        sale_pallets = {}  # pkg_id -> picking_id
         
         for ml in move_lines:
-            location_id = ml.get("location_id")
-            location_dest_id = ml.get("location_dest_id")
-            
-            loc_id = location_id[0] if isinstance(location_id, (list, tuple)) else location_id
-            loc_dest_id = location_dest_id[0] if isinstance(location_dest_id, (list, tuple)) else location_dest_id
+            loc_rel = ml.get("location_id")
+            loc_dest_rel = ml.get("location_dest_id")
+            loc_id = loc_rel[0] if isinstance(loc_rel, (list, tuple)) else loc_rel
+            loc_dest_id = loc_dest_rel[0] if isinstance(loc_dest_rel, (list, tuple)) else loc_dest_rel
             
             pkg_rel = ml.get("package_id")
             result_rel = ml.get("result_package_id")
@@ -613,114 +608,74 @@ class ContainersService:
             prod_name = prod_rel[1] if isinstance(prod_rel, (list, tuple)) and len(prod_rel) > 1 else "N/A"
             
             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-            pkg_name = pkg_rel[1] if isinstance(pkg_rel, (list, tuple)) and len(pkg_rel) > 1 else str(pkg_id) if pkg_id else None
+            pkg_name = pkg_rel[1] if isinstance(pkg_rel, (list, tuple)) and len(pkg_rel) > 1 else None
             
             result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-            result_name = result_rel[1] if isinstance(result_rel, (list, tuple)) and len(result_rel) > 1 else str(result_id) if result_id else None
+            result_name = result_rel[1] if isinstance(result_rel, (list, tuple)) and len(result_rel) > 1 else None
             
-            # Inicializar referencia si no existe
-            if ref not in references_data:
-                references_data[ref] = {
-                    "in_packages": {}, "out_packages": {}, "reception_packages": {},
-                    "dates": [], "is_reception": False, "supplier_id": None, "supplier_name": None
-                }
+            picking_rel = ml.get("picking_id")
+            picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) else picking_rel
             
-            if date:
-                references_data[ref]["dates"].append(date)
+            # Registrar info del proceso
+            if ref not in process_info:
+                process_info[ref] = {"date": date, "qty_in": 0, "qty_out": 0, "picking_id": picking_id}
+            if date > process_info[ref]["date"]:
+                process_info[ref]["date"] = date
             
-            # RECEPCIÓN: viene desde Partner/Vendors (proveedor)
+            # RECEPCIÓN: viene de Partner/Vendors (proveedor)
             if loc_id == PARTNER_VENDORS_LOCATION_ID:
-                references_data[ref]["is_reception"] = True
                 target_pkg = result_id or pkg_id
                 target_name = result_name or pkg_name
                 if target_pkg:
-                    if target_pkg not in references_data[ref]["reception_packages"]:
-                        references_data[ref]["reception_packages"][target_pkg] = {
-                            "id": target_pkg, "name": target_name or str(target_pkg), "qty": 0, "products": {}
-                        }
-                    references_data[ref]["reception_packages"][target_pkg]["qty"] += qty
-                    if prod_name not in references_data[ref]["reception_packages"][target_pkg]["products"]:
-                        references_data[ref]["reception_packages"][target_pkg]["products"][prod_name] = 0
-                    references_data[ref]["reception_packages"][target_pkg]["products"][prod_name] += qty
+                    if target_pkg not in pallet_info:
+                        pallet_info[target_pkg] = {"name": target_name or str(target_pkg), "qty": 0, "products": {}, "is_reception": True}
+                    pallet_info[target_pkg]["qty"] += qty
+                    pallet_info[target_pkg]["is_reception"] = True
+                    if prod_name not in pallet_info[target_pkg]["products"]:
+                        pallet_info[target_pkg]["products"][prod_name] = 0
+                    pallet_info[target_pkg]["products"][prod_name] += qty
                     
-                    # Registrar paquete como recepcionado para conectar con procesos posteriores
-                    reception_packages[target_pkg] = ref
-                    
-                    # Guardar picking para resolver proveedor
-                    picking_rel = ml.get("picking_id")
-                    if picking_rel:
-                        picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) else picking_rel
-                        reception_picking_ids.add(picking_id)
-                        references_data[ref]["picking_id"] = picking_id
+                    # Conexión: PROVEEDOR → PALLET
+                    connections.append(("RECV", ref, "PALLET", target_pkg, qty))
+                    reception_picking_ids.add(picking_id)
+                    process_info[ref]["is_reception"] = True
+                    process_info[ref]["picking_id"] = picking_id
             
-            # IN: tiene package_id y va a ubicación virtual (no usar elif para permitir múltiples clasificaciones)
+            # ENTRADA A PROCESO: paquete va a ubicación virtual
             if pkg_id and loc_dest_id in VIRTUAL_LOCATION_IDS:
-                # Extraer lot_id
-                lot_rel = ml.get("lot_id")
-                lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) else lot_rel
-                lot_name = lot_rel[1] if isinstance(lot_rel, (list, tuple)) and len(lot_rel) > 1 else None
+                if pkg_id not in pallet_info:
+                    pallet_info[pkg_id] = {"name": pkg_name or str(pkg_id), "qty": 0, "products": {}}
+                pallet_info[pkg_id]["qty"] += qty
+                if prod_name not in pallet_info[pkg_id]["products"]:
+                    pallet_info[pkg_id]["products"][prod_name] = 0
+                pallet_info[pkg_id]["products"][prod_name] += qty
+                process_info[ref]["qty_in"] += qty
                 
-                if pkg_id not in references_data[ref]["in_packages"]:
-                    references_data[ref]["in_packages"][pkg_id] = {
-                        "id": pkg_id, "name": pkg_name or str(pkg_id), "qty": 0, "products": {},
-                        "lot_id": lot_id, "lot_name": lot_name
-                    }
-                references_data[ref]["in_packages"][pkg_id]["qty"] += qty
-                if prod_name not in references_data[ref]["in_packages"][pkg_id]["products"]:
-                    references_data[ref]["in_packages"][pkg_id]["products"][prod_name] = 0
-                references_data[ref]["in_packages"][pkg_id]["products"][prod_name] += qty
-                
-                # Registrar lot_id para continuidad
-                if lot_id:
-                    if lot_id not in lot_to_in_refs:
-                        lot_to_in_refs[lot_id] = []
-                    lot_to_in_refs[lot_id].append((ref, pkg_id, lot_name))
-                
-                # Registrar para continuidad
-                if pkg_id not in package_to_refs:
-                    package_to_refs[pkg_id] = set()
-                package_to_refs[pkg_id].add(ref)
+                # Conexión: PALLET → PROCESO
+                connections.append(("PALLET", pkg_id, "PROCESS", ref, qty))
             
-            # OUT: tiene result_package_id y sale de ubicación virtual
+            # SALIDA DE PROCESO: result_package sale de ubicación virtual
             if result_id and loc_id in VIRTUAL_LOCATION_IDS:
-                # Extraer lot_id
-                lot_rel = ml.get("lot_id")
-                lot_id = lot_rel[0] if isinstance(lot_rel, (list, tuple)) else lot_rel
-                lot_name = lot_rel[1] if isinstance(lot_rel, (list, tuple)) and len(lot_rel) > 1 else None
+                if result_id not in pallet_info:
+                    pallet_info[result_id] = {"name": result_name or str(result_id), "qty": 0, "products": {}}
+                pallet_info[result_id]["qty"] += qty
+                if prod_name not in pallet_info[result_id]["products"]:
+                    pallet_info[result_id]["products"][prod_name] = 0
+                pallet_info[result_id]["products"][prod_name] += qty
+                process_info[ref]["qty_out"] += qty
                 
-                if result_id not in references_data[ref]["out_packages"]:
-                    references_data[ref]["out_packages"][result_id] = {
-                        "id": result_id, "name": result_name or str(result_id), "qty": 0, "products": {},
-                        "lot_id": lot_id, "lot_name": lot_name
-                    }
-                references_data[ref]["out_packages"][result_id]["qty"] += qty
-                if prod_name not in references_data[ref]["out_packages"][result_id]["products"]:
-                    references_data[ref]["out_packages"][result_id]["products"][prod_name] = 0
-                references_data[ref]["out_packages"][result_id]["products"][prod_name] += qty
-                
-                # Registrar lot_id para continuidad
-                if lot_id:
-                    if lot_id not in lot_to_out_refs:
-                        lot_to_out_refs[lot_id] = []
-                    lot_to_out_refs[lot_id].append((ref, result_id, lot_name))
-                
-                # Registrar para continuidad
-                if result_id not in result_to_refs:
-                    result_to_refs[result_id] = set()
-                result_to_refs[result_id].add(ref)
+                # Conexión: PROCESO → PALLET
+                connections.append(("PROCESS", ref, "PALLET", result_id, qty))
             
-            # VENTA: va hacia Partner/Vendors
+            # VENTA: va hacia Partner/Vendors (cliente)
             if loc_dest_id == PARTNER_VENDORS_LOCATION_ID:
                 target_pkg = result_id or pkg_id
-                if target_pkg:
-                    picking_rel = ml.get("picking_id")
-                    picking_id = picking_rel[0] if isinstance(picking_rel, (list, tuple)) else picking_rel
-                    sale_packages[target_pkg] = {"picking_id": picking_id}
-                    if picking_id:
-                        sale_picking_ids.add(picking_id)
+                if target_pkg and picking_id:
+                    sale_pallets[target_pkg] = picking_id
+                    sale_picking_ids.add(picking_id)
         
-        # Paso 3: Resolver clientes de ventas y proveedores de recepciones
-        all_picking_ids = sale_picking_ids | reception_picking_ids
+        # Paso 3: Resolver proveedores y clientes desde pickings
+        all_picking_ids = reception_picking_ids | sale_picking_ids
         pickings_by_id = {}
         
         if all_picking_ids:
@@ -731,95 +686,36 @@ class ContainersService:
                     ["id", "partner_id", "origin"]
                 )
                 pickings_by_id = {p["id"]: p for p in pickings}
-                
-                # Resolver clientes de ventas
-                for pkg_id, sale_data in sale_packages.items():
-                    picking = pickings_by_id.get(sale_data.get("picking_id"), {})
-                    partner_rel = picking.get("partner_id")
-                    if partner_rel:
-                        sale_packages[pkg_id]["customer_id"] = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
-                        sale_packages[pkg_id]["customer_name"] = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
-                    sale_packages[pkg_id]["origin"] = picking.get("origin", "")
-                
-                # Resolver proveedores de recepciones
-                for ref, data in references_data.items():
-                    if data.get("is_reception") and data.get("picking_id"):
-                        picking = pickings_by_id.get(data["picking_id"], {})
-                        partner_rel = picking.get("partner_id")
-                        if partner_rel:
-                            data["supplier_id"] = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
-                            data["supplier_name"] = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Proveedor"
             except Exception as e:
-                print(f"Error fetching picking partners: {e}")
+                print(f"Error fetching pickings: {e}")
         
-        # Paso 4: Detectar continuidad entre referencias
-        # Si un result_package de Ref A es package de Ref B -> conectar Ref A con Ref B
-        ref_continuity = {}  # ref_from -> [(ref_to, pkg_id, qty)]
+        # Agregar info de proveedores a recepciones
+        for ref, info in process_info.items():
+            if info.get("is_reception") and info.get("picking_id"):
+                picking = pickings_by_id.get(info["picking_id"], {})
+                partner_rel = picking.get("partner_id")
+                if partner_rel:
+                    info["supplier_id"] = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
+                    info["supplier_name"] = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Proveedor"
         
-        for pkg_id, out_refs in result_to_refs.items():
-            in_refs = package_to_refs.get(pkg_id, set())
-            for out_ref in out_refs:
-                for in_ref in in_refs:
-                    if out_ref != in_ref:  # No conectar consigo mismo
-                        if out_ref not in ref_continuity:
-                            ref_continuity[out_ref] = []
-                        # Obtener qty del paquete en la referencia OUT
-                        pkg_data = references_data[out_ref]["out_packages"].get(pkg_id, {})
-                        qty = pkg_data.get("qty", 1)
-                        ref_continuity[out_ref].append((in_ref, pkg_id, qty))
+        # Agregar clientes a pallets de venta
+        for pkg_id, picking_id in sale_pallets.items():
+            picking = pickings_by_id.get(picking_id, {})
+            partner_rel = picking.get("partner_id")
+            if partner_rel:
+                customer_id = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
+                customer_name = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
+                # Conexión: PALLET → CLIENTE
+                qty = pallet_info.get(pkg_id, {}).get("qty", 1)
+                connections.append(("PALLET", pkg_id, "CUSTOMER", customer_id, qty))
+                if pkg_id in pallet_info:
+                    pallet_info[pkg_id]["customer_id"] = customer_id
+                    pallet_info[pkg_id]["customer_name"] = customer_name
         
-        receptions_count = len([r for r in references_data.values() if r.get("is_reception")])
-        print(f"Referencias: {len(references_data)}, Recepciones: {receptions_count}, Ventas: {len(sale_packages)}, Continuidades: {sum(len(v) for v in ref_continuity.values())}")
-        
-        # Paso 5: Filtrar referencias con actividad (incluye recepciones)
-        active_refs = {
-            ref: data for ref, data in references_data.items()
-            if data["in_packages"] or data["out_packages"] or data.get("reception_packages")
-        }
-        
-        # Ordenar por fecha más reciente y limitar
-        sorted_refs = sorted(
-            active_refs.keys(),
-            key=lambda r: max(active_refs[r]["dates"]) if active_refs[r]["dates"] else "",
-            reverse=True
-        )[:100]  # Aumentado de 50 a 100 para mejor trazabilidad
-        
-        # Función para normalizar nombre de lote (quitar sufijos como -C, -D, etc.)
-        def normalize_lot_name(lot_name: str) -> str:
-            if not lot_name:
-                return ""
-            # Quitar sufijos comunes: -C, -D, -E, etc.
-            import re
-            return re.sub(r'-[A-Z]$', '', lot_name)
-        
-        # Reconstruir mapeos por NOMBRE DE LOTE NORMALIZADO (no por lot_id)
-        # Esto permite conectar 0006944-C (OUT) con 0006944 (IN)
-        active_lot_to_out = {}  # lot_name_normalizado -> [(ref, pkg_id, lot_name_original)]
-        active_lot_to_in = {}   # lot_name_normalizado -> [(ref, pkg_id, lot_name_original)]
-        
-        for ref in sorted_refs:
-            data = active_refs[ref]
-            # Recolectar lotes de paquetes OUT
-            for pkg_id, pkg_data in data.get("out_packages", {}).items():
-                lot_name = pkg_data.get("lot_name")
-                if lot_name:
-                    lot_key = normalize_lot_name(lot_name)
-                    if lot_key not in active_lot_to_out:
-                        active_lot_to_out[lot_key] = []
-                    active_lot_to_out[lot_key].append((ref, pkg_id, lot_name))
-            # Recolectar lotes de paquetes IN
-            for pkg_id, pkg_data in data.get("in_packages", {}).items():
-                lot_name = pkg_data.get("lot_name")
-                if lot_name:
-                    lot_key = normalize_lot_name(lot_name)
-                    if lot_key not in active_lot_to_in:
-                        active_lot_to_in[lot_key] = []
-                    active_lot_to_in[lot_key].append((ref, pkg_id, lot_name))
-        
-        # Paso 6: Construir nodos y links
-        nodes: List[Dict] = []
-        links: List[Dict] = []
-        node_index: Dict[str, int] = {}
+        # Paso 4: Construir nodos y links únicos
+        nodes = []
+        links = []
+        node_index = {}
         
         def _ensure_node(node_id: str, label: str, color: str, detail: Dict) -> int:
             if node_id not in node_index:
@@ -833,309 +729,131 @@ class ContainersService:
                 })
             return node_index[node_id]
         
-        # Estructuras para layout
-        ref_in_nodes: Dict[str, List[str]] = {}
-        ref_out_nodes: Dict[str, List[str]] = {}
-        supplier_nodes: List[str] = []
-        reception_out_nodes: List[str] = []  # Pallets de recepciones
+        # Agregar nodos y links desde connections
+        # Consolidar conexiones duplicadas
+        link_map = {}  # (source_idx, target_idx) -> qty
         
-        for ref in sorted_refs:
-            data = active_refs[ref]
-            process_date = max(data["dates"]) if data["dates"] else ""
-            
-            # Si es RECEPCIÓN: Proveedor -> Recepción -> Pallets
-            if data.get("is_reception") and data.get("reception_packages"):
-                # Nodo RECEPCIÓN (amarillo-verde)
-                reception_id = f"RECV:{ref}"
-                reception_idx = _ensure_node(
-                    reception_id,
-                    f"📥 {ref}",
-                    "#1abc9c",  # Turquesa para recepciones
-                    {"reference": ref, "fecha": process_date, 
-                     "type": "reception", "pkg_count": len(data["reception_packages"])}
-                )
-                
-                # Nodo PROVEEDOR (si hay)
-                supplier_id = data.get("supplier_id")
-                supplier_name = data.get("supplier_name", "Proveedor")
+        for source_type, source_id, target_type, target_id, qty in connections:
+            # Crear nodo source
+            if source_type == "RECV":
+                # Recepción (usar info del proceso)
+                info = process_info.get(source_id, {})
+                supplier_id = info.get("supplier_id")
+                supplier_name = info.get("supplier_name", "Proveedor")
                 if supplier_id:
-                    supplier_node_id = f"SUPP:{supplier_id}"
-                    supp_idx = _ensure_node(
-                        supplier_node_id,
+                    source_node_id = f"SUPP:{supplier_id}"
+                    source_idx = _ensure_node(
+                        source_node_id,
                         f"🏭 {supplier_name}",
-                        "#9b59b6",  # Morado para proveedores
+                        "#9b59b6",
                         {"supplier_id": supplier_id, "name": supplier_name}
                     )
-                    supplier_nodes.append(supplier_node_id)
-                    
-                    # Link: Proveedor -> Recepción
-                    total_qty = sum(p["qty"] for p in data["reception_packages"].values())
-                    links.append({
-                        "source": supp_idx,
-                        "target": reception_idx,
-                        "value": total_qty or 1,
-                        "color": "rgba(155, 89, 182, 0.5)"
-                    })
-                
-                # Nodos de pallets recepcionados
-                for pkg_id, pkg_data in data["reception_packages"].items():
-                    recv_pkg_id = f"RPKG:{pkg_id}"
-                    products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in pkg_data["products"].items()])
-                    
-                    recv_pkg_idx = _ensure_node(
-                        recv_pkg_id,
-                        f"📦 {pkg_data['name']}",
-                        "#f39c12",  # Naranja
-                        {"package_id": pkg_id, "name": pkg_data["name"], "qty": pkg_data["qty"], "products": products_str, "type": "reception"}
+                else:
+                    source_node_id = f"RECV:{source_id}"
+                    source_idx = _ensure_node(
+                        source_node_id,
+                        f"📥 {source_id}",
+                        "#1abc9c",
+                        {"reference": source_id}
                     )
-                    reception_out_nodes.append(recv_pkg_id)
-                    
-                    # Link: Recepción -> Pallet
-                    links.append({
-                        "source": reception_idx,
-                        "target": recv_pkg_idx,
-                        "value": pkg_data["qty"] or 1,
-                        "color": "rgba(26, 188, 156, 0.5)"
-                    })
-                    
-                    # Si este pallet también está en un proceso (IN), conectar
-                    in_node_id = f"IN:{pkg_id}"
-                    if in_node_id in node_index:
-                        links.append({
-                            "source": recv_pkg_idx,
-                            "target": node_index[in_node_id],
-                            "value": pkg_data["qty"] or 1,
-                            "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad
-                        })
-                
-                # Si la recepción SOLO tiene reception_packages, no procesar más
-                if not data["in_packages"] and not data["out_packages"]:
-                    continue
-            
-            # Nodo PROCESO (rojo) - para referencias con in/out packages
-            if not data["in_packages"] and not data["out_packages"]:
-                continue  # Saltar si no hay IN ni OUT
-                
-            process_id = f"PROC:{ref}"
-            process_idx = _ensure_node(
-                process_id,
-                ref,
-                "#e74c3c",
-                {"reference": ref, "fecha": process_date, 
-                 "in_count": len(data["in_packages"]), "out_count": len(data["out_packages"])}
-            )
-            
-            ref_in_nodes[process_id] = []
-            ref_out_nodes[process_id] = []
-            
-            # Nodos IN (naranja)
-            for pkg_id, pkg_data in data["in_packages"].items():
-                in_node_id = f"IN:{pkg_id}"
-                products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in pkg_data["products"].items()])
-                
-                in_idx = _ensure_node(
-                    in_node_id,
-                    f"🟠 {pkg_data['name']}",
-                    "#f39c12",
-                    {"package_id": pkg_id, "name": pkg_data["name"], "qty": pkg_data["qty"], "products": products_str}
+            elif source_type == "PALLET":
+                info = pallet_info.get(source_id, {})
+                products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in info.get("products", {}).items()])
+                source_node_id = f"PKG:{source_id}"
+                # Color: naranja si es recepción, verde si es salida de proceso
+                color = "#f39c12" if info.get("is_reception") else "#2ecc71"
+                source_idx = _ensure_node(
+                    source_node_id,
+                    f"📦 {info.get('name', str(source_id))}",
+                    color,
+                    {"package_id": source_id, "qty": info.get("qty", 0), "products": products_str}
                 )
-                
-                ref_in_nodes[process_id].append(in_node_id)
-                
-                # Link: IN -> PROCESO
-                links.append({
-                    "source": in_idx,
-                    "target": process_idx,
-                    "value": pkg_data["qty"] or 1,
-                    "color": "rgba(243, 156, 18, 0.5)"
-                })
-            
-            # Nodos OUT (verde)
-            for pkg_id, pkg_data in data["out_packages"].items():
-                out_node_id = f"OUT:{pkg_id}"
-                products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in pkg_data["products"].items()])
-                
-                out_idx = _ensure_node(
-                    out_node_id,
-                    f"🟢 {pkg_data['name']}",
-                    "#2ecc71",
-                    {"package_id": pkg_id, "name": pkg_data["name"], "qty": pkg_data["qty"], "products": products_str}
+            elif source_type == "PROCESS":
+                info = process_info.get(source_id, {})
+                source_node_id = f"PROC:{source_id}"
+                source_idx = _ensure_node(
+                    source_node_id,
+                    f"🔴 {source_id}",
+                    "#e74c3c",
+                    {"reference": source_id, "date": info.get("date", ""), "qty_in": info.get("qty_in", 0), "qty_out": info.get("qty_out", 0)}
                 )
-                
-                ref_out_nodes[process_id].append(out_node_id)
-                
-                # Link: PROCESO -> OUT
-                links.append({
-                    "source": process_idx,
-                    "target": out_idx,
-                    "value": pkg_data["qty"] or 1,
-                    "color": "rgba(46, 204, 113, 0.5)"
-                })
-                
-                # Si este paquete tiene venta, conectar a cliente
-                if pkg_id in sale_packages:
-                    sale_data = sale_packages[pkg_id]
-                    customer_id = sale_data.get("customer_id")
-                    customer_name = sale_data.get("customer_name", "Cliente")
-                    
-                    if customer_id:
-                        cust_idx = _ensure_node(
-                            f"CUST:{customer_id}",
-                            f"🔵 {customer_name}",
-                            "#3498db",
-                            {"customer_id": customer_id, "name": customer_name}
-                        )
-                        
-                        links.append({
-                            "source": out_idx,
-                            "target": cust_idx,
-                            "value": pkg_data["qty"] or 1,
-                            "color": "rgba(52, 152, 219, 0.5)"
-                        })
-        
-        # Paso 7: Agregar links de continuidad (OUT de Ref A -> IN de Ref B via mismo paquete)
-        for ref_from, continuities in ref_continuity.items():
-            if ref_from not in sorted_refs:
+            else:
                 continue
-            for ref_to, pkg_id, qty in continuities:
-                if ref_to not in sorted_refs:
-                    continue
-                
-                out_node_id = f"OUT:{pkg_id}"
-                in_node_id = f"IN:{pkg_id}"
-                
-                out_idx = node_index.get(out_node_id)
-                in_idx = node_index.get(in_node_id)
-                
-                if out_idx is not None and in_idx is not None:
-                    # Link de continuidad: OUT -> IN (mismo paquete, diferente proceso)
-                    links.append({
-                        "source": out_idx,
-                        "target": in_idx,
-                        "value": qty or 1,
-                        "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad
-                    })
-        
-        # Paso 7b: Conectar paquetes de recepción con procesos
-        for pkg_id, recv_ref in reception_packages.items():
-            recv_pkg_id = f"RPKG:{pkg_id}"
-            in_node_id = f"IN:{pkg_id}"
             
-            recv_idx = node_index.get(recv_pkg_id)
-            in_idx = node_index.get(in_node_id)
-            
-            if recv_idx is not None and in_idx is not None:
-                # Evitar duplicados - verificar si ya existe este link
-                existing = any(
-                    l["source"] == recv_idx and l["target"] == in_idx 
-                    for l in links
+            # Crear nodo target
+            if target_type == "PALLET":
+                info = pallet_info.get(target_id, {})
+                products_str = ", ".join([f"{p}: {q:.1f}kg" for p, q in info.get("products", {}).items()])
+                target_node_id = f"PKG:{target_id}"
+                color = "#f39c12" if info.get("is_reception") else "#2ecc71"
+                target_idx = _ensure_node(
+                    target_node_id,
+                    f"📦 {info.get('name', str(target_id))}",
+                    color,
+                    {"package_id": target_id, "qty": info.get("qty", 0), "products": products_str}
                 )
-                if not existing:
-                    # Obtener qty del paquete en recepción
-                    recv_data = references_data.get(recv_ref, {})
-                    pkg_data = recv_data.get("reception_packages", {}).get(pkg_id, {})
-                    qty = pkg_data.get("qty", 1)
-                    
-                    links.append({
-                        "source": recv_idx,
-                        "target": in_idx,
-                        "value": qty or 1,
-                        "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad recepción->proceso
-                    })
-        
-        # Paso 7c: Conectar OUT que continúa como IN por NOMBRE DE LOTE NORMALIZADO
-        # El mismo LOTE base aparece en OUT (ej: 0006944-C) y en IN (ej: 0006944)
-        # Usamos active_lot_to_out/in con claves normalizadas
-        continuity_links_added = 0
-        
-        # Debug: verificar datos de lotes normalizados
-        common_lots = set(active_lot_to_out.keys()) & set(active_lot_to_in.keys())
-        print(f"Lotes normalizados en OUT: {len(active_lot_to_out)}, en IN: {len(active_lot_to_in)}, comunes: {len(common_lots)}")
-        
-        # Para cada lote normalizado que aparece tanto en OUT como en IN
-        # Conectar de forma SECUENCIAL: OUT de proceso A → IN de proceso B (siguiente en tiempo)
-        for lot_key in common_lots:
-            out_entries = active_lot_to_out[lot_key]  # [(ref, pkg_id, lot_name_original), ...]
-            in_entries = active_lot_to_in[lot_key]    # [(ref, pkg_id, lot_name_original), ...]
-            
-            # Obtener fechas de cada referencia para ordenar
-            def get_ref_date(ref):
-                dates = active_refs.get(ref, {}).get("dates", [])
-                return max(dates) if dates else ""
-            
-            # Ordenar OUT por fecha (más antiguo primero)
-            out_sorted = sorted(out_entries, key=lambda e: get_ref_date(e[0]))
-            # Ordenar IN por fecha (más antiguo primero)
-            in_sorted = sorted(in_entries, key=lambda e: get_ref_date(e[0]))
-            
-            # Agrupar por referencia (un proceso puede tener múltiples paquetes del mismo lote)
-            out_by_ref = {}
-            for ref, pkg_id, lot_name in out_sorted:
-                if ref not in out_by_ref:
-                    out_by_ref[ref] = []
-                out_by_ref[ref].append((pkg_id, lot_name))
-            
-            in_by_ref = {}
-            for ref, pkg_id, lot_name in in_sorted:
-                if ref not in in_by_ref:
-                    in_by_ref[ref] = []
-                in_by_ref[ref].append((pkg_id, lot_name))
-            
-            # Conectar solo: cada OUT_ref con el siguiente IN_ref en la secuencia temporal
-            out_refs_ordered = sorted(out_by_ref.keys(), key=get_ref_date)
-            in_refs_ordered = sorted(in_by_ref.keys(), key=get_ref_date)
-            
-            # Para cada referencia OUT, encontrar la siguiente referencia IN
-            for out_ref in out_refs_ordered:
-                out_date = get_ref_date(out_ref)
-                
-                # Buscar el primer IN que sea posterior o igual (y diferente ref)
-                next_in_ref = None
-                for in_ref in in_refs_ordered:
-                    if in_ref != out_ref and get_ref_date(in_ref) >= out_date:
-                        next_in_ref = in_ref
+            elif target_type == "PROCESS":
+                info = process_info.get(target_id, {})
+                target_node_id = f"PROC:{target_id}"
+                target_idx = _ensure_node(
+                    target_node_id,
+                    f"🔴 {target_id}",
+                    "#e74c3c",
+                    {"reference": target_id, "date": info.get("date", ""), "qty_in": info.get("qty_in", 0), "qty_out": info.get("qty_out", 0)}
+                )
+            elif target_type == "CUSTOMER":
+                target_node_id = f"CUST:{target_id}"
+                # Buscar nombre del cliente
+                cust_name = "Cliente"
+                for pid, pinfo in pallet_info.items():
+                    if pinfo.get("customer_id") == target_id:
+                        cust_name = pinfo.get("customer_name", "Cliente")
                         break
-                
-                if next_in_ref:
-                    # Conectar UN paquete OUT representativo con UN paquete IN representativo
-                    out_pkg_id = out_by_ref[out_ref][0][0]  # Primer paquete OUT de esta ref
-                    in_pkg_id = in_by_ref[next_in_ref][0][0]  # Primer paquete IN de la siguiente ref
-                    
-                    out_node_id = f"OUT:{out_pkg_id}"
-                    in_node_id = f"IN:{in_pkg_id}"
-                    
-                    out_idx = node_index.get(out_node_id)
-                    in_idx = node_index.get(in_node_id)
-                    
-                    if out_idx is not None and in_idx is not None:
-                        # Evitar duplicados
-                        existing = any(
-                            l["source"] == out_idx and l["target"] == in_idx 
-                            for l in links
-                        )
-                        if not existing:
-                            out_data = active_refs.get(out_ref, {}).get("out_packages", {}).get(out_pkg_id, {})
-                            qty = out_data.get("qty", 1)
-                            
-                            links.append({
-                                "source": out_idx,
-                                "target": in_idx,
-                                "value": qty or 1,
-                                "color": "rgba(155, 89, 182, 0.6)"  # Morado - continuidad entre procesos
-                            })
-                            continuity_links_added += 1
+                target_idx = _ensure_node(
+                    target_node_id,
+                    f"🔵 {cust_name}",
+                    "#3498db",
+                    {"customer_id": target_id, "name": cust_name}
+                )
+            else:
+                continue
+            
+            # Agregar link (consolidar duplicados)
+            link_key = (source_idx, target_idx)
+            if link_key not in link_map:
+                link_map[link_key] = 0
+            link_map[link_key] += qty
         
-        print(f"Continuidades entre procesos por LOT_ID agregadas: {continuity_links_added}")
+        # Convertir link_map a lista de links
+        for (source_idx, target_idx), qty in link_map.items():
+            # Determinar color según tipo de conexión
+            source_node = nodes[source_idx]
+            target_node = nodes[target_idx]
+            
+            if "SUPP:" in list(node_index.keys())[list(node_index.values()).index(source_idx)]:
+                color = "rgba(155, 89, 182, 0.5)"  # Morado - proveedor
+            elif "PROC:" in list(node_index.keys())[list(node_index.values()).index(source_idx)]:
+                color = "rgba(46, 204, 113, 0.5)"  # Verde - salida de proceso
+            elif "CUST:" in list(node_index.keys())[list(node_index.values()).index(target_idx)]:
+                color = "rgba(52, 152, 219, 0.5)"  # Azul - hacia cliente
+            else:
+                color = "rgba(243, 156, 18, 0.5)"  # Naranja - pallet hacia proceso
+            
+            links.append({
+                "source": source_idx,
+                "target": target_idx,
+                "value": qty or 1,
+                "color": color
+            })
         
-        # Paso 8: Layout
-        def _spread_y(node_ids: List[str], y0: float = 0.02, y1: float = 0.98) -> Dict[str, float]:
-            if not node_ids:
-                return {}
-            n = len(node_ids)
-            if n == 1:
-                return {node_ids[0]: (y0 + y1) / 2}
-            step = (y1 - y0) / (n - 1)
-            return {nid: y0 + i * step for i, nid in enumerate(node_ids)}
+        # Paso 5: Layout
+        # Ordenar procesos por fecha y asignar posiciones
+        process_nodes = [(nid, node_index[nid]) for nid in node_index if nid.startswith("PROC:")]
+        process_nodes.sort(key=lambda x: process_info.get(x[0].replace("PROC:", ""), {}).get("date", ""))
+        
+        pallet_nodes = [nid for nid in node_index if nid.startswith("PKG:")]
+        supplier_nodes = [nid for nid in node_index if nid.startswith("SUPP:")]
+        customer_nodes = [nid for nid in node_index if nid.startswith("CUST:")]
         
         def _set_xy(node_id: str, x: float, y: float) -> None:
             idx = node_index.get(node_id)
@@ -1143,54 +861,62 @@ class ContainersService:
                 nodes[idx]["x"] = float(x)
                 nodes[idx]["y"] = float(y)
         
-        y0, y1 = 0.05, 0.95
-        span = y1 - y0
+        # Posicionar proveedores a la izquierda
+        y_step = 0.98 / max(len(supplier_nodes), 1)
+        for i, nid in enumerate(supplier_nodes):
+            _set_xy(nid, 0.02, 0.02 + i * y_step)
         
-        # Posicionar proveedores (izquierda)
-        for sid, y in _spread_y(supplier_nodes, y0, y1).items():
-            _set_xy(sid, 0.02, y)
+        # Posicionar clientes a la derecha
+        y_step = 0.98 / max(len(customer_nodes), 1)
+        for i, nid in enumerate(customer_nodes):
+            _set_xy(nid, 0.98, 0.02 + i * y_step)
         
-        # Posicionar recepciones (segunda columna)
-        recv_ids = [nid for nid in node_index if nid.startswith("RECV:")]
-        for rid, y in _spread_y(recv_ids, y0, y1).items():
-            _set_xy(rid, 0.15, y)
+        # Posicionar procesos en columnas según fecha
+        if process_nodes:
+            n_procs = len(process_nodes)
+            x_start, x_end = 0.25, 0.75
+            x_step = (x_end - x_start) / max(n_procs - 1, 1) if n_procs > 1 else 0
+            y_step = 0.98 / max(n_procs, 1)
+            for i, (nid, idx) in enumerate(process_nodes):
+                x = x_start + i * x_step if n_procs > 1 else (x_start + x_end) / 2
+                _set_xy(nid, x, 0.02 + i * y_step)
         
-        # Posicionar pallets de recepción
-        for rpid, y in _spread_y(reception_out_nodes, y0, y1).items():
-            _set_xy(rpid, 0.25, y)
-        
-        process_ids = [f"PROC:{ref}" for ref in sorted_refs if f"PROC:{ref}" in node_index]
-        
-        # Calcular peso de cada proceso
-        process_weights = {}
-        for pid in process_ids:
-            w = len(ref_in_nodes.get(pid, [])) + len(ref_out_nodes.get(pid, []))
-            process_weights[pid] = max(1, w)
-        
-        total_weight = sum(process_weights.values()) or 1
-        
-        cursor = y0
-        for pid in process_ids:
-            frac = process_weights[pid] / total_weight
-            slot_h = span * frac
-            start = cursor
-            end = min(y1, cursor + slot_h)
-            center = (start + end) / 2
+        # Posicionar pallets según sus conexiones
+        for nid in pallet_nodes:
+            idx = node_index[nid]
+            # Buscar a qué está conectado este pallet
+            connected_procs = []
+            for link in links:
+                if link["source"] == idx:
+                    target_nid = [k for k, v in node_index.items() if v == link["target"]]
+                    if target_nid and target_nid[0].startswith("PROC:"):
+                        connected_procs.append(("target", target_nid[0]))
+                if link["target"] == idx:
+                    source_nid = [k for k, v in node_index.items() if v == link["source"]]
+                    if source_nid and source_nid[0].startswith("PROC:"):
+                        connected_procs.append(("source", source_nid[0]))
             
-            _set_xy(pid, 0.50, center)  # Procesos en el centro
-            
-            for nid, y in _spread_y(ref_in_nodes.get(pid, []), start, end).items():
-                _set_xy(nid, 0.35, y)  # IN pallets
-            
-            for nid, y in _spread_y(ref_out_nodes.get(pid, []), start, end).items():
-                _set_xy(nid, 0.65, y)  # OUT pallets
-            
-            cursor = end
-        
-        # Posicionar clientes (derecha)
-        cust_ids = [nid for nid in node_index if nid.startswith("CUST:")]
-        for cid, y in _spread_y(cust_ids, y0, y1).items():
-            _set_xy(cid, 0.95, y)
+            if connected_procs:
+                # Posicionar entre los procesos conectados
+                avg_x = 0
+                avg_y = 0
+                for conn_type, proc_nid in connected_procs:
+                    proc_idx = node_index[proc_nid]
+                    proc_node = nodes[proc_idx]
+                    if proc_node["x"] is not None:
+                        avg_x += proc_node["x"]
+                        avg_y += proc_node["y"]
+                avg_x /= len(connected_procs)
+                avg_y /= len(connected_procs)
+                
+                # Ajustar x según si es entrada o salida
+                if connected_procs[0][0] == "target":  # pallet → proceso (entrada)
+                    _set_xy(nid, avg_x - 0.08, avg_y)
+                else:  # proceso → pallet (salida)
+                    _set_xy(nid, avg_x + 0.08, avg_y)
+            else:
+                # Pallet sin proceso, posicionar a la izquierda
+                _set_xy(nid, 0.15, 0.5)
         
         print(f"Generados {len(nodes)} nodos y {len(links)} links")
         return {"nodes": nodes, "links": links}
