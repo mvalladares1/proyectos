@@ -769,14 +769,19 @@ class FlujoCajaService:
                     # Parsear
                     mes_str = get_periodo_from_odoo(periodo_val)
                     if not mes_str:
-                        print(f"[FlujoCaja WARNING] No se pudo parsear mes: '{date_month}'")
+                        print(f"[FlujoCaja WARNING] No se pudo parsear periodo: '{periodo_val}'")
                         continue
                     if mes_str not in meses_lista:
                         # El mes está fuera del rango solicitado
+                        print(f"[FlujoCaja WARNING] Periodo {mes_str} fuera de rango {meses_lista}")
                         continue
                     
                     acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
                     codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
+                    
+                    # Debug para cuenta específica
+                    if codigo_cuenta == "21010223":
+                        print(f"[DEBUG 21010223] Periodo: {periodo_val} → {mes_str}, Balance original: {-balance}, Balance invertido: {balance}")
                     
                     # Aplicar filtro de cuentas monitoreadas
                     if filtrar_monitoreadas and codigo_cuenta not in cuentas_monitoreadas:
