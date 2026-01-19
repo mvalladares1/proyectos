@@ -195,7 +195,13 @@ def render_visjs_timeline(
         <link href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
         <style>
             body {{ margin: 0; padding: 0; font-family: Arial, sans-serif; }}
-            #timeline {{ width: 100%; height: {height}; }}
+            #timeline-container {{ 
+                width: 100%; 
+                height: {height}; 
+                position: relative;
+                background: #1e1e1e;
+            }}
+            #timeline {{ width: 100%; height: 100%; }}
             .vis-item {{ 
                 border-radius: 4px; 
                 font-size: 11px;
@@ -232,10 +238,50 @@ def render_visjs_timeline(
                 background-color: #3498db !important;
                 border-color: #2980b9 !important;
             }}
+            /* Botón fullscreen */
+            #fullscreen-btn {{
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                z-index: 1000;
+                padding: 8px 12px;
+                background: #3498db;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }}
+            #fullscreen-btn:hover {{
+                background: #2980b9;
+            }}
+            /* Estilos en fullscreen */
+            #timeline-container:fullscreen {{
+                padding: 20px;
+                height: 100vh !important;
+            }}
+            #timeline-container:fullscreen #timeline {{
+                height: calc(100vh - 40px) !important;
+            }}
+            #timeline-container:-webkit-full-screen {{
+                padding: 20px;
+                height: 100vh !important;
+            }}
+            #timeline-container:-webkit-full-screen #timeline {{
+                height: calc(100vh - 40px) !important;
+            }}
         </style>
     </head>
     <body>
-        <div id="timeline"></div>
+        <div id="timeline-container">
+            <button id="fullscreen-btn" onclick="toggleFullscreen()">
+                <span id="fs-icon">⛶</span> <span id="fs-text">Pantalla completa</span>
+            </button>
+            <div id="timeline"></div>
+        </div>
         <script>
             var groups = new vis.DataSet({json.dumps(groups)});
             var items = new vis.DataSet({json.dumps(timeline_data)});
@@ -247,6 +293,9 @@ def render_visjs_timeline(
                 stack: true,
                 orientation: 'top',
                 margin: {{ item: 5 }},
+                verticalScroll: true,
+                horizontalScroll: true,
+                zoomKey: 'ctrlKey',
                 tooltip: {{
                     followMouse: true,
                     overflowMethod: 'cap'
@@ -265,15 +314,57 @@ def render_visjs_timeline(
                     console.log('Selected:', properties.items[0]);
                 }}
             }});
+            
+            // Fullscreen toggle
+            function toggleFullscreen() {{
+                var elem = document.getElementById('timeline-container');
+                var btn = document.getElementById('fullscreen-btn');
+                var icon = document.getElementById('fs-icon');
+                var text = document.getElementById('fs-text');
+                
+                if (!document.fullscreenElement && !document.webkitFullscreenElement) {{
+                    if (elem.requestFullscreen) {{
+                        elem.requestFullscreen();
+                    }} else if (elem.webkitRequestFullscreen) {{
+                        elem.webkitRequestFullscreen();
+                    }}
+                    icon.textContent = '✕';
+                    text.textContent = 'Salir';
+                }} else {{
+                    if (document.exitFullscreen) {{
+                        document.exitFullscreen();
+                    }} else if (document.webkitExitFullscreen) {{
+                        document.webkitExitFullscreen();
+                    }}
+                    icon.textContent = '⛶';
+                    text.textContent = 'Pantalla completa';
+                }}
+            }}
+            
+            // Escuchar cambios de fullscreen para actualizar botón
+            document.addEventListener('fullscreenchange', function() {{
+                var icon = document.getElementById('fs-icon');
+                var text = document.getElementById('fs-text');
+                if (!document.fullscreenElement) {{
+                    icon.textContent = '⛶';
+                    text.textContent = 'Pantalla completa';
+                    timeline.redraw();
+                }} else {{
+                    setTimeout(function() {{ timeline.redraw(); timeline.fit(); }}, 100);
+                }}
+            }});
+            
+            // Hacer la función global
+            window.toggleFullscreen = toggleFullscreen;
         </script>
     </body>
     </html>
     """
     
     st.markdown("### 📅 Línea de Tiempo")
-    st.caption("🔍 Scroll para zoom | ← → Arrastra para navegar")
+    st.caption("🔍 Ctrl+Scroll = zoom | ← → Arrastra | ↑↓ Scroll vertical | ⛶ Pantalla completa")
     
-    components.html(timeline_html, height=int(height.replace("px", "")) + 50, scrolling=False)
+    components.html(timeline_html, height=int(height.replace("px", "")) + 50, scrolling=True)
 
 
 def render_combined_view(

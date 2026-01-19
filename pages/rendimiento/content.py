@@ -451,7 +451,7 @@ def _render_visjs_diagram(visjs_data: dict):
         render_combined_view(
             visjs_data,
             network_height="500px",
-            timeline_height="450px"
+            timeline_height="750px"
         )
     else:
         # Solo red
