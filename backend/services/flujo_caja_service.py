@@ -783,18 +783,6 @@ class FlujoCajaService:
                     if concepto_id is None:
                         continue
                     
-                    # CORRECCIÓN: Para cuentas de préstamos (21*, 22*), ajustar concepto según signo del balance
-                    # Balance < 0 (débito en pasivo) = Pago de préstamo = 3.1.2
-                    # Balance > 0 (crédito en pasivo) = Obtención de préstamo = 3.0.1 o 3.0.2
-                    if codigo_cuenta.startswith(('21', '22')):
-                        if balance < 0:  # Débito (disminución de pasivo) = PAGO
-                            concepto_id = "3.1.2"  # Pagos de préstamos
-                        else:  # Crédito (aumento de pasivo) = OBTENCIÓN
-                            # Mantener concepto original (3.0.1 o 3.0.2 según mapeo)
-                            if concepto_id not in ["3.0.1", "3.0.2"]:
-                                # Si no está bien mapeado, usar corto plazo por defecto
-                                concepto_id = "3.0.2" if codigo_cuenta.startswith('21') else "3.0.1"
-                    
                     # Acumular monto en el concepto y mes correspondiente
                     if concepto_id not in montos_por_concepto_mes:
                         montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in meses_lista}
