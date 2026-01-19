@@ -94,16 +94,17 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
         if node_id not in node_ids:
             # Acortar nombre si es muy largo
             short_name = sname[:30] + "..." if len(sname) > 30 else sname
+            first_date = supplier_first_dates.get(sid, "")
             nodes.append(_create_node(
                 node_id,
                 short_name,
                 "SUPPLIER",
-                title=f"Proveedor: {sname}"
+                title=f"Proveedor: {sname}\nPrimera recepción: {first_date}" if first_date else f"Proveedor: {sname}",
+                date=first_date
             ))
             node_ids.add(node_id)
             
             # Timeline: Proveedor
-            first_date = supplier_first_dates.get(sid)
             if first_date:
                 timeline_data.append({
                     "id": node_id,
@@ -136,10 +137,11 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             
             nodes.append(_create_node(
                 node_id,
-                name,  # Solo el nombre, sin ícono
+                name,
                 node_type,
                 title=title,
-                value=qty
+                value=qty,
+                date=date
             ))
             node_ids.add(node_id)
             
@@ -172,11 +174,14 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 elif date:
                     title += f"\nFecha: {date}"
                 
+                # Usar fecha de inicio como fecha principal
+                node_date = mrp_start[:10] if mrp_start else date
                 nodes.append(_create_node(
                     node_id,
-                    ref,  # Solo la referencia
+                    ref,
                     "PROCESS",
-                    title=title
+                    title=title,
+                    date=node_date
                 ))
                 node_ids.add(node_id)
                 
@@ -219,7 +224,8 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 node_id,
                 short_name,
                 "CUSTOMER",
-                title=title
+                title=title,
+                date=scheduled_date[:10] if scheduled_date else ""
             ))
             node_ids.add(node_id)
             
@@ -321,7 +327,8 @@ def _create_node(
     label: str,
     node_type: str,
     title: str = "",
-    value: float = None
+    value: float = None,
+    date: str = ""
 ) -> Dict:
     """Crea un nodo en formato vis.js con nivel jerárquico explícito."""
     colors = NODE_COLORS.get(node_type, NODE_COLORS["PROCESS"])
@@ -331,8 +338,10 @@ def _create_node(
         "id": node_id,
         "label": label,
         "title": title,
-        "level": level,  # Crítico para layout jerárquico
+        "level": level,
         "color": colors["background"],
+        "date": date,  # Fecha para posicionamiento en timeline
+        "nodeType": node_type,  # Tipo para agrupación visual
     }
     
     return node

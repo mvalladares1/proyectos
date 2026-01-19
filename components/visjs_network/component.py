@@ -52,41 +52,107 @@ def render_visjs_network(
     
     # Generar HTML directamente con vis.js para control total del layout
     nodes_json = json.dumps(nodes)
-    # Preparar nodos con grupos
-    nodes_with_groups = []
+    # Calcular rango de fechas para posicionamiento
+    dates = []
     for n in nodes:
-        # Determinar grupo basado en el ID del nodo
+        if n.get("date"):
+            try:
+                dates.append(n["date"][:10])
+            except:
+                pass
+    
+    # Si no hay fechas, usar posiciones basadas en tipo
+    if dates:
+        min_date = min(dates)
+        max_date = max(dates)
+        # Calcular días entre min y max
+        from datetime import datetime
+        date_format = "%Y-%m-%d"
+        try:
+            min_dt = datetime.strptime(min_date, date_format)
+            max_dt = datetime.strptime(max_date, date_format)
+            date_range = (max_dt - min_dt).days or 1
+        except:
+            date_range = 30
+            min_dt = datetime.now()
+    else:
+        date_range = 30
+        min_dt = None
+    
+    # Posiciones Y por tipo de nodo (carriles)
+    Y_POSITIONS = {
+        "SUPPLIER": -200,
+        "PALLET_IN": -100,
+        "PROCESS": 0,
+        "PALLET_OUT": 100,
+        "CUSTOMER": 200,
+    }
+    
+    # Preparar nodos con posiciones calculadas
+    nodes_positioned = []
+    type_counters = {}  # Para distribuir nodos del mismo tipo en el mismo día
+    
+    for n in nodes:
         node_id = n["id"]
-        if node_id.startswith("SUPP:"):
-            group = "supplier"
-        elif node_id.startswith("PKG:"):
-            # Determinar si es IN o OUT basado en el color
-            color = n.get("color", "")
-            group = "pallet_out" if "#2ecc71" in color else "pallet_in"
-        elif node_id.startswith("PROC:"):
-            group = "process"
-        elif node_id.startswith("CUST:"):
-            group = "customer"
+        node_type = n.get("nodeType", "PROCESS")
+        node_date = n.get("date", "")
+        
+        # Calcular posición X basada en fecha
+        if node_date and min_dt:
+            try:
+                from datetime import datetime
+                node_dt = datetime.strptime(node_date[:10], "%Y-%m-%d")
+                days_from_start = (node_dt - min_dt).days
+                x_pos = (days_from_start / date_range) * 1500  # Escala a 1500px de ancho
+            except:
+                x_pos = 750  # Centro si hay error
         else:
-            group = "other"
+            # Sin fecha, posicionar por nivel
+            level = n.get("level", 2)
+            x_pos = level * 350
+        
+        # Posición Y basada en tipo + offset para evitar solapamiento
+        base_y = Y_POSITIONS.get(node_type, 0)
+        
+        # Agregar variación para nodos del mismo tipo cerca
+        key = f"{node_type}_{int(x_pos / 100)}"
+        type_counters[key] = type_counters.get(key, 0) + 1
+        y_offset = (type_counters[key] - 1) * 40  # 40px entre nodos cercanos
+        y_pos = base_y + y_offset
         
         node_data = {
             "id": node_id,
             "label": n.get("label", node_id),
-            "title": n.get("title", ""),
-            "group": group,
-            "value": 1  # Para scaling
+            "title": n.get("title", "").replace("\n", "<br>"),  # HTML para tooltip multilínea
+            "x": x_pos,
+            "y": y_pos,
+            "fixed": {"x": True, "y": False},  # X fijo por fecha, Y ajustable
+            "group": node_type.lower(),
         }
-        nodes_with_groups.append(node_data)
+        nodes_positioned.append(node_data)
     
-    nodes_json = json.dumps(nodes_with_groups)
+    nodes_json = json.dumps(nodes_positioned)
     edges_json = json.dumps([{
         "from": e["from"],
         "to": e["to"],
         "value": e.get("value", 1),
-        "width": max(1, min(8, e.get("value", 1) / 200)),
-        "title": f"{e.get('value', 0):,.0f} kg",
+        "width": max(1, min(6, e.get("value", 1) / 300)),
+        "title": f"<b>{e.get('value', 0):,.0f} kg</b>",
     } for e in edges])
+    
+    # Generar marcas de tiempo para el eje X
+    time_markers = ""
+    if dates and min_dt:
+        unique_dates = sorted(set(dates))
+        for d in unique_dates[:15]:  # Máximo 15 marcas
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(d, "%Y-%m-%d")
+                days = (dt - min_dt).days
+                x = (days / date_range) * 1500
+                time_markers += f'<div class="time-marker" style="left: {x + 60}px;">{d[5:]}</div>'
+            except:
+                pass
     
     network_html = f"""
     <!DOCTYPE html>
@@ -96,16 +162,38 @@ def render_visjs_network(
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             html, body {{ height: 100%; overflow: hidden; }}
-            body {{ background: #1a1a2e; }}
-            #network {{ width: 100vw; height: 100vh; }}
+            body {{ background: #1a1a2e; font-family: Arial, sans-serif; }}
+            #network {{ width: 100vw; height: calc(100vh - 30px); margin-top: 30px; }}
+            
+            /* Timeline axis */
+            #time-axis {{
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 30px;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                align-items: center;
+                padding: 0 60px;
+                overflow: hidden;
+            }}
+            .time-marker {{
+                position: absolute;
+                font-size: 10px;
+                color: #888;
+                transform: translateX(-50%);
+                white-space: nowrap;
+            }}
+            
+            /* Legend */
             #legend {{
                 position: absolute;
-                top: 10px;
+                top: 40px;
                 left: 10px;
-                background: rgba(0,0,0,0.7);
-                padding: 10px;
+                background: rgba(0,0,0,0.8);
+                padding: 12px;
                 border-radius: 8px;
-                font-family: Arial, sans-serif;
                 font-size: 11px;
                 color: white;
                 z-index: 1000;
@@ -113,38 +201,59 @@ def render_visjs_network(
             .legend-item {{
                 display: flex;
                 align-items: center;
-                margin: 5px 0;
+                margin: 6px 0;
+            }}
+            .legend-shape {{
+                width: 14px;
+                height: 14px;
+                margin-right: 8px;
+                border-radius: 2px;
             }}
             .legend-dot {{
-                width: 12px;
-                height: 12px;
                 border-radius: 50%;
-                margin-right: 8px;
             }}
-            .legend-square {{
-                width: 12px;
-                height: 12px;
-                margin-right: 8px;
+            
+            /* Lanes labels */
+            #lanes {{
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(0,0,0,0.6);
+                padding: 8px;
+                border-radius: 8px;
+                font-size: 10px;
+                color: #aaa;
             }}
-            .legend-triangle {{
-                width: 0;
-                height: 0;
-                border-left: 6px solid transparent;
-                border-right: 6px solid transparent;
-                border-bottom: 12px solid;
-                margin-right: 8px;
+            .lane-label {{
+                margin: 15px 0;
+                text-align: right;
             }}
         </style>
     </head>
     <body>
-        <div id="legend">
-            <div style="font-weight: bold; margin-bottom: 8px;">🗺️ Leyenda</div>
-            <div class="legend-item"><div class="legend-triangle" style="border-bottom-color: #9b59b6;"></div>Proveedor</div>
-            <div class="legend-item"><div class="legend-dot" style="background: #f39c12;"></div>Pallet Entrada</div>
-            <div class="legend-item"><div class="legend-square" style="background: #e74c3c;"></div>Proceso</div>
-            <div class="legend-item"><div class="legend-dot" style="background: #2ecc71;"></div>Pallet Salida</div>
-            <div class="legend-item"><div class="legend-square" style="background: #3498db;"></div>Cliente</div>
+        <div id="time-axis">
+            <span style="color: #666; font-size: 11px; margin-right: 20px;">📅 Timeline</span>
+            {time_markers}
         </div>
+        
+        <div id="legend">
+            <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 5px;">🗺️ Leyenda</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #9b59b6; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>Proveedor</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #f39c12;"></div>Pallet Entrada</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #e74c3c;"></div>Proceso</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #2ecc71;"></div>Pallet Salida</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #3498db;"></div>Cliente</div>
+        </div>
+        
+        <div id="lanes">
+            <div class="lane-label">Proveedores ↑</div>
+            <div class="lane-label">Pallets IN</div>
+            <div class="lane-label">Procesos</div>
+            <div class="lane-label">Pallets OUT</div>
+            <div class="lane-label">Clientes ↓</div>
+        </div>
+        
         <div id="network"></div>
         <script>
             var nodes = new vis.DataSet({nodes_json});
@@ -154,128 +263,79 @@ def render_visjs_network(
             var data = {{ nodes: nodes, edges: edges }};
             
             var options = {{
-                nodes: {{
-                    scaling: {{
-                        min: 16,
-                        max: 32
-                    }},
-                    font: {{
-                        size: 11,
-                        color: '#ffffff',
-                        face: 'Arial'
-                    }},
-                    borderWidth: 2
-                }},
-                edges: {{
-                    color: {{
-                        color: 'rgba(150, 150, 150, 0.6)',
-                        highlight: '#ffffff',
-                        hover: '#ffffff'
-                    }},
-                    smooth: {{
-                        enabled: true,
-                        type: 'continuous',
-                        roundness: 0.5
-                    }},
-                    arrows: {{
-                        to: {{ enabled: true, scaleFactor: 0.5 }}
-                    }}
+                layout: {{
+                    improvedLayout: false
                 }},
                 physics: {{
-                    forceAtlas2Based: {{
-                        gravitationalConstant: -50,
-                        centralGravity: 0.01,
-                        springLength: 150,
-                        springConstant: 0.08,
-                        damping: 0.4,
-                        avoidOverlap: 0.5
-                    }},
-                    maxVelocity: 50,
-                    solver: 'forceAtlas2Based',
-                    timestep: 0.35,
+                    enabled: true,
                     stabilization: {{
                         enabled: true,
-                        iterations: 300,
-                        updateInterval: 25
+                        iterations: 100
+                    }},
+                    barnesHut: {{
+                        gravitationalConstant: -2000,
+                        centralGravity: 0.1,
+                        springLength: 100,
+                        springConstant: 0.04,
+                        damping: 0.5
                     }}
                 }},
                 interaction: {{
                     hover: true,
-                    tooltipDelay: 100,
+                    tooltipDelay: 50,
                     zoomView: true,
                     dragView: true,
                     dragNodes: true,
                     navigationButtons: true,
                     keyboard: {{ enabled: true, bindToWindow: false }}
                 }},
+                nodes: {{
+                    scaling: {{ min: 15, max: 30 }},
+                    font: {{ size: 10, color: '#ffffff', face: 'Arial' }},
+                    borderWidth: 2
+                }},
+                edges: {{
+                    color: {{ color: 'rgba(150, 150, 150, 0.5)', highlight: '#fff', hover: '#fff' }},
+                    smooth: {{ enabled: true, type: 'curvedCW', roundness: 0.2 }},
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.4 }} }},
+                    hoverWidth: 2
+                }},
                 groups: {{
                     supplier: {{
                         shape: 'triangle',
-                        color: {{
-                            background: '#9b59b6',
-                            border: '#8e44ad',
-                            highlight: {{ background: '#a569bd', border: '#9b59b6' }},
-                            hover: {{ background: '#a569bd', border: '#9b59b6' }}
-                        }},
-                        size: 25
+                        color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
+                        size: 22
                     }},
                     pallet_in: {{
                         shape: 'dot',
-                        color: {{
-                            background: '#f39c12',
-                            border: '#d68910',
-                            highlight: {{ background: '#f5b041', border: '#f39c12' }},
-                            hover: {{ background: '#f5b041', border: '#f39c12' }}
-                        }},
-                        size: 18
+                        color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
+                        size: 16
                     }},
                     process: {{
                         shape: 'square',
-                        color: {{
-                            background: '#e74c3c',
-                            border: '#c0392b',
-                            highlight: {{ background: '#ec7063', border: '#e74c3c' }},
-                            hover: {{ background: '#ec7063', border: '#e74c3c' }}
-                        }},
-                        size: 20
+                        color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
+                        size: 18
                     }},
                     pallet_out: {{
                         shape: 'dot',
-                        color: {{
-                            background: '#2ecc71',
-                            border: '#27ae60',
-                            highlight: {{ background: '#58d68d', border: '#2ecc71' }},
-                            hover: {{ background: '#58d68d', border: '#2ecc71' }}
-                        }},
-                        size: 18
+                        color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
+                        size: 16
                     }},
                     customer: {{
                         shape: 'square',
-                        color: {{
-                            background: '#3498db',
-                            border: '#2980b9',
-                            highlight: {{ background: '#5dade2', border: '#3498db' }},
-                            hover: {{ background: '#5dade2', border: '#3498db' }}
-                        }},
-                        size: 22
-                    }},
-                    other: {{
-                        shape: 'dot',
-                        color: '#666666',
-                        size: 15
+                        color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
+                        size: 20
                     }}
                 }}
             }};
             
             var network = new vis.Network(container, data, options);
             
-            // Fit después de estabilizar
+            // Estabilizar y luego desactivar física para mantener layout
             network.once('stabilizationIterationsDone', function() {{
+                network.setOptions({{ physics: {{ enabled: false }} }});
                 network.fit({{
-                    animation: {{
-                        duration: 500,
-                        easingFunction: 'easeInOutQuad'
-                    }}
+                    animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }}
                 }});
             }});
         </script>
