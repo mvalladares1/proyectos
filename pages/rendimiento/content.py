@@ -374,36 +374,24 @@ def _render_sankey(username: str, password: str):
 
 
 def _render_sankey_plotly(sankey_data: dict):
-    """Renderiza el diagrama Sankey con Plotly."""
-    node_x = [n.get("x") for n in sankey_data["nodes"]]
-    node_y = [n.get("y") for n in sankey_data["nodes"]]
-    has_positions = all(v is not None for v in node_x) and all(v is not None for v in node_y)
-
-    # Crear figura Sankey
-    node_dict = dict(
-        pad=15,
-        thickness=20,
-        line=dict(color="black", width=0.5),
-        label=[n["label"] for n in sankey_data["nodes"]],
-        color=[n["color"] for n in sankey_data["nodes"]],
-        customdata=[n.get("detail", "") for n in sankey_data["nodes"]],
-        hovertemplate="%{label}<br>%{customdata}<extra></extra>"
-    )
-    sankey_kwargs = {}
-    if has_positions:
-        node_dict["x"] = node_x
-        node_dict["y"] = node_y
-        sankey_kwargs["arrangement"] = "fixed"
-
+    """Renderiza el diagrama Sankey con Plotly (layout automático)."""
+    # Crear figura Sankey con layout automático de Plotly
     fig = go.Figure(data=[go.Sankey(
-        node=node_dict,
+        node=dict(
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=0.5),
+            label=[n["label"] for n in sankey_data["nodes"]],
+            color=[n["color"] for n in sankey_data["nodes"]],
+            customdata=[str(n.get("detail", "")) for n in sankey_data["nodes"]],
+            hovertemplate="%{label}<br>%{customdata}<extra></extra>"
+        ),
         link=dict(
             source=[l["source"] for l in sankey_data["links"]],
             target=[l["target"] for l in sankey_data["links"]],
             value=[l["value"] for l in sankey_data["links"]],
             color=[l.get("color", "rgba(200,200,200,0.35)") for l in sankey_data["links"]],
-        ),
-        **sankey_kwargs
+        )
     )])
     
     fig.update_layout(
@@ -509,14 +497,6 @@ def _render_reactflow_diagram(reactflow_data: dict):
         st.warning("No hay nodos para mostrar")
         return
     
-    # Mostrar línea de tiempo
-    if timeline_dates:
-        st.markdown("### 📅 Línea de Tiempo")
-        cols = st.columns(min(len(timeline_dates), 10))
-        for i, date in enumerate(timeline_dates[:10]):
-            with cols[i]:
-                st.markdown(f"**{date}**")
-    
     # Mostrar estadísticas
     st.markdown("### 📊 Resumen")
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -531,73 +511,71 @@ def _render_reactflow_diagram(reactflow_data: dict):
     with col5:
         st.metric("🔵 Clientes", stats.get("customers", 0))
     
+    # Mostrar línea de tiempo si hay fechas
+    if timeline_dates:
+        with st.expander(f"📅 Línea de Tiempo ({len(timeline_dates)} fechas)", expanded=False):
+            st.write(", ".join(timeline_dates[:20]))
+    
     st.markdown("---")
     
-    # Selector de layout
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        layout_option = st.selectbox(
-            "Layout:",
-            ["Layered (Horizontal)", "Tree", "Radial"],
-            key="reactflow_layout"
-        )
+    # Usar session_state para mantener el estado del flow
+    flow_state_key = "reactflow_state"
     
-    # Crear nodos y edges
-    nodes = []
-    for node in nodes_data:
-        nodes.append(StreamlitFlowNode(
-            id=node["id"],
-            pos=(node["position"]["x"], node["position"]["y"]),
-            data=node["data"],
-            node_type=node.get("type", "default"),
-            source_position=node.get("source_position", "right"),
-            target_position=node.get("target_position", "left"),
-            style=node.get("style", {})
-        ))
+    # Solo crear nodos/edges si no existen en session_state o si los datos cambiaron
+    if flow_state_key not in st.session_state or st.session_state.get("reactflow_data_hash") != hash(str(nodes_data)):
+        nodes = []
+        for node in nodes_data:
+            nodes.append(StreamlitFlowNode(
+                id=node["id"],
+                pos=(node["position"]["x"], node["position"]["y"]),
+                data=node["data"],
+                node_type=node.get("type", "default"),
+                source_position=node.get("source_position", "right"),
+                target_position=node.get("target_position", "left"),
+                style=node.get("style", {})
+            ))
+        
+        edges = []
+        for edge in edges_data:
+            edges.append(StreamlitFlowEdge(
+                id=edge["id"],
+                source=edge["source"],
+                target=edge["target"],
+                label=edge.get("label", ""),
+                animated=edge.get("animated", False),
+                edge_type=edge.get("edge_type", "smoothstep"),
+                style=edge.get("style", {}),
+                label_style=edge.get("label_style", {})
+            ))
+        
+        st.session_state[flow_state_key] = StreamlitFlowState(nodes=nodes, edges=edges)
+        st.session_state["reactflow_data_hash"] = hash(str(nodes_data))
     
-    edges = []
-    for edge in edges_data:
-        edges.append(StreamlitFlowEdge(
-            id=edge["id"],
-            source=edge["source"],
-            target=edge["target"],
-            label=edge.get("label", ""),
-            animated=edge.get("animated", False),
-            edge_type=edge.get("edge_type", "smoothstep"),
-            style=edge.get("style", {}),
-            label_style=edge.get("label_style", {})
-        ))
+    # Layout fijo (Layered horizontal)
+    layout = LayeredLayout(direction="right", node_node_spacing=50, node_layer_spacing=200)
     
-    # Configurar layout
-    if layout_option == "Layered (Horizontal)":
-        layout = LayeredLayout(direction="right", node_node_spacing=50, node_layer_spacing=200)
-    elif layout_option == "Tree":
-        layout = TreeLayout(direction="right")
-    else:
-        layout = RadialLayout()
-    
-    # Crear estado
-    state = StreamlitFlowState(nodes=nodes, edges=edges)
-    
-    # Renderizar
+    # Renderizar con estado persistente
     updated_state = streamlit_flow(
         key="traceability_flow",
-        state=state,
+        state=st.session_state[flow_state_key],
         layout=layout,
         fit_view=True,
         height=700,
-        enable_node_menu=True,
-        enable_edge_menu=True,
-        enable_pane_menu=False,
+        show_minimap=True,
+        show_controls=True,
         hide_watermark=True,
         allow_new_edges=False,
+        pan_on_drag=True,
         allow_zoom=True,
         min_zoom=0.1,
+        get_node_on_click=True,
     )
     
-    # Mostrar nodo seleccionado
-    if updated_state and updated_state.selected_id:
-        st.info(f"📍 Nodo seleccionado: **{updated_state.selected_id}**")
+    # Actualizar estado si cambió
+    if updated_state:
+        st.session_state[flow_state_key] = updated_state
+        if updated_state.selected_id:
+            st.info(f"📍 Nodo seleccionado: **{updated_state.selected_id}**")
 
 
 def _render_sankey_stats(sankey_data: dict):
