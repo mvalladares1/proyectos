@@ -288,8 +288,15 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         df_mos['periodo'] = df_mos['fecha_dt'].dt.strftime('%b %Y')
         df_mos['periodo_sort'] = df_mos['fecha_dt'].dt.to_period('M').dt.start_time
     
-    # Clasificar túneles: Estático vs Continuo
-    def clasificar_tunel(sala):
+    # Clasificar túneles: Estático vs Continuo (incluyendo Túnel Continuo por product_name)
+    def clasificar_tunel(sala, product_name=''):
+        """Clasifica el túnel incluyendo Túnel Continuo por nombre de producto."""
+        # CASO ESPECIAL: Túnel Continuo por nombre de producto
+        if product_name:
+            product_upper = str(product_name).upper()
+            if '[1.4]' in str(product_name) and 'TÚNEL CONTÍNUO' in product_upper:
+                return 'Túnel Continuo'
+        
         if not sala:
             return sala
         sala_upper = str(sala).upper()
@@ -297,7 +304,26 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
             return f"{sala} (Estático)"
         return sala
     
-    df_mos['sala_clasificada'] = df_mos['sala'].apply(clasificar_tunel)
+    # Función para determinar tipo real (Túnel Continuo es CONGELADO)
+    def get_tipo_real(row):
+        """Determina el tipo real considerando Túnel Continuo como CONGELADO."""
+        product_name = row['product_name'] if 'product_name' in row.index else ''
+        if product_name:
+            product_upper = str(product_name).upper()
+            if '[1.4]' in str(product_name) and 'TÚNEL CONTÍNUO' in product_upper:
+                return 'CONGELADO'
+        sala_tipo = row['sala_tipo'] if 'sala_tipo' in row.index else 'SIN_SALA'
+        return sala_tipo if sala_tipo else 'SIN_SALA'
+    
+    # Aplicar clasificaciones
+    if 'product_name' in df_mos.columns:
+        df_mos['sala_clasificada'] = df_mos.apply(
+            lambda row: clasificar_tunel(row['sala'], row['product_name']), axis=1
+        )
+    else:
+        df_mos['sala_clasificada'] = df_mos['sala'].apply(lambda s: clasificar_tunel(s, ''))
+    
+    df_mos['sala_tipo_real'] = df_mos.apply(get_tipo_real, axis=1)
     
     # Agregar columna de planta
     df_mos['planta'] = df_mos.apply(
@@ -305,8 +331,8 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         axis=1
     )
     
-    # Agrupar por período y sala
-    df_grouped = df_mos.groupby(['periodo', 'periodo_sort', 'sala_clasificada', 'sala_tipo']).agg({
+    # Agrupar por período y sala (usar sala_tipo_real para incluir Túnel Continuo en CONGELADO)
+    df_grouped = df_mos.groupby(['periodo', 'periodo_sort', 'sala_clasificada', 'sala_tipo_real']).agg({
         'kg_pt': 'sum',
         'kg_mp': 'sum',
         'mo_id': 'count'
@@ -351,7 +377,7 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
                 (agrupacion == "Semana" and pd.to_datetime(mo['fecha']).strftime('S%W-%Y') == periodo) or
                 (agrupacion == "Mes" and pd.to_datetime(mo['fecha']).strftime('%b-%Y') == periodo)
             )
-            and clasificar_tunel(mo.get('sala', '')) == sala
+            and clasificar_tunel(mo.get('sala', ''), mo.get('product_name', '')) == sala
         ]
         
         if not mos_filtradas:
@@ -696,20 +722,41 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
         
         _fragment_kpis_congelado()
         
+        # Función para detectar MOs de congelado (incluyendo Túnel Continuo)
+        def es_mo_congelado(mo):
+            """Determina si una MO es de congelado (túnel estático o continuo)."""
+            if mo.get('sala_tipo') == 'CONGELADO':
+                return True
+            product_name = mo.get('product_name', '')
+            if product_name:
+                product_upper = str(product_name).upper()
+                return '[1.4]' in product_name and 'TÚNEL CONTÍNUO' in product_upper
+            return False
+        
         # === KPIs POR TÚNEL INDIVIDUAL ===
         if mos:
-            mos_congelado = [mo for mo in mos if mo.get('sala_tipo') == 'CONGELADO']
+            mos_congelado = [mo for mo in mos if es_mo_congelado(mo)]
             if mos_congelado:
                 st.markdown("---")
                 st.markdown("### 🧊 KPIs por Túnel Individual")
-                st.caption("Rendimiento y producción de cada túnel")
+                st.caption("Rendimiento y producción de cada túnel (incluyendo Túnel Continuo)")
                 
                 # Agrupar por sala/túnel
                 from collections import defaultdict
                 tuneles_data = defaultdict(lambda: {'kg_mp': 0, 'kg_pt': 0, 'mos': 0, 'kg_merma': 0})
                 
                 for mo in mos_congelado:
-                    sala = mo.get('sala', 'Sin Sala')
+                    # Determinar nombre del túnel (Túnel Continuo por product_name)
+                    product_name = mo.get('product_name', '')
+                    if product_name:
+                        product_upper = str(product_name).upper()
+                        if '[1.4]' in product_name and 'TÚNEL CONTÍNUO' in product_upper:
+                            sala = 'Túnel Continuo'
+                        else:
+                            sala = mo.get('sala', 'Sin Sala')
+                    else:
+                        sala = mo.get('sala', 'Sin Sala')
+                    
                     tuneles_data[sala]['kg_mp'] += mo.get('kg_mp', 0) or 0
                     tuneles_data[sala]['kg_pt'] += mo.get('kg_pt', 0) or 0
                     tuneles_data[sala]['kg_merma'] += mo.get('kg_merma', 0) or 0
@@ -752,10 +799,10 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
         
         # === DETALLE DE FABRICACIONES - CONGELADO ===
         if mos:
-            # Filtrar solo MOs de congelado
-            mos_congelado = [mo for mo in mos if mo.get('sala_tipo') == 'CONGELADO']
-            if mos_congelado:
-                _render_detalle_fabricaciones(mos_congelado, fecha_inicio_rep, fecha_fin_rep, username, password, tipo_filtro='CONGELADO')
+            # Filtrar MOs de congelado (incluyendo Túnel Continuo)
+            mos_congelado_detalle = [mo for mo in mos if es_mo_congelado(mo)]
+            if mos_congelado_detalle:
+                _render_detalle_fabricaciones(mos_congelado_detalle, fecha_inicio_rep, fecha_fin_rep, username, password, tipo_filtro='CONGELADO')
 
 
 def _render_resumen_fruta_manejo(consolidado):

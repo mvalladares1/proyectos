@@ -915,23 +915,26 @@ class FlujoCajaService:
             import traceback
             traceback.print_exc()
 
-        # 5a.1 CUENTAS PARAMETRIZADAS: Incluir TODOS los movimientos de cuentas mapeadas explícitamente
-        # aunque NO toquen efectivo (para visibilidad de compromisos futuros como leasings, intereses, etc.)
+        # 5a.1 CUENTAS PARAMETRIZADAS: Incluir SOLO los movimientos que NO tocaron efectivo
+        # (para visibilidad de compromisos futuros como leasings, intereses devengados, etc.)
+        # IMPORTANTE: Excluir asientos que YA fueron procesados en el flujo normal
         try:
             # Obtener códigos de cuentas explícitamente mapeadas
             cuentas_parametrizadas = list(self.mapeo_cuentas.get("mapeo_cuentas", {}).keys())
             
-            if cuentas_parametrizadas:
+            if cuentas_parametrizadas and asientos_ids:
                 print(f"[FlujoCaja] Procesando {len(cuentas_parametrizadas)} cuentas parametrizadas...")
+                print(f"[FlujoCaja] Excluyendo {len(asientos_ids)} asientos que ya tocaron efectivo...")
                 
-                # Buscar movimientos de estas cuentas en el periodo (posted + draft)
+                # Buscar movimientos de estas cuentas que NO estén en asientos de efectivo
                 lineas_parametrizadas = self.odoo.search_read(
                     'account.move.line',
                     [
                         ['account_id.code', 'in', cuentas_parametrizadas],
                         ['parent_state', 'in', ['posted', 'draft']],
                         ['date', '>=', fecha_inicio],
-                        ['date', '<=', fecha_fin]
+                        ['date', '<=', fecha_fin],
+                        ['move_id', 'not in', asientos_ids]  # EXCLUIR asientos que ya tocaron efectivo
                     ],
                     ['account_id', 'name', 'balance', 'date'],
                     limit=10000
