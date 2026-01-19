@@ -84,9 +84,9 @@ def render_visjs_network(
         "title": f"<b>{e.get('value', 0):,.0f} kg</b>",
     } for e in edges]
     
-    # ============ LAYOUT 1: RADIAL (con más espacio) ============
-    # Radios más grandes y mejor distribución
-    type_radius = {"SUPPLIER": 550, "PALLET_IN": 380, "PROCESS": 180, "PALLET_OUT": 380, "CUSTOMER": 550}
+    # ============ LAYOUT 1: RADIAL (con MUCHO más espacio) ============
+    # Radios mucho más grandes para mejor visualización
+    type_radius = {"SUPPLIER": 1200, "PALLET_IN": 800, "PROCESS": 350, "PALLET_OUT": 800, "CUSTOMER": 1200}
     
     # Contar nodos por tipo para distribuir mejor
     nodes_by_type = {}
@@ -99,19 +99,19 @@ def render_visjs_network(
     nodes_radial = []
     for node_type, type_nodes in nodes_by_type.items():
         count = len(type_nodes)
-        radius = type_radius.get(node_type, 300)
+        radius = type_radius.get(node_type, 500)
         
         # Definir el arco donde se distribuyen los nodos de este tipo
         if node_type == "SUPPLIER":
-            start_angle, end_angle = 150, 210  # Izquierda
+            start_angle, end_angle = 140, 220  # Izquierda amplio
         elif node_type == "PALLET_IN":
-            start_angle, end_angle = 120, 240  # Izquierda-centro
+            start_angle, end_angle = 100, 260  # Izquierda-centro más amplio
         elif node_type == "PROCESS":
             start_angle, end_angle = 0, 360  # Centro (todo el círculo)
         elif node_type == "PALLET_OUT":
-            start_angle, end_angle = -60, 60  # Derecha-centro
+            start_angle, end_angle = -80, 80  # Derecha-centro más amplio
         elif node_type == "CUSTOMER":
-            start_angle, end_angle = -30, 30  # Derecha
+            start_angle, end_angle = -40, 40  # Derecha
         else:
             start_angle, end_angle = 0, 360
         
@@ -126,7 +126,7 @@ def render_visjs_network(
             rad = math.radians(angle)
             x = radius * math.cos(rad)
             y = radius * math.sin(rad)
-            nodes_radial.append({**n, "x": x, "y": y, "fixed": True})
+            nodes_radial.append({**n, "x": x, "y": y, "fixed": {"x": True, "y": True}})
     
     # ============ LAYOUT 2: FÍSICA (ORIGINAL) ============
     nodes_physics = [{**n} for n in nodes_base]  # Sin posiciones fijas
@@ -171,7 +171,7 @@ def render_visjs_network(
                 font-size: 11px;
             }}
             .network-canvas {{
-                height: 450px;
+                height: 700px;
                 width: 100%;
             }}
             
@@ -295,13 +295,24 @@ def render_visjs_network(
                 {{
                     layout: {{ improvedLayout: false }},
                     physics: {{ enabled: false }},
-                    interaction: {{ ...interactionOptions, dragNodes: false }},
+                    interaction: {{ 
+                        ...interactionOptions, 
+                        dragNodes: true,
+                        zoomView: true,
+                        dragView: true
+                    }},
                     nodes: nodeOptions,
                     edges: edgeOptions,
                     groups: groupOptions
                 }}
             );
-            network1.fit({{ animation: false }});
+            // Fit con padding para ver todo
+            setTimeout(function() {{
+                network1.fit({{ 
+                    animation: {{ duration: 500 }},
+                    scale: 0.4
+                }});
+            }}, 100);
             
             // ========== NETWORK 2: FÍSICA ==========
             var network2 = new vis.Network(
