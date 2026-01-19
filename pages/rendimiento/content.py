@@ -15,6 +15,16 @@ from shared.auth import tiene_acceso_pagina
 
 from .shared import fmt_numero, get_trazabilidad_inversa, get_sankey_data, get_container_partners, get_sankey_producers
 
+# Importar componente Timeline Flow
+try:
+    from components.timeline_flow import render_timeline_flow, render_simple_flow
+    from components.timeline_flow.component import FLOW_AVAILABLE
+    TIMELINE_FLOW_AVAILABLE = FLOW_AVAILABLE
+except ImportError:
+    TIMELINE_FLOW_AVAILABLE = False
+    render_timeline_flow = None
+    render_simple_flow = None
+
 
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
@@ -259,10 +269,24 @@ def _render_materia_prima(registro: dict, nivel: int):
 
 
 def _render_sankey(username: str, password: str):
-    """Renderiza el tab del diagrama Sankey."""
-    st.subheader("🔗 Diagrama Sankey: Trazabilidad de Paquetes")
-    st.caption("IN (paquetes origen) → Proceso (reference) → OUT (paquetes destino) → Cliente (ventas)")
-
+    """Renderiza el tab del diagrama de trazabilidad."""
+    st.subheader("🔗 Diagrama de Trazabilidad")
+    
+    # Selector de tipo de diagrama
+    st.markdown("### 📊 Tipo de Visualización")
+    
+    diagram_types = ["📈 Sankey (Plotly)", "🔀 Flujo con Línea de Tiempo", "📋 Tabla de Conexiones"]
+    if not TIMELINE_FLOW_AVAILABLE:
+        diagram_types = ["📈 Sankey (Plotly)", "📋 Tabla de Conexiones"]
+    
+    diagram_type = st.radio(
+        "Selecciona el tipo de diagrama:",
+        diagram_types,
+        horizontal=True,
+        key="diagram_type_selector"
+    )
+    
+    st.markdown("---")
     st.markdown("### 📅 Período para Diagrama")
     col1, col2 = st.columns(2)
     with col1:
@@ -285,7 +309,8 @@ def _render_sankey(username: str, password: str):
     st.caption("🔒 Filtro de productor disponible próximamente")
     
     if st.button("🔄 Generar Diagrama", type="primary"):
-        with st.spinner("Generando diagrama Sankey..."):
+        spinner_msg = "Generando diagrama..." if diagram_type != "📈 Sankey (Plotly)" else "Generando diagrama Sankey..."
+        with st.spinner(spinner_msg):
             sankey_data = get_sankey_data(
                 username, password,
                 fecha_inicio.strftime("%Y-%m-%d"),
@@ -300,72 +325,116 @@ def _render_sankey(username: str, password: str):
                 st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
                 return
             
-            node_x = [n.get("x") for n in sankey_data["nodes"]]
-            node_y = [n.get("y") for n in sankey_data["nodes"]]
-            has_positions = all(v is not None for v in node_x) and all(v is not None for v in node_y)
-
-            # Crear figura Sankey
-            node_dict = dict(
-                pad=15,
-                thickness=20,
-                line=dict(color="black", width=0.5),
-                label=[n["label"] for n in sankey_data["nodes"]],
-                color=[n["color"] for n in sankey_data["nodes"]],
-                customdata=[n.get("detail", "") for n in sankey_data["nodes"]],
-                hovertemplate="%{label}<br>%{customdata}<extra></extra>"
-            )
-            sankey_kwargs = {}
-            if has_positions:
-                node_dict["x"] = node_x
-                node_dict["y"] = node_y
-                sankey_kwargs["arrangement"] = "fixed"
-
-            fig = go.Figure(data=[go.Sankey(
-                node=node_dict,
-                link=dict(
-                    source=[l["source"] for l in sankey_data["links"]],
-                    target=[l["target"] for l in sankey_data["links"]],
-                    value=[l["value"] for l in sankey_data["links"]],
-                    color=[l.get("color", "rgba(200,200,200,0.35)") for l in sankey_data["links"]],
-                ),
-                **sankey_kwargs
-            )])
+            # Renderizar según el tipo de diagrama seleccionado
+            if diagram_type == "📈 Sankey (Plotly)":
+                _render_sankey_plotly(sankey_data)
+            elif diagram_type == "🔀 Flujo con Línea de Tiempo" and TIMELINE_FLOW_AVAILABLE:
+                render_timeline_flow(sankey_data)
+            elif diagram_type == "📋 Tabla de Conexiones":
+                _render_connections_table(sankey_data)
             
-            fig.update_layout(
-                title="Trazabilidad Completa de Paquetes",
-                height=800,
-                font=dict(size=10)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Estadísticas
-            st.markdown("---")
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
-                st.metric("🏭 Proveedores", len([n for n in sankey_data["nodes"] if n["color"] == "#9b59b6"]))
-            with col2:
-                st.metric("📥 Recepciones", len([n for n in sankey_data["nodes"] if n["color"] == "#1abc9c"]))
-            with col3:
-                st.metric("🔴 Procesos", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
-            with col4:
-                st.metric("🟢 Pallets OUT", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
-            with col5:
-                st.metric("🔵 Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
-            
-            # Leyenda
-            st.markdown("##### Leyenda de Nodos:")
-            st.markdown("""
-            - 🏭 **Proveedor** (morado): Origen de la mercadería
-            - 📥 **Recepción** (turquesa): Entrada desde proveedor
-            - 🔴 **Proceso** (rojo): Operación/transformación
-            - 🟠 **Pallet IN** (naranja): Pallet que entra
-            - 🟢 **Pallet OUT** (verde): Pallet que sale
-            - 🔵 **Cliente** (azul): Destino de venta
-            """)
-            st.markdown("##### Conexiones:")
-            st.markdown("""
-            - 🟣 **Continuidad** (morado): Pallet OUT → mismo Pallet IN en otro proceso
-            """)
+            # Estadísticas (siempre mostrar)
+            _render_sankey_stats(sankey_data)
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
+
+
+def _render_sankey_plotly(sankey_data: dict):
+    """Renderiza el diagrama Sankey con Plotly."""
+    node_x = [n.get("x") for n in sankey_data["nodes"]]
+    node_y = [n.get("y") for n in sankey_data["nodes"]]
+    has_positions = all(v is not None for v in node_x) and all(v is not None for v in node_y)
+
+    # Crear figura Sankey
+    node_dict = dict(
+        pad=15,
+        thickness=20,
+        line=dict(color="black", width=0.5),
+        label=[n["label"] for n in sankey_data["nodes"]],
+        color=[n["color"] for n in sankey_data["nodes"]],
+        customdata=[n.get("detail", "") for n in sankey_data["nodes"]],
+        hovertemplate="%{label}<br>%{customdata}<extra></extra>"
+    )
+    sankey_kwargs = {}
+    if has_positions:
+        node_dict["x"] = node_x
+        node_dict["y"] = node_y
+        sankey_kwargs["arrangement"] = "fixed"
+
+    fig = go.Figure(data=[go.Sankey(
+        node=node_dict,
+        link=dict(
+            source=[l["source"] for l in sankey_data["links"]],
+            target=[l["target"] for l in sankey_data["links"]],
+            value=[l["value"] for l in sankey_data["links"]],
+            color=[l.get("color", "rgba(200,200,200,0.35)") for l in sankey_data["links"]],
+        ),
+        **sankey_kwargs
+    )])
+    
+    fig.update_layout(
+        title="Trazabilidad Completa de Paquetes",
+        height=800,
+        font=dict(size=10)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_connections_table(sankey_data: dict):
+    """Renderiza una tabla de conexiones."""
+    st.markdown("### 📋 Tabla de Conexiones")
+    
+    # Crear diccionario de nodos por índice
+    nodes_by_idx = {i: n for i, n in enumerate(sankey_data["nodes"])}
+    
+    # Crear tabla de conexiones
+    connections = []
+    for link in sankey_data["links"]:
+        source_node = nodes_by_idx.get(link["source"], {})
+        target_node = nodes_by_idx.get(link["target"], {})
+        connections.append({
+            "Origen": source_node.get("label", "?"),
+            "Tipo Origen": source_node.get("type", "?"),
+            "Destino": target_node.get("label", "?"),
+            "Tipo Destino": target_node.get("type", "?"),
+            "Cantidad": link.get("value", 0),
+        })
+    
+    if connections:
+        import pandas as pd
+        df = pd.DataFrame(connections)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay conexiones para mostrar")
+
+
+def _render_sankey_stats(sankey_data: dict):
+    """Renderiza las estadísticas del diagrama."""
+    st.markdown("---")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("🏭 Proveedores", len([n for n in sankey_data["nodes"] if n["color"] == "#9b59b6"]))
+    with col2:
+        st.metric("📥 Recepciones", len([n for n in sankey_data["nodes"] if n["color"] == "#1abc9c"]))
+    with col3:
+        st.metric("🔴 Procesos", len([n for n in sankey_data["nodes"] if n["color"] == "#e74c3c"]))
+    with col4:
+        st.metric("🟢 Pallets OUT", len([n for n in sankey_data["nodes"] if n["color"] == "#2ecc71"]))
+    with col5:
+        st.metric("🔵 Clientes", len([n for n in sankey_data["nodes"] if n["color"] == "#3498db"]))
+    
+    # Leyenda
+    st.markdown("##### Leyenda de Nodos:")
+    st.markdown("""
+    - 🏭 **Proveedor** (morado): Origen de la mercadería
+    - 📥 **Recepción** (turquesa): Entrada desde proveedor
+    - 🔴 **Proceso** (rojo): Operación/transformación
+    - 🟠 **Pallet IN** (naranja): Pallet que entra
+    - 🟢 **Pallet OUT** (verde): Pallet que sale
+    - 🔵 **Cliente** (azul): Destino de venta
+    """)
+    st.markdown("##### Conexiones:")
+    st.markdown("""
+    - 🟣 **Continuidad** (morado): Pallet OUT → mismo Pallet IN en otro proceso
+    """)
