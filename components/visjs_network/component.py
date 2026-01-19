@@ -52,6 +52,20 @@ def render_visjs_network(
     
     # Generar HTML directamente con vis.js para control total del layout
     nodes_json = json.dumps(nodes)
+    # Preparar nodos con level explícito
+    nodes_with_level = []
+    for n in nodes:
+        node_data = {
+            "id": n["id"],
+            "label": n.get("label", n["id"]),
+            "title": n.get("title", ""),
+            "level": n.get("level", 2),  # Nivel jerárquico
+            "color": n.get("color", "#97c2fc"),
+            "font": {"color": "#ffffff", "size": 9}
+        }
+        nodes_with_level.append(node_data)
+    
+    nodes_json = json.dumps(nodes_with_level)
     edges_json = json.dumps([{
         "from": e["from"],
         "to": e["to"],
@@ -60,17 +74,19 @@ def render_visjs_network(
         "width": max(1, min(10, e.get("value", 1) / 150)),
         "title": f"{e.get('value', 0):,.0f} kg",
         "arrows": "to",
-        "smooth": {"type": "cubicBezier", "forceDirection": "horizontal", "roundness": 0.5}
+        "smooth": {"type": "cubicBezier", "forceDirection": "horizontal", "roundness": 0.4}
     } for e in edges])
     
     network_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <script src="https://unpkg.com/vis-network@latest/standalone/umd/vis-network.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/dist/vis-network.min.js"></script>
         <style>
-            body {{ margin: 0; padding: 0; background: #1a1a2e; }}
-            #network {{ width: 100%; height: {height}; }}
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            html, body {{ height: 100%; overflow: hidden; }}
+            body {{ background: #1a1a2e; }}
+            #network {{ width: 100vw; height: 100vh; }}
         </style>
     </head>
     <body>
@@ -88,12 +104,13 @@ def render_visjs_network(
                         enabled: true,
                         direction: 'LR',
                         sortMethod: 'directed',
-                        levelSeparation: 250,
-                        nodeSpacing: 25,
-                        treeSpacing: 40,
+                        levelSeparation: 200,
+                        nodeSpacing: 50,
+                        treeSpacing: 100,
                         blockShifting: true,
                         edgeMinimization: true,
-                        parentCentralization: true
+                        parentCentralization: true,
+                        shakeTowards: 'roots'
                     }}
                 }},
                 physics: {{
@@ -106,32 +123,39 @@ def render_visjs_network(
                     dragView: true,
                     dragNodes: false,
                     navigationButtons: true,
-                    keyboard: {{ enabled: true }}
+                    keyboard: {{ enabled: true, bindToWindow: false }}
                 }},
                 nodes: {{
                     shape: 'box',
-                    font: {{ size: 9, color: '#ffffff', face: 'Arial' }},
-                    borderWidth: 1,
-                    margin: 5,
-                    widthConstraint: {{ minimum: 60, maximum: 120 }}
+                    font: {{ size: 10, color: '#ffffff', face: 'Arial', bold: true }},
+                    borderWidth: 2,
+                    margin: {{ top: 5, bottom: 5, left: 10, right: 10 }},
+                    widthConstraint: {{ minimum: 60, maximum: 120 }},
+                    heightConstraint: {{ minimum: 25 }}
                 }},
                 edges: {{
                     smooth: {{
                         enabled: true,
                         type: 'cubicBezier',
                         forceDirection: 'horizontal',
-                        roundness: 0.5
+                        roundness: 0.4
                     }},
-                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.3 }} }}
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.4 }} }},
+                    chosen: false
                 }}
             }};
             
             var network = new vis.Network(container, data, options);
             
-            // Fit después de estabilizar
-            network.once('stabilized', function() {{
-                network.fit();
-            }});
+            // Fit al iniciar con padding
+            setTimeout(function() {{
+                network.fit({{
+                    animation: {{
+                        duration: 500,
+                        easingFunction: 'easeInOutQuad'
+                    }}
+                }});
+            }}, 200);
         </script>
     </body>
     </html>

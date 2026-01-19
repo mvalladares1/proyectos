@@ -323,17 +323,16 @@ def _create_node(
     title: str = "",
     value: float = None
 ) -> Dict:
-    """Crea un nodo en formato vis.js."""
+    """Crea un nodo en formato vis.js con nivel jerárquico explícito."""
     colors = NODE_COLORS.get(node_type, NODE_COLORS["PROCESS"])
     level = NODE_LEVELS.get(node_type, 2)
     
     node = {
         "id": node_id,
         "label": label,
-        "title": title,  # Tooltip
-        "level": level,
-        "color": colors["background"],  # Solo el color de fondo como string
-        "font": {"color": "#ffffff"},
+        "title": title,
+        "level": level,  # Crítico para layout jerárquico
+        "color": colors["background"],
     }
     
     return node
