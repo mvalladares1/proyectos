@@ -397,7 +397,14 @@ def _render_sankey(username: str, password: str):
 
 
 def _render_sankey_plotly(sankey_data: dict):
-    """Renderiza el diagrama Sankey con Plotly (layout automático)."""
+    """Renderiza el diagrama Sankey con Plotly con controles de zoom y pan."""
+    # Calcular altura dinámica basada en cantidad de nodos
+    num_nodes = len(sankey_data.get("nodes", []))
+    min_height = 800
+    max_height = 2000
+    # Aumentar altura si hay muchos nodos
+    dynamic_height = min(max_height, max(min_height, num_nodes * 15))
+    
     # Crear figura Sankey con layout automático de Plotly
     fig = go.Figure(data=[go.Sankey(
         node=dict(
@@ -417,13 +424,40 @@ def _render_sankey_plotly(sankey_data: dict):
         )
     )])
     
+    # Configurar layout con controles de zoom y pan
     fig.update_layout(
         title="Trazabilidad Completa de Paquetes",
-        height=800,
-        font=dict(size=10)
+        height=dynamic_height,
+        font=dict(size=10),
+        dragmode="pan",  # Habilitar pan (arrastre)
+        hovermode="closest",
+        # Configurar modebar con herramientas
+        modebar=dict(
+            orientation="v",
+            bgcolor="rgba(255,255,255,0.7)",
+        )
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    # Configurar opciones del gráfico para mejor interactividad
+    config = {
+        "displayModeBar": True,
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["drawopenpath", "eraseshape"],
+        "modeBarButtonsToRemove": [],
+        "toImageButtonOptions": {
+            "format": "png",
+            "filename": "trazabilidad_sankey",
+            "height": dynamic_height,
+            "width": 1400,
+            "scale": 2
+        },
+        "scrollZoom": True,  # Habilitar zoom con scroll
+    }
+    
+    st.markdown("### 📊 Diagrama Sankey")
+    st.caption("🖱️ Arrastra para mover | 🔍 Scroll para zoom | 📷 Botones superiores para más opciones")
+    
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 def _render_visjs_diagram(visjs_data: dict):
