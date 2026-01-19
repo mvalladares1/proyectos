@@ -33,6 +33,21 @@ except ImportError:
     render_timeline_flow = None
     render_simple_flow = None
 
+# Importar componente vis.js Network
+try:
+    from components.visjs_network import (
+        render_visjs_network,
+        render_visjs_timeline,
+        render_combined_view,
+        PYVIS_AVAILABLE,
+    )
+    VISJS_AVAILABLE = PYVIS_AVAILABLE
+except ImportError:
+    VISJS_AVAILABLE = False
+    render_visjs_network = None
+    render_visjs_timeline = None
+    render_combined_view = None
+
 
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
@@ -283,9 +298,13 @@ def _render_sankey(username: str, password: str):
     # Selector de tipo de diagrama
     st.markdown("### 📊 Tipo de Visualización")
     
-    diagram_types = ["📈 Sankey (Plotly)", "🔀 Flujo con Línea de Tiempo", "📋 Tabla de Conexiones"]
-    if not TIMELINE_FLOW_AVAILABLE:
-        diagram_types = ["📈 Sankey (Plotly)", "📋 Tabla de Conexiones"]
+    diagram_types = ["📈 Sankey (Plotly)", "� Tabla de Conexiones"]
+    
+    # Agregar opciones dinámicamente según disponibilidad
+    if TIMELINE_FLOW_AVAILABLE:
+        diagram_types.insert(1, "🔀 React Flow")
+    if VISJS_AVAILABLE:
+        diagram_types.insert(2 if TIMELINE_FLOW_AVAILABLE else 1, "🕸️ vis.js Network")
     
     diagram_type = st.radio(
         "Selecciona el tipo de diagrama:",
@@ -339,7 +358,7 @@ def _render_sankey(username: str, password: str):
                 st.session_state.diagram_data = data
                 st.session_state.diagram_data_type = "sankey"
                 
-            elif diagram_type == "🔀 Flujo con Línea de Tiempo" and TIMELINE_FLOW_AVAILABLE:
+            elif diagram_type == "🔀 React Flow" and TIMELINE_FLOW_AVAILABLE:
                 data = get_reactflow_data(username, password, fecha_inicio_str, fecha_fin_str)
                 if not data or not data.get('nodes'):
                     st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
@@ -347,6 +366,19 @@ def _render_sankey(username: str, password: str):
                     return
                 st.session_state.diagram_data = data
                 st.session_state.diagram_data_type = "reactflow"
+            
+            elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                # Obtener datos crudos y transformar a vis.js
+                raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
+                if not raw_data or not raw_data.get('pallets'):
+                    st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                    st.session_state.diagram_data = None
+                    return
+                # Transformar a formato vis.js
+                from backend.services.traceability import transform_to_visjs
+                data = transform_to_visjs(raw_data)
+                st.session_state.diagram_data = data
+                st.session_state.diagram_data_type = "visjs"
                 
             elif diagram_type == "📋 Tabla de Conexiones":
                 data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
@@ -367,6 +399,8 @@ def _render_sankey(username: str, password: str):
             _render_sankey_stats(data)
         elif data_type == "reactflow" and TIMELINE_FLOW_AVAILABLE:
             _render_reactflow_diagram(data)
+        elif data_type == "visjs" and VISJS_AVAILABLE:
+            _render_visjs_diagram(data)
         elif data_type == "table":
             _render_connections_table(data)
     else:
@@ -401,6 +435,27 @@ def _render_sankey_plotly(sankey_data: dict):
     )
     
     st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_visjs_diagram(visjs_data: dict):
+    """Renderiza el diagrama con vis.js Network usando pyvis."""
+    if not VISJS_AVAILABLE:
+        st.error("❌ pyvis no está instalado. Ejecuta: pip install pyvis")
+        return
+    
+    # Opción para mostrar timeline
+    show_timeline = st.checkbox("📅 Mostrar Línea de Tiempo", value=True)
+    
+    if show_timeline and visjs_data.get("timeline_data"):
+        # Vista combinada: timeline arriba, red abajo
+        render_combined_view(
+            visjs_data,
+            network_height="550px",
+            timeline_height="200px"
+        )
+    else:
+        # Solo red
+        render_visjs_network(visjs_data, height="700px")
 
 
 def _render_connections_table(traceability_data: dict):
