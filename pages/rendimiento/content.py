@@ -316,6 +316,12 @@ def _render_sankey(username: str, password: str):
     # TODO: Implementar filtro por productor buscando pallet por pallet
     st.caption("🔒 Filtro de productor disponible próximamente")
     
+    # Inicializar session_state para datos de diagrama
+    if "diagram_data" not in st.session_state:
+        st.session_state.diagram_data = None
+    if "diagram_data_type" not in st.session_state:
+        st.session_state.diagram_data_type = None
+    
     if st.button("🔄 Generar Diagrama", type="primary"):
         spinner_msg = "Obteniendo datos de trazabilidad..."
         
@@ -328,23 +334,41 @@ def _render_sankey(username: str, password: str):
                 data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
                 if not data or not data.get('nodes'):
                     st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                    st.session_state.diagram_data = None
                     return
-                _render_sankey_plotly(data)
-                _render_sankey_stats(data)
+                st.session_state.diagram_data = data
+                st.session_state.diagram_data_type = "sankey"
                 
             elif diagram_type == "🔀 Flujo con Línea de Tiempo" and TIMELINE_FLOW_AVAILABLE:
                 data = get_reactflow_data(username, password, fecha_inicio_str, fecha_fin_str)
                 if not data or not data.get('nodes'):
                     st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                    st.session_state.diagram_data = None
                     return
-                _render_reactflow_diagram(data)
+                st.session_state.diagram_data = data
+                st.session_state.diagram_data_type = "reactflow"
                 
             elif diagram_type == "📋 Tabla de Conexiones":
                 data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
                 if not data or not data.get('pallets'):
                     st.warning("No hay datos suficientes para mostrar en el período seleccionado.")
+                    st.session_state.diagram_data = None
                     return
-                _render_connections_table(data)
+                st.session_state.diagram_data = data
+                st.session_state.diagram_data_type = "table"
+    
+    # Renderizar el diagrama si hay datos en session_state
+    if st.session_state.diagram_data:
+        data = st.session_state.diagram_data
+        data_type = st.session_state.diagram_data_type
+        
+        if data_type == "sankey":
+            _render_sankey_plotly(data)
+            _render_sankey_stats(data)
+        elif data_type == "reactflow" and TIMELINE_FLOW_AVAILABLE:
+            _render_reactflow_diagram(data)
+        elif data_type == "table":
+            _render_connections_table(data)
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
 
