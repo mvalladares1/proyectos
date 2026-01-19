@@ -301,8 +301,6 @@ def _render_sankey(username: str, password: str):
     diagram_types = ["📈 Sankey (Plotly)", "� Tabla de Conexiones"]
     
     # Agregar opciones dinámicamente según disponibilidad
-    if TIMELINE_FLOW_AVAILABLE:
-        diagram_types.insert(1, "🔀 React Flow")
     if VISJS_AVAILABLE:
         diagram_types.insert(2 if TIMELINE_FLOW_AVAILABLE else 1, "🕸️ vis.js Network")
     
@@ -357,15 +355,6 @@ def _render_sankey(username: str, password: str):
                     return
                 st.session_state.diagram_data = data
                 st.session_state.diagram_data_type = "sankey"
-                
-            elif diagram_type == "🔀 React Flow" and TIMELINE_FLOW_AVAILABLE:
-                data = get_reactflow_data(username, password, fecha_inicio_str, fecha_fin_str)
-                if not data or not data.get('nodes'):
-                    st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
-                    st.session_state.diagram_data = None
-                    return
-                st.session_state.diagram_data = data
-                st.session_state.diagram_data_type = "reactflow"
             
             elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                 # Obtener datos crudos y transformar a vis.js
