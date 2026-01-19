@@ -59,14 +59,14 @@ def render_visjs_network(
     net = Network(
         height=height,
         width="100%",
-        bgcolor="#ffffff",
-        font_color="#333333",
+        bgcolor="#1a1a2e",
+        font_color="#ffffff",
         directed=True,
         notebook=notebook,
         cdn_resources="in_line",  # Para que funcione en Streamlit
     )
     
-    # Configurar layout jerárquico
+    # Configurar layout jerárquico optimizado para flujo tipo Sankey
     net.set_options("""
     {
         "layout": {
@@ -74,11 +74,12 @@ def render_visjs_network(
                 "enabled": true,
                 "direction": "LR",
                 "sortMethod": "directed",
-                "levelSeparation": 250,
-                "nodeSpacing": 80,
-                "treeSpacing": 150,
+                "levelSeparation": 300,
+                "nodeSpacing": 30,
+                "treeSpacing": 50,
                 "blockShifting": true,
-                "edgeMinimization": true
+                "edgeMinimization": true,
+                "parentCentralization": true
             }
         },
         "physics": {
@@ -97,49 +98,62 @@ def render_visjs_network(
             }
         },
         "nodes": {
-            "font": {"size": 11, "face": "Arial"},
-            "borderWidth": 2,
-            "shadow": true
+            "font": {"size": 10, "face": "Arial", "color": "#ffffff"},
+            "borderWidth": 1,
+            "shadow": false,
+            "shape": "box",
+            "margin": 5,
+            "widthConstraint": { "minimum": 80, "maximum": 150 }
         },
         "edges": {
             "smooth": {
+                "enabled": true,
                 "type": "cubicBezier",
                 "forceDirection": "horizontal",
-                "roundness": 0.4
+                "roundness": 0.5
             },
-            "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}},
-            "color": {"inherit": false}
+            "arrows": {"to": {"enabled": true, "scaleFactor": 0.3}},
+            "color": {"inherit": "from", "opacity": 0.6},
+            "width": 1
         }
     }
     """)
     
-    # Agregar nodos
+    # Agregar nodos con configuración mejorada
     for node in nodes:
+        # Calcular ancho de borde proporcional a la cantidad (si tiene value)
+        border_width = 1
+        
         net.add_node(
             node["id"],
             label=node.get("label", node["id"]),
             title=node.get("title", ""),
             level=node.get("level", 0),
             color=node.get("color", {"background": "#97c2fc"}),
-            shape=node.get("shape", "box"),
-            font=node.get("font", {"color": "#fff"}),
-            borderWidth=node.get("borderWidth", 2),
-            shadow=node.get("shadow", True),
-            margin=node.get("margin", 10),
+            shape="box",
+            font={"color": "#fff", "size": 9},
+            borderWidth=border_width,
+            shadow=False,
+            margin={"top": 5, "bottom": 5, "left": 10, "right": 10},
         )
     
-    # Agregar edges
+    # Agregar edges con grosor proporcional al valor y color heredado
     for edge in edges:
+        # Calcular grosor proporcional (mínimo 1, máximo 10)
+        value = edge.get("value", 1)
+        width = max(1, min(10, value / 150))
+        
+        # Color del edge
+        edge_color = edge.get("color", "rgba(150, 150, 150, 0.5)")
+        
         net.add_edge(
             edge["from"],
             edge["to"],
-            value=edge.get("value", 1),
-            width=edge.get("width", 1),
-            label=edge.get("label", ""),
-            title=f"{edge.get('value', 0):.0f} kg",
-            arrows=edge.get("arrows", "to"),
-            color=edge.get("color", {"color": "#888"}),
-            font={"size": 9, "align": "middle"},
+            width=width,
+            title=f"{value:,.0f} kg",
+            color=edge_color,
+            arrows={"to": {"enabled": True, "scaleFactor": 0.3}},
+            smooth={"type": "cubicBezier", "forceDirection": "horizontal", "roundness": 0.5},
         )
     
     # Generar HTML
@@ -148,7 +162,7 @@ def render_visjs_network(
     # Modificar HTML para mejor integración con Streamlit
     html = html.replace(
         '<body>',
-        '<body style="margin: 0; padding: 0; overflow: hidden;">'
+        '<body style="margin: 0; padding: 0; overflow: hidden; background-color: #1a1a2e;">'
     )
     
     # Mostrar controles
@@ -176,10 +190,9 @@ def render_visjs_timeline(
         st.info("No hay datos de fechas para mostrar en la línea de tiempo")
         return
     
-    # Todos los grupos con estilos
+    # Todos los grupos con estilos (sin recepciones - van directo de proveedor a pallet)
     groups = [
         {"id": "supplier", "content": "🏭 Proveedores", "style": "background-color: #9b59b6; color: white;"},
-        {"id": "reception", "content": "📥 Recepciones", "style": "background-color: #1abc9c; color: white;"},
         {"id": "pallet_in", "content": "📦 Pallets IN", "style": "background-color: #f39c12; color: white;"},
         {"id": "process", "content": "🔄 Procesos", "style": "background-color: #e74c3c; color: white;"},
         {"id": "pallet_out", "content": "📤 Pallets OUT", "style": "background-color: #2ecc71; color: white;"},

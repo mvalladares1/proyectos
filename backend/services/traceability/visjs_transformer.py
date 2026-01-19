@@ -36,14 +36,13 @@ NODE_ICONS = {
     "CUSTOMER": "🔵",
 }
 
-# Niveles para layout jerárquico (izquierda a derecha)
+# Niveles para layout jerárquico (izquierda a derecha) - Simplificado como Sankey
 NODE_LEVELS = {
     "SUPPLIER": 0,
-    "RECEPTION": 1,
-    "PALLET_IN": 2,
-    "PROCESS": 3,
-    "PALLET_OUT": 4,
-    "CUSTOMER": 5,
+    "PALLET_IN": 1,
+    "PROCESS": 2,
+    "PALLET_OUT": 3,
+    "CUSTOMER": 4,
 }
 
 
@@ -76,63 +75,44 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
     # Track de fechas de proveedores (usamos la fecha de primera recepción)
     supplier_first_dates = {}
     
-    # Agregar nodos de proveedores (fechas se asignan después)
+    # Mapear recepciones a proveedores para conexiones directas
+    reception_to_supplier = {}
+    for ref, pinfo in processes.items():
+        if pinfo.get("is_reception"):
+            supplier_id = pinfo.get("supplier_id")
+            if supplier_id:
+                reception_to_supplier[ref] = supplier_id
+                date = pinfo.get("date", "")[:10] if pinfo.get("date") else ""
+                if date:
+                    if supplier_id not in supplier_first_dates or date < supplier_first_dates[supplier_id]:
+                        supplier_first_dates[supplier_id] = date
+    
+    # Agregar nodos de proveedores
     for sid, sdata in suppliers.items():
-        # sdata puede ser string (nombre) o dict con más info
         sname = sdata if isinstance(sdata, str) else sdata.get("name", str(sid))
         node_id = f"SUPP:{sid}"
         if node_id not in node_ids:
+            # Acortar nombre si es muy largo
+            short_name = sname[:30] + "..." if len(sname) > 30 else sname
             nodes.append(_create_node(
                 node_id,
-                f"{NODE_ICONS['SUPPLIER']} {sname}",
+                short_name,
                 "SUPPLIER",
                 title=f"Proveedor: {sname}"
             ))
             node_ids.add(node_id)
-    
-    # Agregar nodos de recepciones y trackear fechas de proveedores
-    for ref, pinfo in processes.items():
-        if pinfo.get("is_reception"):
-            node_id = f"RECV:{ref}"
-            if node_id not in node_ids:
-                date = pinfo.get("date", "")[:10] if pinfo.get("date") else ""
-                nodes.append(_create_node(
-                    node_id,
-                    f"{NODE_ICONS['RECEPTION']} {ref}",
-                    "RECEPTION",
-                    title=f"Recepción: {ref}\nFecha: {date}"
-                ))
-                node_ids.add(node_id)
-                
-                # Timeline: Recepción como punto
-                if date:
-                    timeline_data.append({
-                        "id": node_id,
-                        "content": ref,
-                        "start": date,
-                        "type": "point",
-                        "group": "reception",
-                        "className": "timeline-reception"
-                    })
-                    
-                    # Trackear primera recepción por proveedor
-                    supplier_id = pinfo.get("supplier_id")
-                    if supplier_id:
-                        if supplier_id not in supplier_first_dates or date < supplier_first_dates[supplier_id]:
-                            supplier_first_dates[supplier_id] = date
-    
-    # Timeline: Agregar proveedores con su primera fecha de recepción
-    for sid, first_date in supplier_first_dates.items():
-        sdata = suppliers.get(sid, {})
-        sname = sdata if isinstance(sdata, str) else sdata.get("name", str(sid))
-        timeline_data.append({
-            "id": f"SUPP:{sid}",
-            "content": f"🏭 {sname}",
-            "start": first_date,
-            "type": "point",
-            "group": "supplier",
-            "className": "timeline-supplier"
-        })
+            
+            # Timeline: Proveedor
+            first_date = supplier_first_dates.get(sid)
+            if first_date:
+                timeline_data.append({
+                    "id": node_id,
+                    "content": f"🏭 {short_name}",
+                    "start": first_date,
+                    "type": "point",
+                    "group": "supplier",
+                    "className": "timeline-supplier"
+                })
     
     # Agregar nodos de pallets
     for pid, pinfo in pallets.items():
@@ -156,10 +136,10 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             
             nodes.append(_create_node(
                 node_id,
-                f"{NODE_ICONS[node_type]} {name}",
+                name,  # Solo el nombre, sin ícono
                 node_type,
                 title=title,
-                value=qty  # Tamaño proporcional a cantidad
+                value=qty
             ))
             node_ids.add(node_id)
             
@@ -174,7 +154,7 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                     "className": f"timeline-pallet-{direction.lower()}"
                 })
     
-    # Agregar nodos de procesos
+    # Agregar nodos de procesos (solo los que NO son recepciones)
     for ref, pinfo in processes.items():
         if not pinfo.get("is_reception"):
             node_id = f"PROC:{ref}"
@@ -184,8 +164,6 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 mrp_end = pinfo.get("mrp_end", "")
                 date = pinfo.get("date", "")[:10] if pinfo.get("date") else ""
                 
-                # Para el título del nodo
-                title_date = mrp_start[:16] if mrp_start else date
                 title = f"Proceso: {ref}"
                 if mrp_start:
                     title += f"\nInicio: {mrp_start[:16]}"
@@ -196,7 +174,7 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 
                 nodes.append(_create_node(
                     node_id,
-                    f"{NODE_ICONS['PROCESS']} {ref}",
+                    ref,  # Solo la referencia
                     "PROCESS",
                     title=title
                 ))
@@ -232,13 +210,14 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
         scheduled_date = "" if isinstance(cdata, str) else cdata.get("scheduled_date", "")
         
         if node_id not in node_ids:
+            short_name = cname[:25] + "..." if len(cname) > 25 else cname
             title = f"Cliente: {cname}"
             if scheduled_date:
                 title += f"\nFecha programada: {scheduled_date[:10]}"
             
             nodes.append(_create_node(
                 node_id,
-                f"{NODE_ICONS['CUSTOMER']} {cname}",
+                short_name,
                 "CUSTOMER",
                 title=title
             ))
@@ -248,15 +227,14 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             if scheduled_date:
                 timeline_data.append({
                     "id": node_id,
-                    "content": f"🔵 {cname}",
+                    "content": f"🔵 {short_name}",
                     "start": scheduled_date[:10],
                     "type": "point",
                     "group": "customer",
                     "className": "timeline-customer"
                 })
-            node_ids.add(node_id)
     
-    # Agregar edges
+    # Agregar edges - Conectar directamente proveedor → pallet (sin recepciones)
     edge_aggregated = {}
     
     for link_tuple in links_raw:
@@ -265,14 +243,12 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
         source_nid = None
         target_nid = None
         
-        # Determinar nodo fuente
+        # Determinar nodo fuente - Conectar RECV directamente a su proveedor
         if source_type == "RECV":
-            pinfo = processes.get(source_id, {})
-            supplier_id = pinfo.get("supplier_id")
+            # Buscar el proveedor de esta recepción
+            supplier_id = reception_to_supplier.get(source_id)
             if supplier_id and f"SUPP:{supplier_id}" in node_ids:
                 source_nid = f"SUPP:{supplier_id}"
-            elif f"RECV:{source_id}" in node_ids:
-                source_nid = f"RECV:{source_id}"
         elif source_type == "PALLET":
             source_nid = f"PKG:{source_id}"
         elif source_type == "PROCESS":
@@ -292,21 +268,34 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 edge_aggregated[key] = 0
             edge_aggregated[key] += qty
     
-    # Crear edges finales
+    # Crear edges finales con colores heredados del nodo fuente
+    # Mapear prefijo de nodo a color
+    edge_colors = {
+        "SUPP:": "rgba(155, 89, 182, 0.6)",   # Morado (proveedores)
+        "PKG:": "rgba(243, 156, 18, 0.6)",     # Naranja (pallets - por defecto IN)
+        "PROC:": "rgba(231, 76, 60, 0.6)",    # Rojo (procesos)
+        "CUST:": "rgba(52, 152, 219, 0.6)",   # Azul (clientes)
+    }
+    
     for (source, target), qty in edge_aggregated.items():
-        edge_width = max(1, min(10, qty / 100))
-        label = f"{qty:.0f} kg" if qty > 10 else ""
+        # Determinar color basado en el nodo fuente
+        edge_color = "rgba(150, 150, 150, 0.5)"
+        for prefix, color in edge_colors.items():
+            if source.startswith(prefix):
+                edge_color = color
+                break
+        
+        # Si va hacia pallet OUT, usar verde
+        if target.startswith("PKG:"):
+            pallet_id = int(target.split(":")[1])
+            if pallet_id in pallets and pallets[pallet_id].get("direction") == "OUT":
+                edge_color = "rgba(46, 204, 113, 0.6)"  # Verde
         
         edges.append({
             "from": source,
             "to": target,
             "value": qty,
-            "width": edge_width,
-            "label": label,
-            "arrows": "to",
-            "smooth": {"type": "cubicBezier", "roundness": 0.5},
-            "color": {"color": "#888", "highlight": "#333"},
-            "font": {"size": 10, "align": "middle"}
+            "color": edge_color,
         })
     
     # Estadísticas
