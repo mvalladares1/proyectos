@@ -90,14 +90,86 @@ def render(username: str, password: str):
 
             st.markdown("---")
             
-            # Mostrar tabla detallada
-            st.subheader(f"📋 Detalle de Pallets ({len(df_filtered)})")
+            # Mostrar advertencia si hay guías duplicadas
+            guias_dup = df_filtered[df_filtered['es_duplicada'] == True]
+            
+            if len(guias_dup) > 0:
+                guias_duplicadas_lista = sorted(guias_dup['guia_despacho'].unique())
+                
+                # Banner de advertencia
+                st.warning(f"⚠️ **{len(guias_duplicadas_lista)} guía(s) duplicada(s) detectada(s)**")
+                
+                # Sección especial para guías duplicadas agrupadas
+                st.markdown("### 🔍 Guías Duplicadas Agrupadas (Para Comparación)")
+                
+                # Ordenar por guía y luego por fecha para agrupar duplicados
+                df_dup_agrupado = guias_dup.copy()
+                df_dup_agrupado = df_dup_agrupado.sort_values(by=["guia_despacho", "fecha"], ascending=[True, False])
+                
+                # Mostrar tabla de duplicados agrupados
+                st.dataframe(
+                    df_dup_agrupado[['guia_despacho', 'fecha', 'origen', 'albaran', 'productor', 'manejo', 'tipo_fruta', 'cantidad_pallets', 'total_kg', 'odoo_url']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "guia_despacho": st.column_config.TextColumn("⚠️ Guía Duplicada", width="medium", help="Guías agrupadas para comparación"),
+                        "fecha": st.column_config.TextColumn("Fecha", width="small"),
+                        "origen": st.column_config.TextColumn("Planta", width="small"),
+                        "albaran": st.column_config.TextColumn("Albarán", width="medium"),
+                        "productor": st.column_config.TextColumn("Productor", width="large"),
+                        "manejo": st.column_config.TextColumn("Manejo", width="medium"),
+                        "tipo_fruta": st.column_config.TextColumn("Fruta", width="small"),
+                        "cantidad_pallets": st.column_config.NumberColumn("Pallets", format="%d"),
+                        "total_kg": st.column_config.NumberColumn("Total Kg", format="%.2f"),
+                        "odoo_url": st.column_config.LinkColumn(
+                            "Ver en Odoo",
+                            width="small",
+                            help="Click para abrir en Odoo",
+                            display_text="🔗 Abrir"
+                        )
+                    }
+                )
+                
+                # Resumen por guía duplicada
+                st.markdown("#### 📊 Resumen de Duplicados")
+                for guia in guias_duplicadas_lista:
+                    with st.expander(f"🔸 Guía: **{guia}** ({len(df_dup_agrupado[df_dup_agrupado['guia_despacho'] == guia])} recepciones)"):
+                        df_guia = df_dup_agrupado[df_dup_agrupado['guia_despacho'] == guia]
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Pallets", int(df_guia['cantidad_pallets'].sum()))
+                        with col2:
+                            st.metric("Total Kg", f"{df_guia['total_kg'].sum():.2f}")
+                        with col3:
+                            st.metric("Recepciones", len(df_guia))
+                        
+                        # Tabla detallada de esta guía
+                        st.dataframe(
+                            df_guia[['fecha', 'albaran', 'productor', 'origen', 'cantidad_pallets', 'total_kg', 'odoo_url']],
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "fecha": "Fecha",
+                                "albaran": "Albarán",
+                                "productor": "Productor",
+                                "origen": "Planta",
+                                "cantidad_pallets": st.column_config.NumberColumn("Pallets", format="%d"),
+                                "total_kg": st.column_config.NumberColumn("Kg", format="%.2f"),
+                                "odoo_url": st.column_config.LinkColumn("Odoo", display_text="🔗")
+                            }
+                        )
+                
+                st.markdown("---")
+            
+            # Mostrar tabla completa
+            st.subheader(f"📋 Detalle Completo de Pallets ({len(df_filtered)})")
             
             # Preparar copia para visualización formateada
             df_view = df_filtered.copy()
             
-            # Ordenar por fecha descendente
-            df_view = df_view.sort_values(by="fecha", ascending=False)
+            # Ordenar por guía (para agrupar duplicados) y luego por fecha
+            df_view = df_view.sort_values(by=["guia_despacho", "fecha"], ascending=[True, False])
             
             # Crear columna visual para guías duplicadas
             def format_guia_duplicada(row):
@@ -108,12 +180,6 @@ def render(username: str, password: str):
                 return guia
             
             df_view['guia_display'] = df_view.apply(format_guia_duplicada, axis=1)
-            
-            # Mostrar advertencia si hay guías duplicadas
-            guias_dup = df_view[df_view['es_duplicada'] == True]
-            if len(guias_dup) > 0:
-                guias_duplicadas_lista = guias_dup['guia_despacho'].unique()
-                st.warning(f"⚠️ **{len(guias_duplicadas_lista)} guía(s) duplicada(s) detectada(s):** {', '.join(str(g) for g in guias_duplicadas_lista)}")
             
             st.dataframe(
                 df_view[['fecha', 'origen', 'albaran', 'productor', 'guia_display', 'manejo', 'tipo_fruta', 'cantidad_pallets', 'total_kg', 'odoo_url']],
@@ -181,9 +247,22 @@ def render(username: str, password: str):
     with st.expander("ℹ️ Información sobre este Tab"):
         st.markdown("""
         Este tab muestra la consolidación de pallets por cada recepción validada.
+        
+        ### 📊 Características:
         - **Pallets:** Obtenidos de las líneas de movimiento con paquetes registrados (`stock.move.line`).
         - **Total Kg:** Sumatoria de los kilos hechos en cada línea filtrada.
         - **Filtros:** Puedes filtrar por Manejo (Convencional/Orgánico) y Tipo de Fruta si el producto lo tiene definido en su ficha.
-        - **Guías Duplicadas:** Las guías de despacho que aparecen en múltiples recepciones se marcan con ⚠️ y se muestra una advertencia en la parte superior.
+        
+        ### 🔍 Detección de Duplicados:
+        - **Guías Duplicadas:** Las guías de despacho que aparecen en múltiples recepciones se marcan con ⚠️.
+        - **Vista Agrupada:** Cuando hay duplicados, se muestra una sección especial con las guías agrupadas para facilitar la comparación.
+        - **Resumen por Guía:** Cada guía duplicada tiene un resumen expandible con métricas totales (pallets, kg, recepciones).
+        
+        ### 🔗 Enlaces a Odoo:
         - **Ver en Odoo:** Click en el enlace 🔗 para abrir la recepción directamente en Odoo.
+        - Formato: Abre el formulario del picking en una nueva pestaña del navegador.
+        
+        ### 📋 Tablas Disponibles:
+        1. **Guías Duplicadas Agrupadas:** Solo muestra las guías que están duplicadas, ordenadas por número de guía para facilitar comparación.
+        2. **Detalle Completo:** Muestra todas las recepciones, ordenadas por guía y fecha (duplicados quedan juntos).
         """)
