@@ -13,7 +13,15 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from shared.auth import tiene_acceso_pagina
 
-from .shared import fmt_numero, get_trazabilidad_inversa, get_sankey_data, get_container_partners, get_sankey_producers
+from .shared import (
+    fmt_numero,
+    get_trazabilidad_inversa,
+    get_sankey_data,
+    get_reactflow_data,
+    get_traceability_raw,
+    get_container_partners,
+    get_sankey_producers
+)
 
 # Importar componente Timeline Flow
 try:
@@ -309,32 +317,34 @@ def _render_sankey(username: str, password: str):
     st.caption("🔒 Filtro de productor disponible próximamente")
     
     if st.button("🔄 Generar Diagrama", type="primary"):
-        spinner_msg = "Generando diagrama..." if diagram_type != "📈 Sankey (Plotly)" else "Generando diagrama Sankey..."
+        spinner_msg = "Obteniendo datos de trazabilidad..."
+        
         with st.spinner(spinner_msg):
-            sankey_data = get_sankey_data(
-                username, password,
-                fecha_inicio.strftime("%Y-%m-%d"),
-                fecha_fin.strftime("%Y-%m-%d"),
-            )
+            fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+            fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
             
-            if not sankey_data:
-                st.error("Error al obtener datos del servidor")
-                return
-            
-            if not sankey_data.get('nodes') or not sankey_data.get('links'):
-                st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
-                return
-            
-            # Renderizar según el tipo de diagrama seleccionado
+            # Obtener datos según el tipo de diagrama
             if diagram_type == "📈 Sankey (Plotly)":
-                _render_sankey_plotly(sankey_data)
+                data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
+                if not data or not data.get('nodes'):
+                    st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                    return
+                _render_sankey_plotly(data)
+                _render_sankey_stats(data)
+                
             elif diagram_type == "🔀 Flujo con Línea de Tiempo" and TIMELINE_FLOW_AVAILABLE:
-                render_timeline_flow(sankey_data)
+                data = get_reactflow_data(username, password, fecha_inicio_str, fecha_fin_str)
+                if not data or not data.get('nodes'):
+                    st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                    return
+                _render_reactflow_diagram(data)
+                
             elif diagram_type == "📋 Tabla de Conexiones":
-                _render_connections_table(sankey_data)
-            
-            # Estadísticas (siempre mostrar)
-            _render_sankey_stats(sankey_data)
+                data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
+                if not data or not data.get('pallets'):
+                    st.warning("No hay datos suficientes para mostrar en el período seleccionado.")
+                    return
+                _render_connections_table(data)
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
 
@@ -381,32 +391,189 @@ def _render_sankey_plotly(sankey_data: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_connections_table(sankey_data: dict):
-    """Renderiza una tabla de conexiones."""
+def _render_connections_table(traceability_data: dict):
+    """Renderiza una tabla de conexiones desde datos crudos de trazabilidad."""
     st.markdown("### 📋 Tabla de Conexiones")
     
-    # Crear diccionario de nodos por índice
-    nodes_by_idx = {i: n for i, n in enumerate(sankey_data["nodes"])}
+    pallets = traceability_data.get("pallets", {})
+    processes = traceability_data.get("processes", {})
+    suppliers = traceability_data.get("suppliers", {})
+    customers = traceability_data.get("customers", {})
+    links = traceability_data.get("links", [])
+    
+    # Mostrar estadísticas
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("🏭 Proveedores", len(suppliers))
+    with col2:
+        pallets_in = len([p for p in pallets.values() if p.get("direction") == "IN"])
+        st.metric("🟠 Pallets IN", pallets_in)
+    with col3:
+        procs = len([p for p in processes.values() if not p.get("is_reception")])
+        st.metric("🔴 Procesos", procs)
+    with col4:
+        pallets_out = len([p for p in pallets.values() if p.get("direction") == "OUT"])
+        st.metric("🟢 Pallets OUT", pallets_out)
+    with col5:
+        st.metric("🔵 Clientes", len(customers))
+    
+    st.markdown("---")
     
     # Crear tabla de conexiones
     connections = []
-    for link in sankey_data["links"]:
-        source_node = nodes_by_idx.get(link["source"], {})
-        target_node = nodes_by_idx.get(link["target"], {})
+    for link in links:
+        source_type, source_id, target_type, target_id, qty = link
+        
+        # Resolver nombres
+        source_name = "?"
+        target_name = "?"
+        
+        if source_type == "RECV":
+            source_name = f"📥 {source_id}"
+        elif source_type == "PALLET":
+            pinfo = pallets.get(source_id, {})
+            source_name = f"📦 {pinfo.get('name', source_id)}"
+        elif source_type == "PROCESS":
+            source_name = f"🔴 {source_id}"
+        
+        if target_type == "PALLET":
+            pinfo = pallets.get(target_id, {})
+            target_name = f"📦 {pinfo.get('name', target_id)}"
+        elif target_type == "PROCESS":
+            target_name = f"🔴 {target_id}"
+        elif target_type == "CUSTOMER":
+            cname = customers.get(target_id, "Cliente")
+            target_name = f"🔵 {cname}"
+        
         connections.append({
-            "Origen": source_node.get("label", "?"),
-            "Tipo Origen": source_node.get("type", "?"),
-            "Destino": target_node.get("label", "?"),
-            "Tipo Destino": target_node.get("type", "?"),
-            "Cantidad": link.get("value", 0),
+            "Origen": source_name,
+            "Tipo": source_type,
+            "Destino": target_name,
+            "Tipo Destino": target_type,
+            "Cantidad (kg)": f"{qty:,.0f}",
         })
     
     if connections:
-        import pandas as pd
         df = pd.DataFrame(connections)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True, height=500)
     else:
         st.info("No hay conexiones para mostrar")
+
+
+def _render_reactflow_diagram(reactflow_data: dict):
+    """Renderiza el diagrama con React Flow usando streamlit-flow-component."""
+    if not TIMELINE_FLOW_AVAILABLE:
+        st.error("❌ streamlit-flow-component no está disponible")
+        return
+    
+    # Importar aquí para evitar errores si no está instalado
+    try:
+        from streamlit_flow import streamlit_flow
+        from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
+        from streamlit_flow.state import StreamlitFlowState
+        from streamlit_flow.layouts import LayeredLayout, TreeLayout, RadialLayout
+    except ImportError:
+        st.error("❌ Error al importar streamlit-flow-component")
+        return
+    
+    nodes_data = reactflow_data.get("nodes", [])
+    edges_data = reactflow_data.get("edges", [])
+    timeline_dates = reactflow_data.get("timeline_dates", [])
+    stats = reactflow_data.get("stats", {})
+    
+    if not nodes_data:
+        st.warning("No hay nodos para mostrar")
+        return
+    
+    # Mostrar línea de tiempo
+    if timeline_dates:
+        st.markdown("### 📅 Línea de Tiempo")
+        cols = st.columns(min(len(timeline_dates), 10))
+        for i, date in enumerate(timeline_dates[:10]):
+            with cols[i]:
+                st.markdown(f"**{date}**")
+    
+    # Mostrar estadísticas
+    st.markdown("### 📊 Resumen")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("🏭 Proveedores", stats.get("suppliers", 0))
+    with col2:
+        st.metric("🟠 Pallets IN", stats.get("pallets_in", 0))
+    with col3:
+        st.metric("🔴 Procesos", stats.get("processes", 0))
+    with col4:
+        st.metric("🟢 Pallets OUT", stats.get("pallets_out", 0))
+    with col5:
+        st.metric("🔵 Clientes", stats.get("customers", 0))
+    
+    st.markdown("---")
+    
+    # Selector de layout
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        layout_option = st.selectbox(
+            "Layout:",
+            ["Layered (Horizontal)", "Tree", "Radial"],
+            key="reactflow_layout"
+        )
+    
+    # Crear nodos y edges
+    nodes = []
+    for node in nodes_data:
+        nodes.append(StreamlitFlowNode(
+            id=node["id"],
+            pos=(node["position"]["x"], node["position"]["y"]),
+            data=node["data"],
+            node_type=node.get("type", "default"),
+            source_position=node.get("source_position", "right"),
+            target_position=node.get("target_position", "left"),
+            style=node.get("style", {})
+        ))
+    
+    edges = []
+    for edge in edges_data:
+        edges.append(StreamlitFlowEdge(
+            id=edge["id"],
+            source=edge["source"],
+            target=edge["target"],
+            label=edge.get("label", ""),
+            animated=edge.get("animated", False),
+            edge_type=edge.get("edge_type", "smoothstep"),
+            style=edge.get("style", {}),
+            label_style=edge.get("label_style", {})
+        ))
+    
+    # Configurar layout
+    if layout_option == "Layered (Horizontal)":
+        layout = LayeredLayout(direction="right", node_node_spacing=50, layer_spacing=200)
+    elif layout_option == "Tree":
+        layout = TreeLayout(direction="right")
+    else:
+        layout = RadialLayout()
+    
+    # Crear estado
+    state = StreamlitFlowState(nodes=nodes, edges=edges)
+    
+    # Renderizar
+    updated_state = streamlit_flow(
+        key="traceability_flow",
+        state=state,
+        layout=layout,
+        fit_view=True,
+        height=700,
+        enable_node_menu=True,
+        enable_edge_menu=True,
+        enable_pane_menu=False,
+        hide_watermark=True,
+        allow_new_edges=False,
+        min_zoom=0.1,
+        max_zoom=2.0,
+    )
+    
+    # Mostrar nodo seleccionado
+    if updated_state and updated_state.selected_id:
+        st.info(f"📍 Nodo seleccionado: **{updated_state.selected_id}**")
 
 
 def _render_sankey_stats(sankey_data: dict):

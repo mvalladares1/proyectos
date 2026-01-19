@@ -70,7 +70,61 @@ def get_sankey_data(
             "end_date": fecha_fin,
         }
         resp = requests.get(
-            f"{API_URL}/api/v1/containers/sankey",
+            f"{API_URL}/api/v1/containers/traceability/sankey",
+            params=params,
+            timeout=120
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
+def get_reactflow_data(
+    username: str,
+    password: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+):
+    """Obtiene datos para diagrama React Flow."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "start_date": fecha_inicio,
+            "end_date": fecha_fin,
+        }
+        resp = requests.get(
+            f"{API_URL}/api/v1/containers/traceability/reactflow",
+            params=params,
+            timeout=120
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
+def get_traceability_raw(
+    username: str,
+    password: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+):
+    """Obtiene datos crudos de trazabilidad."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "start_date": fecha_inicio,
+            "end_date": fecha_fin,
+        }
+        resp = requests.get(
+            f"{API_URL}/api/v1/containers/traceability/data",
             params=params,
             timeout=120
         )
