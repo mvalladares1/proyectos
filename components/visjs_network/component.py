@@ -161,7 +161,7 @@ def render_visjs_network(
 
 def render_visjs_timeline(
     data: Dict,
-    height: str = "300px",
+    height: str = "450px",
 ) -> None:
     """
     Renderiza una línea de tiempo usando vis-timeline.
@@ -278,8 +278,8 @@ def render_visjs_timeline(
 
 def render_combined_view(
     data: Dict,
-    network_height: str = "600px",
-    timeline_height: str = "250px",
+    network_height: str = "500px",
+    timeline_height: str = "450px",
 ) -> None:
     """
     Renderiza red + timeline combinados.
