@@ -546,7 +546,7 @@ def _render_reactflow_diagram(reactflow_data: dict):
     
     # Configurar layout
     if layout_option == "Layered (Horizontal)":
-        layout = LayeredLayout(direction="right", node_node_spacing=50, layer_spacing=200)
+        layout = LayeredLayout(direction="right", node_node_spacing=50, node_layer_spacing=200)
     elif layout_option == "Tree":
         layout = TreeLayout(direction="right")
     else:
