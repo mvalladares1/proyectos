@@ -2,7 +2,7 @@
 Módulo de queries a Odoo para Flujo de Caja.
 Maneja todas las consultas a la base de datos de Odoo.
 """
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 
@@ -15,52 +15,95 @@ class OdooQueryManager:
             odoo_client: Instancia de OdooClient
         """
         self.odoo = odoo_client
+        self._cache_cuentas_efectivo = None
     
-    def get_cuentas_efectivo(self, prefijos: List[str] = None, codigos: List[str] = None) -> List[int]:
+    def get_cuentas_efectivo(self, config: Dict = None) -> List[int]:
         """
-        Obtiene los IDs de cuentas de efectivo.
+        Obtiene los IDs de cuentas de efectivo basado en configuración.
         
         Args:
-            prefijos: Lista de prefijos de código (ej: ['110', '111'])
-            codigos: Lista de códigos específicos
+            config: Configuración de cuentas efectivo {
+                "efectivo": {"prefijos": [], "codigos_incluir": [], "codigos_excluir": []},
+                "equivalentes": {...}
+            }
             
         Returns:
-            Lista de IDs de cuentas
+            Lista de IDs de cuentas de efectivo
         """
-        if prefijos is None:
-            prefijos = ['110', '111']
-        if codigos is None:
-            codigos = []
+        if self._cache_cuentas_efectivo:
+            return self._cache_cuentas_efectivo
         
-        # Construir dominio
-        domain_parts = []
+        if config is None:
+            config = {}
         
-        # Agregar prefijos
-        for prefijo in prefijos:
-            domain_parts.append(['code', '=like', f'{prefijo}%'])
+        # Recopilar todos los prefijos, incluir y excluir de ambos tipos
+        all_prefijos = []
+        all_incluir = []
+        all_excluir = []
         
-        # Agregar códigos específicos
-        for codigo in codigos:
-            domain_parts.append(['code', '=', codigo])
+        for tipo in ["efectivo", "equivalentes"]:
+            tipo_config = config.get(tipo, {})
+            all_prefijos.extend(tipo_config.get("prefijos", []))
+            all_incluir.extend(tipo_config.get("codigos_incluir", []))
+            all_excluir.extend(tipo_config.get("codigos_excluir", []))
         
-        # Combinar con OR
-        if len(domain_parts) > 1:
-            domain = ['|'] * (len(domain_parts) - 1) + domain_parts
-        else:
-            domain = domain_parts
+        # Fallback para estructura anterior
+        if not all_prefijos and "prefijos" in config:
+            all_prefijos = config.get("prefijos", ["110", "111"])
         
-        # Buscar cuentas
-        cuentas = self.odoo.search_read(
-            'account.account',
-            domain,
-            ['id', 'code', 'name']
-        )
+        if not all_prefijos:
+            all_prefijos = ["110", "111"]
         
-        return [c['id'] for c in cuentas] if cuentas else []
+        # Construir dominio OR para prefijos
+        domain = ['|'] * (len(all_prefijos) - 1) if len(all_prefijos) > 1 else []
+        for prefijo in all_prefijos:
+            domain.append(['code', '=like', f'{prefijo}%'])
+        
+        try:
+            cuentas = self.odoo.search_read(
+                'account.account',
+                domain,
+                ['id', 'code', 'name'],
+                limit=200
+            )
+            
+            # Aplicar lógica de override: excluir > incluir > prefijos
+            resultado_ids = []
+            codigos_encontrados = set()
+            
+            for c in cuentas:
+                codigo = c.get('code', '')
+                # Excluir tiene prioridad máxima
+                if codigo in all_excluir:
+                    continue
+                resultado_ids.append(c['id'])
+                codigos_encontrados.add(codigo)
+            
+            # Agregar codigos_incluir que no fueron encontrados por prefijo
+            codigos_faltantes = [c for c in all_incluir if c not in codigos_encontrados]
+            if codigos_faltantes:
+                try:
+                    cuentas_extra = self.odoo.search_read(
+                        'account.account',
+                        [['code', 'in', codigos_faltantes]],
+                        ['id', 'code'],
+                        limit=50
+                    )
+                    for c in cuentas_extra:
+                        if c.get('code') not in all_excluir:
+                            resultado_ids.append(c['id'])
+                except:
+                    pass
+            
+            self._cache_cuentas_efectivo = resultado_ids
+            return self._cache_cuentas_efectivo
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo cuentas efectivo: {e}")
+            return []
     
     def get_saldo_efectivo(self, fecha: str, cuentas_efectivo_ids: List[int]) -> float:
         """
-        Obtiene el saldo de efectivo a una fecha específica.
+        Obtiene el saldo de efectivo a una fecha específica usando agregación server-side.
         
         Args:
             fecha: Fecha en formato YYYY-MM-DD
@@ -72,94 +115,316 @@ class OdooQueryManager:
         if not cuentas_efectivo_ids:
             return 0.0
         
-        # Consultar saldos
-        saldos = self.odoo.search_read(
-            'account.move.line',
-            [
-                ['account_id', 'in', cuentas_efectivo_ids],
-                ['date', '<=', fecha],
-                ['parent_state', '=', 'posted']
-            ],
-            ['debit', 'credit']
-        )
-        
-        if not saldos:
+        try:
+            # OPTIMIZADO: Usar read_group para agregar en servidor
+            result = self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'account.move.line', 'read_group',
+                [[
+                    ['account_id', 'in', cuentas_efectivo_ids],
+                    ['parent_state', '=', 'posted'],
+                    ['date', '<=', fecha]
+                ]],
+                {'fields': ['balance:sum'], 'groupby': [], 'lazy': False}
+            )
+            
+            if result and len(result) > 0:
+                return result[0].get('balance', 0) or 0.0
             return 0.0
-        
-        # Calcular saldo
-        total_debit = sum(s.get('debit', 0) for s in saldos)
-        total_credit = sum(s.get('credit', 0) for s in saldos)
-        
-        return total_debit - total_credit
+        except Exception as e:
+            # Fallback al método anterior si read_group no está disponible
+            print(f"[OdooQueryManager] read_group failed, using fallback: {e}")
+            try:
+                moves = self.odoo.search_read(
+                    'account.move.line',
+                    [
+                        ['account_id', 'in', cuentas_efectivo_ids],
+                        ['parent_state', '=', 'posted'],
+                        ['date', '<=', fecha]
+                    ],
+                    ['balance'],
+                    limit=50000
+                )
+                return sum(m.get('balance', 0) for m in moves)
+            except:
+                return 0.0
     
-    def get_movimientos_periodo(self, fecha_inicio: str, fecha_fin: str, 
-                                cuentas_efectivo_ids: List[int],
-                                company_id: int = None) -> List[Dict]:
+    def get_movimientos_efectivo_periodo(self, fecha_inicio: str, fecha_fin: str, 
+                                         cuentas_efectivo_ids: List[int],
+                                         company_id: int = None,
+                                         incluir_draft: bool = False) -> Tuple[List[Dict], List[int]]:
         """
-        Obtiene movimientos contables del período que afectan efectivo.
+        Obtiene movimientos de cuentas de efectivo y sus IDs de asiento.
         
         Args:
-            fecha_inicio: Fecha inicio en formato YYYY-MM-DD
-            fecha_fin: Fecha fin en formato YYYY-MM-DD
+            fecha_inicio: Fecha inicio YYYY-MM-DD
+            fecha_fin: Fecha fin YYYY-MM-DD
             cuentas_efectivo_ids: IDs de cuentas de efectivo
-            company_id: ID de la compañía (opcional)
+            company_id: ID de compañía (opcional)
+            incluir_draft: Si incluir asientos en borrador
             
         Returns:
-            Lista de movimientos contables
+            Tuple (movimientos, asientos_ids)
         """
         if not cuentas_efectivo_ids:
-            return []
+            return [], []
         
-        # Dominio base
+        states = ['posted', 'draft'] if incluir_draft else ['posted']
+        
         domain = [
+            ['account_id', 'in', cuentas_efectivo_ids],
+            ['parent_state', 'in', states],
             ['date', '>=', fecha_inicio],
-            ['date', '<=', fecha_fin],
-            ['parent_state', '=', 'posted']
+            ['date', '<=', fecha_fin]
         ]
-        
-        # Filtrar por compañía si se especifica
         if company_id:
             domain.append(['company_id', '=', company_id])
         
-        # Buscar asientos que tengan al menos una línea en cuentas de efectivo
-        domain.append(['account_id', 'in', cuentas_efectivo_ids])
-        
-        # Obtener movimientos
-        movimientos = self.odoo.search_read(
-            'account.move.line',
-            domain,
-            ['id', 'move_id', 'account_id', 'partner_id', 'debit', 'credit', 
-             'date', 'name', 'ref']
-        )
-        
-        return movimientos or []
+        try:
+            movimientos = self.odoo.search_read(
+                'account.move.line',
+                domain,
+                ['move_id', 'date', 'name', 'ref', 'balance', 'account_id', 'partner_id'],
+                limit=50000,
+                order='date desc'
+            )
+            
+            # Extraer IDs únicos de asientos
+            asientos_ids = list(set(
+                m['move_id'][0] if isinstance(m.get('move_id'), (list, tuple)) else m.get('move_id')
+                for m in movimientos if m.get('move_id')
+            ))
+            
+            return movimientos, asientos_ids
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo movimientos: {e}")
+            return [], []
     
-    def get_cuentas_contrapartida(self, move_ids: List[int], 
-                                  excluir_cuenta_ids: List[int]) -> List[Dict]:
+    def get_contrapartidas_agrupadas(self, asientos_ids: List[int], 
+                                     cuentas_efectivo_ids: List[int],
+                                     groupby_key: str = 'account_id') -> List[Dict]:
         """
-        Obtiene las cuentas contrapartida de los movimientos.
+        Obtiene contrapartidas agrupadas por cuenta usando read_group.
         
         Args:
-            move_ids: IDs de los movimientos contables
-            excluir_cuenta_ids: IDs de cuentas a excluir (efectivo)
+            asientos_ids: IDs de asientos contables
+            cuentas_efectivo_ids: IDs de cuentas de efectivo (para excluir)
+            groupby_key: Campo de agrupación ('account_id' o 'date:month')
             
         Returns:
-            Lista de líneas contrapartida
+            Lista de grupos con balance agregado
         """
-        if not move_ids:
+        if not asientos_ids:
             return []
         
-        # Obtener líneas contrapartida
-        contrapartidas = self.odoo.search_read(
-            'account.move.line',
-            [
-                ['move_id', 'in', move_ids],
-                ['account_id', 'not in', excluir_cuenta_ids]
-            ],
-            ['id', 'move_id', 'account_id', 'debit', 'credit', 'name']
-        )
+        resultados = []
+        chunk_size = 5000
         
-        return contrapartidas or []
+        for i in range(0, len(asientos_ids), chunk_size):
+            chunk = asientos_ids[i:i + chunk_size]
+            
+            try:
+                grupos = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'account.move.line', 'read_group',
+                    [[
+                        ['move_id', 'in', chunk],
+                        ['account_id', 'not in', cuentas_efectivo_ids]
+                    ]],
+                    {
+                        'fields': ['balance', 'account_id'], 
+                        'groupby': [groupby_key], 
+                        'lazy': False
+                    }
+                )
+                resultados.extend(grupos)
+            except Exception as e:
+                print(f"[OdooQueryManager] Error en read_group: {e}")
+        
+        return resultados
+    
+    def get_contrapartidas_agrupadas_mensual(self, asientos_ids: List[int],
+                                             cuentas_efectivo_ids: List[int],
+                                             agrupacion: str = 'mensual') -> List[Dict]:
+        """
+        Obtiene contrapartidas agrupadas por cuenta Y mes/semana.
+        
+        Args:
+            asientos_ids: IDs de asientos
+            cuentas_efectivo_ids: IDs de cuentas de efectivo (excluir)
+            agrupacion: 'mensual' o 'semanal'
+            
+        Returns:
+            Lista de grupos {account_id, date:month/week, balance}
+        """
+        if not asientos_ids:
+            return []
+        
+        groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
+        
+        resultados = []
+        chunk_size = 5000
+        
+        for i in range(0, len(asientos_ids), chunk_size):
+            chunk = asientos_ids[i:i + chunk_size]
+            
+            try:
+                grupos = self.odoo.models.execute_kw(
+                    self.odoo.db, self.odoo.uid, self.odoo.password,
+                    'account.move.line', 'read_group',
+                    [[
+                        ['move_id', 'in', chunk],
+                        ['account_id', 'not in', cuentas_efectivo_ids]
+                    ]],
+                    {
+                        'fields': ['balance', 'account_id', 'date'], 
+                        'groupby': ['account_id', groupby_key],
+                        'lazy': False
+                    }
+                )
+                resultados.extend(grupos)
+            except Exception as e:
+                print(f"[OdooQueryManager] Error en read_group mensual: {e}")
+        
+        return resultados
+    
+    def get_facturas_draft(self, fecha_inicio: str, fecha_fin: str,
+                          company_id: int = None) -> List[Dict]:
+        """
+        Obtiene facturas en borrador para proyección.
+        
+        Args:
+            fecha_inicio: Fecha inicio
+            fecha_fin: Fecha fin
+            company_id: ID de compañía
+            
+        Returns:
+            Lista de facturas draft
+        """
+        domain = [
+            ['state', '=', 'draft'],
+            ['move_type', 'in', ['out_invoice', 'in_invoice', 'out_refund', 'in_refund']],
+            ['date', '>=', fecha_inicio],
+            ['date', '<=', fecha_fin]
+        ]
+        
+        if company_id:
+            domain.append(['company_id', '=', company_id])
+        
+        try:
+            facturas = self.odoo.search_read(
+                'account.move',
+                domain,
+                ['id', 'move_type', 'invoice_date', 'invoice_date_due', 'line_ids', 'date'],
+                limit=5000
+            )
+            return facturas or []
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo facturas draft: {e}")
+            return []
+    
+    def get_lineas_facturas(self, line_ids: List[int]) -> List[Dict]:
+        """
+        Obtiene líneas de factura por IDs.
+        
+        Args:
+            line_ids: IDs de líneas
+            
+        Returns:
+            Lista de líneas con account_id, balance, name
+        """
+        if not line_ids:
+            return []
+        
+        try:
+            lineas = self.odoo.search_read(
+                'account.move.line',
+                [['id', 'in', line_ids]],
+                ['id', 'account_id', 'balance', 'debit', 'credit', 'move_id', 'name'],
+                limit=50000
+            )
+            return lineas or []
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo líneas: {e}")
+            return []
+    
+    def get_lineas_cuentas_parametrizadas(self, codigos_cuentas: List[str],
+                                          fecha_inicio: str, fecha_fin: str,
+                                          excluir_asientos: List[int] = None) -> List[Dict]:
+        """
+        Obtiene líneas de cuentas parametrizadas que NO tocaron efectivo.
+        
+        Args:
+            codigos_cuentas: Códigos de cuentas a buscar
+            fecha_inicio: Fecha inicio
+            fecha_fin: Fecha fin
+            excluir_asientos: IDs de asientos a excluir (ya procesados)
+            
+        Returns:
+            Lista de líneas
+        """
+        if not codigos_cuentas:
+            return []
+        
+        domain = [
+            ['account_id.code', 'in', codigos_cuentas],
+            ['parent_state', 'in', ['posted', 'draft']],
+            ['date', '>=', fecha_inicio],
+            ['date', '<=', fecha_fin]
+        ]
+        
+        if excluir_asientos:
+            domain.append(['move_id', 'not in', excluir_asientos])
+        
+        try:
+            lineas = self.odoo.search_read(
+                'account.move.line',
+                domain,
+                ['account_id', 'name', 'balance', 'date'],
+                limit=10000
+            )
+            return lineas or []
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo líneas parametrizadas: {e}")
+            return []
+    
+    def get_etiquetas_por_mes(self, asientos_ids: List[int],
+                             account_ids: List[int],
+                             agrupacion: str = 'mensual') -> List[Dict]:
+        """
+        Obtiene etiquetas (campo 'name') por cuenta y mes.
+        
+        Args:
+            asientos_ids: IDs de asientos
+            account_ids: IDs de cuentas
+            agrupacion: 'mensual' o 'semanal'
+            
+        Returns:
+            Lista de grupos {account_id, name, date:month, balance}
+        """
+        if not asientos_ids or not account_ids:
+            return []
+        
+        groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
+        
+        try:
+            grupos = self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'account.move.line', 'read_group',
+                [[
+                    ['move_id', 'in', asientos_ids],
+                    ['account_id', 'in', account_ids]
+                ]],
+                {
+                    'fields': ['balance', 'account_id', 'name', 'date'],
+                    'groupby': ['account_id', 'name', groupby_key],
+                    'lazy': False
+                }
+            )
+            return grupos or []
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo etiquetas: {e}")
+            return []
     
     def get_account_info_batch(self, account_ids: List[int]) -> Dict[int, Dict]:
         """
@@ -174,44 +439,21 @@ class OdooQueryManager:
         if not account_ids:
             return {}
         
-        cuentas = self.odoo.search_read(
-            'account.account',
-            [['id', 'in', list(set(account_ids))]],
-            ['id', 'code', 'name']
-        )
-        
-        return {
-            c['id']: {'code': c.get('code', ''), 'name': c.get('name', '')}
-            for c in (cuentas or [])
-        }
-    
-    def get_facturas_periodo(self, fecha_inicio: str, fecha_fin: str,
-                            company_id: int = None) -> List[Dict]:
-        """
-        Obtiene facturas del período para proyección.
-        
-        Args:
-            fecha_inicio: Fecha inicio
-            fecha_fin: Fecha fin
-            company_id: ID de compañía
+        try:
+            cuentas = self.odoo.search_read(
+                'account.account',
+                [['id', 'in', list(set(account_ids))]],
+                ['id', 'code', 'name']
+            )
             
-        Returns:
-            Lista de facturas
-        """
-        domain = [
-            ['invoice_date', '>=', fecha_inicio],
-            ['invoice_date', '<=', fecha_fin],
-            ['state', 'in', ['posted', 'draft']]
-        ]
-        
-        if company_id:
-            domain.append(['company_id', '=', company_id])
-        
-        facturas = self.odoo.search_read(
-            'account.move',
-            domain,
-            ['id', 'name', 'invoice_date', 'invoice_date_due', 
-             'amount_total', 'amount_residual', 'move_type', 'state']
-        )
-        
-        return facturas or []
+            return {
+                c['id']: {'code': c.get('code', ''), 'name': c.get('name', '')}
+                for c in (cuentas or [])
+            }
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo info cuentas: {e}")
+            return {}
+    
+    def invalidar_cache(self):
+        """Invalida el caché de cuentas de efectivo."""
+        self._cache_cuentas_efectivo = None

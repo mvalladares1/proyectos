@@ -6,13 +6,15 @@ Exporta clases helper modularizadas.
 """
 from .clasificador import ClasificadorCuentas
 from .odoo_queries import OdooQueryManager
-from .procesador import FlujoProcesador
 from .validador import ValidadorFlujo
+from .agregador import AgregadorFlujo
+from .proyeccion import ProyeccionFlujo
 
 __all__ = [
     'ClasificadorCuentas',
     'OdooQueryManager', 
-    'FlujoProcesador',
-    'ValidadorFlujo'
+    'ValidadorFlujo',
+    'AgregadorFlujo',
+    'ProyeccionFlujo'
 ]
 
