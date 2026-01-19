@@ -761,11 +761,6 @@ class FlujoCajaService:
                     if not acc_data or not periodo_val:
                         continue
                     
-                    # INVERTIR SIGNO: En Odoo, balance = debit - credit
-                    # Para flujo de caja desde perspectiva de efectivo, necesitamos credit - debit
-                    # Ejemplo: Crédito en cuenta de pasivo = entrada de efectivo = positivo en flujo
-                    balance = -balance
-                    
                     # Parsear
                     mes_str = get_periodo_from_odoo(periodo_val)
                     if not mes_str:

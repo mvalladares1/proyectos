@@ -4,8 +4,8 @@ Por qué enero aparece en $0 cuando hay movimientos en Odoo?
 """
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.odoo_client import OdooClient
 from datetime import datetime
 
@@ -20,19 +20,17 @@ print("="*80)
 
 # Conectar a Odoo
 print("\n1. Conectando a Odoo...")
-odoo = OdooClient(
-    url="https://rio-futuro-master-11821236.dev.odoo.com",
-    db="rio-futuro-master-11821236",
-    username="mvalladares@riofuturo.cl",
-    password="c0766224bec30cac071ffe43a858c9ccbd521ddd"
-)
+username = "mvalladares@riofuturo.cl"
+password = "c0766224bec30cac071ffe43a858c9ccbd521ddd"
+
+odoo = OdooClient(username=username, password=password)
 print("   ✓ Conectado")
 
 # 2. Buscar la cuenta
 print(f"\n2. Buscando cuenta {codigo_cuenta}...")
 cuenta = odoo.search_read(
     'account.account',
-    [['code', '=', codigo_cuenta]],
+    [('code', '=', codigo_cuenta)],
     ['id', 'code', 'name']
 )
 
@@ -48,7 +46,7 @@ print(f"   ✓ Nombre: {cuenta[0]['name']}")
 print(f"\n3. Buscando cuentas de efectivo...")
 cuentas_efectivo = odoo.search_read(
     'account.account',
-    [['account_type', '=', 'asset_cash']],
+    [('account_type', '=', 'asset_cash')],
     ['id', 'code', 'name']
 )
 cuentas_efectivo_ids = [c['id'] for c in cuentas_efectivo]
@@ -59,10 +57,10 @@ print(f"\n4. Buscando movimientos de efectivo ({fecha_inicio} a {fecha_fin})..."
 movimientos_efectivo = odoo.search_read(
     'account.move.line',
     [
-        ['account_id', 'in', cuentas_efectivo_ids],
-        ['parent_state', 'in', ['posted', 'draft']],
-        ['date', '>=', fecha_inicio],
-        ['date', '<=', fecha_fin]
+        ('account_id', 'in', cuentas_efectivo_ids),
+        ('parent_state', 'in', ['posted', 'draft']),
+        ('date', '>=', fecha_inicio),
+        ('date', '<=', fecha_fin)
     ],
     ['move_id', 'date'],
     limit=10000
@@ -111,8 +109,8 @@ print(f"\n6. Líneas individuales de cuenta {codigo_cuenta}:")
 lineas = odoo.search_read(
     'account.move.line',
     [
-        ['move_id', 'in', asientos_ids],
-        ['account_id', '=', account_id]
+        ('move_id', 'in', asientos_ids),
+        ('account_id', '=', account_id)
     ],
     ['date', 'name', 'debit', 'credit', 'balance', 'move_id', 'parent_state'],
     limit=100
