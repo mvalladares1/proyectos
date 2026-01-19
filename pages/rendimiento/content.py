@@ -567,8 +567,8 @@ def _render_reactflow_diagram(reactflow_data: dict):
         enable_pane_menu=False,
         hide_watermark=True,
         allow_new_edges=False,
+        allow_zoom=True,
         min_zoom=0.1,
-        max_zoom=2.0,
     )
     
     # Mostrar nodo seleccionado
