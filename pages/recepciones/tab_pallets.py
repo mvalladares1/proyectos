@@ -94,17 +94,20 @@ def render(username: str, password: str):
             guias_dup = df_filtered[df_filtered['es_duplicada'] == True]
             
             if len(guias_dup) > 0:
-                guias_duplicadas_lista = sorted(guias_dup['guia_despacho'].unique())
+                # Obtener combinaciones únicas de guía-productor duplicadas
+                guias_productores_unicos = guias_dup.groupby(['guia_despacho', 'productor']).size().reset_index(name='count')
+                num_combinaciones = len(guias_productores_unicos)
                 
                 # Banner de advertencia
-                st.warning(f"⚠️ **{len(guias_duplicadas_lista)} guía(s) duplicada(s) detectada(s)**")
+                st.warning(f"⚠️ **{num_combinaciones} combinación(es) de guía-productor duplicada(s) detectada(s)**")
                 
                 # Sección especial para guías duplicadas agrupadas
                 st.markdown("### 🔍 Guías Duplicadas Agrupadas (Para Comparación)")
+                st.caption("*Criterio: Misma guía de despacho Y mismo productor*")
                 
-                # Ordenar por guía y luego por fecha para agrupar duplicados
+                # Ordenar por guía, productor y luego por fecha para agrupar duplicados
                 df_dup_agrupado = guias_dup.copy()
-                df_dup_agrupado = df_dup_agrupado.sort_values(by=["guia_despacho", "fecha"], ascending=[True, False])
+                df_dup_agrupado = df_dup_agrupado.sort_values(by=["guia_despacho", "productor", "fecha"], ascending=[True, True, False])
                 
                 # Mostrar tabla de duplicados agrupados
                 st.dataframe(
@@ -132,27 +135,37 @@ def render(username: str, password: str):
                 
                 # Resumen por guía duplicada
                 st.markdown("#### 📊 Resumen de Duplicados")
-                for guia in guias_duplicadas_lista:
-                    with st.expander(f"🔸 Guía: **{guia}** ({len(df_dup_agrupado[df_dup_agrupado['guia_despacho'] == guia])} recepciones)"):
-                        df_guia = df_dup_agrupado[df_dup_agrupado['guia_despacho'] == guia]
-                        
+                
+                # Iterar sobre cada combinación única de guía-productor
+                for idx, row in guias_productores_unicos.iterrows():
+                    guia = row['guia_despacho']
+                    productor = row['productor']
+                    
+                    # Filtrar datos para esta combinación
+                    df_combinacion = df_dup_agrupado[
+                        (df_dup_agrupado['guia_despacho'] == guia) & 
+                        (df_dup_agrupado['productor'] == productor)
+                    ]
+                    
+                    num_recepciones = len(df_combinacion)
+                    
+                    with st.expander(f"🔸 Guía: **{guia}** | Productor: **{productor}** ({num_recepciones} recepciones)"):
                         col1, col2, col3 = st.columns(3)
                         with col1:
-                            st.metric("Total Pallets", int(df_guia['cantidad_pallets'].sum()))
+                            st.metric("Total Pallets", int(df_combinacion['cantidad_pallets'].sum()))
                         with col2:
-                            st.metric("Total Kg", f"{df_guia['total_kg'].sum():.2f}")
+                            st.metric("Total Kg", f"{df_combinacion['total_kg'].sum():.2f}")
                         with col3:
-                            st.metric("Recepciones", len(df_guia))
+                            st.metric("Recepciones", num_recepciones)
                         
-                        # Tabla detallada de esta guía
+                        # Tabla detallada de esta combinación
                         st.dataframe(
-                            df_guia[['fecha', 'albaran', 'productor', 'origen', 'cantidad_pallets', 'total_kg', 'odoo_url']],
+                            df_combinacion[['fecha', 'albaran', 'origen', 'cantidad_pallets', 'total_kg', 'odoo_url']],
                             use_container_width=True,
                             hide_index=True,
                             column_config={
                                 "fecha": "Fecha",
                                 "albaran": "Albarán",
-                                "productor": "Productor",
                                 "origen": "Planta",
                                 "cantidad_pallets": st.column_config.NumberColumn("Pallets", format="%d"),
                                 "total_kg": st.column_config.NumberColumn("Kg", format="%.2f"),
@@ -168,8 +181,8 @@ def render(username: str, password: str):
             # Preparar copia para visualización formateada
             df_view = df_filtered.copy()
             
-            # Ordenar por guía (para agrupar duplicados) y luego por fecha
-            df_view = df_view.sort_values(by=["guia_despacho", "fecha"], ascending=[True, False])
+            # Ordenar por guía, productor y fecha (para agrupar duplicados)
+            df_view = df_view.sort_values(by=["guia_despacho", "productor", "fecha"], ascending=[True, True, False])
             
             # Crear columna visual para guías duplicadas
             def format_guia_duplicada(row):
@@ -254,15 +267,22 @@ def render(username: str, password: str):
         - **Filtros:** Puedes filtrar por Manejo (Convencional/Orgánico) y Tipo de Fruta si el producto lo tiene definido en su ficha.
         
         ### 🔍 Detección de Duplicados:
-        - **Guías Duplicadas:** Las guías de despacho que aparecen en múltiples recepciones se marcan con ⚠️.
-        - **Vista Agrupada:** Cuando hay duplicados, se muestra una sección especial con las guías agrupadas para facilitar la comparación.
-        - **Resumen por Guía:** Cada guía duplicada tiene un resumen expandible con métricas totales (pallets, kg, recepciones).
+        - **Criterio Estricto:** Solo se consideran duplicadas las recepciones que tienen:
+          - ✅ El **mismo número de guía de despacho** 
+          - ✅ Y el **mismo productor**
+        - **Vista Agrupada:** Cuando hay duplicados, se muestra una sección especial con las recepciones agrupadas para facilitar la comparación.
+        - **Resumen por Combinación:** Cada combinación guía-productor duplicada tiene un resumen expandible con métricas totales.
+        - **Identificación Visual:** Las recepciones duplicadas llevan el marcador ⚠️.
         
         ### 🔗 Enlaces a Odoo:
         - **Ver en Odoo:** Click en el enlace 🔗 para abrir la recepción directamente en Odoo.
         - Formato: Abre el formulario del picking en una nueva pestaña del navegador.
         
         ### 📋 Tablas Disponibles:
-        1. **Guías Duplicadas Agrupadas:** Solo muestra las guías que están duplicadas, ordenadas por número de guía para facilitar comparación.
-        2. **Detalle Completo:** Muestra todas las recepciones, ordenadas por guía y fecha (duplicados quedan juntos).
+        1. **Guías Duplicadas Agrupadas:** Solo muestra las recepciones duplicadas (misma guía + mismo productor), ordenadas para facilitar comparación.
+        2. **Detalle Completo:** Muestra todas las recepciones, ordenadas por guía, productor y fecha (duplicados quedan juntos).
+        
+        ### 💡 Ejemplo:
+        - **NO es duplicado:** Guía "123" del Productor A + Guía "123" del Productor B (diferentes productores)
+        - **SÍ es duplicado:** Guía "123" del Productor A aparece 2 veces (misma guía + mismo productor)
         """)

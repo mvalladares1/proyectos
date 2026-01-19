@@ -850,19 +850,28 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
             "origen": origen_val
         })
     
-    # Identificar guías duplicadas
-    guias_count = {}
+    # Identificar guías duplicadas (mismo número de guía Y mismo productor)
+    guias_productor_count = {}
     for item in resultado:
         guia = item["guia_despacho"]
-        if guia:  # Solo contar guías no vacías
-            guias_count[guia] = guias_count.get(guia, 0) + 1
+        productor = item["productor"]
+        if guia and productor:  # Solo contar si ambos campos tienen valor
+            # Crear clave compuesta (guía, productor)
+            clave = (guia, productor)
+            guias_productor_count[clave] = guias_productor_count.get(clave, 0) + 1
     
     # Marcar duplicados y agregar URL de Odoo
     odoo_url = client.url  # URL base de Odoo
     for item in resultado:
         guia = item["guia_despacho"]
-        # Marcar si la guía está duplicada (aparece más de 1 vez)
-        item["es_duplicada"] = guias_count.get(guia, 0) > 1 if guia else False
+        productor = item["productor"]
+        # Marcar si la combinación (guía, productor) está duplicada
+        if guia and productor:
+            clave = (guia, productor)
+            item["es_duplicada"] = guias_productor_count.get(clave, 0) > 1
+        else:
+            item["es_duplicada"] = False
+        
         # Agregar URL para ir directamente al registro en Odoo
         # Formato universal: primero el modelo, luego el ID
         # Este formato es compatible con todas las versiones de Odoo
