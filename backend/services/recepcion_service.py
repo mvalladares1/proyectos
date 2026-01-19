@@ -835,20 +835,41 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         manejos_presentes = list(set(ml["manejo"] for ml in filtered_ml))
         frutas_presentes = list(set(ml["tipo_fruta"] for ml in filtered_ml))
         
+        guia = p.get("x_studio_gua_de_despacho") or ""
+        
         resultado.append({
             "id": p["id"],
             "albaran": p["name"],
             "fecha": str(p["scheduled_date"])[:10],
             "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",
-            "guia_despacho": p.get("x_studio_gua_de_despacho") or "",
+            "guia_despacho": guia,
             "cantidad_pallets": cantidad_pallets,
             "total_kg": round(total_kg, 2),
             "manejo": ", ".join(manejos_presentes),
             "tipo_fruta": ", ".join(frutas_presentes),
             "origen": origen_val
         })
+    
+    # Identificar guías duplicadas
+    guias_count = {}
+    for item in resultado:
+        guia = item["guia_despacho"]
+        if guia:  # Solo contar guías no vacías
+            guias_count[guia] = guias_count.get(guia, 0) + 1
+    
+    # Marcar duplicados y agregar URL de Odoo
+    odoo_url = client.url  # URL base de Odoo
+    for item in resultado:
+        guia = item["guia_despacho"]
+        # Marcar si la guía está duplicada (aparece más de 1 vez)
+        item["es_duplicada"] = guias_count.get(guia, 0) > 1 if guia else False
+        # Agregar URL para ir directamente al registro en Odoo
+        # Formato universal: primero el modelo, luego el ID
+        # Este formato es compatible con todas las versiones de Odoo
+        item["odoo_url"] = f"{odoo_url}/web#model=stock.picking&id={item['id']}"
         
     return resultado
+
 
 
 def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio: str, fecha_fin: str, 
