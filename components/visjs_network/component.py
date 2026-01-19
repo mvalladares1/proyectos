@@ -6,6 +6,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from typing import Dict
 import json
+import math
 
 # vis.js se carga desde CDN, no necesitamos pyvis
 PYVIS_AVAILABLE = True  # Mantenemos por compatibilidad
@@ -50,8 +51,6 @@ def render_visjs_network(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
-    # Generar HTML directamente con vis.js para control total del layout
-    nodes_json = json.dumps(nodes)
     # Preparar nodos base
     nodes_base = []
     for n in nodes:
@@ -98,7 +97,6 @@ def render_visjs_network(
         nodes_columns.append({**n, "x": x, "y": y, "fixed": True})
     
     # ============ LAYOUT 2: RADIAL ============
-    import math
     type_angles = {"SUPPLIER": -120, "PALLET_IN": -60, "PROCESS": 0, "PALLET_OUT": 60, "CUSTOMER": 120}
     type_radius = {"SUPPLIER": 350, "PALLET_IN": 250, "PROCESS": 100, "PALLET_OUT": 250, "CUSTOMER": 350}
     type_counts_radial = {}
@@ -121,7 +119,6 @@ def render_visjs_network(
     nodes_physics = [{**n} for n in nodes_base]  # Sin posiciones fijas
     
     # Generar JSON
-    import json
     nodes_columns_json = json.dumps(nodes_columns)
     nodes_radial_json = json.dumps(nodes_radial)
     nodes_physics_json = json.dumps(nodes_physics)
