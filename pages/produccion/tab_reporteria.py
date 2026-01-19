@@ -292,9 +292,11 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     def clasificar_tunel(sala, product_name=''):
         """Clasifica el túnel incluyendo Túnel Continuo por nombre de producto."""
         # CASO ESPECIAL: Túnel Continuo por nombre de producto
+        # Buscar tanto "CONTINUO" como "CONTÍNUO" (con tilde en la U)
         if product_name:
             product_upper = str(product_name).upper()
-            if '[1.4]' in str(product_name) and 'TÚNEL CONTÍNUO' in product_upper:
+            if ('[1.4]' in str(product_name) and 
+                ('TÚNEL CONTINUO' in product_upper or 'TÚNEL CONTÍNUO' in product_upper)):
                 return 'Túnel Continuo'
         
         if not sala:
@@ -310,7 +312,8 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
         product_name = row['product_name'] if 'product_name' in row.index else ''
         if product_name:
             product_upper = str(product_name).upper()
-            if '[1.4]' in str(product_name) and 'TÚNEL CONTÍNUO' in product_upper:
+            if ('[1.4]' in str(product_name) and 
+                ('TÚNEL CONTINUO' in product_upper or 'TÚNEL CONTÍNUO' in product_upper)):
                 return 'CONGELADO'
         sala_tipo = row['sala_tipo'] if 'sala_tipo' in row.index else 'SIN_SALA'
         return sala_tipo if sala_tipo else 'SIN_SALA'
@@ -730,7 +733,8 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             product_name = mo.get('product_name', '')
             if product_name:
                 product_upper = str(product_name).upper()
-                return '[1.4]' in product_name and 'TÚNEL CONTÍNUO' in product_upper
+                return ('[1.4]' in product_name and 
+                       ('TÚNEL CONTINUO' in product_upper or 'TÚNEL CONTÍNUO' in product_upper))
             return False
         
         # === KPIs POR TÚNEL INDIVIDUAL ===

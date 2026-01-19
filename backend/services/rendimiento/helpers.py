@@ -120,8 +120,9 @@ def classify_sala(sala_name: str, product_name: str = '') -> Tuple[str, str]:
     product_lower = (product_name or '').lower()
     
     # PRIORIDAD 1: Túnel Continuo detectado por PRODUCTO (no por sala)
-    # Ej: "[1.4] PROCESO CONGELADO TÚNEL CONTINUO"
-    if 'tunel continuo' in product_lower or 'túnel continuo' in product_lower:
+    # Ej: "[1.4] PROCESO CONGELADO TÚNEL CONTÍNUO" (con tilde en la U)
+    if ('tunel continuo' in product_lower or 'túnel continuo' in product_lower or
+        'tunel contínuo' in product_lower or 'túnel contínuo' in product_lower):
         return ('CONGELADO', 'Túnel Continuo')
     
     # PRIORIDAD 2: Congelado explícito por sala - túneles estáticos
