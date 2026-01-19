@@ -78,6 +78,10 @@ class TraceabilityService:
         # Resolver proveedores y clientes
         self._resolve_partners(result)
         
+        # Enriquecer con fechas adicionales
+        self._enrich_with_pallet_dates(result)
+        self._enrich_with_mrp_dates(result)
+        
         return result
     
     def _empty_result(self) -> Dict:
@@ -240,7 +244,7 @@ class TraceabilityService:
             pickings = self.odoo.read(
                 "stock.picking",
                 list(all_picking_ids),
-                ["id", "partner_id"]
+                ["id", "partner_id", "scheduled_date"]
             )
             pickings_by_id = {p["id"]: p for p in pickings}
             
@@ -255,14 +259,20 @@ class TraceabilityService:
                         result["suppliers"][sid] = sname
                         pinfo["supplier_id"] = sid
             
-            # Clientes
+            # Clientes con scheduled_date
             for pkg_id, picking_id in sale_pallet_pickings.items():
                 picking = pickings_by_id.get(picking_id, {})
                 partner_rel = picking.get("partner_id")
+                scheduled_date = picking.get("scheduled_date", "")
                 if partner_rel:
                     cid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
                     cname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
-                    result["customers"][cid] = cname
+                    # Guardar cliente con fecha
+                    if cid not in result["customers"]:
+                        result["customers"][cid] = {
+                            "name": cname,
+                            "scheduled_date": scheduled_date
+                        }
                     # Link: PALLET → CUSTOMER
                     pallet_qty = result["pallets"].get(pkg_id, {}).get("qty", 1)
                     result["links"].append(("PALLET", pkg_id, "CUSTOMER", cid, pallet_qty))
@@ -300,3 +310,56 @@ class TraceabilityService:
         
         self._virtual_location_ids = known_virtual_ids
         return known_virtual_ids
+    
+    def _enrich_with_pallet_dates(self, result: Dict):
+        """Obtiene create_date de stock.quant.package para cada pallet."""
+        pallet_ids = list(result["pallets"].keys())
+        if not pallet_ids:
+            return
+        
+        try:
+            packages = self.odoo.read(
+                "stock.quant.package",
+                pallet_ids,
+                ["id", "create_date"]
+            )
+            for pkg in packages:
+                pid = pkg["id"]
+                if pid in result["pallets"]:
+                    result["pallets"][pid]["create_date"] = pkg.get("create_date", "")
+        except Exception as e:
+            print(f"[TraceabilityService] Error fetching package dates: {e}")
+    
+    def _enrich_with_mrp_dates(self, result: Dict):
+        """Obtiene fechas de inicio/término de mrp.production para procesos."""
+        # Buscar MOs que coincidan con las referencias de procesos
+        process_refs = [ref for ref, p in result["processes"].items() if not p.get("is_reception")]
+        if not process_refs:
+            return
+        
+        try:
+            # Buscar MOs por nombre (origin o name)
+            mrp_orders = self.odoo.search_read(
+                "mrp.production",
+                ["|", ("name", "in", process_refs), ("origin", "in", process_refs)],
+                ["id", "name", "origin", "x_studio_inicio_de_proceso", "x_studio_termino_de_proceso"],
+                limit=len(process_refs) * 2
+            )
+            
+            # Crear mapa de MO por referencia
+            mrp_by_ref = {}
+            for mo in mrp_orders:
+                if mo.get("name") in process_refs:
+                    mrp_by_ref[mo["name"]] = mo
+                if mo.get("origin") in process_refs:
+                    mrp_by_ref[mo["origin"]] = mo
+            
+            # Enriquecer procesos con fechas MRP
+            for ref, pinfo in result["processes"].items():
+                if ref in mrp_by_ref:
+                    mo = mrp_by_ref[ref]
+                    pinfo["mrp_start"] = mo.get("x_studio_inicio_de_proceso", "")
+                    pinfo["mrp_end"] = mo.get("x_studio_termino_de_proceso", "")
+                    pinfo["mrp_id"] = mo.get("id")
+        except Exception as e:
+            print(f"[TraceabilityService] Error fetching MRP dates: {e}")

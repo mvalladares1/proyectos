@@ -176,12 +176,14 @@ def render_visjs_timeline(
         st.info("No hay datos de fechas para mostrar en la línea de tiempo")
         return
     
-    # Agrupar por tipo
+    # Todos los grupos con estilos
     groups = [
+        {"id": "supplier", "content": "🏭 Proveedores", "style": "background-color: #9b59b6; color: white;"},
         {"id": "reception", "content": "📥 Recepciones", "style": "background-color: #1abc9c; color: white;"},
         {"id": "pallet_in", "content": "📦 Pallets IN", "style": "background-color: #f39c12; color: white;"},
         {"id": "process", "content": "🔄 Procesos", "style": "background-color: #e74c3c; color: white;"},
         {"id": "pallet_out", "content": "📤 Pallets OUT", "style": "background-color: #2ecc71; color: white;"},
+        {"id": "customer", "content": "🔵 Clientes", "style": "background-color: #3498db; color: white;"},
     ]
     
     # Generar HTML de timeline
@@ -201,6 +203,34 @@ def render_visjs_timeline(
             }}
             .vis-item.vis-selected {{
                 border-width: 3px;
+            }}
+            /* Estilos para rangos (procesos) */
+            .vis-item.vis-range {{
+                border-radius: 6px;
+            }}
+            .timeline-process {{
+                background-color: #e74c3c !important;
+                border-color: #c0392b !important;
+            }}
+            .timeline-supplier {{
+                background-color: #9b59b6 !important;
+                border-color: #8e44ad !important;
+            }}
+            .timeline-reception {{
+                background-color: #1abc9c !important;
+                border-color: #16a085 !important;
+            }}
+            .timeline-pallet-in {{
+                background-color: #f39c12 !important;
+                border-color: #d68910 !important;
+            }}
+            .timeline-pallet-out {{
+                background-color: #2ecc71 !important;
+                border-color: #27ae60 !important;
+            }}
+            .timeline-customer {{
+                background-color: #3498db !important;
+                border-color: #2980b9 !important;
             }}
         </style>
     </head>

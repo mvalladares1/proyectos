@@ -16,6 +16,16 @@ NODE_COLORS = {
     "CUSTOMER": {"background": "#3498db", "border": "#2980b9", "highlight": {"background": "#5dade2", "border": "#3498db"}},
 }
 
+# Colores para grupos del timeline (CSS)
+TIMELINE_GROUP_STYLES = {
+    "supplier": "background-color: #9b59b6; color: white;",
+    "reception": "background-color: #1abc9c; color: white;",
+    "pallet_in": "background-color: #f39c12; color: white;",
+    "process": "background-color: #e74c3c; color: white;",
+    "pallet_out": "background-color: #2ecc71; color: white;",
+    "customer": "background-color: #3498db; color: white;",
+}
+
 # Iconos por tipo
 NODE_ICONS = {
     "SUPPLIER": "🏭",
@@ -49,6 +59,7 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
         - nodes: Lista de nodos para vis.js
         - edges: Lista de edges para vis.js
         - timeline_data: Datos para timeline (si se usa)
+        - timeline_groups: Grupos para el timeline
         - stats: Estadísticas
     """
     pallets = traceability_data.get("pallets", {})
@@ -62,8 +73,13 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
     node_ids = set()
     timeline_data = []
     
-    # Agregar nodos de proveedores
-    for sid, sname in suppliers.items():
+    # Track de fechas de proveedores (usamos la fecha de primera recepción)
+    supplier_first_dates = {}
+    
+    # Agregar nodos de proveedores (fechas se asignan después)
+    for sid, sdata in suppliers.items():
+        # sdata puede ser string (nombre) o dict con más info
+        sname = sdata if isinstance(sdata, str) else sdata.get("name", str(sid))
         node_id = f"SUPP:{sid}"
         if node_id not in node_ids:
             nodes.append(_create_node(
@@ -74,7 +90,7 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             ))
             node_ids.add(node_id)
     
-    # Agregar nodos de recepciones
+    # Agregar nodos de recepciones y trackear fechas de proveedores
     for ref, pinfo in processes.items():
         if pinfo.get("is_reception"):
             node_id = f"RECV:{ref}"
@@ -88,15 +104,35 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 ))
                 node_ids.add(node_id)
                 
-                # Timeline data
+                # Timeline: Recepción como punto
                 if date:
                     timeline_data.append({
                         "id": node_id,
                         "content": ref,
                         "start": date,
                         "type": "point",
-                        "group": "reception"
+                        "group": "reception",
+                        "className": "timeline-reception"
                     })
+                    
+                    # Trackear primera recepción por proveedor
+                    supplier_id = pinfo.get("supplier_id")
+                    if supplier_id:
+                        if supplier_id not in supplier_first_dates or date < supplier_first_dates[supplier_id]:
+                            supplier_first_dates[supplier_id] = date
+    
+    # Timeline: Agregar proveedores con su primera fecha de recepción
+    for sid, first_date in supplier_first_dates.items():
+        sdata = suppliers.get(sid, {})
+        sname = sdata if isinstance(sdata, str) else sdata.get("name", str(sid))
+        timeline_data.append({
+            "id": f"SUPP:{sid}",
+            "content": f"🏭 {sname}",
+            "start": first_date,
+            "type": "point",
+            "group": "supplier",
+            "className": "timeline-supplier"
+        })
     
     # Agregar nodos de pallets
     for pid, pinfo in pallets.items():
@@ -109,11 +145,14 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             qty = pinfo.get("qty", 0)
             products = list(pinfo.get("products", {}).keys())
             prods_str = ", ".join(products[:2])
-            date = pinfo.get("first_date", "")[:10] if pinfo.get("first_date") else ""
+            
+            # Usar create_date si existe, sino first_date
+            create_date = pinfo.get("create_date", "")
+            date = create_date[:10] if create_date else (pinfo.get("first_date", "")[:10] if pinfo.get("first_date") else "")
             
             title = f"Pallet: {name}\nCantidad: {qty:.0f} kg\nProductos: {prods_str}"
             if date:
-                title += f"\nFecha: {date}"
+                title += f"\nFecha creación: {date}"
             
             nodes.append(_create_node(
                 node_id,
@@ -124,14 +163,15 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             ))
             node_ids.add(node_id)
             
-            # Timeline data
+            # Timeline: Pallet como punto
             if date:
                 timeline_data.append({
                     "id": node_id,
                     "content": name,
                     "start": date,
                     "type": "point",
-                    "group": "pallet_in" if direction == "IN" else "pallet_out"
+                    "group": "pallet_in" if direction == "IN" else "pallet_out",
+                    "className": f"timeline-pallet-{direction.lower()}"
                 })
     
     # Agregar nodos de procesos
@@ -139,35 +179,81 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
         if not pinfo.get("is_reception"):
             node_id = f"PROC:{ref}"
             if node_id not in node_ids:
+                # Usar fechas MRP si existen
+                mrp_start = pinfo.get("mrp_start", "")
+                mrp_end = pinfo.get("mrp_end", "")
                 date = pinfo.get("date", "")[:10] if pinfo.get("date") else ""
+                
+                # Para el título del nodo
+                title_date = mrp_start[:16] if mrp_start else date
+                title = f"Proceso: {ref}"
+                if mrp_start:
+                    title += f"\nInicio: {mrp_start[:16]}"
+                if mrp_end:
+                    title += f"\nTérmino: {mrp_end[:16]}"
+                elif date:
+                    title += f"\nFecha: {date}"
+                
                 nodes.append(_create_node(
                     node_id,
                     f"{NODE_ICONS['PROCESS']} {ref}",
                     "PROCESS",
-                    title=f"Proceso: {ref}\nFecha: {date}"
+                    title=title
                 ))
                 node_ids.add(node_id)
                 
-                # Timeline data
-                if date:
+                # Timeline: Proceso como RANGO si tiene inicio y término
+                if mrp_start and mrp_end:
                     timeline_data.append({
                         "id": node_id,
                         "content": ref,
-                        "start": date,
+                        "start": mrp_start,
+                        "end": mrp_end,
+                        "type": "range",
+                        "group": "process",
+                        "className": "timeline-process"
+                    })
+                elif mrp_start or date:
+                    # Solo punto si no hay rango completo
+                    timeline_data.append({
+                        "id": node_id,
+                        "content": ref,
+                        "start": mrp_start if mrp_start else date,
                         "type": "point",
-                        "group": "process"
+                        "group": "process",
+                        "className": "timeline-process"
                     })
     
     # Agregar nodos de clientes
-    for cid, cname in customers.items():
+    for cid, cdata in customers.items():
         node_id = f"CUST:{cid}"
+        # cdata puede ser string o dict
+        cname = cdata if isinstance(cdata, str) else cdata.get("name", str(cid))
+        scheduled_date = "" if isinstance(cdata, str) else cdata.get("scheduled_date", "")
+        
         if node_id not in node_ids:
+            title = f"Cliente: {cname}"
+            if scheduled_date:
+                title += f"\nFecha programada: {scheduled_date[:10]}"
+            
             nodes.append(_create_node(
                 node_id,
                 f"{NODE_ICONS['CUSTOMER']} {cname}",
                 "CUSTOMER",
-                title=f"Cliente: {cname}"
+                title=title
             ))
+            node_ids.add(node_id)
+            
+            # Timeline: Cliente como punto con fecha programada
+            if scheduled_date:
+                timeline_data.append({
+                    "id": node_id,
+                    "content": f"🔵 {cname}",
+                    "start": scheduled_date[:10],
+                    "type": "point",
+                    "group": "customer",
+                    "className": "timeline-customer"
+                })
             node_ids.add(node_id)
     
     # Agregar edges
