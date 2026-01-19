@@ -52,29 +52,40 @@ def render_visjs_network(
     
     # Generar HTML directamente con vis.js para control total del layout
     nodes_json = json.dumps(nodes)
-    # Preparar nodos con level explícito
-    nodes_with_level = []
+    # Preparar nodos con grupos
+    nodes_with_groups = []
     for n in nodes:
+        # Determinar grupo basado en el ID del nodo
+        node_id = n["id"]
+        if node_id.startswith("SUPP:"):
+            group = "supplier"
+        elif node_id.startswith("PKG:"):
+            # Determinar si es IN o OUT basado en el color
+            color = n.get("color", "")
+            group = "pallet_out" if "#2ecc71" in color else "pallet_in"
+        elif node_id.startswith("PROC:"):
+            group = "process"
+        elif node_id.startswith("CUST:"):
+            group = "customer"
+        else:
+            group = "other"
+        
         node_data = {
-            "id": n["id"],
-            "label": n.get("label", n["id"]),
+            "id": node_id,
+            "label": n.get("label", node_id),
             "title": n.get("title", ""),
-            "level": n.get("level", 2),  # Nivel jerárquico
-            "color": n.get("color", "#97c2fc"),
-            "font": {"color": "#ffffff", "size": 9}
+            "group": group,
+            "value": 1  # Para scaling
         }
-        nodes_with_level.append(node_data)
+        nodes_with_groups.append(node_data)
     
-    nodes_json = json.dumps(nodes_with_level)
+    nodes_json = json.dumps(nodes_with_groups)
     edges_json = json.dumps([{
         "from": e["from"],
         "to": e["to"],
         "value": e.get("value", 1),
-        "color": e.get("color", "rgba(150,150,150,0.5)"),
-        "width": max(1, min(10, e.get("value", 1) / 150)),
+        "width": max(1, min(8, e.get("value", 1) / 200)),
         "title": f"{e.get('value', 0):,.0f} kg",
-        "arrows": "to",
-        "smooth": {"type": "cubicBezier", "forceDirection": "horizontal", "roundness": 0.4}
     } for e in edges])
     
     network_html = f"""
@@ -87,9 +98,53 @@ def render_visjs_network(
             html, body {{ height: 100%; overflow: hidden; }}
             body {{ background: #1a1a2e; }}
             #network {{ width: 100vw; height: 100vh; }}
+            #legend {{
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.7);
+                padding: 10px;
+                border-radius: 8px;
+                font-family: Arial, sans-serif;
+                font-size: 11px;
+                color: white;
+                z-index: 1000;
+            }}
+            .legend-item {{
+                display: flex;
+                align-items: center;
+                margin: 5px 0;
+            }}
+            .legend-dot {{
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                margin-right: 8px;
+            }}
+            .legend-square {{
+                width: 12px;
+                height: 12px;
+                margin-right: 8px;
+            }}
+            .legend-triangle {{
+                width: 0;
+                height: 0;
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-bottom: 12px solid;
+                margin-right: 8px;
+            }}
         </style>
     </head>
     <body>
+        <div id="legend">
+            <div style="font-weight: bold; margin-bottom: 8px;">🗺️ Leyenda</div>
+            <div class="legend-item"><div class="legend-triangle" style="border-bottom-color: #9b59b6;"></div>Proveedor</div>
+            <div class="legend-item"><div class="legend-dot" style="background: #f39c12;"></div>Pallet Entrada</div>
+            <div class="legend-item"><div class="legend-square" style="background: #e74c3c;"></div>Proceso</div>
+            <div class="legend-item"><div class="legend-dot" style="background: #2ecc71;"></div>Pallet Salida</div>
+            <div class="legend-item"><div class="legend-square" style="background: #3498db;"></div>Cliente</div>
+        </div>
         <div id="network"></div>
         <script>
             var nodes = new vis.DataSet({nodes_json});
@@ -99,63 +154,130 @@ def render_visjs_network(
             var data = {{ nodes: nodes, edges: edges }};
             
             var options = {{
-                layout: {{
-                    hierarchical: {{
+                nodes: {{
+                    scaling: {{
+                        min: 16,
+                        max: 32
+                    }},
+                    font: {{
+                        size: 11,
+                        color: '#ffffff',
+                        face: 'Arial'
+                    }},
+                    borderWidth: 2
+                }},
+                edges: {{
+                    color: {{
+                        color: 'rgba(150, 150, 150, 0.6)',
+                        highlight: '#ffffff',
+                        hover: '#ffffff'
+                    }},
+                    smooth: {{
                         enabled: true,
-                        direction: 'LR',
-                        sortMethod: 'directed',
-                        levelSeparation: 200,
-                        nodeSpacing: 50,
-                        treeSpacing: 100,
-                        blockShifting: true,
-                        edgeMinimization: true,
-                        parentCentralization: true,
-                        shakeTowards: 'roots'
+                        type: 'continuous',
+                        roundness: 0.5
+                    }},
+                    arrows: {{
+                        to: {{ enabled: true, scaleFactor: 0.5 }}
                     }}
                 }},
                 physics: {{
-                    enabled: false
+                    forceAtlas2Based: {{
+                        gravitationalConstant: -50,
+                        centralGravity: 0.01,
+                        springLength: 150,
+                        springConstant: 0.08,
+                        damping: 0.4,
+                        avoidOverlap: 0.5
+                    }},
+                    maxVelocity: 50,
+                    solver: 'forceAtlas2Based',
+                    timestep: 0.35,
+                    stabilization: {{
+                        enabled: true,
+                        iterations: 300,
+                        updateInterval: 25
+                    }}
                 }},
                 interaction: {{
                     hover: true,
                     tooltipDelay: 100,
                     zoomView: true,
                     dragView: true,
-                    dragNodes: false,
+                    dragNodes: true,
                     navigationButtons: true,
                     keyboard: {{ enabled: true, bindToWindow: false }}
                 }},
-                nodes: {{
-                    shape: 'box',
-                    font: {{ size: 10, color: '#ffffff', face: 'Arial', bold: true }},
-                    borderWidth: 2,
-                    margin: {{ top: 5, bottom: 5, left: 10, right: 10 }},
-                    widthConstraint: {{ minimum: 60, maximum: 120 }},
-                    heightConstraint: {{ minimum: 25 }}
-                }},
-                edges: {{
-                    smooth: {{
-                        enabled: true,
-                        type: 'cubicBezier',
-                        forceDirection: 'horizontal',
-                        roundness: 0.4
+                groups: {{
+                    supplier: {{
+                        shape: 'triangle',
+                        color: {{
+                            background: '#9b59b6',
+                            border: '#8e44ad',
+                            highlight: {{ background: '#a569bd', border: '#9b59b6' }},
+                            hover: {{ background: '#a569bd', border: '#9b59b6' }}
+                        }},
+                        size: 25
                     }},
-                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.4 }} }},
-                    chosen: false
+                    pallet_in: {{
+                        shape: 'dot',
+                        color: {{
+                            background: '#f39c12',
+                            border: '#d68910',
+                            highlight: {{ background: '#f5b041', border: '#f39c12' }},
+                            hover: {{ background: '#f5b041', border: '#f39c12' }}
+                        }},
+                        size: 18
+                    }},
+                    process: {{
+                        shape: 'square',
+                        color: {{
+                            background: '#e74c3c',
+                            border: '#c0392b',
+                            highlight: {{ background: '#ec7063', border: '#e74c3c' }},
+                            hover: {{ background: '#ec7063', border: '#e74c3c' }}
+                        }},
+                        size: 20
+                    }},
+                    pallet_out: {{
+                        shape: 'dot',
+                        color: {{
+                            background: '#2ecc71',
+                            border: '#27ae60',
+                            highlight: {{ background: '#58d68d', border: '#2ecc71' }},
+                            hover: {{ background: '#58d68d', border: '#2ecc71' }}
+                        }},
+                        size: 18
+                    }},
+                    customer: {{
+                        shape: 'square',
+                        color: {{
+                            background: '#3498db',
+                            border: '#2980b9',
+                            highlight: {{ background: '#5dade2', border: '#3498db' }},
+                            hover: {{ background: '#5dade2', border: '#3498db' }}
+                        }},
+                        size: 22
+                    }},
+                    other: {{
+                        shape: 'dot',
+                        color: '#666666',
+                        size: 15
+                    }}
                 }}
             }};
             
             var network = new vis.Network(container, data, options);
             
-            // Fit al iniciar con padding
-            setTimeout(function() {{
+            // Fit después de estabilizar
+            network.once('stabilizationIterationsDone', function() {{
                 network.fit({{
                     animation: {{
                         duration: 500,
                         easingFunction: 'easeInOutQuad'
                     }}
                 }});
-            }}, 200);
+            }});
         </script>
     </body>
     </html>
