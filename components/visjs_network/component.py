@@ -1,27 +1,22 @@
 """
-Componente de visualización de red usando pyvis (vis.js).
-Genera HTML interactivo con vis.js Network.
+Componente de visualización de red usando vis.js directamente.
+Genera HTML interactivo con vis.js Network y Timeline.
 """
 import streamlit as st
 import streamlit.components.v1 as components
-from typing import Dict, Optional
+from typing import Dict
 import json
 
-try:
-    from pyvis.network import Network
-    PYVIS_AVAILABLE = True
-except ImportError:
-    PYVIS_AVAILABLE = False
+# vis.js se carga desde CDN, no necesitamos pyvis
+PYVIS_AVAILABLE = True  # Mantenemos por compatibilidad
 
 
 def render_visjs_network(
     data: Dict,
     height: str = "700px",
-    show_physics_button: bool = True,
-    notebook: bool = False,
 ) -> None:
     """
-    Renderiza una red de trazabilidad usando pyvis/vis.js.
+    Renderiza una red de trazabilidad usando vis.js Network.
     
     Args:
         data: Dict con nodes, edges del visjs_transformer
@@ -55,122 +50,99 @@ def render_visjs_network(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
-    # Crear la red
-    net = Network(
-        height=height,
-        width="100%",
-        bgcolor="#1a1a2e",
-        font_color="#ffffff",
-        directed=True,
-        notebook=notebook,
-        cdn_resources="in_line",  # Para que funcione en Streamlit
-    )
+    # Generar HTML directamente con vis.js para control total del layout
+    nodes_json = json.dumps(nodes)
+    edges_json = json.dumps([{
+        "from": e["from"],
+        "to": e["to"],
+        "value": e.get("value", 1),
+        "color": e.get("color", "rgba(150,150,150,0.5)"),
+        "width": max(1, min(10, e.get("value", 1) / 150)),
+        "title": f"{e.get('value', 0):,.0f} kg",
+        "arrows": "to",
+        "smooth": {"type": "cubicBezier", "forceDirection": "horizontal", "roundness": 0.5}
+    } for e in edges])
     
-    # Configurar layout jerárquico optimizado para flujo tipo Sankey
-    net.set_options("""
-    {
-        "layout": {
-            "hierarchical": {
-                "enabled": true,
-                "direction": "LR",
-                "sortMethod": "directed",
-                "levelSeparation": 300,
-                "nodeSpacing": 30,
-                "treeSpacing": 50,
-                "blockShifting": true,
-                "edgeMinimization": true,
-                "parentCentralization": true
-            }
-        },
-        "physics": {
-            "enabled": false
-        },
-        "interaction": {
-            "hover": true,
-            "tooltipDelay": 100,
-            "zoomView": true,
-            "dragView": true,
-            "dragNodes": true,
-            "navigationButtons": true,
-            "keyboard": {
-                "enabled": true,
-                "bindToWindow": false
-            }
-        },
-        "nodes": {
-            "font": {"size": 10, "face": "Arial", "color": "#ffffff"},
-            "borderWidth": 1,
-            "shadow": false,
-            "shape": "box",
-            "margin": 5,
-            "widthConstraint": { "minimum": 80, "maximum": 150 }
-        },
-        "edges": {
-            "smooth": {
-                "enabled": true,
-                "type": "cubicBezier",
-                "forceDirection": "horizontal",
-                "roundness": 0.5
-            },
-            "arrows": {"to": {"enabled": true, "scaleFactor": 0.3}},
-            "color": {"inherit": "from", "opacity": 0.6},
-            "width": 1
-        }
-    }
-    """)
-    
-    # Agregar nodos con configuración mejorada
-    for node in nodes:
-        # Calcular ancho de borde proporcional a la cantidad (si tiene value)
-        border_width = 1
-        
-        net.add_node(
-            node["id"],
-            label=node.get("label", node["id"]),
-            title=node.get("title", ""),
-            level=node.get("level", 0),
-            color=node.get("color", {"background": "#97c2fc"}),
-            shape="box",
-            font={"color": "#fff", "size": 9},
-            borderWidth=border_width,
-            shadow=False,
-            margin={"top": 5, "bottom": 5, "left": 10, "right": 10},
-        )
-    
-    # Agregar edges con grosor proporcional al valor y color heredado
-    for edge in edges:
-        # Calcular grosor proporcional (mínimo 1, máximo 10)
-        value = edge.get("value", 1)
-        width = max(1, min(10, value / 150))
-        
-        # Color del edge
-        edge_color = edge.get("color", "rgba(150, 150, 150, 0.5)")
-        
-        net.add_edge(
-            edge["from"],
-            edge["to"],
-            width=width,
-            title=f"{value:,.0f} kg",
-            color=edge_color,
-            arrows={"to": {"enabled": True, "scaleFactor": 0.3}},
-            smooth={"type": "cubicBezier", "forceDirection": "horizontal", "roundness": 0.5},
-        )
-    
-    # Generar HTML
-    html = net.generate_html()
-    
-    # Modificar HTML para mejor integración con Streamlit
-    html = html.replace(
-        '<body>',
-        '<body style="margin: 0; padding: 0; overflow: hidden; background-color: #1a1a2e;">'
-    )
+    network_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://unpkg.com/vis-network@latest/standalone/umd/vis-network.min.js"></script>
+        <style>
+            body {{ margin: 0; padding: 0; background: #1a1a2e; }}
+            #network {{ width: 100%; height: {height}; }}
+        </style>
+    </head>
+    <body>
+        <div id="network"></div>
+        <script>
+            var nodes = new vis.DataSet({nodes_json});
+            var edges = new vis.DataSet({edges_json});
+            
+            var container = document.getElementById('network');
+            var data = {{ nodes: nodes, edges: edges }};
+            
+            var options = {{
+                layout: {{
+                    hierarchical: {{
+                        enabled: true,
+                        direction: 'LR',
+                        sortMethod: 'directed',
+                        levelSeparation: 250,
+                        nodeSpacing: 25,
+                        treeSpacing: 40,
+                        blockShifting: true,
+                        edgeMinimization: true,
+                        parentCentralization: true
+                    }}
+                }},
+                physics: {{
+                    enabled: false
+                }},
+                interaction: {{
+                    hover: true,
+                    tooltipDelay: 100,
+                    zoomView: true,
+                    dragView: true,
+                    dragNodes: false,
+                    navigationButtons: true,
+                    keyboard: {{ enabled: true }}
+                }},
+                nodes: {{
+                    shape: 'box',
+                    font: {{ size: 9, color: '#ffffff', face: 'Arial' }},
+                    borderWidth: 1,
+                    margin: 5,
+                    widthConstraint: {{ minimum: 60, maximum: 120 }}
+                }},
+                edges: {{
+                    smooth: {{
+                        enabled: true,
+                        type: 'cubicBezier',
+                        forceDirection: 'horizontal',
+                        roundness: 0.5
+                    }},
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.3 }} }}
+                }}
+            }};
+            
+            var network = new vis.Network(container, data, options);
+            
+            // Fit después de estabilizar
+            network.once('stabilized', function() {{
+                network.fit();
+            }});
+        </script>
+    </body>
+    </html>
+    """
     
     # Mostrar controles
     st.markdown("### 🕸️ Red de Trazabilidad")
-    st.caption("🖱️ Arrastra nodos | 🔍 Scroll para zoom | 📍 Hover para detalles")
+    st.caption("🖱️ Arrastra para navegar | 🔍 Scroll para zoom | 📍 Hover para detalles")
     
     # Renderizar
-    components.html(html, height=int(height.replace("px", "")) + 50, scrolling=False)
+    components.html(network_html, height=int(height.replace("px", "")) + 50, scrolling=False)
 
 
 def render_visjs_timeline(

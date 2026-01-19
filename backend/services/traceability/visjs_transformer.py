@@ -325,25 +325,16 @@ def _create_node(
 ) -> Dict:
     """Crea un nodo en formato vis.js."""
     colors = NODE_COLORS.get(node_type, NODE_COLORS["PROCESS"])
-    level = NODE_LEVELS.get(node_type, 3)
+    level = NODE_LEVELS.get(node_type, 2)
     
     node = {
         "id": node_id,
         "label": label,
         "title": title,  # Tooltip
         "level": level,
-        "color": colors,
-        "shape": "box",
-        "font": {"color": "#fff", "size": 12},
-        "borderWidth": 2,
-        "shadow": True,
-        "margin": 10,
+        "color": colors["background"],  # Solo el color de fondo como string
+        "font": {"color": "#ffffff"},
     }
-    
-    # Tamaño proporcional si se especifica valor
-    if value and value > 0:
-        node["value"] = value
-        node["scaling"] = {"min": 20, "max": 50}
     
     return node
 
