@@ -915,6 +915,107 @@ class FlujoCajaService:
             import traceback
             traceback.print_exc()
 
+        # 5a.1 CUENTAS PARAMETRIZADAS: Incluir TODOS los movimientos de cuentas mapeadas explícitamente
+        # aunque NO toquen efectivo (para visibilidad de compromisos futuros como leasings, intereses, etc.)
+        try:
+            # Obtener códigos de cuentas explícitamente mapeadas
+            cuentas_parametrizadas = list(self.mapeo_cuentas.get("mapeo_cuentas", {}).keys())
+            
+            if cuentas_parametrizadas:
+                print(f"[FlujoCaja] Procesando {len(cuentas_parametrizadas)} cuentas parametrizadas...")
+                
+                # Buscar movimientos de estas cuentas en el periodo (posted + draft)
+                lineas_parametrizadas = self.odoo.search_read(
+                    'account.move.line',
+                    [
+                        ['account_id.code', 'in', cuentas_parametrizadas],
+                        ['parent_state', 'in', ['posted', 'draft']],
+                        ['date', '>=', fecha_inicio],
+                        ['date', '<=', fecha_fin]
+                    ],
+                    ['account_id', 'name', 'balance', 'date'],
+                    limit=10000
+                )
+                
+                print(f"[FlujoCaja] Líneas de cuentas parametrizadas: {len(lineas_parametrizadas)}")
+                
+                # Agrupar por cuenta y mes
+                for linea in lineas_parametrizadas:
+                    acc_data = linea.get('account_id')
+                    if not acc_data:
+                        continue
+                    
+                    codigo_cuenta = acc_data[1].split(' ')[0] if ' ' in acc_data[1] else acc_data[1]
+                    balance = linea.get('balance', 0)
+                    fecha = linea.get('date', '')
+                    
+                    # Determinar mes
+                    if agrupacion == 'semanal':
+                        # Convertir a semana
+                        from datetime import datetime
+                        fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                        y, w, d = fecha_dt.isocalendar()
+                        mes_str = f"{y}-W{w:02d}"
+                    else:
+                        mes_str = fecha[:7] if fecha else None  # YYYY-MM
+                    
+                    if not mes_str or mes_str not in meses_lista:
+                        continue
+                    
+                    # Clasificar cuenta
+                    concepto_id, es_pendiente = self._clasificar_cuenta(codigo_cuenta)
+                    if concepto_id is None:
+                        continue
+                    
+                    # Acumular en montos_por_concepto_mes
+                    if concepto_id not in montos_por_concepto_mes:
+                        montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in meses_lista}
+                    
+                    montos_por_concepto_mes[concepto_id][mes_str] += balance
+                    
+                    # Trackear en cuentas_por_concepto
+                    if concepto_id not in cuentas_por_concepto:
+                        cuentas_por_concepto[concepto_id] = {}
+                    
+                    if codigo_cuenta not in cuentas_por_concepto[concepto_id]:
+                        nombre_cuenta = acc_data[1].split(' ', 1)[1] if ' ' in acc_data[1] else acc_data[1]
+                        cuentas_por_concepto[concepto_id][codigo_cuenta] = {
+                            'nombre': nombre_cuenta[:50],
+                            'monto': 0.0,
+                            'cantidad': 0,
+                            'montos_por_mes': {m: 0.0 for m in meses_lista},
+                            'etiquetas': {},
+                            'account_id': acc_data[0]
+                        }
+                    
+                    cuentas_por_concepto[concepto_id][codigo_cuenta]['monto'] += balance
+                    cuentas_por_concepto[concepto_id][codigo_cuenta]['cantidad'] += 1
+                    if mes_str in meses_lista:
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['montos_por_mes'][mes_str] += balance
+                    
+                    # Agregar etiqueta (nombre de la línea)
+                    etiqueta_nombre = linea.get('name', 'Sin descripción')
+                    etiqueta_limpia = ' '.join(str(etiqueta_nombre).split())[:60] if etiqueta_nombre else "Sin etiqueta"
+                    
+                    if 'etiquetas' not in cuentas_por_concepto[concepto_id][codigo_cuenta]:
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'] = {}
+                    
+                    if etiqueta_limpia not in cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas']:
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia] = {
+                            'monto': 0.0,
+                            'montos_por_mes': {m: 0.0 for m in meses_lista}
+                        }
+                    
+                    cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]['monto'] += balance
+                    if mes_str in meses_lista:
+                        cuentas_por_concepto[concepto_id][codigo_cuenta]['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_str] += balance
+                
+                print(f"[FlujoCaja] Cuentas parametrizadas procesadas correctamente")
+                
+        except Exception as e:
+            print(f"[FlujoCaja] Error procesando cuentas parametrizadas: {e}")
+            import traceback
+            traceback.print_exc()
         
         # 5b. PROYECCIÓN: Interpretar facturas en borrador como movimientos futuros de efectivo
         # Para cada factura draft, obtenemos sus líneas y clasificamos según las cuentas contables
