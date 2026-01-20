@@ -104,48 +104,23 @@ class TraceabilityService:
     def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
         """Busca trazabilidad de un paquete específico por nombre."""
         try:
-            # Buscar directamente en stock.move.line por nombre de paquete
-            move_lines = self.odoo.search_read(
-                "stock.move.line",
-                [
-                    "|",
-                    ("package_id.name", "=", package_name),
-                    ("result_package_id.name", "=", package_name),
-                    ("qty_done", ">", 0),
-                    ("state", "=", "done"),
-                ],
-                ["package_id", "result_package_id"],
-                limit=100
+            # Buscar el ID del paquete por nombre
+            packages = self.odoo.search_read(
+                "stock.quant.package",
+                [("name", "=", package_name)],
+                ["id"],
+                limit=1
             )
             
-            if not move_lines:
+            if not packages:
                 print(f"[TraceabilityService] No se encontró paquete: {package_name}")
                 return self._empty_result()
             
-            # Extraer package_ids
-            package_ids = set()
-            for ml in move_lines:
-                pkg_rel = ml.get("package_id")
-                result_rel = ml.get("result_package_id")
-                
-                if pkg_rel:
-                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                    if pkg_id:
-                        package_ids.add(pkg_id)
-                
-                if result_rel:
-                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                    if result_id:
-                        package_ids.add(result_id)
+            package_id = packages[0]["id"]
+            print(f"[TraceabilityService] Paquete encontrado: {package_name} (ID: {package_id})")
             
-            if not package_ids:
-                print(f"[TraceabilityService] No se encontraron IDs para paquete: {package_name}")
-                return self._empty_result()
-            
-            print(f"[TraceabilityService] Paquete encontrado: {package_name} ({len(package_ids)} IDs)")
-            
-            # Buscar toda la historia de esos paquetes
-            return self._get_traceability_for_packages(list(package_ids), limit)
+            # Buscar toda la historia de ese paquete
+            return self._get_traceability_for_packages([package_id], limit)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
