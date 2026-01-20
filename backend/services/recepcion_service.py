@@ -87,6 +87,41 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         picking_type_ids = [1, 217, 164]
     
     
+    # ============ PASO 0.5: Identificar recepciones IN con devoluciones asociadas ============
+    # Buscar devoluciones para identificar qué recepciones tienen devoluciones
+    PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas
+    
+    try:
+        # Buscar devoluciones en el mismo rango de fechas
+        devoluciones_domain = [
+            ("picking_type_id", "in", PICKING_TYPES_DEVOLUCION),
+            ("scheduled_date", ">=", fecha_inicio),
+            ("scheduled_date", "<=", fecha_fin),
+        ]
+        
+        devoluciones = client.search_read(
+            "stock.picking",
+            devoluciones_domain,
+            ["id", "origin", "name"],
+            limit=5000
+        )
+        
+        # Extraer los nombres/IDs de las recepciones IN que tienen devolución
+        # El campo 'origin' típicamente contiene el nombre del picking original
+        recepciones_con_devolucion = set()
+        for dev in devoluciones:
+            origin = dev.get("origin", "")
+            if origin:
+                # El origin puede ser el nombre del picking original (ej: "RF/RFP/IN/01234")
+                recepciones_con_devolucion.add(origin)
+        
+        print(f"[INFO] Se encontraron {len(devoluciones)} devoluciones")
+        print(f"[INFO] Recepciones con devolución a excluir: {len(recepciones_con_devolucion)}")
+        
+    except Exception as e:
+        print(f"[WARNING] Error buscando devoluciones: {e}")
+        recepciones_con_devolucion = set()
+    
     # ============ PASO 1: Obtener todas las recepciones (EXCLUYENDO DEVOLUCIONES) ============
     # Las devoluciones tienen picking_type_id diferentes a los de recepción
     # IDs de picking_type para DEVOLUCIONES/SALIDAS que NO queremos incluir:
@@ -94,8 +129,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     # Basándome en la estructura, excluiremos los IDs de picking_types de devolución
     # IDs comunes de devolución en Odoo: 2 (Devoluciones de clientes), 5 (Salidas OUT)
     # Nota: Esto puede variar según la instalación, ajustar según sea necesario
-    
-    PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
     
     domain = [
         ("picking_type_id", "in", picking_type_ids),
@@ -409,6 +442,12 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         
         # Excluir productor ADMINISTRADOR
         if productor.upper().strip() == 'ADMINISTRADOR':
+            continue
+        
+        # EXCLUIR recepciones IN que tienen devoluciones asociadas
+        albaran = rec.get("name", "")
+        if albaran in recepciones_con_devolucion:
+            print(f"[INFO] Excluyendo recepción {albaran} porque tiene devolución asociada")
             continue
         
         # Determinar origen basado en picking_type_id
@@ -735,8 +774,37 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     if not picking_type_ids:
         picking_type_ids = [1, 217, 164]
 
-    # 1. Buscar pickings de MP en el rango (solo validados, EXCLUYENDO DEVOLUCIONES)
+    # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
+    
+    try:
+        devoluciones_domain = [
+            ("picking_type_id", "in", PICKING_TYPES_DEVOLUCION),
+            ("scheduled_date", ">=", fecha_inicio),
+            ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+        ]
+        
+        devoluciones = client.search_read(
+            "stock.picking",
+            devoluciones_domain,
+            ["id", "origin", "name"],
+            limit=5000
+        )
+        
+        recepciones_con_devolucion = set()
+        for dev in devoluciones:
+            origin = dev.get("origin", "")
+            if origin:
+                recepciones_con_devolucion.add(origin)
+        
+        print(f"[INFO PALLETS] Se encontraron {len(devoluciones)} devoluciones")
+        print(f"[INFO PALLETS] Recepciones con devolución a excluir: {len(recepciones_con_devolucion)}")
+        
+    except Exception as e:
+        print(f"[WARNING] Error buscando devoluciones en pallets: {e}")
+        recepciones_con_devolucion = set()
+
+    # 1. Buscar pickings de MP en el rango (solo validados, EXCLUYENDO DEVOLUCIONES)
     
     domain = [
         ("picking_type_id", "in", picking_type_ids),
@@ -754,6 +822,20 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         order="scheduled_date desc",
         limit=2000
     )
+    
+    if not pickings:
+        return []
+    
+    # Filtrar pickings que tienen devoluciones asociadas
+    pickings_filtrados = []
+    for p in pickings:
+        albaran = p.get("name", "")
+        if albaran not in recepciones_con_devolucion:
+            pickings_filtrados.append(p)
+        else:
+            print(f"[INFO PALLETS] Excluyendo picking {albaran} porque tiene devolución")
+    
+    pickings = pickings_filtrados
     
     if not pickings:
         return []
@@ -922,7 +1004,35 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     if not picking_type_ids:
         picking_type_ids = [1, 217, 164]
 
+    # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
+    
+    try:
+        devoluciones_domain = [
+            ("picking_type_id", "in", PICKING_TYPES_DEVOLUCION),
+            ("scheduled_date", ">=", fecha_inicio),
+            ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+        ]
+        
+        devoluciones = client.search_read(
+            "stock.picking",
+            devoluciones_domain,
+            ["id", "origin", "name"],
+            limit=5000
+        )
+        
+        recepciones_con_devolucion = set()
+        for dev in devoluciones:
+            origin = dev.get("origin", "")
+            if origin:
+                recepciones_con_devolucion.add(origin)
+        
+        print(f"[INFO DETAILED] Se encontraron {len(devoluciones)} devoluciones")
+        print(f"[INFO DETAILED] Recepciones con devolución a excluir: {len(recepciones_con_devolucion)}")
+        
+    except Exception as e:
+        print(f"[WARNING] Error buscando devoluciones en detailed: {e}")
+        recepciones_con_devolucion = set()
 
     domain = [
         ("picking_type_id", "in", picking_type_ids),
@@ -940,6 +1050,20 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
         order="scheduled_date desc",
         limit=2000
     )
+    
+    if not pickings:
+        return []
+    
+    # Filtrar pickings que tienen devoluciones asociadas
+    pickings_filtrados = []
+    for p in pickings:
+        albaran = p.get("name", "")
+        if albaran not in recepciones_con_devolucion:
+            pickings_filtrados.append(p)
+        else:
+            print(f"[INFO DETAILED] Excluyendo picking {albaran} porque tiene devolución")
+    
+    pickings = pickings_filtrados
     
     if not pickings:
         return []
