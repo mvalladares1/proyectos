@@ -245,7 +245,8 @@ class TraceabilityService:
         try:
             pickings = self.odoo.read(
                 "stock.picking",
-                list(all_picking_ids), ["origin"]
+                list(all_picking_ids),
+                ["id", "partner_id", "scheduled_date", "origin", "date_done"]
             )
             pickings_by_id = {p["id"]: p for p in pickings}
             
@@ -276,17 +277,19 @@ class TraceabilityService:
                     continue  # No es un formato de venta válido
                 
                 partner_rel = picking.get("partner_id")
+                date_done = picking.get("date_done", "")  # Fecha de concreción de la venta
                 scheduled_date = picking.get("scheduled_date", "")
+                
                 if partner_rel:
                     cid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
                     cname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
-                    # Guardar cliente con fecha
+                    # Guardar cliente con fecha de concreción
                     if cid not in result["customers"]:
                         result["customers"][cid] = {
                             "name": cname,
+                            "date_done": date_done,  # Fecha real de venta concretada
                             "scheduled_date": scheduled_date,
-                            "sale_order": origin,  # Agregar referencia de venta
-                            "scheduled_date": scheduled_date
+                            "sale_order": origin  # Referencia de venta
                         }
                     # Link: PALLET → CUSTOMER
                     pallet_qty = result["pallets"].get(pkg_id, {}).get("qty", 1)

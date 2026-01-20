@@ -51,19 +51,7 @@ def render_visjs_network(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
-    # Preparar nodos base con posiciones iniciales por tipo
-    # Esto organiza: Proveedores izquierda → Pallets IN → Procesos centro → Pallets OUT → Clientes derecha
-    X_POSITIONS = {
-        "SUPPLIER": -600,
-        "PALLET_IN": -300,
-        "PROCESS": 0,
-        "PALLET_OUT": 300,
-        "CUSTOMER": 600,
-    }
-    
-    # Contador por tipo para distribuir verticalmente
-    type_counters = {}
-    
+    # Preparar nodos base sin posicionamiento inicial
     nodes_base = []
     for n in nodes:
         node_id = n["id"]
@@ -80,22 +68,12 @@ def render_visjs_network(
             elif node_id.startswith("CUST:"):
                 node_type = "CUSTOMER"
         
-        # Calcular posición inicial
-        x = X_POSITIONS.get(node_type, 0)
-        
-        # Distribuir verticalmente dentro de cada columna
-        type_counters[node_type] = type_counters.get(node_type, 0) + 1
-        count = type_counters[node_type]
-        y = (count - 1) * 80 - 400  # Distribuir desde -400 hacia abajo
-        
         nodes_base.append({
             "id": node_id,
             "label": n.get("label", node_id),
             "title": n.get("title", "").replace("\n", "<br>"),
             "nodeType": node_type,
             "group": node_type.lower() if node_type else "process",
-            "x": x,
-            "y": y,
         })
     
     edges_base = [{
@@ -147,69 +125,23 @@ def render_visjs_network(
                 border-radius: 2px;
             }}
             .legend-dot {{ border-radius: 50%; }}
-            
-            /* Zone labels */
-            .zone-labels {{
-                position: absolute;
-                top: 50%;
-                left: 0;
-                right: 0;
-                transform: translateY(-50%);
-                display: flex;
-                justify-content: space-between;
-                padding: 0 8%;
-                pointer-events: none;
-                z-index: 1;
-            }}
-            .zone-label {{
-                color: rgba(139, 148, 158, 0.25);
-                font-size: 12px;
-                font-weight: bold;
-                text-transform: uppercase;
-                letter-spacing: 2px;
-            }}
         </style>
     </head>
     <body>
         <div class="legend">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #f0f6fc;">🗺️ Leyend clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>Proveedor</div>
+            <div style="font-weight: bold; margin-bottom: 8px; color: #f0f6fc;">🗺️ Leyenda</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #9b59b6; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>Proveedor</div>
             <div class="legend-item"><div class="legend-shape legend-dot" style="background: #f39c12;"></div>Pallet IN</div>
             <div class="legend-item"><div class="legend-shape" style="background: #e74c3c;"></div>Proceso</div>
-            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #e74c3c;"></div>Proceso</div>
-            <div class="legend-item"><div class="legend-shape" style="background: #2ecc71;"></div>Pallet OUT</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #2ecc71;"></div>Pallet OUT</div>
             <div class="legend-item"><div class="legend-shape" style="background: #3498db;"></div>Cliente</div>
-        </div>
-        
-        <div class="zone-labels">
-            <span class="zone-label">← Origen</span>
-            <span class="zone-label">Procesos</span>
-            <span class="zone-label">Destino →</span>
         </div>
         
         <div id="network"></div>
         
         <script>
-            // Posiciones X objetivo por grupo (zona de atracción)
-            var zoneX = {{
-                'supplier': -600,
-                'pallet_in': -300,
-                'process': 0,
-                'pallet_out': 300,
-                'customer': 600
-            }};
-            
-            // Preparar nodos con posición X inicial según su grupo
-            var nodes = {nodes_json};
-            nodes.forEach(function(node) {{
-                var zone = zoneX[node.group];
-                if (zone !== undefined) {{
-                    // Posición X inicial en la zona + variación random
-                    node.x = zone + (Math.random() - 0.5) * 150;
-                    node.y = (Math.random() - 0.5) * 400;
-                }}
-            }});
-            
-            var edges = {edges_json};
+            var nodes = new vis.DataSet({nodes_json});
+            var edges = new vis.DataSet({edges_json});
             
             var options = {{
                 nodes: {{
@@ -230,19 +162,22 @@ def render_visjs_network(
                     hoverWidth: 2
                 }},
                 physics: {{
-                    stabilization: {{
-                        enabled: true,
-                        iterations: 100,
-                        updateInterval: 10
-                    }},
-                    barnesHut: {{
+                    barnesHut: {
                         gravitationalConstant: -5000,
                         centralGravity: 0.05,
-                        springConstant: 0.01,
                         springLength: 200,
-                        damping: 0.3,
+                        springConstant: 0.01,
+                        damping: 0.2,
                         avoidOverlap: 0.5
-                    }}
+                    },
+                    solver: 'barnesHut',
+                    stabilization: { 
+                        enabled: true,
+                        iterations: 150,
+                        updateInterval: 25
+                    },
+                    timestep: 0.5,
+                    adaptiveTimestep: true
                 }},
                 interaction: {{
                     tooltipDelay: 50,
@@ -285,25 +220,6 @@ def render_visjs_network(
             var data = {{ nodes: nodes, edges: edges }};
             var network = new vis.Network(container, data, options);
             
-            // Fuerza personalizada: atrae cada nodo a su zona X constantemente
-            // Esto hace que los nodos vuelvan a su posición cuando los sueltas
-            network.on('beforeDrawing', function() {{
-                var nodeIds = network.body.nodeIndices;
-                nodeIds.forEach(function(nodeId) {{
-                    var node = network.body.nodes[nodeId];
-                    if (node && node.options && node.options.group) {{
-                        var targetX = zoneX[node.options.group];
-                        if (targetX !== undefined) {{
-                            // Fuerza tipo resorte hacia la zona (más fuerte para organizar rápido)
-                            var dx = targetX - node.x;
-                            var force = dx * 0.02;
-                            node.vx = (node.vx || 0) + force;
-                        }}
-                    }}
-                }});
-            }});
-            
-            // Fit inicial después de estabilizar
             network.once('stabilizationIterationsDone', function() {{
                 network.fit({{ animation: {{ duration: 500 }} }});
             }});
