@@ -144,8 +144,9 @@ def render_visjs_network(
                 width: 12px;
                 height: 12px;
                 margin-right: 8px;
-                border-radius: 50%;
+                border-radius: 2px;
             }}
+            .legend-dot {{ border-radius: 50%; }}
             
             /* Zone labels */
             .zone-labels {{
@@ -171,10 +172,10 @@ def render_visjs_network(
     </head>
     <body>
         <div class="legend">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #f0f6fc;">🗺️ Leyenda</div>
-            <div class="legend-item"><div class="legend-shape" style="background: #9b59b6;"></div>Proveedor</div>
-            <div class="legend-item"><div class="legend-shape" style="background: #f39c12;"></div>Pallet IN</div>
+            <div style="font-weight: bold; margin-bottom: 8px; color: #f0f6fc;">🗺️ Leyend clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>Proveedor</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #f39c12;"></div>Pallet IN</div>
             <div class="legend-item"><div class="legend-shape" style="background: #e74c3c;"></div>Proceso</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #e74c3c;"></div>Proceso</div>
             <div class="legend-item"><div class="legend-shape" style="background: #2ecc71;"></div>Pallet OUT</div>
             <div class="legend-item"><div class="legend-shape" style="background: #3498db;"></div>Cliente</div>
         </div>
@@ -212,11 +213,6 @@ def render_visjs_network(
             
             var options = {{
                 nodes: {{
-                    shape: 'dot',
-                    scaling: {{
-                        min: 10,
-                        max: 30
-                    }},
                     font: {{
                         size: 11,
                         color: '#c9d1d9',
@@ -230,21 +226,26 @@ def render_visjs_network(
                     smooth: {{
                         type: 'continuous'
                     }},
-                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.3 }} }}
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
+                    hoverWidth: 2
                 }},
                 physics: {{
-                    stabilization: false,
+                    stabilization: {{
+                        enabled: true,
+                        iterations: 100,
+                        updateInterval: 10
+                    }},
                     barnesHut: {{
-                        gravitationalConstant: -30000,
-                        centralGravity: 0.0,
-                        springConstant: 0.001,
-                        springLength: 150,
-                        damping: 0.15,
-                        avoidOverlap: 0.2
+                        gravitationalConstant: -5000,
+                        centralGravity: 0.05,
+                        springConstant: 0.01,
+                        springLength: 200,
+                        damping: 0.3,
+                        avoidOverlap: 0.5
                     }}
                 }},
                 interaction: {{
-                    tooltipDelay: 100,
+                    tooltipDelay: 50,
                     hideEdgesOnDrag: true,
                     hideEdgesOnZoom: true,
                     hover: true,
@@ -253,24 +254,29 @@ def render_visjs_network(
                 }},
                 groups: {{
                     supplier: {{
-                        color: {{ background: '#9b59b6', border: '#8e44ad' }},
-                        size: 20
+                        shape: 'triangle',
+                        color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
+                        size: 25
                     }},
                     pallet_in: {{
-                        color: {{ background: '#f39c12', border: '#d68910' }},
-                        size: 15
-                    }},
-                    process: {{
-                        color: {{ background: '#e74c3c', border: '#c0392b' }},
+                        shape: 'dot',
+                        color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
                         size: 18
                     }},
+                    process: {{
+                        shape: 'square',
+                        color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
+                        size: 20
+                    }},
                     pallet_out: {{
-                        color: {{ background: '#2ecc71', border: '#27ae60' }},
-                        size: 15
+                        shape: 'dot',
+                        color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
+                        size: 18
                     }},
                     customer: {{
-                        color: {{ background: '#3498db', border: '#2980b9' }},
-                        size: 20
+                        shape: 'square',
+                        color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
+                        size: 22
                     }}
                 }}
             }};
@@ -288,19 +294,19 @@ def render_visjs_network(
                     if (node && node.options && node.options.group) {{
                         var targetX = zoneX[node.options.group];
                         if (targetX !== undefined) {{
-                            // Fuerza tipo resorte hacia la zona
+                            // Fuerza tipo resorte hacia la zona (más fuerte para organizar rápido)
                             var dx = targetX - node.x;
-                            var force = dx * 0.008;
+                            var force = dx * 0.02;
                             node.vx = (node.vx || 0) + force;
                         }}
                     }}
                 }});
             }});
             
-            // Fit inicial después de un momento
-            setTimeout(function() {{
-                network.fit({{ animation: {{ duration: 800 }} }});
-            }}, 1500);
+            // Fit inicial después de estabilizar
+            network.once('stabilizationIterationsDone', function() {{
+                network.fit({{ animation: {{ duration: 500 }} }});
+            }});
         </script>
     </body>
     </html>
