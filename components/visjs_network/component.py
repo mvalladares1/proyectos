@@ -162,20 +162,20 @@ def render_visjs_network(
                     hoverWidth: 2
                 }},
                 physics: {{
-                    barnesHut: {
+                    barnesHut: {{
                         gravitationalConstant: -5000,
                         centralGravity: 0.05,
                         springLength: 200,
                         springConstant: 0.01,
                         damping: 0.2,
                         avoidOverlap: 0.5
-                    },
+                    }},
                     solver: 'barnesHut',
-                    stabilization: { 
+                    stabilization: {{ 
                         enabled: true,
                         iterations: 150,
                         updateInterval: 25
-                    },
+                    }},
                     timestep: 0.5,
                     adaptiveTimestep: true
                 }},
