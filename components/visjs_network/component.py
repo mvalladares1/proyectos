@@ -51,7 +51,19 @@ def render_visjs_network(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
-    # Preparar nodos base
+    # Preparar nodos base con posiciones iniciales por tipo
+    # Esto organiza: Proveedores izquierda → Pallets IN → Procesos centro → Pallets OUT → Clientes derecha
+    X_POSITIONS = {
+        "SUPPLIER": -600,
+        "PALLET_IN": -300,
+        "PROCESS": 0,
+        "PALLET_OUT": 300,
+        "CUSTOMER": 600,
+    }
+    
+    # Contador por tipo para distribuir verticalmente
+    type_counters = {}
+    
     nodes_base = []
     for n in nodes:
         node_id = n["id"]
@@ -68,12 +80,22 @@ def render_visjs_network(
             elif node_id.startswith("CUST:"):
                 node_type = "CUSTOMER"
         
+        # Calcular posición inicial
+        x = X_POSITIONS.get(node_type, 0)
+        
+        # Distribuir verticalmente dentro de cada columna
+        type_counters[node_type] = type_counters.get(node_type, 0) + 1
+        count = type_counters[node_type]
+        y = (count - 1) * 80 - 400  # Distribuir desde -400 hacia abajo
+        
         nodes_base.append({
             "id": node_id,
             "label": n.get("label", node_id),
             "title": n.get("title", "").replace("\n", "<br>"),
             "nodeType": node_type,
             "group": node_type.lower() if node_type else "process",
+            "x": x,
+            "y": y,
         })
     
     edges_base = [{
@@ -122,97 +144,163 @@ def render_visjs_network(
                 width: 12px;
                 height: 12px;
                 margin-right: 8px;
-                border-radius: 2px;
+                border-radius: 50%;
             }}
-            .legend-dot {{ border-radius: 50%; }}
+            
+            /* Zone labels */
+            .zone-labels {{
+                position: absolute;
+                top: 50%;
+                left: 0;
+                right: 0;
+                transform: translateY(-50%);
+                display: flex;
+                justify-content: space-between;
+                padding: 0 8%;
+                pointer-events: none;
+                z-index: 1;
+            }}
+            .zone-label {{
+                color: rgba(139, 148, 158, 0.25);
+                font-size: 12px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+            }}
         </style>
     </head>
     <body>
         <div class="legend">
             <div style="font-weight: bold; margin-bottom: 8px; color: #f0f6fc;">🗺️ Leyenda</div>
-            <div class="legend-item"><div class="legend-shape" style="background: #9b59b6; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>Proveedor</div>
-            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #f39c12;"></div>Pallet IN</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #9b59b6;"></div>Proveedor</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #f39c12;"></div>Pallet IN</div>
             <div class="legend-item"><div class="legend-shape" style="background: #e74c3c;"></div>Proceso</div>
-            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #2ecc71;"></div>Pallet OUT</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #2ecc71;"></div>Pallet OUT</div>
             <div class="legend-item"><div class="legend-shape" style="background: #3498db;"></div>Cliente</div>
+        </div>
+        
+        <div class="zone-labels">
+            <span class="zone-label">← Origen</span>
+            <span class="zone-label">Procesos</span>
+            <span class="zone-label">Destino →</span>
         </div>
         
         <div id="network"></div>
         
         <script>
-            var groupOptions = {{
-                supplier: {{
-                    shape: 'triangle',
-                    color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
-                    size: 25
-                }},
-                pallet_in: {{
+            // Posiciones X objetivo por grupo (zona de atracción)
+            var zoneX = {{
+                'supplier': -600,
+                'pallet_in': -300,
+                'process': 0,
+                'pallet_out': 300,
+                'customer': 600
+            }};
+            
+            // Preparar nodos con posición X inicial según su grupo
+            var nodes = {nodes_json};
+            nodes.forEach(function(node) {{
+                var zone = zoneX[node.group];
+                if (zone !== undefined) {{
+                    // Posición X inicial en la zona + variación random
+                    node.x = zone + (Math.random() - 0.5) * 150;
+                    node.y = (Math.random() - 0.5) * 400;
+                }}
+            }});
+            
+            var edges = {edges_json};
+            
+            var options = {{
+                nodes: {{
                     shape: 'dot',
-                    color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
-                    size: 18
+                    scaling: {{
+                        min: 10,
+                        max: 30
+                    }},
+                    font: {{
+                        size: 11,
+                        color: '#c9d1d9',
+                        face: 'Arial'
+                    }},
+                    borderWidth: 2
                 }},
-                process: {{
-                    shape: 'square',
-                    color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
-                    size: 20
+                edges: {{
+                    width: 0.5,
+                    color: {{ inherit: 'from', opacity: 0.6 }},
+                    smooth: {{
+                        type: 'continuous'
+                    }},
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.3 }} }}
                 }},
-                pallet_out: {{
-                    shape: 'dot',
-                    color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
-                    size: 18
+                physics: {{
+                    stabilization: false,
+                    barnesHut: {{
+                        gravitationalConstant: -30000,
+                        centralGravity: 0.0,
+                        springConstant: 0.001,
+                        springLength: 150,
+                        damping: 0.15,
+                        avoidOverlap: 0.2
+                    }}
                 }},
-                customer: {{
-                    shape: 'square',
-                    color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
-                    size: 22
+                interaction: {{
+                    tooltipDelay: 100,
+                    hideEdgesOnDrag: true,
+                    hideEdgesOnZoom: true,
+                    hover: true,
+                    navigationButtons: true,
+                    keyboard: true
+                }},
+                groups: {{
+                    supplier: {{
+                        color: {{ background: '#9b59b6', border: '#8e44ad' }},
+                        size: 20
+                    }},
+                    pallet_in: {{
+                        color: {{ background: '#f39c12', border: '#d68910' }},
+                        size: 15
+                    }},
+                    process: {{
+                        color: {{ background: '#e74c3c', border: '#c0392b' }},
+                        size: 18
+                    }},
+                    pallet_out: {{
+                        color: {{ background: '#2ecc71', border: '#27ae60' }},
+                        size: 15
+                    }},
+                    customer: {{
+                        color: {{ background: '#3498db', border: '#2980b9' }},
+                        size: 20
+                    }}
                 }}
             }};
             
-            var network = new vis.Network(
-                document.getElementById('network'),
-                {{
-                    nodes: new vis.DataSet({nodes_json}),
-                    edges: new vis.DataSet({edges_json})
-                }},
-                {{
-                    physics: {{
-                        forceAtlas2Based: {{
-                            gravitationalConstant: -80,
-                            centralGravity: 0.005,
-                            springLength: 200,
-                            springConstant: 0.05,
-                            damping: 0.4,
-                            avoidOverlap: 0.8
-                        }},
-                        solver: 'forceAtlas2Based',
-                        stabilization: {{ iterations: 300 }}
-                    }},
-                    interaction: {{
-                        hover: true,
-                        tooltipDelay: 50,
-                        zoomView: true,
-                        dragView: true,
-                        dragNodes: true,
-                        navigationButtons: true,
-                        keyboard: {{ enabled: true }}
-                    }},
-                    nodes: {{
-                        font: {{ size: 11, color: '#c9d1d9', face: 'Arial' }},
-                        borderWidth: 2
-                    }},
-                    edges: {{
-                        color: {{ color: 'rgba(139, 148, 158, 0.4)', highlight: '#58a6ff', hover: '#58a6ff' }},
-                        smooth: {{ enabled: true, type: 'curvedCW', roundness: 0.15 }},
-                        arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
-                        hoverWidth: 2
-                    }},
-                    groups: groupOptions
-                }}
-            );
+            var container = document.getElementById('network');
+            var data = {{ nodes: nodes, edges: edges }};
+            var network = new vis.Network(container, data, options);
             
-            network.once('stabilizationIterationsDone', function() {{
-                network.fit({{ animation: {{ duration: 500 }} }});
+            // Fuerza personalizada: atrae cada nodo a su zona X constantemente
+            // Esto hace que los nodos vuelvan a su posición cuando los sueltas
+            network.on('beforeDrawing', function() {{
+                var nodeIds = network.body.nodeIndices;
+                nodeIds.forEach(function(nodeId) {{
+                    var node = network.body.nodes[nodeId];
+                    if (node && node.options && node.options.group) {{
+                        var targetX = zoneX[node.options.group];
+                        if (targetX !== undefined) {{
+                            // Fuerza tipo resorte hacia la zona
+                            var dx = targetX - node.x;
+                            var force = dx * 0.008;
+                            node.vx = (node.vx || 0) + force;
+                        }}
+                    }}
+                }});
             }});
+            
+            // Fit inicial después de un momento
+            setTimeout(function() {{
+                network.fit({{ animation: {{ duration: 800 }} }});
+            }}, 1500);
         </script>
     </body>
     </html>
