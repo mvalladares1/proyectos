@@ -186,7 +186,7 @@ def _render_anio_detalle(anio: int, data: dict):
     """Renderiza el detalle de una temporada específica."""
     
     st.markdown(f"#### 📅 Temporada {anio}")
-    temporada_str = data.get('temporada', f'{anio-1}-11-01 a {anio}-10-31')
+    temporada_str = data.get('temporada', f'{int(anio)-1}-11-01 a {int(anio)}-10-31')
     st.caption(f"Período: {temporada_str}")
     st.caption(f"Datos: {data.get('fecha_desde', '')} hasta {data.get('fecha_hasta', '')}")
     
@@ -251,6 +251,29 @@ def _render_anio_detalle(anio: int, data: dict):
         use_container_width=True,
         hide_index=True
     )
+    
+    # Fila de totales
+    st.markdown("##### 📊 Totales")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric("Compras", f"{total_compras_kg:,.0f} kg", delta=f"${total_compras_monto:,.0f}")
+    
+    with col2:
+        st.metric("Ventas", f"{total_ventas_kg:,.0f} kg", delta=f"${total_ventas_monto:,.0f}")
+    
+    with col3:
+        st.metric("Merma", f"{total_merma_kg:,.0f} kg", delta=f"{merma_pct:.2f}%", delta_color="inverse")
+    
+    with col4:
+        st.metric("Stock Teórico", f"${total_stock_valor:,.0f}")
+    
+    with col5:
+        precio_compra_prom = total_compras_monto/total_compras_kg if total_compras_kg > 0 else 0
+        precio_venta_prom = total_ventas_monto/total_ventas_kg if total_ventas_kg > 0 else 0
+        st.metric("$/kg Compra", f"${precio_compra_prom:,.2f}")
+        st.caption(f"$/kg Venta: ${precio_venta_prom:,.2f}")
     
     # Gráfico de distribución de compras por tipo
     st.markdown("##### 🍓 Distribución de Compras por Tipo de Fruta")
