@@ -17,30 +17,6 @@ def render(username: str, password: str):
     
     st.title("📊 Stock Teórico Anual")
     
-    # Descripción del objetivo del tab
-    st.markdown("""
-    <div style="background-color: #f0f8ff; padding: 20px; border-radius: 10px; border-left: 5px solid #1f77b4; margin-bottom: 20px;">
-        <h4 style="color: #1f77b4; margin-top: 0;">🎯 Objetivo del Módulo</h4>
-        <p style="margin-bottom: 10px;">
-            Este módulo calcula el <strong>stock teórico a fin de año</strong> basado en el análisis de compras, 
-            ventas y merma histórica por tipo de fruta y manejo.
-        </p>
-        <p style="margin-bottom: 10px;"><strong>¿Qué resuelve?</strong></p>
-        <ul style="margin-bottom: 10px;">
-            <li><strong>Dashboard de Facturas:</strong> Consolida todas las facturas de compras (proveedores) y ventas (clientes)</li>
-            <li><strong>Filtrado por Categoría:</strong> Analiza cada tipo de fruta y manejo por separado</li>
-            <li><strong>Análisis por Año:</strong> Compara métricas año tras año (2023, 2024, 2025, 2026)</li>
-            <li><strong>Cálculo de Merma:</strong> Detecta pérdidas históricas y proyecta merma futura</li>
-            <li><strong>Stock Teórico:</strong> Calcula cuánto debería quedar en existencia a fin de cada año</li>
-            <li><strong>Corte Temporal:</strong> Análisis hasta 31 de octubre (fin de temporada) por defecto</li>
-        </ul>
-        <p style="margin-bottom: 0;">
-            <strong>💡 Valor:</strong> Permite proyectar inventarios, detectar pérdidas no contabilizadas 
-            y tomar decisiones de compra/venta fundamentadas en datos históricos reales.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
     # ============================================================================
     # FILTROS DE AÑOS Y CONFIGURACIÓN
     # ============================================================================
@@ -106,7 +82,6 @@ def render(username: str, password: str):
             )
             
             st.session_state.stock_teorico_loaded = True
-            st.session_state.stock_teorico_anios = anios_seleccionados
             st.session_state.stock_teorico_corte = fecha_corte_str
             
             st.success(f"✅ Análisis completado para {len(anios_seleccionados)} años")

@@ -24,7 +24,7 @@ def render(username: str, password: str):
     st.caption("Configura quién puede ver cada módulo y página del sistema")
     
     # Tabs principales
-    tab1, tab2, tab3, tab4 = st.tabs(["📁 Módulos", "📄 Páginas", "👤 Usuarios", "⚙️ Configuración"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 Módulos", "📄 Páginas", "👤 Usuarios", "📦 Override Origen", "⚙️ Configuración"])
     
     with tab1:
         _fragment_modulos(username, password)
@@ -33,6 +33,8 @@ def render(username: str, password: str):
     with tab3:
         _fragment_usuarios()
     with tab4:
+        _fragment_override_origen(username, password)
+    with tab5:
         _fragment_config(username, password)
 
 
@@ -167,6 +169,129 @@ def _fragment_usuarios():
         finally:
             st.session_state.permisos_consultar_loading = False
             st.rerun()
+
+
+@st.fragment
+def _fragment_override_origen(username: str, password: str):
+    """Fragment para gestionar overrides de origen de recepciones."""
+    st.subheader("📦 Reclasificación de Origen de Recepciones")
+    st.info("💡 Corrige recepciones que fueron ingresadas con el origen incorrecto en Odoo (ej: RFP → VILKUN)")
+    
+    # Archivo de overrides
+    overrides_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+        "shared", "origen_overrides.json"
+    )
+    
+    # Cargar overrides actuales
+    try:
+        with open(overrides_file, 'r') as f:
+            overrides = json.load(f)
+    except:
+        overrides = {}
+    
+    # Sincronizar con la constante del servicio (leer desde recepcion_service.py)
+    from backend.services.recepcion_service import OVERRIDE_ORIGEN_PICKING
+    
+    tabL, tabA = st.tabs(["📋 Overrides Actuales", "➕ Agregar Override"])
+    
+    with tabL:
+        st.markdown("### Recepciones Reclasificadas")
+        if OVERRIDE_ORIGEN_PICKING:
+            for albaran, origen in OVERRIDE_ORIGEN_PICKING.items():
+                cl, co, cd = st.columns([4, 2, 1])
+                cl.text(albaran)
+                co.markdown(f"🏢 **{origen}**")
+                # Nota: La eliminación requiere modificar el código fuente
+                cd.caption("📌 Fijo")
+            st.caption(f"Total: {len(OVERRIDE_ORIGEN_PICKING)} overrides configurados")
+        else:
+            st.caption("No hay overrides configurados")
+        
+        st.divider()
+        st.markdown("### 📝 Cómo agregar nuevos overrides:")
+        st.code('''
+# Editar: backend/services/recepcion_service.py
+
+OVERRIDE_ORIGEN_PICKING = {
+    "RF/RFP/IN/01151": "VILKUN",  # Agregar aquí
+    "RF/RFP/IN/XXXXX": "SAN JOSE",
+}
+        ''', language="python")
+    
+    with tabA:
+        st.markdown("### Buscar Recepciones para Reclasificar")
+        
+        # Inicializar fechas
+        if "override_date_from" not in st.session_state:
+            st.session_state.override_date_from = datetime.now().date() - timedelta(days=30)
+        if "override_date_to" not in st.session_state:
+            st.session_state.override_date_to = datetime.now().date()
+        
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        with c1:
+            st.session_state.override_date_from = st.date_input("Desde", st.session_state.override_date_from, key="ov_from")
+        with c2:
+            st.session_state.override_date_to = st.date_input("Hasta", st.session_state.override_date_to, key="ov_to")
+        with c3:
+            origen_filtro = st.selectbox("Origen actual", ["Todos", "RFP", "VILKUN", "SAN JOSE"], key="ov_origen_filtro")
+        with c4:
+            st.write("")
+            if st.button("🔍 Buscar Recepciones", key="btn_buscar_override"):
+                try:
+                    # Mapear origen a lista para API
+                    origen_param = None if origen_filtro == "Todos" else [origen_filtro]
+                    
+                    resp = httpx.get(f"{API_URL}/api/v1/recepciones-mp/", params={
+                        "username": username, "password": password,
+                        "fecha_inicio": st.session_state.override_date_from.isoformat(),
+                        "fecha_fin": st.session_state.override_date_to.isoformat(),
+                        "origen": origen_param[0] if origen_param else None
+                    }, timeout=60.0)
+                    if resp.status_code == 200:
+                        st.session_state.r_list_override = resp.json()
+                        st.toast(f"✅ {len(st.session_state.r_list_override)} recepciones cargadas")
+                    else:
+                        st.error(f"Error {resp.status_code} al buscar recepciones")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                st.rerun()
+        
+        # Mostrar tabla si hay recepciones
+        if "r_list_override" in st.session_state and st.session_state.r_list_override:
+            recepciones = st.session_state.r_list_override
+            
+            # Filtrar las que ya tienen override
+            recepciones_sin_override = [r for r in recepciones if r.get('albaran') not in OVERRIDE_ORIGEN_PICKING]
+            
+            st.markdown(f"**{len(recepciones_sin_override)} recepciones disponibles** (excluidas las que ya tienen override)")
+            
+            if recepciones_sin_override:
+                # Crear opciones para multiselect
+                options = [f"{r['albaran']} | {r.get('productor', 'N/A')[:30]} | {r.get('origen', '?')}" for r in recepciones_sin_override]
+                selected = st.multiselect("Seleccionar recepciones a reclasificar", options, key="override_multiselect")
+                
+                if selected:
+                    nuevo_origen = st.selectbox("Nuevo origen:", ["VILKUN", "RFP", "SAN JOSE"], key="nuevo_origen_select")
+                    
+                    st.warning(f"⚠️ Esto cambiará {len(selected)} recepciones a **{nuevo_origen}**")
+                    
+                    if st.button("✅ Confirmar Reclasificación", type="primary"):
+                        # Mostrar código para agregar manualmente
+                        st.markdown("### 📝 Agregar al archivo `recepcion_service.py`:")
+                        codigo = "OVERRIDE_ORIGEN_PICKING = {\n"
+                        # Existentes
+                        for alb, orig in OVERRIDE_ORIGEN_PICKING.items():
+                            codigo += f'    "{alb}": "{orig}",\n'
+                        # Nuevos
+                        for s in selected:
+                            alb = s.split("|")[0].strip()
+                            codigo += f'    "{alb}": "{nuevo_origen}",  # NUEVO\n'
+                        codigo += "}"
+                        st.code(codigo, language="python")
+                        st.success("✅ Copia este código y reemplaza el diccionario OVERRIDE_ORIGEN_PICKING")
+            else:
+                st.info("👍 Todas las recepciones en este rango ya tienen su origen correcto o ya están en overrides")
 
 
 @st.fragment

@@ -18,8 +18,10 @@ ALL_DASHBOARDS = [
     "bandejas",
     "stock",
     "containers",
+    "pedidos_venta",
     "rendimiento",
     "relacion_comercial",
+    "reconciliacion",
     "finanzas",
     "compras",
     "automatizaciones",
@@ -45,10 +47,12 @@ DASHBOARD_NAMES = {
 # ============ PÁGINAS/TABS DENTRO DE CADA MÓDULO ============
 # Estructura: módulo -> lista de páginas con slug y nombre
 # Los nombres DEBEN coincidir con los tabs reales de cada página
+# ACTUALIZADO: 2026-01-20
 MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
     "recepciones": [
         {"slug": "kpis_calidad", "name": "KPIs y Calidad"},
         {"slug": "gestion_recepciones", "name": "Gestión de Recepciones"},
+        {"slug": "pallets_recepcion", "name": "Pallets por Recepción"},
         {"slug": "curva_abastecimiento", "name": "Curva de Abastecimiento"},
         {"slug": "aprobaciones_mp", "name": "Aprobaciones MP"},
     ],
@@ -69,12 +73,12 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
     "containers": [
         {"slug": "lista", "name": "Lista Containers"},
     ],
+    "pedidos_venta": [
+        {"slug": "lista", "name": "Lista de Pedidos"},
+    ],
     "finanzas": [
-        {"slug": "agrupado", "name": "Agrupado"},
-        {"slug": "mensualizado", "name": "Mensualizado"},
-        {"slug": "ytd", "name": "YTD (Acumulado)"},
-        {"slug": "cg", "name": "CG"},
-        {"slug": "detalle", "name": "Detalle"},
+        {"slug": "eerr", "name": "Estado de Resultados"},
+        {"slug": "cg", "name": "Cuentas (CG)"},
         {"slug": "flujo_caja", "name": "Flujo de Caja"},
     ],
     "compras": [
@@ -85,15 +89,23 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "trazabilidad_pallets", "name": "Trazabilidad por Pallets"},
         {"slug": "diagrama_sankey", "name": "Diagrama Sankey"},
     ],
+    "relacion_comercial": [
+        {"slug": "dashboard", "name": "Dashboard"},
+    ],
+    "reconciliacion": [
+        {"slug": "reconciliacion", "name": "Reconciliación ODF"},
+    ],
     "automatizaciones": [
         {"slug": "crear_orden", "name": "Crear Orden"},
         {"slug": "monitor_ordenes", "name": "Monitor de Órdenes"},
         {"slug": "movimientos", "name": "Movimientos"},
+        {"slug": "monitor_mov", "name": "Monitor Mov."},
     ],
     "permisos": [
         {"slug": "modulos", "name": "Módulos"},
         {"slug": "paginas", "name": "Páginas"},
-        {"slug": "por_usuario", "name": "Por Usuario"},
+        {"slug": "usuarios", "name": "Usuarios"},
+        {"slug": "override_origen", "name": "Override Origen"},
         {"slug": "configuracion", "name": "Configuración"},
     ],
 }

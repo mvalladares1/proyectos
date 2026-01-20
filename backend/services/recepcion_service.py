@@ -7,6 +7,27 @@ from typing import List, Dict, Any, Optional
 from shared.odoo_client import OdooClient
 from backend.cache import get_cache, OdooCache
 
+# =============================================================================
+# OVERRIDE DE ORIGEN: Pickings que deben aparecer con origen diferente al de Odoo
+# Esto permite corregir recepciones mal ingresadas sin modificar Odoo
+# Formato: {"nombre_picking": "ORIGEN_CORRECTO"}
+# Valores válidos: "RFP", "VILKUN", "SAN JOSE"
+# =============================================================================
+OVERRIDE_ORIGEN_PICKING = {
+    "RF/RFP/IN/01151": "VILKUN",
+    "RF/RFP/IN/01117": "VILKUN",
+    "RF/RFP/IN/01155": "VILKUN",
+    "RF/RFP/IN/01156": "VILKUN",
+    "RF/RFP/IN/00638": "VILKUN",
+    "RF/RFP/IN/00386": "VILKUN",
+    "RF/RFP/IN/00684": "VILKUN",
+    "RF/RFP/IN/00329": "VILKUN",
+    "RF/RFP/IN/00245": "VILKUN",
+    "RF/RFP/IN/00664": "VILKUN",
+    "RF/RFP/IN/00655": "VILKUN",
+    "RF/RFP/IN/00563": "VILKUN",
+}
+
 
 def _normalize_categoria(cat: str) -> str:
     if not cat:
@@ -453,10 +474,14 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         # Determinar origen basado en picking_type_id
         picking_type = rec.get("picking_type_id")
         picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
-        origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
+        
+        # Aplicar override si existe (para corregir recepciones mal ingresadas en Odoo)
+        if albaran in OVERRIDE_ORIGEN_PICKING:
+            origen_rec = OVERRIDE_ORIGEN_PICKING[albaran]
+        else:
+            origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
         
         fecha = rec.get("scheduled_date", "")
-        albaran = rec.get("name", "")
         
         # Procesar movimientos de este picking
         rec_moves = moves_by_picking.get(picking_id, [])
@@ -897,7 +922,13 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         # Determinar planta
         pt_id = p.get("picking_type_id", [0, ""])
         pt_id_val = pt_id[0] if isinstance(pt_id, (list, tuple)) else pt_id
-        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
+        albaran = p.get("name", "")
+        
+        # Aplicar override si existe (para corregir recepciones mal ingresadas en Odoo)
+        if albaran in OVERRIDE_ORIGEN_PICKING:
+            origen_val = OVERRIDE_ORIGEN_PICKING[albaran]
+        else:
+            origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
 
         # Enriquecer líneas con info de producto
         filtered_ml = []
@@ -1133,7 +1164,13 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
             
         # Determinar planta
         pt_id_val = p["picking_type_id"][0] if isinstance(p["picking_type_id"], (list, tuple)) else p["picking_type_id"]
-        origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
+        albaran = p.get("name", "")
+        
+        # Aplicar override si existe (para corregir recepciones mal ingresadas en Odoo)
+        if albaran in OVERRIDE_ORIGEN_PICKING:
+            origen_val = OVERRIDE_ORIGEN_PICKING[albaran]
+        else:
+            origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
         
         # Pallet (Package)
         pkg = ml.get("result_package_id")
