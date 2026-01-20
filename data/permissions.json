@@ -62,6 +62,7 @@
     "automatizaciones.monitor_movimientos": [],
     "rendimiento.trazabilidad_pallets": [],
     "rendimiento.diagrama_sankey": [],
+    "rendimiento.trazabilidad_inventario": [],
     "reconciliacion.trigger_so": [],
     "reconciliacion.reconciliar_kg": []
   },
