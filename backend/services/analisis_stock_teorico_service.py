@@ -150,7 +150,10 @@ class AnalisisStockTeoricoService:
         }
     
     def _get_compras_por_tipo_manejo(self, fecha_desde: str, fecha_hasta: str) -> List[Dict]:
-        """Obtiene compras agrupadas por tipo de fruta y manejo."""
+        """
+        Obtiene compras agrupadas por tipo de fruta y manejo.
+        ACTUALIZADO: Usa product.template para obtener campos tipo/manejo (igual que recepciones).
+        """
         # Líneas de facturas de proveedor
         lineas = self.odoo.search_read(
             'account.move.line',
@@ -173,66 +176,100 @@ class AnalisisStockTeoricoService:
         if not lineas:
             return []
         
-        # Obtener info de productos
+        # Obtener product.product
         prod_ids = list(set([l.get('product_id', [None])[0] for l in lineas if l.get('product_id')]))
         
         productos = self.odoo.search_read(
             'product.product',
             [['id', 'in', prod_ids]],
-            ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo', 'categ_id'],
+            ['id', 'product_tmpl_id', 'categ_id'],
             limit=100000
         )
         
         print(f"[DEBUG COMPRAS] Productos únicos: {len(productos)}")
         
+        # Obtener templates únicos
+        template_ids = set()
+        product_to_template = {}
+        
+        for prod in productos:
+            prod_id = prod['id']
+            tmpl = prod.get('product_tmpl_id')
+            if tmpl:
+                tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
+                template_ids.add(tmpl_id)
+                product_to_template[prod_id] = {
+                    'tmpl_id': tmpl_id,
+                    'categ': prod.get('categ_id', [None, ''])
+                }
+        
+        # Obtener templates con campos tipo y manejo
+        template_map = {}
+        if template_ids:
+            templates = self.odoo.search_read(
+                'product.template',
+                [['id', 'in', list(template_ids)]],
+                ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo'],
+                limit=100000
+            )
+            
+            for tmpl in templates:
+                # Parsear tipo de fruta
+                tipo = tmpl.get('x_studio_sub_categora')
+                if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
+                    tipo_str = tipo[1]
+                elif isinstance(tipo, str) and tipo:
+                    tipo_str = tipo
+                else:
+                    tipo_str = None
+                
+                # Parsear manejo
+                manejo = tmpl.get('x_studio_categora_tipo_de_manejo')
+                if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                    manejo_str = manejo[1]
+                elif isinstance(manejo, str) and manejo:
+                    manejo_str = manejo
+                else:
+                    manejo_str = None
+                
+                template_map[tmpl['id']] = {
+                    'nombre': tmpl.get('name', ''),
+                    'tipo_fruta': tipo_str,
+                    'manejo': manejo_str,
+                    'tiene_ambos': bool(tipo_str and manejo_str)
+                }
+        
         # Mapear productos con tipo y manejo
         productos_map = {}
         productos_sin_tipo = 0
         productos_sin_manejo = 0
-        productos_sin_categoria_mp = 0
         
-        for prod in productos:
-            categ = prod.get('categ_id')
+        for prod_id, prod_data in product_to_template.items():
+            tmpl_id = prod_data['tmpl_id']
+            categ = prod_data['categ']
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # Obtener tipo de fruta (puede venir como string o como lista/tupla)
-            tipo = prod.get('x_studio_sub_categora')
-            if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
-                tipo_str = tipo[1]
-            elif isinstance(tipo, str) and tipo:
-                tipo_str = tipo
-            else:
-                tipo_str = None
-            
-            # Obtener tipo de manejo (puede venir como string o como lista/tupla)
-            manejo = prod.get('x_studio_categora_tipo_de_manejo')
-            if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
-                manejo_str = manejo[1]
-            elif isinstance(manejo, str) and manejo:
-                manejo_str = manejo
-            else:
-                manejo_str = None
-            
-            if not tipo_str:
-                productos_sin_tipo += 1
-            if not manejo_str:
-                productos_sin_manejo += 1
-            if 'PRODUCTOS / MP' not in categ_name and 'PRODUCTOS / PSP' not in categ_name:
-                productos_sin_categoria_mp += 1
-            
-            # Incluir todos los productos con tipo y manejo
-            if tipo_str and manejo_str:
-                productos_map[prod['id']] = {
-                    'tipo_fruta': tipo_str,
-                    'manejo': manejo_str,
-                    'nombre': prod.get('name', ''),
-                    'categoria': categ_name
-                }
+            if tmpl_id in template_map:
+                tmpl_info = template_map[tmpl_id]
+                
+                if not tmpl_info['tipo_fruta']:
+                    productos_sin_tipo += 1
+                if not tmpl_info['manejo']:
+                    productos_sin_manejo += 1
+                
+                # Solo incluir productos con AMBOS campos
+                if tmpl_info['tiene_ambos']:
+                    productos_map[prod_id] = {
+                        'tipo_fruta': tmpl_info['tipo_fruta'],
+                        'manejo': tmpl_info['manejo'],
+                        'nombre': tmpl_info['nombre'],
+                        'categoria': categ_name
+                    }
         
+        print(f"[DEBUG COMPRAS] Templates únicos: {len(template_ids)}")
         print(f"[DEBUG COMPRAS] Productos sin tipo de fruta: {productos_sin_tipo}")
         print(f"[DEBUG COMPRAS] Productos sin manejo: {productos_sin_manejo}")
-        print(f"[DEBUG COMPRAS] Productos sin categoría MP/PSP: {productos_sin_categoria_mp}")
-        print(f"[DEBUG COMPRAS] Productos mapeados: {len(productos_map)}")
+        print(f"[DEBUG COMPRAS] Productos mapeados (con tipo+manejo): {len(productos_map)}")
         
         # Agrupar por tipo + manejo
         agrupado = {}
@@ -259,7 +296,10 @@ class AnalisisStockTeoricoService:
         return list(agrupado.values())
     
     def _get_ventas_por_tipo_manejo(self, fecha_desde: str, fecha_hasta: str) -> List[Dict]:
-        """Obtiene ventas agrupadas por tipo de fruta y manejo (inferido desde PTT)."""
+        """
+        Obtiene ventas agrupadas por tipo de fruta y manejo.
+        ACTUALIZADO: Usa product.template para obtener campos tipo/manejo (igual que recepciones).
+        """
         # Líneas de facturas de cliente
         lineas = self.odoo.search_read(
             'account.move.line',
@@ -282,51 +322,91 @@ class AnalisisStockTeoricoService:
         if not lineas:
             return []
         
-        # Obtener info de productos
+        # Obtener product.product
         prod_ids = list(set([l.get('product_id', [None])[0] for l in lineas if l.get('product_id')]))
         
         productos = self.odoo.search_read(
             'product.product',
             [['id', 'in', prod_ids]],
-            ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo', 'categ_id'],
+            ['id', 'product_tmpl_id', 'categ_id'],
             limit=100000
         )
         
         print(f"[DEBUG VENTAS] Productos únicos: {len(productos)}")
         
-        # Mapear productos con tipo y manejo
-        productos_map = {}
+        # Obtener templates únicos
+        template_ids = set()
+        product_to_template = {}
+        
         for prod in productos:
-            categ = prod.get('categ_id')
-            categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
-            
-            # Obtener tipo de fruta (puede venir como string o como lista/tupla)
-            tipo = prod.get('x_studio_sub_categora')
-            if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
-                tipo_str = tipo[1]
-            elif isinstance(tipo, str) and tipo:
-                tipo_str = tipo
-            else:
-                tipo_str = None
-            
-            # Obtener tipo de manejo (puede venir como string o como lista/tupla)
-            manejo = prod.get('x_studio_categora_tipo_de_manejo')
-            if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
-                manejo_str = manejo[1]
-            elif isinstance(manejo, str) and manejo:
-                manejo_str = manejo
-            else:
-                manejo_str = None
-            
-            if tipo_str and manejo_str:
-                productos_map[prod['id']] = {
-                    'tipo_fruta': tipo_str,
-                    'manejo': manejo_str,
-                    'nombre': prod.get('name', ''),
-                    'categoria': categ_name
+            prod_id = prod['id']
+            tmpl = prod.get('product_tmpl_id')
+            if tmpl:
+                tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
+                template_ids.add(tmpl_id)
+                product_to_template[prod_id] = {
+                    'tmpl_id': tmpl_id,
+                    'categ': prod.get('categ_id', [None, ''])
                 }
         
-        print(f"[DEBUG VENTAS] Productos mapeados: {len(productos_map)}")
+        # Obtener templates con campos tipo y manejo
+        template_map = {}
+        if template_ids:
+            templates = self.odoo.search_read(
+                'product.template',
+                [['id', 'in', list(template_ids)]],
+                ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo'],
+                limit=100000
+            )
+            
+            for tmpl in templates:
+                # Parsear tipo de fruta
+                tipo = tmpl.get('x_studio_sub_categora')
+                if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
+                    tipo_str = tipo[1]
+                elif isinstance(tipo, str) and tipo:
+                    tipo_str = tipo
+                else:
+                    tipo_str = None
+                
+                # Parsear manejo
+                manejo = tmpl.get('x_studio_categora_tipo_de_manejo')
+                if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                    manejo_str = manejo[1]
+                elif isinstance(manejo, str) and manejo:
+                    manejo_str = manejo
+                else:
+                    manejo_str = None
+                
+                template_map[tmpl['id']] = {
+                    'nombre': tmpl.get('name', ''),
+                    'tipo_fruta': tipo_str,
+                    'manejo': manejo_str,
+                    'tiene_ambos': bool(tipo_str and manejo_str)
+                }
+        
+        # Mapear productos con tipo y manejo
+        productos_map = {}
+        
+        for prod_id, prod_data in product_to_template.items():
+            tmpl_id = prod_data['tmpl_id']
+            categ = prod_data['categ']
+            categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
+            
+            if tmpl_id in template_map:
+                tmpl_info = template_map[tmpl_id]
+                
+                # Solo incluir productos con AMBOS campos
+                if tmpl_info['tiene_ambos']:
+                    productos_map[prod_id] = {
+                        'tipo_fruta': tmpl_info['tipo_fruta'],
+                        'manejo': tmpl_info['manejo'],
+                        'nombre': tmpl_info['nombre'],
+                        'categoria': categ_name
+                    }
+        
+        print(f"[DEBUG VENTAS] Templates únicos: {len(template_ids)}")
+        print(f"[DEBUG VENTAS] Productos mapeados (con tipo+manejo): {len(productos_map)}")
         
         # Agrupar por tipo + manejo
         agrupado = {}
