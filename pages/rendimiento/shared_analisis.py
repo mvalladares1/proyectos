@@ -163,6 +163,45 @@ def get_inventario_rotacion_data(username: str, password: str, fecha_desde: str,
         return {"error": str(e)}
 
 
+def get_stock_teorico_rango(username: str, password: str, fecha_desde: str, fecha_hasta: str):
+    """
+    Obtiene análisis de stock teórico por rango de fechas desde API.
+    
+    Args:
+        username: Usuario Odoo
+        password: API key Odoo
+        fecha_desde: Fecha inicio en formato "YYYY-MM-DD"
+        fecha_hasta: Fecha fin en formato "YYYY-MM-DD"
+    
+    Returns:
+        dict con datos de stock teórico para el rango especificado
+    """
+    try:
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
+        
+        response = requests.get(
+            f"{API_URL}/api/v1/rendimiento/stock-teorico-rango",
+            params={
+                "username": username,
+                "password": password,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta
+            },
+            timeout=180  # Mayor timeout para análisis extenso
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"Error HTTP {response.status_code}: {response.text}"}
+    
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_stock_teorico_anual(username: str, password: str, anios: list, fecha_corte: str):
     """
     Obtiene análisis de stock teórico anual desde API.

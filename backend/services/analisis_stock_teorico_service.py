@@ -16,6 +16,54 @@ class AnalisisStockTeoricoService:
         """
         self.odoo = odoo
     
+    def get_analisis_rango(self, fecha_desde: str, fecha_hasta: str):
+        """
+        Análisis de stock teórico para un rango de fechas específico.
+        
+        Args:
+            fecha_desde: Fecha inicio en formato YYYY-MM-DD
+            fecha_hasta: Fecha fin en formato YYYY-MM-DD
+        
+        Returns:
+            dict con:
+                - resumen: totales consolidados del período
+                - datos: desglose detallado por tipo de fruta y manejo
+                - merma_historica_pct: % de merma del período
+        """
+        # Obtener compras
+        compras = self._get_compras_por_tipo_manejo(fecha_desde, fecha_hasta)
+        
+        # Obtener ventas
+        ventas = self._get_ventas_por_tipo_manejo(fecha_desde, fecha_hasta)
+        
+        # Consolidar datos
+        datos_consolidados = self._consolidar_datos(compras, ventas)
+        
+        # Calcular % de merma del período
+        merma_total_kg = 0
+        merma_total_base = 0
+        
+        for item in datos_consolidados:
+            merma_kg = item.get('merma_kg', 0)
+            compras_kg = item.get('compras_kg', 0)
+            
+            if merma_kg > 0 and compras_kg > 0:
+                merma_total_kg += merma_kg
+                merma_total_base += compras_kg
+        
+        pct_merma = (merma_total_kg / merma_total_base * 100) if merma_total_base > 0 else 0
+        
+        # Generar resumen
+        resumen = self._generar_resumen_simple(datos_consolidados)
+        
+        return {
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+            'merma_historica_pct': round(pct_merma, 2),
+            'resumen': resumen,
+            'datos': datos_consolidados
+        }
+    
     def get_analisis_multi_anual(self, anios: List[int], fecha_corte_mes_dia: str = "10-31"):
         """
         Análisis multi-anual de compras, ventas y stock teórico.
@@ -415,3 +463,32 @@ class AnalisisStockTeoricoService:
             'pct_merma_historico': round(pct_merma_historico, 2),
             'total_stock_teorico_valor': round(total_stock_teorico_valor, 2)
         }
+    
+    def _generar_resumen_simple(self, datos: List[Dict]) -> Dict:
+        """Genera resumen para un único rango de fechas."""
+        total_compras_kg = 0
+        total_compras_monto = 0
+        total_ventas_kg = 0
+        total_ventas_monto = 0
+        total_merma_kg = 0
+        total_stock_teorico_valor = 0
+        
+        for item in datos:
+            total_compras_kg += item['compras_kg']
+            total_compras_monto += item['compras_monto']
+            total_ventas_kg += item['ventas_kg']
+            total_ventas_monto += item['ventas_monto']
+            total_merma_kg += item['merma_kg']
+            total_stock_teorico_valor += item['stock_teorico_valor']
+        
+        return {
+            'total_compras_kg': round(total_compras_kg, 2),
+            'total_compras_monto': round(total_compras_monto, 2),
+            'precio_promedio_compra_global': round(total_compras_monto / total_compras_kg, 2) if total_compras_kg > 0 else 0,
+            'total_ventas_kg': round(total_ventas_kg, 2),
+            'total_ventas_monto': round(total_ventas_monto, 2),
+            'precio_promedio_venta_global': round(total_ventas_monto / total_ventas_kg, 2) if total_ventas_kg > 0 else 0,
+            'total_merma_kg': round(total_merma_kg, 2),
+            'total_stock_teorico_valor': round(total_stock_teorico_valor, 2)
+        }
+

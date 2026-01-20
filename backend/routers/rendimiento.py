@@ -254,6 +254,42 @@ async def get_analisis_inventario(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/stock-teorico-rango")
+async def get_stock_teorico_rango(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: str = Query(..., description="Fecha inicio YYYY-MM-DD"),
+    fecha_hasta: str = Query(..., description="Fecha fin YYYY-MM-DD")
+):
+    """
+    Análisis de stock teórico para un rango de fechas específico.
+    Calcula: Compras - Ventas - Merma proyectada = Stock Teórico
+    
+    Args:
+        fecha_desde: Fecha inicio en formato YYYY-MM-DD
+        fecha_hasta: Fecha fin en formato YYYY-MM-DD
+    
+    Returns:
+        - resumen: totales consolidados del período
+        - datos: desglose detallado por tipo de fruta y manejo con:
+            * compras_kg, compras_monto, precio_promedio_compra
+            * ventas_kg, ventas_monto, precio_promedio_venta
+            * merma_kg, merma_pct
+            * stock_teorico_kg, stock_teorico_valor
+        - merma_historica_pct: % de merma calculado para el período
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisStockTeoricoService(odoo)
+        
+        resultado = service.get_analisis_rango(fecha_desde, fecha_hasta)
+        
+        return resultado
+    
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/stock-teorico-anual")
 async def get_stock_teorico_anual(
     username: str = Query(..., description="Usuario Odoo"),

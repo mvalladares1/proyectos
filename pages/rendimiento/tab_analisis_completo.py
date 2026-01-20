@@ -18,40 +18,24 @@ def render(username: str, password: str):
     st.title("📊 Stock Teórico Anual")
     
     # ============================================================================
-    # FILTROS DE AÑOS Y CONFIGURACIÓN
+    # FILTROS DE FECHAS
     # ============================================================================
     st.markdown("### 🗓️ Configuración de Análisis")
     
-    st.info("ℹ️ **Temporadas**: Cada temporada va del 1 de noviembre al 31 de octubre del año siguiente. Ejemplo: Temporada 2024 = Nov 2023 a Oct 2024")
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
-        # Selector de años múltiples
-        anios_disponibles = [2023, 2024, 2025, 2026]
-        anios_seleccionados = st.multiselect(
-            "Temporadas a Analizar",
-            options=anios_disponibles,
-            default=[2024, 2025, 2026],
-            key="stock_teorico_anios"
+        fecha_desde = st.date_input(
+            "Fecha Desde",
+            value=datetime(2023, 11, 1),
+            key="stock_teorico_fecha_desde"
         )
     
     with col2:
-        # Fecha de corte (mes-día)
-        mes_corte = st.selectbox(
-            "Mes de Corte",
-            options=list(range(1, 13)),
-            index=9,  # Octubre (index 9 = mes 10)
-            format_func=lambda x: datetime(2000, x, 1).strftime("%B"),
-            key="stock_teorico_mes"
-        )
-        
-        dia_corte = st.number_input(
-            "Día de Corte",
-            min_value=1,
-            max_value=31,
-            value=31,
-            key="stock_teorico_dia"
+        fecha_hasta = st.date_input(
+            "Fecha Hasta",
+            value=datetime.now(),
+            key="stock_teorico_fecha_hasta"
         )
     
     with col3:
@@ -61,32 +45,34 @@ def render(username: str, password: str):
     # ============================================================================
     # VALIDAR Y CARGAR DATOS
     # ============================================================================
-    if not anios_seleccionados:
-        st.warning("⚠️ Selecciona al menos una temporada para analizar")
+    if fecha_desde >= fecha_hasta:
+        st.warning("⚠️ La fecha desde debe ser menor que la fecha hasta")
         return
     
     if not cargar_datos and 'stock_teorico_loaded' not in st.session_state:
-        st.info("ℹ️ Presiona 'Cargar Análisis' para iniciar el cálculo de stock teórico por temporada")
+        st.info("ℹ️ Presiona 'Cargar Análisis' para iniciar el cálculo de stock teórico")
         return
     
     if cargar_datos:
-        fecha_corte_str = f"{mes_corte:02d}-{dia_corte:02d}"
+        fecha_desde_str = fecha_desde.strftime("%Y-%m-%d")
+        fecha_hasta_str = fecha_hasta.strftime("%Y-%m-%d")
         
         with st.spinner("🔎 Analizando compras, ventas y calculando merma histórica..."):
-            from .shared_analisis import get_stock_teorico_anual
+            from .shared_analisis import get_stock_teorico_rango
             
-            # Cargar análisis multi-anual
-            st.session_state.datos_stock_teorico = get_stock_teorico_anual(
+            # Cargar análisis por rango
+            st.session_state.datos_stock_teorico = get_stock_teorico_rango(
                 username, 
                 password, 
-                anios_seleccionados,
-                fecha_corte_str
+                fecha_desde_str,
+                fecha_hasta_str
             )
             
             st.session_state.stock_teorico_loaded = True
-            st.session_state.stock_teorico_corte = fecha_corte_str
+            st.session_state.stock_teorico_fecha_desde = fecha_desde_str
+            st.session_state.stock_teorico_fecha_hasta = fecha_hasta_str
             
-            st.success(f"✅ Análisis completado para {len(anios_seleccionados)} años")
+            st.success(f"✅ Análisis completado")
     
     # ============================================================================
     # MOSTRAR RESULTADOS
@@ -103,18 +89,19 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # Información del análisis
+    fecha_desde_display = data.get('fecha_desde', '')
+    fecha_hasta_display = data.get('fecha_hasta', '')
     st.info(f"""
-    📅 **Análisis de {len(data.get('anios_analizados', []))} temporadas** | 
-    📍 Corte: {data.get('fecha_corte', '')} (Fin de temporada) | 
+    📅 **Período**: {fecha_desde_display} → {fecha_hasta_display} | 
     📉 Merma Histórica: **{data.get('merma_historica_pct', 0):.2f}%**
     """)
     
     # ============================================================================
     # RESUMEN GENERAL CONSOLIDADO
     # ============================================================================
-    st.markdown("### 📊 Resumen General (Todas las Temporadas)")
+    st.markdown("### 📊 Resumen General")
     
-    resumen = data.get('resumen_general', {})
+    resumen = data.get('resumen', {})
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -150,37 +137,146 @@ def render(username: str, password: str):
         )
     
     # ============================================================================
-    # TABS POR AÑO
+    # DETALLE POR TIPO Y MANEJO
     # ============================================================================
     st.markdown("---")
-    st.markdown("### 📅 Análisis Detallado por Temporada")
+    st.markdown("### 📋 Detalle por Tipo de Fruta y Manejo")
     
-    por_anio = data.get('por_anio', {})
+    datos = data.get('datos', [])
     
-    if not por_anio:
-        st.warning("No hay datos por temporada")
+    if not datos:
+        st.warning("No hay datos para el período seleccionado")
         return
     
-    # Crear tabs dinámicamente según los años analizados
-    anios_ordenados = sorted(por_anio.keys())
-    tabs = st.tabs([f"📆 Temporada {anio}" for anio in anios_ordenados])
-    
-    for idx, anio in enumerate(anios_ordenados):
-        with tabs[idx]:
-            _render_anio_detalle(anio, por_anio[anio])
-    
-    # ============================================================================
-    # COMPARATIVA MULTI-ANUAL
-    # ============================================================================
-    st.markdown("---")
-    st.markdown("### 📈 Comparativa Multi-Anual")
-    
-    _render_comparativa_multianual(por_anio)
+    _render_detalle_datos(datos, resumen)
 
 
 # ==============================================================================
 # FUNCIONES AUXILIARES
 # ==============================================================================
+def _render_detalle_datos(datos: list, resumen: dict):
+    """Renderiza el detalle de datos por tipo y manejo."""
+    
+    df = pd.DataFrame(datos)
+    
+    # Totales
+    total_compras_kg = df['compras_kg'].sum()
+    total_compras_monto = df['compras_monto'].sum()
+    total_ventas_kg = df['ventas_kg'].sum()
+    total_ventas_monto = df['ventas_monto'].sum()
+    total_merma_kg = df['merma_kg'].sum()
+    total_stock_valor = df['stock_teorico_valor'].sum()
+    
+    # Métricas del período
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Compras", f"{total_compras_kg:,.0f} kg")
+        st.caption(f"Monto: ${total_compras_monto:,.0f}")
+        st.caption(f"Precio: ${total_compras_monto/total_compras_kg:,.2f}/kg" if total_compras_kg > 0 else "N/A")
+    
+    with col2:
+        st.metric("Ventas", f"{total_ventas_kg:,.0f} kg")
+        st.caption(f"Monto: ${total_ventas_monto:,.0f}")
+        st.caption(f"Precio: ${total_ventas_monto/total_ventas_kg:,.2f}/kg" if total_ventas_kg > 0 else "N/A")
+    
+    with col3:
+        merma_pct = (total_merma_kg / total_compras_kg * 100) if total_compras_kg > 0 else 0
+        st.metric("Merma", f"{total_merma_kg:,.0f} kg", delta=f"{merma_pct:.2f}%", delta_color="inverse")
+        st.caption(f"Stock teórico: ${total_stock_valor:,.0f}")
+    
+    # Tabla detallada por tipo y manejo
+    st.markdown("##### 📊 Por Tipo de Fruta y Manejo")
+    
+    # Formatear DataFrame para visualización
+    df_display = df.copy()
+    df_display['Compras (kg)'] = df_display['compras_kg'].apply(lambda x: f"{x:,.0f}")
+    df_display['Compras ($)'] = df_display['compras_monto'].apply(lambda x: f"${x:,.0f}")
+    df_display['$/kg Compra'] = df_display['precio_promedio_compra'].apply(lambda x: f"${x:,.2f}")
+    df_display['Ventas (kg)'] = df_display['ventas_kg'].apply(lambda x: f"{x:,.0f}")
+    df_display['Ventas ($)'] = df_display['ventas_monto'].apply(lambda x: f"${x:,.0f}")
+    df_display['$/kg Venta'] = df_display['precio_promedio_venta'].apply(lambda x: f"${x:,.2f}")
+    df_display['Merma (kg)'] = df_display['merma_kg'].apply(lambda x: f"{x:,.0f}")
+    df_display['Merma (%)'] = df_display['merma_pct'].apply(lambda x: f"{x:.2f}%")
+    df_display['Stock Teórico ($)'] = df_display['stock_teorico_valor'].apply(lambda x: f"${x:,.0f}")
+    
+    st.dataframe(
+        df_display[[
+            'tipo_fruta', 'manejo', 
+            'Compras (kg)', 'Compras ($)', '$/kg Compra',
+            'Ventas (kg)', 'Ventas ($)', '$/kg Venta',
+            'Merma (kg)', 'Merma (%)', 
+            'Stock Teórico ($)'
+        ]],
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Fila de totales
+    st.markdown("##### 📊 Totales")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric("Compras", f"{total_compras_kg:,.0f} kg", delta=f"${total_compras_monto:,.0f}")
+    
+    with col2:
+        st.metric("Ventas", f"{total_ventas_kg:,.0f} kg", delta=f"${total_ventas_monto:,.0f}")
+    
+    with col3:
+        st.metric("Merma", f"{total_merma_kg:,.0f} kg", delta=f"{merma_pct:.2f}%", delta_color="inverse")
+    
+    with col4:
+        st.metric("Stock Teórico", f"${total_stock_valor:,.0f}")
+    
+    with col5:
+        precio_compra_prom = total_compras_monto/total_compras_kg if total_compras_kg > 0 else 0
+        precio_venta_prom = total_ventas_monto/total_ventas_kg if total_ventas_kg > 0 else 0
+        st.metric("$/kg Compra", f"${precio_compra_prom:,.2f}")
+        st.caption(f"$/kg Venta: ${precio_venta_prom:,.2f}")
+    
+    # Gráfico de distribución de compras por tipo
+    st.markdown("##### 🍓 Distribución de Compras por Tipo de Fruta")
+    
+    # Agrupar por tipo de fruta
+    df_por_tipo = df.groupby('tipo_fruta').agg({
+        'compras_kg': 'sum',
+        'compras_monto': 'sum',
+        'ventas_kg': 'sum',
+        'ventas_monto': 'sum'
+    }).reset_index()
+    
+    fig_tipo = px.bar(
+        df_por_tipo,
+        x='tipo_fruta',
+        y=['compras_kg', 'ventas_kg'],
+        title='Compras vs Ventas por Tipo de Fruta (kg)',
+        labels={'value': 'Kilogramos', 'variable': 'Tipo'},
+        barmode='group',
+        color_discrete_map={'compras_kg': '#2ecc71', 'ventas_kg': '#e74c3c'}
+    )
+    
+    st.plotly_chart(fig_tipo, use_container_width=True)
+    
+    # Gráfico de distribución por manejo
+    st.markdown("##### 🌱 Distribución por Tipo de Manejo")
+    
+    df_por_manejo = df.groupby('manejo').agg({
+        'compras_kg': 'sum',
+        'compras_monto': 'sum',
+        'ventas_kg': 'sum',
+        'ventas_monto': 'sum'
+    }).reset_index()
+    
+    fig_manejo = px.pie(
+        df_por_manejo,
+        values='compras_kg',
+        names='manejo',
+        title='Distribución de Compras por Tipo de Manejo (kg)'
+    )
+    
+    st.plotly_chart(fig_manejo, use_container_width=True)
+
 
 def _render_anio_detalle(anio: int, data: dict):
     """Renderiza el detalle de una temporada específica."""
