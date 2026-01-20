@@ -10,6 +10,7 @@ class TraceabilityService:
     """Servicio para obtener datos de trazabilidad de paquetes."""
     
     PARTNER_VENDORS_LOCATION_ID = 4  # Partners/Vendors location
+    PARTNER_CUSTOMERS_LOCATION_ID = 5  # Partners/Customers location
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
@@ -171,9 +172,10 @@ class TraceabilityService:
                 # Link: PROCESO → PALLET
                 links.append(("PROCESS", ref, "PALLET", result_id, qty))
             
-            # CASO 4: VENTA (va hacia cliente)
-            if loc_dest_id == self.PARTNER_VENDORS_LOCATION_ID and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
-                target_pkg = result_id or pkg_id
+            # CASO 4: VENTA (va hacia cliente - Partners/Customers)
+            # Verificar que el picking origin empiece con "S" (ej: S00574)
+            if loc_dest_id == self.PARTNER_CUSTOMERS_LOCATION_ID and loc_id != self.PARTNER_CUSTOMERS_LOCATION_ID:
+                target_pkg = pkg_id  # En ventas, el paquete de origen es el que se vendió
                 if target_pkg and picking_id:
                     sale_pallet_pickings[target_pkg] = picking_id
                     sale_picking_ids.add(picking_id)
@@ -243,8 +245,7 @@ class TraceabilityService:
         try:
             pickings = self.odoo.read(
                 "stock.picking",
-                list(all_picking_ids),
-                ["id", "partner_id", "scheduled_date"]
+                list(all_picking_ids), ["origin"]
             )
             pickings_by_id = {p["id"]: p for p in pickings}
             
@@ -259,9 +260,21 @@ class TraceabilityService:
                         result["suppliers"][sid] = sname
                         pinfo["supplier_id"] = sid
             
-            # Clientes con scheduled_date
+            # Clientes - Filtrar solo ventas (origin empieza con "S")
             for pkg_id, picking_id in sale_pallet_pickings.items():
                 picking = pickings_by_id.get(picking_id, {})
+                origin = picking.get("origin", "")
+                
+                # Verificar que sea una venta (origin empieza con S seguido de números)
+                if not origin or not origin.startswith("S"):
+                    continue
+                
+                # Verificar que después de S haya números (ej: S00574)
+                try:
+                    int(origin[1:])  # Intentar convertir lo que sigue después de "S"
+                except (ValueError, IndexError):
+                    continue  # No es un formato de venta válido
+                
                 partner_rel = picking.get("partner_id")
                 scheduled_date = picking.get("scheduled_date", "")
                 if partner_rel:
@@ -271,6 +284,8 @@ class TraceabilityService:
                     if cid not in result["customers"]:
                         result["customers"][cid] = {
                             "name": cname,
+                            "scheduled_date": scheduled_date,
+                            "sale_order": origin,  # Agregar referencia de venta
                             "scheduled_date": scheduled_date
                         }
                     # Link: PALLET → CUSTOMER
