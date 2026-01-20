@@ -11,7 +11,6 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from shared.odoo_client import get_odoo_client
 
 def render(username: str, password: str):
     """Renderiza el tab de trazabilidad de inventario."""
@@ -38,11 +37,15 @@ def render(username: str, password: str):
         )
     
     with col3:
-        if st.button("🔄 Actualizar Datos", type="primary", use_container_width=True):
-            st.session_state.pop('inventario_data', None)
+        cargar_datos = st.button("🔄 Actualizar Datos", type="primary", use_container_width=True)
+    
+    # Solo cargar datos cuando se presiona el botón
+    if not cargar_datos and 'inventario_data' not in st.session_state:
+        st.info("ℹ️ Presiona 'Actualizar Datos' para cargar la información")
+        return
     
     # Obtener datos
-    if 'inventario_data' not in st.session_state:
+    if cargar_datos or 'inventario_data' not in st.session_state:
         with st.spinner("🔎 Cargando datos de facturas..."):
             st.session_state.inventario_data = _get_inventario_data(
                 username, password, anio, mes_hasta
@@ -233,7 +236,10 @@ def _get_inventario_data(username: str, password: str, anio: int, mes_hasta: int
         dict con total_comprado, total_vendido, y detalle por tipo_fruta/manejo
     """
     try:
-        odoo = get_odoo_client()
+        from shared.odoo_client import OdooClient
+        
+        # Crear cliente con credenciales de Streamlit
+        odoo = OdooClient(username=username, password=password)
         
         fecha_inicio = f"{anio}-01-01"
         fecha_fin = f"{anio}-{mes_hasta:02d}-31"
