@@ -239,42 +239,38 @@ class AnalisisStockTeoricoService:
                     'tiene_ambos': bool(tipo_str and manejo_str)
                 }
         
-        # Mapear productos - INCLUIR TODOS los productos de categoría PRODUCTOS
+        # Mapear productos - SOLO MP (materia prima)
         productos_map = {}
-        productos_sin_tipo = 0
-        productos_sin_manejo = 0
         productos_incluidos = 0
+        productos_excluidos_no_mp = 0
         
         for prod_id, prod_data in product_to_template.items():
             tmpl_id = prod_data['tmpl_id']
             categ = prod_data['categ']
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # Filtrar por categoría: debe contener "PRODUCTOS"
-            es_producto = 'PRODUCTOS' in categ_name.upper()
+            # SOLO categoría MP (materia prima)
+            es_mp = ('PRODUCTOS / MP' in categ_name or 'PRODUCTOS / MP IQF' in categ_name)
             
-            if tmpl_id in template_map and es_producto:
+            if tmpl_id in template_map:
                 tmpl_info = template_map[tmpl_id]
                 
-                if not tmpl_info['tipo_fruta']:
-                    productos_sin_tipo += 1
-                if not tmpl_info['manejo']:
-                    productos_sin_manejo += 1
-                
-                # Incluir TODOS los productos de categoría PRODUCTOS
-                # Si no tienen tipo/manejo, usar "Sin clasificar"
-                productos_map[prod_id] = {
-                    'tipo_fruta': tmpl_info['tipo_fruta'] or 'Sin clasificar',
-                    'manejo': tmpl_info['manejo'] or 'Sin clasificar',
-                    'nombre': tmpl_info['nombre'],
-                    'categoria': categ_name
-                }
-                productos_incluidos += 1
+                if es_mp:
+                    # Incluir TODOS los productos MP
+                    # Si no tienen tipo/manejo, usar "Sin clasificar"
+                    productos_map[prod_id] = {
+                        'tipo_fruta': tmpl_info['tipo_fruta'] or 'Sin clasificar',
+                        'manejo': tmpl_info['manejo'] or 'Sin clasificar',
+                        'nombre': tmpl_info['nombre'],
+                        'categoria': categ_name
+                    }
+                    productos_incluidos += 1
+                else:
+                    productos_excluidos_no_mp += 1
         
         print(f"[DEBUG COMPRAS] Templates únicos: {len(template_ids)}")
-        print(f"[DEBUG COMPRAS] Productos de categoría PRODUCTOS: {productos_incluidos}")
-        print(f"[DEBUG COMPRAS] Productos sin tipo de fruta: {productos_sin_tipo}")
-        print(f"[DEBUG COMPRAS] Productos sin manejo: {productos_sin_manejo}")
+        print(f"[DEBUG COMPRAS] Productos MP incluidos: {productos_incluidos}")
+        print(f"[DEBUG COMPRAS] Productos no-MP excluidos: {productos_excluidos_no_mp}")
         print(f"[DEBUG COMPRAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
@@ -391,33 +387,40 @@ class AnalisisStockTeoricoService:
                     'tiene_ambos': bool(tipo_str and manejo_str)
                 }
         
-        # Mapear productos - INCLUIR TODOS los productos de categoría PRODUCTOS
+        # Mapear productos - SOLO PTT/PSP/RETAIL (producto procesado)
         productos_map = {}
         productos_incluidos = 0
+        productos_excluidos_no_ptt = 0
         
         for prod_id, prod_data in product_to_template.items():
             tmpl_id = prod_data['tmpl_id']
             categ = prod_data['categ']
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # Filtrar por categoría: debe contener "PRODUCTOS"
-            es_producto = 'PRODUCTOS' in categ_name.upper()
+            # SOLO categoría PTT/PSP/RETAIL (producto terminado/semi-procesado)
+            es_ptt = ('PRODUCTOS / PTT' in categ_name or 
+                     'PRODUCTOS / PSP' in categ_name or 
+                     'PRODUCTOS / RETAIL' in categ_name)
             
-            if tmpl_id in template_map and es_producto:
+            if tmpl_id in template_map:
                 tmpl_info = template_map[tmpl_id]
                 
-                # Incluir TODOS los productos de categoría PRODUCTOS
-                # Si no tienen tipo/manejo, usar "Sin clasificar"
-                productos_map[prod_id] = {
-                    'tipo_fruta': tmpl_info['tipo_fruta'] or 'Sin clasificar',
-                    'manejo': tmpl_info['manejo'] or 'Sin clasificar',
-                    'nombre': tmpl_info['nombre'],
-                    'categoria': categ_name
-                }
-                productos_incluidos += 1
+                if es_ptt:
+                    # Incluir TODOS los productos PTT/PSP/RETAIL
+                    # Si no tienen tipo/manejo, usar "Sin clasificar"
+                    productos_map[prod_id] = {
+                        'tipo_fruta': tmpl_info['tipo_fruta'] or 'Sin clasificar',
+                        'manejo': tmpl_info['manejo'] or 'Sin clasificar',
+                        'nombre': tmpl_info['nombre'],
+                        'categoria': categ_name
+                    }
+                    productos_incluidos += 1
+                else:
+                    productos_excluidos_no_ptt += 1
         
         print(f"[DEBUG VENTAS] Templates únicos: {len(template_ids)}")
-        print(f"[DEBUG VENTAS] Productos de categoría PRODUCTOS: {productos_incluidos}")
+        print(f"[DEBUG VENTAS] Productos PTT/PSP/RETAIL incluidos: {productos_incluidos}")
+        print(f"[DEBUG VENTAS] Productos no-PTT excluidos: {productos_excluidos_no_ptt}")
         print(f"[DEBUG VENTAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
