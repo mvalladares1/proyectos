@@ -51,7 +51,7 @@ def render_visjs_network(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
-    # Preparar nodos base sin posicionamiento inicial
+    # Preparar nodos base
     nodes_base = []
     for n in nodes:
         node_id = n["id"]
@@ -143,82 +143,78 @@ def render_visjs_network(
             var nodes = new vis.DataSet({nodes_json});
             var edges = new vis.DataSet({edges_json});
             
-            var options = {{
-                nodes: {{
-                    font: {{
-                        size: 11,
-                        color: '#c9d1d9',
-                        face: 'Arial'
+            var network = new vis.Network(
+                document.getElementById('network'),
+                {{ nodes: nodes, edges: edges }},
+                {{
+                    physics: {{
+                        barnesHut: {{
+                            gravitationalConstant: -5000,
+                            centralGravity: 0.05,
+                            springLength: 200,
+                            springConstant: 0.01,
+                            damping: 0.2,
+                            avoidOverlap: 0.5
+                        }},
+                        solver: 'barnesHut',
+                        stabilization: {{ 
+                            enabled: true,
+                            iterations: 150,
+                            updateInterval: 25
+                        }},
+                        timestep: 0.5,
+                        adaptiveTimestep: true
                     }},
-                    borderWidth: 2
-                }},
-                edges: {{
-                    width: 0.5,
-                    color: {{ inherit: 'from', opacity: 0.6 }},
-                    smooth: {{
-                        type: 'continuous'
+                    interaction: {{
+                        hover: true,
+                        tooltipDelay: 50,
+                        hideEdgesOnDrag: true,
+                        hideEdgesOnZoom: true,
+                        dragNodes: true,
+                        zoomView: true,
+                        dragView: true,
+                        navigationButtons: true,
+                        keyboard: true
                     }},
-                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
-                    hoverWidth: 2
-                }},
-                physics: {{
-                    barnesHut: {{
-                        gravitationalConstant: -5000,
-                        centralGravity: 0.05,
-                        springLength: 200,
-                        springConstant: 0.01,
-                        damping: 0.2,
-                        avoidOverlap: 0.5
+                    nodes: {{
+                        font: {{ size: 11, color: '#c9d1d9', face: 'Arial' }},
+                        borderWidth: 2
                     }},
-                    solver: 'barnesHut',
-                    stabilization: {{ 
-                        enabled: true,
-                        iterations: 150,
-                        updateInterval: 25
+                    edges: {{
+                        color: {{ color: 'rgba(139, 148, 158, 0.4)', highlight: '#58a6ff', hover: '#58a6ff' }},
+                        smooth: {{ enabled: true, type: 'continuous' }},
+                        arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
+                        hoverWidth: 2
                     }},
-                    timestep: 0.5,
-                    adaptiveTimestep: true
-                }},
-                interaction: {{
-                    tooltipDelay: 50,
-                    hideEdgesOnDrag: true,
-                    hideEdgesOnZoom: true,
-                    hover: true,
-                    navigationButtons: true,
-                    keyboard: true
-                }},
-                groups: {{
-                    supplier: {{
-                        shape: 'triangle',
-                        color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
-                        size: 25
-                    }},
-                    pallet_in: {{
-                        shape: 'dot',
-                        color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
-                        size: 18
-                    }},
-                    process: {{
-                        shape: 'square',
-                        color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
-                        size: 20
-                    }},
-                    pallet_out: {{
-                        shape: 'dot',
-                        color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
-                        size: 18
-                    }},
-                    customer: {{
-                        shape: 'square',
-                        color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
-                        size: 22
+                    groups: {{
+                        supplier: {{
+                            shape: 'triangle',
+                            color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
+                            size: 25
+                        }},
+                        pallet_in: {{
+                            shape: 'dot',
+                            color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
+                            size: 18
+                        }},
+                        process: {{
+                            shape: 'square',
+                            color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
+                            size: 20
+                        }},
+                        pallet_out: {{
+                            shape: 'dot',
+                            color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
+                            size: 18
+                        }},
+                        customer: {{
+                            shape: 'square',
+                            color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
+                            size: 22
+                        }}
                     }}
                 }}
-            }};
-            
-            var container = document.getElementById('network');
-            var data = {{ nodes: nodes, edges: edges }};
-            var network = new vis.Network(container, data, options);
+            );
             
             network.once('stabilizationIterationsDone', function() {{
                 network.fit({{ animation: {{ duration: 500 }} }});
@@ -232,7 +228,7 @@ def render_visjs_network(
     st.markdown("### 🕸️ Red de Trazabilidad")
     st.caption("🖱️ Arrastra para navegar | 🔍 Scroll para zoom | 📍 Hover para detalles")
     
-    # Renderizar con altura grande
+    # Renderizar con altura completa
     components.html(network_html, height=800, scrolling=False)
 
 
