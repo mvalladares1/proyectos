@@ -48,7 +48,7 @@ def fmt_dinero(valor, decimales=0):
     return f"${fmt_numero(valor, decimales)}"
 
 
-MAX_DAYS_FETCH = 90
+MAX_DAYS_FETCH = 180
 
 
 def _auto_fit_columns(ws):
@@ -148,7 +148,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
     ws.title = 'Detalle'
 
     headers = [
-        'Albarán', 'Fecha', 'Productor', 'Tipo Fruta', 'OC Asociada', 'Guía Despacho',
+        'Albarán', 'Fecha', 'Productor', 'Tipo Fruta', 'Planta/Origen', 'OC Asociada', 'Guía Despacho',
         'Producto', 'Categoría', 'Manejo', 'Bandejas (unidades)', 'Kg Hechos', 'UOM',
         'Costo Unitario', 'Costo Total', 'Clasificación', '% IQF', '% Block'
     ]
@@ -165,6 +165,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
         fecha = fmt_fecha(r.get('fecha', ''))
         productor = r.get('productor', '')
         tipo_fruta = r.get('tipo_fruta', '')
+        origen = r.get('origen', 'RFP')  # Ya viene con override aplicado desde recepcion_service
         guia = r.get('guia_despacho', '')
         calific = r.get('calific_final', '')
         pct_iqf = r.get('total_iqf', 0) or 0
@@ -180,7 +181,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
             # Pero si hay filtro estricto de tipo fruta y la recepción no tiene productos, ¿qué hacemos?
             # Asumimos que si filter_tipo_fruta está activo, requerimos match explicito.
             if kg_rec > 0 and not filter_tipo_fruta and not filter_manejo:
-                 ws.append([albaran, fecha, productor, tipo_fruta, oc_asociada, guia, '', '', '', '', kg_rec, '', '', '', calific, pct_iqf, pct_block])
+                 ws.append([albaran, fecha, productor, tipo_fruta, origen, oc_asociada, guia, '', '', '', '', kg_rec, '', '', '', calific, pct_iqf, pct_block])
         else:
             for p in productos:
                 kg_hechos = p.get('Kg Hechos', 0) or 0
@@ -207,7 +208,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
                 bandejas_units = kg_hechos if (categoria or '').upper() == 'BANDEJAS' else ''
                 
                 ws.append([
-                    albaran, fecha, productor, tipo_fruta_prod, oc_asociada, guia,
+                    albaran, fecha, productor, tipo_fruta_prod, origen, oc_asociada, guia,
                     prod_name, categoria, manejo, bandejas_units, kg_hechos, uom,
                     costo_unit, costo_total, calific, pct_iqf, pct_block
                 ])

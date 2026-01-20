@@ -106,12 +106,14 @@ class AnalisisStockTeoricoService:
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta],
                 ['quantity', '>', 0],
-                ['debit', '>', 0],
-                ['account_id.code', '=like', '21%']
+                ['debit', '>', 0]
             ],
-            ['product_id', 'quantity', 'debit'],
+            ['product_id', 'quantity', 'debit', 'account_id'],
             limit=100000
         )
+        
+        print(f"[DEBUG COMPRAS] Fecha: {fecha_desde} a {fecha_hasta}")
+        print(f"[DEBUG COMPRAS] Líneas encontradas: {len(lineas)}")
         
         if not lineas:
             return []
@@ -122,29 +124,60 @@ class AnalisisStockTeoricoService:
         productos = self.odoo.search_read(
             'product.product',
             [['id', 'in', prod_ids]],
-            ['id', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo', 'categ_id'],
+            ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo', 'categ_id'],
             limit=100000
         )
         
+        print(f"[DEBUG COMPRAS] Productos únicos: {len(productos)}")
+        
         # Mapear productos con tipo y manejo
         productos_map = {}
+        productos_sin_tipo = 0
+        productos_sin_manejo = 0
+        productos_sin_categoria_mp = 0
+        
         for prod in productos:
             categ = prod.get('categ_id')
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # Solo MP/PSP
-            if 'PRODUCTOS / MP' in categ_name or 'PRODUCTOS / PSP' in categ_name:
-                tipo = prod.get('x_studio_sub_categora')
-                tipo_str = tipo[1] if isinstance(tipo, (list, tuple)) and len(tipo) > 1 else None
-                
-                manejo = prod.get('x_studio_categora_tipo_de_manejo')
-                manejo_str = manejo[1] if isinstance(manejo, (list, tuple)) and len(manejo) > 1 else None
-                
-                if tipo_str and manejo_str:
-                    productos_map[prod['id']] = {
-                        'tipo_fruta': tipo_str,
-                        'manejo': manejo_str
-                    }
+            # Obtener tipo de fruta (puede venir como string o como lista/tupla)
+            tipo = prod.get('x_studio_sub_categora')
+            if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
+                tipo_str = tipo[1]
+            elif isinstance(tipo, str) and tipo:
+                tipo_str = tipo
+            else:
+                tipo_str = None
+            
+            # Obtener tipo de manejo (puede venir como string o como lista/tupla)
+            manejo = prod.get('x_studio_categora_tipo_de_manejo')
+            if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                manejo_str = manejo[1]
+            elif isinstance(manejo, str) and manejo:
+                manejo_str = manejo
+            else:
+                manejo_str = None
+            
+            if not tipo_str:
+                productos_sin_tipo += 1
+            if not manejo_str:
+                productos_sin_manejo += 1
+            if 'PRODUCTOS / MP' not in categ_name and 'PRODUCTOS / PSP' not in categ_name:
+                productos_sin_categoria_mp += 1
+            
+            # Incluir todos los productos con tipo y manejo
+            if tipo_str and manejo_str:
+                productos_map[prod['id']] = {
+                    'tipo_fruta': tipo_str,
+                    'manejo': manejo_str,
+                    'nombre': prod.get('name', ''),
+                    'categoria': categ_name
+                }
+        
+        print(f"[DEBUG COMPRAS] Productos sin tipo de fruta: {productos_sin_tipo}")
+        print(f"[DEBUG COMPRAS] Productos sin manejo: {productos_sin_manejo}")
+        print(f"[DEBUG COMPRAS] Productos sin categoría MP/PSP: {productos_sin_categoria_mp}")
+        print(f"[DEBUG COMPRAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
         agrupado = {}
@@ -188,6 +221,9 @@ class AnalisisStockTeoricoService:
             limit=100000
         )
         
+        print(f"[DEBUG VENTAS] Fecha: {fecha_desde} a {fecha_hasta}")
+        print(f"[DEBUG VENTAS] Líneas encontradas: {len(lineas)}")
+        
         if not lineas:
             return []
         
@@ -197,9 +233,11 @@ class AnalisisStockTeoricoService:
         productos = self.odoo.search_read(
             'product.product',
             [['id', 'in', prod_ids]],
-            ['id', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo', 'categ_id'],
+            ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo', 'categ_id'],
             limit=100000
         )
+        
+        print(f"[DEBUG VENTAS] Productos únicos: {len(productos)}")
         
         # Mapear productos con tipo y manejo
         productos_map = {}
@@ -207,19 +245,33 @@ class AnalisisStockTeoricoService:
             categ = prod.get('categ_id')
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # Solo PTT/RETAIL/SUBPRODUCTO
-            if any(x in categ_name for x in ['PRODUCTOS / PTT', 'PRODUCTOS / RETAIL', 'PRODUCTOS / SUBPRODUCTO']):
-                tipo = prod.get('x_studio_sub_categora')
-                tipo_str = tipo[1] if isinstance(tipo, (list, tuple)) and len(tipo) > 1 else None
-                
-                manejo = prod.get('x_studio_categora_tipo_de_manejo')
-                manejo_str = manejo[1] if isinstance(manejo, (list, tuple)) and len(manejo) > 1 else None
-                
-                if tipo_str and manejo_str:
-                    productos_map[prod['id']] = {
-                        'tipo_fruta': tipo_str,
-                        'manejo': manejo_str
-                    }
+            # Obtener tipo de fruta (puede venir como string o como lista/tupla)
+            tipo = prod.get('x_studio_sub_categora')
+            if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
+                tipo_str = tipo[1]
+            elif isinstance(tipo, str) and tipo:
+                tipo_str = tipo
+            else:
+                tipo_str = None
+            
+            # Obtener tipo de manejo (puede venir como string o como lista/tupla)
+            manejo = prod.get('x_studio_categora_tipo_de_manejo')
+            if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                manejo_str = manejo[1]
+            elif isinstance(manejo, str) and manejo:
+                manejo_str = manejo
+            else:
+                manejo_str = None
+            
+            if tipo_str and manejo_str:
+                productos_map[prod['id']] = {
+                    'tipo_fruta': tipo_str,
+                    'manejo': manejo_str,
+                    'nombre': prod.get('name', ''),
+                    'categoria': categ_name
+                }
+        
+        print(f"[DEBUG VENTAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
         agrupado = {}
