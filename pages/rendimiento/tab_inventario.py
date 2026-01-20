@@ -15,8 +15,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 def render(username: str, password: str):
     """Renderiza el tab de trazabilidad de inventario."""
     
-    st.subheader("📊 Trazabilidad de Inventario: Compras, Ventas y Merma")
-    st.markdown("Análisis de facturas por tipo de fruta y categoría de manejo. **Solo productos clasificados.**")
+    st.subheader("📊 Análisis de Facturas: Compras vs Ventas")
+    st.markdown("Análisis de facturas de proveedores y clientes por tipo de fruta. **Solo productos clasificados.**")
+    
+    # Advertencia sobre limitaciones
+    st.warning("""
+        ⚠️ **Limitaciones del análisis actual:**
+        - Compras incluyen principalmente **PSP** (materia prima/semi-procesado)
+        - Ventas incluyen principalmente **PTT** (producto terminado)
+        - **No son comparables 1:1** debido a merma de proceso (10-30%) y valor agregado
+        - Excluye ~260k kg de insumos sin clasificar (cajas, pallets, EPP)
+        - Para análisis de rentabilidad real, usar costos de producción
+    """)
     
     # Filtros de fecha
     col1, col2, col3 = st.columns(3)
@@ -66,7 +76,7 @@ def render(username: str, password: str):
     # Mostrar métricas principales
     st.markdown("### 📈 Resumen General")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric(
@@ -108,16 +118,11 @@ def render(username: str, password: str):
             pct_sobre_venta = (abs(diferencia_kg) / data['total_vendido_kg'] * 100) if data['total_vendido_kg'] > 0 else 0
             st.caption(f"**{pct_sobre_venta:.1f}%** de lo vendido vino de inventario previo")
     
-    with col4:
-        # Calcular margen bruto (diferencia entre venta y compra en dinero)
-        margen_monto = data['total_vendido_monto'] - data['total_comprado_monto']
-        margen_pct = (margen_monto / data['total_vendido_monto'] * 100) if data['total_vendido_monto'] > 0 else 0
-        
-        st.metric(
-            "Margen Bruto",
-            f"${margen_monto:,.0f}",
-            f"{margen_pct:.1f}%",
-            help="Diferencia entre ingresos por venta y costo de compra"
+    # Nota informativa sobre análisis
+    st.info("""
+        💡 **Nota:** La diferencia en kilogramos no representa merma real. 
+        Para calcular merma de proceso, usar datos de producción (ordenes de fabricación).
+    """)
         )
     
     # Mostrar tabla detallada

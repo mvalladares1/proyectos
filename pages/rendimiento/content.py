@@ -73,8 +73,8 @@ def render(username: str, password: str):
         tab_funcs.append(('sankey', _render_sankey))
     
     if _perm_inventario:
-        tab_names.append("📊 Inventario (Compras/Ventas)")
-        tab_funcs.append(('inventario', _render_inventario))
+        tab_names.append("📊 Análisis Integral")
+        tab_funcs.append(('inventario', _render_analisis_completo))
     
     if not tab_names:
         st.error("🚫 **Acceso Restringido** - No tienes permisos para ver ninguna sección de Trazabilidad.")
@@ -703,6 +703,13 @@ def _render_sankey_stats(sankey_data: dict):
 
 
 def _render_inventario(username: str, password: str):
-    """Renderiza el tab de trazabilidad de inventario."""
+    """DEPRECATED: Renderiza el tab viejo de inventario."""
     from .tab_inventario import render as render_inventario
     render_inventario(username, password)
+
+
+def _render_analisis_completo(username: str, password: str):
+    """Renderiza el nuevo tab de análisis completo (4 en 1)."""
+    from .tab_analisis_completo import render as render_analisis_completo
+    render_analisis_completo(username, password)
+

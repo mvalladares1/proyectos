@@ -1,11 +1,17 @@
 """
 Router de Rendimiento Productivo
 Incluye trazabilidad inversa y endpoints para el módulo de Producción
+Nuevos análisis: Compras, Ventas, Producción, Inventario (separados)
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 from backend.services.rendimiento_service import RendimientoService
+from backend.services.analisis_compras_service import AnalisisComprasService
+from backend.services.analisis_ventas_service import AnalisisVentasService
+from backend.services.analisis_produccion_service import AnalisisProduccionService
+from backend.services.analisis_inventario_service import AnalisisInventarioService
+from shared.odoo_client import OdooClient
 
 router = APIRouter(prefix="/api/v1/rendimiento", tags=["rendimiento"])
 
@@ -131,3 +137,118 @@ async def get_overview(
         return data.get('overview', {}) if data else {}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ====================================================================
+# NUEVOS ENDPOINTS - ANÁLISIS SEPARADOS
+# ====================================================================
+
+@router.get("/analisis-compras")
+async def get_analisis_compras(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: str = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(..., description="Fecha hasta (YYYY-MM-DD)")
+):
+    """
+    Análisis de compras de materia prima (MP/PSP).
+    Solo facturas de proveedor con productos clasificados.
+    
+    Returns:
+        - resumen: totales generales
+        - por_tipo: desglose por tipo de fruta y manejo
+        - top_proveedores: principales proveedores
+        - tendencia_precios: evolución mensual de precios
+        - detalle: líneas individuales
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisComprasService(odoo=odoo)
+        return service.get_analisis_compras(fecha_desde, fecha_hasta)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analisis-ventas")
+async def get_analisis_ventas(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: str = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(..., description="Fecha hasta (YYYY-MM-DD)")
+):
+    """
+    Análisis de ventas de productos terminados (PTT/Retail).
+    Solo facturas de cliente con productos terminados.
+    
+    Returns:
+        - resumen: totales generales
+        - por_categoria: PTT, Retail, Subproducto
+        - por_tipo: desglose por tipo de fruta
+        - top_clientes: principales clientes
+        - tendencia_precios: evolución mensual de precios
+        - detalle: líneas individuales
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisVentasService(odoo=odoo)
+        return service.get_analisis_ventas(fecha_desde, fecha_hasta)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analisis-produccion")
+async def get_analisis_produccion(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: str = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(..., description="Fecha hasta (YYYY-MM-DD)")
+):
+    """
+    Análisis de rendimientos de producción (PSP → PTT).
+    Usa órdenes de fabricación y movimientos de stock.
+    
+    Returns:
+        - resumen: totales de consumo, producción, merma
+        - rendimientos_por_tipo: % rendimiento por tipo de fruta
+        - detalle_ordenes: detalle de órdenes de producción
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisProduccionService(odoo=odoo)
+        return service.get_analisis_produccion(fecha_desde, fecha_hasta)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analisis-inventario")
+async def get_analisis_inventario(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: str = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(..., description="Fecha hasta (YYYY-MM-DD)")
+):
+    """
+    Análisis de inventario y rotación de stock.
+    Calcula stock actual, valorización, rotación, días de inventario.
+    
+    Returns:
+        - resumen: stock total, valorización
+        - por_producto: detalle por producto con rotación
+        - por_ubicacion: stock por ubicación
+        - alertas: productos con stock bajo o sin movimiento
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisInventarioService(odoo=odoo)
+        return service.get_analisis_inventario(fecha_desde, fecha_hasta)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
