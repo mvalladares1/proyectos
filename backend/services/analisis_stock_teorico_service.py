@@ -19,9 +19,13 @@ class AnalisisStockTeoricoService:
     def get_analisis_multi_anual(self, anios: List[int], fecha_corte_mes_dia: str = "10-31"):
         """
         Análisis multi-anual de compras, ventas y stock teórico.
+        IMPORTANTE: Los "años" son TEMPORADAS que van de noviembre a octubre.
         
         Args:
-            anios: Lista de años a analizar [2023, 2024, 2025, 2026]
+            anios: Lista de temporadas a analizar [2024, 2025, 2026]
+                  Temporada 2024 = 2023-11-01 a 2024-10-31
+                  Temporada 2025 = 2024-11-01 a 2025-10-31
+                  Temporada 2026 = 2025-11-01 a 2026-10-31
             fecha_corte_mes_dia: Mes-Día de corte (formato "MM-DD"), default "10-31"
         
         Returns:
@@ -35,22 +39,24 @@ class AnalisisStockTeoricoService:
         merma_total_kg = 0
         merma_total_base = 0
         
-        # Procesar cada año
+        # Procesar cada temporada
         for anio in sorted(anios):
-            fecha_desde = f"{anio}-01-01"
+            # Temporada comienza en noviembre del año anterior
+            fecha_desde = f"{anio - 1}-11-01"
             
-            # Si el año actual es mayor al corte, usar hasta el corte
-            # Si no, usar hasta fin de año
-            if anio < datetime.now().year:
-                fecha_hasta = f"{anio}-{fecha_corte_mes_dia}"
-            elif anio == datetime.now().year:
-                # Año actual: hasta el corte o hasta hoy (lo que sea menor)
-                fecha_corte_completa = f"{anio}-{fecha_corte_mes_dia}"
+            # Temporada termina en octubre del año indicado (o hoy si es año actual)
+            fecha_corte_completa = f"{anio}-{fecha_corte_mes_dia}"
+            
+            if anio == datetime.now().year:
+                # Temporada actual: hasta el corte o hasta hoy (lo que sea menor)
                 fecha_hoy = datetime.now().strftime("%Y-%m-%d")
                 fecha_hasta = min(fecha_corte_completa, fecha_hoy)
+            elif anio < datetime.now().year:
+                # Temporadas pasadas: hasta el corte
+                fecha_hasta = fecha_corte_completa
             else:
-                # Años futuros: hasta el corte
-                fecha_hasta = f"{anio}-{fecha_corte_mes_dia}"
+                # Temporadas futuras: hasta el corte
+                fecha_hasta = fecha_corte_completa
             
             # Obtener compras
             compras = self._get_compras_por_tipo_manejo(fecha_desde, fecha_hasta)
@@ -66,6 +72,7 @@ class AnalisisStockTeoricoService:
             
             resultados_por_anio[anio] = {
                 'anio': anio,
+                'temporada': f"{anio-1}-11-01 a {anio}-10-31",
                 'fecha_desde': fecha_desde,
                 'fecha_hasta': fecha_hasta,
                 'datos': datos_consolidados

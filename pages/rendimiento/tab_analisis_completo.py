@@ -22,13 +22,15 @@ def render(username: str, password: str):
     # ============================================================================
     st.markdown("### 🗓️ Configuración de Análisis")
     
+    st.info("ℹ️ **Temporadas**: Cada temporada va del 1 de noviembre al 31 de octubre del año siguiente. Ejemplo: Temporada 2024 = Nov 2023 a Oct 2024")
+    
     col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
         # Selector de años múltiples
         anios_disponibles = [2023, 2024, 2025, 2026]
         anios_seleccionados = st.multiselect(
-            "Años a Analizar",
+            "Temporadas a Analizar",
             options=anios_disponibles,
             default=[2024, 2025, 2026],
             key="stock_teorico_anios"
@@ -60,11 +62,11 @@ def render(username: str, password: str):
     # VALIDAR Y CARGAR DATOS
     # ============================================================================
     if not anios_seleccionados:
-        st.warning("⚠️ Selecciona al menos un año para analizar")
+        st.warning("⚠️ Selecciona al menos una temporada para analizar")
         return
     
     if not cargar_datos and 'stock_teorico_loaded' not in st.session_state:
-        st.info("ℹ️ Presiona 'Cargar Análisis' para iniciar el cálculo de stock teórico")
+        st.info("ℹ️ Presiona 'Cargar Análisis' para iniciar el cálculo de stock teórico por temporada")
         return
     
     if cargar_datos:
@@ -102,7 +104,7 @@ def render(username: str, password: str):
     
     # Información del análisis
     st.info(f"""
-    📅 **Análisis de {len(data.get('anios_analizados', []))} años** | 
+    📅 **Análisis de {len(data.get('anios_analizados', []))} temporadas** | 
     📍 Corte: {data.get('fecha_corte', '')} (Fin de temporada) | 
     📉 Merma Histórica: **{data.get('merma_historica_pct', 0):.2f}%**
     """)
@@ -110,7 +112,7 @@ def render(username: str, password: str):
     # ============================================================================
     # RESUMEN GENERAL CONSOLIDADO
     # ============================================================================
-    st.markdown("### 📊 Resumen General (Todos los Años)")
+    st.markdown("### 📊 Resumen General (Todas las Temporadas)")
     
     resumen = data.get('resumen_general', {})
     
@@ -151,17 +153,17 @@ def render(username: str, password: str):
     # TABS POR AÑO
     # ============================================================================
     st.markdown("---")
-    st.markdown("### 📅 Análisis Detallado por Año")
+    st.markdown("### 📅 Análisis Detallado por Temporada")
     
     por_anio = data.get('por_anio', {})
     
     if not por_anio:
-        st.warning("No hay datos por año")
+        st.warning("No hay datos por temporada")
         return
     
     # Crear tabs dinámicamente según los años analizados
     anios_ordenados = sorted(por_anio.keys())
-    tabs = st.tabs([f"📆 {anio}" for anio in anios_ordenados])
+    tabs = st.tabs([f"📆 Temporada {anio}" for anio in anios_ordenados])
     
     for idx, anio in enumerate(anios_ordenados):
         with tabs[idx]:
@@ -181,15 +183,17 @@ def render(username: str, password: str):
 # ==============================================================================
 
 def _render_anio_detalle(anio: int, data: dict):
-    """Renderiza el detalle de un año específico."""
+    """Renderiza el detalle de una temporada específica."""
     
-    st.markdown(f"#### 📅 Año {anio}")
-    st.caption(f"Período: {data.get('fecha_desde', '')} hasta {data.get('fecha_hasta', '')}")
+    st.markdown(f"#### 📅 Temporada {anio}")
+    temporada_str = data.get('temporada', f'{anio-1}-11-01 a {anio}-10-31')
+    st.caption(f"Período: {temporada_str}")
+    st.caption(f"Datos: {data.get('fecha_desde', '')} hasta {data.get('fecha_hasta', '')}")
     
     datos = data.get('datos', [])
     
     if not datos:
-        st.warning(f"No hay datos para el año {anio}")
+        st.warning(f"No hay datos para la temporada {anio}")
         return
     
     # Convertir a DataFrame
@@ -255,7 +259,7 @@ def _render_anio_detalle(anio: int, data: dict):
         df, 
         values='compras_kg', 
         names='tipo_fruta', 
-        title=f'Compras {anio} por Tipo de Fruta',
+        title=f'Compras Temporada {anio} por Tipo de Fruta',
         hole=0.4
     )
     st.plotly_chart(fig_pie, use_container_width=True)
@@ -298,9 +302,9 @@ def _render_anio_detalle(anio: int, data: dict):
 
 
 def _render_comparativa_multianual(por_anio: dict):
-    """Renderiza gráficos comparativos entre años."""
+    """Renderiza gráficos comparativos entre temporadas."""
     
-    # Consolidar datos de todos los años
+    # Consolidar datos de todas las temporadas
     datos_comparativa = []
     
     for anio, data in por_anio.items():
@@ -330,8 +334,8 @@ def _render_comparativa_multianual(por_anio: dict):
         'merma_kg': 'sum'
     }).reset_index()
     
-    # Gráfico de líneas: Evolución de compras/ventas por año
-    st.markdown("#### 📈 Evolución de Compras y Ventas por Año")
+    # Gráfico de líneas: Evolución de compras/ventas por temporada
+    st.markdown("#### 📈 Evolución de Compras y Ventas por Temporada")
     
     fig_evol = go.Figure()
     
@@ -363,7 +367,7 @@ def _render_comparativa_multianual(por_anio: dict):
     ))
     
     fig_evol.update_layout(
-        xaxis_title='Año',
+        xaxis_title='Temporada',
         yaxis_title='Kilogramos',
         hovermode='x unified'
     )
@@ -371,7 +375,7 @@ def _render_comparativa_multianual(por_anio: dict):
     st.plotly_chart(fig_evol, use_container_width=True)
     
     # Tabla de totales por año
-    st.markdown("#### 📊 Tabla Comparativa por Año")
+    st.markdown("#### 📊 Tabla Comparativa por Temporada")
     
     df_totales_display = df_totales_anio.copy()
     df_totales_display['Compras (kg)'] = df_totales_display['compras_kg'].apply(lambda x: f"{x:,.0f}")
@@ -428,7 +432,7 @@ def _render_comparativa_multianual(por_anio: dict):
         
         fig_precios.update_layout(
             title=f'Evolución de Precios: {tipo_seleccionado}',
-            xaxis_title='Año',
+            xaxis_title='Temporada',
             yaxis_title='Precio ($/kg)',
             hovermode='x unified'
         )
