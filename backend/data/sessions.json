@@ -1582,5 +1582,1337 @@
     "last_activity": "2026-01-05T12:30:38.538762",
     "expires_at": "2026-01-05T20:30:38.538762",
     "encrypted_password": "Vl1RAFdZVQFXXlkHXFRZUgFVVwgAV1tUBQlVUl5QA1dVClcDAANQUw=="
+  },
+  "a144faa09489e9008069f0ea1fbb3f17": {
+    "session_id": "a144faa09489e9008069f0ea1fbb3f17",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T12:54:50.762190",
+    "last_activity": "2026-01-16T13:02:04.247548",
+    "expires_at": "2026-01-16T20:54:50.762190",
+    "encrypted_password": "VgcBBwQDVQBXAlgGXVZcUQkJAl1VVA4GVF9WUVFVUFVWAVQHUAFQDg=="
+  },
+  "c4c89e4fa9befb04d848f752f73f6c15": {
+    "session_id": "c4c89e4fa9befb04d848f752f73f6c15",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T12:58:38.532428",
+    "last_activity": "2026-01-16T13:02:15.806061",
+    "expires_at": "2026-01-16T20:58:38.532428",
+    "encrypted_password": "AQhSAAQBAgAEUwUFAgEEAghVAgReUAcLVAoAAAFaUlMAXFAEA1dUUA=="
+  },
+  "2516263883253cf2d18ed62ca6dd242b": {
+    "session_id": "2516263883253cf2d18ed62ca6dd242b",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T13:06:47.868769",
+    "last_activity": "2026-01-16T13:08:39.300130",
+    "expires_at": "2026-01-16T21:06:47.868769",
+    "encrypted_password": "UVAFUAJVUwBXBQMAUQdUBAgEAFMHBg9RBFpQBgdUUlZRVlBQVldWDg=="
+  },
+  "fd6c788c457b91c694b38f7cd7f6b573": {
+    "session_id": "fd6c788c457b91c694b38f7cd7f6b573",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:10:42.803174",
+    "last_activity": "2026-01-16T13:16:28.997326",
+    "expires_at": "2026-01-16T21:10:42.803174",
+    "encrypted_password": "WwVWB1MCAQRRV1ZXUVAABgkGBQJeUAxRAgxUClBdBVNaUVQDVFRXVA=="
+  },
+  "4ec1f491823209e798b4621338ab2824": {
+    "session_id": "4ec1f491823209e798b4621338ab2824",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:19:35.180720",
+    "last_activity": "2026-01-16T13:19:35.180720",
+    "expires_at": "2026-01-16T21:19:35.180720",
+    "encrypted_password": "VQFSAFcLBAUGUVQABQBTVAABCF4DUlFWV10GCAIIAQdUVVAEUF1SVQ=="
+  },
+  "270d7323566a7e17e2c40cc609f38136": {
+    "session_id": "270d7323566a7e17e2c40cc609f38136",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:23:37.738753",
+    "last_activity": "2026-01-16T13:23:37.738753",
+    "expires_at": "2026-01-16T21:23:37.738753",
+    "encrypted_password": "BVIGBFNQAlJaUloKA1ZTBwQCVwdWAwEHUABQCgUKU1cEBgQAVAZUAg=="
+  },
+  "91938be80cd91f33809f0f9d35f71bd3": {
+    "session_id": "91938be80cd91f33809f0f9d35f71bd3",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:25:33.981393",
+    "last_activity": "2026-01-16T13:25:33.981393",
+    "expires_at": "2026-01-16T21:25:33.981393",
+    "encrypted_password": "BwBWBFIBBgxTVVtQAABXAlYHAlVSAFcLV1kDCAcIV1YGVFQAVVdQXA=="
+  },
+  "2fddfc9297d68d6b1dd8c96396771ee5": {
+    "session_id": "2fddfc9297d68d6b1dd8c96396771ee5",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:26:40.121955",
+    "last_activity": "2026-01-16T13:29:54.094720",
+    "expires_at": "2026-01-16T21:26:40.121955",
+    "encrypted_password": "BgQFVAcEUA1UXFoKCFNQAFJTVVUHXAIBBFoHW1NbAlYHUAdQAFIGXQ=="
+  },
+  "8d94d522e1767c6f74d185963fbb8815": {
+    "session_id": "8d94d522e1767c6f74d185963fbb8815",
+    "username": "fbravo@riofuturo.cl",
+    "uid": 172,
+    "created_at": "2026-01-16T13:36:09.728792",
+    "last_activity": "2026-01-16T13:37:56.811046",
+    "expires_at": "2026-01-16T21:36:09.728792",
+    "encrypted_password": "CFcHCVcFDFEFAldRAgtWVwNVAFZQUQEHUAFWBVEFWwYODwMGAlBQUQ=="
+  },
+  "cbfdc7c466dc883397b1e3342e6fbbd6": {
+    "session_id": "cbfdc7c466dc883397b1e3342e6fbbd6",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-16T13:38:19.968292",
+    "last_activity": "2026-01-16T13:39:25.046614",
+    "expires_at": "2026-01-16T21:38:19.968292",
+    "encrypted_password": "BQxYBwpUBwEABlRUAFZVBwdaAwUDVglcAwYOAwhdWAADWwNQBQEBAA=="
+  },
+  "ff49675314cdf7cc7294cbcbcb823ba4": {
+    "session_id": "ff49675314cdf7cc7294cbcbcb823ba4",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:40:32.322117",
+    "last_activity": "2026-01-16T13:48:13.239829",
+    "expires_at": "2026-01-16T21:40:32.322117",
+    "encrypted_password": "AFZWAwZQAwQGB1FSUgAAVgMEUlFSUAMBAAgNCAAKUgABAlQHAQZVVA=="
+  },
+  "0b49500d3c79498e44bb1d3b79a2ef9d": {
+    "session_id": "0b49500d3c79498e44bb1d3b79a2ef9d",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T13:41:39.502782",
+    "last_activity": "2026-01-16T13:47:10.724094",
+    "expires_at": "2026-01-16T21:41:39.502782",
+    "encrypted_password": "AgFRBVIPBFwFBVBRB1BWU1RXAlMCCg4GBgoBVQEEUAYCBwQFBg0BUg=="
+  },
+  "6eb3137fa79110fb91f421677e0f15ad": {
+    "session_id": "6eb3137fa79110fb91f421677e0f15ad",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T13:47:34.669344",
+    "last_activity": "2026-01-16T13:47:34.669344",
+    "expires_at": "2026-01-16T21:47:34.669344",
+    "encrypted_password": "BlBWAQgAXw1bBVVUA1VTUAYDUlIHCwUAA10BUFcEAFoGVgMBXAJaAw=="
+  },
+  "f4905e418e3610ba181cea0a11c69f2b": {
+    "session_id": "f4905e418e3610ba181cea0a11c69f2b",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T13:47:41.188002",
+    "last_activity": "2026-01-16T13:48:03.722893",
+    "expires_at": "2026-01-16T21:47:41.188002",
+    "encrypted_password": "BAkABgMEVQAAVFMJUwMBCwgEUVNXVwIBUgpSBQVUB1MED1UGVwZQDg=="
+  },
+  "8e8bfaf9767693818f8dc5b0ae1ec165": {
+    "session_id": "8e8bfaf9767693818f8dc5b0ae1ec165",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T13:51:42.121440",
+    "last_activity": "2026-01-16T13:57:01.993589",
+    "expires_at": "2026-01-16T21:51:42.121440",
+    "encrypted_password": "VwEBWgMFVAxbU1IJVAYHAFUABwACCwRXU11RUVEBAVtXB1RaVwdRAg=="
+  },
+  "98966d0ba4fa170d43669238cd2d5f02": {
+    "session_id": "98966d0ba4fa170d43669238cd2d5f02",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T13:51:54.806541",
+    "last_activity": "2026-01-16T14:00:50.943551",
+    "expires_at": "2026-01-16T21:51:54.806541",
+    "encrypted_password": "UFRUAABTA1BXBwIKAQdWBQlVAFBeUQdQVwoDW1UKAAZRAFYEBwVVAA=="
+  },
+  "849923bef643e9a3d075c851b7ae490e": {
+    "session_id": "849923bef643e9a3d075c851b7ae490e",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-16T14:01:22.082868",
+    "last_activity": "2026-01-16T14:54:35.744738",
+    "expires_at": "2026-01-16T22:01:22.082868",
+    "encrypted_password": "BQYLUVgHVAQCUAoEB1BbAgBWVgVQCwxUUgNVVg1RBwUDUVAGV1JSBQ=="
+  },
+  "cf943d4c051a3e2d101d6f02a4ede89a": {
+    "session_id": "cf943d4c051a3e2d101d6f02a4ede89a",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-16T14:12:55.531302",
+    "last_activity": "2026-01-16T14:15:59.228760",
+    "expires_at": "2026-01-16T22:12:55.531302",
+    "encrypted_password": "SgxXAxREQBFW"
+  },
+  "497def00bff23c69d6e381bac7577642": {
+    "session_id": "497def00bff23c69d6e381bac7577642",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T14:23:05.831613",
+    "last_activity": "2026-01-16T14:24:46.018736",
+    "expires_at": "2026-01-16T22:23:05.831613",
+    "encrypted_password": "WghSBFJUBgZSBwJQUVUAWgkHBQRQVAxXVVtXW1oKWgVbXFAAVQJQVg=="
+  },
+  "ab9f5aec5990b442717cb07e910b3fa8": {
+    "session_id": "ab9f5aec5990b442717cb07e910b3fa8",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T14:31:04.926810",
+    "last_activity": "2026-01-16T14:31:04.926810",
+    "expires_at": "2026-01-16T22:31:04.926810",
+    "encrypted_password": "VFZUVQACCgcDVQYBVQcHUwkDAQJUXAJRBAtUDlELB1dVAlZRB1RcVw=="
+  },
+  "4150884b7e8e6e88c5d9ddaf976c32aa": {
+    "session_id": "4150884b7e8e6e88c5d9ddaf976c32aa",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T14:37:25.922111",
+    "last_activity": "2026-01-16T14:39:22.811452",
+    "expires_at": "2026-01-16T22:37:25.922111",
+    "encrypted_password": "VgYGBwcBA1BSVVsHVgIAUwhUAgRQXAxQUwAFXFtaUVdXUgQDAFdVAA=="
+  },
+  "938cfaf75d5e0f5b6a315f991776095b": {
+    "session_id": "938cfaf75d5e0f5b6a315f991776095b",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T14:45:10.979797",
+    "last_activity": "2026-01-16T14:45:10.979797",
+    "expires_at": "2026-01-16T22:45:10.979797",
+    "encrypted_password": "VgUKW1IPXgtaBAUIVAEHAAFVVF0AAgVWBF8EVQUEUFNWA19bBg1bBQ=="
+  },
+  "1b62484cee77fd07e8568889dad41831": {
+    "session_id": "1b62484cee77fd07e8568889dad41831",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T14:54:42.503122",
+    "last_activity": "2026-01-16T14:54:42.503122",
+    "expires_at": "2026-01-16T22:54:42.503122",
+    "encrypted_password": "AlMPAVRUVFdVVVsHBFpWVVFUVVYEBFIBUFoNCwcAVAUDBw0FUwICBw=="
+  },
+  "7e5ad2f05f28cfb12705176e69ae4edf": {
+    "session_id": "7e5ad2f05f28cfb12705176e69ae4edf",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T14:57:04.472422",
+    "last_activity": "2026-01-16T14:57:04.472422",
+    "expires_at": "2026-01-16T22:57:04.472422",
+    "encrypted_password": "BANWVAVSXwBTBwRRAFsBAlUFVQJZUQBXBlgFV1NVBAQEBQNUUVBaDg=="
+  },
+  "63346373f86bcfe0116d946f5a00522b": {
+    "session_id": "63346373f86bcfe0116d946f5a00522b",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T14:57:11.533096",
+    "last_activity": "2026-01-16T15:05:32.287829",
+    "expires_at": "2026-01-16T22:57:11.533096",
+    "encrypted_password": "UFRSVVcPAA4CBgMCUFNdBlVSAVdSAQRSAFtRUQoGA1JQUgdVAw0FAA=="
+  },
+  "af8ca53babd43ddfa3610697bb4bfcf8": {
+    "session_id": "af8ca53babd43ddfa3610697bb4bfcf8",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T14:57:36.390044",
+    "last_activity": "2026-01-16T15:07:33.709895",
+    "expires_at": "2026-01-16T22:57:36.390044",
+    "encrypted_password": "AlEHBwUBBVZUAVNSCQJRWgEOAAACU1VRBFwDXQZfU1UDBQUDAldTBg=="
+  },
+  "11a4b14723f641acdca02fc5998aa434": {
+    "session_id": "11a4b14723f641acdca02fc5998aa434",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T15:09:06.551373",
+    "last_activity": "2026-01-16T15:11:40.320532",
+    "expires_at": "2026-01-16T23:09:06.551373",
+    "encrypted_password": "AQgOBAZQAgBXVlsEBFJUWlFTAwAAAwVSVQwGAVcMBVQAXAwAAQZUUA=="
+  },
+  "9b4848b43a4c43bc4c29ee0811c7936c": {
+    "session_id": "9b4848b43a4c43bc4c29ee0811c7936c",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T15:19:57.308484",
+    "last_activity": "2026-01-16T15:19:57.308484",
+    "expires_at": "2026-01-16T23:19:57.308484",
+    "encrypted_password": "VggFAAIHBgBTUFQAUQZTWggFUgBWVFZXAw0FAAJcAVVXXAcEBVFQUA=="
+  },
+  "32520688b74f0c27b041a4125841f63b": {
+    "session_id": "32520688b74f0c27b041a4125841f63b",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-16T15:26:41.905561",
+    "last_activity": "2026-01-16T15:32:03.160618",
+    "expires_at": "2026-01-16T23:26:41.905561",
+    "encrypted_password": "Vw0KV19UVQIGVVBTBgNSUlYBVgZUAwpdUFcAAF9cAgRRWlEAUAFTAw=="
+  },
+  "93d179a573bbc8648697365cb3e58e73": {
+    "session_id": "93d179a573bbc8648697365cb3e58e73",
+    "username": "ctapia@riofuturo.cl",
+    "uid": 159,
+    "created_at": "2026-01-16T15:30:59.815212",
+    "last_activity": "2026-01-16T15:30:59.815212",
+    "expires_at": "2026-01-16T23:30:59.815212",
+    "encrypted_password": "AFdfUAAAAABSAFMCAldcCgYEWgFUUQNTVAEGXwlRUwcBBV1WWgAABw=="
+  },
+  "50af8ee479038b8f65c630ea69fa009e": {
+    "session_id": "50af8ee479038b8f65c630ea69fa009e",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-16T15:39:38.924971",
+    "last_activity": "2026-01-16T15:39:38.924971",
+    "expires_at": "2026-01-16T23:39:38.924971",
+    "encrypted_password": "BwAAUAsHBVYGVVBUBlMGVFNXAwMNAg9dAQgOUA5XAFMBV1sHBFIDVw=="
+  },
+  "9809bd2b9e9ae70acc84ac910758c76c": {
+    "session_id": "9809bd2b9e9ae70acc84ac910758c76c",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T16:01:33.373629",
+    "last_activity": "2026-01-16T16:01:33.373629",
+    "expires_at": "2026-01-17T00:01:33.373629",
+    "encrypted_password": "VgcKVVcFVgEAAlNVAQdXAQMBUlQDC1cGAl8AAgYBW1tWAV9VAwdTDw=="
+  },
+  "61abdb56d3a6fbcabf8f491f33564668": {
+    "session_id": "61abdb56d3a6fbcabf8f491f33564668",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T16:19:50.987132",
+    "last_activity": "2026-01-16T16:19:50.987132",
+    "expires_at": "2026-01-17T00:19:50.987132",
+    "encrypted_password": "VAAEAwVUBAJUAQALB1BQVlQFCABfXQUKBQgGAVELAltVVAYHAgJSUg=="
+  },
+  "d2654a0015cfb3d3f7ffca4ce18d9fc0": {
+    "session_id": "d2654a0015cfb3d3f7ffca4ce18d9fc0",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T16:27:06.830326",
+    "last_activity": "2026-01-16T16:27:06.830326",
+    "expires_at": "2026-01-17T00:27:06.830326",
+    "encrypted_password": "BwkABgQPB10FAgUAXQYHAVcBAVJVUVMGBg0DUgRaUQQHD1UGUA0CUw=="
+  },
+  "160a8c3aff2c1647d026d6f006c169ad": {
+    "session_id": "160a8c3aff2c1647d026d6f006c169ad",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T16:32:17.877701",
+    "last_activity": "2026-01-16T16:33:30.505057",
+    "expires_at": "2026-01-17T00:32:17.877701",
+    "encrypted_password": "AAVTVwEEC1VQUlRRAVdYVAFRU1IEV1IHVA4BCAIAAAIBUVFTBlJdBQ=="
+  },
+  "1a6ce85c715d3fa8a64045c6b11d3de6": {
+    "session_id": "1a6ce85c715d3fa8a64045c6b11d3de6",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T16:32:52.497183",
+    "last_activity": "2026-01-16T16:32:52.497183",
+    "expires_at": "2026-01-17T00:32:52.497183",
+    "encrypted_password": "AwUEAQMBVwgCCVgFUAYHAQIDVAFXBFQCBlpWB1ZXUVIDA1EBVwNSBg=="
+  },
+  "ccc2d6fec11c30f972eab3f31f44d4f9": {
+    "session_id": "ccc2d6fec11c30f972eab3f31f44d4f9",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T16:34:36.315703",
+    "last_activity": "2026-01-16T16:34:36.315703",
+    "expires_at": "2026-01-17T00:34:36.315703",
+    "encrypted_password": "WggBAVMHCgdaAwBVAAcEAgUGCF9RVAEHBVkEDQYLBgZbXAMFVFFcVw=="
+  },
+  "78e0411a743bd33598ea1fd7b69f727a": {
+    "session_id": "78e0411a743bd33598ea1fd7b69f727a",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T16:43:40.998175",
+    "last_activity": "2026-01-16T16:47:39.097123",
+    "expires_at": "2026-01-17T00:43:40.998175",
+    "encrypted_password": "WlUDUA4CVgdWUltWAwBXVlRUAgQHXQIGVVwDD1dbV1dbAQFUCVQAVw=="
+  },
+  "e53c0618926bb55183515cce2de4ae09": {
+    "session_id": "e53c0618926bb55183515cce2de4ae09",
+    "username": "asanchez@riofuturo.cl",
+    "uid": 160,
+    "created_at": "2026-01-16T16:55:00.924177",
+    "last_activity": "2026-01-16T16:56:19.553279",
+    "expires_at": "2026-01-17T00:55:00.924177",
+    "encrypted_password": "D1RbUg5UAgYAVgcBXQYDBwYDVlUOVlNXWAJVVlBQAwoGBl0AV10PUQ=="
+  },
+  "241b2181ee35b738281da7bba60161c7": {
+    "session_id": "241b2181ee35b738281da7bba60161c7",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T16:57:39.563274",
+    "last_activity": "2026-01-16T17:00:06.106264",
+    "expires_at": "2026-01-17T00:57:39.563274",
+    "encrypted_password": "WlEBAgABCwEAXVABVVsEUAgAVAQEU1YDVQhXAQILVQFbBQMGB1ddUQ=="
+  },
+  "d6f3338d8c01d8a083749f6989b5b3b5": {
+    "session_id": "d6f3338d8c01d8a083749f6989b5b3b5",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T17:08:38.292548",
+    "last_activity": "2026-01-16T17:12:34.958336",
+    "expires_at": "2026-01-17T01:08:38.292548",
+    "encrypted_password": "VgAPB1MHBQ0BVwEBAVsDVwVRAVEAVwRSVgECDlRbAFpXVA0DVFFTXQ=="
+  },
+  "87172b6ee9d9cbdd25040763ffcdae50": {
+    "session_id": "87172b6ee9d9cbdd25040763ffcdae50",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T17:13:18.508774",
+    "last_activity": "2026-01-16T17:13:18.508774",
+    "expires_at": "2026-01-17T01:13:18.508774",
+    "encrypted_password": "UVUHBlRVXwtaAlMFUQFdAggHV1JQC1ACVgpSUgJXUQNRU1IGAFdaBQ=="
+  },
+  "918ac5cd77ec1c2b122fb71ff423eb31": {
+    "session_id": "918ac5cd77ec1c2b122fb71ff423eb31",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T17:15:14.269380",
+    "last_activity": "2026-01-16T17:39:09.242972",
+    "expires_at": "2026-01-17T01:15:14.269380",
+    "encrypted_password": "AFQHVVUHBFFVUQVQBwVVUAIPB18AAQIABVsCXVJdBQcBAAVRUlFSAQ=="
+  },
+  "985eaf48674440b07d291a7852e8a9c8": {
+    "session_id": "985eaf48674440b07d291a7852e8a9c8",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T17:17:21.175819",
+    "last_activity": "2026-01-16T17:17:21.175819",
+    "expires_at": "2026-01-17T01:17:21.175819",
+    "encrypted_password": "BQBVVlBTAw9bVVADAAFVU1VTUFNXBQRSAl0CWgpbUVAFBgBWBFEGAQ=="
+  },
+  "412894ea8751808d113311d3305dd1f6": {
+    "session_id": "412894ea8751808d113311d3305dd1f6",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-16T17:23:59.570330",
+    "last_activity": "2026-01-16T17:25:07.222712",
+    "expires_at": "2026-01-17T01:23:59.570330",
+    "encrypted_password": "EA9bXkJGEUQO"
+  },
+  "822a2c6eaf7386109072accca50cfd4f": {
+    "session_id": "822a2c6eaf7386109072accca50cfd4f",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T17:25:50.781020",
+    "last_activity": "2026-01-16T17:25:50.781020",
+    "expires_at": "2026-01-17T01:25:50.781020",
+    "encrypted_password": "A1QBWgEGAAoFBFMEAFIBUAcFU10EAQBQCQpSWwZVV1UDUlRaVQQFBA=="
+  },
+  "aeef93b3105e07b79c2da01be0e85f65": {
+    "session_id": "aeef93b3105e07b79c2da01be0e85f65",
+    "username": "jvidaurre@riofuturo.cl",
+    "uid": 2,
+    "created_at": "2026-01-16T17:29:06.872434",
+    "last_activity": "2026-01-16T17:38:34.702876",
+    "expires_at": "2026-01-17T01:29:06.872434",
+    "encrypted_password": "VlUGB11eDAQCVAMEUAFSUFJVUF8FVlMEAQ9TBFdTVwdVAgAECgQJVg=="
+  },
+  "05470f68df593b80ec7fe066430f5386": {
+    "session_id": "05470f68df593b80ec7fe066430f5386",
+    "username": "asanchez@riofuturo.cl",
+    "uid": 160,
+    "created_at": "2026-01-16T17:30:17.913804",
+    "last_activity": "2026-01-16T17:30:17.913804",
+    "expires_at": "2026-01-17T01:30:17.913804",
+    "encrypted_password": "XAdSWwECUQYABQEGWlAAB1FRAwIBXAUDXwJWUgJQAQNVVVQJWAtcUQ=="
+  },
+  "2baeb1a8a483780ccee3a638d37a88f6": {
+    "session_id": "2baeb1a8a483780ccee3a638d37a88f6",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T17:43:10.054420",
+    "last_activity": "2026-01-16T17:43:10.054420",
+    "expires_at": "2026-01-17T01:43:10.054420",
+    "encrypted_password": "BQBQUQACVF0BUVYHA1EAVwIAUwBZVwNUBwxVAgFSW1MFBgVRVABRUw=="
+  },
+  "30e0d89bcae6790d0c9f107308c3b3f6": {
+    "session_id": "30e0d89bcae6790d0c9f107308c3b3f6",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T17:49:59.378747",
+    "last_activity": "2026-01-16T17:49:59.378747",
+    "expires_at": "2026-01-17T01:49:59.378747",
+    "encrypted_password": "DAZXBwNRA1sCUgAABlpUAlQJU1JYAFVUVFsHUApaU1EMAAIHV1MGVQ=="
+  },
+  "8400da838d3eff7712f9c82e4f2f497c": {
+    "session_id": "8400da838d3eff7712f9c82e4f2f497c",
+    "username": "jbrandt@riofuturo.cl",
+    "uid": 237,
+    "created_at": "2026-01-16T17:52:03.806399",
+    "last_activity": "2026-01-16T17:57:26.516397",
+    "expires_at": "2026-01-17T01:52:03.806399",
+    "encrypted_password": "CQReBgddVwdXA1AKDFpfVg0DCggLXVMEXFVfWAZcDgUPUlIKVV0EAQ=="
+  },
+  "cbc5c7f772f94a862b82abae89006c3b": {
+    "session_id": "cbc5c7f772f94a862b82abae89006c3b",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T17:59:15.577268",
+    "last_activity": "2026-01-16T17:59:15.577268",
+    "expires_at": "2026-01-17T01:59:15.577268",
+    "encrypted_password": "BVMHVwlRV1tXAVZWXARXBAFVBwVXAAYFVA0GBwFbU1QFVVJXXVNSVQ=="
+  },
+  "af4cc52e48fb651c9631ebd1edb06d0e": {
+    "session_id": "af4cc52e48fb651c9631ebd1edb06d0e",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:03:11.080391",
+    "last_activity": "2026-01-16T18:03:11.080391",
+    "expires_at": "2026-01-17T02:03:11.080391",
+    "encrypted_password": "UAEGBVNTXw1WAAVUXVJcUQQEBQVRBgZQAwEAAVcBW1dQB1MFB1FaAw=="
+  },
+  "e073f4400e833fcaa71618029beaf33c": {
+    "session_id": "e073f4400e833fcaa71618029beaf33c",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:08:07.485389",
+    "last_activity": "2026-01-16T18:08:07.485389",
+    "expires_at": "2026-01-17T02:08:07.485389",
+    "encrypted_password": "AVcDAVMOXlxWAwcHA1ZXBwVTUl1UAgZXVA8EBwZUV1EBUVYBBwxbUg=="
+  },
+  "377d58613f5d21f9d8d2bb257a6758a8": {
+    "session_id": "377d58613f5d21f9d8d2bb257a6758a8",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-16T18:15:12.110575",
+    "last_activity": "2026-01-16T18:15:12.110575",
+    "expires_at": "2026-01-17T02:15:12.110575",
+    "encrypted_password": "VAxcAAAFVFRVW1RWVwoBUgdTUgcFUg0FV1QAAlhXBFFSWwdXD1BSVQ=="
+  },
+  "9974b95a5c0f5a95b354d412eccce7e1": {
+    "session_id": "9974b95a5c0f5a95b354d412eccce7e1",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T18:18:53.123822",
+    "last_activity": "2026-01-16T18:20:54.133760",
+    "expires_at": "2026-01-17T02:18:53.123822",
+    "encrypted_password": "UQhUAQNXVAVXUgEFA1EFVVQECVQEAwNQV11WXlIJAgdQXFYFBAECVQ=="
+  },
+  "5eb021376daa556f051fe19037947802": {
+    "session_id": "5eb021376daa556f051fe19037947802",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:19:15.603209",
+    "last_activity": "2026-01-16T18:19:15.603209",
+    "expires_at": "2026-01-17T02:19:15.603209",
+    "encrypted_password": "VVQGUVABBV5bCVFRVAMAAQBQVQFSUVBWCF0FUQdaBwBVUlNRBAMAUA=="
+  },
+  "3ac3e6bb138d97f3d5bf661c3513e073": {
+    "session_id": "3ac3e6bb138d97f3d5bf661c3513e073",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:19:33.908322",
+    "last_activity": "2026-01-16T18:19:33.908322",
+    "expires_at": "2026-01-17T02:19:33.908322",
+    "encrypted_password": "AVdQBgIDBA0FVFEHBgddUVUDBVcHCwUCCQEMUVEEWlUBUQUGVgEBAw=="
+  },
+  "30b5b52facaaa2e71917bbf29e744990": {
+    "session_id": "30b5b52facaaa2e71917bbf29e744990",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:20:16.649805",
+    "last_activity": "2026-01-16T18:20:16.649805",
+    "expires_at": "2026-01-17T02:20:16.649805",
+    "encrypted_password": "UlcCVgJWXwAGBFVVU1NcVwcDUQVTVwJRAFsBU1NTWwFSUVdWVlRaDg=="
+  },
+  "498ed51ca741c8ef9d165d1e76c8e48f": {
+    "session_id": "498ed51ca741c8ef9d165d1e76c8e48f",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T18:31:00.054820",
+    "last_activity": "2026-01-16T18:31:00.054820",
+    "expires_at": "2026-01-17T02:31:00.054820",
+    "encrypted_password": "V1VWVAIAClJUUQYCA1RTVAlUU1QHUgQBAAhQDgFbUwJWAVRQBVZcAg=="
+  },
+  "b4f619d4bd9c22623eabeb793937c447": {
+    "session_id": "b4f619d4bd9c22623eabeb793937c447",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T18:35:47.429654",
+    "last_activity": "2026-01-16T18:39:44.939819",
+    "expires_at": "2026-01-17T02:35:47.429654",
+    "encrypted_password": "AAcEVwEDBFdQVVcDBVpXWgAHAVNeBg0AVQwDWwYJAVABUwZTBlVSBw=="
+  },
+  "23eed3524cc2b39e29519d92a4294544": {
+    "session_id": "23eed3524cc2b39e29519d92a4294544",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:41:31.080102",
+    "last_activity": "2026-01-16T18:41:31.080102",
+    "expires_at": "2026-01-17T02:41:31.080102",
+    "encrypted_password": "UgAAVQUOBF1XAFdTAQADCwhXBQUEBQIBAAFVUQdaWwZSBlVVUQwBUw=="
+  },
+  "41c47e3cac4c0494fc034fcc069c4f3e": {
+    "session_id": "41c47e3cac4c0494fc034fcc069c4f3e",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T18:43:16.879837",
+    "last_activity": "2026-01-16T18:43:16.879837",
+    "expires_at": "2026-01-17T02:43:16.879837",
+    "encrypted_password": "WgkFAwcDV1ZWAAYGVAZVAQgGV1QAUlUKVwoADwFcAFpbXQcHAFUBBg=="
+  },
+  "cc0ed128fa8db26a28c3d5ed13ee531b": {
+    "session_id": "cc0ed128fa8db26a28c3d5ed13ee531b",
+    "username": "jvidaurre@riofuturo.cl",
+    "uid": 2,
+    "created_at": "2026-01-16T18:43:18.251616",
+    "last_activity": "2026-01-16T18:43:18.251616",
+    "expires_at": "2026-01-17T02:43:18.251616",
+    "encrypted_password": "AQJTAF0PBQZRAlNTVVJYVQtXUV9XAFtRVQFSAFcMAFQCVVUDClUAVA=="
+  },
+  "d4a8c4f8906b29cd94afc3f0ffab1232": {
+    "session_id": "d4a8c4f8906b29cd94afc3f0ffab1232",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:45:24.123979",
+    "last_activity": "2026-01-16T18:45:24.123979",
+    "expires_at": "2026-01-17T02:45:24.123979",
+    "encrypted_password": "UVNXV1cCXl1SVFVSV1NcBQBSAVYFA1JTVg0BBQQBAQZRVQJXAwBbUw=="
+  },
+  "db5f8e5e85852faed2ee5c645163361b": {
+    "session_id": "db5f8e5e85852faed2ee5c645163361b",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-16T18:45:32.986379",
+    "last_activity": "2026-01-16T18:47:09.697167",
+    "expires_at": "2026-01-17T02:45:32.986379",
+    "encrypted_password": "VwVYBglTAAQDBwpbAANbBVQHUFIGUF0FUAIEUQtSVgJRUgNRBgYGBQ=="
+  },
+  "bc68fb3f91c1241dc53f5476c0f69fbe": {
+    "session_id": "bc68fb3f91c1241dc53f5476c0f69fbe",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T18:53:07.109323",
+    "last_activity": "2026-01-16T18:53:07.109323",
+    "expires_at": "2026-01-17T02:53:07.109323",
+    "encrypted_password": "VgIFBglTVwEGBVAEVwEEUVUIUF1ZBlRVUg0EWwNRUVpWBFAGXVFSDw=="
+  },
+  "29158f489b804191f201c84806a470c2": {
+    "session_id": "29158f489b804191f201c84806a470c2",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T18:59:14.854014",
+    "last_activity": "2026-01-16T18:59:14.854014",
+    "expires_at": "2026-01-17T02:59:14.854014",
+    "encrypted_password": "UwlUUlNXBwEGXVdRUVJRVFUPBlBTUwZVBAwHDQZaUgdSXVZWVAFRUQ=="
+  },
+  "0ca5fda0107f61d465bd6f0cf188e713": {
+    "session_id": "0ca5fda0107f61d465bd6f0cf188e713",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T19:13:30.532545",
+    "last_activity": "2026-01-16T19:13:30.532545",
+    "expires_at": "2026-01-17T03:13:30.532545",
+    "encrypted_password": "VlADUQEHAl1QBVhVUwcEUwlVBlADCg5bVQgCUVQABAZWVlZRVQUHUw=="
+  },
+  "3934f70f06f060046d6e677c971b4fcd": {
+    "session_id": "3934f70f06f060046d6e677c971b4fcd",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T19:18:09.917897",
+    "last_activity": "2026-01-16T19:18:09.917897",
+    "expires_at": "2026-01-17T03:18:09.917897",
+    "encrypted_password": "BQBWBVIAV1IHBAIAAlsEAQcBCFFeUVcKUFpUClUPVVIEVFQBVVYBAg=="
+  },
+  "a15241538935d73da9a66f09a35201a6": {
+    "session_id": "a15241538935d73da9a66f09a35201a6",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-16T19:29:18.667466",
+    "last_activity": "2026-01-16T19:29:18.667466",
+    "expires_at": "2026-01-17T03:29:18.667466",
+    "encrypted_password": "UFRQWwUGAApTVQUDBFNdAFACBVADVlNaBQxRAAVWVFVQUgVbUQQFBA=="
+  },
+  "2a926908f6a3961922c175f54a41ff6e": {
+    "session_id": "2a926908f6a3961922c175f54a41ff6e",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T19:39:44.761921",
+    "last_activity": "2026-01-16T19:39:44.761921",
+    "expires_at": "2026-01-17T03:39:44.761921",
+    "encrypted_password": "BgcHUlIDC1BSB1sGVlVWUAgHUFFRBFIHAlkGW1EIUQYHUwVWVVVdAA=="
+  },
+  "422ac639dea52a7253feb3b5372c8c44": {
+    "session_id": "422ac639dea52a7253feb3b5372c8c44",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-16T19:42:31.040123",
+    "last_activity": "2026-01-16T19:42:31.040123",
+    "expires_at": "2026-01-17T03:42:31.040123",
+    "encrypted_password": "UAQOUgYBVAcAU1ECUQFUBwJSUAReUwwCAg1XW1AIAgVRUAxWAVcCVw=="
+  },
+  "1a6bd52a782a993bc1425e8cafe77116": {
+    "session_id": "1a6bd52a782a993bc1425e8cafe77116",
+    "username": "asesorias@riofuturo.cl",
+    "uid": 151,
+    "created_at": "2026-01-17T17:12:04.269252",
+    "last_activity": "2026-01-17T17:19:14.487581",
+    "expires_at": "2026-01-18T01:12:04.269252",
+    "encrypted_password": "UAJRBwxTAVFXUwBTBFJXCVYGBVUBAFNSDFdWB1NWVFhTAlwEDVVXUw=="
+  },
+  "93b73412fdee5caaec1c15205f655b62": {
+    "session_id": "93b73412fdee5caaec1c15205f655b62",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-17T22:21:52.126161",
+    "last_activity": "2026-01-17T22:24:00.772463",
+    "expires_at": "2026-01-18T06:21:52.126161",
+    "encrypted_password": "QFpWVRFAQktd"
+  },
+  "a6f914ba265854f88fd8d241e1c0dbd0": {
+    "session_id": "a6f914ba265854f88fd8d241e1c0dbd0",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-17T22:32:28.558055",
+    "last_activity": "2026-01-17T23:46:53.819171",
+    "expires_at": "2026-01-18T06:32:28.558055",
+    "encrypted_password": "QlxbXkFCR0cM"
+  },
+  "eec6c2868d685eb8bc8dd852df953110": {
+    "session_id": "eec6c2868d685eb8bc8dd852df953110",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-18T00:16:31.784223",
+    "last_activity": "2026-01-18T00:53:37.658635",
+    "expires_at": "2026-01-18T08:16:31.784223",
+    "encrypted_password": "QFFcBBZFQEFY"
+  },
+  "d446be6a76dfb56dac4bf0f4fbc2af66": {
+    "session_id": "d446be6a76dfb56dac4bf0f4fbc2af66",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-18T13:03:12.905056",
+    "last_activity": "2026-01-18T13:03:12.905056",
+    "expires_at": "2026-01-18T21:03:12.905056",
+    "encrypted_password": "UgJdXA9fBVNTBwRSVQoHB1MGVQEEAFhdXQEDVwpXVldUVQYLAAoDUg=="
+  },
+  "242ee6a9bb3d9b7df85e662574f10e65": {
+    "session_id": "242ee6a9bb3d9b7df85e662574f10e65",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-18T13:04:41.207740",
+    "last_activity": "2026-01-18T13:12:14.725536",
+    "expires_at": "2026-01-18T21:04:41.207740",
+    "encrypted_password": "DwRaVAhTBgNVVFRbBQNTBQNSAgpQBVtXA1QHAF8FAA0JUwEDBwYAAg=="
+  },
+  "948c5016ad871f6e30d5c02b9c7b4fe2": {
+    "session_id": "948c5016ad871f6e30d5c02b9c7b4fe2",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-18T13:16:17.513932",
+    "last_activity": "2026-01-18T13:16:17.513932",
+    "expires_at": "2026-01-18T21:16:17.513932",
+    "encrypted_password": "VQwBXQ1TAgEEVQcHUAYCBgUCUQsGAQlVXFRUBQxSB1BTW1oKAgYEAA=="
+  },
+  "ec6458aa9c28d3348e9c92dfcd4c33ce": {
+    "session_id": "ec6458aa9c28d3348e9c92dfcd4c33ce",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-18T15:35:04.533640",
+    "last_activity": "2026-01-18T15:39:57.572485",
+    "expires_at": "2026-01-18T23:35:04.533640",
+    "encrypted_password": "VQVcB1oEVgBTVgJVAAECUgUAUFcDC1xTXQcGVQgBVAZTUgdQVVFQAQ=="
+  },
+  "b2402dffb0c4a688f345eb531325c737": {
+    "session_id": "b2402dffb0c4a688f345eb531325c737",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-18T15:53:43.841958",
+    "last_activity": "2026-01-18T16:02:11.723588",
+    "expires_at": "2026-01-18T23:53:43.841958",
+    "encrypted_password": "VAdcAF1SVwcBVQQGVgUHU1VQUAVXB1xQXVcEU10FAwFSUAdXUgdRBg=="
+  },
+  "81557701e17bce2d8a54fd47fc115f3e": {
+    "session_id": "81557701e17bce2d8a54fd47fc115f3e",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-18T19:26:10.880765",
+    "last_activity": "2026-01-18T19:26:10.880765",
+    "expires_at": "2026-01-19T03:26:10.880765",
+    "encrypted_password": "EFlXXhZME0Jd"
+  },
+  "205b83cbe430a48b25b33604351ebc7a": {
+    "session_id": "205b83cbe430a48b25b33604351ebc7a",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-19T10:37:59.314233",
+    "last_activity": "2026-01-19T10:37:59.314233",
+    "expires_at": "2026-01-19T18:37:59.314233",
+    "encrypted_password": "EwxZUEBCE0QK"
+  },
+  "4479dae0a0da3f32fd42b38edeead104": {
+    "session_id": "4479dae0a0da3f32fd42b38edeead104",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T11:15:56.941306",
+    "last_activity": "2026-01-19T11:15:56.941306",
+    "expires_at": "2026-01-19T19:15:56.941306",
+    "encrypted_password": "VgYGDlcGAQEBAwABCABSUANRVwNfVQdVUApQDlNYU1BXUgQKUFBXUQ=="
+  },
+  "328d2af1c41a56a516422ef993bbb428": {
+    "session_id": "328d2af1c41a56a516422ef993bbb428",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T11:52:29.118625",
+    "last_activity": "2026-01-19T11:52:29.118625",
+    "expires_at": "2026-01-19T19:52:29.118625",
+    "encrypted_password": "WwMEAQFXAwcGUAYFAAdYAQIDBFFQBwcEBAEMXVpfWgBaVwYFBgFVVw=="
+  },
+  "297a415d0b0abaeecf40ede22dc832af": {
+    "session_id": "297a415d0b0abaeecf40ede22dc832af",
+    "username": "viturra@riofuturo.cl",
+    "uid": 190,
+    "created_at": "2026-01-19T12:19:34.642487",
+    "last_activity": "2026-01-19T12:19:34.642487",
+    "expires_at": "2026-01-19T20:19:34.642487",
+    "encrypted_password": "AQRVBgQEWwQOUA8KUAQHUQEHVVZQBVAEUAAGUFRTWlcDXAdaAFNaUA=="
+  },
+  "851fa987dd2218090f04ac2340dc21b4": {
+    "session_id": "851fa987dd2218090f04ac2340dc21b4",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T12:23:55.742251",
+    "last_activity": "2026-01-19T12:23:55.742251",
+    "expires_at": "2026-01-19T20:23:55.742251",
+    "encrypted_password": "VQJdU1teVQYFBAcHUwcHBQBUWQUGVlhXA1JQBA4HUFNTVQYEVAtTBw=="
+  },
+  "f90eeea30be45d2f2d38e748997202af": {
+    "session_id": "f90eeea30be45d2f2d38e748997202af",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T12:28:02.043974",
+    "last_activity": "2026-01-19T12:35:08.124985",
+    "expires_at": "2026-01-19T20:28:02.043974",
+    "encrypted_password": "DQQBUgkDUwwAAFIJXVJXVwgFUAVWCgJbVQxVB1RRAAENAlRSXQFWAg=="
+  },
+  "27ef4f28fa0fdd417a3745f21a5398d8": {
+    "session_id": "27ef4f28fa0fdd417a3745f21a5398d8",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T12:28:56.151163",
+    "last_activity": "2026-01-19T12:28:56.151163",
+    "expires_at": "2026-01-19T20:28:56.151163",
+    "encrypted_password": "UgBQBgACBFxXCVgJB1BcVwQGAQVTBAFXVAkCUQMGV1RSBgUGVAABUg=="
+  },
+  "a486213028b0de28f621fc932d2254e4": {
+    "session_id": "a486213028b0de28f621fc932d2254e4",
+    "username": "viturra@riofuturo.cl",
+    "uid": 190,
+    "created_at": "2026-01-19T12:30:22.286834",
+    "last_activity": "2026-01-19T12:30:22.286834",
+    "expires_at": "2026-01-19T20:30:22.286834",
+    "encrypted_password": "AVMAVVwDAlFbBQ5RAVVWUQNWAldQU1UCAVZRA1QAUgADC1IJWFQDBQ=="
+  },
+  "927716f64a4a230bea3e8b1a368502ab": {
+    "session_id": "927716f64a4a230bea3e8b1a368502ab",
+    "username": "jvidaurre@riofuturo.cl",
+    "uid": 2,
+    "created_at": "2026-01-19T12:34:11.948871",
+    "last_activity": "2026-01-19T12:34:11.948871",
+    "expires_at": "2026-01-19T20:34:11.948871",
+    "encrypted_password": "BQNRBANSCVFWBFcCVVcACAcIAVVWB1MAVgcBDlVTAVlSBwJWAlQMXA=="
+  },
+  "8be9c038ea8ec3ce0675e1ee407a53eb": {
+    "session_id": "8be9c038ea8ec3ce0675e1ee407a53eb",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T12:38:20.132247",
+    "last_activity": "2026-01-19T12:38:20.132247",
+    "expires_at": "2026-01-19T20:38:20.132247",
+    "encrypted_password": "BQddUwteUQACWgcGUQFXBQIFUAYNBAkGAAhUUQxXAFQDUAYEBAtXAQ=="
+  },
+  "c0f8292a396cac3a3d32a29cdffec6bd": {
+    "session_id": "c0f8292a396cac3a3d32a29cdffec6bd",
+    "username": "viturra@riofuturo.cl",
+    "uid": 190,
+    "created_at": "2026-01-19T12:41:09.481186",
+    "last_activity": "2026-01-19T12:41:09.481186",
+    "expires_at": "2026-01-19T20:41:09.481186",
+    "encrypted_password": "UQUBUF0BVVYKVwQEU1BSB1pSBFkCAgcAB1QBUAUFUQJTXVMMWVZUAg=="
+  },
+  "1b0a1a19a12a131dc0d1510d76ac5568": {
+    "session_id": "1b0a1a19a12a131dc0d1510d76ac5568",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T12:48:39.930757",
+    "last_activity": "2026-01-19T12:48:39.930757",
+    "expires_at": "2026-01-19T20:48:39.930757",
+    "encrypted_password": "AVULWgYDBAkAUVYFVFpSBQAIW1UEAQdSUV0CAFQHUFABU15aUgEBBw=="
+  },
+  "abe032ec5d516ed7f8cc2dd8ec989f6b": {
+    "session_id": "abe032ec5d516ed7f8cc2dd8ec989f6b",
+    "username": "viturra@riofuturo.cl",
+    "uid": 190,
+    "created_at": "2026-01-19T12:48:56.342384",
+    "last_activity": "2026-01-19T12:48:56.342384",
+    "expires_at": "2026-01-19T20:48:56.342384",
+    "encrypted_password": "UQIABlRTAARcCwEFVAsBVQFVWQQKBQQBVwtQA1NRVARTWlJaUAQBUA=="
+  },
+  "6ef4b6028b8af78e5e15d977cc2a1471": {
+    "session_id": "6ef4b6028b8af78e5e15d977cc2a1471",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T12:59:42.309171",
+    "last_activity": "2026-01-19T12:59:42.309171",
+    "expires_at": "2026-01-19T20:59:42.309171",
+    "encrypted_password": "A1dXBQgEX1tWUVcIVgMDVAMJV1FRAwEAVVgNUgIABlcDUQIFXAZaVQ=="
+  },
+  "acdaaac02c356a91da50cc2bdecf32f0": {
+    "session_id": "acdaaac02c356a91da50cc2bdecf32f0",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T13:00:52.832260",
+    "last_activity": "2026-01-19T13:00:52.832260",
+    "expires_at": "2026-01-19T21:00:52.832260",
+    "encrypted_password": "AgIGVANRCgZXUVICBVtYVlEEAFIEVAYHV1oHDVdaBVYDVgRQBAdcVg=="
+  },
+  "42217605273ace2ab30369eae3c3bfc6": {
+    "session_id": "42217605273ace2ab30369eae3c3bfc6",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:05:54.426262",
+    "last_activity": "2026-01-19T13:11:39.096704",
+    "expires_at": "2026-01-19T21:05:54.426262",
+    "encrypted_password": "AVUBVVMOUgFaAwQBBwcDVANXUF0AAVcHAVgNU1FRU1UBU1RVBwxXDw=="
+  },
+  "1e25e44cc226560cf2d07c617ff2bdce": {
+    "session_id": "1e25e44cc226560cf2d07c617ff2bdce",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:15:42.765546",
+    "last_activity": "2026-01-19T13:15:42.765546",
+    "expires_at": "2026-01-19T21:15:42.765546",
+    "encrypted_password": "BQFXAAEGA1wBAllTB1RXCgIFVAEAC1RSBVtQVwpUVgcFBwIAVQQGUg=="
+  },
+  "eb31fa97496ce89f29c1376924217bc7": {
+    "session_id": "eb31fa97496ce89f29c1376924217bc7",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T13:17:03.711288",
+    "last_activity": "2026-01-19T13:17:03.711288",
+    "expires_at": "2026-01-19T21:17:03.711288",
+    "encrypted_password": "BQUGVQFTCgJbVldQVgBXUwdTBAMFBFIEBQoDXlIJAVoEUQRRBgVcUg=="
+  },
+  "3fc5b706e86922285f1554599d38c831": {
+    "session_id": "3fc5b706e86922285f1554599d38c831",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:21:23.608521",
+    "last_activity": "2026-01-19T13:21:23.608521",
+    "expires_at": "2026-01-19T21:21:23.608521",
+    "encrypted_password": "AlQDUgMPVV4BA1ICXFtQAFJXVgdQUVVQVgwNBwIBV1cCUlZSVw1QUA=="
+  },
+  "bfaa4b7878fe217cfdc76da11874f37f": {
+    "session_id": "bfaa4b7878fe217cfdc76da11874f37f",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:26:11.283206",
+    "last_activity": "2026-01-19T13:26:11.283206",
+    "expires_at": "2026-01-19T21:26:11.283206",
+    "encrypted_password": "VlNXWwQGBVtbUlkAAVpTUQNUU1VUAA9RVl8DUAsDAQZWVQJbUAQAVQ=="
+  },
+  "c437f4bd6d190c941d6b8e8c2fc24d37": {
+    "session_id": "c437f4bd6d190c941d6b8e8c2fc24d37",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:31:50.953513",
+    "last_activity": "2026-01-19T13:36:28.969269",
+    "expires_at": "2026-01-19T21:31:50.953513",
+    "encrypted_password": "DAgAWgcOU14BAlYBBwdQUwNVVgZYBFcFVg0FAlABVQcMDlVaUwxWUA=="
+  },
+  "cab60b7a8a210f2a45477244e008c0da": {
+    "session_id": "cab60b7a8a210f2a45477244e008c0da",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T13:34:40.809000",
+    "last_activity": "2026-01-19T13:35:45.472459",
+    "expires_at": "2026-01-19T21:34:40.809000",
+    "encrypted_password": "UlYEBQRRAQUGUAEFCQJTVFIDAVVUVgIDAF4BAFsJVAJTAgYBAwdXVQ=="
+  },
+  "ae4b283b7c0b2ef2ade0872266555c5f": {
+    "session_id": "ae4b283b7c0b2ef2ade0872266555c5f",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:42:53.916223",
+    "last_activity": "2026-01-19T13:45:03.281500",
+    "expires_at": "2026-01-19T21:42:53.916223",
+    "encrypted_password": "BVAHVwkDVgFQCQADB1EAVAQFU1RVUFQFBAkDBVABVwEFVlJXXQFTDw=="
+  },
+  "daf8f2173e9f83cf3229138b87df4ec5": {
+    "session_id": "daf8f2173e9f83cf3229138b87df4ec5",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T13:59:21.603779",
+    "last_activity": "2026-01-19T14:14:33.114720",
+    "expires_at": "2026-01-19T21:59:21.603779",
+    "encrypted_password": "UQdWAAMDBF5QBgAHA1tdUQJXBVBZAQRbUgoCVFFQVgNRAQMAVwEBUA=="
+  },
+  "edde0eb5299993dea9cfca6a75c57559": {
+    "session_id": "edde0eb5299993dea9cfca6a75c57559",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T14:03:38.838178",
+    "last_activity": "2026-01-19T14:03:38.838178",
+    "expires_at": "2026-01-19T22:03:38.838178",
+    "encrypted_password": "UVRRBQFXBg1XVFcHAFRZVQRWV15WVAIDBQxTWQBcV1VQAFMBBgFQXQ=="
+  },
+  "bfbe301105915736ac9c8c7480735c6d": {
+    "session_id": "bfbe301105915736ac9c8c7480735c6d",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T14:43:35.141904",
+    "last_activity": "2026-01-19T14:43:35.141904",
+    "expires_at": "2026-01-19T22:43:35.141904",
+    "encrypted_password": "DFIBVFAEX1sBVVZRUFUHVAAHUgJYCgNRVgsGBldWVlEMVFRUBAZaVQ=="
+  },
+  "cd5644e456ada035d96ba8d27dc9c722": {
+    "session_id": "cd5644e456ada035d96ba8d27dc9c722",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T14:45:00.939820",
+    "last_activity": "2026-01-19T14:45:00.939820",
+    "expires_at": "2026-01-19T22:45:00.939820",
+    "encrypted_password": "VlNRWgEOU1wBBAQAVVsDCwIBUFZRClcFVQwABgVbUlRWVQRaVQxWUg=="
+  },
+  "7943d127faf6a9be114ace642e981083": {
+    "session_id": "7943d127faf6a9be114ace642e981083",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T14:53:27.178019",
+    "last_activity": "2026-01-19T15:03:04.105076",
+    "expires_at": "2026-01-19T22:53:27.178019",
+    "encrypted_password": "VwZdAwxeUlQHBgAHBwIGBgQFBVYMV19dXAkEVApVV1NRUQZUAwtUVQ=="
+  },
+  "05b99390d4bcc8fe1f23c852b6e11f66": {
+    "session_id": "05b99390d4bcc8fe1f23c852b6e11f66",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T15:02:52.439971",
+    "last_activity": "2026-01-19T15:02:52.439971",
+    "expires_at": "2026-01-19T23:02:52.439971",
+    "encrypted_password": "UQZRWwUBVV1RAAMDVFsACwECVgcCV1cGBQ0NAAFXBwBRAARbUQNQUw=="
+  },
+  "d6cee3ba60945afe027b618003c45c7f": {
+    "session_id": "d6cee3ba60945afe027b618003c45c7f",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T15:13:28.904382",
+    "last_activity": "2026-01-19T15:25:34.528566",
+    "expires_at": "2026-01-19T23:13:28.904382",
+    "encrypted_password": "VlcDVwAOU1pQUwUJUVQAVANUAFdXVFIGUlxRUgNSVVpWUVZXVAxWVA=="
+  },
+  "2db80924a829f9f3c68e8259c5a9ceb9": {
+    "session_id": "2db80924a829f9f3c68e8259c5a9ceb9",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-19T15:36:08.380262",
+    "last_activity": "2026-01-19T15:36:55.656588",
+    "expires_at": "2026-01-19T23:36:08.380262",
+    "encrypted_password": "S15cXxMWEURW"
+  },
+  "adee720a71811ac27ae3742bae3a536a": {
+    "session_id": "adee720a71811ac27ae3742bae3a536a",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T15:36:11.448561",
+    "last_activity": "2026-01-19T15:36:11.448561",
+    "expires_at": "2026-01-19T23:36:11.448561",
+    "encrypted_password": "AldWUVRRBwACBQUAAVBSUQVVAQFTUQEBBQ0NUQYHUVQCUQNRAFMCDg=="
+  },
+  "dabeff40d8d02221698201c5e4abc46e": {
+    "session_id": "dabeff40d8d02221698201c5e4abc46e",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T15:36:17.971019",
+    "last_activity": "2026-01-19T15:36:17.971019",
+    "expires_at": "2026-01-19T23:36:17.971019",
+    "encrypted_password": "VQADVgMGUAtWVgICBltUUVVXVVxYUAEAAQhXUQoAVFVVBlZWVwRVBQ=="
+  },
+  "5214aac8e28890a22f70817f2b4bdfc0": {
+    "session_id": "5214aac8e28890a22f70817f2b4bdfc0",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T15:44:36.311468",
+    "last_activity": "2026-01-19T16:07:57.901714",
+    "expires_at": "2026-01-19T23:44:36.311468",
+    "encrypted_password": "BAJSAAZTVgxWAlVWUltTBQUIV1ZQCgUCCA8MAQUBVlQEBAcAUlFTAg=="
+  },
+  "852d3284aa2c87edfa2c8b25659d6109": {
+    "session_id": "852d3284aa2c87edfa2c8b25659d6109",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T15:45:14.119682",
+    "last_activity": "2026-01-19T15:54:31.305281",
+    "expires_at": "2026-01-19T23:45:14.119682",
+    "encrypted_password": "B1NcVgEDVQECA1ZWAVMGCVZXVFIAUQAFUwdSAwoAVgABBAcBDlZTAA=="
+  },
+  "f68cf569214106f881bc4a1822284348": {
+    "session_id": "f68cf569214106f881bc4a1822284348",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T16:01:51.937301",
+    "last_activity": "2026-01-19T16:01:51.937301",
+    "expires_at": "2026-01-20T00:01:51.937301",
+    "encrypted_password": "UwgCAwEFA1JWXAABVQdVBwMOAAdeV1VRBwoBC1cNAQJSXAAHBlNVAg=="
+  },
+  "7195f0f3d5dec061c9038d631c9b2bd6": {
+    "session_id": "7195f0f3d5dec061c9038d631c9b2bd6",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T16:13:08.889184",
+    "last_activity": "2026-01-19T16:13:45.707459",
+    "expires_at": "2026-01-20T00:13:08.889184",
+    "encrypted_password": "DVcGUVBRVAgAVQQDUwdXBVUAVlMCAwUGAloGWlRQUFoNUVNRBFNRBg=="
+  },
+  "f2e2edd8d3b4a1145e5a79eef158386d": {
+    "session_id": "f2e2edd8d3b4a1145e5a79eef158386d",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T16:13:55.842051",
+    "last_activity": "2026-01-19T16:13:55.842051",
+    "expires_at": "2026-01-20T00:13:55.842051",
+    "encrypted_password": "AVRaV1xUAAJSVQVVUQZbAQQABAtQUQ8CVwQCVAoBV1YHAwEAUwEGAw=="
+  },
+  "6bf9725db61244292a96b84201e368b0": {
+    "session_id": "6bf9725db61244292a96b84201e368b0",
+    "username": "aferreira@riofuturo.cl",
+    "uid": 242,
+    "created_at": "2026-01-19T17:04:40.647576",
+    "last_activity": "2026-01-19T17:28:54.232978",
+    "expires_at": "2026-01-20T01:04:40.647576",
+    "encrypted_password": "BlMCD1EEUF4AVQFVVFAPA1xUVAEOUgFTUVAAWQsAUQEBUVQNVAZSVA=="
+  },
+  "dc651a5f86938bf26ef2ae5dedb12728": {
+    "session_id": "dc651a5f86938bf26ef2ae5dedb12728",
+    "username": "msepulveda@riofuturo.cl",
+    "uid": 241,
+    "created_at": "2026-01-19T17:24:07.912469",
+    "last_activity": "2026-01-19T17:24:07.912469",
+    "expires_at": "2026-01-20T01:24:07.912469",
+    "encrypted_password": "UAwABlAHCFFRUQAHBFZaB1FTBF1WAFRUC1NQCwEHAVgKUVMDUgJaBw=="
+  },
+  "c388950fc074c72bc6e8f791b4aaa0da": {
+    "session_id": "c388950fc074c72bc6e8f791b4aaa0da",
+    "username": "ctapia@riofuturo.cl",
+    "uid": 159,
+    "created_at": "2026-01-19T17:30:02.982226",
+    "last_activity": "2026-01-19T17:39:53.054153",
+    "expires_at": "2026-01-20T01:30:02.982226",
+    "encrypted_password": "D1UAAFoJVVVQAAdWD1AAA1RXVFJTBVlTVQlaUlgHVwAOBwIGAAlVUg=="
+  },
+  "d3e92404af112c7e76dfd7478bf563cd": {
+    "session_id": "d3e92404af112c7e76dfd7478bf563cd",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T17:42:48.791024",
+    "last_activity": "2026-01-19T17:42:48.791024",
+    "expires_at": "2026-01-20T01:42:48.791024",
+    "encrypted_password": "VAMNVQgHVVIOVVFbBgBaUwRVUVFTBgxWXVMABApSAldSVFYCB1JTUw=="
+  },
+  "615e4feda7641fa31cfc1cfa45521bae": {
+    "session_id": "615e4feda7641fa31cfc1cfa45521bae",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T17:44:15.532486",
+    "last_activity": "2026-01-19T17:44:15.532486",
+    "expires_at": "2026-01-20T01:44:15.532486",
+    "encrypted_password": "AVNRUAgBBF1TB1MBVAAGA1UEUFJUVAJSVAoAUwMGV1sBVQRQXAMBUw=="
+  },
+  "049bed28cd5bb7d1230bb229412aae31": {
+    "session_id": "049bed28cd5bb7d1230bb229412aae31",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T17:58:36.675872",
+    "last_activity": "2026-01-19T17:58:36.675872",
+    "expires_at": "2026-01-20T01:58:36.675872",
+    "encrypted_password": "V1BRUAkEXwxaA1cCUlJRAVJVBVZVBAEFUVsAVQUGBgRXVgRQXQZaAg=="
+  },
+  "4ad951c45f272b92659efcb335125cfe": {
+    "session_id": "4ad951c45f272b92659efcb335125cfe",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T18:10:21.184811",
+    "last_activity": "2026-01-19T18:10:21.184811",
+    "expires_at": "2026-01-20T02:10:21.184811",
+    "encrypted_password": "A1ZbAwtTUwVVBAZVVgQCVFVbVwpQUFtTUgBTVwhRBVQFAQBUBAZVBA=="
+  },
+  "96aab5f6609a832cbff6beb2db8eea14": {
+    "session_id": "96aab5f6609a832cbff6beb2db8eea14",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T18:11:43.821151",
+    "last_activity": "2026-01-19T18:35:31.096405",
+    "expires_at": "2026-01-20T02:11:43.821151",
+    "encrypted_password": "A1AHBQNRVVxbA1gJXFIBA1JSWlBWAgNVAgwGVldSVlYDVlIFV1NQUg=="
+  },
+  "32b56cf4b1009c19b289b43a31682790": {
+    "session_id": "32b56cf4b1009c19b289b43a31682790",
+    "username": "mjaramillo@riofuturo.cl",
+    "uid": 214,
+    "created_at": "2026-01-19T18:11:50.043835",
+    "last_activity": "2026-01-19T18:11:50.043835",
+    "expires_at": "2026-01-20T02:11:50.043835",
+    "encrypted_password": "AQcNBFhWVAlSAVFVAVQGUwBaVgFRAAsFBgBSBFsGVAcHUFZTVwNSCA=="
+  },
+  "d76098c966d2b3ddc014f02d97acc41d": {
+    "session_id": "d76098c966d2b3ddc014f02d97acc41d",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T18:46:56.204481",
+    "last_activity": "2026-01-19T18:46:56.204481",
+    "expires_at": "2026-01-20T02:46:56.204481",
+    "encrypted_password": "UQYAW1QOXghQCVgGVVJWBQMEBwdSAg5bBglWVgpaB1RRAFVbAAxbBg=="
+  },
+  "fdf92aa7dd7dac8540bcaf165789c540": {
+    "session_id": "fdf92aa7dd7dac8540bcaf165789c540",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T19:00:45.991934",
+    "last_activity": "2026-01-19T19:21:58.486454",
+    "expires_at": "2026-01-20T03:00:45.991934",
+    "encrypted_password": "AlMFVAIBUVlaVldSAVtVVgdXU1VVUQJaCAkGAQYDB1oCVVBUVgNUVw=="
+  },
+  "8a7cdfca5aa10c5379f7e36d9c804071": {
+    "session_id": "8a7cdfca5aa10c5379f7e36d9c804071",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T19:25:17.623377",
+    "last_activity": "2026-01-19T19:25:44.630490",
+    "expires_at": "2026-01-20T03:25:17.623377",
+    "encrypted_password": "BVdXBVBWB1paAAQDUFYDC1JXUQJUBQdSVloHBgdWV1IFUQIFBFQCVA=="
+  },
+  "28965180c353ca19ccdcdaac3232895f": {
+    "session_id": "28965180c353ca19ccdcdaac3232895f",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T19:44:15.376613",
+    "last_activity": "2026-01-19T19:44:15.376613",
+    "expires_at": "2026-01-20T03:44:15.376613",
+    "encrypted_password": "UAkGAldRX1taCQdVV1dQUANUAlRSAgdUUV8GWwVQV1JQD1MCA1NaVQ=="
+  },
+  "02db4c9441b59a8362e4e906e3984fb3": {
+    "session_id": "02db4c9441b59a8362e4e906e3984fb3",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T19:49:58.958490",
+    "last_activity": "2026-01-19T19:52:09.004389",
+    "expires_at": "2026-01-20T03:49:58.958490",
+    "encrypted_password": "DQRSUwhRVwxaVlIFXFVdAAEFVlNVAA4ABVwEWwpWAVENAgdTXFNSAg=="
+  },
+  "f0e5e40e3a3b27728c6342692e65d2e5": {
+    "session_id": "f0e5e40e3a3b27728c6342692e65d2e5",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T19:56:38.980457",
+    "last_activity": "2026-01-19T19:58:04.938769",
+    "expires_at": "2026-01-20T03:56:38.980457",
+    "encrypted_password": "B1IGDw8LV1AHUlcBBVYDAQdSBFdeU1YGBQgGW1sJB1QGBgQLCF0BAA=="
+  },
+  "140d3fa64153ad1e9b82dd49fde44bb9": {
+    "session_id": "140d3fa64153ad1e9b82dd49fde44bb9",
+    "username": "aferreira@riofuturo.cl",
+    "uid": 242,
+    "created_at": "2026-01-19T19:58:18.298170",
+    "last_activity": "2026-01-19T19:58:18.298170",
+    "expires_at": "2026-01-20T03:58:18.298170",
+    "encrypted_password": "B1EBVAQAAwsHXFBaVQYMBlxVUgEMVggBUQULDAYHVVEAU1dWAQIBAQ=="
+  },
+  "ac4ed2636142b160ed67fed669dfcc85": {
+    "session_id": "ac4ed2636142b160ed67fed669dfcc85",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T20:02:16.227462",
+    "last_activity": "2026-01-19T20:02:16.227462",
+    "expires_at": "2026-01-20T04:02:16.227462",
+    "encrypted_password": "DQgAAgBWUwEGUlEGAwRQBQACWwZRAlUBUlsBUwZUVQENDlUCVFRWDw=="
+  },
+  "3ed99796ef51e185b3398dd8cdf75e07": {
+    "session_id": "3ed99796ef51e185b3398dd8cdf75e07",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-19T20:02:19.971643",
+    "last_activity": "2026-01-19T20:02:19.971643",
+    "expires_at": "2026-01-20T04:02:19.971643",
+    "encrypted_password": "UQNXWwIGVgFVVFkCVFRQA1RXVQVYClAGCVgAAAtbUgZRBQJbVgRTDw=="
+  },
+  "43a9b2b668a120e15124278c933b5884": {
+    "session_id": "43a9b2b668a120e15124278c933b5884",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T20:19:54.883751",
+    "last_activity": "2026-01-19T20:25:37.518698",
+    "expires_at": "2026-01-20T04:19:54.883751",
+    "encrypted_password": "UFECBA8DCwBWUFQKVQJUWgdUVVNQXARWUw1UWQAIAldRBQAACFVdUA=="
+  },
+  "1b4925c894dd053a30e2edc4e0313a4e": {
+    "session_id": "1b4925c894dd053a30e2edc4e0313a4e",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-19T20:39:42.520492",
+    "last_activity": "2026-01-19T20:39:42.520492",
+    "expires_at": "2026-01-20T04:39:42.520492",
+    "encrypted_password": "BVRRA1VQVAMDXQECUQACWgFTU1YEVQYFVw9WWVQJUVIEAFMHUgYCUw=="
+  },
+  "3897070d2306ceb6d6da2b855b1c2f7a": {
+    "session_id": "3897070d2306ceb6d6da2b855b1c2f7a",
+    "username": "ctapia@riofuturo.cl",
+    "uid": 159,
+    "created_at": "2026-01-19T20:40:01.322044",
+    "last_activity": "2026-01-19T20:40:01.322044",
+    "expires_at": "2026-01-20T04:40:01.322044",
+    "encrypted_password": "DAdSAAAABAtQVwUDAFNdUgBTVlNdAgBVBAZUA1wAAlYNVVAGWgAEDA=="
+  },
+  "bc3789fde33fba03b829d2dfd62d26c5": {
+    "session_id": "bc3789fde33fba03b829d2dfd62d26c5",
+    "username": "asesorias@riofuturo.cl",
+    "uid": 151,
+    "created_at": "2026-01-19T21:19:08.885994",
+    "last_activity": "2026-01-19T21:19:08.885994",
+    "expires_at": "2026-01-20T05:19:08.885994",
+    "encrypted_password": "WAZRAVlVUQJbU1JUAVlVXAZUUwpRUQMNXVNWV1JQUApbBlwCWFMHAA=="
+  },
+  "c3d87b2026b981fdaf001be2750a0d61": {
+    "session_id": "c3d87b2026b981fdaf001be2750a0d61",
+    "username": "asesorias@riofuturo.cl",
+    "uid": 151,
+    "created_at": "2026-01-19T21:19:43.322249",
+    "last_activity": "2026-01-19T21:19:43.322249",
+    "expires_at": "2026-01-20T05:19:43.322249",
+    "encrypted_password": "WVUGBQFcVVRVCAcOBFBUAAcECgYBVwYGWwdWUAMHBwFaVQsGAFoDVg=="
+  },
+  "f82c77cf748dd9e1b4830ba396ed79a8": {
+    "session_id": "f82c77cf748dd9e1b4830ba396ed79a8",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-19T23:25:12.049529",
+    "last_activity": "2026-01-19T23:31:22.605719",
+    "expires_at": "2026-01-20T07:25:12.049529",
+    "encrypted_password": "R18JXkEQEBNY"
+  },
+  "0dea2c57cb47f26c079f27e8c7d2624a": {
+    "session_id": "0dea2c57cb47f26c079f27e8c7d2624a",
+    "username": "dzuniga@riofuturo.cl",
+    "uid": 269,
+    "created_at": "2026-01-19T23:37:57.539088",
+    "last_activity": "2026-01-19T23:41:34.084223",
+    "expires_at": "2026-01-20T07:37:57.539088",
+    "encrypted_password": "RFAKUUBFTBcL"
+  },
+  "bf385ea1190171bf602fa2200f0b320e": {
+    "session_id": "bf385ea1190171bf602fa2200f0b320e",
+    "username": "frios@riofuturo.cl",
+    "uid": 238,
+    "created_at": "2026-01-20T11:15:25.801552",
+    "last_activity": "2026-01-20T11:15:25.801552",
+    "expires_at": "2026-01-20T19:15:25.801552",
+    "encrypted_password": "AAMKUQYGBAkFVgcIAQBVAwcJUQBSUAcCCAhSUQJTUlUABV9RUgQBBw=="
+  },
+  "740bf83d7e9ce9e71c986bbc982cb3f9": {
+    "session_id": "740bf83d7e9ce9e71c986bbc982cb3f9",
+    "username": "mvalladares@riofuturo.cl",
+    "uid": 217,
+    "created_at": "2026-01-20T11:32:17.369138",
+    "last_activity": "2026-01-20T11:32:17.369138",
+    "expires_at": "2026-01-20T19:32:17.369138",
+    "encrypted_password": "UAgEBVVWAVYGAwVWUlpZUgEECFZfUAYEV1sFWlcAVwVRXAYBUgBXBg=="
   }
 }

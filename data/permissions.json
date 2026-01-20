@@ -4,7 +4,6 @@
     "produccion": [],
     "bandejas": [],
     "stock": [],
-    "pedidos_venta": [],
     "relacion_comercial": [
       "fhorst@riofuturo.cl",
       "vdominguez@riofuturo.cl",
@@ -13,7 +12,8 @@
     ],
     "finanzas": [
       "jvidaurre@riofuturo.cl",
-      "fhorst@riofuturo.cl"
+      "fhorst@riofuturo.cl",
+      "viturra@riofuturo.cl"
     ],
     "compras": [
       "jbrandt@riofuturo.cl",
@@ -24,7 +24,7 @@
     ],
     "automatizaciones": [],
     "rendimiento": [],
-    "reconciliacion": []
+    "containers": []
   },
   "admins": [
     "mvalladares@riofuturo.cl"
