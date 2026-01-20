@@ -25,6 +25,11 @@ class TraceabilityService:
         """
         Obtiene todos los datos de trazabilidad de paquetes en un período.
         
+        Estrategia:
+        1. Busca movimientos en el rango de fechas (eventos principales)
+        2. Identifica todos los pallets involucrados
+        3. Trae TODOS los movimientos de esos pallets (flujo completo sin filtro fecha)
+        
         Returns:
             Dict con:
             - pallets: {pkg_id: {name, qty, products: {prod: qty}}}
@@ -36,7 +41,7 @@ class TraceabilityService:
         """
         virtual_ids = self._get_virtual_location_ids()
         
-        # Buscar movimientos con paquetes
+        # PASO 1: Buscar movimientos con paquetes en el rango de fechas (eventos principales)
         domain = [
             "|",
             ("package_id", "!=", False),
@@ -56,7 +61,7 @@ class TraceabilityService:
         ]
         
         try:
-            move_lines = self.odoo.search_read(
+            initial_move_lines = self.odoo.search_read(
                 "stock.move.line",
                 domain,
                 fields,
@@ -64,17 +69,63 @@ class TraceabilityService:
                 order="date asc"
             )
         except Exception as e:
-            print(f"[TraceabilityService] Error fetching move lines: {e}")
+            print(f"[TraceabilityService] Error fetching initial move lines: {e}")
             return self._empty_result()
         
-        if not move_lines:
+        if not initial_move_lines:
             return self._empty_result()
         
-        print(f"[TraceabilityService] Found {len(move_lines)} move lines")
+        print(f"[TraceabilityService] Found {len(initial_move_lines)} move lines in date range")
         
-        # Procesar movimientos
-        result = self._process_move_lines(move_lines, virtual_ids)
-        result["move_lines"] = move_lines  # Para debug
+        # PASO 2: Extraer todos los package_ids involucrados
+        package_ids = set()
+        for ml in initial_move_lines:
+            pkg_rel = ml.get("package_id")
+            result_rel = ml.get("result_package_id")
+            
+            if pkg_rel:
+                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                if pkg_id:
+                    package_ids.add(pkg_id)
+            
+            if result_rel:
+                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                if result_id:
+                    package_ids.add(result_id)
+        
+        if not package_ids:
+            print("[TraceabilityService] No packages found in date range")
+            return self._empty_result()
+        
+        print(f"[TraceabilityService] Found {len(package_ids)} unique packages, fetching full history...")
+        
+        # PASO 3: Traer TODOS los movimientos de esos pallets (sin filtro de fecha)
+        full_domain = [
+            "|",
+            ("package_id", "in", list(package_ids)),
+            ("result_package_id", "in", list(package_ids)),
+            ("qty_done", ">", 0),
+            ("state", "=", "done"),
+        ]
+        
+        try:
+            all_move_lines = self.odoo.search_read(
+                "stock.move.line",
+                full_domain,
+                fields,
+                limit=limit * 3,  # Aumentar límite para historia completa
+                order="date asc"
+            )
+        except Exception as e:
+            print(f"[TraceabilityService] Error fetching full move lines: {e}")
+            return self._empty_result()
+        
+        print(f"[TraceabilityService] Processing {len(all_move_lines)} total move lines (full history)")
+        
+        # Procesar movimientos con historia completa
+        result = self._process_move_lines(all_move_lines, virtual_ids)
+        result["move_lines"] = all_move_lines  # Para debug
+        result["initial_packages_count"] = len(package_ids)
         
         # Resolver proveedores y clientes
         self._resolve_partners(result)
