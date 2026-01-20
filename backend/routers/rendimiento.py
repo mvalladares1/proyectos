@@ -98,15 +98,17 @@ async def get_inventario_trazabilidad(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     anio: int = Query(..., description="Año a analizar"),
+    mes_desde: int = Query(1, description="Mes desde el que analizar (1-12)"),
     mes_hasta: int = Query(..., description="Mes hasta el que analizar (1-12)")
 ):
     """
     Análisis de inventario: compras vs ventas por tipo de fruta y manejo.
     Usado para calcular merma y stock teórico.
+    SOLO incluye productos con tipo_fruta Y manejo clasificados.
     """
     try:
         service = RendimientoService(username=username, password=password)
-        return service.get_inventario_trazabilidad(anio, mes_hasta)
+        return service.get_inventario_trazabilidad(anio, mes_hasta, mes_desde)
     except Exception as e:
         import traceback
         traceback.print_exc()

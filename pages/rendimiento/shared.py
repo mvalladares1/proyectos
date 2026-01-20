@@ -39,13 +39,14 @@ def fmt_numero(valor, decimales=0):
 
 # --------------------- Funciones API ---------------------
 
-def get_inventario_data(username: str, password: str, anio: int, mes_hasta: int):
+def get_inventario_data(username: str, password: str, anio: int, mes_desde: int, mes_hasta: int):
     """Obtiene datos de inventario (compras vs ventas) desde el backend."""
     try:
         params = {
             "username": username,
             "password": password,
             "anio": anio,
+            "mes_desde": mes_desde,
             "mes_hasta": mes_hasta
         }
         resp = requests.get(
@@ -59,8 +60,12 @@ def get_inventario_data(username: str, password: str, anio: int, mes_hasta: int)
         return data
     except Exception as e:
         return {
-            'total_comprado': 0,
-            'total_vendido': 0,
+            'fecha_desde': '',
+            'fecha_hasta': '',
+            'total_comprado_kg': 0,
+            'total_comprado_monto': 0,
+            'total_vendido_kg': 0,
+            'total_vendido_monto': 0,
             'detalle': [],
             'error': f"Error llamando al backend: {str(e)}"
         }

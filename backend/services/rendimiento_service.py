@@ -1251,21 +1251,24 @@ class RendimientoService:
         
         return result
 
-    def get_inventario_trazabilidad(self, anio: int, mes_hasta: int) -> dict:
+    def get_inventario_trazabilidad(self, anio: int, mes_hasta: int, mes_desde: int = 1) -> dict:
         """
         Análisis de inventario: compras vs ventas por tipo de fruta y manejo.
+        SOLO incluye productos que tengan tipo_fruta Y manejo clasificados.
         
         Args:
             anio: Año a analizar
             mes_hasta: Mes hasta el que analizar (1-12)
+            mes_desde: Mes desde el que analizar (1-12), default 1
         
         Returns:
-            dict con total_comprado, total_vendido, y detalle por tipo_fruta/manejo
+            dict con total_comprado, total_vendido, precios, y detalle por tipo_fruta/manejo
         """
-        fecha_inicio = f"{anio}-01-01"
+        fecha_inicio = f"{anio}-{mes_desde:02d}-01"
         fecha_fin = f"{anio}-{mes_hasta:02d}-31"
         
         # 1. Obtener líneas de facturas de proveedor (COMPRAS)
+        # Usar cuenta 21% (PROVEEDORES) con debit > 0 para evitar duplicados
         lineas_compra = self.odoo.search_read(
             'account.move.line',
             [
@@ -1273,13 +1276,17 @@ class RendimientoService:
                 ['move_id.state', '=', 'posted'],
                 ['product_id', '!=', False],
                 ['date', '>=', fecha_inicio],
-                ['date', '<=', fecha_fin]
+                ['date', '<=', fecha_fin],
+                ['quantity', '>', 0],
+                ['debit', '>', 0],  # Solo líneas con débito (proveedor)
+                ['account_id.code', '=like', '21%']  # Cuenta de proveedores
             ],
-            ['product_id', 'quantity', 'product_uom_id'],
-            limit=10000
+            ['product_id', 'quantity', 'price_unit', 'debit'],
+            limit=50000
         )
         
         # 2. Obtener líneas de facturas de cliente (VENTAS)
+        # Usar cuenta 41% (INGRESOS) con credit > 0 para evitar duplicados
         lineas_venta = self.odoo.search_read(
             'account.move.line',
             [
@@ -1287,10 +1294,13 @@ class RendimientoService:
                 ['move_id.state', '=', 'posted'],
                 ['product_id', '!=', False],
                 ['date', '>=', fecha_inicio],
-                ['date', '<=', fecha_fin]
+                ['date', '<=', fecha_fin],
+                ['quantity', '>', 0],
+                ['credit', '>', 0],  # Solo líneas con crédito (ingreso)
+                ['account_id.code', '=like', '41%']  # Cuenta de ingresos
             ],
-            ['product_id', 'quantity', 'product_uom_id'],
-            limit=10000
+            ['product_id', 'quantity', 'price_unit', 'credit'],
+            limit=50000
         )
         
         # 3. Obtener productos únicos
@@ -1300,15 +1310,26 @@ class RendimientoService:
             if prod_id:
                 prod_ids.add(prod_id)
         
+        if not prod_ids:
+            return {
+                'fecha_desde': fecha_inicio,
+                'fecha_hasta': fecha_fin,
+                'total_comprado_kg': 0,
+                'total_comprado_monto': 0,
+                'total_vendido_kg': 0,
+                'total_vendido_monto': 0,
+                'detalle': []
+            }
+        
         # 4. Obtener información de productos (tipo fruta y manejo)
         productos = self.odoo.search_read(
             'product.product',
             [['id', 'in', list(prod_ids)]],
             ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo'],
-            limit=10000
+            limit=50000
         )
         
-        # Mapear productos
+        # Mapear productos - SOLO los que tengan tipo_fruta Y manejo
         productos_map = {}
         for prod in productos:
             prod_id = prod['id']
@@ -1316,76 +1337,111 @@ class RendimientoService:
             # Tipo de fruta (x_studio_sub_categora)
             tipo_fruta = prod.get('x_studio_sub_categora')
             if isinstance(tipo_fruta, (list, tuple)):
-                tipo_fruta = tipo_fruta[1] if len(tipo_fruta) > 1 else str(tipo_fruta[0])
-            elif not tipo_fruta:
-                tipo_fruta = "Sin clasificar"
+                tipo_fruta = tipo_fruta[1] if len(tipo_fruta) > 1 else None
+            elif not tipo_fruta or tipo_fruta == False:
+                tipo_fruta = None
             
             # Manejo (x_studio_categora_tipo_de_manejo)
             manejo = prod.get('x_studio_categora_tipo_de_manejo')
             if isinstance(manejo, (list, tuple)):
-                manejo = manejo[1] if len(manejo) > 1 else str(manejo[0])
-            elif not manejo:
-                manejo = "Sin clasificar"
+                manejo = manejo[1] if len(manejo) > 1 else None
+            elif not manejo or manejo == False:
+                manejo = None
             
-            productos_map[prod_id] = {
-                'nombre': prod.get('name', ''),
-                'tipo_fruta': str(tipo_fruta),
-                'manejo': str(manejo)
-            }
+            # FILTRO: Solo incluir si tiene AMBOS campos
+            if tipo_fruta and manejo:
+                productos_map[prod_id] = {
+                    'nombre': prod.get('name', ''),
+                    'tipo_fruta': str(tipo_fruta),
+                    'manejo': str(manejo)
+                }
         
         # 5. Procesar compras
-        compras = {}  # {(tipo_fruta, manejo): cantidad}
+        compras = {}  # {(tipo_fruta, manejo): {'kg': X, 'monto': Y}}
         for linea in lineas_compra:
             prod_id = linea.get('product_id', [None])[0]
             cantidad = linea.get('quantity', 0)
+            monto = linea.get('debit', 0)  # Usar debit (cuenta proveedores)
             
-            if prod_id and prod_id in productos_map:
+            if prod_id and prod_id in productos_map and cantidad > 0 and monto > 0:
                 info = productos_map[prod_id]
                 key = (info['tipo_fruta'], info['manejo'])
-                compras[key] = compras.get(key, 0) + cantidad
+                
+                if key not in compras:
+                    compras[key] = {'kg': 0, 'monto': 0}
+                
+                compras[key]['kg'] += cantidad
+                compras[key]['monto'] += monto
         
         # 6. Procesar ventas
-        ventas = {}  # {(tipo_fruta, manejo): cantidad}
+        ventas = {}  # {(tipo_fruta, manejo): {'kg': X, 'monto': Y}}
         for linea in lineas_venta:
             prod_id = linea.get('product_id', [None])[0]
             cantidad = linea.get('quantity', 0)
+            monto = linea.get('credit', 0)  # Usar credit (cuenta ingresos)
             
-            if prod_id and prod_id in productos_map:
+            if prod_id and prod_id in productos_map and cantidad > 0 and monto > 0:
                 info = productos_map[prod_id]
                 key = (info['tipo_fruta'], info['manejo'])
-                ventas[key] = ventas.get(key, 0) + cantidad
+                
+                if key not in ventas:
+                    ventas[key] = {'kg': 0, 'monto': 0}
+                
+                ventas[key]['kg'] += cantidad
+                ventas[key]['monto'] += monto
         
         # 7. Combinar y calcular merma
         todas_keys = set(compras.keys()) | set(ventas.keys())
         
         detalle = []
-        total_comprado = 0
-        total_vendido = 0
+        total_comprado_kg = 0
+        total_comprado_monto = 0
+        total_vendido_kg = 0
+        total_vendido_monto = 0
         
         for key in todas_keys:
             tipo_fruta, manejo = key
-            comprado = compras.get(key, 0)
-            vendido = ventas.get(key, 0)
-            merma = comprado - vendido
-            merma_pct = (merma / comprado * 100) if comprado > 0 else 0
+            
+            compra_kg = compras.get(key, {}).get('kg', 0)
+            compra_monto = compras.get(key, {}).get('monto', 0)
+            venta_kg = ventas.get(key, {}).get('kg', 0)
+            venta_monto = ventas.get(key, {}).get('monto', 0)
+            
+            merma_kg = compra_kg - venta_kg
+            merma_pct = (merma_kg / compra_kg * 100) if compra_kg > 0 else 0
+            
+            precio_compra_promedio = (compra_monto / compra_kg) if compra_kg > 0 else 0
+            precio_venta_promedio = (venta_monto / venta_kg) if venta_kg > 0 else 0
             
             detalle.append({
                 'tipo_fruta': tipo_fruta,
                 'manejo': manejo,
-                'comprado': comprado,
-                'vendido': vendido,
-                'merma': merma,
+                'comprado_kg': compra_kg,
+                'comprado_monto': compra_monto,
+                'comprado_precio_promedio': precio_compra_promedio,
+                'vendido_kg': venta_kg,
+                'vendido_monto': venta_monto,
+                'vendido_precio_promedio': precio_venta_promedio,
+                'merma_kg': merma_kg,
                 'merma_pct': merma_pct
             })
             
-            total_comprado += comprado
-            total_vendido += vendido
+            total_comprado_kg += compra_kg
+            total_comprado_monto += compra_monto
+            total_vendido_kg += venta_kg
+            total_vendido_monto += venta_monto
         
         # Ordenar por tipo de fruta
         detalle = sorted(detalle, key=lambda x: (x['tipo_fruta'], x['manejo']))
         
         return {
-            'total_comprado': total_comprado,
-            'total_vendido': total_vendido,
+            'fecha_desde': fecha_inicio,
+            'fecha_hasta': fecha_fin,
+            'total_comprado_kg': total_comprado_kg,
+            'total_comprado_monto': total_comprado_monto,
+            'total_comprado_precio_promedio': (total_comprado_monto / total_comprado_kg) if total_comprado_kg > 0 else 0,
+            'total_vendido_kg': total_vendido_kg,
+            'total_vendido_monto': total_vendido_monto,
+            'total_vendido_precio_promedio': (total_vendido_monto / total_vendido_kg) if total_vendido_kg > 0 else 0,
             'detalle': detalle
         }
