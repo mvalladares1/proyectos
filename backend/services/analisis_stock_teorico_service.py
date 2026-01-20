@@ -239,24 +239,25 @@ class AnalisisStockTeoricoService:
                     'tiene_ambos': bool(tipo_str and manejo_str)
                 }
         
-        # Mapear productos - SOLO MP (materia prima)
+        # Mapear productos - MP + PSP (materia prima y semi-procesado que ENTRA)
         productos_map = {}
         productos_incluidos = 0
-        productos_excluidos_no_mp = 0
+        productos_excluidos = 0
         
         for prod_id, prod_data in product_to_template.items():
             tmpl_id = prod_data['tmpl_id']
             categ = prod_data['categ']
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # SOLO categoría MP (materia prima)
-            es_mp = ('PRODUCTOS / MP' in categ_name or 'PRODUCTOS / MP IQF' in categ_name)
+            # MP + PSP (lo que entra a la empresa para procesar)
+            es_compra = ('PRODUCTOS / MP' in categ_name or 
+                        'PRODUCTOS / PSP' in categ_name)
             
             if tmpl_id in template_map:
                 tmpl_info = template_map[tmpl_id]
                 
-                if es_mp:
-                    # Incluir TODOS los productos MP
+                if es_compra:
+                    # Incluir MP + PSP
                     # Si no tienen tipo/manejo, usar "Sin clasificar"
                     productos_map[prod_id] = {
                         'tipo_fruta': tmpl_info['tipo_fruta'] or 'Sin clasificar',
@@ -266,11 +267,11 @@ class AnalisisStockTeoricoService:
                     }
                     productos_incluidos += 1
                 else:
-                    productos_excluidos_no_mp += 1
+                    productos_excluidos += 1
         
         print(f"[DEBUG COMPRAS] Templates únicos: {len(template_ids)}")
-        print(f"[DEBUG COMPRAS] Productos MP incluidos: {productos_incluidos}")
-        print(f"[DEBUG COMPRAS] Productos no-MP excluidos: {productos_excluidos_no_mp}")
+        print(f"[DEBUG COMPRAS] Productos MP+PSP incluidos: {productos_incluidos}")
+        print(f"[DEBUG COMPRAS] Productos excluidos: {productos_excluidos}")
         print(f"[DEBUG COMPRAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
@@ -387,26 +388,24 @@ class AnalisisStockTeoricoService:
                     'tiene_ambos': bool(tipo_str and manejo_str)
                 }
         
-        # Mapear productos - SOLO PTT/PSP/RETAIL (producto procesado)
+        # Mapear productos - PRODUCTOS terminados/semi-procesados que SALEN
         productos_map = {}
         productos_incluidos = 0
-        productos_excluidos_no_ptt = 0
+        productos_excluidos = 0
         
         for prod_id, prod_data in product_to_template.items():
             tmpl_id = prod_data['tmpl_id']
             categ = prod_data['categ']
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            # SOLO categoría PTT/PSP/RETAIL (producto terminado/semi-procesado)
-            es_ptt = ('PRODUCTOS / PTT' in categ_name or 
-                     'PRODUCTOS / PSP' in categ_name or 
-                     'PRODUCTOS / RETAIL' in categ_name)
+            # Todo lo que sea PRODUCTOS (PTT, PSP, RETAIL, JUGO, etc.) - excluir solo MP
+            es_venta = 'PRODUCTOS' in categ_name.upper() and 'PRODUCTOS / MP' not in categ_name
             
             if tmpl_id in template_map:
                 tmpl_info = template_map[tmpl_id]
                 
-                if es_ptt:
-                    # Incluir TODOS los productos PTT/PSP/RETAIL
+                if es_venta:
+                    # Incluir todos los productos terminados/procesados que venden
                     # Si no tienen tipo/manejo, usar "Sin clasificar"
                     productos_map[prod_id] = {
                         'tipo_fruta': tmpl_info['tipo_fruta'] or 'Sin clasificar',
@@ -416,11 +415,11 @@ class AnalisisStockTeoricoService:
                     }
                     productos_incluidos += 1
                 else:
-                    productos_excluidos_no_ptt += 1
+                    productos_excluidos += 1
         
         print(f"[DEBUG VENTAS] Templates únicos: {len(template_ids)}")
-        print(f"[DEBUG VENTAS] Productos PTT/PSP/RETAIL incluidos: {productos_incluidos}")
-        print(f"[DEBUG VENTAS] Productos no-PTT excluidos: {productos_excluidos_no_ptt}")
+        print(f"[DEBUG VENTAS] Productos incluidos: {productos_incluidos}")
+        print(f"[DEBUG VENTAS] Productos excluidos: {productos_excluidos}")
         print(f"[DEBUG VENTAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
