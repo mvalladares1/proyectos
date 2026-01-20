@@ -167,6 +167,31 @@ def get_traceability_raw(
         return None
 
 
+def get_traceability_by_identifier(
+    username: str,
+    password: str,
+    identifier: str,
+):
+    """Obtiene datos de trazabilidad por identificador (venta o paquete)."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "identifier": identifier,
+        }
+        resp = requests.get(
+            f"{API_URL}/api/v1/containers/traceability/by-identifier/visjs",
+            params=params,
+            timeout=120
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
 @st.cache_data(ttl=300)
 def get_sankey_producers(
     username: str,

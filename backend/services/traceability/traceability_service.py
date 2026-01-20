@@ -16,6 +16,165 @@ class TraceabilityService:
         self.odoo = OdooClient(username=username, password=password)
         self._virtual_location_ids = None
     
+    def get_traceability_by_identifier(
+        self,
+        identifier: str,
+        limit: int = 10000
+    ) -> Dict:
+        """
+        Obtiene trazabilidad completa por identificador (venta o paquete).
+        
+        Args:
+            identifier: Puede ser:
+                - Código de venta (ej: S00574) → busca todos los pallets de esa venta
+                - Nombre de paquete → busca ese paquete específico
+        
+        Returns:
+            Dict con estructura similar a get_traceability_data
+        """
+        # Detectar si es venta (S + números) o paquete
+        is_sale = identifier.startswith("S") and identifier[1:].isdigit() if len(identifier) > 1 else False
+        
+        if is_sale:
+            return self._get_traceability_by_sale(identifier, limit)
+        else:
+            return self._get_traceability_by_package(identifier, limit)
+    
+    def _get_traceability_by_sale(self, sale_origin: str, limit: int) -> Dict:
+        """Busca trazabilidad desde una venta específica."""
+        try:
+            # Buscar pickings de esa venta
+            pickings = self.odoo.search_read(
+                "stock.picking",
+                [("origin", "=", sale_origin)],
+                ["id"],
+                limit=10
+            )
+            
+            if not pickings:
+                print(f"[TraceabilityService] No se encontró venta: {sale_origin}")
+                return self._empty_result()
+            
+            picking_ids = [p["id"] for p in pickings]
+            
+            # Buscar movimientos de esos pickings
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [
+                    ("picking_id", "in", picking_ids),
+                    "|",
+                    ("package_id", "!=", False),
+                    ("result_package_id", "!=", False),
+                    ("qty_done", ">", 0),
+                    ("state", "=", "done"),
+                ],
+                ["package_id", "result_package_id"],
+                limit=100
+            )
+            
+            # Extraer package_ids de la venta
+            package_ids = set()
+            for ml in move_lines:
+                pkg_rel = ml.get("package_id")
+                result_rel = ml.get("result_package_id")
+                
+                if pkg_rel:
+                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                    if pkg_id:
+                        package_ids.add(pkg_id)
+                
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        package_ids.add(result_id)
+            
+            if not package_ids:
+                print(f"[TraceabilityService] No se encontraron paquetes en venta: {sale_origin}")
+                return self._empty_result()
+            
+            print(f"[TraceabilityService] Venta {sale_origin}: {len(package_ids)} paquetes encontrados")
+            
+            # Buscar toda la historia de esos paquetes
+            return self._get_traceability_for_packages(list(package_ids), limit)
+            
+        except Exception as e:
+            print(f"[TraceabilityService] Error en trazabilidad por venta: {e}")
+            return self._empty_result()
+    
+    def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
+        """Busca trazabilidad de un paquete específico por nombre."""
+        try:
+            # Buscar el paquete por nombre
+            packages = self.odoo.search_read(
+                "stock.quant.package",
+                [("name", "=", package_name)],
+                ["id"],
+                limit=1
+            )
+            
+            if not packages:
+                print(f"[TraceabilityService] No se encontró paquete: {package_name}")
+                return self._empty_result()
+            
+            package_id = packages[0]["id"]
+            print(f"[TraceabilityService] Paquete encontrado: {package_name} (ID: {package_id})")
+            
+            # Buscar toda la historia de ese paquete
+            return self._get_traceability_for_packages([package_id], limit)
+            
+        except Exception as e:
+            print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
+            return self._empty_result()
+    
+    def _get_traceability_for_packages(self, package_ids: List[int], limit: int) -> Dict:
+        """Obtiene la trazabilidad completa de paquetes específicos."""
+        virtual_ids = self._get_virtual_location_ids()
+        
+        # Buscar TODOS los movimientos de esos paquetes (sin filtro de fecha)
+        domain = [
+            "|",
+            ("package_id", "in", package_ids),
+            ("result_package_id", "in", package_ids),
+            ("qty_done", ">", 0),
+            ("state", "=", "done"),
+        ]
+        
+        fields = [
+            "id", "reference", "package_id", "result_package_id",
+            "lot_id", "qty_done", "product_id", "location_id", 
+            "location_dest_id", "date", "picking_id"
+        ]
+        
+        try:
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                domain,
+                fields,
+                limit=limit,
+                order="date asc"
+            )
+        except Exception as e:
+            print(f"[TraceabilityService] Error fetching move lines: {e}")
+            return self._empty_result()
+        
+        if not move_lines:
+            return self._empty_result()
+        
+        print(f"[TraceabilityService] Procesando {len(move_lines)} movimientos")
+        
+        # Procesar movimientos
+        result = self._process_move_lines(move_lines, virtual_ids)
+        result["move_lines"] = move_lines
+        
+        # Resolver proveedores y clientes
+        self._resolve_partners(result)
+        
+        # Enriquecer con fechas
+        self._enrich_with_pallet_dates(result)
+        self._enrich_with_mrp_dates(result)
+        
+        return result
+
     def get_traceability_data(
         self,
         start_date: Optional[str] = None,

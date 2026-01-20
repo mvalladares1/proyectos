@@ -19,6 +19,7 @@ from .shared import (
     get_sankey_data,
     get_reactflow_data,
     get_traceability_raw,
+    get_traceability_by_identifier,
     get_container_partners,
     get_sankey_producers
 )
@@ -327,22 +328,44 @@ def _render_sankey(username: str, password: str):
     )
     
     st.markdown("---")
-    st.markdown("### 📅 Período para Diagrama")
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.date_input(
-            "Desde",
-            datetime(2025, 12, 1),
-            format="DD/MM/YYYY",
-            key="sankey_fecha_inicio",
+    st.markdown("### � Modo de Búsqueda")
+    
+    search_mode = st.radio(
+        "Selecciona el modo:",
+        ["📅 Por rango de fechas", "🔖 Por venta o paquete"],
+        horizontal=True,
+        key="search_mode_selector"
+    )
+    
+    if search_mode == "📅 Por rango de fechas":
+        st.markdown("### 📅 Período para Diagrama")
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.date_input(
+                "Desde",
+                datetime(2025, 12, 1),
+                format="DD/MM/YYYY",
+                key="sankey_fecha_inicio",
+            )
+        with col2:
+            fecha_fin = st.date_input(
+                "Hasta",
+                datetime.now(),
+                format="DD/MM/YYYY",
+                key="sankey_fecha_fin",
+            )
+        identifier = None
+    else:
+        st.markdown("### 🔖 Buscar por Identificador")
+        identifier = st.text_input(
+            "Ingresa el código",
+            placeholder="Ej: S00574 (venta) o nombre de paquete",
+            key="identifier_input",
+            help="Si empieza con 'S' + números, buscará la venta. Si no, buscará el paquete específico."
         )
-    with col2:
-        fecha_fin = st.date_input(
-            "Hasta",
-            datetime.now(),
-            format="DD/MM/YYYY",
-            key="sankey_fecha_fin",
-        )
+        st.caption("💡 **Ejemplos:** `S00574` (busca venta) | `PALLET-001` (busca paquete)")
+        fecha_inicio = None
+        fecha_fin = None
 
     # Filtro de productor (deshabilitado temporalmente)
     # TODO: Implementar filtro por productor buscando pallet por pallet
@@ -354,44 +377,68 @@ def _render_sankey(username: str, password: str):
     if "diagram_data_type" not in st.session_state:
         st.session_state.diagram_data_type = None
     
-    if st.button("🔄 Generar Diagrama", type="primary"):
+    # Validar entrada según modo
+    can_generate = False
+    if search_mode == "📅 Por rango de fechas":
+        can_generate = True
+    else:  # Por identificador
+        can_generate = identifier and identifier.strip()
+    
+    if st.button("🔄 Generar Diagrama", type="primary", disabled=not can_generate):
         spinner_msg = "Obteniendo datos de trazabilidad..."
         
         with st.spinner(spinner_msg):
-            fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
-            fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
-            
-            # Obtener datos según el tipo de diagrama
-            if diagram_type == "📈 Sankey (Plotly)":
-                data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
-                if not data or not data.get('nodes'):
-                    st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
-                    st.session_state.diagram_data = None
-                    return
-                st.session_state.diagram_data = data
-                st.session_state.diagram_data_type = "sankey"
-            
-            elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
-                # Obtener datos crudos y transformar a vis.js
-                raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
-                if not raw_data or not raw_data.get('pallets'):
-                    st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
-                    st.session_state.diagram_data = None
-                    return
-                # Transformar a formato vis.js
-                from backend.services.traceability import transform_to_visjs
-                data = transform_to_visjs(raw_data)
-                st.session_state.diagram_data = data
-                st.session_state.diagram_data_type = "visjs"
+            # Obtener datos según el modo de búsqueda
+            if search_mode == "📅 Por rango de fechas":
+                fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+                fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
                 
-            elif diagram_type == "📋 Tabla de Conexiones":
-                data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
-                if not data or not data.get('pallets'):
-                    st.warning("No hay datos suficientes para mostrar en el período seleccionado.")
+                # Obtener datos según el tipo de diagrama
+                if diagram_type == "📈 Sankey (Plotly)":
+                    data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
+                    if not data or not data.get('nodes'):
+                        st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "sankey"
+                
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                    # Obtener datos crudos y transformar a vis.js
+                    raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
+                    if not raw_data or not raw_data.get('pallets'):
+                        st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                        st.session_state.diagram_data = None
+                        return
+                    # Transformar a formato vis.js
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "visjs"
+                    
+                elif diagram_type == "📋 Tabla de Conexiones":
+                    data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
+                    if not data or not data.get('pallets'):
+                        st.warning("No hay datos suficientes para mostrar en el período seleccionado.")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "table"
+            
+            else:  # Por identificador
+                # Solo vis.js Network disponible para búsqueda por identificador
+                if diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                    data = get_traceability_by_identifier(username, password, identifier.strip())
+                    if not data or not data.get('nodes'):
+                        st.warning(f"No se encontraron datos para: {identifier}")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "visjs"
+                else:
+                    st.warning("⚠️ La búsqueda por identificador solo está disponible para vis.js Network")
                     st.session_state.diagram_data = None
                     return
-                st.session_state.diagram_data = data
-                st.session_state.diagram_data_type = "table"
     
     # Renderizar el diagrama si hay datos en session_state
     if st.session_state.diagram_data:

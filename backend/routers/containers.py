@@ -172,6 +172,44 @@ async def get_traceability_reactflow(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/traceability/by-identifier")
+async def get_traceability_by_identifier(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    identifier: str = Query(..., description="Venta (ej: S00574) o Paquete"),
+):
+    """
+    Obtiene trazabilidad completa por identificador.
+    - Si es S + números (ej: S00574) → busca todos los pallets de esa venta
+    - Si no → busca ese paquete específico
+    Retorna datos crudos (pallets, procesos, proveedores, clientes, links).
+    """
+    try:
+        service = TraceabilityService(username=username, password=password)
+        data = service.get_traceability_by_identifier(identifier=identifier)
+        data.pop("move_lines", None)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/traceability/by-identifier/visjs")
+async def get_traceability_by_identifier_visjs(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    identifier: str = Query(..., description="Venta (ej: S00574) o Paquete"),
+):
+    """
+    Obtiene trazabilidad por identificador transformada a formato vis.js Network.
+    """
+    try:
+        service = TraceabilityService(username=username, password=password)
+        data = service.get_traceability_by_identifier(identifier=identifier)
+        return transform_to_visjs(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============ FIN ENDPOINTS DE TRAZABILIDAD ============
 
 
