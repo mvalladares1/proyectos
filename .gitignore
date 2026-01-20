@@ -38,6 +38,10 @@ wheels/
 *.log
 nohup.out
 
+# Debug scripts
+debug_pack_search.py
+debug_traceability.py
+
 # OS
 .DS_Store
 Thumbs.db
