@@ -57,6 +57,9 @@ def render(username: str, password: str):
     _perm_sankey = tiene_acceso_pagina("rendimiento", "diagrama_sankey")
     _perm_inventario = tiene_acceso_pagina("rendimiento", "trazabilidad_inventario")
     
+    # Debug permisos
+    print(f"[DEBUG] Permisos - Trazabilidad: {_perm_trazabilidad}, Sankey: {_perm_sankey}, Inventario: {_perm_inventario}")
+    
     # Tabs con nombres actualizados
     tab_names = []
     tab_funcs = []
