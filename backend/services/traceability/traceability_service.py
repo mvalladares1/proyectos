@@ -102,7 +102,7 @@ class TraceabilityService:
             return self._empty_result()
     
     def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
-        """Busca trazabilidad de un paquete específico por nombre en stock.move.line."""
+        """Busca trazabilidad de un paquete específico por nombre."""
         virtual_ids = self._get_virtual_location_ids()
         
         fields = [
@@ -112,11 +112,31 @@ class TraceabilityService:
         ]
         
         try:
-            # Búsqueda 1: por package_id
-            move_lines_pkg = self.odoo.search_read(
+            # Primero buscar el ID del paquete en stock.quant.package
+            packages = self.odoo.search_read(
+                "stock.quant.package",
+                [("name", "ilike", package_name)],
+                ["id", "name"],
+                limit=10
+            )
+            
+            print(f"[TraceabilityService] stock.quant.package ilike '{package_name}': {len(packages)} encontrados")
+            for p in packages:
+                print(f"   - ID: {p['id']}, Name: {p['name']}")
+            
+            if not packages:
+                print(f"[TraceabilityService] No se encontró paquete: {package_name}")
+                return self._empty_result()
+            
+            package_ids = [p["id"] for p in packages]
+            
+            # Buscar movimientos con esos package_ids
+            move_lines = self.odoo.search_read(
                 "stock.move.line",
                 [
-                    ("package_id", "ilike", package_name),
+                    "|",
+                    ("package_id", "in", package_ids),
+                    ("result_package_id", "in", package_ids),
                     ("qty_done", ">", 0),
                     ("state", "=", "done"),
                 ],
@@ -124,36 +144,15 @@ class TraceabilityService:
                 limit=limit,
                 order="date asc"
             )
-            print(f"[TraceabilityService] Búsqueda package_id ilike '{package_name}': {len(move_lines_pkg)} resultados")
             
-            # Búsqueda 2: por result_package_id
-            move_lines_result = self.odoo.search_read(
-                "stock.move.line",
-                [
-                    ("result_package_id", "ilike", package_name),
-                    ("qty_done", ">", 0),
-                    ("state", "=", "done"),
-                ],
-                fields,
-                limit=limit,
-                order="date asc"
-            )
-            print(f"[TraceabilityService] Búsqueda result_package_id ilike '{package_name}': {len(move_lines_result)} resultados")
-            
-            # Combinar resultados (sin duplicados por id)
-            seen_ids = set()
-            move_lines = []
-            for ml in move_lines_pkg + move_lines_result:
-                if ml["id"] not in seen_ids:
-                    seen_ids.add(ml["id"])
-                    move_lines.append(ml)
+            print(f"[TraceabilityService] stock.move.line: {len(move_lines)} movimientos encontrados")
             
             if not move_lines:
                 print(f"[TraceabilityService] No se encontraron movimientos para: {package_name}")
                 return self._empty_result()
             
             # Extraer todos los package_ids relacionados para trazabilidad completa
-            related_package_ids = set()
+            related_package_ids = set(package_ids)
             for ml in move_lines:
                 pkg_rel = ml.get("package_id")
                 result_rel = ml.get("result_package_id")
@@ -168,10 +167,10 @@ class TraceabilityService:
                     if result_id:
                         related_package_ids.add(result_id)
             
-            print(f"[TraceabilityService] Paquetes relacionados encontrados: {len(related_package_ids)}")
+            print(f"[TraceabilityService] Paquetes relacionados: {len(related_package_ids)}")
             
             # Buscar TODA la historia de los paquetes relacionados
-            if related_package_ids:
+            if len(related_package_ids) > len(package_ids):
                 all_move_lines = self.odoo.search_read(
                     "stock.move.line",
                     [
