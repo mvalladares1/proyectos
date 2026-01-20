@@ -1,7 +1,7 @@
 """
 Router de Rendimiento Productivo
 Incluye trazabilidad inversa y endpoints para el módulo de Producción
-Nuevos análisis: Compras, Ventas, Producción, Inventario (separados)
+Nuevos análisis: Compras, Ventas, Producción, Inventario, Stock Teórico Anual
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
@@ -11,6 +11,7 @@ from backend.services.analisis_compras_service import AnalisisComprasService
 from backend.services.analisis_ventas_service import AnalisisVentasService
 from backend.services.analisis_produccion_service import AnalisisProduccionService
 from backend.services.analisis_inventario_service import AnalisisInventarioService
+from backend.services.analisis_stock_teorico_service import AnalisisStockTeoricoService
 from shared.odoo_client import OdooClient
 
 router = APIRouter(prefix="/api/v1/rendimiento", tags=["rendimiento"])
@@ -252,3 +253,41 @@ async def get_analisis_inventario(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/stock-teorico-anual")
+async def get_stock_teorico_anual(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    anios: str = Query(..., description="Años separados por coma (ej: 2024,2025,2026)"),
+    fecha_corte: str = Query("10-31", description="Fecha de corte MM-DD (default: 10-31)")
+):
+    """
+    Análisis de stock teórico anual por tipo de fruta y manejo.
+    Calcula: Compras - Ventas - Merma proyectada = Stock Teórico
+    
+    Args:
+        anios: Años a analizar separados por coma (ej: "2024,2025,2026")
+        fecha_corte: Mes-Día de corte para cada año (default: "10-31" = 31 octubre)
+    
+    Returns:
+        - resumen_general: totales consolidados de todos los años
+        - por_anio: desglose detallado año por año con:
+            * compras_kg, compras_monto, precio_promedio_compra
+            * ventas_kg, ventas_monto, precio_promedio_venta
+            * merma_kg, merma_pct
+            * stock_teorico_kg, stock_teorico_valor
+        - merma_historica_pct: % de merma calculado histórico
+    """
+    try:
+        # Convertir string de años a lista de enteros
+        anios_list = [int(a.strip()) for a in anios.split(",")]
+        
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisStockTeoricoService(odoo=odoo)
+        return service.get_analisis_multi_anual(anios_list, fecha_corte)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Formato de años inválido: {str(e)}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

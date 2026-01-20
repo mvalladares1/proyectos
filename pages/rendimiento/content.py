@@ -73,7 +73,7 @@ def render(username: str, password: str):
         tab_funcs.append(('sankey', _render_sankey))
     
     if _perm_inventario:
-        tab_names.append("📊 Análisis Integral")
+        tab_names.append("📊 Stock Teórico Anual")
         tab_funcs.append(('inventario', _render_analisis_completo))
     
     if not tab_names:

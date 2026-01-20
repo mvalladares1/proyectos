@@ -161,3 +161,45 @@ def get_inventario_rotacion_data(username: str, password: str, fecha_desde: str,
     
     except Exception as e:
         return {"error": str(e)}
+
+
+def get_stock_teorico_anual(username: str, password: str, anios: list, fecha_corte: str):
+    """
+    Obtiene análisis de stock teórico anual desde API.
+    
+    Args:
+        username: Usuario Odoo
+        password: API key Odoo
+        anios: Lista de años a analizar [2024, 2025, 2026]
+        fecha_corte: Fecha de corte en formato "MM-DD" (ej: "10-31")
+    
+    Returns:
+        dict con datos de stock teórico multi-anual
+    """
+    try:
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
+        
+        # Convertir lista de años a string separado por comas
+        anios_str = ",".join(map(str, anios))
+        
+        response = requests.get(
+            f"{API_URL}/api/v1/rendimiento/stock-teorico-anual",
+            params={
+                "username": username,
+                "password": password,
+                "anios": anios_str,
+                "fecha_corte": fecha_corte
+            },
+            timeout=180  # Mayor timeout para análisis multi-anual
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"Error HTTP {response.status_code}: {response.text}"}
+    
+    except Exception as e:
+        return {"error": str(e)}
