@@ -25,13 +25,15 @@ def render(username: str, password: str):
         solo_hechas = st.checkbox("Solo recepciones hechas", value=True, key="solo_hechas_recepcion", 
                                 help="Activa para ver solo recepciones completadas/validadas.")
         
-        # Checkboxes para filtrar por origen (RFP / VILKÚN)
+        # Checkboxes para filtrar por origen (RFP / VILKÚN / SAN JOSE)
         st.markdown("**Origen de recepciones:**")
-        col_orig1, col_orig2, col_dummy = st.columns([1, 1, 2])
+        col_orig1, col_orig2, col_orig3 = st.columns([1, 1, 1])
         with col_orig1:
             check_rfp = st.checkbox("🏭 RFP", value=True, key="check_rfp")
         with col_orig2:
             check_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="check_vilkun")
+        with col_orig3:
+            check_san_jose = st.checkbox("🏘️ SAN JOSE", value=True, key="check_san_jose")
 
     # Fechas (arriba para acceso rápido)
     col1, col2 = st.columns(2)
@@ -48,9 +50,11 @@ def render(username: str, password: str):
             origen_list.append("RFP")
         if check_vilkun:
             origen_list.append("VILKUN")
+        if check_san_jose:
+            origen_list.append("SAN JOSE")
 
         if not origen_list:
-            st.warning("Debes seleccionar al menos un origen (RFP o VILKÚN)")
+            st.warning("Debes seleccionar al menos un origen (RFP, VILKÚN o SAN JOSE)")
         else:
             # Guardar filtros usados en session_state
             st.session_state.origen_filtro_usado = origen_list.copy()

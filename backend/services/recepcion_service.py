@@ -87,9 +87,19 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         picking_type_ids = [1, 217, 164]
     
     
-    # ============ PASO 1: Obtener todas las recepciones ============
+    # ============ PASO 1: Obtener todas las recepciones (EXCLUYENDO DEVOLUCIONES) ============
+    # Las devoluciones tienen picking_type_id diferentes a los de recepción
+    # IDs de picking_type para DEVOLUCIONES/SALIDAS que NO queremos incluir:
+    # - Típicamente los picking_type con code='outgoing' o que sean devoluciones
+    # Basándome en la estructura, excluiremos los IDs de picking_types de devolución
+    # IDs comunes de devolución en Odoo: 2 (Devoluciones de clientes), 5 (Salidas OUT)
+    # Nota: Esto puede variar según la instalación, ajustar según sea necesario
+    
+    PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
+    
     domain = [
         ("picking_type_id", "in", picking_type_ids),
+        ("picking_type_id", "not in", PICKING_TYPES_DEVOLUCION),  # EXCLUIR DEVOLUCIONES
         ("x_studio_categora_de_producto", "=", "MP"),
         ("scheduled_date", ">=", fecha_inicio),
         ("scheduled_date", "<=", fecha_fin),
@@ -725,9 +735,12 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     if not picking_type_ids:
         picking_type_ids = [1, 217, 164]
 
-    # 1. Buscar pickings de MP en el rango (solo validados)
+    # 1. Buscar pickings de MP en el rango (solo validados, EXCLUYENDO DEVOLUCIONES)
+    PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
+    
     domain = [
         ("picking_type_id", "in", picking_type_ids),
+        ("picking_type_id", "not in", PICKING_TYPES_DEVOLUCION),  # EXCLUIR DEVOLUCIONES
         ("x_studio_categora_de_producto", "=", "MP"),
         ("scheduled_date", ">=", fecha_inicio),
         ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
@@ -909,8 +922,11 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     if not picking_type_ids:
         picking_type_ids = [1, 217, 164]
 
+    PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
+
     domain = [
         ("picking_type_id", "in", picking_type_ids),
+        ("picking_type_id", "not in", PICKING_TYPES_DEVOLUCION),  # EXCLUIR DEVOLUCIONES
         ("x_studio_categora_de_producto", "=", "MP"),
         ("scheduled_date", ">=", fecha_inicio),
         ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
