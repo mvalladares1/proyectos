@@ -93,13 +93,6 @@ async def get_dashboard_completo(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/overview")
-async def get_overview(
-    username: str = Query(..., description="Usuario Odoo"),
-    password: str = Query(..., description="API Key Odoo"),
-    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
-
-
 @router.get("/inventario-trazabilidad")
 async def get_inventario_trazabilidad(
     username: str = Query(..., description="Usuario Odoo"),
@@ -121,7 +114,7 @@ async def get_inventario_trazabilidad(
 
 
 @router.get("/overview")
-async def get_overview_legacy(
+async def get_overview(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
