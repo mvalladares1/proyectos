@@ -15,8 +15,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 def render(username: str, password: str):
     """Renderiza el tab unificado de análisis completo."""
     
-    st.subheader("📊 Análisis Integral de Operaciones")
-    st.markdown("Análisis completo de compras, ventas, producción e inventario.")
+    st.title("📊 Análisis Integral de Operaciones")
+    
+    # Descripción del objetivo del tab
+    st.markdown("""
+    <div style="background-color: #f0f8ff; padding: 20px; border-radius: 10px; border-left: 5px solid #1f77b4; margin-bottom: 20px;">
+        <h4 style="color: #1f77b4; margin-top: 0;">🎯 Objetivo del Módulo</h4>
+        <p style="margin-bottom: 10px;">
+            Este módulo proporciona un <strong>análisis integral de las operaciones</strong> de Rio Futuro, 
+            integrando métricas críticas de toda la cadena de valor en un solo panel de control.
+        </p>
+        <p style="margin-bottom: 10px;"><strong>¿Qué resuelve?</strong></p>
+        <ul style="margin-bottom: 10px;">
+            <li><strong>Compras MP/PSP:</strong> Identifica productos con mejor precio, volumen y tendencias de compra</li>
+            <li><strong>Ventas PTT:</strong> Analiza productos más rentables, clientes top y márgenes reales</li>
+            <li><strong>Producción:</strong> Calcula rendimientos PSP→PTT por tipo de fruta, detecta pérdidas y eficiencia</li>
+            <li><strong>Inventario:</strong> Monitorea rotación, valorización y alertas de sobre/sub stock</li>
+        </ul>
+        <p style="margin-bottom: 0;">
+            <strong>💡 Valor:</strong> Elimina la necesidad de analizar reportes separados. 
+            Toda la información clave en un solo lugar para tomar decisiones rápidas y fundamentadas.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # ============================================================================
     # FILTROS GLOBALES (compartidos por todos los análisis)
