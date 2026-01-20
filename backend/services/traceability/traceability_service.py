@@ -102,15 +102,14 @@ class TraceabilityService:
             return self._empty_result()
     
     def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
-        """Busca trazabilidad de un paquete específico por nombre directamente en stock.move.line."""
+        """Busca trazabilidad de un paquete específico por nombre en stock.move.line."""
         virtual_ids = self._get_virtual_location_ids()
         
         try:
-            # Buscar directamente en stock.move.line por nombre del paquete (case insensitive)
             domain = [
                 "|",
-                ("package_id.name", "ilike", package_name),
-                ("result_package_id.name", "ilike", package_name),
+                ("package_id", "ilike", package_name),
+                ("result_package_id", "ilike", package_name),
                 ("qty_done", ">", 0),
                 ("state", "=", "done"),
             ]
@@ -130,10 +129,10 @@ class TraceabilityService:
             )
             
             if not move_lines:
-                print(f"[TraceabilityService] No se encontraron movimientos para paquete: {package_name}")
+                print(f"[TraceabilityService] No se encontraron movimientos para: {package_name}")
                 return self._empty_result()
             
-            print(f"[TraceabilityService] Paquete {package_name}: {len(move_lines)} movimientos encontrados")
+            print(f"[TraceabilityService] {package_name}: {len(move_lines)} movimientos encontrados")
             
             # Procesar movimientos
             result = self._process_move_lines(move_lines, virtual_ids)
