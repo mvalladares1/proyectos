@@ -84,56 +84,8 @@ def render_visjs_network(
         "title": f"<b>{e.get('value', 0):,.0f} kg</b>",
     } for e in edges]
     
-    # ============ LAYOUT 1: RADIAL (con MUCHO más espacio) ============
-    # Radios mucho más grandes para mejor visualización
-    type_radius = {"SUPPLIER": 1200, "PALLET_IN": 800, "PROCESS": 350, "PALLET_OUT": 800, "CUSTOMER": 1200}
-    
-    # Contar nodos por tipo para distribuir mejor
-    nodes_by_type = {}
-    for n in nodes_base:
-        t = n["nodeType"]
-        if t not in nodes_by_type:
-            nodes_by_type[t] = []
-        nodes_by_type[t].append(n)
-    
-    nodes_radial = []
-    for node_type, type_nodes in nodes_by_type.items():
-        count = len(type_nodes)
-        radius = type_radius.get(node_type, 500)
-        
-        # Definir el arco donde se distribuyen los nodos de este tipo
-        if node_type == "SUPPLIER":
-            start_angle, end_angle = 140, 220  # Izquierda amplio
-        elif node_type == "PALLET_IN":
-            start_angle, end_angle = 100, 260  # Izquierda-centro más amplio
-        elif node_type == "PROCESS":
-            start_angle, end_angle = 0, 360  # Centro (todo el círculo)
-        elif node_type == "PALLET_OUT":
-            start_angle, end_angle = -80, 80  # Derecha-centro más amplio
-        elif node_type == "CUSTOMER":
-            start_angle, end_angle = -40, 40  # Derecha
-        else:
-            start_angle, end_angle = 0, 360
-        
-        # Distribuir uniformemente en el arco
-        angle_span = end_angle - start_angle
-        for i, n in enumerate(type_nodes):
-            if count == 1:
-                angle = (start_angle + end_angle) / 2
-            else:
-                angle = start_angle + (angle_span * i / (count - 1)) if count > 1 else start_angle
-            
-            rad = math.radians(angle)
-            x = radius * math.cos(rad)
-            y = radius * math.sin(rad)
-            nodes_radial.append({**n, "x": x, "y": y, "fixed": {"x": True, "y": True}})
-    
-    # ============ LAYOUT 2: FÍSICA (ORIGINAL) ============
-    nodes_physics = [{**n} for n in nodes_base]  # Sin posiciones fijas
-    
     # Generar JSON
-    nodes_radial_json = json.dumps(nodes_radial)
-    nodes_physics_json = json.dumps(nodes_physics)
+    nodes_json = json.dumps(nodes_base)
     edges_json = json.dumps(edges_base)
     
     network_html = f"""
@@ -143,41 +95,14 @@ def render_visjs_network(
         <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/dist/vis-network.min.js"></script>
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            html, body {{ height: 100%; overflow: auto; }}
-            body {{ background: #0d1117; font-family: Arial, sans-serif; padding: 10px; }}
+            html, body {{ height: 100%; overflow: hidden; }}
+            body {{ background: #0d1117; font-family: Arial, sans-serif; }}
             
-            .container {{ display: flex; flex-direction: column; gap: 15px; }}
-            .network-card {{
-                background: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 8px;
-                overflow: hidden;
-            }}
-            .network-header {{
-                background: #21262d;
-                padding: 10px 15px;
-                border-bottom: 1px solid #30363d;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }}
-            .network-title {{
-                color: #f0f6fc;
-                font-size: 14px;
-                font-weight: 600;
-            }}
-            .network-desc {{
-                color: #8b949e;
-                font-size: 11px;
-            }}
-            .network-canvas {{
-                height: 700px;
-                width: 100%;
-            }}
+            #network {{ width: 100%; height: 100%; }}
             
             /* Legend */
             .legend {{
-                position: fixed;
+                position: absolute;
                 top: 10px;
                 right: 10px;
                 background: rgba(22, 27, 34, 0.95);
@@ -212,136 +137,81 @@ def render_visjs_network(
             <div class="legend-item"><div class="legend-shape" style="background: #3498db;"></div>Cliente</div>
         </div>
         
-        <div class="container">
-            <!-- Layout 1: Radial -->
-            <div class="network-card">
-                <div class="network-header">
-                    <div>
-                        <div class="network-title">🔄 Layout 1: Radial</div>
-                        <div class="network-desc">Procesos al centro. Proveedores izquierda → Clientes derecha. Flujo circular.</div>
-                    </div>
-                </div>
-                <div id="network1" class="network-canvas"></div>
-            </div>
-            
-            <!-- Layout 2: Física -->
-            <div class="network-card">
-                <div class="network-header">
-                    <div>
-                        <div class="network-title">🌐 Layout 2: Física</div>
-                        <div class="network-desc">Nodos se organizan por conexiones. Arrastrable. Orgánico.</div>
-                    </div>
-                </div>
-                <div id="network2" class="network-canvas"></div>
-            </div>
-        </div>
+        <div id="network"></div>
         
         <script>
             var groupOptions = {{
                 supplier: {{
                     shape: 'triangle',
                     color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
-                    size: 22
+                    size: 25
                 }},
                 pallet_in: {{
                     shape: 'dot',
                     color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
-                    size: 16
+                    size: 18
                 }},
                 process: {{
                     shape: 'square',
                     color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
-                    size: 18
+                    size: 20
                 }},
                 pallet_out: {{
                     shape: 'dot',
                     color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
-                    size: 16
+                    size: 18
                 }},
                 customer: {{
                     shape: 'square',
                     color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
-                    size: 20
+                    size: 22
                 }}
             }};
             
-            var edgeOptions = {{
-                color: {{ color: 'rgba(139, 148, 158, 0.3)', highlight: '#58a6ff', hover: '#58a6ff' }},
-                smooth: {{ enabled: true, type: 'curvedCW', roundness: 0.1 }},
-                arrows: {{ to: {{ enabled: true, scaleFactor: 0.4 }} }},
-                hoverWidth: 1.5
-            }};
-            
-            var nodeOptions = {{
-                font: {{ size: 10, color: '#c9d1d9', face: 'Arial' }},
-                borderWidth: 2
-            }};
-            
-            var interactionOptions = {{
-                hover: true,
-                tooltipDelay: 50,
-                zoomView: true,
-                dragView: true,
-                navigationButtons: false
-            }};
-            
-            // ========== NETWORK 1: RADIAL ==========
-            var network1 = new vis.Network(
-                document.getElementById('network1'),
+            var network = new vis.Network(
+                document.getElementById('network'),
                 {{
-                    nodes: new vis.DataSet({nodes_radial_json}),
-                    edges: new vis.DataSet({edges_json})
-                }},
-                {{
-                    layout: {{ improvedLayout: false }},
-                    physics: {{ enabled: false }},
-                    interaction: {{ 
-                        ...interactionOptions, 
-                        dragNodes: true,
-                        zoomView: true,
-                        dragView: true
-                    }},
-                    nodes: nodeOptions,
-                    edges: edgeOptions,
-                    groups: groupOptions
-                }}
-            );
-            // Fit con padding para ver todo
-            setTimeout(function() {{
-                network1.fit({{ 
-                    animation: {{ duration: 500 }},
-                    scale: 0.4
-                }});
-            }}, 100);
-            
-            // ========== NETWORK 2: FÍSICA ==========
-            var network2 = new vis.Network(
-                document.getElementById('network2'),
-                {{
-                    nodes: new vis.DataSet({nodes_physics_json}),
+                    nodes: new vis.DataSet({nodes_json}),
                     edges: new vis.DataSet({edges_json})
                 }},
                 {{
                     physics: {{
                         forceAtlas2Based: {{
-                            gravitationalConstant: -40,
-                            centralGravity: 0.01,
-                            springLength: 120,
-                            springConstant: 0.08,
+                            gravitationalConstant: -80,
+                            centralGravity: 0.005,
+                            springLength: 200,
+                            springConstant: 0.05,
                             damping: 0.4,
-                            avoidOverlap: 0.5
+                            avoidOverlap: 0.8
                         }},
                         solver: 'forceAtlas2Based',
-                        stabilization: {{ iterations: 200 }}
+                        stabilization: {{ iterations: 300 }}
                     }},
-                    interaction: {{ ...interactionOptions, dragNodes: true }},
-                    nodes: nodeOptions,
-                    edges: edgeOptions,
+                    interaction: {{
+                        hover: true,
+                        tooltipDelay: 50,
+                        zoomView: true,
+                        dragView: true,
+                        dragNodes: true,
+                        navigationButtons: true,
+                        keyboard: {{ enabled: true }}
+                    }},
+                    nodes: {{
+                        font: {{ size: 11, color: '#c9d1d9', face: 'Arial' }},
+                        borderWidth: 2
+                    }},
+                    edges: {{
+                        color: {{ color: 'rgba(139, 148, 158, 0.4)', highlight: '#58a6ff', hover: '#58a6ff' }},
+                        smooth: {{ enabled: true, type: 'curvedCW', roundness: 0.15 }},
+                        arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
+                        hoverWidth: 2
+                    }},
                     groups: groupOptions
                 }}
             );
-            network2.once('stabilizationIterationsDone', function() {{
-                network2.fit({{ animation: {{ duration: 300 }} }});
+            
+            network.once('stabilizationIterationsDone', function() {{
+                network.fit({{ animation: {{ duration: 500 }} }});
             }});
         </script>
     </body>
@@ -352,8 +222,8 @@ def render_visjs_network(
     st.markdown("### 🕸️ Red de Trazabilidad")
     st.caption("🖱️ Arrastra para navegar | 🔍 Scroll para zoom | 📍 Hover para detalles")
     
-    # Renderizar
-    components.html(network_html, height=int(height.replace("px", "")) + 50, scrolling=False)
+    # Renderizar con altura grande
+    components.html(network_html, height=800, scrolling=False)
 
 
 def render_visjs_timeline(
