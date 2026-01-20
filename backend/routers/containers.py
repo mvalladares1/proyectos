@@ -8,7 +8,8 @@ from backend.services.containers import ContainersService
 from backend.services.traceability import (
     TraceabilityService,
     transform_to_sankey,
-    transform_to_reactflow
+    transform_to_reactflow,
+    transform_to_visjs
 )
 
 router = APIRouter(prefix="/api/v1/containers", tags=["containers"])
