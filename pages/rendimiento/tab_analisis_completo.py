@@ -200,40 +200,37 @@ def _render_detalle_datos(datos: list, resumen: dict):
     df_display['Merma (%)'] = df_display['merma_pct'].apply(lambda x: f"{x:.2f}%")
     df_display['Stock Teórico ($)'] = df_display['stock_teorico_valor'].apply(lambda x: f"${x:,.0f}")
     
+    # Agregar fila de totales
+    precio_compra_prom = total_compras_monto/total_compras_kg if total_compras_kg > 0 else 0
+    precio_venta_prom = total_ventas_monto/total_ventas_kg if total_ventas_kg > 0 else 0
+    
+    totales_row = pd.DataFrame([{
+        'tipo_fruta': '📊 Totales',
+        'manejo': '',
+        'Compras (kg)': f"{total_compras_kg:,.0f}",
+        'Compras ($)': f"${total_compras_monto:,.0f}",
+        '$/kg Compra': f"${precio_compra_prom:,.2f}",
+        'Ventas (kg)': f"{total_ventas_kg:,.0f}",
+        'Ventas ($)': f"${total_ventas_monto:,.0f}",
+        '$/kg Venta': f"${precio_venta_prom:,.2f}",
+        'Merma (kg)': f"{total_merma_kg:,.0f}",
+        'Merma (%)': f"{merma_pct:.2f}%",
+        'Stock Teórico ($)': f"${total_stock_valor:,.0f}"
+    }])
+    
+    df_display_con_totales = pd.concat([df_display[[
+        'tipo_fruta', 'manejo', 
+        'Compras (kg)', 'Compras ($)', '$/kg Compra',
+        'Ventas (kg)', 'Ventas ($)', '$/kg Venta',
+        'Merma (kg)', 'Merma (%)', 
+        'Stock Teórico ($)'
+    ]], totales_row], ignore_index=True)
+    
     st.dataframe(
-        df_display[[
-            'tipo_fruta', 'manejo', 
-            'Compras (kg)', 'Compras ($)', '$/kg Compra',
-            'Ventas (kg)', 'Ventas ($)', '$/kg Venta',
-            'Merma (kg)', 'Merma (%)', 
-            'Stock Teórico ($)'
-        ]],
+        df_display_con_totales,
         use_container_width=True,
         hide_index=True
     )
-    
-    # Fila de totales
-    st.markdown("##### 📊 Totales")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.metric("Compras", f"{total_compras_kg:,.0f} kg", delta=f"${total_compras_monto:,.0f}")
-    
-    with col2:
-        st.metric("Ventas", f"{total_ventas_kg:,.0f} kg", delta=f"${total_ventas_monto:,.0f}")
-    
-    with col3:
-        st.metric("Merma", f"{total_merma_kg:,.0f} kg", delta=f"{merma_pct:.2f}%", delta_color="inverse")
-    
-    with col4:
-        st.metric("Stock Teórico", f"${total_stock_valor:,.0f}")
-    
-    with col5:
-        precio_compra_prom = total_compras_monto/total_compras_kg if total_compras_kg > 0 else 0
-        precio_venta_prom = total_ventas_monto/total_ventas_kg if total_ventas_kg > 0 else 0
-        st.metric("$/kg Compra", f"${precio_compra_prom:,.2f}")
-        st.caption(f"$/kg Venta: ${precio_venta_prom:,.2f}")
     
     # Gráfico de distribución de compras por tipo
     st.markdown("##### 🍓 Distribución de Compras por Tipo de Fruta")
