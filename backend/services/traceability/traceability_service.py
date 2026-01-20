@@ -105,34 +105,88 @@ class TraceabilityService:
         """Busca trazabilidad de un paquete específico por nombre en stock.move.line."""
         virtual_ids = self._get_virtual_location_ids()
         
+        fields = [
+            "id", "reference", "package_id", "result_package_id",
+            "lot_id", "qty_done", "product_id", "location_id", 
+            "location_dest_id", "date", "picking_id"
+        ]
+        
         try:
-            domain = [
-                "|",
-                ("package_id", "ilike", package_name),
-                ("result_package_id", "ilike", package_name),
-                ("qty_done", ">", 0),
-                ("state", "=", "done"),
-            ]
-            
-            fields = [
-                "id", "reference", "package_id", "result_package_id",
-                "lot_id", "qty_done", "product_id", "location_id", 
-                "location_dest_id", "date", "picking_id"
-            ]
-            
-            move_lines = self.odoo.search_read(
+            # Búsqueda 1: por package_id
+            move_lines_pkg = self.odoo.search_read(
                 "stock.move.line",
-                domain,
+                [
+                    ("package_id", "ilike", package_name),
+                    ("qty_done", ">", 0),
+                    ("state", "=", "done"),
+                ],
                 fields,
                 limit=limit,
                 order="date asc"
             )
+            print(f"[TraceabilityService] Búsqueda package_id ilike '{package_name}': {len(move_lines_pkg)} resultados")
+            
+            # Búsqueda 2: por result_package_id
+            move_lines_result = self.odoo.search_read(
+                "stock.move.line",
+                [
+                    ("result_package_id", "ilike", package_name),
+                    ("qty_done", ">", 0),
+                    ("state", "=", "done"),
+                ],
+                fields,
+                limit=limit,
+                order="date asc"
+            )
+            print(f"[TraceabilityService] Búsqueda result_package_id ilike '{package_name}': {len(move_lines_result)} resultados")
+            
+            # Combinar resultados (sin duplicados por id)
+            seen_ids = set()
+            move_lines = []
+            for ml in move_lines_pkg + move_lines_result:
+                if ml["id"] not in seen_ids:
+                    seen_ids.add(ml["id"])
+                    move_lines.append(ml)
             
             if not move_lines:
                 print(f"[TraceabilityService] No se encontraron movimientos para: {package_name}")
                 return self._empty_result()
             
-            print(f"[TraceabilityService] {package_name}: {len(move_lines)} movimientos encontrados")
+            # Extraer todos los package_ids relacionados para trazabilidad completa
+            related_package_ids = set()
+            for ml in move_lines:
+                pkg_rel = ml.get("package_id")
+                result_rel = ml.get("result_package_id")
+                
+                if pkg_rel:
+                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                    if pkg_id:
+                        related_package_ids.add(pkg_id)
+                
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        related_package_ids.add(result_id)
+            
+            print(f"[TraceabilityService] Paquetes relacionados encontrados: {len(related_package_ids)}")
+            
+            # Buscar TODA la historia de los paquetes relacionados
+            if related_package_ids:
+                all_move_lines = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        "|",
+                        ("package_id", "in", list(related_package_ids)),
+                        ("result_package_id", "in", list(related_package_ids)),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=limit * 2,
+                    order="date asc"
+                )
+                print(f"[TraceabilityService] Historia completa: {len(all_move_lines)} movimientos")
+                move_lines = all_move_lines
             
             # Procesar movimientos
             result = self._process_move_lines(move_lines, virtual_ids)
@@ -149,6 +203,8 @@ class TraceabilityService:
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
+            import traceback
+            traceback.print_exc()
             return self._empty_result()
     
     def _get_traceability_for_packages(self, package_ids: List[int], limit: int) -> Dict:
