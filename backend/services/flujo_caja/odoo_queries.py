@@ -368,7 +368,7 @@ class OdooQueryManager:
         
         domain = [
             ['account_id.code', 'in', codigos_cuentas],
-            ['parent_state', 'in', ['posted', 'draft']],
+            ['parent_state', '=', 'posted'],
             ['date', '>=', fecha_inicio],
             ['date', '<=', fecha_fin]
         ]

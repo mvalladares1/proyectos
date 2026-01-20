@@ -413,7 +413,7 @@ class FlujoCajaService:
         
         # 4. Obtener movimientos
         movimientos, asientos_ids = self.odoo_manager.get_movimientos_efectivo_periodo(
-            fecha_inicio, fecha_fin, cuentas_efectivo_ids, company_id, incluir_draft=True
+            fecha_inicio, fecha_fin, cuentas_efectivo_ids, company_id, incluir_draft=False
         )
         
         if not asientos_ids:

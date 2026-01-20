@@ -8,12 +8,61 @@ from typing import Optional
 class AnalisisProduccionService:
     """Servicio para análisis de rendimientos de producción."""
     
+    # Mapeo de códigos a tipos de fruta
+    CODIGOS_FRUTA = {
+        'AR': 'Arándano',
+        'FB': 'Frambuesa',
+        'MR': 'Mora',
+        'FR': 'Frutilla',
+        'CE': 'Cereza',
+        'GR': 'Grosella',
+        'CA': 'Cassis'
+    }
+    
     def __init__(self, odoo):
         """
         Args:
             odoo: Cliente OdooClient configurado
         """
         self.odoo = odoo
+    
+    def _detectar_tipo_fruta(self, nombre_producto: str, codigo_producto: str) -> str:
+        """
+        Detecta el tipo de fruta a partir del nombre o código del producto.
+        
+        Args:
+            nombre_producto: Nombre del producto (ej: "AR S/V Conv...")
+            codigo_producto: Código del producto (ej: "100002")
+        
+        Returns:
+            Tipo de fruta (Arándano, Frambuesa, etc.) o "Sin clasificar"
+        """
+        nombre_upper = nombre_producto.upper()
+        
+        # Buscar en nombre completo
+        if 'ARANDANO' in nombre_upper or 'BLUEBERR' in nombre_upper:
+            return 'Arándano'
+        elif 'FRAMBUESA' in nombre_upper or 'RASPBERR' in nombre_upper:
+            return 'Frambuesa'
+        elif 'FRUTILLA' in nombre_upper or 'STRAWBERR' in nombre_upper:
+            return 'Frutilla'
+        elif 'MORA' in nombre_upper or 'BLACKBERR' in nombre_upper:
+            return 'Mora'
+        elif 'CEREZA' in nombre_upper or 'CHERR' in nombre_upper:
+            return 'Cereza'
+        elif 'GROSELLA' in nombre_upper or 'CURRANT' in nombre_upper:
+            return 'Grosella'
+        elif 'CASSIS' in nombre_upper:
+            return 'Cassis'
+        elif 'MIX BERRY' in nombre_upper or 'MIXBERRY' in nombre_upper:
+            return 'Mix Berries'
+        
+        # Buscar por código al inicio del nombre (ej: "AR S/V...")
+        for codigo, fruta in self.CODIGOS_FRUTA.items():
+            if nombre_producto.startswith(codigo + ' ') or nombre_producto.startswith(codigo + '-'):
+                return fruta
+        
+        return 'Sin clasificar'
     
     def get_analisis_produccion(self, fecha_desde: str, fecha_hasta: str):
         """
@@ -99,52 +148,71 @@ class AnalisisProduccionService:
             categ = prod.get('categ_id')
             categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
             
-            tipo = prod.get('x_studio_sub_categora')
-            tipo_str = tipo[1] if isinstance(tipo, (list, tuple)) and len(tipo) > 1 else 'Sin clasificar'
+            nombre = prod['name']
+            codigo = prod.get('default_code', '')
+            
+            # Detectar tipo de fruta del nombre/código (x_studio_sub_categora suele estar vacío)
+            tipo_fruta = self._detectar_tipo_fruta(nombre, codigo)
             
             manejo = prod.get('x_studio_categora_tipo_de_manejo')
             manejo_str = manejo[1] if isinstance(manejo, (list, tuple)) and len(manejo) > 1 else 'Sin clasificar'
             
             productos_map[prod['id']] = {
-                'nombre': prod['name'],
-                'codigo': prod.get('default_code', ''),
-                'tipo_fruta': tipo_str,
+                'nombre': nombre,
+                'codigo': codigo,
+                'tipo_fruta': tipo_fruta,
                 'manejo': manejo_str,
                 'categoria': categ_name
             }
         
-        # 6. Agrupar consumos por orden
+        # 6. Agrupar consumos por orden (SOLO materia prima, NO insumos)
         consumos_por_orden = {}
         for consumo in consumos:
             orden_id = consumo.get('raw_material_production_id', [None])[0]
             if not orden_id:
                 continue
             
+            prod_id = consumo.get('product_id', [None])[0]
+            if not prod_id or prod_id not in productos_map:
+                continue
+            
+            # FILTRO CRÍTICO: Excluir insumos de empaque que inflan el consumo
+            categoria = productos_map[prod_id].get('categoria', '')
+            # Solo contar productos de categorías de fruta (PSP, MP)
+            if 'INSUMOS' in categoria.upper() or 'EMBALAJE' in categoria.upper():
+                continue  # Ignorar cajas, bolsas, etc.
+            
             if orden_id not in consumos_por_orden:
                 consumos_por_orden[orden_id] = []
-            
-            prod_id = consumo.get('product_id', [None])[0]
-            if prod_id and prod_id in productos_map:
-                consumos_por_orden[orden_id].append({
+                
+            consumos_por_orden[orden_id].append({
                     'producto': productos_map[prod_id]['nombre'],
                     'tipo_fruta': productos_map[prod_id]['tipo_fruta'],
                     'manejo': productos_map[prod_id]['manejo'],
                     'kg': consumo.get('quantity_done', 0)
                 })
         
-        # 7. Agrupar producciones por orden
+        # 7. Agrupar producciones por orden (SOLO productos terminados, NO mermas ni intermedios)
         producciones_por_orden = {}
         for produccion in producciones:
             orden_id = produccion.get('production_id', [None])[0]
             if not orden_id:
                 continue
             
+            prod_id = produccion.get('product_id', [None])[0]
+            if not prod_id or prod_id not in productos_map:
+                continue
+            
+            # FILTRO CRÍTICO: Excluir mermas y productos intermedios de proceso
+            producto_nombre = productos_map[prod_id].get('nombre', '').upper()
+            # Excluir "Proceso X" (intermedio) y "Merma X"
+            if producto_nombre.startswith('PROCESO ') or 'MERMA' in producto_nombre:
+                continue  
+            
             if orden_id not in producciones_por_orden:
                 producciones_por_orden[orden_id] = []
-            
-            prod_id = produccion.get('product_id', [None])[0]
-            if prod_id and prod_id in productos_map:
-                producciones_por_orden[orden_id].append({
+                
+            producciones_por_orden[orden_id].append({
                     'producto': productos_map[prod_id]['nombre'],
                     'tipo_fruta': productos_map[prod_id]['tipo_fruta'],
                     'manejo': productos_map[prod_id]['manejo'],
@@ -169,10 +237,6 @@ class AnalisisProduccionService:
             fecha = orden.get('date_planned_start', '')
             estado = orden.get('state', '')
             
-            prod_id = orden.get('product_id', [None])[0]
-            producto_final = productos_map.get(prod_id, {}).get('nombre', 'N/A') if prod_id else 'N/A'
-            tipo_fruta = productos_map.get(prod_id, {}).get('tipo_fruta', 'Sin clasificar') if prod_id else 'Sin clasificar'
-            
             # Sumar consumos de esta orden
             consumos_orden = consumos_por_orden.get(orden_id, [])
             kg_consumido = sum([c['kg'] for c in consumos_orden])
@@ -180,6 +244,17 @@ class AnalisisProduccionService:
             # Sumar producciones de esta orden
             producciones_orden = producciones_por_orden.get(orden_id, [])
             kg_producido = sum([p['kg'] for p in producciones_orden])
+            
+            # CLASIFICACIÓN: Usar el tipo de fruta del PRODUCTO MÁS PRODUCIDO (no el de la orden)
+            # porque product_id de la orden puede ser "Proceso X" (intermedio)
+            tipo_fruta = 'Sin clasificar'
+            producto_principal = 'N/A'
+            
+            if producciones_orden:
+                # Encontrar el producto con más kg producidos
+                prod_max = max(producciones_orden, key=lambda x: x['kg'])
+                tipo_fruta = prod_max.get('tipo_fruta', 'Sin clasificar')
+                producto_principal = prod_max.get('producto', 'N/A')
             
             # Calcular rendimiento y merma
             rendimiento = (kg_producido / kg_consumido * 100) if kg_consumido > 0 else 0
@@ -204,10 +279,11 @@ class AnalisisProduccionService:
             por_tipo[tipo_fruta]['merma_kg'] += merma
             
             # Detalle para tabla
+            # Detalle para tabla
             detalle_ordenes.append({
                 'fecha': fecha,
                 'orden': nombre,
-                'producto_final': producto_final,
+                'producto_final': producto_principal,  # Usar producto con más kg producidos
                 'tipo_fruta': tipo_fruta,
                 'estado': estado,
                 'kg_consumido': round(kg_consumido, 2),
