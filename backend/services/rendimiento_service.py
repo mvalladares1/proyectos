@@ -1102,6 +1102,7 @@ class RendimientoService:
                     'kg_por_hora': kg_por_hora if isinstance(kg_por_hora, (int, float)) else 0,
                     'dotacion': dotacion if isinstance(dotacion, (int, float)) else 0,
                     'sala': sala,
+                    'sala_original': mo.get('x_studio_sala_de_proceso', '') or '',
                     'sala_tipo': sala_tipo,
                     'fecha': fecha
                 })

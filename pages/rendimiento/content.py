@@ -55,26 +55,38 @@ def render(username: str, password: str):
     # Pre-calcular permisos
     _perm_trazabilidad = tiene_acceso_pagina("rendimiento", "trazabilidad_pallets")
     _perm_sankey = tiene_acceso_pagina("rendimiento", "diagrama_sankey")
+    _perm_inventario = tiene_acceso_pagina("rendimiento", "trazabilidad_inventario")
     
-    # Tabs
-    tab1, tab2 = st.tabs(["📦 Trazabilidad por Pallets", "🔗 Diagrama Sankey"])
+    # Tabs con nombres actualizados
+    tab_names = []
+    tab_funcs = []
     
-    with tab1:
-        if _perm_trazabilidad:
-            _render_trazabilidad(username, password)
-        else:
-            st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Trazabilidad por Pallets'. Contacta al administrador.")
+    if _perm_trazabilidad:
+        tab_names.append("📦 Producción")
+        tab_funcs.append(('trazabilidad', _render_trazabilidad))
     
-    with tab2:
-        if _perm_sankey:
-            _render_sankey(username, password)
-        else:
-            st.error("🚫 **Acceso Restringido** - No tienes permisos para ver 'Diagrama Sankey'. Contacta al administrador.")
+    if _perm_sankey:
+        tab_names.append("🔗 Contenedores")
+        tab_funcs.append(('sankey', _render_sankey))
+    
+    if _perm_inventario:
+        tab_names.append("📊 Inventario (Compras/Ventas)")
+        tab_funcs.append(('inventario', _render_inventario))
+    
+    if not tab_names:
+        st.error("🚫 **Acceso Restringido** - No tienes permisos para ver ninguna sección de Trazabilidad.")
+        return
+    
+    tabs_ui = st.tabs(tab_names)
+    
+    for idx, (tab_type, render_func) in enumerate(tab_funcs):
+        with tabs_ui[idx]:
+            render_func(username, password)
 
 
 def _render_trazabilidad(username: str, password: str):
-    """Renderiza el tab de trazabilidad inversa por pallets."""
-    st.subheader("📦 Trazabilidad Completa: Pallet → Productor")
+    """Renderiza el tab de trazabilidad inversa por pallets (Producción)."""
+    st.subheader("📦 Trazabilidad de Producción: Pallet → Productor")
     st.markdown("Rastrea uno o varios pallets desde el producto terminado hasta el productor original.")
     
     # Sección de búsqueda
@@ -685,3 +697,9 @@ def _render_sankey_stats(sankey_data: dict):
     st.markdown("""
     - 🟣 **Continuidad** (morado): Pallet OUT → mismo Pallet IN en otro proceso
     """)
+
+
+def _render_inventario(username: str, password: str):
+    """Renderiza el tab de trazabilidad de inventario."""
+    from .tab_inventario import render as render_inventario
+    render_inventario(username, password)

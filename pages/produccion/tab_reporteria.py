@@ -399,7 +399,7 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
             'Kg PT': mo.get('kg_pt', 0),
             'Kg MP': mo.get('kg_mp', 0),
             'Rendimiento': mo.get('rendimiento', 0),
-            'Sala': mo.get('sala', ''),
+            'Sala': mo.get('sala_original') or mo.get('sala', ''),
             'Dotación': mo.get('dotacion', 0),
             'HH Efectiva': mo.get('hh_efectiva', 0),
             'Kg/HH': mo.get('kg_hh', 0),
@@ -743,6 +743,8 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
             if mos_congelado:
                 st.markdown("---")
                 st.markdown("### 🧊 KPIs por Túnel Individual")
+                # DEBUG TEMPORAL (eliminar luego)
+                # st.caption(f"Debug: {len(mos_congelado)} órdenes encontradas")
                 st.caption("Rendimiento y producción de cada túnel (incluyendo Túnel Continuo)")
                 
                 # Agrupar por sala/túnel
