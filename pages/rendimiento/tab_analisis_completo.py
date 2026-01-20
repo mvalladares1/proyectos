@@ -69,8 +69,8 @@ def render(username: str, password: str):
             )
             
             st.session_state.stock_teorico_loaded = True
-            st.session_state.stock_teorico_fecha_desde = fecha_desde_str
-            st.session_state.stock_teorico_fecha_hasta = fecha_hasta_str
+            st.session_state.st_fecha_desde_cargada = fecha_desde_str
+            st.session_state.st_fecha_hasta_cargada = fecha_hasta_str
             
             st.success(f"✅ Análisis completado")
     
