@@ -3,6 +3,7 @@ Helper para tab de análisis de compras
 """
 import requests
 import streamlit as st
+import os
 
 
 def get_compras_data(username: str, password: str, fecha_desde: str, fecha_hasta: str):
@@ -19,7 +20,11 @@ def get_compras_data(username: str, password: str, fecha_desde: str, fecha_hasta
         dict con datos de compras
     """
     try:
-        API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+        # Intentar obtener API_URL de secrets, si no existe usar variable de entorno
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
         
         response = requests.get(
             f"{API_URL}/api/v1/rendimiento/analisis-compras",
@@ -55,7 +60,10 @@ def get_ventas_data(username: str, password: str, fecha_desde: str, fecha_hasta:
         dict con datos de ventas
     """
     try:
-        API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
         
         response = requests.get(
             f"{API_URL}/api/v1/rendimiento/analisis-ventas",
@@ -91,7 +99,10 @@ def get_produccion_data(username: str, password: str, fecha_desde: str, fecha_ha
         dict con datos de producción
     """
     try:
-        API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
         
         response = requests.get(
             f"{API_URL}/api/v1/rendimiento/analisis-produccion",
@@ -127,7 +138,10 @@ def get_inventario_rotacion_data(username: str, password: str, fecha_desde: str,
         dict con datos de inventario
     """
     try:
-        API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
         
         response = requests.get(
             f"{API_URL}/api/v1/rendimiento/analisis-inventario",
