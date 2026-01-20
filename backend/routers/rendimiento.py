@@ -98,6 +98,33 @@ async def get_overview(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+
+
+@router.get("/inventario-trazabilidad")
+async def get_inventario_trazabilidad(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    anio: int = Query(..., description="Año a analizar"),
+    mes_hasta: int = Query(..., description="Mes hasta el que analizar (1-12)")
+):
+    """
+    Análisis de inventario: compras vs ventas por tipo de fruta y manejo.
+    Usado para calcular merma y stock teórico.
+    """
+    try:
+        service = RendimientoService(username=username, password=password)
+        return service.get_inventario_trazabilidad(anio, mes_hasta)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/overview")
+async def get_overview_legacy(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)")
 ):
     """

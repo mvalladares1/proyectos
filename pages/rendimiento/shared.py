@@ -39,6 +39,33 @@ def fmt_numero(valor, decimales=0):
 
 # --------------------- Funciones API ---------------------
 
+def get_inventario_data(username: str, password: str, anio: int, mes_hasta: int):
+    """Obtiene datos de inventario (compras vs ventas) desde el backend."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "anio": anio,
+            "mes_hasta": mes_hasta
+        }
+        resp = requests.get(
+            f"{API_URL}/api/v1/rendimiento/inventario-trazabilidad",
+            params=params,
+            timeout=120
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        data['error'] = None
+        return data
+    except Exception as e:
+        return {
+            'total_comprado': 0,
+            'total_vendido': 0,
+            'detalle': [],
+            'error': f"Error llamando al backend: {str(e)}"
+        }
+
+
 def get_trazabilidad_inversa(username: str, password: str, lote_pt: str):
     """Obtiene trazabilidad inversa desde PT hacia MP."""
     try:
