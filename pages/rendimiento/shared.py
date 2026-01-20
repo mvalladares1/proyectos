@@ -39,15 +39,14 @@ def fmt_numero(valor, decimales=0):
 
 # --------------------- Funciones API ---------------------
 
-def get_inventario_data(username: str, password: str, anio: int, mes_desde: int, mes_hasta: int):
+def get_inventario_data(username: str, password: str, fecha_desde: str, fecha_hasta: str):
     """Obtiene datos de inventario (compras vs ventas) desde el backend."""
     try:
         params = {
             "username": username,
             "password": password,
-            "anio": anio,
-            "mes_desde": mes_desde,
-            "mes_hasta": mes_hasta
+            "fecha_desde": fecha_desde,
+            "fecha_hasta": fecha_hasta
         }
         resp = requests.get(
             f"{API_URL}/api/v1/rendimiento/inventario-trazabilidad",

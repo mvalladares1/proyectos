@@ -876,12 +876,13 @@ def render(username: str, password: str):
                 ).properties(width=700, height=350)
                 return chart
 
-            # Si ambas plantas están seleccionadas, mostrar un gráfico por cada una
-            if len(origen_filtro_usado) == 2 and 'origen' in df_filtrada.columns:
+            # Si múltiples plantas están seleccionadas, mostrar un gráfico por cada una
+            if len(origen_filtro_usado) >= 2 and 'origen' in df_filtrada.columns:
                 # =================================================================
-                #  GRÁFICO CONSOLIDADO (RFP + VILKÚN)
+                #  GRÁFICO CONSOLIDADO (Todas las plantas seleccionadas)
                 # =================================================================
-                st.subheader("📊 CONSOLIDADO - Kg recepcionados por día (RFP + VILKÚN)")
+                plantas_str = " + ".join(origen_filtro_usado)
+                st.subheader(f"📊 CONSOLIDADO - Kg recepcionados por día ({plantas_str})")
                 chart_consolidado = crear_grafico_planta(df_filtrada, 'CONSOLIDADO', '#8e44ad')
                 st.altair_chart(chart_consolidado, use_container_width=True)
                 # Calcular total consolidado excluyendo bandejas
@@ -933,10 +934,31 @@ def render(username: str, password: str):
                 else:
                     st.info("No hay datos de VILKÚN en el período seleccionado")
 
+                st.markdown("---")
+
+                # =================================================================
+                #  GRÁFICO SAN JOSE
+                # =================================================================
+                st.subheader("🏘️ SAN JOSE - Kg recepcionados por día (por Tipo de Fruta)")
+                df_san_jose = df_filtrada[df_filtrada['origen'] == 'SAN JOSE']
+                if not df_san_jose.empty:
+                    chart_san_jose = crear_grafico_planta(df_san_jose, 'SAN JOSE', '#e67e22')
+                    st.altair_chart(chart_san_jose, use_container_width=True)
+                    # Calcular total excluyendo bandejas
+                    total_san_jose = 0.0
+                    for _, row in df_san_jose.iterrows():
+                        for p in row.get('productos', []) or []:
+                            cat = (p.get('Categoria') or '').strip().upper()
+                            if 'BANDEJ' not in cat:
+                                total_san_jose += p.get('Kg Hechos', 0) or 0
+                    st.caption(f"**Total SAN JOSE:** {fmt_numero(total_san_jose, 0)} Kg")
+                else:
+                    st.info("No hay datos de SAN JOSE en el período seleccionado")
+
                 # Resumen comparativo
                 st.markdown("---")
                 st.markdown("**📊 Resumen Comparativo:**")
-                col_p1, col_p2 = st.columns(2)
+                col_p1, col_p2, col_p3 = st.columns(3)
                 with col_p1:
                     # Calcular total RFP excluyendo bandejas
                     total_rfp = 0.0
@@ -957,10 +979,20 @@ def render(username: str, password: str):
                             if 'BANDEJ' not in cat:
                                 total_vilkun += p.get('Kg Hechos', 0) or 0
                     st.metric("🌿 VILKÚN", f"{fmt_numero(total_vilkun, 0)} Kg")
+                with col_p3:
+                    # Calcular total SAN JOSE excluyendo bandejas
+                    total_san_jose_comp = 0.0
+                    df_san_jose_comp = df_filtrada[df_filtrada['origen'] == 'SAN JOSE'] if 'origen' in df_filtrada.columns else df_filtrada.head(0)
+                    for _, row in df_san_jose_comp.iterrows():
+                        for p in row.get('productos', []) or []:
+                            cat = (p.get('Categoria') or '').strip().upper()
+                            if 'BANDEJ' not in cat:
+                                total_san_jose_comp += p.get('Kg Hechos', 0) or 0
+                    st.metric("🏘️ SAN JOSE", f"{fmt_numero(total_san_jose_comp, 0)} Kg")
             else:
                 # Solo una planta seleccionada - mostrar gráfico normal
                 planta_actual = origen_filtro_usado[0] if origen_filtro_usado else "Planta"
-                emoji = "🏭" if planta_actual == "RFP" else "🌿"
+                emoji = "🏭" if planta_actual == "RFP" else "🌿" if planta_actual == "VILKUN" else "🏘️"
                 st.subheader(f"{emoji} {planta_actual} - Kg recepcionados por día (por Tipo de Fruta)")
                 chart_kg = crear_grafico_planta(df_filtrada, planta_actual, '#3498db')
                 st.altair_chart(chart_kg, use_container_width=True)

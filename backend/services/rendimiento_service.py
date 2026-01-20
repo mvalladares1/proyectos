@@ -1251,22 +1251,18 @@ class RendimientoService:
         
         return result
 
-    def get_inventario_trazabilidad(self, anio: int, mes_hasta: int, mes_desde: int = 1) -> dict:
+    def get_inventario_trazabilidad(self, fecha_desde: str, fecha_hasta: str) -> dict:
         """
         Análisis de inventario: compras vs ventas por tipo de fruta y manejo.
         SOLO incluye productos que tengan tipo_fruta Y manejo clasificados.
         
         Args:
-            anio: Año a analizar
-            mes_hasta: Mes hasta el que analizar (1-12)
-            mes_desde: Mes desde el que analizar (1-12), default 1
+            fecha_desde: Fecha desde (YYYY-MM-DD)
+            fecha_hasta: Fecha hasta (YYYY-MM-DD)
         
         Returns:
             dict con total_comprado, total_vendido, precios, y detalle por tipo_fruta/manejo
         """
-        fecha_inicio = f"{anio}-{mes_desde:02d}-01"
-        fecha_fin = f"{anio}-{mes_hasta:02d}-31"
-        
         # 1. Obtener líneas de facturas de proveedor (COMPRAS)
         # Usar cuenta 21% (PROVEEDORES) con debit > 0 para evitar duplicados
         lineas_compra = self.odoo.search_read(
@@ -1275,8 +1271,8 @@ class RendimientoService:
                 ['move_id.move_type', '=', 'in_invoice'],
                 ['move_id.state', '=', 'posted'],
                 ['product_id', '!=', False],
-                ['date', '>=', fecha_inicio],
-                ['date', '<=', fecha_fin],
+                ['date', '>=', fecha_desde],
+                ['date', '<=', fecha_hasta],
                 ['quantity', '>', 0],
                 ['debit', '>', 0],  # Solo líneas con débito (proveedor)
                 ['account_id.code', '=like', '21%']  # Cuenta de proveedores
@@ -1293,8 +1289,8 @@ class RendimientoService:
                 ['move_id.move_type', '=', 'out_invoice'],
                 ['move_id.state', '=', 'posted'],
                 ['product_id', '!=', False],
-                ['date', '>=', fecha_inicio],
-                ['date', '<=', fecha_fin],
+                ['date', '>=', fecha_desde],
+                ['date', '<=', fecha_hasta],
                 ['quantity', '>', 0],
                 ['credit', '>', 0],  # Solo líneas con crédito (ingreso)
                 ['account_id.code', '=like', '41%']  # Cuenta de ingresos
@@ -1312,8 +1308,8 @@ class RendimientoService:
         
         if not prod_ids:
             return {
-                'fecha_desde': fecha_inicio,
-                'fecha_hasta': fecha_fin,
+                'fecha_desde': fecha_desde,
+                'fecha_hasta': fecha_hasta,
                 'total_comprado_kg': 0,
                 'total_comprado_monto': 0,
                 'total_vendido_kg': 0,
@@ -1435,8 +1431,8 @@ class RendimientoService:
         detalle = sorted(detalle, key=lambda x: (x['tipo_fruta'], x['manejo']))
         
         return {
-            'fecha_desde': fecha_inicio,
-            'fecha_hasta': fecha_fin,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
             'total_comprado_kg': total_comprado_kg,
             'total_comprado_monto': total_comprado_monto,
             'total_comprado_precio_promedio': (total_comprado_monto / total_comprado_kg) if total_comprado_kg > 0 else 0,

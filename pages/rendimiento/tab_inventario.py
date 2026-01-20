@@ -18,33 +18,24 @@ def render(username: str, password: str):
     st.subheader("📊 Trazabilidad de Inventario: Compras, Ventas y Merma")
     st.markdown("Análisis de facturas por tipo de fruta y categoría de manejo. **Solo productos clasificados.**")
     
-    # Filtros
-    col1, col2, col3, col4 = st.columns(4)
+    # Filtros de fecha
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        anio = st.selectbox(
-            "Año",
-            options=[2026, 2025, 2024, 2023],
-            index=0  # Default 2026
+        fecha_desde = st.date_input(
+            "Desde",
+            value=datetime(2026, 1, 1),
+            format="DD/MM/YYYY"
         )
     
     with col2:
-        mes_desde = st.selectbox(
-            "Desde mes",
-            options=list(range(1, 13)),
-            format_func=lambda x: datetime(2000, x, 1).strftime('%B'),
-            index=0  # Default enero
+        fecha_hasta = st.date_input(
+            "Hasta",
+            value=datetime(2026, 1, 31),
+            format="DD/MM/YYYY"
         )
     
     with col3:
-        mes_hasta = st.selectbox(
-            "Hasta mes",
-            options=list(range(1, 13)),
-            format_func=lambda x: datetime(2000, x, 1).strftime('%B'),
-            index=0  # Default enero
-        )
-    
-    with col4:
         st.markdown("<br>", unsafe_allow_html=True)
         cargar_datos = st.button("🔄 Actualizar Datos", type="primary", use_container_width=True)
     
@@ -58,7 +49,9 @@ def render(username: str, password: str):
         with st.spinner("🔎 Cargando datos de facturas..."):
             from .shared import get_inventario_data
             st.session_state.inventario_data = get_inventario_data(
-                username, password, anio, mes_desde, mes_hasta
+                username, password, 
+                fecha_desde.strftime('%Y-%m-%d'),
+                fecha_hasta.strftime('%Y-%m-%d')
             )
     
     data = st.session_state.inventario_data
@@ -94,20 +87,37 @@ def render(username: str, password: str):
         st.caption(f"Precio promedio: **${data.get('total_vendido_precio_promedio', 0):,.2f}/kg**")
     
     with col3:
-        merma_kg = data['total_comprado_kg'] - data['total_vendido_kg']
-        merma_pct = (merma_kg / data['total_comprado_kg'] * 100) if data['total_comprado_kg'] > 0 else 0
-        st.metric(
-            "Merma Estimada",
-            f"{merma_kg:,.0f} kg",
-            f"{merma_pct:.1f}%",
-            help="Diferencia entre comprado y vendido"
-        )
+        diferencia_kg = data['total_comprado_kg'] - data['total_vendido_kg']
+        
+        # Si la diferencia es positiva = tenemos inventario
+        # Si es negativa = vendimos más de lo que compramos (hay inventario inicial)
+        if diferencia_kg > 0:
+            st.metric(
+                "Inventario Final Teórico",
+                f"{diferencia_kg:,.0f} kg",
+                help="Stock que debería quedar (Comprado - Vendido)"
+            )
+            pct_sobre_compra = (diferencia_kg / data['total_comprado_kg'] * 100) if data['total_comprado_kg'] > 0 else 0
+            st.caption(f"**{pct_sobre_compra:.1f}%** del total comprado")
+        else:
+            st.metric(
+                "Inventario Inicial Usado",
+                f"{abs(diferencia_kg):,.0f} kg",
+                help="Vendimos más de lo comprado en el período (usamos inventario anterior)"
+            )
+            pct_sobre_venta = (abs(diferencia_kg) / data['total_vendido_kg'] * 100) if data['total_vendido_kg'] > 0 else 0
+            st.caption(f"**{pct_sobre_venta:.1f}%** de lo vendido vino de inventario previo")
     
     with col4:
+        # Calcular margen bruto (diferencia entre venta y compra en dinero)
+        margen_monto = data['total_vendido_monto'] - data['total_comprado_monto']
+        margen_pct = (margen_monto / data['total_vendido_monto'] * 100) if data['total_vendido_monto'] > 0 else 0
+        
         st.metric(
-            "Inventario Teórico",
-            f"{merma_kg:,.0f} kg",
-            help="Stock que debería quedar al final del periodo"
+            "Margen Bruto",
+            f"${margen_monto:,.0f}",
+            f"{margen_pct:.1f}%",
+            help="Diferencia entre ingresos por venta y costo de compra"
         )
     
     # Mostrar tabla detallada

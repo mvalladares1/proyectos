@@ -97,9 +97,8 @@ async def get_dashboard_completo(
 async def get_inventario_trazabilidad(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
-    anio: int = Query(..., description="Año a analizar"),
-    mes_desde: int = Query(1, description="Mes desde el que analizar (1-12)"),
-    mes_hasta: int = Query(..., description="Mes hasta el que analizar (1-12)")
+    fecha_desde: str = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(..., description="Fecha hasta (YYYY-MM-DD)")
 ):
     """
     Análisis de inventario: compras vs ventas por tipo de fruta y manejo.
@@ -108,7 +107,7 @@ async def get_inventario_trazabilidad(
     """
     try:
         service = RendimientoService(username=username, password=password)
-        return service.get_inventario_trazabilidad(anio, mes_hasta, mes_desde)
+        return service.get_inventario_trazabilidad(fecha_desde, fecha_hasta)
     except Exception as e:
         import traceback
         traceback.print_exc()
