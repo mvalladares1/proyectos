@@ -480,8 +480,14 @@ class TraceabilityService:
                 if pkg_id and pkg_id in connected_packages:
                     filtered_moves.append(ml)
             else:
-                # Proceso interno: incluir si el output está conectado
-                if result_id and result_id in connected_packages:
+                # Proceso interno: incluir si el input O output están conectados
+                # Necesitamos ambos tipos de movimientos para generar los links:
+                # - pkg_id conectado: genera link PALLET → PROCESS
+                # - result_id conectado: genera link PROCESS → PALLET
+                input_connected = pkg_id and pkg_id in connected_packages
+                output_connected = result_id and result_id in connected_packages
+                
+                if input_connected or output_connected:
                     filtered_moves.append(ml)
         
         return filtered_moves
