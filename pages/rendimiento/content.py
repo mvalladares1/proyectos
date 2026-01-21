@@ -613,7 +613,7 @@ def _render_sankey_plotly(sankey_data: dict):
         )
     ))
     
-    # Layout con soporte para pan/zoom
+    # Layout con soporte para interacción
     fig.update_layout(
         title={
             "text": "Trazabilidad Completa de Paquetes (Vista Temporal)",
@@ -626,27 +626,17 @@ def _render_sankey_plotly(sankey_data: dict):
         plot_bgcolor="rgba(240,240,240,0.5)",
         paper_bgcolor="white",
         margin=dict(l=80, r=40, t=60, b=40),
-        # Habilitar interacción
-        xaxis=dict(
-            showgrid=False, 
-            zeroline=False, 
-            showticklabels=False,
-            fixedrange=False  # Permitir zoom horizontal
-        ),
-        yaxis=dict(
-            showgrid=False, 
-            zeroline=False, 
-            showticklabels=False,
-            fixedrange=False  # Permitir zoom vertical
-        ),
+        dragmode="pan",  # Modo de arrastre por defecto
+        hovermode="closest"
     )
     
-    # Config con todas las herramientas de zoom/pan habilitadas
+    # Config con herramientas de zoom/pan - Sankey requiere configuración especial
     config = {
         "displayModeBar": True,
         "displaylogo": False,
         "scrollZoom": True,
-        "modeBarButtonsToRemove": [],
+        "doubleClick": "reset",
+        "modeBarButtonsToAdd": ["pan2d", "zoom2d", "zoomIn2d", "zoomOut2d", "resetScale2d"],
         "toImageButtonOptions": {
             "format": "png",
             "filename": "trazabilidad_sankey",
@@ -657,7 +647,7 @@ def _render_sankey_plotly(sankey_data: dict):
     }
     
     st.markdown("### 📊 Diagrama Sankey con Línea de Tiempo")
-    st.caption("⏱️ Flujo: izquierda → derecha (proveedor → venta) | 🖱️ Haz clic en los botones superiores para Pan/Zoom | 🔍 Scroll para zoom")
+    st.caption("⏱️ Flujo horizontal (izq→der) | Nodos ordenados verticalmente por fecha | 🖱️ Arrastra para mover | 🔍 Scroll para zoom | Doble-clic para resetear")
     
     st.plotly_chart(fig, use_container_width=True, config=config)
 
