@@ -458,6 +458,20 @@ class TraceabilityService:
         print(f"[TraceabilityService] Paquetes conectados: {len(connected_packages)}, de recepción: {len(connected_reception_packages)}")
         print(f"[TraceabilityService] Total paquetes de recepción encontrados: {len(reception_packages)}")
         
+        # Debug: mostrar algunos paquetes de cada set para comparar
+        connected_sample = list(connected_packages)[:10]
+        reception_sample = list(reception_packages)[:10]
+        print(f"[TraceabilityService] Muestra paquetes conectados: {connected_sample}")
+        print(f"[TraceabilityService] Muestra paquetes recepción: {reception_sample}")
+        
+        # Debug: buscar paquetes que no tienen inputs (son terminales hacia atrás)
+        terminal_packages = set()
+        for pkg in connected_packages:
+            if pkg not in output_to_inputs or not output_to_inputs[pkg]:
+                terminal_packages.add(pkg)
+        print(f"[TraceabilityService] Paquetes terminales (sin inputs): {len(terminal_packages)}")
+        print(f"[TraceabilityService] Muestra terminales: {list(terminal_packages)[:10]}")
+        
         # Filtrar movimientos: solo los que tienen paquetes conectados
         filtered_moves = []
         reception_moves_included = 0
