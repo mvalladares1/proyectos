@@ -152,15 +152,17 @@ class AnalisisStockTeoricoService:
     def _get_compras_por_tipo_manejo(self, fecha_desde: str, fecha_hasta: str) -> List[Dict]:
         """
         Obtiene compras agrupadas por tipo de fruta y manejo.
-        ACTUALIZADO: Usa product.template para obtener campos tipo/manejo (igual que recepciones).
+        ACTUALIZADO: Usa product.template + filtra por diario "Facturas Proveedores" + categoría producto.
         """
-        # Líneas de facturas de proveedor
+        # Líneas de facturas de proveedor - SOLO diario "Facturas Proveedores"
         lineas = self.odoo.search_read(
             'account.move.line',
             [
                 ['move_id.move_type', '=', 'in_invoice'],
                 ['move_id.state', '=', 'posted'],
+                ['move_id.journal_id.name', 'ilike', 'Facturas Proveedores'],
                 ['product_id', '!=', False],
+                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTO'],
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta],
                 ['quantity', '>', 0],
@@ -171,7 +173,7 @@ class AnalisisStockTeoricoService:
         )
         
         print(f"[DEBUG COMPRAS] Fecha: {fecha_desde} a {fecha_hasta}")
-        print(f"[DEBUG COMPRAS] Líneas encontradas: {len(lineas)}")
+        print(f"[DEBUG COMPRAS] Líneas encontradas (diario Facturas Proveedores): {len(lineas)}")
         
         if not lineas:
             return []
@@ -301,15 +303,17 @@ class AnalisisStockTeoricoService:
     def _get_ventas_por_tipo_manejo(self, fecha_desde: str, fecha_hasta: str) -> List[Dict]:
         """
         Obtiene ventas agrupadas por tipo de fruta y manejo.
-        ACTUALIZADO: Usa product.template para obtener campos tipo/manejo (igual que recepciones).
+        ACTUALIZADO: Usa product.template + filtra por diario "Facturas de Cliente" + categoría producto.
         """
-        # Líneas de facturas de cliente
+        # Líneas de facturas de cliente - SOLO diario "Facturas de Cliente"
         lineas = self.odoo.search_read(
             'account.move.line',
             [
                 ['move_id.move_type', '=', 'out_invoice'],
                 ['move_id.state', '=', 'posted'],
+                ['move_id.journal_id.name', 'ilike', 'Facturas de Cliente'],
                 ['product_id', '!=', False],
+                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTO'],
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta],
                 ['quantity', '>', 0],
@@ -320,7 +324,7 @@ class AnalisisStockTeoricoService:
         )
         
         print(f"[DEBUG VENTAS] Fecha: {fecha_desde} a {fecha_hasta}")
-        print(f"[DEBUG VENTAS] Líneas encontradas: {len(lineas)}")
+        print(f"[DEBUG VENTAS] Líneas encontradas (diario Facturas de Cliente): {len(lineas)}")
         
         if not lineas:
             return []
