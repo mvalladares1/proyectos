@@ -368,13 +368,15 @@ class TraceabilityService:
             return []
         
         # Construir grafo de conexiones: output -> inputs
-        # y también proceso -> (inputs, outputs)
         output_to_inputs = {}  # result_package_id -> set of package_ids
-        package_to_moves = {}  # package_id -> list of move_lines donde es input o output
+        package_to_moves = {}  # package_id -> list of move_lines
+        reception_packages = set()  # Paquetes que vienen de recepción (no tienen input)
         
         for ml in move_lines:
             pkg_rel = ml.get("package_id")
             result_rel = ml.get("result_package_id")
+            loc_id = ml.get("location_id")
+            loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
             
             pkg_id = None
             result_id = None
@@ -384,7 +386,11 @@ class TraceabilityService:
             if result_rel:
                 result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
             
-            # Mapear output -> inputs
+            # Detectar paquetes de recepción
+            if loc_id == self.PARTNER_VENDORS_LOCATION_ID and result_id:
+                reception_packages.add(result_id)
+            
+            # Mapear output -> inputs (solo si hay input)
             if result_id and pkg_id:
                 if result_id not in output_to_inputs:
                     output_to_inputs[result_id] = set()
@@ -446,10 +452,16 @@ class TraceabilityService:
                     connected_packages.add(input_pkg)
                     packages_to_check.append(input_pkg)
         
-        print(f"[TraceabilityService] Paquetes conectados: {len(connected_packages)}")
+        # Agregar paquetes de recepción que están conectados
+        # (son los que no tienen inputs pero están en la cadena)
+        connected_reception_packages = connected_packages & reception_packages
+        print(f"[TraceabilityService] Paquetes conectados: {len(connected_packages)}, de recepción: {len(connected_reception_packages)}")
+        print(f"[TraceabilityService] Total paquetes de recepción encontrados: {len(reception_packages)}")
         
         # Filtrar movimientos: solo los que tienen paquetes conectados
         filtered_moves = []
+        reception_moves_included = 0
+        
         for ml in move_lines:
             pkg_rel = ml.get("package_id")
             result_rel = ml.get("result_package_id")
@@ -462,7 +474,6 @@ class TraceabilityService:
             if result_rel:
                 result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
             
-            # Incluir si ambos (input y output) están conectados, o si es recepción/venta de paquete conectado
             loc_id = ml.get("location_id")
             loc_dest_id = ml.get("location_dest_id")
             loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
@@ -472,23 +483,24 @@ class TraceabilityService:
             is_sale = loc_dest_id == self.PARTNER_CUSTOMERS_LOCATION_ID
             
             if is_reception:
-                # Recepción: incluir si el result_package está conectado
-                if result_id and result_id in connected_packages:
+                # Recepción: incluir si el result_package O package está conectado
+                target_pkg = result_id or pkg_id
+                if target_pkg and target_pkg in connected_packages:
                     filtered_moves.append(ml)
+                    reception_moves_included += 1
             elif is_sale:
                 # Venta: incluir si el package está conectado
                 if pkg_id and pkg_id in connected_packages:
                     filtered_moves.append(ml)
             else:
                 # Proceso interno: incluir si el input O output están conectados
-                # Necesitamos ambos tipos de movimientos para generar los links:
-                # - pkg_id conectado: genera link PALLET → PROCESS
-                # - result_id conectado: genera link PROCESS → PALLET
                 input_connected = pkg_id and pkg_id in connected_packages
                 output_connected = result_id and result_id in connected_packages
                 
                 if input_connected or output_connected:
                     filtered_moves.append(ml)
+        
+        print(f"[TraceabilityService] Movimientos de recepción incluidos: {reception_moves_included}")
         
         return filtered_moves
 
