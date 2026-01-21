@@ -493,48 +493,138 @@ def _render_sankey(username: str, password: str):
 
 
 def _render_sankey_plotly(sankey_data: dict):
-    """Renderiza el diagrama Sankey con Plotly con controles de zoom y pan."""
-    # Calcular altura dinámica basada en cantidad de nodos
-    num_nodes = len(sankey_data.get("nodes", []))
-    min_height = 800
-    max_height = 2000
-    # Aumentar altura si hay muchos nodos
-    dynamic_height = min(max_height, max(min_height, num_nodes * 15))
+    """Renderiza el diagrama Sankey vertical con línea de tiempo en el fondo."""
+    nodes = sankey_data.get("nodes", [])
+    links = sankey_data.get("links", [])
     
-    # Crear figura Sankey con layout automático de Plotly
-    fig = go.Figure(data=[go.Sankey(
+    # Calcular altura dinámica basada en cantidad de nodos
+    num_nodes = len(nodes)
+    min_height = 1200
+    max_height = 2500
+    dynamic_height = min(max_height, max(min_height, num_nodes * 20))
+    
+    # Extraer fechas de los nodos para crear línea de tiempo
+    import re
+    from datetime import datetime
+    
+    node_dates = {}
+    timeline_levels = []
+    
+    for i, node in enumerate(nodes):
+        label = node.get("label", "")
+        detail = node.get("detail", "")
+        
+        # Buscar fecha en el detalle (formato: YYYY-MM-DD)
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', detail)
+        if date_match:
+            try:
+                date_obj = datetime.strptime(date_match.group(1), "%Y-%m-%d")
+                node_dates[i] = date_obj
+            except:
+                pass
+    
+    # Agrupar nodos por fecha para crear niveles de timeline
+    if node_dates:
+        sorted_dates = sorted(set(node_dates.values()))
+        date_to_level = {date: idx / (len(sorted_dates) - 1) if len(sorted_dates) > 1 else 0.5 
+                        for idx, date in enumerate(sorted_dates)}
+        timeline_levels = [{"date": date, "y": date_to_level[date]} for date in sorted_dates]
+    
+    # Asignar posiciones X e Y para orientación vertical
+    # X: distribuir horizontalmente según tipo de nodo
+    # Y: distribuir verticalmente según fecha (arriba = fechas antiguas, abajo = recientes)
+    node_x = []
+    node_y = []
+    
+    for i, node in enumerate(nodes):
+        label = node.get("label", "")
+        
+        # Distribuir X según tipo de nodo
+        if "Proveedor" in label or "Supplier" in label:
+            x = 0.1  # Proveedores a la izquierda
+        elif "Venta" in label or "Sale" in label or label.startswith("S"):
+            x = 0.9  # Ventas a la derecha
+        elif "PACK" in label or "PALLET" in label:
+            x = 0.5  # Paquetes al centro
+        else:
+            # Procesos distribuidos entre centro-izquierda
+            x = 0.3 + (i % 3) * 0.15
+        
+        # Distribuir Y según fecha (vertical timeline)
+        if i in node_dates:
+            y = date_to_level[node_dates[i]]
+        else:
+            # Sin fecha: distribuir equitativamente
+            y = i / max(num_nodes - 1, 1)
+        
+        node_x.append(x)
+        node_y.append(y)
+    
+    # Crear figura con orientación vertical
+    fig = go.Figure()
+    
+    # Agregar línea de tiempo en el fondo (si hay fechas)
+    if timeline_levels:
+        for level in timeline_levels:
+            fig.add_shape(
+                type="line",
+                x0=0, x1=1,
+                y0=level["y"], y1=level["y"],
+                line=dict(color="rgba(200,200,200,0.3)", width=1, dash="dot"),
+                layer="below"
+            )
+            fig.add_annotation(
+                x=-0.05, y=level["y"],
+                text=level["date"].strftime("%Y-%m-%d"),
+                showarrow=False,
+                font=dict(size=9, color="gray"),
+                xanchor="right"
+            )
+    
+    # Crear diagrama Sankey vertical
+    fig.add_trace(go.Sankey(
+        orientation="v",  # Orientación vertical
+        arrangement="snap",  # Mejor distribución automática
         node=dict(
-            pad=15,
-            thickness=20,
+            pad=20,
+            thickness=15,
             line=dict(color="black", width=0.5),
-            label=[n["label"] for n in sankey_data["nodes"]],
-            color=[n["color"] for n in sankey_data["nodes"]],
-            customdata=[str(n.get("detail", "")) for n in sankey_data["nodes"]],
+            label=[n["label"] for n in nodes],
+            color=[n["color"] for n in nodes],
+            x=node_x,  # Posición horizontal
+            y=node_y,  # Posición vertical (timeline)
+            customdata=[str(n.get("detail", "")) for n in nodes],
             hovertemplate="%{label}<br>%{customdata}<extra></extra>"
         ),
         link=dict(
-            source=[l["source"] for l in sankey_data["links"]],
-            target=[l["target"] for l in sankey_data["links"]],
-            value=[l["value"] for l in sankey_data["links"]],
-            color=[l.get("color", "rgba(200,200,200,0.35)") for l in sankey_data["links"]],
+            source=[l["source"] for l in links],
+            target=[l["target"] for l in links],
+            value=[l["value"] for l in links],
+            color=[l.get("color", "rgba(200,200,200,0.35)") for l in links],
         )
-    )])
+    ))
     
-    # Configurar layout con controles de zoom y pan
+    # Configurar layout para pantalla completa
     fig.update_layout(
-        title="Trazabilidad Completa de Paquetes",
+        title={
+            "text": "Trazabilidad Completa de Paquetes (Vista Temporal)",
+            "x": 0.5,
+            "xanchor": "center"
+        },
         height=dynamic_height,
         font=dict(size=10),
-        dragmode="pan",  # Habilitar pan (arrastre)
+        dragmode="pan",
         hovermode="closest",
-        # Configurar modebar con herramientas
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        margin=dict(l=100, r=50, t=80, b=50),
         modebar=dict(
             orientation="v",
             bgcolor="rgba(255,255,255,0.7)",
         )
     )
     
-    # Configurar opciones del gráfico para mejor interactividad
+    # Configurar opciones del gráfico
     config = {
         "displayModeBar": True,
         "displaylogo": False,
@@ -542,16 +632,16 @@ def _render_sankey_plotly(sankey_data: dict):
         "modeBarButtonsToRemove": [],
         "toImageButtonOptions": {
             "format": "png",
-            "filename": "trazabilidad_sankey",
+            "filename": "trazabilidad_sankey_vertical",
             "height": dynamic_height,
             "width": 1400,
             "scale": 2
         },
-        "scrollZoom": True,  # Habilitar zoom con scroll
+        "scrollZoom": True,
     }
     
-    st.markdown("### 📊 Diagrama Sankey")
-    st.caption("🖱️ Arrastra para mover | 🔍 Scroll para zoom | 📷 Botones superiores para más opciones")
+    st.markdown("### 📊 Diagrama Sankey Vertical con Línea de Tiempo")
+    st.caption("⏱️ Línea de tiempo: arriba = antiguo, abajo = reciente | 🖱️ Arrastra para mover | 🔍 Scroll para zoom")
     
     st.plotly_chart(fig, use_container_width=True, config=config)
 
