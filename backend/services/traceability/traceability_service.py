@@ -458,19 +458,12 @@ class TraceabilityService:
         print(f"[TraceabilityService] Paquetes conectados: {len(connected_packages)}, de recepción: {len(connected_reception_packages)}")
         print(f"[TraceabilityService] Total paquetes de recepción encontrados: {len(reception_packages)}")
         
-        # Debug: mostrar algunos paquetes de cada set para comparar
-        connected_sample = list(connected_packages)[:10]
-        reception_sample = list(reception_packages)[:10]
-        print(f"[TraceabilityService] Muestra paquetes conectados: {connected_sample}")
-        print(f"[TraceabilityService] Muestra paquetes recepción: {reception_sample}")
-        
         # Debug: buscar paquetes que no tienen inputs (son terminales hacia atrás)
         terminal_packages = set()
         for pkg in connected_packages:
             if pkg not in output_to_inputs or not output_to_inputs[pkg]:
                 terminal_packages.add(pkg)
         print(f"[TraceabilityService] Paquetes terminales (sin inputs): {len(terminal_packages)}")
-        print(f"[TraceabilityService] Muestra terminales: {list(terminal_packages)[:10]}")
         
         # Filtrar movimientos: solo los que tienen paquetes conectados
         filtered_moves = []
@@ -511,10 +504,17 @@ class TraceabilityService:
                 input_connected = pkg_id and pkg_id in connected_packages
                 output_connected = result_id and result_id in connected_packages
                 
-                if input_connected or output_connected:
+                # También incluir si es el movimiento de CREACIÓN de un paquete terminal
+                # (el paquete terminal aparece como result_package_id y no tiene pkg_id o pkg_id no está conectado)
+                is_terminal_creation = (result_id and result_id in terminal_packages and 
+                                        (not pkg_id or pkg_id not in connected_packages))
+                
+                if input_connected or output_connected or is_terminal_creation:
                     filtered_moves.append(ml)
+                    if is_terminal_creation and not (input_connected or output_connected):
+                        reception_moves_included += 1  # Contar como "recepción" para debug
         
-        print(f"[TraceabilityService] Movimientos de recepción incluidos: {reception_moves_included}")
+        print(f"[TraceabilityService] Movimientos de recepción/creación incluidos: {reception_moves_included}")
         
         return filtered_moves
 
