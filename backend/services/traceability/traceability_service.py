@@ -347,7 +347,49 @@ class TraceabilityService:
                 traceback.print_exc()
                 break
         
-        # PASO 3: Buscar movimientos de venta de los pallets OUT conectados
+        # PASO 3: Buscar movimientos de RECEPCIÓN de los paquetes conectados
+        # Los paquetes que vienen de recepción tienen location_id = PARTNER_VENDORS_LOCATION_ID
+        try:
+            # Obtener todos los paquetes que están en la cadena conectada
+            reception_package_ids = set()
+            for ml in all_move_lines:
+                pkg_rel = ml.get("package_id")
+                result_rel = ml.get("result_package_id")
+                
+                if pkg_rel:
+                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                    if pkg_id and (include_siblings or pkg_id in connected_packages):
+                        reception_package_ids.add(pkg_id)
+                
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id and (include_siblings or result_id in connected_packages):
+                        reception_package_ids.add(result_id)
+            
+            if reception_package_ids:
+                reception_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("result_package_id", "in", list(reception_package_ids)),
+                        ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=500,
+                    order="date asc"
+                )
+                
+                for ml in reception_moves:
+                    if ml["id"] not in processed_move_ids:
+                        all_move_lines.append(ml)
+                        processed_move_ids.add(ml["id"])
+                
+                print(f"[TraceabilityService] Encontrados {len(reception_moves)} movimientos de recepción")
+        except Exception as e:
+            print(f"[TraceabilityService] Error buscando recepciones: {e}")
+        
+        # PASO 4: Buscar movimientos de venta de los pallets OUT conectados
         try:
             # Solo buscar ventas de paquetes que están en mi cadena conectada
             out_package_ids = set()
