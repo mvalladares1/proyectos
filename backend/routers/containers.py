@@ -211,6 +211,23 @@ async def get_traceability_by_identifier_visjs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/traceability/by-identifier/sankey")
+async def get_traceability_by_identifier_sankey(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    identifier: str = Query(..., description="Venta (ej: S00574) o Paquete"),
+):
+    """
+    Obtiene trazabilidad por identificador transformada a formato Sankey (Plotly).
+    """
+    try:
+        service = TraceabilityService(username=username, password=password)
+        data = service.get_traceability_by_identifier(identifier=identifier)
+        return transform_to_sankey(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============ FIN ENDPOINTS DE TRAZABILIDAD ============
 
 

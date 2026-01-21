@@ -171,19 +171,25 @@ def get_traceability_by_identifier(
     username: str,
     password: str,
     identifier: str,
+    output_format: str = "visjs"
 ):
-    """Obtiene datos de trazabilidad por identificador (venta o paquete)."""
+    """
+    Obtiene datos de trazabilidad por identificador (venta o paquete).
+    
+    Args:
+        username: Usuario Odoo
+        password: API Key Odoo
+        identifier: Venta (ej: S00574) o Paquete (ej: PACK0014448)
+        output_format: 'visjs' (network) o 'sankey'
+    """
     try:
         params = {
             "username": username,
             "password": password,
             "identifier": identifier,
         }
-        resp = requests.get(
-            f"{API_URL}/api/v1/containers/traceability/by-identifier/visjs",
-            params=params,
-            timeout=120
-        )
+        endpoint = f"{API_URL}/api/v1/containers/traceability/by-identifier/{output_format}"
+        resp = requests.get(endpoint, params=params, timeout=120)
         if resp.status_code == 200:
             return resp.json()
         return None
