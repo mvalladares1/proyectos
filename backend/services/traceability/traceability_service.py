@@ -102,15 +102,7 @@ class TraceabilityService:
             return self._empty_result()
     
     def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
-        """Busca trazabilidad de un paquete específico por nombre."""
-        virtual_ids = self._get_virtual_location_ids()
-        
-        fields = [
-            "id", "reference", "package_id", "result_package_id",
-            "lot_id", "qty_done", "product_id", "location_id", 
-            "location_dest_id", "date", "picking_id"
-        ]
-        
+        """Busca trazabilidad de un paquete específico por nombre hacia ATRÁS."""
         try:
             # Primero buscar el ID del paquete en stock.quant.package
             packages = self.odoo.search_read(
@@ -130,75 +122,10 @@ class TraceabilityService:
             
             package_ids = [p["id"] for p in packages]
             
-            # Buscar movimientos con esos package_ids
-            move_lines = self.odoo.search_read(
-                "stock.move.line",
-                [
-                    "|",
-                    ("package_id", "in", package_ids),
-                    ("result_package_id", "in", package_ids),
-                    ("qty_done", ">", 0),
-                    ("state", "=", "done"),
-                ],
-                fields,
-                limit=limit,
-                order="date asc"
-            )
+            print(f"[TraceabilityService] Paquete {package_name}: {len(package_ids)} IDs encontrados")
             
-            print(f"[TraceabilityService] stock.move.line: {len(move_lines)} movimientos encontrados")
-            
-            if not move_lines:
-                print(f"[TraceabilityService] No se encontraron movimientos para: {package_name}")
-                return self._empty_result()
-            
-            # Extraer todos los package_ids relacionados para trazabilidad completa
-            related_package_ids = set(package_ids)
-            for ml in move_lines:
-                pkg_rel = ml.get("package_id")
-                result_rel = ml.get("result_package_id")
-                
-                if pkg_rel:
-                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                    if pkg_id:
-                        related_package_ids.add(pkg_id)
-                
-                if result_rel:
-                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                    if result_id:
-                        related_package_ids.add(result_id)
-            
-            print(f"[TraceabilityService] Paquetes relacionados: {len(related_package_ids)}")
-            
-            # Buscar TODA la historia de los paquetes relacionados
-            if len(related_package_ids) > len(package_ids):
-                all_move_lines = self.odoo.search_read(
-                    "stock.move.line",
-                    [
-                        "|",
-                        ("package_id", "in", list(related_package_ids)),
-                        ("result_package_id", "in", list(related_package_ids)),
-                        ("qty_done", ">", 0),
-                        ("state", "=", "done"),
-                    ],
-                    fields,
-                    limit=limit * 2,
-                    order="date asc"
-                )
-                print(f"[TraceabilityService] Historia completa: {len(all_move_lines)} movimientos")
-                move_lines = all_move_lines
-            
-            # Procesar movimientos
-            result = self._process_move_lines(move_lines, virtual_ids)
-            result["move_lines"] = move_lines
-            
-            # Resolver proveedores y clientes
-            self._resolve_partners(result)
-            
-            # Enriquecer con fechas
-            self._enrich_with_pallet_dates(result)
-            self._enrich_with_mrp_dates(result)
-            
-            return result
+            # Usar la misma lógica recursiva hacia ATRÁS que con las ventas
+            return self._get_traceability_for_packages(package_ids, limit)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
