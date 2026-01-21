@@ -206,8 +206,17 @@ class TraceabilityService:
             traceback.print_exc()
             return self._empty_result()
     
-    def _get_traceability_for_packages(self, package_ids: List[int], limit: int) -> Dict:
-        """Obtiene la trazabilidad completa siguiendo referencias de procesos recursivamente."""
+    def _get_traceability_for_packages(self, initial_package_ids: List[int], limit: int) -> Dict:
+        """
+        Trazabilidad hacia ATRÁS desde los paquetes iniciales.
+        
+        Lógica:
+        1. Tomo los pallets iniciales (de la venta)
+        2. Busco de qué proceso salieron (donde son result_package_id)
+        3. Obtengo TODO el proceso (todas sus entradas y salidas)
+        4. Las ENTRADAS del proceso son SALIDAS de procesos anteriores
+        5. Repito hasta llegar a recepciones (location_id = 4)
+        """
         virtual_ids = self._get_virtual_location_ids()
         
         fields = [
@@ -216,120 +225,135 @@ class TraceabilityService:
             "location_dest_id", "date", "picking_id"
         ]
         
-        # Sets para control de expansión
-        all_package_ids = set(package_ids)
-        all_references = set()
-        processed_packages = set()
-        processed_references = set()
+        # Control de expansión
         all_move_lines = []
+        processed_move_ids = set()
+        processed_references = set()
+        
+        # Cola de paquetes a trazabilizar (solo los que necesitamos seguir hacia atrás)
+        packages_to_trace = set(initial_package_ids)
+        traced_packages = set()
         
         max_iterations = 50
         iteration = 0
         
-        print(f"[TraceabilityService] Iniciando trazabilidad recursiva desde {len(all_package_ids)} paquetes")
+        print(f"[TraceabilityService] Iniciando trazabilidad hacia ATRÁS desde {len(packages_to_trace)} paquetes")
         
-        while iteration < max_iterations:
+        while packages_to_trace and iteration < max_iterations:
             iteration += 1
             
-            # PASO 1: Procesar paquetes pendientes
-            pending_packages = list(all_package_ids - processed_packages)
-            if pending_packages:
-                print(f"[TraceabilityService] Iteración {iteration}.1: procesando {len(pending_packages)} paquetes")
+            # Tomar paquetes pendientes
+            current_packages = list(packages_to_trace - traced_packages)
+            if not current_packages:
+                break
                 
-                try:
-                    move_lines = self.odoo.search_read(
+            print(f"[TraceabilityService] Iteración {iteration}: {len(current_packages)} paquetes a procesar")
+            
+            # PASO 1: Buscar dónde estos paquetes son SALIDA (result_package_id)
+            # Esto nos dice de qué proceso salieron
+            try:
+                out_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("result_package_id", "in", current_packages),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=limit,
+                    order="date asc"
+                )
+                
+                # Recopilar referencias (procesos) de donde salieron
+                new_references = set()
+                for ml in out_moves:
+                    if ml["id"] not in processed_move_ids:
+                        all_move_lines.append(ml)
+                        processed_move_ids.add(ml["id"])
+                    
+                    ref = ml.get("reference")
+                    if ref and ref not in processed_references:
+                        new_references.add(ref)
+                
+                print(f"[TraceabilityService] Encontradas {len(new_references)} referencias (procesos) nuevas")
+                
+                # PASO 2: Para cada proceso, obtener TODOS sus movimientos
+                for ref in new_references:
+                    ref_moves = self.odoo.search_read(
                         "stock.move.line",
                         [
-                            "|",
-                            ("package_id", "in", pending_packages),
-                            ("result_package_id", "in", pending_packages),
+                            ("reference", "=", ref),
                             ("qty_done", ">", 0),
                             ("state", "=", "done"),
                         ],
                         fields,
-                        limit=limit,
+                        limit=500,
                         order="date asc"
                     )
                     
-                    print(f"[TraceabilityService] Encontrados {len(move_lines)} movimientos de paquetes")
-                    all_move_lines.extend(move_lines)
-                    
-                    # Extraer referencias y paquetes de estos movimientos
-                    for ml in move_lines:
-                        ref = ml.get("reference")
-                        if ref:
-                            all_references.add(ref)
+                    for ml in ref_moves:
+                        if ml["id"] not in processed_move_ids:
+                            all_move_lines.append(ml)
+                            processed_move_ids.add(ml["id"])
                         
+                        # Las ENTRADAS (package_id) de este proceso son las que debemos seguir
+                        # hacia atrás (son SALIDAS de procesos anteriores)
                         pkg_rel = ml.get("package_id")
-                        result_rel = ml.get("result_package_id")
+                        loc_id = ml.get("location_id")
+                        loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
                         
                         if pkg_rel:
                             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                            if pkg_id:
-                                all_package_ids.add(pkg_id)
-                        
-                        if result_rel:
-                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                            if result_id:
-                                all_package_ids.add(result_id)
+                            # Solo seguir si NO es recepción (location_id != 4)
+                            if pkg_id and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                                packages_to_trace.add(pkg_id)
                     
-                    processed_packages.update(pending_packages)
-                    
-                except Exception as e:
-                    print(f"[TraceabilityService] Error procesando paquetes: {e}")
-            
-            # PASO 2: Procesar referencias pendientes
-            pending_references = list(all_references - processed_references)
-            if pending_references:
-                print(f"[TraceabilityService] Iteración {iteration}.2: procesando {len(pending_references)} referencias")
+                    processed_references.add(ref)
                 
-                try:
-                    # Buscar TODOS los movimientos de estas referencias
-                    ref_move_lines = self.odoo.search_read(
-                        "stock.move.line",
-                        [
-                            ("reference", "in", pending_references),
-                            ("qty_done", ">", 0),
-                            ("state", "=", "done"),
-                        ],
-                        fields,
-                        limit=limit,
-                        order="date asc"
-                    )
-                    
-                    print(f"[TraceabilityService] Encontrados {len(ref_move_lines)} movimientos de referencias")
-                    
-                    # Evitar duplicados
-                    existing_ids = {ml["id"] for ml in all_move_lines}
-                    new_move_lines = [ml for ml in ref_move_lines if ml["id"] not in existing_ids]
-                    all_move_lines.extend(new_move_lines)
-                    
-                    # Extraer paquetes de estos movimientos
-                    for ml in new_move_lines:
-                        pkg_rel = ml.get("package_id")
-                        result_rel = ml.get("result_package_id")
-                        
-                        if pkg_rel:
-                            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                            if pkg_id:
-                                all_package_ids.add(pkg_id)
-                        
-                        if result_rel:
-                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                            if result_id:
-                                all_package_ids.add(result_id)
-                    
-                    processed_references.update(pending_references)
-                    
-                except Exception as e:
-                    print(f"[TraceabilityService] Error procesando referencias: {e}")
-            
-            # Si no hay más paquetes ni referencias por procesar, terminar
-            if not (all_package_ids - processed_packages) and not (all_references - processed_references):
-                print(f"[TraceabilityService] No hay más elementos por procesar, finalizando")
+                # Marcar paquetes actuales como procesados
+                traced_packages.update(current_packages)
+                
+            except Exception as e:
+                print(f"[TraceabilityService] Error en iteración {iteration}: {e}")
+                import traceback
+                traceback.print_exc()
                 break
         
-        print(f"[TraceabilityService] Expansión completa: {len(all_package_ids)} paquetes, {len(all_references)} referencias, {len(all_move_lines)} movimientos")
+        # PASO 3: Buscar movimientos de venta de los pallets OUT
+        # (donde location_dest_id = 5, Partners/Customers)
+        try:
+            out_package_ids = set()
+            for ml in all_move_lines:
+                result_rel = ml.get("result_package_id")
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        out_package_ids.add(result_id)
+            
+            if out_package_ids:
+                sale_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("package_id", "in", list(out_package_ids)),
+                        ("location_dest_id", "=", self.PARTNER_CUSTOMERS_LOCATION_ID),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=500,
+                    order="date asc"
+                )
+                
+                for ml in sale_moves:
+                    if ml["id"] not in processed_move_ids:
+                        all_move_lines.append(ml)
+                        processed_move_ids.add(ml["id"])
+                
+                print(f"[TraceabilityService] Encontrados {len(sale_moves)} movimientos de venta")
+        except Exception as e:
+            print(f"[TraceabilityService] Error buscando ventas: {e}")
+        
+        print(f"[TraceabilityService] Total: {len(all_move_lines)} movimientos, {len(processed_references)} procesos")
         
         if not all_move_lines:
             return self._empty_result()
