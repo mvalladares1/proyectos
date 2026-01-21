@@ -19,7 +19,8 @@ class TraceabilityService:
     def get_traceability_by_identifier(
         self,
         identifier: str,
-        limit: int = 10000
+        limit: int = 10000,
+        include_siblings: bool = True
     ) -> Dict:
         """
         Obtiene trazabilidad completa por identificador (venta o paquete).
@@ -28,6 +29,8 @@ class TraceabilityService:
             identifier: Puede ser:
                 - Código de venta (ej: S00574) → busca todos los pallets de esa venta
                 - Nombre de paquete → busca ese paquete específico
+            include_siblings: Si True, incluye pallets hermanos del mismo proceso.
+                             Si False, solo sigue la cadena conectada directa.
         
         Returns:
             Dict con estructura similar a get_traceability_data
@@ -36,11 +39,11 @@ class TraceabilityService:
         is_sale = identifier.startswith("S") and identifier[1:].isdigit() if len(identifier) > 1 else False
         
         if is_sale:
-            return self._get_traceability_by_sale(identifier, limit)
+            return self._get_traceability_by_sale(identifier, limit, include_siblings)
         else:
-            return self._get_traceability_by_package(identifier, limit)
+            return self._get_traceability_by_package(identifier, limit, include_siblings)
     
-    def _get_traceability_by_sale(self, sale_origin: str, limit: int) -> Dict:
+    def _get_traceability_by_sale(self, sale_origin: str, limit: int, include_siblings: bool = True) -> Dict:
         """Busca trazabilidad desde una venta específica."""
         try:
             # Buscar pickings de esa venta
@@ -94,14 +97,14 @@ class TraceabilityService:
             
             print(f"[TraceabilityService] Venta {sale_origin}: {len(package_ids)} paquetes encontrados")
             
-            # Buscar toda la historia de esos paquetes
-            return self._get_traceability_for_packages(list(package_ids), limit)
+            # Buscar toda la historia de esos paquetes según el modo seleccionado
+            return self._get_traceability_for_packages(list(package_ids), limit, include_siblings=include_siblings)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por venta: {e}")
             return self._empty_result()
     
-    def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
+    def _get_traceability_by_package(self, package_name: str, limit: int, include_siblings: bool = False) -> Dict:
         """Busca trazabilidad de un paquete específico por nombre hacia ATRÁS."""
         try:
             # Primero buscar el ID del paquete en stock.quant.package
@@ -124,8 +127,8 @@ class TraceabilityService:
             
             print(f"[TraceabilityService] Paquete {package_name}: {len(package_ids)} IDs encontrados")
             
-            # Usar la misma lógica recursiva hacia ATRÁS que con las ventas
-            return self._get_traceability_for_packages(package_ids, limit)
+            # Buscar hacia ATRÁS según el modo seleccionado
+            return self._get_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
@@ -133,14 +136,26 @@ class TraceabilityService:
             traceback.print_exc()
             return self._empty_result()
     
-    def _get_traceability_for_packages(self, initial_package_ids: List[int], limit: int) -> Dict:
+    def _get_traceability_for_packages(
+        self, 
+        initial_package_ids: List[int], 
+        limit: int,
+        include_siblings: bool = True
+    ) -> Dict:
         """
         Trazabilidad hacia ATRÁS desde los paquetes iniciales.
         
+        Args:
+            initial_package_ids: IDs de paquetes iniciales
+            limit: Límite de registros por query
+            include_siblings: Si es True (ventas), trae todos los movimientos del proceso.
+                             Si es False (pallets), solo trae la cadena conectada directa.
+        
         Lógica:
-        1. Tomo los pallets iniciales (de la venta)
+        1. Tomo los pallets iniciales
         2. Busco de qué proceso salieron (donde son result_package_id)
-        3. Obtengo TODO el proceso (todas sus entradas y salidas)
+        3. Si include_siblings=True: Obtengo TODO el proceso
+           Si include_siblings=False: Solo obtengo movimientos conectados directamente
         4. Las ENTRADAS del proceso son SALIDAS de procesos anteriores
         5. Repito hasta llegar a recepciones (location_id = 4)
         """
@@ -164,7 +179,8 @@ class TraceabilityService:
         max_iterations = 50
         iteration = 0
         
-        print(f"[TraceabilityService] Iniciando trazabilidad hacia ATRÁS desde {len(packages_to_trace)} paquetes")
+        mode_msg = "CON hermanos" if include_siblings else "SIN hermanos (solo cadena directa)"
+        print(f"[TraceabilityService] Iniciando trazabilidad hacia ATRÁS {mode_msg} desde {len(packages_to_trace)} paquetes")
         
         while packages_to_trace and iteration < max_iterations:
             iteration += 1
@@ -204,19 +220,64 @@ class TraceabilityService:
                 
                 print(f"[TraceabilityService] Encontradas {len(new_references)} referencias (procesos) nuevas")
                 
-                # PASO 2: Para cada proceso, obtener TODOS sus movimientos
+                # PASO 2: Para cada proceso, obtener movimientos según el modo
                 for ref in new_references:
-                    ref_moves = self.odoo.search_read(
-                        "stock.move.line",
-                        [
-                            ("reference", "=", ref),
-                            ("qty_done", ">", 0),
-                            ("state", "=", "done"),
-                        ],
-                        fields,
-                        limit=500,
-                        order="date asc"
-                    )
+                    if include_siblings:
+                        # MODO VENTA: Traer TODOS los movimientos del proceso (con hermanos)
+                        ref_moves = self.odoo.search_read(
+                            "stock.move.line",
+                            [
+                                ("reference", "=", ref),
+                                ("qty_done", ">", 0),
+                                ("state", "=", "done"),
+                            ],
+                            fields,
+                            limit=500,
+                            order="date asc"
+                        )
+                    else:
+                        # MODO PALLET: Solo traer movimientos conectados directamente
+                        # Primero obtener los inputs de mis paquetes actuales en este proceso
+                        input_moves = self.odoo.search_read(
+                            "stock.move.line",
+                            [
+                                ("reference", "=", ref),
+                                ("result_package_id", "in", current_packages),
+                                ("qty_done", ">", 0),
+                                ("state", "=", "done"),
+                            ],
+                            fields,
+                            limit=500,
+                            order="date asc"
+                        )
+                        
+                        # Extraer los package_id (inputs) de estos movimientos específicos
+                        input_package_ids = set()
+                        for ml in input_moves:
+                            pkg_rel = ml.get("package_id")
+                            if pkg_rel:
+                                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                                if pkg_id:
+                                    input_package_ids.add(pkg_id)
+                        
+                        # Ahora buscar SOLO los movimientos que involucran esos inputs
+                        if input_package_ids:
+                            ref_moves = self.odoo.search_read(
+                                "stock.move.line",
+                                [
+                                    ("reference", "=", ref),
+                                    "|",
+                                    ("package_id", "in", list(input_package_ids)),
+                                    ("result_package_id", "in", list(input_package_ids)),
+                                    ("qty_done", ">", 0),
+                                    ("state", "=", "done"),
+                                ],
+                                fields,
+                                limit=500,
+                                order="date asc"
+                            )
+                        else:
+                            ref_moves = input_moves
                     
                     for ml in ref_moves:
                         if ml["id"] not in processed_move_ids:

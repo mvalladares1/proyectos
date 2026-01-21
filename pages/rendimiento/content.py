@@ -357,12 +357,22 @@ def _render_sankey(username: str, password: str):
         identifier = None
     else:
         st.markdown("### 🔖 Buscar por Identificador")
-        identifier = st.text_input(
-            "Ingresa el código",
-            placeholder="Ej: S00574 (venta) o nombre de paquete",
-            key="identifier_input",
-            help="Si empieza con 'S' + números, buscará la venta. Si no, buscará el paquete específico."
-        )
+        col_id, col_mode = st.columns([3, 2])
+        with col_id:
+            identifier = st.text_input(
+                "Ingresa el código",
+                placeholder="Ej: S00574 (venta) o nombre de paquete",
+                key="identifier_input",
+                help="Si empieza con 'S' + números, buscará la venta. Si no, buscará el paquete específico."
+            )
+        with col_mode:
+            connection_mode = st.selectbox(
+                "Modo de conexión",
+                ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
+                key="connection_mode",
+                help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+            )
+        include_siblings = connection_mode == "🌐 Todos (con hermanos)"
         st.caption("💡 **Ejemplos:** `S00574` (busca venta) | `PALLET-001` (busca paquete)")
         fecha_inicio = None
         fecha_fin = None
@@ -428,7 +438,7 @@ def _render_sankey(username: str, password: str):
             else:  # Por identificador
                 # Determinar el formato de salida según el tipo de diagrama
                 if diagram_type == "📈 Sankey (Plotly)":
-                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey")
+                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
                         st.session_state.diagram_data = None
@@ -437,7 +447,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "sankey"
                 
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
-                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs")
+                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
                         st.session_state.diagram_data = None
@@ -452,6 +462,7 @@ def _render_sankey(username: str, password: str):
                             "username": username,
                             "password": password,
                             "identifier": identifier.strip(),
+                            "include_siblings": str(include_siblings).lower(),
                         }
                         import requests, os
                         API_URL = os.getenv("API_URL", "http://127.0.0.1:8002")

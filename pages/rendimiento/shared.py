@@ -171,7 +171,8 @@ def get_traceability_by_identifier(
     username: str,
     password: str,
     identifier: str,
-    output_format: str = "visjs"
+    output_format: str = "visjs",
+    include_siblings: bool = True
 ):
     """
     Obtiene datos de trazabilidad por identificador (venta o paquete).
@@ -181,12 +182,14 @@ def get_traceability_by_identifier(
         password: API Key Odoo
         identifier: Venta (ej: S00574) o Paquete (ej: PACK0014448)
         output_format: 'visjs' (network) o 'sankey'
+        include_siblings: True = todos los pallets del proceso, False = solo cadena directa
     """
     try:
         params = {
             "username": username,
             "password": password,
             "identifier": identifier,
+            "include_siblings": str(include_siblings).lower(),
         }
         endpoint = f"{API_URL}/api/v1/containers/traceability/by-identifier/{output_format}"
         resp = requests.get(endpoint, params=params, timeout=120)
