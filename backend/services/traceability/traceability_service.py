@@ -150,12 +150,10 @@ class TraceabilityService:
             limit: Límite de registros por query
             include_siblings: 
                 - True: Trae TODOS los movimientos de cada proceso (todos los hermanos)
-                - False: "Conexión directa" - En nivel 0 trae hermanos de salida,
-                         pero hacia atrás solo la cadena conectada
+                - False: "Conexión directa" - Trae todo pero filtra para mostrar solo la cadena conectada
         
-        Lógica "Conexión directa" (include_siblings=False):
-        - Nivel 0: Del proceso de mi pallet, traigo TODOS outputs (hermanos) y TODOS inputs
-        - Niveles -1, -2, etc: Solo traigo el output que conecta, pero TODOS los inputs
+        Estrategia: Siempre recopilamos TODOS los datos (como "Todos"), 
+        y luego si include_siblings=False, filtramos para quedarnos solo con la cadena conectada.
         """
         virtual_ids = self._get_virtual_location_ids()
         
@@ -170,32 +168,30 @@ class TraceabilityService:
         processed_move_ids = set()
         processed_references = set()
         
-        # Set de paquetes que están en mi cadena de conexión
-        connected_packages = set(initial_package_ids)
-        
         # Cola de paquetes a trazabilizar
         packages_to_trace = set(initial_package_ids)
         traced_packages = set()
         
         max_iterations = 50
         iteration = 0
-        is_first_level = True  # Flag para el primer nivel
         
         mode_msg = "CON todos los hermanos" if include_siblings else "Conexión directa"
         print(f"[TraceabilityService] Iniciando trazabilidad hacia ATRÁS ({mode_msg}) desde {len(packages_to_trace)} paquetes")
         
+        # =====================================================
+        # FASE 1: Recopilar TODOS los movimientos (como "Todos")
+        # =====================================================
         while packages_to_trace and iteration < max_iterations:
             iteration += 1
             
-            # Tomar paquetes pendientes
             current_packages = list(packages_to_trace - traced_packages)
             if not current_packages:
                 break
                 
             print(f"[TraceabilityService] Iteración {iteration}: {len(current_packages)} paquetes a procesar")
             
-            # PASO 1: Buscar dónde estos paquetes son SALIDA (result_package_id)
             try:
+                # Buscar dónde estos paquetes son SALIDA (result_package_id)
                 out_moves = self.odoo.search_read(
                     "stock.move.line",
                     [
@@ -208,7 +204,7 @@ class TraceabilityService:
                     order="date asc"
                 )
                 
-                # Guardar movimientos y recopilar referencias
+                # Recopilar referencias
                 new_references = set()
                 for ml in out_moves:
                     if ml["id"] not in processed_move_ids:
@@ -219,11 +215,8 @@ class TraceabilityService:
                     if ref and ref not in processed_references:
                         new_references.add(ref)
                 
-                print(f"[TraceabilityService] Encontradas {len(new_references)} referencias (procesos) nuevas")
-                
-                # PASO 2: Para cada proceso, obtener movimientos
+                # Para cada proceso, obtener TODOS los movimientos
                 for ref in new_references:
-                    # Obtener TODOS los movimientos del proceso
                     ref_moves = self.odoo.search_read(
                         "stock.move.line",
                         [
@@ -236,91 +229,7 @@ class TraceabilityService:
                         order="date asc"
                     )
                     
-                    # Identificar qué paquetes son INPUTS y cuáles OUTPUTS en este proceso
-                    process_inputs = set()
-                    process_outputs = set()
-                    
                     for ml in ref_moves:
-                        pkg_rel = ml.get("package_id")
-                        result_rel = ml.get("result_package_id")
-                        
-                        if pkg_rel:
-                            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                            if pkg_id:
-                                process_inputs.add(pkg_id)
-                        
-                        if result_rel:
-                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                            if result_id:
-                                process_outputs.add(result_id)
-                    
-                    # Decidir qué movimientos incluir según el modo
-                    if include_siblings:
-                        # MODO "TODOS": Incluir todos los movimientos del proceso
-                        moves_to_include = ref_moves
-                        # Agregar TODOS los outputs a la cadena conectada
-                        connected_packages.update(process_outputs)
-                    else:
-                        # MODO "CONEXIÓN DIRECTA"
-                        # Los outputs conectados son los que estamos buscando en esta iteración
-                        # (los que están en current_packages O en connected_packages)
-                        current_packages_set = set(current_packages)
-                        connected_outputs_in_process = process_outputs & (connected_packages | current_packages_set)
-                        
-                        if is_first_level:
-                            # Primer nivel: traer TODOS los outputs (hermanos) y TODOS los inputs
-                            moves_to_include = ref_moves
-                            # Agregar todos los outputs Y todos los inputs del primer nivel
-                            connected_packages.update(process_outputs)
-                            connected_packages.update(process_inputs)
-                        else:
-                            # Niveles posteriores: solo movimientos donde el output está conectado
-                            # pero traer TODOS los inputs de esos outputs
-                            moves_to_include = []
-                            
-                            # Primero identificar qué inputs alimentan los outputs conectados
-                            inputs_for_connected_outputs = set()
-                            for ml in ref_moves:
-                                result_rel = ml.get("result_package_id")
-                                pkg_rel = ml.get("package_id")
-                                
-                                result_id = None
-                                pkg_id = None
-                                
-                                if result_rel:
-                                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                                if pkg_rel:
-                                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                                
-                                # Si el output está conectado, el input también lo está
-                                if result_id and result_id in connected_outputs_in_process:
-                                    if pkg_id:
-                                        inputs_for_connected_outputs.add(pkg_id)
-                            
-                            # Agregar outputs conectados e inputs a la cadena conectada
-                            connected_packages.update(connected_outputs_in_process)
-                            connected_packages.update(inputs_for_connected_outputs)
-                            
-                            # Incluir movimientos donde output O input están conectados
-                            for ml in ref_moves:
-                                result_rel = ml.get("result_package_id")
-                                pkg_rel = ml.get("package_id")
-                                
-                                result_id = None
-                                pkg_id = None
-                                
-                                if result_rel:
-                                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                                if pkg_rel:
-                                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                                
-                                # Incluir si output está conectado O si input está conectado
-                                if (result_id and result_id in connected_packages) or \
-                                   (pkg_id and pkg_id in connected_packages):
-                                    moves_to_include.append(ml)
-                    
-                    # Agregar movimientos filtrados
-                    for ml in moves_to_include:
                         if ml["id"] not in processed_move_ids:
                             all_move_lines.append(ml)
                             processed_move_ids.add(ml["id"])
@@ -333,16 +242,11 @@ class TraceabilityService:
                         if pkg_rel:
                             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                             if pkg_id and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
-                                # En modo "conexión directa", solo seguir paquetes conectados
-                                # En modo "todos", seguir todos
-                                if include_siblings or pkg_id in connected_packages:
-                                    packages_to_trace.add(pkg_id)
+                                packages_to_trace.add(pkg_id)
                     
                     processed_references.add(ref)
                 
-                # Marcar paquetes actuales como procesados
                 traced_packages.update(current_packages)
-                is_first_level = False  # Ya no es el primer nivel
                 
             except Exception as e:
                 print(f"[TraceabilityService] Error en iteración {iteration}: {e}")
@@ -350,30 +254,28 @@ class TraceabilityService:
                 traceback.print_exc()
                 break
         
-        # PASO 3: Buscar movimientos de RECEPCIÓN de los paquetes conectados
-        # Los paquetes que vienen de recepción tienen location_id = PARTNER_VENDORS_LOCATION_ID
+        # Buscar movimientos de RECEPCIÓN
         try:
-            # Obtener todos los paquetes que están en la cadena conectada
-            reception_package_ids = set()
+            all_package_ids = set()
             for ml in all_move_lines:
                 pkg_rel = ml.get("package_id")
                 result_rel = ml.get("result_package_id")
                 
                 if pkg_rel:
                     pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                    if pkg_id and (include_siblings or pkg_id in connected_packages):
-                        reception_package_ids.add(pkg_id)
+                    if pkg_id:
+                        all_package_ids.add(pkg_id)
                 
                 if result_rel:
                     result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                    if result_id and (include_siblings or result_id in connected_packages):
-                        reception_package_ids.add(result_id)
+                    if result_id:
+                        all_package_ids.add(result_id)
             
-            if reception_package_ids:
+            if all_package_ids:
                 reception_moves = self.odoo.search_read(
                     "stock.move.line",
                     [
-                        ("result_package_id", "in", list(reception_package_ids)),
+                        ("result_package_id", "in", list(all_package_ids)),
                         ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
@@ -392,15 +294,14 @@ class TraceabilityService:
         except Exception as e:
             print(f"[TraceabilityService] Error buscando recepciones: {e}")
         
-        # PASO 4: Buscar movimientos de venta de los pallets OUT conectados
+        # Buscar movimientos de VENTA
         try:
-            # Solo buscar ventas de paquetes que están en mi cadena conectada
             out_package_ids = set()
             for ml in all_move_lines:
                 result_rel = ml.get("result_package_id")
                 if result_rel:
                     result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                    if result_id and (include_siblings or result_id in connected_packages):
+                    if result_id:
                         out_package_ids.add(result_id)
             
             if out_package_ids:
@@ -426,7 +327,14 @@ class TraceabilityService:
         except Exception as e:
             print(f"[TraceabilityService] Error buscando ventas: {e}")
         
-        print(f"[TraceabilityService] Total: {len(all_move_lines)} movimientos, {len(processed_references)} procesos, {len(connected_packages)} paquetes conectados")
+        print(f"[TraceabilityService] Total ANTES de filtrar: {len(all_move_lines)} movimientos")
+        
+        # =====================================================
+        # FASE 2: Si include_siblings=False, filtrar para conexión directa
+        # =====================================================
+        if not include_siblings:
+            all_move_lines = self._filter_direct_connection(all_move_lines, initial_package_ids)
+            print(f"[TraceabilityService] Total DESPUÉS de filtrar: {len(all_move_lines)} movimientos")
         
         if not all_move_lines:
             return self._empty_result()
@@ -443,6 +351,140 @@ class TraceabilityService:
         self._enrich_with_mrp_dates(result)
         
         return result
+    
+    def _filter_direct_connection(
+        self, 
+        move_lines: List[Dict], 
+        initial_package_ids: List[int]
+    ) -> List[Dict]:
+        """
+        Filtra los movimientos para quedarnos solo con la cadena conectada directamente.
+        
+        Lógica:
+        1. Nivel 0: El proceso del pallet inicial - traemos TODOS sus outputs (hermanos) y sus inputs
+        2. Hacia atrás: Solo los movimientos donde el output conecta con un input del nivel anterior
+        """
+        if not move_lines:
+            return []
+        
+        # Construir grafo de conexiones: output -> inputs
+        # y también proceso -> (inputs, outputs)
+        output_to_inputs = {}  # result_package_id -> set of package_ids
+        package_to_moves = {}  # package_id -> list of move_lines donde es input o output
+        
+        for ml in move_lines:
+            pkg_rel = ml.get("package_id")
+            result_rel = ml.get("result_package_id")
+            
+            pkg_id = None
+            result_id = None
+            
+            if pkg_rel:
+                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+            if result_rel:
+                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+            
+            # Mapear output -> inputs
+            if result_id and pkg_id:
+                if result_id not in output_to_inputs:
+                    output_to_inputs[result_id] = set()
+                output_to_inputs[result_id].add(pkg_id)
+            
+            # Mapear package -> moves
+            if pkg_id:
+                if pkg_id not in package_to_moves:
+                    package_to_moves[pkg_id] = []
+                package_to_moves[pkg_id].append(ml)
+            if result_id:
+                if result_id not in package_to_moves:
+                    package_to_moves[result_id] = []
+                package_to_moves[result_id].append(ml)
+        
+        # Encontrar paquetes conectados usando BFS hacia atrás
+        connected_packages = set(initial_package_ids)
+        packages_to_check = list(initial_package_ids)
+        checked_packages = set()
+        
+        # También incluir hermanos del primer nivel
+        first_level_refs = set()
+        for pkg_id in initial_package_ids:
+            for ml in package_to_moves.get(pkg_id, []):
+                ref = ml.get("reference")
+                if ref:
+                    first_level_refs.add(ref)
+        
+        # Agregar todos los paquetes del primer nivel (hermanos)
+        for ml in move_lines:
+            ref = ml.get("reference")
+            if ref in first_level_refs:
+                pkg_rel = ml.get("package_id")
+                result_rel = ml.get("result_package_id")
+                
+                if pkg_rel:
+                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                    if pkg_id:
+                        connected_packages.add(pkg_id)
+                        if pkg_id not in checked_packages:
+                            packages_to_check.append(pkg_id)
+                
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        connected_packages.add(result_id)
+        
+        # BFS hacia atrás: para cada paquete conectado, agregar sus inputs
+        while packages_to_check:
+            current_pkg = packages_to_check.pop(0)
+            if current_pkg in checked_packages:
+                continue
+            checked_packages.add(current_pkg)
+            
+            # Si este paquete es un output, sus inputs también están conectados
+            inputs = output_to_inputs.get(current_pkg, set())
+            for input_pkg in inputs:
+                if input_pkg not in connected_packages:
+                    connected_packages.add(input_pkg)
+                    packages_to_check.append(input_pkg)
+        
+        print(f"[TraceabilityService] Paquetes conectados: {len(connected_packages)}")
+        
+        # Filtrar movimientos: solo los que tienen paquetes conectados
+        filtered_moves = []
+        for ml in move_lines:
+            pkg_rel = ml.get("package_id")
+            result_rel = ml.get("result_package_id")
+            
+            pkg_id = None
+            result_id = None
+            
+            if pkg_rel:
+                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+            if result_rel:
+                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+            
+            # Incluir si ambos (input y output) están conectados, o si es recepción/venta de paquete conectado
+            loc_id = ml.get("location_id")
+            loc_dest_id = ml.get("location_dest_id")
+            loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
+            loc_dest_id = loc_dest_id[0] if isinstance(loc_dest_id, (list, tuple)) else loc_dest_id
+            
+            is_reception = loc_id == self.PARTNER_VENDORS_LOCATION_ID
+            is_sale = loc_dest_id == self.PARTNER_CUSTOMERS_LOCATION_ID
+            
+            if is_reception:
+                # Recepción: incluir si el result_package está conectado
+                if result_id and result_id in connected_packages:
+                    filtered_moves.append(ml)
+            elif is_sale:
+                # Venta: incluir si el package está conectado
+                if pkg_id and pkg_id in connected_packages:
+                    filtered_moves.append(ml)
+            else:
+                # Proceso interno: incluir si el output está conectado
+                if result_id and result_id in connected_packages:
+                    filtered_moves.append(ml)
+        
+        return filtered_moves
 
     def get_traceability_data(
         self,
