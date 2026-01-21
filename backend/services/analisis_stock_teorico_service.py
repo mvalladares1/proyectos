@@ -154,19 +154,17 @@ class AnalisisStockTeoricoService:
         Obtiene compras agrupadas por tipo de fruta y manejo.
         ACTUALIZADO: Usa product.template + filtra por diario "Facturas Proveedores" + categoría producto.
         """
-        # Líneas de facturas de proveedor - SOLO diario "Facturas Proveedores"
+        # Líneas de facturas de proveedor - SOLO diario "Facturas de Proveedores"
         lineas = self.odoo.search_read(
             'account.move.line',
             [
                 ['move_id.move_type', '=', 'in_invoice'],
                 ['move_id.state', '=', 'posted'],
-                ['move_id.journal_id.name', 'ilike', 'Facturas Proveedores'],
+                ['move_id.journal_id.name', '=', 'Facturas de Proveedores'],
                 ['product_id', '!=', False],
                 ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTO'],
                 ['date', '>=', fecha_desde],
-                ['date', '<=', fecha_hasta],
-                ['quantity', '>', 0],
-                ['debit', '>', 0]
+                ['date', '<=', fecha_hasta]
             ],
             ['product_id', 'quantity', 'debit', 'account_id'],
             limit=100000
@@ -216,21 +214,31 @@ class AnalisisStockTeoricoService:
             )
             
             for tmpl in templates:
-                # Parsear tipo de fruta
+                # Parsear tipo de fruta - MEJORADO
                 tipo = tmpl.get('x_studio_sub_categora')
-                if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
-                    tipo_str = tipo[1]
-                elif isinstance(tipo, str) and tipo:
-                    tipo_str = tipo
+                if tipo:
+                    if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
+                        tipo_str = tipo[1]
+                    elif isinstance(tipo, str):
+                        tipo_str = tipo
+                    elif isinstance(tipo, (list, tuple)) and len(tipo) == 1:
+                        tipo_str = str(tipo[0])
+                    else:
+                        tipo_str = None
                 else:
                     tipo_str = None
                 
-                # Parsear manejo
+                # Parsear manejo - MEJORADO
                 manejo = tmpl.get('x_studio_categora_tipo_de_manejo')
-                if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
-                    manejo_str = manejo[1]
-                elif isinstance(manejo, str) and manejo:
-                    manejo_str = manejo
+                if manejo:
+                    if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                        manejo_str = manejo[1]
+                    elif isinstance(manejo, str):
+                        manejo_str = manejo
+                    elif isinstance(manejo, (list, tuple)) and len(manejo) == 1:
+                        manejo_str = str(manejo[0])
+                    else:
+                        manejo_str = None
                 else:
                     manejo_str = None
                 
@@ -311,13 +319,11 @@ class AnalisisStockTeoricoService:
             [
                 ['move_id.move_type', '=', 'out_invoice'],
                 ['move_id.state', '=', 'posted'],
-                ['move_id.journal_id.name', 'ilike', 'Facturas de Cliente'],
+                ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
                 ['product_id', '!=', False],
                 ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTO'],
                 ['date', '>=', fecha_desde],
-                ['date', '<=', fecha_hasta],
-                ['quantity', '>', 0],
-                ['credit', '>', 0]
+                ['date', '<=', fecha_hasta]
             ],
             ['product_id', 'quantity', 'credit'],
             limit=100000
@@ -367,21 +373,31 @@ class AnalisisStockTeoricoService:
             )
             
             for tmpl in templates:
-                # Parsear tipo de fruta
+                # Parsear tipo de fruta - MEJORADO
                 tipo = tmpl.get('x_studio_sub_categora')
-                if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
-                    tipo_str = tipo[1]
-                elif isinstance(tipo, str) and tipo:
-                    tipo_str = tipo
+                if tipo:
+                    if isinstance(tipo, (list, tuple)) and len(tipo) > 1:
+                        tipo_str = tipo[1]
+                    elif isinstance(tipo, str):
+                        tipo_str = tipo
+                    elif isinstance(tipo, (list, tuple)) and len(tipo) == 1:
+                        tipo_str = str(tipo[0])
+                    else:
+                        tipo_str = None
                 else:
                     tipo_str = None
                 
-                # Parsear manejo
+                # Parsear manejo - MEJORADO
                 manejo = tmpl.get('x_studio_categora_tipo_de_manejo')
-                if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
-                    manejo_str = manejo[1]
-                elif isinstance(manejo, str) and manejo:
-                    manejo_str = manejo
+                if manejo:
+                    if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                        manejo_str = manejo[1]
+                    elif isinstance(manejo, str):
+                        manejo_str = manejo
+                    elif isinstance(manejo, (list, tuple)) and len(manejo) == 1:
+                        manejo_str = str(manejo[0])
+                    else:
+                        manejo_str = None
                 else:
                     manejo_str = None
                 
