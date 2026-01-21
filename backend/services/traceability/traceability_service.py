@@ -207,17 +207,8 @@ class TraceabilityService:
             return self._empty_result()
     
     def _get_traceability_for_packages(self, package_ids: List[int], limit: int) -> Dict:
-        """Obtiene la trazabilidad completa de paquetes específicos."""
+        """Obtiene la trazabilidad completa de paquetes específicos con expansión recursiva."""
         virtual_ids = self._get_virtual_location_ids()
-        
-        # Buscar TODOS los movimientos de esos paquetes (sin filtro de fecha)
-        domain = [
-            "|",
-            ("package_id", "in", package_ids),
-            ("result_package_id", "in", package_ids),
-            ("qty_done", ">", 0),
-            ("state", "=", "done"),
-        ]
         
         fields = [
             "id", "reference", "package_id", "result_package_id",
@@ -225,26 +216,71 @@ class TraceabilityService:
             "location_dest_id", "date", "picking_id"
         ]
         
-        try:
-            move_lines = self.odoo.search_read(
-                "stock.move.line",
-                domain,
-                fields,
-                limit=limit,
-                order="date asc"
-            )
-        except Exception as e:
-            print(f"[TraceabilityService] Error fetching move lines: {e}")
-            return self._empty_result()
+        # Expandir paquetes relacionados recursivamente
+        all_package_ids = set(package_ids)
+        processed_packages = set()
+        all_move_lines = []
         
-        if not move_lines:
-            return self._empty_result()
+        max_iterations = 50  # Prevenir loops infinitos
+        iteration = 0
         
-        print(f"[TraceabilityService] Procesando {len(move_lines)} movimientos")
+        print(f"[TraceabilityService] Iniciando expansión recursiva desde {len(all_package_ids)} paquetes")
+        
+        while all_package_ids - processed_packages and iteration < max_iterations:
+            iteration += 1
+            pending_packages = list(all_package_ids - processed_packages)
+            
+            print(f"[TraceabilityService] Iteración {iteration}: procesando {len(pending_packages)} paquetes")
+            
+            # Buscar movimientos de los paquetes pendientes
+            try:
+                move_lines = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        "|",
+                        ("package_id", "in", pending_packages),
+                        ("result_package_id", "in", pending_packages),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=limit,
+                    order="date asc"
+                )
+                
+                print(f"[TraceabilityService] Encontrados {len(move_lines)} movimientos")
+                all_move_lines.extend(move_lines)
+                
+                # Extraer nuevos paquetes relacionados
+                for ml in move_lines:
+                    pkg_rel = ml.get("package_id")
+                    result_rel = ml.get("result_package_id")
+                    
+                    if pkg_rel:
+                        pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                        if pkg_id:
+                            all_package_ids.add(pkg_id)
+                    
+                    if result_rel:
+                        result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                        if result_id:
+                            all_package_ids.add(result_id)
+                
+                # Marcar como procesados
+                processed_packages.update(pending_packages)
+                
+            except Exception as e:
+                print(f"[TraceabilityService] Error en iteración {iteration}: {e}")
+                break
+        
+        print(f"[TraceabilityService] Expansión completa: {len(all_package_ids)} paquetes totales, {len(all_move_lines)} movimientos")
+        
+        if not all_move_lines:
+            return self._empty_result()
         
         # Procesar movimientos
-        result = self._process_move_lines(move_lines, virtual_ids)
-        result["move_lines"] = move_lines
+        result = self._process_move_lines(all_move_lines, virtual_ids)
+        result["move_lines"] = all_move_lines
         
         # Resolver proveedores y clientes
         self._resolve_partners(result)
