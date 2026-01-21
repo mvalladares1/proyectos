@@ -512,7 +512,7 @@ def _render_sankey_plotly(sankey_data: dict):
     
     for i, node in enumerate(nodes):
         label = node.get("label", "")
-        detail = node.get("detail", "")
+        detail = str(node.get("detail") or "")
         
         # Buscar fecha en el detalle (formato: YYYY-MM-DD)
         date_match = re.search(r'(\d{4}-\d{2}-\d{2})', detail)
