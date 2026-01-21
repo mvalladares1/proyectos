@@ -591,9 +591,9 @@ def _render_sankey_plotly(sankey_data: dict):
                 textangle=-45
             )
     
-    # Crear diagrama Sankey HORIZONTAL
+    # Crear diagrama Sankey con nodos horizontales (barras -)
     fig.add_trace(go.Sankey(
-        orientation="h",  # HORIZONTAL: izquierda → derecha
+        orientation="v",  # Nodos horizontales (barras -)
         arrangement="snap",
         node=dict(
             pad=15,
