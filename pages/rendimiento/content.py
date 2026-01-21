@@ -426,19 +426,53 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "table"
             
             else:  # Por identificador
-                # Solo vis.js Network disponible para búsqueda por identificador
-                if diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
-                    data = get_traceability_by_identifier(username, password, identifier.strip())
+                # Determinar el formato de salida según el tipo de diagrama
+                if diagram_type == "📈 Sankey (Plotly)":
+                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey")
+                    if not data or not data.get('nodes'):
+                        st.warning(f"No se encontraron datos para: {identifier}")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "sankey"
+                
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs")
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
                         st.session_state.diagram_data = None
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "visjs"
-                else:
-                    st.warning("⚠️ La búsqueda por identificador solo está disponible para vis.js Network")
-                    st.session_state.diagram_data = None
-                    return
+                    
+                elif diagram_type == "📋 Tabla de Conexiones":
+                    # Para tabla, usar raw data del endpoint base
+                    try:
+                        params = {
+                            "username": username,
+                            "password": password,
+                            "identifier": identifier.strip(),
+                        }
+                        import requests, os
+                        API_URL = os.getenv("API_URL", "http://127.0.0.1:8002")
+                        resp = requests.get(
+                            f"{API_URL}/api/v1/containers/traceability/by-identifier",
+                            params=params,
+                            timeout=120
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                        else:
+                            data = None
+                    except:
+                        data = None
+                    
+                    if not data or not data.get('pallets'):
+                        st.warning(f"No se encontraron datos para: {identifier}")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "table"
     
     # Renderizar el diagrama si hay datos en session_state
     if st.session_state.diagram_data:

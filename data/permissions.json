@@ -24,10 +24,13 @@
     ],
     "automatizaciones": [],
     "rendimiento": [],
-    "containers": []
+    "containers": [],
+    "pedidos_venta": [],
+    "reconciliacion": []
   },
   "admins": [
-    "mvalladares@riofuturo.cl"
+    "mvalladares@riofuturo.cl",
+    "jvidaurre@riofuturo.cl"
   ],
   "pages": {
     "recepciones.kpis_calidad": [],
