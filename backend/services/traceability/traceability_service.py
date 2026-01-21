@@ -262,8 +262,10 @@ class TraceabilityService:
                         connected_packages.update(process_outputs)
                     else:
                         # MODO "CONEXIÓN DIRECTA"
-                        # Identificar qué outputs de este proceso están en mi cadena
-                        connected_outputs_in_process = process_outputs & connected_packages
+                        # Los outputs conectados son los que estamos buscando en esta iteración
+                        # (los que están en current_packages O en connected_packages)
+                        current_packages_set = set(current_packages)
+                        connected_outputs_in_process = process_outputs & (connected_packages | current_packages_set)
                         
                         if is_first_level:
                             # Primer nivel: traer TODOS los outputs (hermanos) y TODOS los inputs
@@ -295,7 +297,8 @@ class TraceabilityService:
                                     if pkg_id:
                                         inputs_for_connected_outputs.add(pkg_id)
                             
-                            # Agregar inputs a la cadena conectada
+                            # Agregar outputs conectados e inputs a la cadena conectada
+                            connected_packages.update(connected_outputs_in_process)
                             connected_packages.update(inputs_for_connected_outputs)
                             
                             # Incluir movimientos donde output O input están conectados
