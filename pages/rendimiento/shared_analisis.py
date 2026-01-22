@@ -280,6 +280,10 @@ def get_comparativa_anual(username: str, password: str, anio1: int, anio2: int):
         return {"error": str(e)}
 
 
+def get_stock_teorico_anual(username: str, password: str, anios: list, fecha_corte: str):
+    """
+    Obtiene análisis de stock teórico anual desde API.
+    
     Args:
         username: Usuario Odoo
         password: API key Odoo
