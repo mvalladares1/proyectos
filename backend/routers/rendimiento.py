@@ -327,3 +327,56 @@ async def get_stock_teorico_anual(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/analisis-mensual")
+async def get_analisis_mensual(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: str = Query(..., description="Fecha inicio YYYY-MM-DD"),
+    fecha_hasta: str = Query(..., description="Fecha fin YYYY-MM-DD")
+):
+    """
+    Análisis mensual de compras, ventas y merma.
+    
+    Returns:
+        List[dict] con datos mensuales:
+            - mes: YYYY-MM
+            - compras_kg, compras_monto
+            - ventas_kg, ventas_monto
+            - merma_kg, merma_pct
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisStockTeoricoService(odoo)
+        return service.get_analisis_mensual(fecha_desde, fecha_hasta)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/comparativa-anual")
+async def get_comparativa_anual(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    anio1: int = Query(..., description="Año base"),
+    anio2: int = Query(..., description="Año a comparar")
+):
+    """
+    Comparativa año vs año por tipo de fruta y manejo.
+    
+    Returns:
+        List[dict] con comparativa:
+            - tipo_fruta, manejo
+            - compras_kg_anio1, compras_kg_anio2, delta_compras_kg, delta_compras_pct
+            - ventas_kg_anio1, ventas_kg_anio2, delta_ventas_kg, delta_ventas_pct
+            - merma_pct_anio1, merma_pct_anio2, delta_merma_pct
+    """
+    try:
+        odoo = OdooClient(username=username, password=password)
+        service = AnalisisStockTeoricoService(odoo)
+        return service.get_comparativa_anual(anio1, anio2)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

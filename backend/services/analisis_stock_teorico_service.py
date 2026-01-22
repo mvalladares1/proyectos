@@ -614,4 +614,154 @@ class AnalisisStockTeoricoService:
             'total_merma_kg': round(total_merma_kg, 2),
             'total_stock_teorico_valor': round(total_stock_teorico_valor, 2)
         }
-
+    
+    def get_analisis_mensual(self, fecha_desde: str, fecha_hasta: str):
+        """
+        Análisis mes a mes de compras, ventas y merma.
+        
+        Args:
+            fecha_desde: Fecha inicio en formato YYYY-MM-DD
+            fecha_hasta: Fecha fin en formato YYYY-MM-DD
+        
+        Returns:
+            List[Dict] con datos mensuales:
+                - mes: YYYY-MM
+                - compras_kg, compras_monto
+                - ventas_kg, ventas_monto
+                - merma_kg, merma_pct
+        """
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        inicio = datetime.strptime(fecha_desde, "%Y-%m-%d")
+        fin = datetime.strptime(fecha_hasta, "%Y-%m-%d")
+        
+        resultados = []
+        fecha_actual = inicio.replace(day=1)  # Primer día del mes
+        
+        while fecha_actual <= fin:
+            # Calcular último día del mes
+            siguiente_mes = fecha_actual + relativedelta(months=1)
+            ultimo_dia = siguiente_mes - relativedelta(days=1)
+            
+            # No pasar de la fecha final
+            if ultimo_dia > fin:
+                ultimo_dia = fin
+            
+            fecha_desde_mes = fecha_actual.strftime("%Y-%m-%d")
+            fecha_hasta_mes = ultimo_dia.strftime("%Y-%m-%d")
+            
+            # Obtener compras del mes
+            compras = self._get_compras_por_tipo_manejo(fecha_desde_mes, fecha_hasta_mes)
+            ventas = self._get_ventas_por_tipo_manejo(fecha_desde_mes, fecha_hasta_mes)
+            
+            # Consolidar
+            datos = self._consolidar_datos(compras, ventas)
+            
+            # Sumar totales del mes
+            total_compras_kg = sum(d['compras_kg'] for d in datos)
+            total_compras_monto = sum(d['compras_monto'] for d in datos)
+            total_ventas_kg = sum(d['ventas_kg'] for d in datos)
+            total_ventas_monto = sum(d['ventas_monto'] for d in datos)
+            total_merma_kg = sum(d['merma_kg'] for d in datos)
+            
+            merma_pct = (total_merma_kg / total_compras_kg * 100) if total_compras_kg > 0 else 0
+            
+            resultados.append({
+                'mes': fecha_actual.strftime("%Y-%m"),
+                'compras_kg': round(total_compras_kg, 2),
+                'compras_monto': round(total_compras_monto, 2),
+                'ventas_kg': round(total_ventas_kg, 2),
+                'ventas_monto': round(total_ventas_monto, 2),
+                'merma_kg': round(total_merma_kg, 2),
+                'merma_pct': round(merma_pct, 2)
+            })
+            
+            fecha_actual = siguiente_mes
+        
+        return resultados
+    
+    def get_comparativa_anual(self, anio1: int, anio2: int):
+        """
+        Comparativa año vs año por tipo de fruta y manejo.
+        
+        Args:
+            anio1: Año base (ej: 2024)
+            anio2: Año a comparar (ej: 2025)
+        
+        Returns:
+            List[Dict] con comparativa:
+                - tipo_fruta, manejo
+                - compras_kg_anio1, compras_kg_anio2, delta_compras_kg, delta_compras_pct
+                - ventas_kg_anio1, ventas_kg_anio2, delta_ventas_kg, delta_ventas_pct
+                - merma_pct_anio1, merma_pct_anio2, delta_merma_pct
+        """
+        # Temporada = nov año-1 a oct año
+        fecha_desde_1 = f"{anio1 - 1}-11-01"
+        fecha_hasta_1 = f"{anio1}-10-31"
+        
+        fecha_desde_2 = f"{anio2 - 1}-11-01"
+        fecha_hasta_2 = f"{anio2}-10-31"
+        
+        # Si anio2 es el año actual, ajustar hasta hoy
+        if anio2 == datetime.now().year:
+            fecha_hasta_2 = datetime.now().strftime("%Y-%m-%d")
+        
+        # Obtener datos de ambos años
+        compras_1 = self._get_compras_por_tipo_manejo(fecha_desde_1, fecha_hasta_1)
+        ventas_1 = self._get_ventas_por_tipo_manejo(fecha_desde_1, fecha_hasta_1)
+        datos_1 = self._consolidar_datos(compras_1, ventas_1)
+        
+        compras_2 = self._get_compras_por_tipo_manejo(fecha_desde_2, fecha_hasta_2)
+        ventas_2 = self._get_ventas_por_tipo_manejo(fecha_desde_2, fecha_hasta_2)
+        datos_2 = self._consolidar_datos(compras_2, ventas_2)
+        
+        # Crear índice por tipo+manejo
+        map_1 = {f"{d['tipo_fruta']}||{d['manejo']}": d for d in datos_1}
+        map_2 = {f"{d['tipo_fruta']}||{d['manejo']}": d for d in datos_2}
+        
+        # Unir todas las claves
+        todas_keys = set(map_1.keys()) | set(map_2.keys())
+        
+        resultados = []
+        for key in todas_keys:
+            tipo, manejo = key.split('||')
+            
+            d1 = map_1.get(key, {'compras_kg': 0, 'ventas_kg': 0, 'merma_kg': 0})
+            d2 = map_2.get(key, {'compras_kg': 0, 'ventas_kg': 0, 'merma_kg': 0})
+            
+            compras_1_kg = d1['compras_kg']
+            compras_2_kg = d2['compras_kg']
+            ventas_1_kg = d1['ventas_kg']
+            ventas_2_kg = d2['ventas_kg']
+            merma_1_kg = d1['merma_kg']
+            merma_2_kg = d2['merma_kg']
+            
+            # Calcular deltas
+            delta_compras_kg = compras_2_kg - compras_1_kg
+            delta_compras_pct = ((compras_2_kg / compras_1_kg - 1) * 100) if compras_1_kg > 0 else 0
+            
+            delta_ventas_kg = ventas_2_kg - ventas_1_kg
+            delta_ventas_pct = ((ventas_2_kg / ventas_1_kg - 1) * 100) if ventas_1_kg > 0 else 0
+            
+            merma_pct_1 = (merma_1_kg / compras_1_kg * 100) if compras_1_kg > 0 else 0
+            merma_pct_2 = (merma_2_kg / compras_2_kg * 100) if compras_2_kg > 0 else 0
+            delta_merma_pct = merma_pct_2 - merma_pct_1
+            
+            resultados.append({
+                'tipo_fruta': tipo,
+                'manejo': manejo,
+                f'compras_kg_{anio1}': round(compras_1_kg, 2),
+                f'compras_kg_{anio2}': round(compras_2_kg, 2),
+                'delta_compras_kg': round(delta_compras_kg, 2),
+                'delta_compras_pct': round(delta_compras_pct, 2),
+                f'ventas_kg_{anio1}': round(ventas_1_kg, 2),
+                f'ventas_kg_{anio2}': round(ventas_2_kg, 2),
+                'delta_ventas_kg': round(delta_ventas_kg, 2),
+                'delta_ventas_pct': round(delta_ventas_pct, 2),
+                f'merma_pct_{anio1}': round(merma_pct_1, 2),
+                f'merma_pct_{anio2}': round(merma_pct_2, 2),
+                'delta_merma_pct': round(delta_merma_pct, 2)
+            })
+        
+        return resultados
