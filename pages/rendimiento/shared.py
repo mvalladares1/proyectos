@@ -311,6 +311,48 @@ def get_traceability_by_delivery_guide(
         return None
 
 
+def search_recepciones_by_guide_pattern(username: str, password: str, guide_pattern: str):
+    """Busca recepciones que coincidan con el patrón de guía."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "guide_pattern": guide_pattern,
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/search-by-guide-pattern"
+        resp = requests.get(endpoint, params=params, timeout=60)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error buscando recepciones: {str(e)}")
+        return None
+
+
+def get_traceability_by_picking_id(
+    username: str,
+    password: str,
+    picking_id: int,
+    include_siblings: bool = True
+):
+    """Obtiene trazabilidad desde un picking específico."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "picking_id": picking_id,
+            "include_siblings": str(include_siblings).lower(),
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/by-picking-id"
+        resp = requests.get(endpoint, params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
     """Obtiene trazabilidad completa de uno o varios pallets."""
     try:

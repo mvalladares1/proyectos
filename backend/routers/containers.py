@@ -216,6 +216,116 @@ async def get_traceability_by_delivery_guide(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/traceability/search-by-guide-pattern")
+async def search_by_guide_pattern(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    guide_pattern: str = Query(..., description="Patrón de guía (ej: 503)"),
+):
+    """
+    Busca recepciones que coincidan con el patrón de guía.
+    Por ejemplo: '503' encuentra '503', '503.', '503a', '503-a', 'A503'
+    pero NO '3503', '5031', '15034'.
+    Retorna lista de recepciones con productor, fecha, albarán.
+    """
+    try:
+        from shared.odoo_client import OdooClient
+        client = OdooClient(username=username, password=password)
+        
+        # Buscar pickings con guía que contenga el patrón en cualquier parte
+        # Usamos operador '=ilike' para búsqueda case-insensitive y con wildcards
+        pickings = client.search_read(
+            "stock.picking",
+            [
+                ("x_studio_gua_de_despacho", "=ilike", f"%{guide_pattern}%"),
+                ("state", "=", "done"),
+                ("picking_type_id", "in", [1, 217, 164])  # RFP, VILKUN, SAN JOSE
+            ],
+            ["id", "name", "x_studio_gua_de_despacho", "partner_id", "scheduled_date", "picking_type_id"],
+            limit=100
+        )
+        
+        # Filtrar para asegurar que el patrón sea un número completo
+        # Por ejemplo: si busco "503", quiero "503", "503.", "503a", "503-a", "A503"
+        # pero NO quiero "3503", "5031", "15034"
+        import re
+        filtered_pickings = []
+        # Regex: el patrón debe estar rodeado de no-dígitos (o inicio/fin de string)
+        pattern_regex = re.compile(r'(?<!\d)' + re.escape(guide_pattern) + r'(?!\d)', re.IGNORECASE)
+        
+        for p in pickings:
+            guia = p.get("x_studio_gua_de_despacho", "")
+            if guia and pattern_regex.search(guia):
+                filtered_pickings.append(p)
+        
+        # Formatear respuesta
+        recepciones = []
+        for p in filtered_pickings:
+            partner_rel = p.get("partner_id")
+            partner_name = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Productor"
+            
+            recepciones.append({
+                "picking_id": p["id"],
+                "albaran": p.get("name", ""),
+                "guia_despacho": p.get("x_studio_gua_de_despacho", ""),
+                "productor": partner_name,
+                "fecha": p.get("scheduled_date", ""),
+                "picking_type_id": p.get("picking_type_id", [None])[0] if isinstance(p.get("picking_type_id"), list) else p.get("picking_type_id")
+            })
+        
+        return {"recepciones": recepciones, "total": len(recepciones)}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/traceability/by-picking-id")
+async def get_traceability_by_picking_id(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    picking_id: int = Query(..., description="ID del picking de recepción"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
+):
+    """
+    Obtiene trazabilidad desde un picking específico HACIA ADELANTE.
+    """
+    try:
+        service = TraceabilityService(username=username, password=password)
+        
+        # Buscar pallets de este picking
+        move_lines = service.odoo.search_read(
+            "stock.move.line",
+            [
+                ("picking_id", "=", picking_id),
+                ("result_package_id", "!=", False),
+                ("qty_done", ">", 0),
+                ("state", "=", "done"),
+            ],
+            ["result_package_id"],
+            limit=500
+        )
+        
+        # Extraer package_ids
+        package_ids = set()
+        for ml in move_lines:
+            result_rel = ml.get("result_package_id")
+            if result_rel:
+                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                if result_id:
+                    package_ids.add(result_id)
+        
+        if not package_ids:
+            return {"error": "No se encontraron pallets en este picking"}
+        
+        # Obtener trazabilidad de esos pallets
+        data = service._get_traceability_for_packages(list(package_ids), limit=10000, include_siblings=include_siblings)
+        data.pop("move_lines", None)
+        return data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/traceability/by-identifier/visjs")
 async def get_traceability_by_identifier_visjs(
     username: str = Query(..., description="Usuario Odoo"),

@@ -372,26 +372,69 @@ def _render_sankey(username: str, password: str):
         delivery_guide = None
     elif search_mode == "📥 Por guía de despacho":
         st.markdown("### 📥 Buscar por Guía de Despacho")
-        col_guide, col_mode = st.columns([3, 2])
+        
+        col_guide, col_btn = st.columns([3, 1])
         with col_guide:
-            delivery_guide = st.text_input(
+            guide_pattern = st.text_input(
                 "Número de guía",
                 placeholder="Ej: 503",
-                key="delivery_guide_input",
-                help="Ingresa el número de guía de despacho de la recepción"
+                key="delivery_guide_pattern",
+                help="Ingresa el número base de guía (ej: 503 para buscar 503, 503., 503a, etc.)"
             )
-        with col_mode:
-            connection_mode = st.selectbox(
-                "Modo de conexión",
-                ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
-                key="connection_mode_guide",
-                help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+        with col_btn:
+            st.markdown("<br>", unsafe_allow_html=True)
+            search_btn = st.button("🔍 Buscar", use_container_width=True, key="search_guide_btn")
+        
+        # Buscar recepciones cuando se presiona el botón
+        if search_btn and guide_pattern:
+            from .shared import search_recepciones_by_guide_pattern
+            with st.spinner(f"Buscando recepciones con guía {guide_pattern}..."):
+                result = search_recepciones_by_guide_pattern(username, password, guide_pattern)
+                
+                if result and result.get('recepciones'):
+                    st.session_state.found_recepciones = result['recepciones']
+                    st.session_state.guide_pattern_searched = guide_pattern
+                else:
+                    st.warning(f"No se encontraron recepciones con guía {guide_pattern}")
+                    st.session_state.found_recepciones = []
+        
+        # Mostrar recepciones encontradas
+        selected_picking_id = None
+        if 'found_recepciones' in st.session_state and st.session_state.found_recepciones:
+            st.markdown(f"#### 📋 Recepciones encontradas ({len(st.session_state.found_recepciones)})")
+            
+            # Crear opciones para el selectbox
+            opciones = [
+                f"{r['guia_despacho']} | {r['productor']} | {r['albaran']} | {r['fecha'][:10] if r['fecha'] else 'Sin fecha'}"
+                for r in st.session_state.found_recepciones
+            ]
+            
+            seleccion_idx = st.selectbox(
+                "Selecciona una recepción:",
+                options=range(len(opciones)),
+                format_func=lambda i: opciones[i],
+                key="select_recepcion_guide"
             )
+            
+            if seleccion_idx is not None:
+                selected_picking_id = st.session_state.found_recepciones[seleccion_idx]['picking_id']
+                selected_info = st.session_state.found_recepciones[seleccion_idx]
+                st.info(f"✅ Seleccionado: **{selected_info['guia_despacho']}** - {selected_info['productor']}")
+        
+        # Modo de conexión
+        connection_mode = st.selectbox(
+            "Modo de conexión",
+            ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
+            key="connection_mode_guide",
+            help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+        )
         include_siblings = connection_mode == "🌐 Todos (con hermanos)"
-        st.caption("💡 **Ejemplo:** `503` → Rastrea la recepción y todos los pallets hasta el cliente")
+        
+        st.caption("💡 Ingresa el número base de guía (ej: 503), busca las recepciones y selecciona una para ver su trazabilidad")
         fecha_inicio = None
         fecha_fin = None
         identifier = None
+        delivery_guide = None
     else:
         st.markdown("### 🔖 Buscar por Identificador")
         col_id, col_mode = st.columns([3, 2])
@@ -430,7 +473,7 @@ def _render_sankey(username: str, password: str):
     if search_mode == "📅 Por rango de fechas":
         can_generate = True
     elif search_mode == "📥 Por guía de despacho":
-        can_generate = delivery_guide and delivery_guide.strip()
+        can_generate = selected_picking_id is not None
     else:  # Por identificador
         can_generate = identifier and identifier.strip()
     
@@ -440,16 +483,16 @@ def _render_sankey(username: str, password: str):
         with st.spinner(spinner_msg):
             # Obtener datos según el modo de búsqueda
             if search_mode == "📥 Por guía de despacho":
-                from .shared import get_traceability_by_delivery_guide
-                raw_data = get_traceability_by_delivery_guide(
+                from .shared import get_traceability_by_picking_id
+                raw_data = get_traceability_by_picking_id(
                     username, 
                     password, 
-                    delivery_guide, 
+                    selected_picking_id, 
                     include_siblings=include_siblings
                 )
                 
                 if not raw_data or not raw_data.get('pallets'):
-                    st.warning(f"No se encontraron datos para la guía: {delivery_guide}")
+                    st.warning(f"No se encontraron datos para la recepción seleccionada")
                     st.session_state.diagram_data = None
                     return
                 
@@ -476,7 +519,8 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"
                 
-                st.success(f"✅ Diagrama generado para guía {delivery_guide}")
+                selected_info = st.session_state.found_recepciones[seleccion_idx]
+                st.success(f"✅ Diagrama generado para guía {selected_info['guia_despacho']} - {selected_info['productor']}")
                 st.rerun()
             
             elif search_mode == "📅 Por rango de fechas":
