@@ -178,16 +178,18 @@ async def get_traceability_by_identifier(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     identifier: str = Query(..., description="Venta (ej: S00574) o Paquete"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
 ):
     """
     Obtiene trazabilidad completa por identificador.
     - Si es S + números (ej: S00574) → busca todos los pallets de esa venta
     - Si no → busca ese paquete específico
+    - include_siblings: True = traer todos los movimientos del proceso, False = solo cadena directa
     Retorna datos crudos (pallets, procesos, proveedores, clientes, links).
     """
     try:
         service = TraceabilityService(username=username, password=password)
-        data = service.get_traceability_by_identifier(identifier=identifier)
+        data = service.get_traceability_by_identifier(identifier=identifier, include_siblings=include_siblings)
         data.pop("move_lines", None)
         return data
     except Exception as e:
@@ -199,13 +201,14 @@ async def get_traceability_by_identifier_visjs(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     identifier: str = Query(..., description="Venta (ej: S00574) o Paquete"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
 ):
     """
     Obtiene trazabilidad por identificador transformada a formato vis.js Network.
     """
     try:
         service = TraceabilityService(username=username, password=password)
-        data = service.get_traceability_by_identifier(identifier=identifier)
+        data = service.get_traceability_by_identifier(identifier=identifier, include_siblings=include_siblings)
         return transform_to_visjs(data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -216,13 +219,14 @@ async def get_traceability_by_identifier_sankey(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     identifier: str = Query(..., description="Venta (ej: S00574) o Paquete"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
 ):
     """
     Obtiene trazabilidad por identificador transformada a formato Sankey (Plotly).
     """
     try:
         service = TraceabilityService(username=username, password=password)
-        data = service.get_traceability_by_identifier(identifier=identifier)
+        data = service.get_traceability_by_identifier(identifier=identifier, include_siblings=include_siblings)
         return transform_to_sankey(data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

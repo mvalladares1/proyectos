@@ -19,7 +19,8 @@ class TraceabilityService:
     def get_traceability_by_identifier(
         self,
         identifier: str,
-        limit: int = 10000
+        limit: int = 10000,
+        include_siblings: bool = True
     ) -> Dict:
         """
         Obtiene trazabilidad completa por identificador (venta o paquete).
@@ -28,6 +29,8 @@ class TraceabilityService:
             identifier: Puede ser:
                 - Código de venta (ej: S00574) → busca todos los pallets de esa venta
                 - Nombre de paquete → busca ese paquete específico
+            include_siblings: Si True, incluye pallets hermanos del mismo proceso.
+                             Si False, solo sigue la cadena conectada directa.
         
         Returns:
             Dict con estructura similar a get_traceability_data
@@ -36,11 +39,11 @@ class TraceabilityService:
         is_sale = identifier.startswith("S") and identifier[1:].isdigit() if len(identifier) > 1 else False
         
         if is_sale:
-            return self._get_traceability_by_sale(identifier, limit)
+            return self._get_traceability_by_sale(identifier, limit, include_siblings)
         else:
-            return self._get_traceability_by_package(identifier, limit)
+            return self._get_traceability_by_package(identifier, limit, include_siblings)
     
-    def _get_traceability_by_sale(self, sale_origin: str, limit: int) -> Dict:
+    def _get_traceability_by_sale(self, sale_origin: str, limit: int, include_siblings: bool = True) -> Dict:
         """Busca trazabilidad desde una venta específica."""
         try:
             # Buscar pickings de esa venta
@@ -94,23 +97,15 @@ class TraceabilityService:
             
             print(f"[TraceabilityService] Venta {sale_origin}: {len(package_ids)} paquetes encontrados")
             
-            # Buscar toda la historia de esos paquetes
-            return self._get_traceability_for_packages(list(package_ids), limit)
+            # Buscar toda la historia de esos paquetes según el modo seleccionado
+            return self._get_traceability_for_packages(list(package_ids), limit, include_siblings=include_siblings)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por venta: {e}")
             return self._empty_result()
     
-    def _get_traceability_by_package(self, package_name: str, limit: int) -> Dict:
-        """Busca trazabilidad de un paquete específico por nombre."""
-        virtual_ids = self._get_virtual_location_ids()
-        
-        fields = [
-            "id", "reference", "package_id", "result_package_id",
-            "lot_id", "qty_done", "product_id", "location_id", 
-            "location_dest_id", "date", "picking_id"
-        ]
-        
+    def _get_traceability_by_package(self, package_name: str, limit: int, include_siblings: bool = False) -> Dict:
+        """Busca trazabilidad de un paquete específico por nombre hacia ATRÁS."""
         try:
             # Primero buscar el ID del paquete en stock.quant.package
             packages = self.odoo.search_read(
@@ -130,75 +125,10 @@ class TraceabilityService:
             
             package_ids = [p["id"] for p in packages]
             
-            # Buscar movimientos con esos package_ids
-            move_lines = self.odoo.search_read(
-                "stock.move.line",
-                [
-                    "|",
-                    ("package_id", "in", package_ids),
-                    ("result_package_id", "in", package_ids),
-                    ("qty_done", ">", 0),
-                    ("state", "=", "done"),
-                ],
-                fields,
-                limit=limit,
-                order="date asc"
-            )
+            print(f"[TraceabilityService] Paquete {package_name}: {len(package_ids)} IDs encontrados")
             
-            print(f"[TraceabilityService] stock.move.line: {len(move_lines)} movimientos encontrados")
-            
-            if not move_lines:
-                print(f"[TraceabilityService] No se encontraron movimientos para: {package_name}")
-                return self._empty_result()
-            
-            # Extraer todos los package_ids relacionados para trazabilidad completa
-            related_package_ids = set(package_ids)
-            for ml in move_lines:
-                pkg_rel = ml.get("package_id")
-                result_rel = ml.get("result_package_id")
-                
-                if pkg_rel:
-                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                    if pkg_id:
-                        related_package_ids.add(pkg_id)
-                
-                if result_rel:
-                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                    if result_id:
-                        related_package_ids.add(result_id)
-            
-            print(f"[TraceabilityService] Paquetes relacionados: {len(related_package_ids)}")
-            
-            # Buscar TODA la historia de los paquetes relacionados
-            if len(related_package_ids) > len(package_ids):
-                all_move_lines = self.odoo.search_read(
-                    "stock.move.line",
-                    [
-                        "|",
-                        ("package_id", "in", list(related_package_ids)),
-                        ("result_package_id", "in", list(related_package_ids)),
-                        ("qty_done", ">", 0),
-                        ("state", "=", "done"),
-                    ],
-                    fields,
-                    limit=limit * 2,
-                    order="date asc"
-                )
-                print(f"[TraceabilityService] Historia completa: {len(all_move_lines)} movimientos")
-                move_lines = all_move_lines
-            
-            # Procesar movimientos
-            result = self._process_move_lines(move_lines, virtual_ids)
-            result["move_lines"] = move_lines
-            
-            # Resolver proveedores y clientes
-            self._resolve_partners(result)
-            
-            # Enriquecer con fechas
-            self._enrich_with_pallet_dates(result)
-            self._enrich_with_mrp_dates(result)
-            
-            return result
+            # Buscar hacia ATRÁS según el modo seleccionado
+            return self._get_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
@@ -206,16 +136,24 @@ class TraceabilityService:
             traceback.print_exc()
             return self._empty_result()
     
-    def _get_traceability_for_packages(self, initial_package_ids: List[int], limit: int) -> Dict:
+    def _get_traceability_for_packages(
+        self, 
+        initial_package_ids: List[int], 
+        limit: int,
+        include_siblings: bool = True
+    ) -> Dict:
         """
         Trazabilidad hacia ATRÁS desde los paquetes iniciales.
         
-        Lógica:
-        1. Tomo los pallets iniciales (de la venta)
-        2. Busco de qué proceso salieron (donde son result_package_id)
-        3. Obtengo TODO el proceso (todas sus entradas y salidas)
-        4. Las ENTRADAS del proceso son SALIDAS de procesos anteriores
-        5. Repito hasta llegar a recepciones (location_id = 4)
+        Args:
+            initial_package_ids: IDs de paquetes iniciales
+            limit: Límite de registros por query
+            include_siblings: 
+                - True: Trae TODOS los movimientos de cada proceso (todos los hermanos)
+                - False: "Conexión directa" - Trae todo pero filtra para mostrar solo la cadena conectada
+        
+        Estrategia: Siempre recopilamos TODOS los datos (como "Todos"), 
+        y luego si include_siblings=False, filtramos para quedarnos solo con la cadena conectada.
         """
         virtual_ids = self._get_virtual_location_ids()
         
@@ -230,28 +168,30 @@ class TraceabilityService:
         processed_move_ids = set()
         processed_references = set()
         
-        # Cola de paquetes a trazabilizar (solo los que necesitamos seguir hacia atrás)
+        # Cola de paquetes a trazabilizar
         packages_to_trace = set(initial_package_ids)
         traced_packages = set()
         
         max_iterations = 50
         iteration = 0
         
-        print(f"[TraceabilityService] Iniciando trazabilidad hacia ATRÁS desde {len(packages_to_trace)} paquetes")
+        mode_msg = "CON todos los hermanos" if include_siblings else "Conexión directa"
+        print(f"[TraceabilityService] Iniciando trazabilidad hacia ATRÁS ({mode_msg}) desde {len(packages_to_trace)} paquetes")
         
+        # =====================================================
+        # FASE 1: Recopilar TODOS los movimientos (como "Todos")
+        # =====================================================
         while packages_to_trace and iteration < max_iterations:
             iteration += 1
             
-            # Tomar paquetes pendientes
             current_packages = list(packages_to_trace - traced_packages)
             if not current_packages:
                 break
                 
             print(f"[TraceabilityService] Iteración {iteration}: {len(current_packages)} paquetes a procesar")
             
-            # PASO 1: Buscar dónde estos paquetes son SALIDA (result_package_id)
-            # Esto nos dice de qué proceso salieron
             try:
+                # Buscar dónde estos paquetes son SALIDA (result_package_id)
                 out_moves = self.odoo.search_read(
                     "stock.move.line",
                     [
@@ -264,7 +204,7 @@ class TraceabilityService:
                     order="date asc"
                 )
                 
-                # Recopilar referencias (procesos) de donde salieron
+                # Recopilar referencias
                 new_references = set()
                 for ml in out_moves:
                     if ml["id"] not in processed_move_ids:
@@ -275,9 +215,7 @@ class TraceabilityService:
                     if ref and ref not in processed_references:
                         new_references.add(ref)
                 
-                print(f"[TraceabilityService] Encontradas {len(new_references)} referencias (procesos) nuevas")
-                
-                # PASO 2: Para cada proceso, obtener TODOS sus movimientos
+                # Para cada proceso, obtener TODOS los movimientos
                 for ref in new_references:
                     ref_moves = self.odoo.search_read(
                         "stock.move.line",
@@ -296,21 +234,18 @@ class TraceabilityService:
                             all_move_lines.append(ml)
                             processed_move_ids.add(ml["id"])
                         
-                        # Las ENTRADAS (package_id) de este proceso son las que debemos seguir
-                        # hacia atrás (son SALIDAS de procesos anteriores)
+                        # Los INPUTS que NO vienen de recepción se siguen hacia atrás
                         pkg_rel = ml.get("package_id")
                         loc_id = ml.get("location_id")
                         loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
                         
                         if pkg_rel:
                             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                            # Solo seguir si NO es recepción (location_id != 4)
                             if pkg_id and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
                                 packages_to_trace.add(pkg_id)
                     
                     processed_references.add(ref)
                 
-                # Marcar paquetes actuales como procesados
                 traced_packages.update(current_packages)
                 
             except Exception as e:
@@ -319,8 +254,47 @@ class TraceabilityService:
                 traceback.print_exc()
                 break
         
-        # PASO 3: Buscar movimientos de venta de los pallets OUT
-        # (donde location_dest_id = 5, Partners/Customers)
+        # Buscar movimientos de RECEPCIÓN
+        try:
+            all_package_ids = set()
+            for ml in all_move_lines:
+                pkg_rel = ml.get("package_id")
+                result_rel = ml.get("result_package_id")
+                
+                if pkg_rel:
+                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                    if pkg_id:
+                        all_package_ids.add(pkg_id)
+                
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        all_package_ids.add(result_id)
+            
+            if all_package_ids:
+                reception_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("result_package_id", "in", list(all_package_ids)),
+                        ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=500,
+                    order="date asc"
+                )
+                
+                for ml in reception_moves:
+                    if ml["id"] not in processed_move_ids:
+                        all_move_lines.append(ml)
+                        processed_move_ids.add(ml["id"])
+                
+                print(f"[TraceabilityService] Encontrados {len(reception_moves)} movimientos de recepción")
+        except Exception as e:
+            print(f"[TraceabilityService] Error buscando recepciones: {e}")
+        
+        # Buscar movimientos de VENTA
         try:
             out_package_ids = set()
             for ml in all_move_lines:
@@ -353,12 +327,12 @@ class TraceabilityService:
         except Exception as e:
             print(f"[TraceabilityService] Error buscando ventas: {e}")
         
-        print(f"[TraceabilityService] Total: {len(all_move_lines)} movimientos, {len(processed_references)} procesos")
+        print(f"[TraceabilityService] Total ANTES de filtrar: {len(all_move_lines)} movimientos")
         
         if not all_move_lines:
             return self._empty_result()
         
-        # Procesar movimientos
+        # Procesar movimientos (siempre procesamos todo como "Todos")
         result = self._process_move_lines(all_move_lines, virtual_ids)
         result["move_lines"] = all_move_lines
         
@@ -369,7 +343,165 @@ class TraceabilityService:
         self._enrich_with_pallet_dates(result)
         self._enrich_with_mrp_dates(result)
         
+        # =====================================================
+        # FASE 2: Si include_siblings=False, filtrar el resultado procesado
+        # =====================================================
+        if not include_siblings:
+            result = self._filter_direct_connection_result(result, initial_package_ids)
+        
         return result
+    
+    def _filter_direct_connection_result(
+        self, 
+        result: Dict,
+        initial_package_ids: List[int]
+    ) -> Dict:
+        """
+        Filtra el resultado procesado para quedarnos solo con la cadena conectada.
+        
+        Estrategia:
+        1. Usar los links ya construidos para hacer BFS desde los pallets iniciales
+        2. Marcar todos los nodos alcanzables (hacia atrás y adelante)
+        3. Filtrar el resultado para quedarnos solo con nodos conectados
+        """
+        pallets = result.get("pallets", {})
+        processes = result.get("processes", {})
+        suppliers = result.get("suppliers", {})
+        customers = result.get("customers", {})
+        links = result.get("links", [])
+        
+        print(f"[TraceabilityService] Filtrando conexión directa desde {len(initial_package_ids)} pallets iniciales")
+        print(f"[TraceabilityService] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
+        
+        # Construir grafo bidireccional desde los links
+        # node_id -> tipo:id (ej: "PALLET:123", "PROCESS:ref", "RECV:ref")
+        graph_forward = {}  # source -> [targets]
+        graph_backward = {}  # target -> [sources]
+        
+        for link in links:
+            source_type, source_id, target_type, target_id, qty = link
+            
+            source_node = f"{source_type}:{source_id}"
+            target_node = f"{target_type}:{target_id}"
+            
+            if source_node not in graph_forward:
+                graph_forward[source_node] = []
+            graph_forward[source_node].append(target_node)
+            
+            if target_node not in graph_backward:
+                graph_backward[target_node] = []
+            graph_backward[target_node].append(source_node)
+        
+        # BFS desde pallets iniciales (hacia atrás y adelante)
+        connected_nodes = set()
+        queue = []
+        
+        for pkg_id in initial_package_ids:
+            node = f"PALLET:{pkg_id}"
+            connected_nodes.add(node)
+            queue.append(node)
+        
+        # Primero: incluir todos los procesos del primer nivel (hermanos)
+        first_level_processes = set()
+        for pkg_id in initial_package_ids:
+            node = f"PALLET:{pkg_id}"
+            # Buscar procesos donde este pallet es output
+            for source in graph_backward.get(node, []):
+                if source.startswith("PROCESS:") or source.startswith("RECV:"):
+                    first_level_processes.add(source)
+                    connected_nodes.add(source)
+        
+        # Agregar todos los outputs (hermanos) de los procesos del primer nivel
+        for proc_node in first_level_processes:
+            for target in graph_forward.get(proc_node, []):
+                if target.startswith("PALLET:"):
+                    connected_nodes.add(target)
+                    queue.append(target)
+        
+        # Agregar los procesos a la cola para seguir hacia atrás
+        queue.extend(first_level_processes)
+        
+        # BFS hacia atrás (inputs)
+        visited = set(initial_package_ids)
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            
+            # Agregar todos los nodos de entrada (hacia atrás)
+            for source in graph_backward.get(current, []):
+                if source not in connected_nodes:
+                    connected_nodes.add(source)
+                    queue.append(source)
+        
+        # Agregar proveedores y clientes conectados
+        for node in list(connected_nodes):
+            if node.startswith("RECV:"):
+                # Buscar proveedor de esta recepción
+                ref = node.replace("RECV:", "")
+                proc_info = processes.get(ref, {})
+                supplier_id = proc_info.get("supplier_id")
+                if supplier_id:
+                    connected_nodes.add(f"SUPPLIER:{supplier_id}")
+        
+        for node in list(connected_nodes):
+            if node.startswith("PALLET:"):
+                # Buscar si este pallet va a un cliente
+                for target in graph_forward.get(node, []):
+                    if target.startswith("CUSTOMER:"):
+                        connected_nodes.add(target)
+        
+        print(f"[TraceabilityService] Nodos conectados: {len(connected_nodes)}")
+        
+        # Filtrar pallets
+        filtered_pallets = {}
+        for pid, pinfo in pallets.items():
+            if f"PALLET:{pid}" in connected_nodes:
+                filtered_pallets[pid] = pinfo
+        
+        # Filtrar procesos
+        filtered_processes = {}
+        for ref, pinfo in processes.items():
+            proc_node = f"RECV:{ref}" if pinfo.get("is_reception") else f"PROCESS:{ref}"
+            if proc_node in connected_nodes:
+                filtered_processes[ref] = pinfo
+        
+        # Filtrar proveedores
+        filtered_suppliers = {}
+        for sid, sname in suppliers.items():
+            if f"SUPPLIER:{sid}" in connected_nodes:
+                filtered_suppliers[sid] = sname
+        
+        # Filtrar clientes
+        filtered_customers = {}
+        for cid, cname in customers.items():
+            if f"CUSTOMER:{cid}" in connected_nodes:
+                filtered_customers[cid] = cname
+        
+        # Filtrar links
+        filtered_links = []
+        for link in links:
+            source_type, source_id, target_type, target_id, qty = link
+            source_node = f"{source_type}:{source_id}"
+            target_node = f"{target_type}:{target_id}"
+            
+            if source_node in connected_nodes and target_node in connected_nodes:
+                filtered_links.append(link)
+        
+        print(f"[TraceabilityService] Después del filtro: {len(filtered_pallets)} pallets, {len(filtered_processes)} procesos, {len(filtered_links)} links")
+        
+        return {
+            "pallets": filtered_pallets,
+            "processes": filtered_processes,
+            "suppliers": filtered_suppliers,
+            "customers": filtered_customers,
+            "links": filtered_links,
+            "reception_picking_ids": result.get("reception_picking_ids", []),
+            "sale_picking_ids": result.get("sale_picking_ids", []),
+            "sale_pallet_pickings": result.get("sale_pallet_pickings", {}),
+            "move_lines": result.get("move_lines", [])
+        }
 
     def get_traceability_data(
         self,
