@@ -288,11 +288,12 @@ async def get_traceability_by_picking_id(
 ):
     """
     Obtiene trazabilidad desde un picking específico HACIA ADELANTE.
+    Sigue toda la cadena: recepción → procesos → más procesos → clientes.
     """
     try:
         service = TraceabilityService(username=username, password=password)
         
-        # Buscar pallets de este picking
+        # Buscar pallets de este picking (result_package_id de la recepción)
         move_lines = service.odoo.search_read(
             "stock.move.line",
             [
@@ -317,8 +318,8 @@ async def get_traceability_by_picking_id(
         if not package_ids:
             return {"error": "No se encontraron pallets en este picking"}
         
-        # Obtener trazabilidad de esos pallets
-        data = service._get_traceability_for_packages(list(package_ids), limit=10000, include_siblings=include_siblings)
+        # Obtener trazabilidad HACIA ADELANTE de esos pallets
+        data = service._get_forward_traceability_for_packages(list(package_ids), limit=10000, include_siblings=include_siblings)
         data.pop("move_lines", None)
         return data
         

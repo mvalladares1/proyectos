@@ -178,7 +178,7 @@ class TraceabilityService:
             print(f"[TraceabilityService] Guía {delivery_guide}: {len(package_ids)} pallets encontrados")
             
             # Trazabilidad HACIA ADELANTE de esos pallets
-            return self._get_traceability_for_packages(list(package_ids), limit, include_siblings=include_siblings)
+            return self._get_forward_traceability_for_packages(list(package_ids), limit, include_siblings=include_siblings)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por guía: {e}")
@@ -415,6 +415,215 @@ class TraceabilityService:
             return self._empty_result()
         
         # Procesar movimientos (siempre procesamos todo como "Todos")
+        result = self._process_move_lines(all_move_lines, virtual_ids)
+        result["move_lines"] = all_move_lines
+        
+        # Resolver proveedores y clientes
+        self._resolve_partners(result)
+        
+        # Enriquecer con fechas
+        self._enrich_with_pallet_dates(result)
+        self._enrich_with_mrp_dates(result)
+        
+        # =====================================================
+        # FASE 2: Si include_siblings=False, filtrar el resultado procesado
+        # =====================================================
+        if not include_siblings:
+            result = self._filter_direct_connection_result(result, initial_package_ids)
+        
+        return result
+    
+    def _get_forward_traceability_for_packages(
+        self, 
+        initial_package_ids: List[int], 
+        limit: int,
+        include_siblings: bool = True
+    ) -> Dict:
+        """
+        Trazabilidad hacia ADELANTE desde los paquetes iniciales (típicamente de una recepción).
+        
+        Sigue la cadena completa:
+        1. Pallets iniciales (de recepción)
+        2. Esos pallets como INPUT (package_id) de procesos → obtiene OUTPUT (result_package_id)
+        3. Esos OUTPUT como INPUT de otros procesos → más OUTPUT
+        4. Y así hasta llegar a clientes
+        
+        Args:
+            initial_package_ids: IDs de paquetes iniciales (ej: pallets de recepción)
+            limit: Límite de registros por query
+            include_siblings: 
+                - True: Trae TODOS los movimientos de cada proceso (todos los hermanos)
+                - False: "Conexión directa" - solo la cadena conectada
+        """
+        virtual_ids = self._get_virtual_location_ids()
+        
+        fields = [
+            "id", "reference", "package_id", "result_package_id",
+            "lot_id", "qty_done", "product_id", "location_id", 
+            "location_dest_id", "date", "picking_id"
+        ]
+        
+        all_move_lines = []
+        processed_move_ids = set()
+        processed_references = set()
+        
+        # Cola de paquetes a trazabilizar HACIA ADELANTE
+        packages_to_trace = set(initial_package_ids)
+        traced_packages = set()
+        
+        max_iterations = 50
+        iteration = 0
+        
+        mode_msg = "CON todos los hermanos" if include_siblings else "Conexión directa"
+        print(f"[TraceabilityService] Iniciando trazabilidad HACIA ADELANTE ({mode_msg}) desde {len(packages_to_trace)} paquetes")
+        
+        # =====================================================
+        # FASE 1: Recopilar TODOS los movimientos hacia ADELANTE
+        # =====================================================
+        while packages_to_trace and iteration < max_iterations:
+            iteration += 1
+            
+            current_packages = list(packages_to_trace - traced_packages)
+            if not current_packages:
+                break
+                
+            print(f"[TraceabilityService] Iteración {iteration}: {len(current_packages)} paquetes a procesar")
+            
+            try:
+                # Buscar dónde estos paquetes son ENTRADA (package_id) de procesos
+                in_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("package_id", "in", current_packages),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=limit,
+                    order="date asc"
+                )
+                
+                # Recopilar referencias de procesos
+                new_references = set()
+                for ml in in_moves:
+                    if ml["id"] not in processed_move_ids:
+                        all_move_lines.append(ml)
+                        processed_move_ids.add(ml["id"])
+                    
+                    ref = ml.get("reference")
+                    if ref and ref not in processed_references:
+                        new_references.add(ref)
+                
+                # Para cada proceso, obtener TODOS los movimientos (inputs y outputs)
+                for ref in new_references:
+                    ref_moves = self.odoo.search_read(
+                        "stock.move.line",
+                        [
+                            ("reference", "=", ref),
+                            ("qty_done", ">", 0),
+                            ("state", "=", "done"),
+                        ],
+                        fields,
+                        limit=500,
+                        order="date asc"
+                    )
+                    
+                    for ml in ref_moves:
+                        if ml["id"] not in processed_move_ids:
+                            all_move_lines.append(ml)
+                            processed_move_ids.add(ml["id"])
+                        
+                        # Los OUTPUTS generados se siguen hacia adelante
+                        result_rel = ml.get("result_package_id")
+                        loc_dest_id = ml.get("location_dest_id")
+                        loc_dest_id = loc_dest_id[0] if isinstance(loc_dest_id, (list, tuple)) else loc_dest_id
+                        
+                        if result_rel:
+                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                            # Solo seguir si NO va a clientes (seguir la cadena interna)
+                            if result_id and loc_dest_id != self.PARTNER_CUSTOMERS_LOCATION_ID:
+                                packages_to_trace.add(result_id)
+                    
+                    processed_references.add(ref)
+                
+                traced_packages.update(current_packages)
+                
+            except Exception as e:
+                print(f"[TraceabilityService] Error en iteración {iteration}: {e}")
+                import traceback
+                traceback.print_exc()
+                break
+        
+        # Buscar movimientos hacia CLIENTES (salidas finales)
+        try:
+            all_package_ids = set()
+            for ml in all_move_lines:
+                pkg_rel = ml.get("package_id")
+                result_rel = ml.get("result_package_id")
+                
+                if pkg_rel:
+                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                    if pkg_id:
+                        all_package_ids.add(pkg_id)
+                
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        all_package_ids.add(result_id)
+            
+            if all_package_ids:
+                customer_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("package_id", "in", list(all_package_ids)),
+                        ("location_dest_id", "=", self.PARTNER_CUSTOMERS_LOCATION_ID),
+                        ("qty_done", ">", 0),
+                        ("state", "=", "done"),
+                    ],
+                    fields,
+                    limit=1000,
+                    order="date asc"
+                )
+                
+                for ml in customer_moves:
+                    if ml["id"] not in processed_move_ids:
+                        all_move_lines.append(ml)
+                        processed_move_ids.add(ml["id"])
+                
+                print(f"[TraceabilityService] Encontrados {len(customer_moves)} movimientos hacia clientes")
+        except Exception as e:
+            print(f"[TraceabilityService] Error buscando movimientos a clientes: {e}")
+        
+        # Buscar movimientos de RECEPCIÓN (para incluir los pallets iniciales en el diagrama)
+        try:
+            reception_moves = self.odoo.search_read(
+                "stock.move.line",
+                [
+                    ("result_package_id", "in", initial_package_ids),
+                    ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
+                    ("qty_done", ">", 0),
+                    ("state", "=", "done"),
+                ],
+                fields,
+                limit=500,
+                order="date asc"
+            )
+            
+            for ml in reception_moves:
+                if ml["id"] not in processed_move_ids:
+                    all_move_lines.append(ml)
+                    processed_move_ids.add(ml["id"])
+            
+            print(f"[TraceabilityService] Encontrados {len(reception_moves)} movimientos de recepción")
+        except Exception as e:
+            print(f"[TraceabilityService] Error buscando recepciones: {e}")
+        
+        print(f"[TraceabilityService] Total movimientos hacia ADELANTE: {len(all_move_lines)}")
+        
+        if not all_move_lines:
+            return self._empty_result()
+        
+        # Procesar movimientos
         result = self._process_move_lines(all_move_lines, virtual_ids)
         result["move_lines"] = all_move_lines
         
