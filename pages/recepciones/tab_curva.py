@@ -28,11 +28,13 @@ def render(username: str, password: str):
 
     with col_row1_1:
         st.markdown("**Origen/Planta:**")
-        col_pl1, col_pl2 = st.columns(2)
+        col_pl1, col_pl2, col_pl3 = st.columns(3)
         with col_pl1:
             curva_rfp = st.checkbox("🏭 RFP", value=True, key="curva_rfp")
         with col_pl2:
             curva_vilkun = st.checkbox("🌿 VILKÚN", value=True, key="curva_vilkun")
+        with col_pl3:
+            curva_san_jose = st.checkbox("🏘️ SAN JOSE", value=True, key="curva_san_jose")
 
     with col_row1_2:
         st.markdown("**Estado recepciones:**")
@@ -107,9 +109,11 @@ def render(username: str, password: str):
             plantas_list.append("RFP")
         if curva_vilkun:
             plantas_list.append("VILKUN")
+        if curva_san_jose:
+            plantas_list.append("SAN JOSE")
 
         if not plantas_list:
-            st.warning("Debes seleccionar al menos una planta (RFP o VILKÚN)")
+            st.warning("Debes seleccionar al menos una planta (RFP, VILKÚN o SAN JOSE)")
         else:
             st.session_state.recep_curva_loading = True
             try:
