@@ -321,7 +321,8 @@ def _render_detalle_datos(datos: list, resumen: dict):
                 fecha_hasta_str
             )
             
-            if datos_mensuales and not datos_mensuales.get('error'):
+            # Verificar si es lista (éxito) o dict con error
+            if isinstance(datos_mensuales, list) and len(datos_mensuales) > 0:
                 df_mensual = pd.DataFrame(datos_mensuales)
                 
                 # Gráfico de línea: Merma % por mes
@@ -389,6 +390,11 @@ def _render_detalle_datos(datos: list, resumen: dict):
                         st.warning(f"⚠️ **Tendencia negativa**: La merma ha aumentado en {cambio_merma:.1f} puntos porcentuales")
                     else:
                         st.info("ℹ️ **Tendencia estable**: La merma se mantiene relativamente constante")
+            
+            elif isinstance(datos_mensuales, dict) and datos_mensuales.get('error'):
+                st.error(f"Error al obtener datos mensuales: {datos_mensuales.get('error')}")
+            else:
+                st.warning("No hay datos mensuales suficientes para el período seleccionado")
     
     # ============================================================================
     # COMPARATIVA AÑO VS AÑO
@@ -432,7 +438,8 @@ def _render_detalle_datos(datos: list, resumen: dict):
                     anio_comparar
                 )
                 
-                if comparativa and not comparativa.get('error'):
+                # Verificar si es lista (éxito) o dict con error
+                if isinstance(comparativa, list) and len(comparativa) > 0:
                     df_comp = pd.DataFrame(comparativa)
                     
                     # Ordenar por delta de merma (mayor empeoramiento primero)
@@ -507,8 +514,10 @@ def _render_detalle_datos(datos: list, resumen: dict):
                         else:
                             st.success("✅ No hay productos con empeoramiento significativo de merma")
                 
+                elif isinstance(comparativa, dict) and comparativa.get('error'):
+                    st.error(f"Error al obtener comparativa: {comparativa.get('error')}")
                 else:
-                    st.error(f"Error al obtener comparativa: {comparativa.get('error', 'Desconocido')}")
+                    st.warning("No hay datos para la comparativa seleccionada")
 
 
 def _render_anio_detalle(anio: int, data: dict):
