@@ -167,19 +167,45 @@ def _render_detalle_datos(datos: list, resumen: dict):
     st.markdown("---")
     st.markdown("### 📋 Detalle por Tipo de Fruta y Manejo")
     
+    # Nota informativa sobre productos elaborados
+    st.info("""
+    ℹ️ **Nota sobre interpretación de métricas:**
+    - **"Mix"** es producto elaborado (mezcla de frutas). No tiene compras directas, por lo que muestra métricas especiales.
+    - Productos con **baja rotación** pueden haberse vendido como parte de Mix u otros productos elaborados.
+    - **ROI negativo** indica pérdida en la operación (costos > ingresos).
+    """)
+    
     # Formatear DataFrame para visualización
     df_display = df.copy()
+    
+    # Función helper para formatear valores especiales
+    def format_percentage(value):
+        if pd.isna(value) or value == 0:
+            return "0.0%"
+        elif abs(value) == float('inf'):
+            return "Prod. Elab."
+        else:
+            return f"{value:.1f}%"
+    
+    def format_margin_pct(value):
+        if pd.isna(value):
+            return "N/A"
+        elif abs(value) == float('inf'):
+            return "Prod. Elab."
+        else:
+            return f"{value:.1f}%"
+    
     df_display['Compras (kg)'] = df_display['compras_kg'].apply(lambda x: f"{x:,.0f}")
     df_display['Compras ($)'] = df_display['compras_monto'].apply(lambda x: f"${x:,.0f}")
-    df_display['$/kg Compra'] = df_display['precio_promedio_compra'].apply(lambda x: f"${x:,.2f}")
+    df_display['$/kg Compra'] = df_display['precio_promedio_compra'].apply(lambda x: f"${x:,.2f}" if x > 0 else "$0.00")
     df_display['Ventas (kg)'] = df_display['ventas_kg'].apply(lambda x: f"{x:,.0f}")
     df_display['Ventas ($)'] = df_display['ventas_monto'].apply(lambda x: f"${x:,.0f}")
-    df_display['$/kg Venta'] = df_display['precio_promedio_venta'].apply(lambda x: f"${x:,.2f}")
+    df_display['$/kg Venta'] = df_display['precio_promedio_venta'].apply(lambda x: f"${x:,.2f}" if x > 0 else "$0.00")
     df_display['Merma (kg)'] = df_display['merma_kg'].apply(lambda x: f"{x:,.0f}")
     df_display['Merma (%)'] = df_display['merma_pct'].apply(lambda x: f"{x:.2f}%")
     df_display['Margen $/kg'] = df_display['margen_bruto_kg'].apply(lambda x: f"${x:,.2f}")
-    df_display['Margen %'] = df_display['margen_bruto_pct'].apply(lambda x: f"{x:.1f}%")
-    df_display['ROI %'] = df_display['roi_pct'].apply(lambda x: f"{x:.1f}%")
+    df_display['Margen %'] = df_display['margen_bruto_pct'].apply(format_margin_pct)
+    df_display['ROI %'] = df_display['roi_pct'].apply(format_percentage)
     df_display['Stock Teórico ($)'] = df_display['stock_teorico_valor'].apply(lambda x: f"${x:,.0f}")
     
     # Agregar fila de totales
