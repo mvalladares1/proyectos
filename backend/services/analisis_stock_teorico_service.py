@@ -153,6 +153,7 @@ class AnalisisStockTeoricoService:
         """
         Obtiene compras agrupadas por tipo de fruta y manejo.
         ACTUALIZADO: Usa product.template + filtra por diario "Facturas Proveedores" + categoría producto.
+        Incluye productos archivados usando active_test=False.
         """
         # Líneas de facturas de proveedor - SOLO diario "Facturas de Proveedores"
         # Filtrado por cuentas específicas para evitar duplicaciones contables
@@ -183,14 +184,17 @@ class AnalisisStockTeoricoService:
         # Obtener product.product
         prod_ids = list(set([l.get('product_id', [None])[0] for l in lineas if l.get('product_id')]))
         
-        productos = self.odoo.search_read(
-            'product.product',
-            [['id', 'in', prod_ids]],
-            ['id', 'product_tmpl_id', 'categ_id'],
-            limit=100000
+        print(f"[DEBUG COMPRAS] IDs de productos únicos en líneas: {len(prod_ids)}")
+        
+        # IMPORTANTE: Usar execute_kw con active_test=False para incluir productos archivados
+        productos = self.odoo.models.execute_kw(
+            self.odoo.db, self.odoo.uid, self.odoo.password,
+            'product.product', 'read',
+            [prod_ids, ['id', 'product_tmpl_id', 'categ_id']],
+            {'context': {'active_test': False}}
         )
         
-        print(f"[DEBUG COMPRAS] Productos únicos: {len(productos)}")
+        print(f"[DEBUG COMPRAS] Productos encontrados en Odoo: {len(productos)}")
         
         # Obtener templates únicos
         template_ids = set()
@@ -207,15 +211,20 @@ class AnalisisStockTeoricoService:
                     'categ': prod.get('categ_id', [None, ''])
                 }
         
-        # Obtener templates con campos tipo y manejo
+        print(f"[DEBUG COMPRAS] Templates únicos: {len(template_ids)}")
+        
+        # Obtener templates con campos tipo y manejo (incluir archivados)
         template_map = {}
         if template_ids:
-            templates = self.odoo.search_read(
-                'product.template',
-                [['id', 'in', list(template_ids)]],
-                ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo'],
-                limit=100000
+            # IMPORTANTE: active_test=False para incluir templates archivados
+            templates = self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'product.template', 'read',
+                [list(template_ids), ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo']],
+                {'context': {'active_test': False}}
             )
+            
+            print(f"[DEBUG COMPRAS] Templates obtenidos: {len(templates)}")
             
             for tmpl in templates:
                 # Parsear tipo de fruta - MEJORADO
@@ -235,7 +244,7 @@ class AnalisisStockTeoricoService:
                 # Parsear manejo - MEJORADO
                 manejo = tmpl.get('x_studio_categora_tipo_de_manejo')
                 if manejo:
-                    if isinstance(manejo, (list, tuple)) and len(manejo) > 1:
+                    if isinstance(manejo, (list, tuple)) and len(tipo) > 1:
                         manejo_str = manejo[1]
                     elif isinstance(manejo, str):
                         manejo_str = manejo
@@ -274,16 +283,19 @@ class AnalisisStockTeoricoService:
                 }
                 productos_incluidos += 1
         
-        print(f"[DEBUG COMPRAS] Templates únicos: {len(template_ids)}")
         print(f"[DEBUG COMPRAS] Productos incluidos: {productos_incluidos}")
         print(f"[DEBUG COMPRAS] Productos mapeados: {len(productos_map)}")
         
         # Agrupar por tipo + manejo
         agrupado = {}
+        lineas_descartadas = 0
+        kg_descartados = 0
         
         for linea in lineas:
             prod_id = linea.get('product_id', [None])[0]
             if not prod_id or prod_id not in productos_map:
+                lineas_descartadas += 1
+                kg_descartados += linea.get('quantity', 0)
                 continue
             
             prod = productos_map[prod_id]
@@ -300,12 +312,15 @@ class AnalisisStockTeoricoService:
             agrupado[key]['kg'] += linea.get('quantity', 0)
             agrupado[key]['monto'] += linea.get('debit', 0)
         
+        print(f"[DEBUG COMPRAS] Líneas descartadas: {lineas_descartadas} ({kg_descartados:,.0f} kg)")
+        
         return list(agrupado.values())
     
     def _get_ventas_por_tipo_manejo(self, fecha_desde: str, fecha_hasta: str) -> List[Dict]:
         """
         Obtiene ventas agrupadas por tipo de fruta y manejo.
         ACTUALIZADO: Usa product.template + filtra por diario "Facturas de Cliente" + categoría producto.
+        Incluye productos archivados usando active_test=False.
         """
         # Líneas de facturas de cliente - SOLO diario "Facturas de Cliente"
         # Filtrado por cuenta específica para evitar duplicaciones contables
@@ -336,11 +351,12 @@ class AnalisisStockTeoricoService:
         # Obtener product.product
         prod_ids = list(set([l.get('product_id', [None])[0] for l in lineas if l.get('product_id')]))
         
-        productos = self.odoo.search_read(
-            'product.product',
-            [['id', 'in', prod_ids]],
-            ['id', 'product_tmpl_id', 'categ_id'],
-            limit=100000
+        # IMPORTANTE: Usar execute_kw con active_test=False para incluir productos archivados
+        productos = self.odoo.models.execute_kw(
+            self.odoo.db, self.odoo.uid, self.odoo.password,
+            'product.product', 'read',
+            [prod_ids, ['id', 'product_tmpl_id', 'categ_id']],
+            {'context': {'active_test': False}}
         )
         
         print(f"[DEBUG VENTAS] Productos únicos: {len(productos)}")
@@ -360,15 +376,20 @@ class AnalisisStockTeoricoService:
                     'categ': prod.get('categ_id', [None, ''])
                 }
         
-        # Obtener templates con campos tipo y manejo
+        print(f"[DEBUG VENTAS] Templates únicos: {len(template_ids)}")
+        
+        # Obtener templates con campos tipo y manejo (incluir archivados)
         template_map = {}
         if template_ids:
-            templates = self.odoo.search_read(
-                'product.template',
-                [['id', 'in', list(template_ids)]],
-                ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo'],
-                limit=100000
+            # IMPORTANTE: active_test=False para incluir templates archivados
+            templates = self.odoo.models.execute_kw(
+                self.odoo.db, self.odoo.uid, self.odoo.password,
+                'product.template', 'read',
+                [list(template_ids), ['id', 'name', 'x_studio_sub_categora', 'x_studio_categora_tipo_de_manejo']],
+                {'context': {'active_test': False}}
             )
+            
+            print(f"[DEBUG VENTAS] Templates obtenidos: {len(templates)}")
             
             for tmpl in templates:
                 # Parsear tipo de fruta - MEJORADO
@@ -427,7 +448,6 @@ class AnalisisStockTeoricoService:
                 }
                 productos_incluidos += 1
         
-        print(f"[DEBUG VENTAS] Templates únicos: {len(template_ids)}")
         print(f"[DEBUG VENTAS] Productos incluidos: {productos_incluidos}")
         print(f"[DEBUG VENTAS] Productos mapeados: {len(productos_map)}")
         
