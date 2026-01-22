@@ -196,8 +196,8 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             const width = container.clientWidth || 1200;
             const height = {height};
             
-            // Márgenes para etiquetas
-            const margin = {{ top: 30, right: 20, bottom: 30, left: 20 }};
+            // Márgenes para etiquetas y eje temporal
+            const margin = {{ top: 30, right: 20, bottom: 70, left: 20 }};
             const innerWidth = width - margin.left - margin.right;
             const innerHeight = height - margin.top - margin.bottom;
             
@@ -343,6 +343,56 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     const name = d.name || '';
                     return name.length > 25 ? name.substring(0, 23) + '...' : name;
                 }});
+            
+            // Crear eje temporal debajo del diagrama
+            // Extraer fechas válidas de los nodos
+            const validDates = graph.nodes
+                .map(d => d.date)
+                .filter(date => date && date !== '9999-99-99')
+                .map(date => new Date(date));
+            
+            if (validDates.length > 0) {{
+                const minDate = d3.min(validDates);
+                const maxDate = d3.max(validDates);
+                
+                // Escala temporal
+                const timeScale = d3.scaleTime()
+                    .domain([minDate, maxDate])
+                    .range([0, innerWidth]);
+                
+                // Crear eje temporal
+                const timeAxis = d3.axisBottom(timeScale)
+                    .ticks(d3.timeMonth, 1)
+                    .tickFormat(d3.timeFormat('%b %Y'));
+                
+                // Agregar grupo para el eje
+                const axisGroup = g.append('g')
+                    .attr('class', 'time-axis')
+                    .attr('transform', `translate(0, ${{innerHeight + 20}})`)
+                    .call(timeAxis);
+                
+                // Estilizar el eje
+                axisGroup.selectAll('text')
+                    .attr('font-size', '11px')
+                    .attr('fill', '#666')
+                    .style('text-anchor', 'middle');
+                
+                axisGroup.selectAll('line')
+                    .attr('stroke', '#999');
+                
+                axisGroup.select('.domain')
+                    .attr('stroke', '#999');
+                    
+                // Etiqueta del eje
+                g.append('text')
+                    .attr('x', innerWidth / 2)
+                    .attr('y', innerHeight + 55)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '12px')
+                    .attr('font-weight', 'bold')
+                    .attr('fill', '#333')
+                    .text('📅 Línea de Tiempo');
+            }}
         </script>
     </body>
     </html>
