@@ -469,15 +469,15 @@ class TraceabilityService:
         
         # Filtrar proveedores
         filtered_suppliers = {}
-        for sid, sname in suppliers.items():
+        for sid, sinfo in suppliers.items():
             if f"SUPPLIER:{sid}" in connected_nodes:
-                filtered_suppliers[sid] = sname
+                filtered_suppliers[sid] = sinfo
         
         # Filtrar clientes
         filtered_customers = {}
-        for cid, cname in customers.items():
+        for cid, cinfo in customers.items():
             if f"CUSTOMER:{cid}" in connected_nodes:
-                filtered_customers[cid] = cname
+                filtered_customers[cid] = cinfo
         
         # Filtrar links
         filtered_links = []
@@ -793,10 +793,20 @@ class TraceabilityService:
                 if pinfo.get("is_reception") and pinfo.get("picking_id"):
                     picking = pickings_by_id.get(pinfo["picking_id"], {})
                     partner_rel = picking.get("partner_id")
+                    date_done = picking.get("date_done", "")
+                    scheduled_date = picking.get("scheduled_date", "")
+                    
                     if partner_rel:
                         sid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
                         sname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Proveedor"
-                        result["suppliers"][sid] = sname
+                        
+                        # Guardar proveedor con fecha de recepción
+                        if sid not in result["suppliers"]:
+                            result["suppliers"][sid] = {
+                                "name": sname,
+                                "date_done": date_done,  # Fecha real de recepción
+                                "scheduled_date": scheduled_date
+                            }
                         pinfo["supplier_id"] = sid
             
             # Clientes - Filtrar solo ventas (origin empieza con "S")
@@ -868,7 +878,7 @@ class TraceabilityService:
         return known_virtual_ids
     
     def _enrich_with_pallet_dates(self, result: Dict):
-        """Obtiene create_date de stock.quant.package para cada pallet."""
+        """Obtiene pack_date de stock.quant.package para cada pallet."""
         pallet_ids = list(result["pallets"].keys())
         if not pallet_ids:
             return
@@ -877,12 +887,15 @@ class TraceabilityService:
             packages = self.odoo.read(
                 "stock.quant.package",
                 pallet_ids,
-                ["id", "create_date"]
+                ["id", "pack_date", "create_date"]
             )
             for pkg in packages:
                 pid = pkg["id"]
                 if pid in result["pallets"]:
-                    result["pallets"][pid]["create_date"] = pkg.get("create_date", "")
+                    # Usar pack_date si existe, si no usar create_date, si no dejar first_date del movimiento
+                    pack_date = pkg.get("pack_date", "")
+                    create_date = pkg.get("create_date", "")
+                    result["pallets"][pid]["pack_date"] = pack_date or create_date or result["pallets"][pid].get("first_date", "")
         except Exception as e:
             print(f"[TraceabilityService] Error fetching package dates: {e}")
     

@@ -41,12 +41,26 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
         return node_index[nid]
     
     # Agregar nodos de proveedores
-    for sid, sname in suppliers.items():
+    for sid, sinfo in suppliers.items():
+        # Suppliers ahora son diccionarios con name y date_done
+        if isinstance(sinfo, dict):
+            sname = sinfo.get("name", "Proveedor")
+            date_done = sinfo.get("date_done", "")
+        else:
+            # Compatibilidad con formato antiguo (string)
+            sname = sinfo
+            date_done = ""
+        
         add_node(
             f"SUPP:{sid}",
             f"🏭 {sname}",
             "#9b59b6",  # Morado
-            {"type": "SUPPLIER", "id": sid, "name": sname},
+            {
+                "type": "SUPPLIER",
+                "id": sid,
+                "name": sname,
+                "date": date_done
+            },
             "SUPPLIER"
         )
     
@@ -63,6 +77,9 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
             color = "#f39c12"  # Naranja (entrada)
             icon = "🟠"
         
+        # Usar pack_date si existe, si no usar first_date
+        pallet_date = pinfo.get("pack_date") or pinfo.get("first_date", "")
+        
         add_node(
             f"PKG:{pid}",
             f"{icon} {pinfo.get('name', str(pid))}",
@@ -72,7 +89,7 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "id": pid,
                 "qty": pinfo.get("qty", 0),
                 "products": prods_str,
-                "date": pinfo.get("first_date", ""),
+                "date": pallet_date,
                 "lots": ", ".join(pinfo.get("lot_names", []))
             },
             f"PALLET_{direction}"
@@ -94,12 +111,26 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
             )
     
     # Agregar nodos de clientes
-    for cid, cname in customers.items():
+    for cid, cinfo in customers.items():
+        # Customers ahora son diccionarios con name y date_done
+        if isinstance(cinfo, dict):
+            cname = cinfo.get("name", "Cliente")
+            date_done = cinfo.get("date_done", "")
+        else:
+            # Compatibilidad con formato antiguo (string)
+            cname = cinfo
+            date_done = ""
+        
         add_node(
             f"CUST:{cid}",
             f"🔵 {cname}",
             "#3498db",  # Azul
-            {"type": "CUSTOMER", "id": cid, "name": cname},
+            {
+                "type": "CUSTOMER",
+                "id": cid,
+                "name": cname,
+                "date": date_done
+            },
             "CUSTOMER"
         )
     
