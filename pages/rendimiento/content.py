@@ -98,152 +98,81 @@ def render(username: str, password: str):
 def _render_trazabilidad(username: str, password: str):
     """Renderiza el tab de trazabilidad inversa por pallets (Producción)."""
     st.subheader("📦 Trazabilidad de Producción: Pallet → Productor")
-    st.markdown("Rastrea pallets, ventas o recepciones desde el producto terminado hasta el productor original.")
+    st.markdown("Rastrea uno o varios pallets desde el producto terminado hasta el productor original.")
     
     # Sección de búsqueda
-    st.markdown("### 🔍 Buscar Trazabilidad")
+    st.markdown("### 🔍 Buscar Pallets")
     
-    # Selector de tipo de búsqueda
-    tipo_busqueda = st.radio(
-        "Tipo de búsqueda:",
-        ["📦 Pallet", "🛒 Venta (S00XXX)", "📥 Guía de Despacho"],
-        horizontal=True,
-        help="Selecciona el tipo de identificador que quieres rastrear"
+    # Opciones de entrada
+    modo = st.radio(
+        "Modo de entrada:",
+        ["📝 Ingresar uno por uno", "📋 Pegar lista (separada por comas o líneas)"],
+        horizontal=True
     )
     
     pallets = []
-    buscar_guia = None
-    buscar_venta = None
     
-    if tipo_busqueda == "📥 Guía de Despacho":
-        buscar_guia = st.text_input(
-            "Número de Guía de Despacho",
-            placeholder="Ej: 503",
-            help="Ingresa el número de guía de despacho de la recepción",
-            key="guia_input"
-        )
-    
-    elif tipo_busqueda == "🛒 Venta (S00XXX)":
-        buscar_venta = st.text_input(
-            "Código de Venta",
-            placeholder="Ej: S00574",
-            help="Ingresa el código de venta (empieza con S)",
-            key="venta_input"
-        )
-        if buscar_venta and not buscar_venta.startswith("S"):
-            st.warning("⚠️ El código de venta debe empezar con 'S'")
-            return
-    
-    else:  # Búsqueda por Pallet
-        # Opciones de entrada
-        modo = st.radio(
-            "Modo de entrada:",
-            ["📝 Ingresar uno por uno", "📋 Pegar lista (separada por comas o líneas)"],
-            horizontal=True
-        )
-        
-        if modo == "📝 Ingresar uno por uno":
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                pallet_input = st.text_input(
-                    "Nombre del Pallet",
-                    placeholder="Ej: PALLET-RF-2024-0156",
-                    key="pallet_single"
-                )
-            with col2:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("➕ Agregar", use_container_width=True):
-                    if pallet_input and pallet_input not in st.session_state.get('pallets_list', []):
-                        if 'pallets_list' not in st.session_state:
-                            st.session_state.pallets_list = []
-                        st.session_state.pallets_list.append(pallet_input.strip())
-                        st.rerun()
-            
-            # Mostrar pallets agregados
-            if 'pallets_list' in st.session_state and st.session_state.pallets_list:
-                st.markdown("**Pallets agregados:**")
-                cols = st.columns([4, 1])
-                for idx, p in enumerate(st.session_state.pallets_list):
-                    with cols[0]:
-                        st.write(f"{idx + 1}. {p}")
-                    with cols[1]:
-                        if st.button(f"🗑️", key=f"del_{idx}"):
-                            st.session_state.pallets_list.remove(p)
-                            st.rerun()
-                pallets = st.session_state.pallets_list
-        else:
-            pallets_text = st.text_area(
-                "Lista de Pallets",
-                placeholder="PALLET-001\nPALLET-002, PALLET-003\nPALLET-004",
-                height=150,
-                help="Separa los pallets por comas o líneas nuevas"
+    if modo == "📝 Ingresar uno por uno":
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            pallet_input = st.text_input(
+                "Nombre del Pallet",
+                placeholder="Ej: PALLET-RF-2024-0156",
+                key="pallet_single"
             )
-            if pallets_text:
-                # Separar por comas o líneas
-                import re
-                pallets = [p.strip() for p in re.split(r'[,\n]+', pallets_text) if p.strip()]
-                st.info(f"🔢 {len(pallets)} pallet(s) detectado(s)")
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("➕ Agregar", use_container_width=True):
+                if pallet_input and pallet_input not in st.session_state.get('pallets_list', []):
+                    if 'pallets_list' not in st.session_state:
+                        st.session_state.pallets_list = []
+                    st.session_state.pallets_list.append(pallet_input.strip())
+                    st.rerun()
+        
+        # Mostrar pallets agregados
+        if 'pallets_list' in st.session_state and st.session_state.pallets_list:
+            st.markdown("**Pallets agregados:**")
+            cols = st.columns([4, 1])
+            for idx, p in enumerate(st.session_state.pallets_list):
+                with cols[0]:
+                    st.write(f"{idx + 1}. {p}")
+                with cols[1]:
+                    if st.button(f"🗑️", key=f"del_{idx}"):
+                        st.session_state.pallets_list.remove(p)
+                        st.rerun()
+            pallets = st.session_state.pallets_list
+    else:
+        pallets_text = st.text_area(
+            "Lista de Pallets",
+            placeholder="PALLET-001\nPALLET-002, PALLET-003\nPALLET-004",
+            height=150,
+            help="Separa los pallets por comas o líneas nuevas"
+        )
+        if pallets_text:
+            # Separar por comas o líneas
+            import re
+            pallets = [p.strip() for p in re.split(r'[,\n]+', pallets_text) if p.strip()]
+            st.info(f"🔢 {len(pallets)} pallet(s) detectado(s)")
     
     # Botón de búsqueda
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🔍 Rastrear Trazabilidad", type="primary", use_container_width=True):
-            # Validar según tipo de búsqueda
-            if tipo_busqueda == "📥 Guía de Despacho":
-                if not buscar_guia:
-                    st.warning("⚠️ Ingresa el número de guía de despacho")
-                    return
-                
-                with st.spinner(f"🔎 Rastreando guía {buscar_guia}..."):
-                    from .shared import get_traceability_by_delivery_guide
-                    resultado = get_traceability_by_delivery_guide(username, password, buscar_guia, include_siblings=True)
-                    
-                    if not resultado:
-                        st.error(f"❌ No se encontró la recepción con guía: {buscar_guia}")
-                        return
-                    
-                    # Verificar si hay datos
-                    if not resultado.get('pallets'):
-                        st.warning(f"⚠️ No se encontraron pallets para la guía: {buscar_guia}")
-                        return
-                    
-                    # Guardar en session state
-                    st.session_state.trazabilidad_resultado = resultado
-                    st.rerun()
+            if not pallets:
+                st.warning("⚠️ Ingresa al menos un pallet")
+                return
             
-            elif tipo_busqueda == "🛒 Venta (S00XXX)":
-                if not buscar_venta:
-                    st.warning("⚠️ Ingresa un código de venta")
+            with st.spinner(f"🔎 Rastreando {len(pallets)} pallet(s)..."):
+                from .shared import get_trazabilidad_pallets
+                resultado = get_trazabilidad_pallets(username, password, pallets)
+                
+                if resultado.get('error'):
+                    st.error(f"❌ {resultado['error']}")
                     return
                 
-                with st.spinner(f"🔎 Rastreando venta {buscar_venta}..."):
-                    from .shared import get_traceability_by_identifier
-                    resultado = get_traceability_by_identifier(username, password, buscar_venta, include_siblings=True)
-                    
-                    if not resultado or resultado.get('error'):
-                        st.error(f"❌ {resultado.get('error', 'Error desconocido')}")
-                        return
-                    
-                    # Guardar en session state
-                    st.session_state.trazabilidad_resultado = resultado
-                    st.rerun()
-            
-            else:  # Pallets
-                if not pallets:
-                    st.warning("⚠️ Ingresa al menos un pallet")
-                    return
-                
-                with st.spinner(f"🔎 Rastreando {len(pallets)} pallet(s)..."):
-                    from .shared import get_trazabilidad_pallets
-                    resultado = get_trazabilidad_pallets(username, password, pallets)
-                    
-                    if resultado.get('error'):
-                        st.error(f"❌ {resultado['error']}")
-                        return
-                    
-                    # Guardar en session state
-                    st.session_state.trazabilidad_resultado = resultado
-                    st.rerun()
+                # Guardar en session state
+                st.session_state.trazabilidad_resultado = resultado
+                st.rerun()
     
     # Botón para limpiar
     if 'pallets_list' in st.session_state and st.session_state.pallets_list:
@@ -417,7 +346,7 @@ def _render_sankey(username: str, password: str):
     
     search_mode = st.radio(
         "Selecciona el modo:",
-        ["📅 Por rango de fechas", "🔖 Por venta o paquete"],
+        ["📅 Por rango de fechas", "🔖 Por venta o paquete", "📥 Por guía de despacho"],
         horizontal=True,
         key="search_mode_selector"
     )
@@ -440,6 +369,29 @@ def _render_sankey(username: str, password: str):
                 key="sankey_fecha_fin",
             )
         identifier = None
+        delivery_guide = None
+    elif search_mode == "📥 Por guía de despacho":
+        st.markdown("### 📥 Buscar por Guía de Despacho")
+        col_guide, col_mode = st.columns([3, 2])
+        with col_guide:
+            delivery_guide = st.text_input(
+                "Número de guía",
+                placeholder="Ej: 503",
+                key="delivery_guide_input",
+                help="Ingresa el número de guía de despacho de la recepción"
+            )
+        with col_mode:
+            connection_mode = st.selectbox(
+                "Modo de conexión",
+                ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
+                key="connection_mode_guide",
+                help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+            )
+        include_siblings = connection_mode == "🌐 Todos (con hermanos)"
+        st.caption("💡 **Ejemplo:** `503` → Rastrea la recepción y todos los pallets hasta el cliente")
+        fecha_inicio = None
+        fecha_fin = None
+        identifier = None
     else:
         st.markdown("### 🔖 Buscar por Identificador")
         col_id, col_mode = st.columns([3, 2])
@@ -461,6 +413,7 @@ def _render_sankey(username: str, password: str):
         st.caption("💡 **Ejemplos:** `S00574` (busca venta) | `PALLET-001` (busca paquete)")
         fecha_inicio = None
         fecha_fin = None
+        delivery_guide = None
 
     # Filtro de productor (deshabilitado temporalmente)
     # TODO: Implementar filtro por productor buscando pallet por pallet
@@ -476,6 +429,8 @@ def _render_sankey(username: str, password: str):
     can_generate = False
     if search_mode == "📅 Por rango de fechas":
         can_generate = True
+    elif search_mode == "📥 Por guía de despacho":
+        can_generate = delivery_guide and delivery_guide.strip()
     else:  # Por identificador
         can_generate = identifier and identifier.strip()
     
@@ -484,7 +439,39 @@ def _render_sankey(username: str, password: str):
         
         with st.spinner(spinner_msg):
             # Obtener datos según el modo de búsqueda
-            if search_mode == "📅 Por rango de fechas":
+            if search_mode == "📥 Por guía de despacho":
+                from .shared import get_traceability_by_delivery_guide
+                raw_data = get_traceability_by_delivery_guide(
+                    username, 
+                    password, 
+                    delivery_guide, 
+                    include_siblings=include_siblings
+                )
+                
+                if not raw_data or not raw_data.get('pallets'):
+                    st.warning(f"No se encontraron datos para la guía: {delivery_guide}")
+                    st.session_state.diagram_data = None
+                    return
+                
+                # Transformar según el tipo de diagrama
+                if diagram_type == "📈 Sankey (Plotly)":
+                    from backend.services.traceability import transform_to_sankey
+                    data = transform_to_sankey(raw_data)
+                elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
+                    from backend.services.traceability import transform_to_sankey
+                    data = transform_to_sankey(raw_data)
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                else:  # Tabla
+                    from backend.services.traceability import transform_to_sankey
+                    data = transform_to_sankey(raw_data)
+                
+                st.session_state.diagram_data = data
+                st.session_state.diagram_data_type = diagram_type
+                st.success(f"✅ Diagrama generado para guía {delivery_guide}")
+            
+            elif search_mode == "📅 Por rango de fechas":
                 fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
                 fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
                 
