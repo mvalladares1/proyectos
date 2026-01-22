@@ -342,7 +342,7 @@ def _render_sankey(username: str, password: str):
     )
     
     st.markdown("---")
-    st.markdown("### � Modo de Búsqueda")
+    st.markdown("### 🔍 Modo de Búsqueda")
     
     search_mode = st.radio(
         "Selecciona el modo:",
@@ -427,7 +427,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
                 
-                elif diagram_type == "� Sankey (Nivo)" and NIVO_AVAILABLE:
+                elif diagram_type == "📊 Sankey (Nivo)" and NIVO_AVAILABLE:
                     data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
                     if not data or not data.get('nodes'):
                         st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
@@ -436,7 +436,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     # Obtener datos crudos y transformar a vis.js
                     raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
                     if not raw_data or not raw_data.get('pallets'):
@@ -469,7 +469,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
                 
-                elif diagram_type == "� Sankey (Nivo)" and NIVO_AVAILABLE:
+                elif diagram_type == "📊 Sankey (Nivo)" and NIVO_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
@@ -478,7 +478,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
