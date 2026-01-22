@@ -60,6 +60,10 @@ def render(username: str, password: str):
         with st.spinner("🔎 Analizando compras, ventas y calculando merma histórica..."):
             from .shared_analisis import get_stock_teorico_rango
             
+            # Guardar credenciales en session_state para funciones auxiliares
+            st.session_state.username = username
+            st.session_state.password = password
+            
             # Cargar análisis por rango
             st.session_state.datos_stock_teorico = get_stock_teorico_rango(
                 username, 
@@ -118,6 +122,16 @@ def _render_detalle_datos(datos: list, resumen: dict):
     df = pd.DataFrame(datos)
     
     # ============================================================================
+    # CALCULAR COLUMNAS DE RENTABILIDAD
+    # ============================================================================
+    df['margen_bruto_kg'] = df['precio_promedio_venta'] - df['precio_promedio_compra']
+    df['margen_bruto_pct'] = ((df['precio_promedio_venta'] / df['precio_promedio_compra'] - 1) * 100).fillna(0)
+    df['costo_merma'] = df['merma_kg'] * df['precio_promedio_compra']
+    df['utilidad_neta'] = df['ventas_monto'] - df['compras_monto']
+    df['rentabilidad_real'] = df['ventas_monto'] - df['compras_monto'] - df['costo_merma']
+    df['roi_pct'] = ((df['utilidad_neta'] / df['compras_monto']) * 100).fillna(0)
+    
+    # ============================================================================
     # RESUMEN GENERAL (ÚNICO)
     # ============================================================================
     st.markdown("### 📊 Resumen General")
@@ -148,7 +162,7 @@ def _render_detalle_datos(datos: list, resumen: dict):
         st.caption(f"Stock teórico: ${total_stock_valor:,.0f}")
     
     # ============================================================================
-    # TABLA DETALLADA
+    # TABLA DETALLADA CON RENTABILIDAD
     # ============================================================================
     st.markdown("---")
     st.markdown("### 📋 Detalle por Tipo de Fruta y Manejo")
@@ -163,11 +177,17 @@ def _render_detalle_datos(datos: list, resumen: dict):
     df_display['$/kg Venta'] = df_display['precio_promedio_venta'].apply(lambda x: f"${x:,.2f}")
     df_display['Merma (kg)'] = df_display['merma_kg'].apply(lambda x: f"{x:,.0f}")
     df_display['Merma (%)'] = df_display['merma_pct'].apply(lambda x: f"{x:.2f}%")
+    df_display['Margen $/kg'] = df_display['margen_bruto_kg'].apply(lambda x: f"${x:,.2f}")
+    df_display['Margen %'] = df_display['margen_bruto_pct'].apply(lambda x: f"{x:.1f}%")
+    df_display['ROI %'] = df_display['roi_pct'].apply(lambda x: f"{x:.1f}%")
     df_display['Stock Teórico ($)'] = df_display['stock_teorico_valor'].apply(lambda x: f"${x:,.0f}")
     
     # Agregar fila de totales
     precio_compra_prom = total_compras_monto/total_compras_kg if total_compras_kg > 0 else 0
     precio_venta_prom = total_ventas_monto/total_ventas_kg if total_ventas_kg > 0 else 0
+    margen_bruto_total = precio_venta_prom - precio_compra_prom
+    margen_pct_total = ((precio_venta_prom / precio_compra_prom - 1) * 100) if precio_compra_prom > 0 else 0
+    roi_total = (((total_ventas_monto - total_compras_monto) / total_compras_monto) * 100) if total_compras_monto > 0 else 0
     
     totales_row = pd.DataFrame([{
         'tipo_fruta': '📊 Totales',
@@ -180,6 +200,9 @@ def _render_detalle_datos(datos: list, resumen: dict):
         '$/kg Venta': f"${precio_venta_prom:,.2f}",
         'Merma (kg)': f"{total_merma_kg:,.0f}",
         'Merma (%)': f"{merma_pct:.2f}%",
+        'Margen $/kg': f"${margen_bruto_total:,.2f}",
+        'Margen %': f"{margen_pct_total:.1f}%",
+        'ROI %': f"{roi_total:.1f}%",
         'Stock Teórico ($)': f"${total_stock_valor:,.0f}"
     }])
     
@@ -188,6 +211,7 @@ def _render_detalle_datos(datos: list, resumen: dict):
         'Compras (kg)', 'Compras ($)', '$/kg Compra',
         'Ventas (kg)', 'Ventas ($)', '$/kg Venta',
         'Merma (kg)', 'Merma (%)', 
+        'Margen $/kg', 'Margen %', 'ROI %',
         'Stock Teórico ($)'
     ]], totales_row], ignore_index=True)
     
@@ -276,6 +300,215 @@ def _render_detalle_datos(datos: list, resumen: dict):
     )
     
     st.plotly_chart(fig_manejo, use_container_width=True)
+    
+    # ============================================================================
+    # ANÁLISIS TEMPORAL MES A MES
+    # ============================================================================
+    st.markdown("---")
+    st.markdown("### 📈 Análisis Temporal Mes a Mes")
+    
+    with st.spinner("Calculando tendencias mensuales..."):
+        from .shared_analisis import get_analisis_mensual
+        
+        fecha_desde_str = st.session_state.get('st_fecha_desde_cargada', '')
+        fecha_hasta_str = st.session_state.get('st_fecha_hasta_cargada', '')
+        
+        if fecha_desde_str and fecha_hasta_str:
+            datos_mensuales = get_analisis_mensual(
+                st.session_state.get('username', ''),
+                st.session_state.get('password', ''),
+                fecha_desde_str,
+                fecha_hasta_str
+            )
+            
+            if datos_mensuales and not datos_mensuales.get('error'):
+                df_mensual = pd.DataFrame(datos_mensuales)
+                
+                # Gráfico de línea: Merma % por mes
+                fig_merma_mensual = go.Figure()
+                
+                fig_merma_mensual.add_trace(go.Scatter(
+                    x=df_mensual['mes'],
+                    y=df_mensual['merma_pct'],
+                    mode='lines+markers',
+                    name='Merma %',
+                    line=dict(color='#e74c3c', width=3),
+                    marker=dict(size=8)
+                ))
+                
+                fig_merma_mensual.update_layout(
+                    title='Evolución de Merma Mensual (%)',
+                    xaxis_title='Mes',
+                    yaxis_title='Merma (%)',
+                    hovermode='x unified',
+                    yaxis=dict(ticksuffix='%')
+                )
+                
+                st.plotly_chart(fig_merma_mensual, use_container_width=True)
+                
+                # Gráfico de línea: Kg comprados vs vendidos por mes
+                fig_kg_mensual = go.Figure()
+                
+                fig_kg_mensual.add_trace(go.Scatter(
+                    x=df_mensual['mes'],
+                    y=df_mensual['compras_kg'],
+                    mode='lines+markers',
+                    name='Compras (kg)',
+                    line=dict(color='#2ecc71', width=3),
+                    marker=dict(size=8)
+                ))
+                
+                fig_kg_mensual.add_trace(go.Scatter(
+                    x=df_mensual['mes'],
+                    y=df_mensual['ventas_kg'],
+                    mode='lines+markers',
+                    name='Ventas (kg)',
+                    line=dict(color='#3498db', width=3),
+                    marker=dict(size=8)
+                ))
+                
+                fig_kg_mensual.update_layout(
+                    title='Evolución Mensual: Compras vs Ventas (kg)',
+                    xaxis_title='Mes',
+                    yaxis_title='Kilogramos (kg)',
+                    hovermode='x unified',
+                    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+                )
+                
+                st.plotly_chart(fig_kg_mensual, use_container_width=True)
+                
+                # Insight: Tendencia
+                if len(df_mensual) >= 3:
+                    merma_inicial = df_mensual.iloc[0]['merma_pct']
+                    merma_final = df_mensual.iloc[-1]['merma_pct']
+                    cambio_merma = merma_final - merma_inicial
+                    
+                    if cambio_merma < -2:
+                        st.success(f"✅ **Tendencia positiva**: La merma ha mejorado en {abs(cambio_merma):.1f} puntos porcentuales")
+                    elif cambio_merma > 2:
+                        st.warning(f"⚠️ **Tendencia negativa**: La merma ha aumentado en {cambio_merma:.1f} puntos porcentuales")
+                    else:
+                        st.info("ℹ️ **Tendencia estable**: La merma se mantiene relativamente constante")
+    
+    # ============================================================================
+    # COMPARATIVA AÑO VS AÑO
+    # ============================================================================
+    st.markdown("---")
+    st.markdown("### 🔄 Comparativa Año vs Año")
+    
+    col_anio1, col_anio2, col_comparar = st.columns([2, 2, 1])
+    
+    with col_anio1:
+        anio_base = st.selectbox(
+            "Año Base",
+            options=[2024, 2025, 2026],
+            index=0,
+            key="comparativa_anio_base"
+        )
+    
+    with col_anio2:
+        anio_comparar = st.selectbox(
+            "Año a Comparar",
+            options=[2024, 2025, 2026],
+            index=1,
+            key="comparativa_anio_comparar"
+        )
+    
+    with col_comparar:
+        st.markdown("<br>", unsafe_allow_html=True)
+        ejecutar_comparativa = st.button("📊 Comparar", type="primary", use_container_width=True)
+    
+    if ejecutar_comparativa:
+        if anio_base == anio_comparar:
+            st.warning("⚠️ Selecciona dos años diferentes para comparar")
+        else:
+            with st.spinner(f"Comparando temporada {anio_base} vs {anio_comparar}..."):
+                from .shared_analisis import get_comparativa_anual
+                
+                comparativa = get_comparativa_anual(
+                    st.session_state.get('username', ''),
+                    st.session_state.get('password', ''),
+                    anio_base,
+                    anio_comparar
+                )
+                
+                if comparativa and not comparativa.get('error'):
+                    df_comp = pd.DataFrame(comparativa)
+                    
+                    # Ordenar por delta de merma (mayor empeoramiento primero)
+                    df_comp = df_comp.sort_values('delta_merma_pct', ascending=False)
+                    
+                    st.markdown(f"#### Comparativa: Temporada {anio_base} vs {anio_comparar}")
+                    
+                    # Formatear tabla
+                    df_comp_display = df_comp.copy()
+                    df_comp_display['Tipo Fruta'] = df_comp_display['tipo_fruta']
+                    df_comp_display['Manejo'] = df_comp_display['manejo']
+                    df_comp_display[f'Compras {anio_base} (kg)'] = df_comp_display[f'compras_kg_{anio_base}'].apply(lambda x: f"{x:,.0f}")
+                    df_comp_display[f'Compras {anio_comparar} (kg)'] = df_comp_display[f'compras_kg_{anio_comparar}'].apply(lambda x: f"{x:,.0f}")
+                    df_comp_display['Δ Compras (kg)'] = df_comp_display['delta_compras_kg'].apply(lambda x: f"{x:+,.0f}")
+                    df_comp_display['Δ Compras (%)'] = df_comp_display['delta_compras_pct'].apply(lambda x: f"{x:+.1f}%")
+                    df_comp_display[f'Ventas {anio_base} (kg)'] = df_comp_display[f'ventas_kg_{anio_base}'].apply(lambda x: f"{x:,.0f}")
+                    df_comp_display[f'Ventas {anio_comparar} (kg)'] = df_comp_display[f'ventas_kg_{anio_comparar}'].apply(lambda x: f"{x:,.0f}")
+                    df_comp_display['Δ Ventas (kg)'] = df_comp_display['delta_ventas_kg'].apply(lambda x: f"{x:+,.0f}")
+                    df_comp_display['Δ Ventas (%)'] = df_comp_display['delta_ventas_pct'].apply(lambda x: f"{x:+.1f}%")
+                    df_comp_display[f'Merma {anio_base} (%)'] = df_comp_display[f'merma_pct_{anio_base}'].apply(lambda x: f"{x:.2f}%")
+                    df_comp_display[f'Merma {anio_comparar} (%)'] = df_comp_display[f'merma_pct_{anio_comparar}'].apply(lambda x: f"{x:.2f}%")
+                    df_comp_display['Δ Merma (pp)'] = df_comp_display['delta_merma_pct'].apply(lambda x: f"{x:+.2f}")
+                    
+                    st.dataframe(
+                        df_comp_display[[
+                            'Tipo Fruta', 'Manejo',
+                            f'Compras {anio_base} (kg)', f'Compras {anio_comparar} (kg)', 'Δ Compras (kg)', 'Δ Compras (%)',
+                            f'Ventas {anio_base} (kg)', f'Ventas {anio_comparar} (kg)', 'Δ Ventas (kg)', 'Δ Ventas (%)',
+                            f'Merma {anio_base} (%)', f'Merma {anio_comparar} (%)', 'Δ Merma (pp)'
+                        ]],
+                        use_container_width=True,
+                        hide_index=True,
+                        height=600
+                    )
+                    
+                    # Gráfico de deltas de merma
+                    fig_delta_merma = px.bar(
+                        df_comp.head(10),
+                        x='tipo_fruta',
+                        y='delta_merma_pct',
+                        color='delta_merma_pct',
+                        color_continuous_scale=['green', 'yellow', 'red'],
+                        title=f'Top 10: Cambio en Merma (puntos porcentuales) - {anio_base} vs {anio_comparar}',
+                        labels={'tipo_fruta': 'Tipo de Fruta', 'delta_merma_pct': 'Cambio en Merma (pp)'},
+                        text='delta_merma_pct'
+                    )
+                    
+                    fig_delta_merma.update_traces(texttemplate='%{text:+.1f}pp', textposition='outside')
+                    fig_delta_merma.update_layout(showlegend=False)
+                    
+                    st.plotly_chart(fig_delta_merma, use_container_width=True)
+                    
+                    # Insights
+                    mejoras = df_comp[df_comp['delta_merma_pct'] < -2]
+                    empeoramientos = df_comp[df_comp['delta_merma_pct'] > 2]
+                    
+                    col_m1, col_m2 = st.columns(2)
+                    
+                    with col_m1:
+                        if len(mejoras) > 0:
+                            st.success(f"✅ **{len(mejoras)} productos mejoraron** (merma reducida >2pp)")
+                            for _, row in mejoras.head(3).iterrows():
+                                st.caption(f"• {row['tipo_fruta']} {row['manejo']}: {row['delta_merma_pct']:+.1f}pp")
+                        else:
+                            st.info("ℹ️ No hay productos con mejora significativa de merma")
+                    
+                    with col_m2:
+                        if len(empeoramientos) > 0:
+                            st.warning(f"⚠️ **{len(empeoramientos)} productos empeoraron** (merma aumentó >2pp)")
+                            for _, row in empeoramientos.head(3).iterrows():
+                                st.caption(f"• {row['tipo_fruta']} {row['manejo']}: {row['delta_merma_pct']:+.1f}pp")
+                        else:
+                            st.success("✅ No hay productos con empeoramiento significativo de merma")
+                
+                else:
+                    st.error(f"Error al obtener comparativa: {comparativa.get('error', 'Desconocido')}")
 
 
 def _render_anio_detalle(anio: int, data: dict):

@@ -202,10 +202,84 @@ def get_stock_teorico_rango(username: str, password: str, fecha_desde: str, fech
         return {"error": str(e)}
 
 
-def get_stock_teorico_anual(username: str, password: str, anios: list, fecha_corte: str):
+def get_analisis_mensual(username: str, password: str, fecha_desde: str, fecha_hasta: str):
     """
-    Obtiene análisis de stock teórico anual desde API.
+    Obtiene análisis mensual de compras, ventas y merma.
     
+    Args:
+        username: Usuario Odoo
+        password: API key Odoo
+        fecha_desde: Fecha inicio (YYYY-MM-DD)
+        fecha_hasta: Fecha fin (YYYY-MM-DD)
+    
+    Returns:
+        List[dict] con datos mensuales
+    """
+    try:
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
+        
+        response = requests.get(
+            f"{API_URL}/api/v1/rendimiento/analisis-mensual",
+            params={
+                "username": username,
+                "password": password,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta
+            },
+            timeout=180
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"Error HTTP {response.status_code}: {response.text}"}
+    
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_comparativa_anual(username: str, password: str, anio1: int, anio2: int):
+    """
+    Obtiene comparativa año vs año.
+    
+    Args:
+        username: Usuario Odoo
+        password: API key Odoo
+        anio1: Año base
+        anio2: Año a comparar
+    
+    Returns:
+        List[dict] con comparativa
+    """
+    try:
+        try:
+            API_URL = st.secrets.get("API_URL", os.getenv("API_URL", "http://localhost:8000"))
+        except:
+            API_URL = os.getenv("API_URL", "http://localhost:8000")
+        
+        response = requests.get(
+            f"{API_URL}/api/v1/rendimiento/comparativa-anual",
+            params={
+                "username": username,
+                "password": password,
+                "anio1": anio1,
+                "anio2": anio2
+            },
+            timeout=180
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"Error HTTP {response.status_code}: {response.text}"}
+    
+    except Exception as e:
+        return {"error": str(e)}
+
+
     Args:
         username: Usuario Odoo
         password: API key Odoo
