@@ -49,6 +49,13 @@ except ImportError:
     render_visjs_timeline = None
     render_combined_view = None
 
+# Importar componente Nivo Sankey
+try:
+    from components.nivo_sankey import render_nivo_sankey, NIVO_AVAILABLE
+except ImportError:
+    NIVO_AVAILABLE = False
+    render_nivo_sankey = None
+
 
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
@@ -314,11 +321,18 @@ def _render_sankey(username: str, password: str):
     # Selector de tipo de diagrama
     st.markdown("### 📊 Tipo de Visualización")
     
-    diagram_types = ["📈 Sankey (Plotly)", "� Tabla de Conexiones"]
+    diagram_types = ["📈 Sankey (Plotly)"]
     
-    # Agregar opciones dinámicamente según disponibilidad
+    # Agregar Nivo Sankey si está disponible
+    if NIVO_AVAILABLE:
+        diagram_types.append("📊 Sankey (Nivo)")
+    
+    # Agregar vis.js si está disponible
     if VISJS_AVAILABLE:
-        diagram_types.insert(2 if TIMELINE_FLOW_AVAILABLE else 1, "🕸️ vis.js Network")
+        diagram_types.append("🕸️ vis.js Network")
+    
+    # Agregar tabla al final
+    diagram_types.append("📋 Tabla de Conexiones")
     
     diagram_type = st.radio(
         "Selecciona el tipo de diagrama:",
@@ -413,7 +427,16 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
                 
-                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "� Sankey (Nivo)" and NIVO_AVAILABLE:
+                    data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
+                    if not data or not data.get('nodes'):
+                        st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "nivo_sankey"
+                
+                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
                     # Obtener datos crudos y transformar a vis.js
                     raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
                     if not raw_data or not raw_data.get('pallets'):
@@ -446,7 +469,16 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
                 
-                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "� Sankey (Nivo)" and NIVO_AVAILABLE:
+                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
+                    if not data or not data.get('nodes'):
+                        st.warning(f"No se encontraron datos para: {identifier}")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "nivo_sankey"
+                
+                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
@@ -492,6 +524,9 @@ def _render_sankey(username: str, password: str):
         
         if data_type == "sankey":
             _render_sankey_plotly(data)
+            _render_sankey_stats(data)
+        elif data_type == "nivo_sankey" and NIVO_AVAILABLE:
+            _render_nivo_sankey(data)
             _render_sankey_stats(data)
         elif data_type == "reactflow" and TIMELINE_FLOW_AVAILABLE:
             _render_reactflow_diagram(data)
@@ -565,6 +600,24 @@ def _render_sankey_plotly(sankey_data: dict):
     st.caption("🖱️ Arrastra para mover | 🔍 Scroll para zoom | 📷 Botones superiores para más opciones")
     
     st.plotly_chart(fig, use_container_width=True, config=config)
+
+
+def _render_nivo_sankey(sankey_data: dict):
+    """Renderiza el diagrama Sankey con Nivo en orientación vertical."""
+    if not NIVO_AVAILABLE:
+        st.error("❌ Componente Nivo no está disponible")
+        return
+    
+    # Calcular altura dinámica basada en cantidad de nodos
+    num_nodes = len(sankey_data.get("nodes", []))
+    min_height = 800
+    max_height = 2000
+    dynamic_height = min(max_height, max(min_height, num_nodes * 20))
+    
+    st.markdown("### 📊 Diagrama Sankey (Nivo)")
+    st.caption("🖱️ Hover sobre nodos para ver detalles | 📊 Orientación vertical para mejor flujo temporal")
+    
+    render_nivo_sankey(sankey_data, height=dynamic_height)
 
 
 def _render_visjs_diagram(visjs_data: dict):
