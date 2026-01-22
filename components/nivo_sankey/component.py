@@ -1,17 +1,18 @@
 """
-Renderizador de Sankey usando Nivo (React).
+Renderizador de Sankey usando D3.js (orientación vertical).
+D3 tiene excelente soporte de CDN y funciona sin necesidad de build.
 """
 import streamlit as st
 import streamlit.components.v1 as components
 import json
 from typing import Dict
 
-NIVO_AVAILABLE = True
+NIVO_AVAILABLE = True  # Mantenemos el nombre por compatibilidad
 
 
 def render_nivo_sankey(data: Dict, height: int = 800):
     """
-    Renderiza un diagrama Sankey usando Nivo en orientación vertical.
+    Renderiza un diagrama Sankey usando D3.js en orientación vertical.
     
     Args:
         data: Diccionario con 'nodes' y 'links' en formato Plotly
@@ -21,133 +22,112 @@ def render_nivo_sankey(data: Dict, height: int = 800):
         st.warning("No hay datos para renderizar")
         return
     
-    # Transformar datos de formato Plotly a formato Nivo
-    nivo_data = _transform_to_nivo_format(data)
+    # Transformar datos de formato Plotly a formato D3
+    d3_data = _transform_to_d3_format(data)
     
-    # Generar HTML con React + Nivo
-    html_content = _generate_nivo_html(nivo_data, height)
+    # Generar HTML con D3
+    html_content = _generate_d3_sankey_html(d3_data, height)
     
     # Renderizar
     components.html(html_content, height=height + 50, scrolling=True)
 
 
-def _transform_to_nivo_format(plotly_data: Dict) -> Dict:
+def _transform_to_d3_format(plotly_data: Dict) -> Dict:
     """
-    Transforma datos de formato Plotly Sankey a formato Nivo.
-    
-    Plotly usa:
-    - nodes: [{label, color, detail, ...}]
-    - links: [{source: int, target: int, value, color}]
-    
-    Nivo usa:
-    - nodes: [{id: str, nodeColor?: str}]
-    - links: [{source: str, target: str, value: number, color?: str}]
+    Transforma datos de formato Plotly Sankey a formato D3-sankey.
     """
     nodes_plotly = plotly_data.get("nodes", [])
     links_plotly = plotly_data.get("links", [])
     
-    # Crear nodos con IDs únicos
-    nivo_nodes = []
-    node_id_map = {}  # índice -> id
+    # Crear nodos
+    d3_nodes = []
     
     for idx, node in enumerate(nodes_plotly):
-        node_id = f"node_{idx}"
-        node_id_map[idx] = node_id
-        
-        # Extraer información del detalle
         detail = node.get("detail", {})
         node_type = detail.get("type", "UNKNOWN")
         
-        nivo_node = {
-            "id": node_id,
-            "nodeColor": node.get("color", "#cccccc"),
+        d3_node = {
+            "id": idx,
+            "color": node.get("color", "#cccccc"),
         }
         
         # Agregar metadata para tooltips
         if node_type == "SUPPLIER":
-            nivo_node["label"] = f"🏭 {detail.get('name', 'Proveedor')}"
-            nivo_node["metadata"] = {
-                "type": "Proveedor",
-                "name": detail.get("name", ""),
-                "date": detail.get("date", ""),
-                "date_done": detail.get("date_done", "")
-            }
+            d3_node["name"] = f"🏭 {detail.get('name', 'Proveedor')}"
+            d3_node["tooltip"] = f"<strong>Proveedor</strong><br/>{detail.get('name', '')}"
+            if detail.get("date"):
+                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
         elif node_type == "RECEPTION":
-            nivo_node["label"] = f"📥 {detail.get('ref', 'Recepción')}"
-            nivo_node["metadata"] = {
-                "type": "Recepción",
-                "ref": detail.get("ref", ""),
-                "date": detail.get("date", ""),
-                "supplier": detail.get("supplier", "")
-            }
+            d3_node["name"] = f"📥 {detail.get('ref', 'Recepción')}"
+            d3_node["tooltip"] = f"<strong>Recepción</strong><br/>{detail.get('ref', '')}"
+            if detail.get("date"):
+                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
+            if detail.get("supplier"):
+                d3_node["tooltip"] += f"<br/>Proveedor: {detail.get('supplier')}"
         elif node_type == "PALLET_IN":
-            nivo_node["label"] = f"🟠 {detail.get('id', 'Pallet')}"
-            nivo_node["metadata"] = {
-                "type": "Pallet IN",
-                "id": detail.get("id", ""),
-                "qty": detail.get("qty", 0),
-                "products": detail.get("products", ""),
-                "date": detail.get("date", ""),
-                "lots": detail.get("lots", "")
-            }
+            d3_node["name"] = f"🟠 {detail.get('id', 'Pallet')}"
+            d3_node["tooltip"] = f"<strong>Pallet IN</strong><br/>ID: {detail.get('id', '')}"
+            if detail.get("qty"):
+                d3_node["tooltip"] += f"<br/>Cantidad: {detail.get('qty'):.0f} kg"
+            if detail.get("date"):
+                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
+            if detail.get("products"):
+                d3_node["tooltip"] += f"<br/>Productos: {detail.get('products')}"
         elif node_type == "PALLET_OUT":
-            nivo_node["label"] = f"🟢 {detail.get('id', 'Pallet')}"
-            nivo_node["metadata"] = {
-                "type": "Pallet OUT",
-                "id": detail.get("id", ""),
-                "qty": detail.get("qty", 0),
-                "products": detail.get("products", ""),
-                "date": detail.get("date", ""),
-                "lots": detail.get("lots", "")
-            }
+            d3_node["name"] = f"🟢 {detail.get('id', 'Pallet')}"
+            d3_node["tooltip"] = f"<strong>Pallet OUT</strong><br/>ID: {detail.get('id', '')}"
+            if detail.get("qty"):
+                d3_node["tooltip"] += f"<br/>Cantidad: {detail.get('qty'):.0f} kg"
+            if detail.get("date"):
+                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
+            if detail.get("products"):
+                d3_node["tooltip"] += f"<br/>Productos: {detail.get('products')}"
         elif node_type == "PROCESS":
-            nivo_node["label"] = f"🔴 {detail.get('ref', 'Proceso')}"
-            nivo_node["metadata"] = {
-                "type": "Proceso",
-                "ref": detail.get("ref", ""),
-                "date": detail.get("date", ""),
-                "mrp_start": detail.get("mrp_start", ""),
-                "mrp_end": detail.get("mrp_end", ""),
-                "product": detail.get("product", "")
-            }
+            d3_node["name"] = f"🔴 {detail.get('ref', 'Proceso')}"
+            d3_node["tooltip"] = f"<strong>Proceso</strong><br/>{detail.get('ref', '')}"
+            if detail.get("date"):
+                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
+            if detail.get("mrp_start"):
+                d3_node["tooltip"] += f"<br/>Inicio MRP: {detail.get('mrp_start')}"
+            if detail.get("mrp_end"):
+                d3_node["tooltip"] += f"<br/>Fin MRP: {detail.get('mrp_end')}"
+            if detail.get("product"):
+                d3_node["tooltip"] += f"<br/>Producto: {detail.get('product')}"
         elif node_type == "CUSTOMER":
-            nivo_node["label"] = f"🔵 {detail.get('name', 'Cliente')}"
-            nivo_node["metadata"] = {
-                "type": "Cliente",
-                "name": detail.get("name", ""),
-                "date": detail.get("date", "")
-            }
+            d3_node["name"] = f"🔵 {detail.get('name', 'Cliente')}"
+            d3_node["tooltip"] = f"<strong>Cliente</strong><br/>{detail.get('name', '')}"
+            if detail.get("date"):
+                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
         else:
-            nivo_node["label"] = node.get("label", f"Nodo {idx}")
-            nivo_node["metadata"] = {"type": "Unknown"}
+            d3_node["name"] = node.get("label", f"Nodo {idx}")
+            d3_node["tooltip"] = d3_node["name"]
         
-        nivo_nodes.append(nivo_node)
+        d3_nodes.append(d3_node)
     
-    # Crear links usando IDs de string
-    nivo_links = []
+    # Crear links (D3 usa índices numéricos)
+    d3_links = []
     for link in links_plotly:
         source_idx = link.get("source")
         target_idx = link.get("target")
-        value = link.get("value", 0)
-        color = link.get("color", "rgba(200,200,200,0.4)")
+        value = link.get("value", 1)
         
-        if source_idx in node_id_map and target_idx in node_id_map:
-            nivo_links.append({
-                "source": node_id_map[source_idx],
-                "target": node_id_map[target_idx],
-                "value": value,
-                "color": color
-            })
+        if source_idx is not None and target_idx is not None:
+            if source_idx < len(d3_nodes) and target_idx < len(d3_nodes):
+                d3_links.append({
+                    "source": source_idx,
+                    "target": target_idx,
+                    "value": max(value, 1)  # D3 necesita value > 0
+                })
     
     return {
-        "nodes": nivo_nodes,
-        "links": nivo_links
+        "nodes": d3_nodes,
+        "links": d3_links
     }
 
 
-def _generate_nivo_html(data: Dict, height: int) -> str:
+def _generate_d3_sankey_html(data: Dict, height: int) -> str:
     """
-    Genera el HTML completo con React + Nivo Sankey.
+    Genera el HTML completo con D3.js Sankey en orientación VERTICAL.
     """
     data_json = json.dumps(data, ensure_ascii=False)
     
@@ -156,178 +136,194 @@ def _generate_nivo_html(data: Dict, height: int) -> str:
     <html>
     <head>
         <meta charset="UTF-8">
-        <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-        <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-        <script src="https://unpkg.com/@nivo/core@0.87.0/dist/nivo-core.umd.js"></script>
-        <script src="https://unpkg.com/@nivo/sankey@0.87.0/dist/nivo-sankey.umd.js"></script>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
         <style>
             body {{
                 margin: 0;
-                padding: 0;
+                padding: 10px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                background-color: transparent;
+                background-color: #fafafa;
             }}
-            #root {{
+            #chart {{
                 width: 100%;
                 height: {height}px;
             }}
+            .node rect {{
+                cursor: pointer;
+                stroke-width: 0.5px;
+            }}
+            .node text {{
+                font-size: 9px;
+                fill: #333;
+                pointer-events: none;
+            }}
+            .link {{
+                fill-opacity: 0.4;
+            }}
+            .link:hover {{
+                fill-opacity: 0.7;
+            }}
             .tooltip {{
+                position: absolute;
                 background: white;
-                padding: 12px;
-                border-radius: 4px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                padding: 10px 14px;
+                border-radius: 6px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.15);
                 font-size: 12px;
-                line-height: 1.6;
-                max-width: 300px;
-            }}
-            .tooltip-title {{
-                font-weight: 600;
-                margin-bottom: 8px;
-                font-size: 14px;
-                color: #333;
-            }}
-            .tooltip-row {{
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 4px;
-            }}
-            .tooltip-label {{
-                color: #666;
-                margin-right: 12px;
-            }}
-            .tooltip-value {{
-                color: #000;
-                font-weight: 500;
+                line-height: 1.5;
+                pointer-events: none;
+                z-index: 1000;
+                max-width: 280px;
             }}
         </style>
     </head>
     <body>
-        <div id="root"></div>
+        <div id="chart"></div>
+        <div id="tooltip" class="tooltip" style="display: none;"></div>
+        
         <script>
-            const {{ ResponsiveSankey }} = window.nivo.Sankey;
-            const {{ createElement }} = window.React;
-            const {{ createRoot }} = window.ReactDOM;
-            
             const data = {data_json};
             
-            // Custom tooltip
-            const CustomTooltip = ({{ node }}) => {{
-                const metadata = node.nodeColor ? node : null;
-                if (!metadata) return null;
-                
-                const meta = data.nodes.find(n => n.id === node.id)?.metadata || {{}};
-                
-                return createElement('div', {{ className: 'tooltip' }}, [
-                    createElement('div', {{ className: 'tooltip-title', key: 'title' }}, 
-                        data.nodes.find(n => n.id === node.id)?.label || node.id
-                    ),
-                    meta.type && createElement('div', {{ className: 'tooltip-row', key: 'type' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Tipo:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.type)
-                    ]),
-                    meta.date && createElement('div', {{ className: 'tooltip-row', key: 'date' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Fecha:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.date)
-                    ]),
-                    meta.date_done && createElement('div', {{ className: 'tooltip-row', key: 'date_done' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Fecha realización:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.date_done)
-                    ]),
-                    meta.qty && createElement('div', {{ className: 'tooltip-row', key: 'qty' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Cantidad:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.qty.toFixed(2) + ' kg')
-                    ]),
-                    meta.products && createElement('div', {{ className: 'tooltip-row', key: 'products' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Productos:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.products)
-                    ]),
-                    meta.lots && createElement('div', {{ className: 'tooltip-row', key: 'lots' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Lotes:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.lots)
-                    ]),
-                    meta.mrp_start && createElement('div', {{ className: 'tooltip-row', key: 'mrp_start' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Inicio MRP:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.mrp_start)
-                    ]),
-                    meta.mrp_end && createElement('div', {{ className: 'tooltip-row', key: 'mrp_end' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Fin MRP:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.mrp_end)
-                    ]),
-                    meta.product && createElement('div', {{ className: 'tooltip-row', key: 'product' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Producto:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.product)
-                    ]),
-                    meta.supplier && createElement('div', {{ className: 'tooltip-row', key: 'supplier' }}, [
-                        createElement('span', {{ className: 'tooltip-label' }}, 'Proveedor:'),
-                        createElement('span', {{ className: 'tooltip-value' }}, meta.supplier)
-                    ])
-                ].filter(Boolean));
-            }};
+            const container = document.getElementById('chart');
+            const width = container.clientWidth || 1200;
+            const height = {height};
             
-            // Custom label
-            const CustomLabel = ({{ node }}) => {{
-                const nodeData = data.nodes.find(n => n.id === node.id);
-                const label = nodeData?.label || node.id;
-                
-                // Truncar si es muy largo
-                const displayLabel = label.length > 20 ? label.substring(0, 18) + '...' : label;
-                
-                return createElement('text', {{
-                    x: node.x,
-                    y: node.y,
-                    textAnchor: 'middle',
-                    dominantBaseline: 'central',
-                    style: {{
-                        fontSize: '11px',
-                        fontWeight: 500,
-                        fill: '#333',
-                        pointerEvents: 'none'
-                    }}
-                }}, displayLabel);
-            }};
+            // Márgenes para etiquetas
+            const margin = {{ top: 30, right: 20, bottom: 30, left: 20 }};
+            const innerWidth = width - margin.left - margin.right;
+            const innerHeight = height - margin.top - margin.bottom;
             
-            const SankeyChart = () => {{
-                return createElement(ResponsiveSankey, {{
-                    data: data,
-                    layout: 'vertical',  // VERTICAL orientation
-                    align: 'justify',
-                    colors: {{ scheme: 'category10' }},
-                    nodeColor: node => {{
-                        const nodeData = data.nodes.find(n => n.id === node.id);
-                        return nodeData?.nodeColor || '#cccccc';
-                    }},
-                    nodeOpacity: 1,
-                    nodeHoverOpacity: 1,
-                    nodeThickness: 18,
-                    nodeSpacing: 24,
-                    nodeBorderWidth: 0,
-                    nodeBorderRadius: 3,
-                    linkOpacity: 0.5,
-                    linkHoverOpacity: 0.8,
-                    linkContract: 0,
-                    linkBlendMode: 'multiply',
-                    linkColor: link => {{
-                        const linkData = data.links.find(l => 
-                            l.source === link.source.id && l.target === link.target.id
-                        );
-                        return linkData?.color || 'rgba(200,200,200,0.4)';
-                    }},
-                    enableLinkGradient: true,
-                    label: CustomLabel,
-                    labelPosition: 'inside',
-                    labelOrientation: 'horizontal',
-                    labelPadding: 16,
-                    labelTextColor: '#333333',
-                    nodeTooltip: CustomTooltip,
-                    animate: true,
-                    motionConfig: 'gentle',
-                    margin: {{ top: 20, right: 160, bottom: 20, left: 160 }}
+            // Crear SVG
+            const svg = d3.select('#chart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            const g = svg.append('g')
+                .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+            
+            // Tooltip
+            const tooltip = d3.select('#tooltip');
+            
+            // Configurar Sankey - usamos configuración horizontal y luego rotamos
+            const sankey = d3.sankey()
+                .nodeId(d => d.id)
+                .nodeWidth(15)
+                .nodePadding(12)
+                .nodeAlign(d3.sankeyJustify)
+                .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
+            
+            // Clonar datos
+            const graph = sankey({{
+                nodes: data.nodes.map(d => ({{...d}})),
+                links: data.links.map(d => ({{...d}}))
+            }});
+            
+            // Rotar coordenadas para orientación vertical
+            // x -> y, y -> x
+            graph.nodes.forEach(node => {{
+                const x0 = node.x0, x1 = node.x1, y0 = node.y0, y1 = node.y1;
+                node.x0 = y0;
+                node.x1 = y1;
+                node.y0 = x0;
+                node.y1 = x1;
+            }});
+            
+            // Función para dibujar links verticales
+            function verticalLink(d) {{
+                const x0 = d.source.x0 + (d.source.x1 - d.source.x0) / 2;
+                const x1 = d.target.x0 + (d.target.x1 - d.target.x0) / 2;
+                const y0 = d.source.y1;
+                const y1 = d.target.y0;
+                const curvature = 0.5;
+                const yi = d3.interpolateNumber(y0, y1);
+                const y2 = yi(curvature);
+                const y3 = yi(1 - curvature);
+                const halfWidth = Math.max(1, d.width / 2);
+                
+                return `M${{x0 - halfWidth}},${{y0}}
+                        C${{x0 - halfWidth}},${{y2}} ${{x1 - halfWidth}},${{y3}} ${{x1 - halfWidth}},${{y1}}
+                        L${{x1 + halfWidth}},${{y1}}
+                        C${{x1 + halfWidth}},${{y3}} ${{x0 + halfWidth}},${{y2}} ${{x0 + halfWidth}},${{y0}}
+                        Z`;
+            }}
+            
+            // Dibujar links
+            const link = g.append('g')
+                .attr('class', 'links')
+                .selectAll('path')
+                .data(graph.links)
+                .join('path')
+                .attr('class', 'link')
+                .attr('d', verticalLink)
+                .attr('fill', d => d.source.color || '#aaa')
+                .attr('stroke', 'none')
+                .on('mouseover', function(event, d) {{
+                    d3.select(this).attr('fill-opacity', 0.7);
+                    tooltip
+                        .style('display', 'block')
+                        .html(`<strong>${{d.source.name}} → ${{d.target.name}}</strong><br/>Cantidad: ${{d.value.toLocaleString()}} kg`)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                }})
+                .on('mousemove', function(event) {{
+                    tooltip
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                }})
+                .on('mouseout', function() {{
+                    d3.select(this).attr('fill-opacity', 0.4);
+                    tooltip.style('display', 'none');
                 }});
-            }};
             
-            const container = document.getElementById('root');
-            const root = createRoot(container);
-            root.render(createElement(SankeyChart));
+            // Dibujar nodos
+            const node = g.append('g')
+                .attr('class', 'nodes')
+                .selectAll('g')
+                .data(graph.nodes)
+                .join('g')
+                .attr('class', 'node');
+            
+            node.append('rect')
+                .attr('x', d => d.x0)
+                .attr('y', d => d.y0)
+                .attr('width', d => Math.max(1, d.x1 - d.x0))
+                .attr('height', d => Math.max(1, d.y1 - d.y0))
+                .attr('fill', d => d.color || '#69b3a2')
+                .attr('stroke', '#333')
+                .attr('stroke-width', 0.5)
+                .attr('rx', 2)
+                .attr('ry', 2)
+                .on('mouseover', function(event, d) {{
+                    d3.select(this).attr('opacity', 0.8);
+                    tooltip
+                        .style('display', 'block')
+                        .html(d.tooltip || d.name)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                }})
+                .on('mousemove', function(event) {{
+                    tooltip
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                }})
+                .on('mouseout', function() {{
+                    d3.select(this).attr('opacity', 1);
+                    tooltip.style('display', 'none');
+                }});
+            
+            // Etiquetas de nodos (arriba de cada nodo)
+            node.append('text')
+                .attr('x', d => (d.x0 + d.x1) / 2)
+                .attr('y', d => d.y0 - 5)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '9px')
+                .attr('fill', '#333')
+                .text(d => {{
+                    const name = d.name || '';
+                    return name.length > 20 ? name.substring(0, 18) + '...' : name;
+                }});
         </script>
     </body>
     </html>
