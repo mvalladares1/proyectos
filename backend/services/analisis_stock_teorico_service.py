@@ -155,6 +155,7 @@ class AnalisisStockTeoricoService:
         ACTUALIZADO: Usa product.template + filtra por diario "Facturas Proveedores" + categoría producto.
         """
         # Líneas de facturas de proveedor - SOLO diario "Facturas de Proveedores"
+        # Filtrado por cuentas específicas para evitar duplicaciones contables
         lineas = self.odoo.search_read(
             'account.move.line',
             [
@@ -162,7 +163,10 @@ class AnalisisStockTeoricoService:
                 ['move_id.state', '=', 'posted'],
                 ['move_id.journal_id.name', '=', 'Facturas de Proveedores'],
                 ['product_id', '!=', False],
-                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTO'],
+                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
+                ['product_id.type', '!=', 'service'],
+                ['account_id.code', 'in', ['21020107', '21020106']],  # Solo cuentas de facturas por recibir
+                ['debit', '>', 0],  # Solo líneas con débito (compra real)
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta]
             ],
@@ -314,6 +318,7 @@ class AnalisisStockTeoricoService:
         ACTUALIZADO: Usa product.template + filtra por diario "Facturas de Cliente" + categoría producto.
         """
         # Líneas de facturas de cliente - SOLO diario "Facturas de Cliente"
+        # Filtrado por cuenta específica para evitar duplicaciones contables
         lineas = self.odoo.search_read(
             'account.move.line',
             [
@@ -321,7 +326,10 @@ class AnalisisStockTeoricoService:
                 ['move_id.state', '=', 'posted'],
                 ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
                 ['product_id', '!=', False],
-                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTO'],
+                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
+                ['product_id.type', '!=', 'service'],
+                ['account_id.code', '=', '41010101'],  # Solo cuenta de ingresos por ventas
+                ['credit', '>', 0],  # Solo líneas con crédito (venta real)
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta]
             ],
