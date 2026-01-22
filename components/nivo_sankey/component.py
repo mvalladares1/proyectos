@@ -70,7 +70,7 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
         elif node_type == "PALLET_IN":
             # Usar el NOMBRE del pallet de los datos del backend
             pallet_name = nodes_plotly[idx].get("label", "").replace("🟠 ", "")
-            d3_node["name"] = f"🟠 {pallet_name}"
+            d3_node["name"] = pallet_name
             d3_node["tooltip"] = f"<strong>Pallet IN</strong><br/>Nombre: {pallet_name}"
             if detail.get("qty"):
                 d3_node["tooltip"] += f"<br/>Cantidad: {detail.get('qty'):.0f} kg"
@@ -81,7 +81,7 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
         elif node_type == "PALLET_OUT":
             # Usar el NOMBRE del pallet de los datos del backend
             pallet_name = nodes_plotly[idx].get("label", "").replace("🟢 ", "")
-            d3_node["name"] = f"🟢 {pallet_name}"
+            d3_node["name"] = pallet_name
             d3_node["tooltip"] = f"<strong>Pallet OUT</strong><br/>Nombre: {pallet_name}"
             if detail.get("qty"):
                 d3_node["tooltip"] += f"<br/>Cantidad: {detail.get('qty'):.0f} kg"
@@ -90,7 +90,7 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
             if detail.get("products"):
                 d3_node["tooltip"] += f"<br/>Productos: {detail.get('products')}"
         elif node_type == "PROCESS":
-            d3_node["name"] = f"🔴 {detail.get('ref', 'Proceso')}"
+            d3_node["name"] = detail.get('ref', 'Proceso')
             d3_node["tooltip"] = f"<strong>Proceso</strong><br/>{detail.get('ref', '')}"
             if detail.get("date"):
                 d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
@@ -101,7 +101,7 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
             if detail.get("product"):
                 d3_node["tooltip"] += f"<br/>Producto: {detail.get('product')}"
         elif node_type == "CUSTOMER":
-            d3_node["name"] = f"🔵 {detail.get('name', 'Cliente')}"
+            d3_node["name"] = detail.get('name', 'Cliente')
             d3_node["tooltip"] = f"<strong>Cliente</strong><br/>{detail.get('name', '')}"
             if detail.get("date"):
                 d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
@@ -186,6 +186,11 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
         </style>
     </head>
     <body>
+        <div class="zoom-controls">
+            <button class="zoom-btn" id="zoom-in" title="Acercar">+</button>
+            <button class="zoom-btn" id="zoom-out" title="Alejar">−</button>
+            <button class="zoom-btn" id="zoom-reset" title="Restablecer">⟲</button>
+        </div>
         <div id="chart"></div>
         <div id="tooltip" class="tooltip" style="display: none;"></div>
         
@@ -212,6 +217,52 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             
             // Tooltip
             const tooltip = d3.select('#tooltip');
+            
+            // Configurar zoom
+            let currentZoomLevel = 1;
+            const zoom = d3.zoom()
+                .scaleExtent([0.5, 10])
+                .on('zoom', (event) => {{
+                    currentZoomLevel = event.transform.k;
+                    g.attr('transform', `translate(${{margin.left + event.transform.x}},${{margin.top + event.transform.y}}) scale(${{event.transform.k}})`);
+                    updateTimeline(event.transform.k);
+                }});
+            
+            svg.call(zoom);
+            
+            // Botones de zoom
+            d3.select('#zoom-in').on('click', () => {{
+                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
+            }});
+            d3.select('#zoom-out').on('click', () => {{
+                svg.transition().duration(300).call(zoom.scaleBy, 0.67);
+            }});
+            d3.select('#zoom-reset').on('click', () => {{
+                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
+            }});
+            
+            // Configurar zoom
+            let currentZoomLevel = 1;
+            const zoom = d3.zoom()
+                .scaleExtent([0.5, 10])
+                .on('zoom', (event) => {{
+                    currentZoomLevel = event.transform.k;
+                    g.attr('transform', `translate(${{margin.left + event.transform.x}},${{margin.top + event.transform.y}}) scale(${{event.transform.k}})`);
+                    updateTimeline(event.transform.k);
+                }});
+            
+            svg.call(zoom);
+            
+            // Botones de zoom
+            d3.select('#zoom-in').on('click', () => {{
+                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
+            }});
+            d3.select('#zoom-out').on('click', () => {{
+                svg.transition().duration(300).call(zoom.scaleBy, 0.67);
+            }});
+            d3.select('#zoom-reset').on('click', () => {{
+                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
+            }});
             
             // Configurar Sankey - usamos configuración horizontal y luego rotamos
             const sankey = d3.sankey()
@@ -351,25 +402,89 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .filter(date => date && date !== '9999-99-99')
                 .map(date => new Date(date));
             
+            let timeScale, minDate, maxDate, timeAxisGroup, timeGridGroup, timeLabel;
+            
             if (validDates.length > 0) {{
-                const minDate = d3.min(validDates);
-                const maxDate = d3.max(validDates);
+                minDate = d3.min(validDates);
+                maxDate = d3.max(validDates);
                 
                 // Escala temporal
-                const timeScale = d3.scaleTime()
+                timeScale = d3.scaleTime()
                     .domain([minDate, maxDate])
                     .range([0, innerWidth]);
                 
-                // Crear eje temporal
-                const timeAxis = d3.axisBottom(timeScale)
-                    .ticks(d3.timeMonth, 1)
-                    .tickFormat(d3.timeFormat('%b %Y'));
+                // Grupos para timeline (se actualizarán con zoom)
+                timeGridGroup = g.append('g').attr('class', 'time-grid');
+                timeAxisGroup = g.append('g')
+                    .attr('class', 'time-axis')
+                    .attr('transform', `translate(0, ${{innerHeight + 20}})`);
                 
-                // Agregar líneas verticales de guía (grid) ANTES del eje
-                const tickValues = timeScale.ticks(d3.timeMonth, 1);
-                g.append('g')
-                    .attr('class', 'time-grid')
-                    .selectAll('line')
+                // Etiqueta del eje
+                timeLabel = g.append('text')
+                    .attr('x', innerWidth / 2)
+                    .attr('y', innerHeight + 55)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '12px')
+                    .attr('font-weight', 'bold')
+                    .attr('fill', '#333')
+                    .text('📅 Línea de Tiempo');
+            }}
+            
+            // Función para actualizar timeline según zoom
+            function updateTimeline(zoomLevel) {{
+                if (!timeScale) return;
+                
+                // Calcular rango en días
+                const daysDiff = (maxDate - minDate) / (1000 * 60 * 60 * 24);
+                
+                // Determinar intervalo según zoom y rango de datos
+                let tickInterval, tickFormat;
+                const effectiveRange = daysDiff / zoomLevel;
+                
+                if (effectiveRange <= 3) {{
+                    // Vista muy cercana: por día con hora
+                    tickInterval = d3.timeDay;
+                    tickFormat = d3.timeFormat('%d %b');
+                }} else if (effectiveRange <= 14) {{
+                    // Cercano: por día
+                    tickInterval = d3.timeDay;
+                    tickFormat = d3.timeFormat('%d %b');
+                }} else if (effectiveRange <= 60) {{
+                    // Medio: por semana
+                    tickInterval = d3.timeWeek;
+                    tickFormat = d3.timeFormat('%d %b');
+                }} else if (effectiveRange <= 180) {{
+                    // Alejado: por mes
+                    tickInterval = d3.timeMonth;
+                    tickFormat = d3.timeFormat('%b %Y');
+                }} else {{
+                    // Muy alejado: por mes
+                    tickInterval = d3.timeMonth;
+                    tickFormat = d3.timeFormat('%b %Y');
+                }}
+                
+                // Actualizar eje
+                const timeAxis = d3.axisBottom(timeScale)
+                    .ticks(tickInterval, 1)
+                    .tickFormat(tickFormat);
+                
+                timeAxisGroup.call(timeAxis);
+                
+                // Estilizar el eje
+                timeAxisGroup.selectAll('text')
+                    .attr('font-size', '11px')
+                    .attr('fill', '#666')
+                    .style('text-anchor', 'middle');
+                
+                timeAxisGroup.selectAll('line')
+                    .attr('stroke', '#999');
+                
+                timeAxisGroup.select('.domain')
+                    .attr('stroke', '#999');
+                
+                // Actualizar grid
+                const tickValues = timeScale.ticks(tickInterval, 1);
+                timeGridGroup.selectAll('line')
                     .data(tickValues)
                     .join('line')
                     .attr('x1', d => timeScale(d))
@@ -380,35 +495,10 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     .attr('stroke-width', 1)
                     .attr('opacity', 0.15)
                     .attr('stroke-dasharray', '4,4');
-                
-                // Agregar grupo para el eje
-                const axisGroup = g.append('g')
-                    .attr('class', 'time-axis')
-                    .attr('transform', `translate(0, ${{innerHeight + 20}})`)
-                    .call(timeAxis);
-                
-                // Estilizar el eje
-                axisGroup.selectAll('text')
-                    .attr('font-size', '11px')
-                    .attr('fill', '#666')
-                    .style('text-anchor', 'middle');
-                
-                axisGroup.selectAll('line')
-                    .attr('stroke', '#999');
-                
-                axisGroup.select('.domain')
-                    .attr('stroke', '#999');
-                    
-                // Etiqueta del eje
-                g.append('text')
-                    .attr('x', innerWidth / 2)
-                    .attr('y', innerHeight + 55)
-                    .attr('text-anchor', 'middle')
-                    .attr('font-size', '12px')
-                    .attr('font-weight', 'bold')
-                    .attr('fill', '#333')
-                    .text('📅 Línea de Tiempo');
             }}
+            
+            // Inicializar timeline
+            updateTimeline(1);
         </script>
     </body>
     </html>

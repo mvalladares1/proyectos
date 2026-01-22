@@ -325,7 +325,7 @@ def _render_sankey(username: str, password: str):
     
     # Agregar Nivo Sankey si está disponible
     if NIVO_AVAILABLE:
-        diagram_types.append("📊 Sankey (Nivo)")
+        diagram_types.append("📊 Sankey (D3)")
     
     # Agregar vis.js si está disponible
     if VISJS_AVAILABLE:
@@ -427,7 +427,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
                 
-                elif diagram_type == "📊 Sankey (Nivo)" and NIVO_AVAILABLE:
+                elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
                     if not data or not data.get('nodes'):
                         st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
@@ -469,7 +469,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
                 
-                elif diagram_type == "📊 Sankey (Nivo)" and NIVO_AVAILABLE:
+                elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
@@ -603,7 +603,7 @@ def _render_sankey_plotly(sankey_data: dict):
 
 
 def _render_nivo_sankey(sankey_data: dict):
-    """Renderiza el diagrama Sankey con Nivo en orientación vertical."""
+    """Renderiza el diagrama Sankey con D3 en orientación vertical."""
     if not NIVO_AVAILABLE:
         st.error("❌ Componente Nivo no está disponible")
         return
@@ -614,7 +614,7 @@ def _render_nivo_sankey(sankey_data: dict):
     max_height = 2000
     dynamic_height = min(max_height, max(min_height, num_nodes * 20))
     
-    st.markdown("### 📊 Diagrama Sankey (Nivo)")
+    st.markdown("### 📊 Diagrama Sankey (D3)")
     st.caption("🖱️ Hover sobre nodos para ver detalles | 📊 Orientación vertical para mejor flujo temporal")
     
     render_nivo_sankey(sankey_data, height=dynamic_height)
