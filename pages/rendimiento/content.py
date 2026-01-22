@@ -457,19 +457,27 @@ def _render_sankey(username: str, password: str):
                 if diagram_type == "📈 Sankey (Plotly)":
                     from backend.services.traceability import transform_to_sankey
                     data = transform_to_sankey(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "sankey"
+                    
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     from backend.services.traceability import transform_to_sankey
                     data = transform_to_sankey(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "nivo_sankey"
+                    
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     from backend.services.traceability import transform_to_visjs
                     data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "visjs"
+                    
                 else:  # Tabla
-                    from backend.services.traceability import transform_to_sankey
-                    data = transform_to_sankey(raw_data)
+                    st.session_state.diagram_data = raw_data
+                    st.session_state.diagram_data_type = "table"
                 
-                st.session_state.diagram_data = data
-                st.session_state.diagram_data_type = diagram_type
                 st.success(f"✅ Diagrama generado para guía {delivery_guide}")
+                st.rerun()
             
             elif search_mode == "📅 Por rango de fechas":
                 fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
