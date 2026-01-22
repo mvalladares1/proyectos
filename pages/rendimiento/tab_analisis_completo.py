@@ -97,50 +97,8 @@ def render(username: str, password: str):
     """)
     
     # ============================================================================
-    # RESUMEN GENERAL CONSOLIDADO
+    # DETALLE POR TIPO Y MANEJO (incluye resumen integrado)
     # ============================================================================
-    st.markdown("### 📊 Resumen General")
-    
-    resumen = data.get('resumen', {})
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "Total Compras", 
-            f"{resumen.get('total_compras_kg', 0):,.0f} kg",
-            delta=f"${resumen.get('total_compras_monto', 0):,.0f}"
-        )
-        st.caption(f"Precio: ${resumen.get('precio_promedio_compra_global', 0):,.2f}/kg")
-    
-    with col2:
-        st.metric(
-            "Total Ventas", 
-            f"{resumen.get('total_ventas_kg', 0):,.0f} kg",
-            delta=f"${resumen.get('total_ventas_monto', 0):,.0f}"
-        )
-        st.caption(f"Precio: ${resumen.get('precio_promedio_venta_global', 0):,.2f}/kg")
-    
-    with col3:
-        st.metric(
-            "Total Merma", 
-            f"{resumen.get('total_merma_kg', 0):,.0f} kg",
-            delta=f"{resumen.get('pct_merma_historico', 0):.2f}%",
-            delta_color="inverse"
-        )
-    
-    with col4:
-        st.metric(
-            "Stock Teórico Total", 
-            f"${resumen.get('total_stock_teorico_valor', 0):,.0f}",
-            delta="Valorización"
-        )
-    
-    # ============================================================================
-    # DETALLE POR TIPO Y MANEJO
-    # ============================================================================
-    st.markdown("---")
-    st.markdown("### 📋 Detalle por Tipo de Fruta y Manejo")
     
     datos = data.get('datos', [])
     
@@ -148,7 +106,7 @@ def render(username: str, password: str):
         st.warning("No hay datos para el período seleccionado")
         return
     
-    _render_detalle_datos(datos, resumen)
+    _render_detalle_datos(datos, data.get('resumen', {}))
 
 
 # ==============================================================================
@@ -159,34 +117,41 @@ def _render_detalle_datos(datos: list, resumen: dict):
     
     df = pd.DataFrame(datos)
     
-    # Totales
+    # ============================================================================
+    # RESUMEN GENERAL (ÚNICO)
+    # ============================================================================
+    st.markdown("### 📊 Resumen General")
+    
     total_compras_kg = df['compras_kg'].sum()
     total_compras_monto = df['compras_monto'].sum()
     total_ventas_kg = df['ventas_kg'].sum()
     total_ventas_monto = df['ventas_monto'].sum()
     total_merma_kg = df['merma_kg'].sum()
     total_stock_valor = df['stock_teorico_valor'].sum()
+    merma_pct = (total_merma_kg / total_compras_kg * 100) if total_compras_kg > 0 else 0
     
-    # Métricas del período
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Compras", f"{total_compras_kg:,.0f} kg")
-        st.caption(f"Monto: ${total_compras_monto:,.0f}")
+        st.markdown("#### 📦 Compras")
+        st.metric("", f"{total_compras_kg:,.0f} kg", delta=f"${total_compras_monto:,.0f}", delta_color="off")
         st.caption(f"Precio: ${total_compras_monto/total_compras_kg:,.2f}/kg" if total_compras_kg > 0 else "N/A")
     
     with col2:
-        st.metric("Ventas", f"{total_ventas_kg:,.0f} kg")
-        st.caption(f"Monto: ${total_ventas_monto:,.0f}")
+        st.markdown("#### 💰 Ventas")
+        st.metric("", f"{total_ventas_kg:,.0f} kg", delta=f"${total_ventas_monto:,.0f}", delta_color="off")
         st.caption(f"Precio: ${total_ventas_monto/total_ventas_kg:,.2f}/kg" if total_ventas_kg > 0 else "N/A")
     
     with col3:
-        merma_pct = (total_merma_kg / total_compras_kg * 100) if total_compras_kg > 0 else 0
-        st.metric("Merma", f"{total_merma_kg:,.0f} kg", delta=f"{merma_pct:.2f}%", delta_color="inverse")
+        st.markdown("#### 📉 Merma")
+        st.metric("", f"{total_merma_kg:,.0f} kg", delta=f"{merma_pct:.2f}%", delta_color="inverse")
         st.caption(f"Stock teórico: ${total_stock_valor:,.0f}")
     
-    # Tabla detallada por tipo y manejo
-    st.markdown("##### 📊 Por Tipo de Fruta y Manejo")
+    # ============================================================================
+    # TABLA DETALLADA
+    # ============================================================================
+    st.markdown("---")
+    st.markdown("### 📋 Detalle por Tipo de Fruta y Manejo")
     
     # Formatear DataFrame para visualización
     df_display = df.copy()
@@ -229,11 +194,15 @@ def _render_detalle_datos(datos: list, resumen: dict):
     st.dataframe(
         df_display_con_totales,
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        height=600
     )
     
-    # Gráfico de distribución de compras por tipo
-    st.markdown("##### 🍓 Distribución de Compras por Tipo de Fruta")
+    # ============================================================================
+    # GRÁFICOS DE ANÁLISIS
+    # ============================================================================
+    st.markdown("---")
+    st.markdown("### 📊 Distribución de Compras por Tipo de Fruta")
     
     # Agrupar por tipo de fruta
     df_por_tipo = df.groupby('tipo_fruta').agg({
@@ -243,20 +212,44 @@ def _render_detalle_datos(datos: list, resumen: dict):
         'ventas_monto': 'sum'
     }).reset_index()
     
+    # Ordenar por compras (mayor a menor)
+    df_por_tipo = df_por_tipo.sort_values('compras_kg', ascending=False)
+    
+    # Crear DataFrame largo para mejor visualización
+    df_tipo_melt = df_por_tipo.melt(
+        id_vars=['tipo_fruta'], 
+        value_vars=['compras_kg', 'ventas_kg'],
+        var_name='Tipo',
+        value_name='Kilogramos'
+    )
+    
+    # Renombrar para leyenda más clara
+    df_tipo_melt['Tipo'] = df_tipo_melt['Tipo'].replace({
+        'compras_kg': 'Compras',
+        'ventas_kg': 'Ventas'
+    })
+    
     fig_tipo = px.bar(
-        df_por_tipo,
+        df_tipo_melt,
         x='tipo_fruta',
-        y=['compras_kg', 'ventas_kg'],
+        y='Kilogramos',
+        color='Tipo',
         title='Compras vs Ventas por Tipo de Fruta (kg)',
-        labels={'value': 'Kilogramos', 'variable': 'Tipo'},
+        labels={'tipo_fruta': 'Tipo de Fruta', 'Kilogramos': 'Kilogramos (kg)'},
         barmode='group',
-        color_discrete_map={'compras_kg': '#2ecc71', 'ventas_kg': '#e74c3c'}
+        color_discrete_map={'Compras': '#2ecc71', 'Ventas': '#e74c3c'}
+    )
+    
+    fig_tipo.update_layout(
+        xaxis_title="Tipo de Fruta",
+        yaxis_title="Kilogramos (kg)",
+        legend_title="",
+        hovermode='x unified'
     )
     
     st.plotly_chart(fig_tipo, use_container_width=True)
     
-    # Gráfico de distribución por manejo
-    st.markdown("##### 🌱 Distribución por Tipo de Manejo")
+    st.markdown("### 🌱 Distribución por Tipo de Manejo")
     
     df_por_manejo = df.groupby('manejo').agg({
         'compras_kg': 'sum',
@@ -265,11 +258,21 @@ def _render_detalle_datos(datos: list, resumen: dict):
         'ventas_monto': 'sum'
     }).reset_index()
     
+    # Ordenar por compras
+    df_por_manejo = df_por_manejo.sort_values('compras_kg', ascending=False)
+    
     fig_manejo = px.pie(
         df_por_manejo,
         values='compras_kg',
         names='manejo',
-        title='Distribución de Compras por Tipo de Manejo (kg)'
+        title='Distribución de Compras por Tipo de Manejo (kg)',
+        color_discrete_sequence=px.colors.qualitative.Set2
+    )
+    
+    fig_manejo.update_traces(
+        textposition='inside',
+        textinfo='percent+label',
+        hovertemplate='<b>%{label}</b><br>%{value:,.0f} kg<br>%{percent}<extra></extra>'
     )
     
     st.plotly_chart(fig_manejo, use_container_width=True)
@@ -342,7 +345,8 @@ def _render_anio_detalle(anio: int, data: dict):
             'Stock Teórico ($)'
         ]],
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        height=600
     )
     
     # Fila de totales
@@ -502,7 +506,8 @@ def _render_comparativa_multianual(por_anio: dict):
     st.dataframe(
         df_totales_display[['anio', 'Compras (kg)', 'Ventas (kg)', 'Merma (kg)', 'Merma (%)']],
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        height=400
     )
     
     # Evolución de precios promedio por tipo de fruta
