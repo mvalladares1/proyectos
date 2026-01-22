@@ -365,6 +365,22 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     .ticks(d3.timeMonth, 1)
                     .tickFormat(d3.timeFormat('%b %Y'));
                 
+                // Agregar líneas verticales de guía (grid) ANTES del eje
+                const tickValues = timeScale.ticks(d3.timeMonth, 1);
+                g.append('g')
+                    .attr('class', 'time-grid')
+                    .selectAll('line')
+                    .data(tickValues)
+                    .join('line')
+                    .attr('x1', d => timeScale(d))
+                    .attr('x2', d => timeScale(d))
+                    .attr('y1', 0)
+                    .attr('y2', innerHeight)
+                    .attr('stroke', '#333')
+                    .attr('stroke-width', 1)
+                    .attr('opacity', 0.15)
+                    .attr('stroke-dasharray', '4,4');
+                
                 // Agregar grupo para el eje
                 const axisGroup = g.append('g')
                     .attr('class', 'time-axis')
