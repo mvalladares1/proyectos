@@ -4,6 +4,8 @@ Este servicio es la fuente de datos para los transformadores de Sankey y React F
 """
 from typing import List, Dict, Optional, Set
 from shared.odoo_client import OdooClient
+from datetime import datetime
+import pytz
 
 
 class TraceabilityService:
@@ -15,6 +17,26 @@ class TraceabilityService:
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         self._virtual_location_ids = None
+        self.chile_tz = pytz.timezone('America/Santiago')
+        self.utc_tz = pytz.UTC
+    
+    def _convert_utc_to_chile(self, utc_datetime_str: str) -> str:
+        """Convierte fecha UTC a hora de Chile."""
+        if not utc_datetime_str:
+            return ""
+        
+        try:
+            # Parsear fecha UTC (formato: "2024-01-15 14:30:00")
+            utc_dt = datetime.strptime(utc_datetime_str, "%Y-%m-%d %H:%M:%S")
+            utc_dt = self.utc_tz.localize(utc_dt)
+            
+            # Convertir a Chile
+            chile_dt = utc_dt.astimezone(self.chile_tz)
+            
+            return chile_dt.strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, AttributeError) as e:
+            print(f"[TraceabilityService] Error converting datetime: {utc_datetime_str} - {e}")
+            return utc_datetime_str
     
     def get_traceability_by_identifier(
         self,
@@ -793,8 +815,16 @@ class TraceabilityService:
                 if pinfo.get("is_reception") and pinfo.get("picking_id"):
                     picking = pickings_by_id.get(pinfo["picking_id"], {})
                     partner_rel = picking.get("partner_id")
-                    date_done = picking.get("date_done", "")
-                    scheduled_date = picking.get("scheduled_date", "")
+                    date_done_utc = picking.get("date_done", "")
+                    scheduled_date_utc = picking.get("scheduled_date", "")
+                    
+                    # Convertir fechas UTC a hora Chile
+                    date_done = self._convert_utc_to_chile(date_done_utc)
+                    scheduled_date = self._convert_utc_to_chile(scheduled_date_utc)
+                    
+                    # Guardar scheduled_date en el proceso de recepción
+                    pinfo["scheduled_date"] = scheduled_date
+                    pinfo["date_done"] = date_done
                     
                     if partner_rel:
                         sid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
@@ -825,8 +855,12 @@ class TraceabilityService:
                     continue  # No es un formato de venta válido
                 
                 partner_rel = picking.get("partner_id")
-                date_done = picking.get("date_done", "")  # Fecha de concreción de la venta
-                scheduled_date = picking.get("scheduled_date", "")
+                date_done_utc = picking.get("date_done", "")  # Fecha de concreción de la venta
+                scheduled_date_utc = picking.get("scheduled_date", "")
+                
+                # Convertir fechas UTC a hora Chile
+                date_done = self._convert_utc_to_chile(date_done_utc)
+                scheduled_date = self._convert_utc_to_chile(scheduled_date_utc)
                 
                 if partner_rel:
                     cid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
@@ -927,8 +961,13 @@ class TraceabilityService:
             for ref, pinfo in result["processes"].items():
                 if ref in mrp_by_ref:
                     mo = mrp_by_ref[ref]
-                    pinfo["mrp_start"] = mo.get("x_studio_inicio_de_proceso", "")
-                    pinfo["mrp_end"] = mo.get("x_studio_termino_de_proceso", "")
+                    
+                    # Convertir fechas UTC a hora Chile
+                    mrp_start_utc = mo.get("x_studio_inicio_de_proceso", "")
+                    mrp_end_utc = mo.get("x_studio_termino_de_proceso", "")
+                    
+                    pinfo["mrp_start"] = self._convert_utc_to_chile(mrp_start_utc)
+                    pinfo["mrp_end"] = self._convert_utc_to_chile(mrp_end_utc)
                     pinfo["mrp_id"] = mo.get("id")
                     
                     # Extraer product_id

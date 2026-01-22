@@ -45,10 +45,12 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
         # Suppliers ahora son diccionarios con name y date_done
         if isinstance(sinfo, dict):
             sname = sinfo.get("name", "Proveedor")
+            scheduled_date = sinfo.get("scheduled_date", "")
             date_done = sinfo.get("date_done", "")
         else:
             # Compatibilidad con formato antiguo (string)
             sname = sinfo
+            scheduled_date = ""
             date_done = ""
         
         add_node(
@@ -59,7 +61,8 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "type": "SUPPLIER",
                 "id": sid,
                 "name": sname,
-                "date": date_done
+                "date": scheduled_date,  # Usar scheduled_date para proveedores
+                "date_done": date_done
             },
             "SUPPLIER"
         )
@@ -147,6 +150,9 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
         if pinfo.get("is_reception"):
             supplier_id = pinfo.get("supplier_id")
             supplier_name = suppliers.get(supplier_id, "Proveedor")
+            scheduled_date = pinfo.get("scheduled_date", "")
+            date_done = pinfo.get("date_done", "")
+            
             add_node(
                 f"RECV:{ref}",
                 f"📥 {ref}",
@@ -154,7 +160,8 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 {
                     "type": "RECEPTION",
                     "ref": ref,
-                    "date": pinfo.get("date", ""),
+                    "date": scheduled_date,  # Usar scheduled_date para recepciones
+                    "date_done": date_done,
                     "supplier": supplier_name
                 },
                 "RECEPTION"
