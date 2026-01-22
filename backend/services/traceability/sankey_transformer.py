@@ -98,6 +98,11 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
     # Agregar nodos de procesos (solo los que no son recepciones)
     for ref, pinfo in processes.items():
         if not pinfo.get("is_reception"):
+            # Incluir fechas de MRP y producto
+            mrp_start = pinfo.get("mrp_start", "")
+            mrp_end = pinfo.get("mrp_end", "")
+            product_name = pinfo.get("product_name", "")
+            
             add_node(
                 f"PROC:{ref}",
                 f"🔴 {ref}",
@@ -105,7 +110,10 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 {
                     "type": "PROCESS",
                     "ref": ref,
-                    "date": pinfo.get("date", "")
+                    "date": pinfo.get("date", ""),
+                    "mrp_start": mrp_start,
+                    "mrp_end": mrp_end,
+                    "product": product_name
                 },
                 "PROCESS"
             )

@@ -900,7 +900,7 @@ class TraceabilityService:
             print(f"[TraceabilityService] Error fetching package dates: {e}")
     
     def _enrich_with_mrp_dates(self, result: Dict):
-        """Obtiene fechas de inicio/término de mrp.production para procesos."""
+        """Obtiene fechas de inicio/término y producto de mrp.production para procesos."""
         # Buscar MOs que coincidan con las referencias de procesos
         process_refs = [ref for ref, p in result["processes"].items() if not p.get("is_reception")]
         if not process_refs:
@@ -911,7 +911,7 @@ class TraceabilityService:
             mrp_orders = self.odoo.search_read(
                 "mrp.production",
                 ["|", ("name", "in", process_refs), ("origin", "in", process_refs)],
-                ["id", "name", "origin", "x_studio_inicio_de_proceso", "x_studio_termino_de_proceso"],
+                ["id", "name", "origin", "x_studio_inicio_de_proceso", "x_studio_termino_de_proceso", "product_id"],
                 limit=len(process_refs) * 2
             )
             
@@ -923,12 +923,20 @@ class TraceabilityService:
                 if mo.get("origin") in process_refs:
                     mrp_by_ref[mo["origin"]] = mo
             
-            # Enriquecer procesos con fechas MRP
+            # Enriquecer procesos con fechas y producto MRP
             for ref, pinfo in result["processes"].items():
                 if ref in mrp_by_ref:
                     mo = mrp_by_ref[ref]
                     pinfo["mrp_start"] = mo.get("x_studio_inicio_de_proceso", "")
                     pinfo["mrp_end"] = mo.get("x_studio_termino_de_proceso", "")
                     pinfo["mrp_id"] = mo.get("id")
+                    
+                    # Extraer product_id
+                    product_rel = mo.get("product_id")
+                    if product_rel:
+                        product_id = product_rel[0] if isinstance(product_rel, (list, tuple)) else product_rel
+                        product_name = product_rel[1] if isinstance(product_rel, (list, tuple)) and len(product_rel) > 1 else ""
+                        pinfo["product_id"] = product_id
+                        pinfo["product_name"] = product_name
         except Exception as e:
             print(f"[TraceabilityService] Error fetching MRP dates: {e}")
