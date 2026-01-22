@@ -58,6 +58,7 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
         d3_node = {
             "id": new_idx,
             "color": node.get("color", "#cccccc"),
+            "date": detail.get("date", detail.get("mrp_start", "9999-99-99")),  # Fecha para ordenar
         }
         
         # Agregar metadata para tooltips
@@ -218,6 +219,12 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .nodeWidth(15)
                 .nodePadding(12)
                 .nodeAlign(d3.sankeyJustify)
+                .nodeSort((a, b) => {{
+                    // Ordenar nodos por fecha (eje X = línea de tiempo)
+                    const dateA = a.date || '9999-99-99';
+                    const dateB = b.date || '9999-99-99';
+                    return dateA.localeCompare(dateB);
+                }})
                 .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
             
             // Clonar datos
