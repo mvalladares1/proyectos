@@ -39,15 +39,24 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
     nodes_plotly = plotly_data.get("nodes", [])
     links_plotly = plotly_data.get("links", [])
     
-    # Crear nodos
+    # Crear nodos (filtrar recepciones y remapear índices)
     d3_nodes = []
+    original_to_new_idx = {}  # Mapeo de índice original -> nuevo índice
     
     for idx, node in enumerate(nodes_plotly):
         detail = node.get("detail", {})
         node_type = detail.get("type", "UNKNOWN")
         
+        # SALTAR nodos de RECEPCIÓN
+        if node_type == "RECEPTION":
+            continue
+        
+        # Guardar mapeo de índices
+        new_idx = len(d3_nodes)
+        original_to_new_idx[idx] = new_idx
+        
         d3_node = {
-            "id": idx,
+            "id": new_idx,
             "color": node.get("color", "#cccccc"),
         }
         
@@ -57,16 +66,11 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
             d3_node["tooltip"] = f"<strong>Proveedor</strong><br/>{detail.get('name', '')}"
             if detail.get("date"):
                 d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
-        elif node_type == "RECEPTION":
-            d3_node["name"] = f"📥 {detail.get('ref', 'Recepción')}"
-            d3_node["tooltip"] = f"<strong>Recepción</strong><br/>{detail.get('ref', '')}"
-            if detail.get("date"):
-                d3_node["tooltip"] += f"<br/>Fecha: {detail.get('date')}"
-            if detail.get("supplier"):
-                d3_node["tooltip"] += f"<br/>Proveedor: {detail.get('supplier')}"
         elif node_type == "PALLET_IN":
-            d3_node["name"] = f"🟠 {detail.get('id', 'Pallet')}"
-            d3_node["tooltip"] = f"<strong>Pallet IN</strong><br/>ID: {detail.get('id', '')}"
+            # Usar el NOMBRE del pallet de los datos del backend
+            pallet_name = nodes_plotly[idx].get("label", "").replace("🟠 ", "")
+            d3_node["name"] = f"🟠 {pallet_name}"
+            d3_node["tooltip"] = f"<strong>Pallet IN</strong><br/>Nombre: {pallet_name}"
             if detail.get("qty"):
                 d3_node["tooltip"] += f"<br/>Cantidad: {detail.get('qty'):.0f} kg"
             if detail.get("date"):
@@ -74,8 +78,10 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
             if detail.get("products"):
                 d3_node["tooltip"] += f"<br/>Productos: {detail.get('products')}"
         elif node_type == "PALLET_OUT":
-            d3_node["name"] = f"🟢 {detail.get('id', 'Pallet')}"
-            d3_node["tooltip"] = f"<strong>Pallet OUT</strong><br/>ID: {detail.get('id', '')}"
+            # Usar el NOMBRE del pallet de los datos del backend
+            pallet_name = nodes_plotly[idx].get("label", "").replace("🟢 ", "")
+            d3_node["name"] = f"🟢 {pallet_name}"
+            d3_node["tooltip"] = f"<strong>Pallet OUT</strong><br/>Nombre: {pallet_name}"
             if detail.get("qty"):
                 d3_node["tooltip"] += f"<br/>Cantidad: {detail.get('qty'):.0f} kg"
             if detail.get("date"):
@@ -104,20 +110,20 @@ def _transform_to_d3_format(plotly_data: Dict) -> Dict:
         
         d3_nodes.append(d3_node)
     
-    # Crear links (D3 usa índices numéricos)
+    # Crear links (D3 usa índices numéricos) - remapear índices
     d3_links = []
     for link in links_plotly:
         source_idx = link.get("source")
         target_idx = link.get("target")
         value = link.get("value", 1)
         
-        if source_idx is not None and target_idx is not None:
-            if source_idx < len(d3_nodes) and target_idx < len(d3_nodes):
-                d3_links.append({
-                    "source": source_idx,
-                    "target": target_idx,
-                    "value": max(value, 1)  # D3 necesita value > 0
-                })
+        # Verificar que ambos índices existen en el mapeo (no fueron filtrados)
+        if source_idx in original_to_new_idx and target_idx in original_to_new_idx:
+            d3_links.append({
+                "source": original_to_new_idx[source_idx],
+                "target": original_to_new_idx[target_idx],
+                "value": max(value, 1)  # D3 necesita value > 0
+            })
     
     return {
         "nodes": d3_nodes,
@@ -313,16 +319,22 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     tooltip.style('display', 'none');
                 }});
             
-            // Etiquetas de nodos (arriba de cada nodo)
+            // Etiquetas de nodos (arriba de cada nodo) - ROTADAS VERTICALMENTE
             node.append('text')
                 .attr('x', d => (d.x0 + d.x1) / 2)
-                .attr('y', d => d.y0 - 5)
+                .attr('y', d => d.y0 - 10)
                 .attr('text-anchor', 'middle')
-                .attr('font-size', '9px')
+                .attr('transform', d => {{
+                    const x = (d.x0 + d.x1) / 2;
+                    const y = d.y0 - 10;
+                    return `rotate(-45, ${{x}}, ${{y}})`;
+                }})
+                .attr('font-size', '10px')
                 .attr('fill', '#333')
+                .attr('font-weight', '500')
                 .text(d => {{
                     const name = d.name || '';
-                    return name.length > 20 ? name.substring(0, 18) + '...' : name;
+                    return name.length > 25 ? name.substring(0, 23) + '...' : name;
                 }});
         </script>
     </body>
