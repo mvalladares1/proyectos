@@ -250,6 +250,67 @@ def get_container_partners(username: str, password: str):
         return []
 
 
+@st.cache_data(ttl=300)
+def get_recepciones_list(username: str, password: str, fecha_inicio: str, fecha_fin: str):
+    """Obtiene lista de recepciones con guías de despacho en el rango de fechas."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin
+        }
+        resp = requests.get(
+            f"{API_URL}/api/v1/recepciones/mp",
+            params=params,
+            timeout=120
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # Filtrar solo recepciones con guía de despacho
+            recepciones = [
+                {
+                    "albaran": r.get("albaran", ""),
+                    "guia_despacho": r.get("guia_despacho", ""),
+                    "productor": r.get("productor", ""),
+                    "fecha": r.get("fecha", ""),
+                    "kg_total": r.get("kg_total", 0)
+                }
+                for r in data
+                if r.get("guia_despacho")
+            ]
+            return recepciones
+        return []
+    except Exception as e:
+        st.error(f"Error obteniendo recepciones: {str(e)}")
+        return []
+
+
+def get_traceability_by_delivery_guide(
+    username: str,
+    password: str,
+    guide: str,
+    include_siblings: bool = True,
+    output_format: str = "raw"
+):
+    """Obtiene trazabilidad desde una guía de despacho."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "guide": guide,
+            "include_siblings": str(include_siblings).lower(),
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/by-delivery-guide"
+        resp = requests.get(endpoint, params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
     """Obtiene trazabilidad completa de uno o varios pallets."""
     try:

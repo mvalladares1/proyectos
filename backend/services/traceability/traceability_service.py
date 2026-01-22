@@ -45,12 +45,13 @@ class TraceabilityService:
         include_siblings: bool = True
     ) -> Dict:
         """
-        Obtiene trazabilidad completa por identificador (venta o paquete).
+        Obtiene trazabilidad completa por identificador (venta, paquete o guía).
         
         Args:
             identifier: Puede ser:
                 - Código de venta (ej: S00574) → busca todos los pallets de esa venta
                 - Nombre de paquete → busca ese paquete específico
+                - Guía de despacho (si mode="guide") → busca por número de guía
             include_siblings: Si True, incluye pallets hermanos del mismo proceso.
                              Si False, solo sigue la cadena conectada directa.
         
@@ -124,6 +125,65 @@ class TraceabilityService:
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por venta: {e}")
+            return self._empty_result()
+    
+    def _get_traceability_by_delivery_guide(self, delivery_guide: str, limit: int, include_siblings: bool = True) -> Dict:
+        """Busca trazabilidad desde una guía de despacho HACIA ADELANTE."""
+        try:
+            # Buscar recepciones con esa guía de despacho
+            pickings = self.odoo.search_read(
+                "stock.picking",
+                [
+                    ("x_studio_gua_de_despacho", "=", delivery_guide),
+                    ("state", "=", "done")
+                ],
+                ["id", "name"],
+                limit=10
+            )
+            
+            if not pickings:
+                print(f"[TraceabilityService] No se encontró recepción con guía: {delivery_guide}")
+                return self._empty_result()
+            
+            print(f"[TraceabilityService] Guía {delivery_guide}: {len(pickings)} recepciones encontradas")
+            
+            picking_ids = [p["id"] for p in pickings]
+            
+            # Buscar pallets de estas recepciones (result_package_id)
+            move_lines = self.odoo.search_read(
+                "stock.move.line",
+                [
+                    ("picking_id", "in", picking_ids),
+                    ("result_package_id", "!=", False),
+                    ("qty_done", ">", 0),
+                    ("state", "=", "done"),
+                ],
+                ["result_package_id"],
+                limit=500
+            )
+            
+            # Extraer package_ids de la recepción
+            package_ids = set()
+            for ml in move_lines:
+                result_rel = ml.get("result_package_id")
+                if result_rel:
+                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                    if result_id:
+                        package_ids.add(result_id)
+            
+            if not package_ids:
+                print(f"[TraceabilityService] No se encontraron pallets en guía: {delivery_guide}")
+                return self._empty_result()
+            
+            print(f"[TraceabilityService] Guía {delivery_guide}: {len(package_ids)} pallets encontrados")
+            
+            # Trazabilidad HACIA ADELANTE de esos pallets
+            return self._get_traceability_for_packages(list(package_ids), limit, include_siblings=include_siblings)
+            
+        except Exception as e:
+            print(f"[TraceabilityService] Error en trazabilidad por guía: {e}")
+            import traceback
+            traceback.print_exc()
             return self._empty_result()
     
     def _get_traceability_by_package(self, package_name: str, limit: int, include_siblings: bool = False) -> Dict:

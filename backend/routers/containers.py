@@ -196,6 +196,26 @@ async def get_traceability_by_identifier(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/traceability/by-delivery-guide")
+async def get_traceability_by_delivery_guide(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    guide: str = Query(..., description="Número de guía de despacho"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
+):
+    """
+    Obtiene trazabilidad desde una guía de despacho HACIA ADELANTE.
+    Busca la recepción con esa guía y rastrea todos los pallets hasta clientes.
+    """
+    try:
+        service = TraceabilityService(username=username, password=password)
+        data = service._get_traceability_by_delivery_guide(delivery_guide=guide, limit=10000, include_siblings=include_siblings)
+        data.pop("move_lines", None)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/traceability/by-identifier/visjs")
 async def get_traceability_by_identifier_visjs(
     username: str = Query(..., description="Usuario Odoo"),
