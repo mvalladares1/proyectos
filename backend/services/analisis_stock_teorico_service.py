@@ -157,13 +157,11 @@ class AnalisisStockTeoricoService:
         """
         # Líneas de facturas de proveedor - SOLO diario "Facturas de Proveedores"
         # Filtrado por cuentas específicas para evitar duplicaciones contables
-        # IMPORTANTE: Excluir facturas revertidas (con nota de crédito)
         lineas = self.odoo.search_read(
             'account.move.line',
             [
                 ['move_id.move_type', '=', 'in_invoice'],
                 ['move_id.state', '=', 'posted'],
-                ['move_id.reversed_entry_id', '=', False],  # Excluir facturas revertidas
                 ['move_id.journal_id.name', '=', 'Facturas de Proveedores'],
                 ['product_id', '!=', False],
                 ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
@@ -326,13 +324,11 @@ class AnalisisStockTeoricoService:
         """
         # Líneas de facturas de cliente - SOLO diario "Facturas de Cliente"
         # Filtrado por cuenta específica para evitar duplicaciones contables
-        # IMPORTANTE: Excluir facturas revertidas (con nota de crédito)
         lineas = self.odoo.search_read(
             'account.move.line',
             [
                 ['move_id.move_type', '=', 'out_invoice'],
                 ['move_id.state', '=', 'posted'],
-                ['move_id.reversed_entry_id', '=', False],  # Excluir facturas revertidas
                 ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
                 ['product_id', '!=', False],
                 ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
