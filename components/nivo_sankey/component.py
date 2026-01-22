@@ -218,52 +218,6 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             // Tooltip
             const tooltip = d3.select('#tooltip');
             
-            // Configurar zoom
-            let currentZoomLevel = 1;
-            const zoom = d3.zoom()
-                .scaleExtent([0.5, 10])
-                .on('zoom', (event) => {{
-                    currentZoomLevel = event.transform.k;
-                    g.attr('transform', `translate(${{margin.left + event.transform.x}},${{margin.top + event.transform.y}}) scale(${{event.transform.k}})`);
-                    updateTimeline(event.transform.k);
-                }});
-            
-            svg.call(zoom);
-            
-            // Botones de zoom
-            d3.select('#zoom-in').on('click', () => {{
-                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
-            }});
-            d3.select('#zoom-out').on('click', () => {{
-                svg.transition().duration(300).call(zoom.scaleBy, 0.67);
-            }});
-            d3.select('#zoom-reset').on('click', () => {{
-                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
-            }});
-            
-            // Configurar zoom
-            let currentZoomLevel = 1;
-            const zoom = d3.zoom()
-                .scaleExtent([0.5, 10])
-                .on('zoom', (event) => {{
-                    currentZoomLevel = event.transform.k;
-                    g.attr('transform', `translate(${{margin.left + event.transform.x}},${{margin.top + event.transform.y}}) scale(${{event.transform.k}})`);
-                    updateTimeline(event.transform.k);
-                }});
-            
-            svg.call(zoom);
-            
-            // Botones de zoom
-            d3.select('#zoom-in').on('click', () => {{
-                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
-            }});
-            d3.select('#zoom-out').on('click', () => {{
-                svg.transition().duration(300).call(zoom.scaleBy, 0.67);
-            }});
-            d3.select('#zoom-reset').on('click', () => {{
-                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
-            }});
-            
             // Configurar Sankey - usamos configuración horizontal y luego rotamos
             const sankey = d3.sankey()
                 .nodeId(d => d.id)
@@ -499,6 +453,29 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             
             // Inicializar timeline
             updateTimeline(1);
+            
+            // Configurar zoom DESPUÉS de dibujar todo
+            let currentZoomLevel = 1;
+            const zoom = d3.zoom()
+                .scaleExtent([0.5, 10])
+                .on('zoom', (event) => {{
+                    currentZoomLevel = event.transform.k;
+                    g.attr('transform', `translate(${{margin.left + event.transform.x}},${{margin.top + event.transform.y}}) scale(${{event.transform.k}})`);
+                    updateTimeline(event.transform.k);
+                }});
+            
+            svg.call(zoom);
+            
+            // Botones de zoom
+            d3.select('#zoom-in').on('click', () => {{
+                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
+            }});
+            d3.select('#zoom-out').on('click', () => {{
+                svg.transition().duration(300).call(zoom.scaleBy, 0.67);
+            }});
+            d3.select('#zoom-reset').on('click', () => {{
+                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
+            }});
         </script>
     </body>
     </html>
