@@ -329,17 +329,10 @@ class TraceabilityService:
         
         print(f"[TraceabilityService] Total ANTES de filtrar: {len(all_move_lines)} movimientos")
         
-        # =====================================================
-        # FASE 2: Si include_siblings=False, filtrar para conexión directa
-        # =====================================================
-        if not include_siblings:
-            all_move_lines = self._filter_direct_connection(all_move_lines, initial_package_ids)
-            print(f"[TraceabilityService] Total DESPUÉS de filtrar: {len(all_move_lines)} movimientos")
-        
         if not all_move_lines:
             return self._empty_result()
         
-        # Procesar movimientos
+        # Procesar movimientos (siempre procesamos todo como "Todos")
         result = self._process_move_lines(all_move_lines, virtual_ids)
         result["move_lines"] = all_move_lines
         
@@ -350,173 +343,165 @@ class TraceabilityService:
         self._enrich_with_pallet_dates(result)
         self._enrich_with_mrp_dates(result)
         
+        # =====================================================
+        # FASE 2: Si include_siblings=False, filtrar el resultado procesado
+        # =====================================================
+        if not include_siblings:
+            result = self._filter_direct_connection_result(result, initial_package_ids)
+        
         return result
     
-    def _filter_direct_connection(
+    def _filter_direct_connection_result(
         self, 
-        move_lines: List[Dict], 
+        result: Dict,
         initial_package_ids: List[int]
-    ) -> List[Dict]:
+    ) -> Dict:
         """
-        Filtra los movimientos para quedarnos solo con la cadena conectada directamente.
+        Filtra el resultado procesado para quedarnos solo con la cadena conectada.
         
-        Lógica:
-        1. Nivel 0: El proceso del pallet inicial - traemos TODOS sus outputs (hermanos) y sus inputs
-        2. Hacia atrás: Solo los movimientos donde el output conecta con un input del nivel anterior
+        Estrategia:
+        1. Usar los links ya construidos para hacer BFS desde los pallets iniciales
+        2. Marcar todos los nodos alcanzables (hacia atrás y adelante)
+        3. Filtrar el resultado para quedarnos solo con nodos conectados
         """
-        if not move_lines:
-            return []
+        pallets = result.get("pallets", {})
+        processes = result.get("processes", {})
+        suppliers = result.get("suppliers", {})
+        customers = result.get("customers", {})
+        links = result.get("links", [])
         
-        # Construir grafo de conexiones: output -> inputs
-        output_to_inputs = {}  # result_package_id -> set of package_ids
-        package_to_moves = {}  # package_id -> list of move_lines
-        reception_packages = set()  # Paquetes que vienen de recepción (no tienen input)
+        print(f"[TraceabilityService] Filtrando conexión directa desde {len(initial_package_ids)} pallets iniciales")
+        print(f"[TraceabilityService] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
         
-        for ml in move_lines:
-            pkg_rel = ml.get("package_id")
-            result_rel = ml.get("result_package_id")
-            loc_id = ml.get("location_id")
-            loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
-            
-            pkg_id = None
-            result_id = None
-            
-            if pkg_rel:
-                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-            if result_rel:
-                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-            
-            # Detectar paquetes de recepción
-            if loc_id == self.PARTNER_VENDORS_LOCATION_ID and result_id:
-                reception_packages.add(result_id)
-            
-            # Mapear output -> inputs (solo si hay input)
-            if result_id and pkg_id:
-                if result_id not in output_to_inputs:
-                    output_to_inputs[result_id] = set()
-                output_to_inputs[result_id].add(pkg_id)
-            
-            # Mapear package -> moves
-            if pkg_id:
-                if pkg_id not in package_to_moves:
-                    package_to_moves[pkg_id] = []
-                package_to_moves[pkg_id].append(ml)
-            if result_id:
-                if result_id not in package_to_moves:
-                    package_to_moves[result_id] = []
-                package_to_moves[result_id].append(ml)
+        # Construir grafo bidireccional desde los links
+        # node_id -> tipo:id (ej: "PALLET:123", "PROCESS:ref", "RECV:ref")
+        graph_forward = {}  # source -> [targets]
+        graph_backward = {}  # target -> [sources]
         
-        # Encontrar paquetes conectados usando BFS hacia atrás
-        connected_packages = set(initial_package_ids)
-        packages_to_check = list(initial_package_ids)
-        checked_packages = set()
+        for link in links:
+            source_type, source_id, target_type, target_id, qty = link
+            
+            source_node = f"{source_type}:{source_id}"
+            target_node = f"{target_type}:{target_id}"
+            
+            if source_node not in graph_forward:
+                graph_forward[source_node] = []
+            graph_forward[source_node].append(target_node)
+            
+            if target_node not in graph_backward:
+                graph_backward[target_node] = []
+            graph_backward[target_node].append(source_node)
         
-        # También incluir hermanos del primer nivel
-        first_level_refs = set()
+        # BFS desde pallets iniciales (hacia atrás y adelante)
+        connected_nodes = set()
+        queue = []
+        
         for pkg_id in initial_package_ids:
-            for ml in package_to_moves.get(pkg_id, []):
-                ref = ml.get("reference")
-                if ref:
-                    first_level_refs.add(ref)
+            node = f"PALLET:{pkg_id}"
+            connected_nodes.add(node)
+            queue.append(node)
         
-        # Agregar todos los paquetes del primer nivel (hermanos)
-        for ml in move_lines:
-            ref = ml.get("reference")
-            if ref in first_level_refs:
-                pkg_rel = ml.get("package_id")
-                result_rel = ml.get("result_package_id")
-                
-                if pkg_rel:
-                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                    if pkg_id:
-                        connected_packages.add(pkg_id)
-                        if pkg_id not in checked_packages:
-                            packages_to_check.append(pkg_id)
-                
-                if result_rel:
-                    result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                    if result_id:
-                        connected_packages.add(result_id)
+        # Primero: incluir todos los procesos del primer nivel (hermanos)
+        first_level_processes = set()
+        for pkg_id in initial_package_ids:
+            node = f"PALLET:{pkg_id}"
+            # Buscar procesos donde este pallet es output
+            for source in graph_backward.get(node, []):
+                if source.startswith("PROCESS:") or source.startswith("RECV:"):
+                    first_level_processes.add(source)
+                    connected_nodes.add(source)
         
-        # BFS hacia atrás: para cada paquete conectado, agregar sus inputs
-        while packages_to_check:
-            current_pkg = packages_to_check.pop(0)
-            if current_pkg in checked_packages:
+        # Agregar todos los outputs (hermanos) de los procesos del primer nivel
+        for proc_node in first_level_processes:
+            for target in graph_forward.get(proc_node, []):
+                if target.startswith("PALLET:"):
+                    connected_nodes.add(target)
+                    queue.append(target)
+        
+        # Agregar los procesos a la cola para seguir hacia atrás
+        queue.extend(first_level_processes)
+        
+        # BFS hacia atrás (inputs)
+        visited = set(initial_package_ids)
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
                 continue
-            checked_packages.add(current_pkg)
+            visited.add(current)
             
-            # Si este paquete es un output, sus inputs también están conectados
-            inputs = output_to_inputs.get(current_pkg, set())
-            for input_pkg in inputs:
-                if input_pkg not in connected_packages:
-                    connected_packages.add(input_pkg)
-                    packages_to_check.append(input_pkg)
+            # Agregar todos los nodos de entrada (hacia atrás)
+            for source in graph_backward.get(current, []):
+                if source not in connected_nodes:
+                    connected_nodes.add(source)
+                    queue.append(source)
         
-        # Agregar paquetes de recepción que están conectados
-        # (son los que no tienen inputs pero están en la cadena)
-        connected_reception_packages = connected_packages & reception_packages
-        print(f"[TraceabilityService] Paquetes conectados: {len(connected_packages)}, de recepción: {len(connected_reception_packages)}")
-        print(f"[TraceabilityService] Total paquetes de recepción encontrados: {len(reception_packages)}")
+        # Agregar proveedores y clientes conectados
+        for node in list(connected_nodes):
+            if node.startswith("RECV:"):
+                # Buscar proveedor de esta recepción
+                ref = node.replace("RECV:", "")
+                proc_info = processes.get(ref, {})
+                supplier_id = proc_info.get("supplier_id")
+                if supplier_id:
+                    connected_nodes.add(f"SUPPLIER:{supplier_id}")
         
-        # Debug: buscar paquetes que no tienen inputs (son terminales hacia atrás)
-        terminal_packages = set()
-        for pkg in connected_packages:
-            if pkg not in output_to_inputs or not output_to_inputs[pkg]:
-                terminal_packages.add(pkg)
-        print(f"[TraceabilityService] Paquetes terminales (sin inputs): {len(terminal_packages)}")
+        for node in list(connected_nodes):
+            if node.startswith("PALLET:"):
+                # Buscar si este pallet va a un cliente
+                for target in graph_forward.get(node, []):
+                    if target.startswith("CUSTOMER:"):
+                        connected_nodes.add(target)
         
-        # Filtrar movimientos: solo los que tienen paquetes conectados
-        filtered_moves = []
-        reception_moves_included = 0
+        print(f"[TraceabilityService] Nodos conectados: {len(connected_nodes)}")
         
-        for ml in move_lines:
-            pkg_rel = ml.get("package_id")
-            result_rel = ml.get("result_package_id")
+        # Filtrar pallets
+        filtered_pallets = {}
+        for pid, pinfo in pallets.items():
+            if f"PALLET:{pid}" in connected_nodes:
+                filtered_pallets[pid] = pinfo
+        
+        # Filtrar procesos
+        filtered_processes = {}
+        for ref, pinfo in processes.items():
+            proc_node = f"RECV:{ref}" if pinfo.get("is_reception") else f"PROCESS:{ref}"
+            if proc_node in connected_nodes:
+                filtered_processes[ref] = pinfo
+        
+        # Filtrar proveedores
+        filtered_suppliers = {}
+        for sid, sname in suppliers.items():
+            if f"SUPPLIER:{sid}" in connected_nodes:
+                filtered_suppliers[sid] = sname
+        
+        # Filtrar clientes
+        filtered_customers = {}
+        for cid, cname in customers.items():
+            if f"CUSTOMER:{cid}" in connected_nodes:
+                filtered_customers[cid] = cname
+        
+        # Filtrar links
+        filtered_links = []
+        for link in links:
+            source_type, source_id, target_type, target_id, qty = link
+            source_node = f"{source_type}:{source_id}"
+            target_node = f"{target_type}:{target_id}"
             
-            pkg_id = None
-            result_id = None
-            
-            if pkg_rel:
-                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-            if result_rel:
-                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-            
-            loc_id = ml.get("location_id")
-            loc_dest_id = ml.get("location_dest_id")
-            loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
-            loc_dest_id = loc_dest_id[0] if isinstance(loc_dest_id, (list, tuple)) else loc_dest_id
-            
-            is_reception = loc_id == self.PARTNER_VENDORS_LOCATION_ID
-            is_sale = loc_dest_id == self.PARTNER_CUSTOMERS_LOCATION_ID
-            
-            if is_reception:
-                # Recepción: incluir si el result_package O package está conectado
-                target_pkg = result_id or pkg_id
-                if target_pkg and target_pkg in connected_packages:
-                    filtered_moves.append(ml)
-                    reception_moves_included += 1
-            elif is_sale:
-                # Venta: incluir si el package está conectado
-                if pkg_id and pkg_id in connected_packages:
-                    filtered_moves.append(ml)
-            else:
-                # Proceso interno: incluir si el input O output están conectados
-                input_connected = pkg_id and pkg_id in connected_packages
-                output_connected = result_id and result_id in connected_packages
-                
-                # También incluir si es el movimiento de CREACIÓN de un paquete terminal
-                # (el paquete terminal aparece como result_package_id y no tiene pkg_id o pkg_id no está conectado)
-                is_terminal_creation = (result_id and result_id in terminal_packages and 
-                                        (not pkg_id or pkg_id not in connected_packages))
-                
-                if input_connected or output_connected or is_terminal_creation:
-                    filtered_moves.append(ml)
-                    if is_terminal_creation and not (input_connected or output_connected):
-                        reception_moves_included += 1  # Contar como "recepción" para debug
+            if source_node in connected_nodes and target_node in connected_nodes:
+                filtered_links.append(link)
         
-        print(f"[TraceabilityService] Movimientos de recepción/creación incluidos: {reception_moves_included}")
+        print(f"[TraceabilityService] Después del filtro: {len(filtered_pallets)} pallets, {len(filtered_processes)} procesos, {len(filtered_links)} links")
         
-        return filtered_moves
+        return {
+            "pallets": filtered_pallets,
+            "processes": filtered_processes,
+            "suppliers": filtered_suppliers,
+            "customers": filtered_customers,
+            "links": filtered_links,
+            "reception_picking_ids": result.get("reception_picking_ids", []),
+            "sale_picking_ids": result.get("sale_picking_ids", []),
+            "sale_pallet_pickings": result.get("sale_pallet_pickings", {}),
+            "move_lines": result.get("move_lines", [])
+        }
 
     def get_traceability_data(
         self,
