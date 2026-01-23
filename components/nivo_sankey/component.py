@@ -273,56 +273,29 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .nodeId(d => d.id)
                 .nodeWidth(15)
                 .nodePadding(12)
-                .nodeAlign(d3.sankeyJustify)
+                .nodeAlign(d3.sankeyLeft)  // Alinear a la izquierda para respetar el orden temporal
+                .nodeSort((a, b) => {{
+                    const dateA = a.date || '9999-99-99';
+                    const dateB = b.date || '9999-99-99';
+                    return dateA.localeCompare(dateB);
+                }})
                 .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
             
-            // Antes de calcular layout, pre-asignar posiciones X basadas en fechas
-            const dates = data.nodes.map(d => d.date || '9999-99-99').filter(d => d !== '9999-99-99');
-            const minDate = d3.min(dates);
-            const maxDate = d3.max(dates);
-            
-            // Escala de fechas para posición X (que será Y después de rotar)
-            const dateScale = d3.scaleTime()
-                .domain([new Date(minDate), new Date(maxDate)])
-                .range([0, innerHeight]);
-            
-            // Asignar depth manualmente basado en fechas
-            data.nodes.forEach(node => {{
-                if (node.date && node.date !== '9999-99-99') {{
-                    const datePos = dateScale(new Date(node.date));
-                    // Convertir posición a depth aproximado
-                    node.depth = Math.floor((datePos / innerHeight) * 10);
-                }} else {{
-                    node.depth = 999; // Nodos sin fecha van al final
-                }}
-            }});
-            
             // Clonar datos
-            const graph = sankey({{
-                nodes: data.nodes.map(d => ({{...d}})),
-                links: data.links.map(d => ({{...d}}))
-            }});
-            
-            // Después del layout, ajustar coordenadas Y según las fechas reales
-            graph.nodes.forEach(node => {{
-                if (node.date && node.date !== '9999-99-99') {{
-                    const targetY = dateScale(new Date(node.date));
-                    // Ajustar x0 y x1 (que serán y0 y y1 después de rotar)
-                    const nodeHeight = node.x1 - node.x0;
-                    node.x0 = targetY;
-                    node.x1 = targetY + nodeHeight;
-                }}
-            }});
+            const graph = sankey({
+                nodes: data.nodes.map(d => ({...d})),
+                links: data.links.map(d => ({...d}))
+            });
             
             // Rotar coordenadas para orientación vertical
             // x -> y, y -> x
-            graph.nodes.forEach(node => {{
+            graph.nodes.forEach(node => {
                 const x0 = node.x0, x1 = node.x1, y0 = node.y0, y1 = node.y1;
                 node.x0 = y0;
                 node.x1 = y1;
                 node.y0 = x0;
                 node.y1 = x1;
-            }});
+            });
             
             // Función para dibujar links verticales
             function verticalLink(d) {{
