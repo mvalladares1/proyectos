@@ -47,11 +47,19 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
             sname = sinfo.get("name", "Proveedor")
             scheduled_date = sinfo.get("scheduled_date", "")
             date_done = sinfo.get("date_done", "")
+            albaran = sinfo.get("albaran", "")
+            guia_despacho = sinfo.get("guia_despacho", "")
+            origen = sinfo.get("origen", "")
+            transportista = sinfo.get("transportista", "")
         else:
             # Compatibilidad con formato antiguo (string)
             sname = sinfo
             scheduled_date = ""
             date_done = ""
+            albaran = ""
+            guia_despacho = ""
+            origen = ""
+            transportista = ""
         
         add_node(
             f"SUPP:{sid}",
@@ -62,7 +70,11 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "id": sid,
                 "name": sname,
                 "date": scheduled_date,  # Usar scheduled_date para proveedores
-                "date_done": date_done
+                "date_done": date_done,
+                "albaran": albaran,
+                "guia_despacho": guia_despacho,
+                "origen": origen,
+                "transportista": transportista
             },
             "SUPPLIER"
         )
