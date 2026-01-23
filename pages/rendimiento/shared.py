@@ -311,6 +311,164 @@ def get_traceability_by_delivery_guide(
         return None
 
 
+def search_recepciones_by_guide_pattern(username: str, password: str, guide_pattern: str):
+    """Busca recepciones que coincidan con el patrón de guía."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "guide_pattern": guide_pattern,
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/search-by-guide-pattern"
+        resp = requests.get(endpoint, params=params, timeout=60)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error buscando recepciones: {str(e)}")
+        return None
+
+
+def get_traceability_by_picking_id(
+    username: str,
+    password: str,
+    picking_id: int,
+    include_siblings: bool = True
+):
+    """Obtiene trazabilidad desde un picking específico."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "picking_id": picking_id,
+            "include_siblings": str(include_siblings).lower(),
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/by-picking-id"
+        resp = requests.get(endpoint, params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
+def get_traceability_by_supplier(
+    username: str,
+    password: str,
+    supplier_id: int,
+    start_date: str,
+    end_date: str,
+    include_siblings: bool = True
+):
+    """Obtiene trazabilidad de todas las recepciones de un proveedor en un rango de fechas."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "supplier_id": supplier_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "include_siblings": str(include_siblings).lower(),
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/by-supplier"
+        resp = requests.get(endpoint, params=params, timeout=180)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
+@st.cache_data(ttl=600)
+def get_suppliers_list(username: str, password: str):
+    """Obtiene lista de proveedores con recepciones."""
+    try:
+        from shared.odoo_client import OdooClient
+        client = OdooClient(username=username, password=password)
+        
+        # Obtener proveedores que tienen recepciones
+        pickings = client.search_read(
+            "stock.picking",
+            [
+                ("picking_type_id", "in", [1, 217, 164]),  # RFP, VILKUN, SAN JOSE
+                ("state", "=", "done"),
+            ],
+            ["partner_id"],
+            limit=5000
+        )
+        
+        # Extraer IDs únicos de proveedores
+        supplier_ids = set()
+        for p in pickings:
+            partner_rel = p.get("partner_id")
+            if partner_rel:
+                sid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
+                if sid:
+                    supplier_ids.add(sid)
+        
+        # Obtener detalles de proveedores
+        if supplier_ids:
+            suppliers = client.read("res.partner", list(supplier_ids), ["id", "name"])
+            # Ordenar por nombre
+            suppliers.sort(key=lambda x: x.get("name", ""))
+            return suppliers
+        
+        return []
+    except Exception as e:
+        st.error(f"Error obteniendo proveedores: {str(e)}")
+        return []
+
+
+def get_traceability_by_sale(
+    username: str, 
+    password: str, 
+    sale_identifier: str = None, 
+    start_date: str = None, 
+    end_date: str = None,
+    include_siblings: bool = True,
+    output_format: str = "sankey"
+):
+    """
+    Obtiene trazabilidad de ventas con dos modos:
+    1. Venta específica (con sale_identifier) con filtro opcional de fechas
+    2. Todas las ventas de un período (sin sale_identifier pero con fechas obligatorias)
+    """
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "include_siblings": str(include_siblings).lower(),
+            "output_format": output_format
+        }
+        
+        # Agregar sale_identifier solo si se proporciona
+        if sale_identifier:
+            params["sale_identifier"] = sale_identifier
+            
+        # Agregar fechas solo si se proporcionan
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        
+        response = requests.get(
+            f"{API_URL}/api/v1/containers/traceability/by-sale",
+            params=params,
+            timeout=120
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
     """Obtiene trazabilidad completa de uno o varios pallets."""
     try:

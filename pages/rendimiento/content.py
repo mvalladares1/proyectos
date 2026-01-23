@@ -77,7 +77,7 @@ def render(username: str, password: str):
         tab_funcs.append(('trazabilidad', _render_trazabilidad))
     
     if _perm_sankey:
-        tab_names.append("🔗 Contenedores")
+        tab_names.append("📊 Diagramas")
         tab_funcs.append(('sankey', _render_sankey))
     
     if _perm_inventario:
@@ -346,7 +346,7 @@ def _render_sankey(username: str, password: str):
     
     search_mode = st.radio(
         "Selecciona el modo:",
-        ["📅 Por rango de fechas", "🔖 Por venta o paquete", "📥 Por guía de despacho"],
+        ["📅 Por rango de fechas", "� Por paquete", "🚚 Por venta", "📥 Por guía de despacho", "🏭 Por proveedor"],
         horizontal=True,
         key="search_mode_selector"
     )
@@ -372,48 +372,209 @@ def _render_sankey(username: str, password: str):
         delivery_guide = None
     elif search_mode == "📥 Por guía de despacho":
         st.markdown("### 📥 Buscar por Guía de Despacho")
-        col_guide, col_mode = st.columns([3, 2])
+        
+        col_guide, col_btn = st.columns([3, 1])
         with col_guide:
-            delivery_guide = st.text_input(
+            guide_pattern = st.text_input(
                 "Número de guía",
                 placeholder="Ej: 503",
-                key="delivery_guide_input",
-                help="Ingresa el número de guía de despacho de la recepción"
+                key="delivery_guide_pattern",
+                help="Ingresa el número base de guía (ej: 503 para buscar 503, 503., 503a, etc.)"
             )
-        with col_mode:
-            connection_mode = st.selectbox(
-                "Modo de conexión",
-                ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
-                key="connection_mode_guide",
-                help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+        with col_btn:
+            st.markdown("<br>", unsafe_allow_html=True)
+            search_btn = st.button("🔍 Buscar", use_container_width=True, key="search_guide_btn")
+        
+        # Buscar recepciones cuando se presiona el botón
+        if search_btn and guide_pattern:
+            from .shared import search_recepciones_by_guide_pattern
+            with st.spinner(f"Buscando recepciones con guía {guide_pattern}..."):
+                result = search_recepciones_by_guide_pattern(username, password, guide_pattern)
+                
+                if result and result.get('recepciones'):
+                    st.session_state.found_recepciones = result['recepciones']
+                    st.session_state.guide_pattern_searched = guide_pattern
+                else:
+                    st.warning(f"No se encontraron recepciones con guía {guide_pattern}")
+                    st.session_state.found_recepciones = []
+        
+        # Mostrar recepciones encontradas
+        selected_picking_id = None
+        if 'found_recepciones' in st.session_state and st.session_state.found_recepciones:
+            st.markdown(f"#### 📋 Recepciones encontradas ({len(st.session_state.found_recepciones)})")
+            
+            # Crear opciones para el selectbox
+            opciones = [
+                f"{r['guia_despacho']} | {r['productor']} | {r['albaran']} | {r['fecha'][:10] if r['fecha'] else 'Sin fecha'}"
+                for r in st.session_state.found_recepciones
+            ]
+            
+            seleccion_idx = st.selectbox(
+                "Selecciona una recepción:",
+                options=range(len(opciones)),
+                format_func=lambda i: opciones[i],
+                key="select_recepcion_guide"
             )
+            
+            if seleccion_idx is not None:
+                selected_picking_id = st.session_state.found_recepciones[seleccion_idx]['picking_id']
+                selected_info = st.session_state.found_recepciones[seleccion_idx]
+                st.info(f"✅ Seleccionado: **{selected_info['guia_despacho']}** - {selected_info['productor']}")
+        
+        # Modo de conexión
+        connection_mode = st.selectbox(
+            "Modo de conexión",
+            ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
+            key="connection_mode_guide",
+            help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+        )
         include_siblings = connection_mode == "🌐 Todos (con hermanos)"
-        st.caption("💡 **Ejemplo:** `503` → Rastrea la recepción y todos los pallets hasta el cliente")
+        
+        st.caption("💡 Ingresa el número base de guía (ej: 503), busca las recepciones y selecciona una para ver su trazabilidad")
         fecha_inicio = None
         fecha_fin = None
         identifier = None
-    else:
-        st.markdown("### 🔖 Buscar por Identificador")
+        delivery_guide = None
+        supplier_id = None
+    elif search_mode == "🏭 Por proveedor":
+        st.markdown("### 🏭 Buscar por Proveedor")
+        
+        # Obtener lista de proveedores
+        from .shared import get_suppliers_list
+        suppliers = get_suppliers_list(username, password)
+        
+        if suppliers:
+            # Crear opciones para el selectbox
+            supplier_options = {f"{s['name']} (ID: {s['id']})": s['id'] for s in suppliers}
+            
+            selected_supplier = st.selectbox(
+                "Selecciona un proveedor:",
+                options=list(supplier_options.keys()),
+                key="select_supplier"
+            )
+            supplier_id = supplier_options[selected_supplier]
+            
+            # Rango de fechas con default últimos 7 días
+            st.markdown("#### 📅 Rango de fechas")
+            col1, col2 = st.columns(2)
+            
+            default_end = datetime.now().date()
+            default_start = default_end - timedelta(days=7)
+            
+            with col1:
+                fecha_inicio_supplier = st.date_input(
+                    "Desde",
+                    value=default_start,
+                    format="DD/MM/YYYY",
+                    key="supplier_fecha_inicio",
+                )
+            with col2:
+                fecha_fin_supplier = st.date_input(
+                    "Hasta",
+                    value=default_end,
+                    format="DD/MM/YYYY",
+                    key="supplier_fecha_fin",
+                )
+            
+            # Modo de conexión
+            connection_mode = st.selectbox(
+                "Modo de conexión",
+                ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
+                key="connection_mode_supplier",
+                help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+            )
+            include_siblings = connection_mode == "🌐 Todos (con hermanos)"
+            
+            st.caption("💡 Selecciona un proveedor y un rango de fechas para ver la trazabilidad de todas sus recepciones")
+            fecha_inicio = fecha_inicio_supplier
+            fecha_fin = fecha_fin_supplier
+            identifier = None
+            delivery_guide = None
+        else:
+            st.warning("No se encontraron proveedores con recepciones")
+            supplier_id = None
+            fecha_inicio = None
+            fecha_fin = None
+            identifier = None
+            delivery_guide = None
+    elif search_mode == "📦 Por paquete":
+        st.markdown("### 📦 Buscar por Paquete")
         col_id, col_mode = st.columns([3, 2])
         with col_id:
             identifier = st.text_input(
-                "Ingresa el código",
-                placeholder="Ej: S00574 (venta) o nombre de paquete",
-                key="identifier_input",
-                help="Si empieza con 'S' + números, buscará la venta. Si no, buscará el paquete específico."
+                "Nombre del paquete",
+                placeholder="Ej: PALLET-001, JAC-0001-005-2",
+                key="package_input",
+                help="Ingresa el nombre exacto del paquete"
             )
         with col_mode:
             connection_mode = st.selectbox(
                 "Modo de conexión",
                 ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
-                key="connection_mode",
+                key="connection_mode_package",
                 help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
             )
         include_siblings = connection_mode == "🌐 Todos (con hermanos)"
-        st.caption("💡 **Ejemplos:** `S00574` (busca venta) | `PALLET-001` (busca paquete)")
+        st.caption("💡 Ingresa el nombre exacto del paquete para ver su trazabilidad completa")
         fecha_inicio = None
         fecha_fin = None
         delivery_guide = None
+        supplier_id = None
+    else:  # Por venta
+        st.markdown("### 🚚 Buscar por Venta")
+        
+        col_id, col_mode = st.columns([3, 2])
+        with col_id:
+            identifier = st.text_input(
+                "Código de venta (opcional)",
+                placeholder="Ej: S00574",
+                key="sale_input",
+                help="Opcional: ingresa un código específico. Si está vacío, se buscarán todas las ventas del período."
+            )
+        with col_mode:
+            connection_mode = st.selectbox(
+                "Modo de conexión",
+                ["🔗 Conexión directa", "🌐 Todos (con hermanos)"],
+                key="connection_mode_sale",
+                help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
+            )
+        include_siblings = connection_mode == "🌐 Todos (con hermanos)"
+        
+        # Filtro de fechas
+        st.markdown("#### 📅 Rango de fechas")
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            fecha_inicio_sale = st.date_input(
+                "Desde",
+                value=datetime(2025, 1, 1) if not identifier else None,
+                format="DD/MM/YYYY",
+                key="sale_fecha_inicio",
+                help="Obligatorio si no hay código de venta"
+            )
+        with col_f2:
+            fecha_fin_sale = st.date_input(
+                "Hasta",
+                value=datetime.now() if not identifier else None,
+                format="DD/MM/YYYY",
+                key="sale_fecha_fin",
+                help="Obligatorio si no hay código de venta"
+            )
+        
+        fecha_inicio = fecha_inicio_sale
+        fecha_fin = fecha_fin_sale
+        
+        # Mensaje dinámico según lo que está lleno
+        if identifier and (fecha_inicio or fecha_fin):
+            st.caption("💡 Buscará la venta específica en el rango de fechas indicado")
+        elif identifier:
+            st.caption("💡 Buscará la venta específica sin filtro de fechas")
+        elif fecha_inicio and fecha_fin:
+            st.caption("💡 Mostrará todas las ventas del período seleccionado")
+        else:
+            st.caption("⚠️ Debes ingresar un código de venta O un rango de fechas")
+            
+        delivery_guide = None
+        supplier_id = None
 
     # Filtro de productor (deshabilitado temporalmente)
     # TODO: Implementar filtro por productor buscando pallet por pallet
@@ -424,13 +585,22 @@ def _render_sankey(username: str, password: str):
         st.session_state.diagram_data = None
     if "diagram_data_type" not in st.session_state:
         st.session_state.diagram_data_type = None
+    if "search_identifier" not in st.session_state:
+        st.session_state.search_identifier = None
     
     # Validar entrada según modo
     can_generate = False
     if search_mode == "📅 Por rango de fechas":
         can_generate = True
     elif search_mode == "📥 Por guía de despacho":
-        can_generate = delivery_guide and delivery_guide.strip()
+        can_generate = selected_picking_id is not None
+    elif search_mode == "📦 Por paquete":
+        can_generate = bool(identifier and identifier.strip())
+    elif search_mode == "🚚 Por venta":
+        # Válido si: tiene código O tiene ambas fechas
+        can_generate = bool((identifier and identifier.strip()) or (fecha_inicio and fecha_fin))
+    elif search_mode == "🏭 Por proveedor":
+        can_generate = supplier_id is not None
     else:  # Por identificador
         can_generate = identifier and identifier.strip()
     
@@ -439,17 +609,74 @@ def _render_sankey(username: str, password: str):
         
         with st.spinner(spinner_msg):
             # Obtener datos según el modo de búsqueda
-            if search_mode == "📥 Por guía de despacho":
-                from .shared import get_traceability_by_delivery_guide
-                raw_data = get_traceability_by_delivery_guide(
+            if search_mode == "🏭 Por proveedor":
+                # Limpiar identificador en búsqueda por proveedor
+                st.session_state.search_identifier = None
+                
+                from .shared import get_traceability_by_supplier
+                fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
+                fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
+                
+                raw_data = get_traceability_by_supplier(
+                    username,
+                    password,
+                    supplier_id,
+                    fecha_inicio_str,
+                    fecha_fin_str,
+                    include_siblings=include_siblings
+                )
+                
+                if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
+                    error_msg = raw_data.get('error', f"No se encontraron datos para el proveedor seleccionado")
+                    st.warning(error_msg)
+                    st.session_state.diagram_data = None
+                    return
+                
+                # Mostrar metadata
+                metadata = raw_data.get('search_metadata', {})
+                if metadata:
+                    st.info(f"✅ Encontradas {metadata.get('total_recepciones', 0)} recepciones con {metadata.get('total_pallets', 0)} pallets")
+                
+                # Transformar según el tipo de diagrama
+                if diagram_type == "📈 Sankey (Plotly)":
+                    from backend.services.traceability import transform_to_sankey
+                    data = transform_to_sankey(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "sankey"  # Guardar modo de búsqueda
+                    
+                elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
+                    from backend.services.traceability import transform_to_sankey
+                    data = transform_to_sankey(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "nivo_sankey"  # Guardar modo de búsqueda
+                    
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "visjs"  # Guardar modo de búsqueda
+                    
+                else:  # Tabla
+                    st.session_state.diagram_data = raw_data
+                    st.session_state.diagram_data_type = "table"  # Guardar modo de búsqueda
+                
+                st.success(f"✅ Diagrama generado para {selected_supplier}")
+                st.rerun()
+            
+            elif search_mode == "📥 Por guía de despacho":
+                # Limpiar identificador en búsqueda por guía
+                st.session_state.search_identifier = None
+                
+                from .shared import get_traceability_by_picking_id
+                raw_data = get_traceability_by_picking_id(
                     username, 
                     password, 
-                    delivery_guide, 
+                    selected_picking_id, 
                     include_siblings=include_siblings
                 )
                 
                 if not raw_data or not raw_data.get('pallets'):
-                    st.warning(f"No se encontraron datos para la guía: {delivery_guide}")
+                    st.warning(f"No se encontraron datos para la recepción seleccionada")
                     st.session_state.diagram_data = None
                     return
                 
@@ -475,11 +702,17 @@ def _render_sankey(username: str, password: str):
                 else:  # Tabla
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"
+                    st.session_state.diagram_data = raw_data
+                    st.session_state.diagram_data_type = "table"
                 
-                st.success(f"✅ Diagrama generado para guía {delivery_guide}")
+                selected_info = st.session_state.found_recepciones[seleccion_idx]
+                st.success(f"✅ Diagrama generado para guía {selected_info['guia_despacho']} - {selected_info['productor']}")
                 st.rerun()
             
             elif search_mode == "📅 Por rango de fechas":
+                # Limpiar identificador en búsqueda por fechas
+                st.session_state.search_identifier = None
+                
                 fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
                 fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
                 
@@ -524,7 +757,75 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
             
-            else:  # Por identificador
+            elif search_mode == "🚚 Por venta":
+                # Guardar el identificador para resaltado (si existe)
+                st.session_state.search_identifier = identifier.strip() if identifier else None
+                
+                from .shared import get_traceability_by_sale
+                
+                # Preparar parámetros
+                sale_id = identifier.strip() if identifier and identifier.strip() else None
+                fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d") if fecha_inicio else None
+                fecha_fin_str = fecha_fin.strftime("%Y-%m-%d") if fecha_fin else None
+                
+                # Determinar formato según tipo de diagrama
+                if diagram_type == "📈 Sankey (Plotly)":
+                    data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "sankey")
+                    if not data or data.get('error') or not data.get('nodes'):
+                        error_msg = data.get('error', f"No se encontraron datos")
+                        st.warning(error_msg)
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "sankey"
+                
+                elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
+                    data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "sankey")
+                    if not data or data.get('error') or not data.get('nodes'):
+                        error_msg = data.get('error', f"No se encontraron datos")
+                        st.warning(error_msg)
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "nivo_sankey"
+                
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                    raw_data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
+                    if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
+                        error_msg = raw_data.get('error', f"No se encontraron datos")
+                        st.warning(error_msg)
+                        st.session_state.diagram_data = None
+                        return
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "visjs"
+                    
+                elif diagram_type == "📋 Tabla de Conexiones":
+                    data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
+                    if not data or data.get('error') or not data.get('pallets'):
+                        error_msg = data.get('error', f"No se encontraron datos")
+                        st.warning(error_msg)
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "table"
+                
+                # Mensaje dinámico
+                metadata = data.get('search_metadata', {})
+                if sale_id and (fecha_inicio_str or fecha_fin_str):
+                    st.success(f"✅ Diagrama generado para venta {sale_id} (filtrado {fecha_inicio_str} - {fecha_fin_str})")
+                elif sale_id:
+                    st.success(f"✅ Diagrama generado para venta {sale_id}")
+                else:
+                    total_sales = metadata.get('total_sales', 0)
+                    st.success(f"✅ Diagrama generado: {total_sales} ventas entre {fecha_inicio_str} y {fecha_fin_str}")
+                st.rerun()
+            
+            elif search_mode == "📦 Por paquete":  # Por paquete
+                # Guardar el identificador para resaltado
+                st.session_state.search_identifier = identifier.strip()
+                
                 # Determinar el formato de salida según el tipo de diagrama
                 if diagram_type == "📈 Sankey (Plotly)":
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
@@ -683,7 +984,14 @@ def _render_nivo_sankey(sankey_data: dict):
     st.markdown("### 📊 Diagrama Sankey (D3)")
     st.caption("🖱️ Hover sobre nodos para ver detalles | 📊 Orientación vertical para mejor flujo temporal")
     
-    render_nivo_sankey(sankey_data, height=dynamic_height)
+    # Obtener identificador buscado para resaltar (si existe)
+    highlight_package = st.session_state.get("search_identifier", None)
+    
+    render_nivo_sankey(
+        sankey_data, 
+        height=dynamic_height, 
+        highlight_package=highlight_package
+    )
 
 
 def _render_visjs_diagram(visjs_data: dict):

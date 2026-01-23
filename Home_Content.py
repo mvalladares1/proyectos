@@ -184,7 +184,7 @@ else:
         ("📊", "Bandejas", "Control de bandejas por proveedor", "pages/3_Bandejas.py"),
         ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py"),
         ("🚢", "Pedidos de Venta", "Pedidos y avance de producción", "pages/5_Pedidos_Venta.py"),
-        ("🔍", "Trazabilidad", "Trazabilidad inversa PT → MP y diagrama Sankey", "pages/7_Rendimiento.py"),
+        ("🔍", "Trazabilidad", "Trazabilidad inversa PT → MP y generación de diagramas", "pages/7_Rendimiento.py"),
         ("🤝", "Relación Comercial", "Análisis comercial y relaciones con clientes", "pages/11_Relacion_Comercial.py"),
         ("🦾", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py"),
     ]
