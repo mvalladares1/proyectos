@@ -149,20 +149,28 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
     for ref, pinfo in processes.items():
         if pinfo.get("is_reception"):
             supplier_id = pinfo.get("supplier_id")
-            supplier_name = suppliers.get(supplier_id, "Proveedor")
+            supplier_name = suppliers.get(supplier_id, {}).get("name", "Proveedor") if isinstance(suppliers.get(supplier_id), dict) else suppliers.get(supplier_id, "Proveedor")
             scheduled_date = pinfo.get("scheduled_date", "")
             date_done = pinfo.get("date_done", "")
+            albaran = pinfo.get("albaran", "")
+            guia_despacho = pinfo.get("guia_despacho", "")
+            origen = pinfo.get("origen", "")
+            transportista = pinfo.get("transportista", "")
             
             add_node(
                 f"RECV:{ref}",
                 f"📥 {ref}",
-                "#1abc9c",  # Turquesa
+                "#9b59b6",  # Morado
                 {
                     "type": "RECEPTION",
                     "ref": ref,
                     "date": scheduled_date,  # Usar scheduled_date para recepciones
                     "date_done": date_done,
-                    "supplier": supplier_name
+                    "supplier": supplier_name,
+                    "albaran": albaran,
+                    "guia_despacho": guia_despacho,
+                    "origen": origen,
+                    "transportista": transportista
                 },
                 "RECEPTION"
             )
