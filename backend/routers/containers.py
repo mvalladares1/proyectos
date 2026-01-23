@@ -459,7 +459,7 @@ async def get_traceability_by_sale(
             "stock.picking",
             sale_domain,
             ["id", "name", "date_done"],
-            limit=100  # Aumentado para búsquedas por período
+            limit=20 if not sale_identifier else 10  # Límite más bajo para búsqueda por período
         )
         
         if not pickings:
@@ -507,9 +507,11 @@ async def get_traceability_by_sale(
             return {"error": "No se encontraron pallets en las ventas"}
         
         # Obtener trazabilidad completa de todos esos pallets
+        # Para búsquedas por período, usar límite más conservador
+        trace_limit = 3000 if sale_identifier else 1500
         data = service._get_traceability_for_packages(
             list(package_ids),
-            limit=10000,
+            limit=trace_limit,
             include_siblings=include_siblings
         )
         
