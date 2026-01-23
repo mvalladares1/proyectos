@@ -506,8 +506,8 @@ async def get_traceability_by_sale(
         if not package_ids:
             return {"error": "No se encontraron pallets en las ventas"}
         
-        # Obtener trazabilidad HACIA ATRÁS de todos esos pallets
-        data = service._get_backward_traceability_for_packages(
+        # Obtener trazabilidad completa de todos esos pallets
+        data = service._get_traceability_for_packages(
             list(package_ids),
             limit=10000,
             include_siblings=include_siblings
