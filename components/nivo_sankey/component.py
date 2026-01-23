@@ -274,18 +274,44 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .nodeWidth(15)
                 .nodePadding(12)
                 .nodeAlign(d3.sankeyJustify)
-                .nodeSort((a, b) => {{
-                    // Ordenar nodos por fecha (eje X = línea de tiempo)
-                    const dateA = a.date || '9999-99-99';
-                    const dateB = b.date || '9999-99-99';
-                    return dateA.localeCompare(dateB);
-                }})
                 .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
+            
+            // Antes de calcular layout, pre-asignar posiciones X basadas en fechas
+            const dates = data.nodes.map(d => d.date || '9999-99-99').filter(d => d !== '9999-99-99');
+            const minDate = d3.min(dates);
+            const maxDate = d3.max(dates);
+            
+            // Escala de fechas para posición X (que será Y después de rotar)
+            const dateScale = d3.scaleTime()
+                .domain([new Date(minDate), new Date(maxDate)])
+                .range([0, innerHeight]);
+            
+            // Asignar depth manualmente basado en fechas
+            data.nodes.forEach(node => {{
+                if (node.date && node.date !== '9999-99-99') {{
+                    const datePos = dateScale(new Date(node.date));
+                    // Convertir posición a depth aproximado
+                    node.depth = Math.floor((datePos / innerHeight) * 10);
+                }} else {{
+                    node.depth = 999; // Nodos sin fecha van al final
+                }}
+            }});
             
             // Clonar datos
             const graph = sankey({{
                 nodes: data.nodes.map(d => ({{...d}})),
                 links: data.links.map(d => ({{...d}}))
+            }});
+            
+            // Después del layout, ajustar coordenadas Y según las fechas reales
+            graph.nodes.forEach(node => {{
+                if (node.date && node.date !== '9999-99-99') {{
+                    const targetY = dateScale(new Date(node.date));
+                    // Ajustar x0 y x1 (que serán y0 y y1 después de rotar)
+                    const nodeHeight = node.x1 - node.x0;
+                    node.x0 = targetY;
+                    node.x1 = targetY + nodeHeight;
+                }}
             }});
             
             // Rotar coordenadas para orientación vertical
