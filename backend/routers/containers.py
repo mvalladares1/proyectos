@@ -411,6 +411,83 @@ async def get_traceability_by_supplier(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/traceability/by-sale")
+async def get_traceability_by_sale(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    sale_identifier: str = Query(..., description="Código de venta"),
+    start_date: str = Query(None, description="Fecha inicio (YYYY-MM-DD) - opcional"),
+    end_date: str = Query(None, description="Fecha fin (YYYY-MM-DD) - opcional"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
+    output_format: str = Query("sankey", description="Formato de salida: 'sankey' o 'raw'")
+):
+    """
+    Obtiene trazabilidad de una venta específica, con filtro opcional de fechas.
+    Usa la misma lógica que by-identifier pero específicamente para ventas.
+    """
+    try:
+        service = TraceabilityService(username=username, password=password)
+        
+        # Construir filtros de búsqueda
+        sale_domain = [
+            ("name", "=ilike", sale_identifier),
+            ("picking_type_id.code", "=", "outgoing"),
+            ("state", "=", "done")
+        ]
+        
+        # Agregar filtro de fechas si se proporciona
+        if start_date:
+            sale_domain.append(("date_done", ">=", f"{start_date} 00:00:00"))
+        if end_date:
+            sale_domain.append(("date_done", "<=", f"{end_date} 23:59:59"))
+        
+        # Buscar la venta
+        from shared.odoo_client import OdooClient
+        client = OdooClient(username=username, password=password)
+        
+        pickings = client.search_read(
+            "stock.picking",
+            sale_domain,
+            ["id", "name", "date_done"],
+            limit=10
+        )
+        
+        if not pickings:
+            date_msg = f" en el rango {start_date} - {end_date}" if start_date or end_date else ""
+            return {"error": f"No se encontraron ventas con código {sale_identifier}{date_msg}"}
+        
+        # Si hay múltiples ventas, tomar la más reciente
+        picking = max(pickings, key=lambda p: p.get("date_done", ""))
+        picking_id = picking["id"]
+        
+        # Usar el mismo flujo que by-identifier pero desde el picking_id
+        data = service._get_forward_traceability_from_picking(
+            picking_id,
+            limit=5000,
+            include_siblings=include_siblings
+        )
+        
+        data.pop("move_lines", None)
+        
+        # Agregar metadata
+        data["search_metadata"] = {
+            "sale_identifier": sale_identifier,
+            "picking_name": picking.get("name"),
+            "date_done": picking.get("date_done"),
+            "filtered_by_date": bool(start_date or end_date)
+        }
+        
+        # Transformar si es necesario
+        if output_format == "sankey":
+            from backend.services.traceability import transform_to_sankey
+            return transform_to_sankey(data)
+        
+        return data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/traceability/by-identifier/visjs")
 async def get_traceability_by_identifier_visjs(
     username: str = Query(..., description="Usuario Odoo"),

@@ -421,6 +421,47 @@ def get_suppliers_list(username: str, password: str):
         return []
 
 
+def get_traceability_by_sale(
+    username: str, 
+    password: str, 
+    sale_identifier: str, 
+    start_date: str = None, 
+    end_date: str = None,
+    include_siblings: bool = True,
+    output_format: str = "sankey"
+):
+    """Obtiene trazabilidad de una venta con filtro opcional de fechas."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "sale_identifier": sale_identifier,
+            "include_siblings": str(include_siblings).lower(),
+            "output_format": output_format
+        }
+        
+        # Agregar fechas solo si se proporcionan
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        
+        response = requests.get(
+            f"{API_URL}/api/v1/containers/traceability/by-sale",
+            params=params,
+            timeout=120
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Error {response.status_code}: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
     """Obtiene trazabilidad completa de uno o varios pallets."""
     try:
