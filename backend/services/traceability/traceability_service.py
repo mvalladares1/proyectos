@@ -638,9 +638,147 @@ class TraceabilityService:
         # FASE 2: Si include_siblings=False, filtrar el resultado procesado
         # =====================================================
         if not include_siblings:
-            result = self._filter_direct_connection_result(result, initial_package_ids)
+            result = self._filter_forward_direct_connection(result, initial_package_ids)
         
         return result
+    
+    def _filter_forward_direct_connection(
+        self, 
+        result: Dict,
+        initial_package_ids: List[int]
+    ) -> Dict:
+        """
+        Filtra resultado de trazabilidad HACIA ADELANTE para quedarnos solo con la cadena conectada.
+        
+        Estrategia:
+        1. Empezar desde los pallets iniciales (recepción)
+        2. Hacer BFS hacia ADELANTE siguiendo los links
+        3. Incluir solo nodos que están en la cadena directa desde la recepción
+        """
+        pallets = result.get("pallets", {})
+        processes = result.get("processes", {})
+        suppliers = result.get("suppliers", {})
+        customers = result.get("customers", {})
+        links = result.get("links", [])
+        
+        print(f"[TraceabilityService] Filtrando FORWARD conexión directa desde {len(initial_package_ids)} pallets iniciales")
+        print(f"[TraceabilityService] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
+        
+        # Construir grafo dirigido desde los links
+        graph_forward = {}  # source -> [targets]
+        graph_backward = {}  # target -> [sources]
+        
+        for link in links:
+            source_type, source_id, target_type, target_id, qty = link
+            
+            source_node = f"{source_type}:{source_id}"
+            target_node = f"{target_type}:{target_id}"
+            
+            if source_node not in graph_forward:
+                graph_forward[source_node] = []
+            graph_forward[source_node].append(target_node)
+            
+            if target_node not in graph_backward:
+                graph_backward[target_node] = []
+            graph_backward[target_node].append(source_node)
+        
+        # BFS desde pallets iniciales HACIA ADELANTE
+        connected_nodes = set()
+        queue = []
+        
+        # Agregar pallets iniciales
+        for pkg_id in initial_package_ids:
+            node = f"PALLET:{pkg_id}"
+            connected_nodes.add(node)
+            queue.append(node)
+        
+        # Agregar recepciones que generaron estos pallets (hacia atrás solo un paso)
+        for pkg_id in initial_package_ids:
+            node = f"PALLET:{pkg_id}"
+            for source in graph_backward.get(node, []):
+                if source.startswith("RECV:"):
+                    connected_nodes.add(source)
+                    # Agregar el proveedor de esta recepción
+                    ref = source.replace("RECV:", "")
+                    proc_info = processes.get(ref, {})
+                    supplier_id = proc_info.get("supplier_id")
+                    if supplier_id:
+                        connected_nodes.add(f"SUPPLIER:{supplier_id}")
+        
+        # BFS hacia ADELANTE
+        visited = set()
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            
+            # Seguir todos los targets (hacia adelante)
+            for target in graph_forward.get(current, []):
+                if target not in connected_nodes:
+                    connected_nodes.add(target)
+                    # Solo agregar a la cola si es un pallet (para seguir la cadena)
+                    # Los procesos y clientes se agregan pero no se expanden más
+                    if target.startswith("PALLET:"):
+                        queue.append(target)
+                    elif target.startswith("PROCESS:"):
+                        queue.append(target)
+                        # Cuando llegamos a un proceso, incluir TODOS sus outputs
+                        for proc_target in graph_forward.get(target, []):
+                            if proc_target.startswith("PALLET:") and proc_target not in connected_nodes:
+                                connected_nodes.add(proc_target)
+                                queue.append(proc_target)
+        
+        print(f"[TraceabilityService] Nodos conectados hacia adelante: {len(connected_nodes)}")
+        
+        # Filtrar pallets
+        filtered_pallets = {}
+        for pid, pinfo in pallets.items():
+            if f"PALLET:{pid}" in connected_nodes:
+                filtered_pallets[pid] = pinfo
+        
+        # Filtrar procesos
+        filtered_processes = {}
+        for ref, pinfo in processes.items():
+            proc_node = f"RECV:{ref}" if pinfo.get("is_reception") else f"PROCESS:{ref}"
+            if proc_node in connected_nodes:
+                filtered_processes[ref] = pinfo
+        
+        # Filtrar proveedores
+        filtered_suppliers = {}
+        for sid, sinfo in suppliers.items():
+            if f"SUPPLIER:{sid}" in connected_nodes:
+                filtered_suppliers[sid] = sinfo
+        
+        # Filtrar clientes
+        filtered_customers = {}
+        for cid, cinfo in customers.items():
+            if f"CUSTOMER:{cid}" in connected_nodes:
+                filtered_customers[cid] = cinfo
+        
+        # Filtrar links
+        filtered_links = []
+        for link in links:
+            source_type, source_id, target_type, target_id, qty = link
+            source_node = f"{source_type}:{source_id}"
+            target_node = f"{target_type}:{target_id}"
+            
+            if source_node in connected_nodes and target_node in connected_nodes:
+                filtered_links.append(link)
+        
+        print(f"[TraceabilityService] Después del filtro: {len(filtered_pallets)} pallets, {len(filtered_processes)} procesos, {len(filtered_links)} links")
+        
+        return {
+            "pallets": filtered_pallets,
+            "processes": filtered_processes,
+            "suppliers": filtered_suppliers,
+            "customers": filtered_customers,
+            "links": filtered_links,
+            "reception_picking_ids": result.get("reception_picking_ids", []),
+            "sale_picking_ids": result.get("sale_picking_ids", []),
+            "sale_pallet_pickings": result.get("sale_pallet_pickings", {}),
+            "move_lines": result.get("move_lines", [])
+        }
     
     def _filter_direct_connection_result(
         self, 
