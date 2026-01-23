@@ -1213,7 +1213,7 @@ class TraceabilityService:
             pickings = self.odoo.read(
                 "stock.picking",
                 list(all_picking_ids),
-                ["id", "partner_id", "scheduled_date", "origin", "date_done"]
+                ["id", "partner_id", "scheduled_date", "origin", "date_done", "name", "x_studio_gua_de_despacho", "x_studio_many2one_field_f1eVZ"]
             )
             pickings_by_id = {p["id"]: p for p in pickings}
             
@@ -1225,24 +1225,41 @@ class TraceabilityService:
                     date_done_utc = picking.get("date_done", "")
                     scheduled_date_utc = picking.get("scheduled_date", "")
                     
+                    # Información adicional de la recepción
+                    albaran = picking.get("name", "")  # Referencia del albarán
+                    guia_despacho = picking.get("x_studio_gua_de_despacho", "")
+                    origen = picking.get("origin", "")  # Documento de origen
+                    transportista_rel = picking.get("x_studio_many2one_field_f1eVZ")
+                    transportista = ""
+                    if transportista_rel:
+                        transportista = transportista_rel[1] if isinstance(transportista_rel, (list, tuple)) and len(transportista_rel) > 1 else ""
+                    
                     # Convertir fechas UTC a hora Chile
                     date_done = self._convert_utc_to_chile(date_done_utc)
                     scheduled_date = self._convert_utc_to_chile(scheduled_date_utc)
                     
-                    # Guardar scheduled_date en el proceso de recepción
+                    # Guardar información adicional en el proceso de recepción
                     pinfo["scheduled_date"] = scheduled_date
                     pinfo["date_done"] = date_done
+                    pinfo["albaran"] = albaran
+                    pinfo["guia_despacho"] = guia_despacho
+                    pinfo["origen"] = origen
+                    pinfo["transportista"] = transportista
                     
                     if partner_rel:
                         sid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
                         sname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Proveedor"
                         
-                        # Guardar proveedor con fecha de recepción
+                        # Guardar proveedor con toda la información
                         if sid not in result["suppliers"]:
                             result["suppliers"][sid] = {
                                 "name": sname,
-                                "date_done": date_done,  # Fecha real de recepción
-                                "scheduled_date": scheduled_date
+                                "date_done": date_done,
+                                "scheduled_date": scheduled_date,
+                                "albaran": albaran,
+                                "guia_despacho": guia_despacho,
+                                "origen": origen,
+                                "transportista": transportista
                             }
                         pinfo["supplier_id"] = sid
             

@@ -467,6 +467,8 @@ def _render_sankey(username: str, password: str):
         st.session_state.diagram_data = None
     if "diagram_data_type" not in st.session_state:
         st.session_state.diagram_data_type = None
+    if "search_identifier" not in st.session_state:
+        st.session_state.search_identifier = None
     
     # Validar entrada según modo
     can_generate = False
@@ -483,6 +485,9 @@ def _render_sankey(username: str, password: str):
         with st.spinner(spinner_msg):
             # Obtener datos según el modo de búsqueda
             if search_mode == "📥 Por guía de despacho":
+                # Limpiar identificador en búsqueda por guía
+                st.session_state.search_identifier = None
+                
                 from .shared import get_traceability_by_picking_id
                 raw_data = get_traceability_by_picking_id(
                     username, 
@@ -524,6 +529,9 @@ def _render_sankey(username: str, password: str):
                 st.rerun()
             
             elif search_mode == "📅 Por rango de fechas":
+                # Limpiar identificador en búsqueda por fechas
+                st.session_state.search_identifier = None
+                
                 fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
                 fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
                 
@@ -569,6 +577,9 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "table"
             
             else:  # Por identificador
+                # Guardar el identificador para resaltado
+                st.session_state.search_identifier = identifier.strip()
+                
                 # Determinar el formato de salida según el tipo de diagrama
                 if diagram_type == "📈 Sankey (Plotly)":
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
@@ -727,7 +738,10 @@ def _render_nivo_sankey(sankey_data: dict):
     st.markdown("### 📊 Diagrama Sankey (D3)")
     st.caption("🖱️ Hover sobre nodos para ver detalles | 📊 Orientación vertical para mejor flujo temporal")
     
-    render_nivo_sankey(sankey_data, height=dynamic_height)
+    # Obtener identificador buscado para resaltar (si existe)
+    highlight_package = st.session_state.get("search_identifier", None)
+    
+    render_nivo_sankey(sankey_data, height=dynamic_height, highlight_package=highlight_package)
 
 
 def _render_visjs_diagram(visjs_data: dict):
