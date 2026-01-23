@@ -10,15 +10,14 @@ from typing import Dict
 NIVO_AVAILABLE = True  # Mantenemos el nombre por compatibilidad
 
 
-def render_nivo_sankey(data: Dict, height: int = 800, highlight_package: str = None, show_receptions: bool = False):
+def render_nivo_sankey(data: dict, height: int = 800, highlight_package: str = None):
     """
     Renderiza un diagrama Sankey usando D3.js en orientación vertical.
     
     Args:
-        data: Diccionario con 'nodes' y 'links' en formato Plotly
-        height: Altura del diagrama en pixels
-        highlight_package: Nombre del paquete a resaltar visualmente (opcional)
-        show_receptions: Si True, muestra nodos de recepción (útil para búsqueda por proveedor)
+        data: Diccionario con 'nodes' y 'links' en formato Plotly Sankey
+        height: Altura del diagrama en píxeles
+        highlight_package: ID del paquete a resaltar (opcional)
     """
     if not data or not data.get("nodes"):
         st.warning("No hay datos para renderizar")
@@ -34,7 +33,7 @@ def render_nivo_sankey(data: Dict, height: int = 800, highlight_package: str = N
     components.html(html_content, height=height + 50, scrolling=True)
 
 
-def _transform_to_d3_format(plotly_data: Dict, highlight_package: str = None, show_receptions: bool = False) -> Dict:
+def _transform_to_d3_format(plotly_data: dict, highlight_package: str = None) -> dict:
     """
     Transforma datos de formato Plotly Sankey a formato D3-sankey.
     
@@ -53,10 +52,6 @@ def _transform_to_d3_format(plotly_data: Dict, highlight_package: str = None, sh
     for idx, node in enumerate(nodes_plotly):
         detail = node.get("detail", {})
         node_type = detail.get("type", "UNKNOWN")
-        
-        # SALTAR nodos de RECEPCIÓN solo si show_receptions es False
-        if node_type == "RECEPTION" and not show_receptions:
-            continue
         
         # Guardar mapeo de índices
         new_idx = len(d3_nodes)
