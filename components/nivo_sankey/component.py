@@ -24,7 +24,7 @@ def render_nivo_sankey(data: dict, height: int = 800, highlight_package: str = N
         return
     
     # Transformar datos de formato Plotly a formato D3
-    d3_data = _transform_to_d3_format(data, highlight_package, show_receptions)
+    d3_data = _transform_to_d3_format(data, highlight_package)
     
     # Generar HTML con D3
     html_content = _generate_d3_sankey_html(d3_data, height)
