@@ -441,12 +441,16 @@ async def get_traceability_by_sale(
         # Construir filtros de búsqueda
         sale_domain = [
             ("picking_type_id.code", "=", "outgoing"),
-            ("state", "=", "done")
+            ("state", "=", "done"),
+            ("origin", "!=", False),  # Debe tener origin
         ]
         
         # Agregar filtro de código si se proporciona
         if sale_identifier:
-            sale_domain.append(("name", "=ilike", sale_identifier))
+            sale_domain.append(("origin", "=ilike", sale_identifier))
+        else:
+            # Si no hay código específico, filtrar solo origins que empiecen con "S"
+            sale_domain.append(("origin", "=ilike", "S%"))
         
         # Agregar filtro de fechas si se proporciona
         if start_date:
@@ -454,12 +458,12 @@ async def get_traceability_by_sale(
         if end_date:
             sale_domain.append(("date_done", "<=", f"{end_date} 23:59:59"))
         
-        # Buscar ventas
+        # Buscar ventas (buscar por origin, no por name)
         pickings = client.search_read(
             "stock.picking",
             sale_domain,
-            ["id", "name", "date_done"],
-            limit=20 if not sale_identifier else 10  # Límite más bajo para búsqueda por período
+            ["id", "name", "origin", "date_done"],
+            limit=50 if not sale_identifier else 10
         )
         
         if not pickings:
@@ -469,17 +473,20 @@ async def get_traceability_by_sale(
             else:
                 return {"error": f"No se encontraron ventas en el rango {start_date} - {end_date}"}
         
-        # Si es búsqueda de venta específica, tomar la más reciente
-        # Si es por período, procesar todas
-        if sale_identifier and len(pickings) == 1:
-            picking_ids = [pickings[0]["id"]]
-        elif sale_identifier:
-            # Múltiples ventas con mismo código, tomar la más reciente
-            picking = max(pickings, key=lambda p: p.get("date_done", ""))
-            picking_ids = [picking["id"]]
-        else:
-            # Búsqueda por período: todas las ventas
-            picking_ids = [p["id"] for p in pickings]
+        # Agrupar por origin para contar ventas reales
+        ventas_por_origin = {}
+        for p in pickings:
+            origin = p.get("origin", "")
+            if origin and origin.startswith("S"):
+                if origin not in ventas_por_origin:
+                    ventas_por_origin[origin] = []
+                ventas_por_origin[origin].append(p["id"])
+        
+        # Si es búsqueda de venta específica y hay múltiples pickings del mismo origin, usar todos
+        # Si es por período, ya están limitados
+        picking_ids = []
+        for origin, pids in ventas_por_origin.items():
+            picking_ids.extend(pids)
         
         # Obtener package_ids de todas las ventas seleccionadas
         move_lines = client.search_read(
@@ -522,7 +529,8 @@ async def get_traceability_by_sale(
             "sale_identifier": sale_identifier,
             "start_date": start_date,
             "end_date": end_date,
-            "total_sales": len(pickings),
+            "total_sales": len(ventas_por_origin),  # Número de códigos S únicos
+            "total_pickings": len(picking_ids),     # Total de pickings
             "total_pallets": len(package_ids),
             "filtered_by_date": bool(start_date or end_date)
         }
