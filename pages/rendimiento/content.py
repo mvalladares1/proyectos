@@ -582,22 +582,26 @@ def _render_sankey(username: str, password: str):
                     data = transform_to_sankey(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
+                    st.session_state.search_mode = "proveedor"  # Guardar modo de búsqueda
                     
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     from backend.services.traceability import transform_to_sankey
                     data = transform_to_sankey(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
+                    st.session_state.search_mode = "proveedor"  # Guardar modo de búsqueda
                     
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     from backend.services.traceability import transform_to_visjs
                     data = transform_to_visjs(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "visjs"
+                    st.session_state.search_mode = "proveedor"  # Guardar modo de búsqueda
                     
                 else:  # Tabla
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"
+                    st.session_state.search_mode = "proveedor"  # Guardar modo de búsqueda
                 
                 st.success(f"✅ Diagrama generado para {selected_supplier}")
                 st.rerun()
@@ -625,20 +629,26 @@ def _render_sankey(username: str, password: str):
                     data = transform_to_sankey(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
+                    st.session_state.search_mode = "guia"
                     
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     from backend.services.traceability import transform_to_sankey
                     data = transform_to_sankey(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
+                    st.session_state.search_mode = "guia"
                     
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     from backend.services.traceability import transform_to_visjs
                     data = transform_to_visjs(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "visjs"
+                    st.session_state.search_mode = "guia"
                     
                 else:  # Tabla
+                    st.session_state.diagram_data = raw_data
+                    st.session_state.diagram_data_type = "table"
+                    st.session_state.search_mode = "guia"
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"
                 
@@ -662,6 +672,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
+                    st.session_state.search_mode = "fechas"
                 
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     data = get_sankey_data(username, password, fecha_inicio_str, fecha_fin_str)
@@ -671,6 +682,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
+                    st.session_state.search_mode = "fechas"
                 
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     # Obtener datos crudos y transformar a vis.js
@@ -684,6 +696,7 @@ def _render_sankey(username: str, password: str):
                     data = transform_to_visjs(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "visjs"
+                    st.session_state.search_mode = "fechas"
                     
                 elif diagram_type == "📋 Tabla de Conexiones":
                     data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
@@ -693,6 +706,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                    st.session_state.search_mode = "fechas"
             
             else:  # Por identificador
                 # Guardar el identificador para resaltado
@@ -707,6 +721,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "sankey"
+                    st.session_state.search_mode = "identificador"
                 
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
@@ -716,6 +731,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
+                    st.session_state.search_mode = "identificador"
                 
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
@@ -725,6 +741,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "visjs"
+                    st.session_state.search_mode = "identificador"
                     
                 elif diagram_type == "📋 Tabla de Conexiones":
                     # Para tabla, usar raw data del endpoint base
@@ -755,6 +772,7 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                    st.session_state.search_mode = "identificador"
     
     # Renderizar el diagrama si hay datos en session_state
     if st.session_state.diagram_data:
@@ -859,7 +877,16 @@ def _render_nivo_sankey(sankey_data: dict):
     # Obtener identificador buscado para resaltar (si existe)
     highlight_package = st.session_state.get("search_identifier", None)
     
-    render_nivo_sankey(sankey_data, height=dynamic_height, highlight_package=highlight_package)
+    # Determinar si se deben mostrar nodos de recepción
+    search_mode = st.session_state.get("search_mode", "identificador")
+    show_receptions = (search_mode == "proveedor")
+    
+    render_nivo_sankey(
+        sankey_data, 
+        height=dynamic_height, 
+        highlight_package=highlight_package,
+        show_receptions=show_receptions
+    )
 
 
 def _render_visjs_diagram(visjs_data: dict):
