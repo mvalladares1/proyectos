@@ -200,15 +200,40 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
         
         # Determinar nodo fuente
         if source_type == "RECV":
-            # Buscar si hay proveedor asociado
+            # Si es una recepción, necesitamos crear dos links:
+            # 1. SUPPLIER → RECEPTION
+            # 2. RECEPTION → PALLET/PROCESO
             pinfo = processes.get(source_id, {})
             supplier_id = pinfo.get("supplier_id")
+            reception_nid = f"RECV:{source_id}"
+            
+            # Determinar nodo destino
+            if target_type == "PALLET":
+                target_nid = f"PKG:{target_id}"
+            elif target_type == "PROCESS":
+                target_nid = f"PROC:{target_id}"
+            elif target_type == "CUSTOMER":
+                target_nid = f"CUST:{target_id}"
+            
+            # Si hay proveedor, crear link SUPPLIER → RECEPTION
             if supplier_id:
-                source_nid = f"SUPP:{supplier_id}"
-                color = "rgba(155, 89, 182, 0.5)"  # Morado
-            else:
-                source_nid = f"RECV:{source_id}"
-                color = "rgba(26, 188, 156, 0.5)"  # Turquesa
+                supplier_nid = f"SUPP:{supplier_id}"
+                if supplier_nid in node_index and reception_nid in node_index:
+                    key = (supplier_nid, reception_nid)
+                    if key not in link_aggregated:
+                        link_aggregated[key] = {"qty": 0, "color": "rgba(155, 89, 182, 0.5)"}
+                    link_aggregated[key]["qty"] += qty
+            
+            # Crear link RECEPTION → TARGET
+            if reception_nid in node_index and target_nid and target_nid in node_index:
+                key = (reception_nid, target_nid)
+                if key not in link_aggregated:
+                    link_aggregated[key] = {"qty": 0, "color": "rgba(155, 89, 182, 0.5)"}
+                link_aggregated[key]["qty"] += qty
+            
+            # Ya procesamos este link, continuar al siguiente
+            continue
+            
         elif source_type == "PALLET":
             source_nid = f"PKG:{source_id}"
             color = "rgba(243, 156, 18, 0.5)"  # Naranja

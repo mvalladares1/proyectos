@@ -85,7 +85,7 @@ def _transform_to_d3_format(plotly_data: Dict, highlight_package: str = None, sh
                 tooltip_parts.append(f"Fecha: {detail.get('date')}")
             d3_node["tooltip"] = "<br/>".join(tooltip_parts)
         elif node_type == "RECEPTION":
-            d3_node["name"] = f"📦 {detail.get('name', 'Recepción')}"
+            d3_node["name"] = f"📥"
             tooltip_parts = [f"<strong>Recepción</strong><br/>{detail.get('name', '')}"]
             if detail.get("albaran"):
                 tooltip_parts.append(f"Albarán: {detail.get('albaran')}")
