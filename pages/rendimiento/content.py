@@ -77,7 +77,7 @@ def render(username: str, password: str):
         tab_funcs.append(('trazabilidad', _render_trazabilidad))
     
     if _perm_sankey:
-        tab_names.append("🔗 Contenedores")
+        tab_names.append("📊 Diagramas")
         tab_funcs.append(('sankey', _render_sankey))
     
     if _perm_inventario:
