@@ -326,7 +326,7 @@ class AnalisisStockTeoricoService:
         Incluye productos archivados usando active_test=False.
         """
         # Líneas de facturas de cliente - SOLO diario "Facturas de Cliente"
-        # Filtrado por cuenta específica para evitar duplicaciones contables
+        # Filtrado SOLO por tipo_fruta y manejo (sin restricción de cuenta contable)
         # display_type='product' excluye líneas de COGS que duplican
         lineas = self.odoo.search_read(
             'account.move.line',
@@ -338,13 +338,11 @@ class AnalisisStockTeoricoService:
                 ['product_id', '!=', False],
                 ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
                 ['product_id.type', '!=', 'service'],
-                ['account_id.code', '=', '41010101'],  # Solo cuenta de ingresos por ventas
-                ['credit', '>', 0],  # Solo líneas con crédito (venta real)
                 ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta]
             ],
-            ['product_id', 'quantity', 'credit'],
+            ['product_id', 'quantity', 'credit', 'debit'],
             limit=100000
         )
         
@@ -477,7 +475,7 @@ class AnalisisStockTeoricoService:
                 }
             
             agrupado[key]['kg'] += linea.get('quantity', 0)
-            agrupado[key]['monto'] += linea.get('credit', 0)
+            agrupado[key]['monto'] += linea.get('credit', 0) - linea.get('debit', 0)
         
         return list(agrupado.values())
     

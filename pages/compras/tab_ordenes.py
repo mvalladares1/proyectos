@@ -119,8 +119,7 @@ def render(username: str, password: str):
                 with fc5:
                     pend_filter = st.selectbox("Con Pendientes", ["Todos", "Sí", "No"], key="tbl_pend")
             
-            # Leyenda
-            st.caption("**Leyenda:** ✅ Completo | 🟡 Parcial | ⏳ Pendiente | 🔴 Sin recepción | ➖ N/A | ✓ Sin pendientes")
+            # Leyenda (solo para vista expanders)
             
             # Aplicar filtros
             df_filtered = df.copy()
@@ -191,20 +190,28 @@ def _render_tabla_compacta(df_filtered):
     end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
     df_page = df_filtered.iloc[start_idx:end_idx]
     
-    df_display = df_page[['name', 'date_order', 'partner', 'created_by', 'amount_total', 'approval_status', 'receive_status', 'pending_users']].copy()
+    df_display = df_page[['name', 'date_order', 'partner', 'created_by', 'amount_total', 'approved_by', 'pending_users']].copy()
     
-    df_display['Aprobación'] = df_display['approval_status'].apply(lambda x: {
-        'Aprobada': '✅', 'Parcialmente aprobada': '🟡', 'En revisión': '⏳', 'Rechazada': '❌'
-    }.get(x, '⚪'))
-    df_display['Recepción'] = df_display['receive_status'].apply(lambda x: {
-        'Recepcionada totalmente': '✅', 'Recepción parcial': '🟡', 'No recepcionada': '🔴', 'No se recepciona': '➖'
-    }.get(x, '⚪'))
-    df_display['Pendientes'] = df_display['pending_users'].apply(lambda x: '⏳' if x else '✓')
+    # Agregar po_id para generar el link a Odoo
+    df_display['po_id'] = df_page['po_id']
     
-    df_final = df_display[['name', 'date_order', 'partner', 'created_by', 'amount_total', 'Aprobación', 'Recepción', 'Pendientes']].copy()
-    df_final.columns = ['PO', 'Fecha', 'Proveedor', 'Creado por', 'Monto', 'Aprobación', 'Recepción', 'Pend.']
+    # Generar link a Odoo para la columna OC
+    def make_odoo_link(row):
+        po_id = row.get('po_id', '')
+        name = row.get('name', '')
+        if po_id:
+            return f"https://riofuturo.server98c6e.oerpondemand.net/web#id={po_id}&menu_id=411&cids=1&action=627&model=purchase.order&view_type=form"
+        return name
+    
+    df_display['odoo_link'] = df_page.apply(make_odoo_link, axis=1)
+    
+    df_final = df_display[['name', 'odoo_link', 'date_order', 'partner', 'created_by', 'amount_total', 'approved_by', 'pending_users']].copy()
+    df_final.columns = ['PO', 'Link', 'Fecha', 'Proveedor', 'Creado por', 'Monto', 'Aprobado por', 'Falta aprobar']
     df_final['Monto'] = df_final['Monto'].apply(fmt_moneda)
     df_final['Fecha'] = df_final['Fecha'].apply(fmt_fecha)
+    # Limpiar valores nulos en las columnas de aprobadores
+    df_final['Aprobado por'] = df_final['Aprobado por'].fillna('-')
+    df_final['Falta aprobar'] = df_final['Falta aprobar'].fillna('-')
     
     st.dataframe(
         df_final, 
@@ -213,13 +220,13 @@ def _render_tabla_compacta(df_filtered):
         height=450,
         column_config={
             "PO": st.column_config.TextColumn(width="small"),
+            "Link": st.column_config.LinkColumn(display_text="🔗 Abrir", width="small"),
             "Fecha": st.column_config.TextColumn(width="small"),
             "Proveedor": st.column_config.TextColumn(width="medium"),
             "Creado por": st.column_config.TextColumn(width="medium"),
             "Monto": st.column_config.TextColumn(width="small"),
-            "Aprobación": st.column_config.TextColumn(width="small"),
-            "Recepción": st.column_config.TextColumn(width="small"),
-            "Pend.": st.column_config.TextColumn(width="small"),
+            "Aprobado por": st.column_config.TextColumn(width="medium"),
+            "Falta aprobar": st.column_config.TextColumn(width="medium"),
         }
     )
 

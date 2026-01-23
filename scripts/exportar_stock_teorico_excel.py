@@ -124,11 +124,13 @@ ventas_lineas = odoo.search_read(
     [
         ['move_id.move_type', '=', 'out_invoice'],
         ['move_id.state', '=', 'posted'],
+        ['move_id.payment_state', '!=', 'reversed'],  # Excluir facturas revertidas
         ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
         ['product_id', '!=', False],
         ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],  # PRODUCTOS (plural)
-        ['product_id.type', '!=', 'service'],  # Excluir servicios        ['account_id.code', '=', '41010101'],  # Solo cuenta de ingresos por ventas
-        ['credit', '>', 0],  # Solo líneas con crédito (venta real)        ['date', '>=', FECHA_DESDE],
+        ['product_id.type', '!=', 'service'],  # Excluir servicios
+        ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
+        ['date', '>=', FECHA_DESDE],
         ['date', '<=', FECHA_HASTA]
     ],
     ['product_id', 'quantity', 'debit', 'credit', 'account_id', 'date', 'move_id', 'name'],
@@ -281,6 +283,9 @@ for linea in ventas_lineas:
     fecha_obj = datetime.strptime(fecha, '%Y-%m-%d') if fecha else None
     temporada = fecha_obj.year if fecha_obj and fecha_obj.month >= 11 else (fecha_obj.year - 1 if fecha_obj else None)
     
+    # Calcular monto neto (credit - debit)
+    monto_neto = linea.get('credit', 0) - linea.get('debit', 0)
+    
     ventas_data.append({
         'Fecha': fecha,
         'Temporada': temporada + 1 if temporada else None,
@@ -299,8 +304,8 @@ for linea in ventas_lineas:
         'Cantidad (kg)': linea.get('quantity', 0),
         'Débito': linea.get('debit', 0),
         'Crédito': linea.get('credit', 0),
-        'Monto': linea.get('credit', 0),  # Para ventas, el monto es el crédito
-        'Precio/kg': linea.get('credit', 0) / abs(linea.get('quantity', 1)) if linea.get('quantity', 0) != 0 else 0
+        'Monto': monto_neto,  # Monto neto (credit - debit)
+        'Precio/kg': monto_neto / abs(linea.get('quantity', 1)) if linea.get('quantity', 0) != 0 else 0
     })
 
 df_ventas = pd.DataFrame(ventas_data)
