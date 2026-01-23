@@ -424,22 +424,29 @@ def get_suppliers_list(username: str, password: str):
 def get_traceability_by_sale(
     username: str, 
     password: str, 
-    sale_identifier: str, 
+    sale_identifier: str = None, 
     start_date: str = None, 
     end_date: str = None,
     include_siblings: bool = True,
     output_format: str = "sankey"
 ):
-    """Obtiene trazabilidad de una venta con filtro opcional de fechas."""
+    """
+    Obtiene trazabilidad de ventas con dos modos:
+    1. Venta específica (con sale_identifier) con filtro opcional de fechas
+    2. Todas las ventas de un período (sin sale_identifier pero con fechas obligatorias)
+    """
     try:
         params = {
             "username": username,
             "password": password,
-            "sale_identifier": sale_identifier,
             "include_siblings": str(include_siblings).lower(),
             "output_format": output_format
         }
         
+        # Agregar sale_identifier solo si se proporciona
+        if sale_identifier:
+            params["sale_identifier"] = sale_identifier
+            
         # Agregar fechas solo si se proporcionan
         if start_date:
             params["start_date"] = start_date

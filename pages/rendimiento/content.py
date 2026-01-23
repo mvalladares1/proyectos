@@ -522,13 +522,14 @@ def _render_sankey(username: str, password: str):
         supplier_id = None
     else:  # Por venta
         st.markdown("### 🚚 Buscar por Venta")
+        
         col_id, col_mode = st.columns([3, 2])
         with col_id:
             identifier = st.text_input(
-                "Código de venta",
+                "Código de venta (opcional)",
                 placeholder="Ej: S00574",
                 key="sale_input",
-                help="Ingresa el código de venta (usualmente empieza con S)"
+                help="Opcional: ingresa un código específico. Si está vacío, se buscarán todas las ventas del período."
             )
         with col_mode:
             connection_mode = st.selectbox(
@@ -539,29 +540,39 @@ def _render_sankey(username: str, password: str):
             )
         include_siblings = connection_mode == "🌐 Todos (con hermanos)"
         
-        # Filtro opcional de fechas
-        st.markdown("#### 📅 Filtro de fechas (opcional)")
+        # Filtro de fechas
+        st.markdown("#### 📅 Rango de fechas")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             fecha_inicio_sale = st.date_input(
-                "Desde (opcional)",
-                value=None,
+                "Desde",
+                value=datetime(2025, 1, 1) if not identifier else None,
                 format="DD/MM/YYYY",
                 key="sale_fecha_inicio",
-                help="Deja vacío para no filtrar por fecha"
+                help="Obligatorio si no hay código de venta"
             )
         with col_f2:
             fecha_fin_sale = st.date_input(
-                "Hasta (opcional)",
-                value=None,
+                "Hasta",
+                value=datetime.now() if not identifier else None,
                 format="DD/MM/YYYY",
                 key="sale_fecha_fin",
-                help="Deja vacío para no filtrar por fecha"
+                help="Obligatorio si no hay código de venta"
             )
         
         fecha_inicio = fecha_inicio_sale
         fecha_fin = fecha_fin_sale
-        st.caption("💡 Si no ingresas fechas, se buscarán todas las ventas con ese código")
+        
+        # Mensaje dinámico según lo que está lleno
+        if identifier and (fecha_inicio or fecha_fin):
+            st.caption("💡 Buscará la venta específica en el rango de fechas indicado")
+        elif identifier:
+            st.caption("💡 Buscará la venta específica sin filtro de fechas")
+        elif fecha_inicio and fecha_fin:
+            st.caption("💡 Mostrará todas las ventas del período seleccionado")
+        else:
+            st.caption("⚠️ Debes ingresar un código de venta O un rango de fechas")
+            
         delivery_guide = None
         supplier_id = None
 
@@ -586,7 +597,8 @@ def _render_sankey(username: str, password: str):
     elif search_mode == "📦 Por paquete":
         can_generate = bool(identifier and identifier.strip())
     elif search_mode == "🚚 Por venta":
-        can_generate = bool(identifier and identifier.strip())
+        # Válido si: tiene código O tiene ambas fechas
+        can_generate = bool((identifier and identifier.strip()) or (fecha_inicio and fecha_fin))
     elif search_mode == "🏭 Por proveedor":
         can_generate = supplier_id is not None
     else:  # Por identificador
@@ -746,20 +758,21 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "table"
             
             elif search_mode == "🚚 Por venta":
-                # Guardar el identificador para resaltado
-                st.session_state.search_identifier = identifier.strip()
+                # Guardar el identificador para resaltado (si existe)
+                st.session_state.search_identifier = identifier.strip() if identifier else None
                 
                 from .shared import get_traceability_by_sale
                 
-                # Preparar fechas si están definidas
+                # Preparar parámetros
+                sale_id = identifier.strip() if identifier and identifier.strip() else None
                 fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d") if fecha_inicio else None
                 fecha_fin_str = fecha_fin.strftime("%Y-%m-%d") if fecha_fin else None
                 
                 # Determinar formato según tipo de diagrama
                 if diagram_type == "📈 Sankey (Plotly)":
-                    data = get_traceability_by_sale(username, password, identifier.strip(), fecha_inicio_str, fecha_fin_str, include_siblings, "sankey")
+                    data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "sankey")
                     if not data or data.get('error') or not data.get('nodes'):
-                        error_msg = data.get('error', f"No se encontraron datos para: {identifier}")
+                        error_msg = data.get('error', f"No se encontraron datos")
                         st.warning(error_msg)
                         st.session_state.diagram_data = None
                         return
@@ -767,9 +780,9 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "sankey"
                 
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
-                    data = get_traceability_by_sale(username, password, identifier.strip(), fecha_inicio_str, fecha_fin_str, include_siblings, "sankey")
+                    data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "sankey")
                     if not data or data.get('error') or not data.get('nodes'):
-                        error_msg = data.get('error', f"No se encontraron datos para: {identifier}")
+                        error_msg = data.get('error', f"No se encontraron datos")
                         st.warning(error_msg)
                         st.session_state.diagram_data = None
                         return
@@ -777,9 +790,9 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
-                    raw_data = get_traceability_by_sale(username, password, identifier.strip(), fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
+                    raw_data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
                     if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
-                        error_msg = raw_data.get('error', f"No se encontraron datos para: {identifier}")
+                        error_msg = raw_data.get('error', f"No se encontraron datos")
                         st.warning(error_msg)
                         st.session_state.diagram_data = None
                         return
@@ -789,17 +802,24 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "visjs"
                     
                 elif diagram_type == "📋 Tabla de Conexiones":
-                    data = get_traceability_by_sale(username, password, identifier.strip(), fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
+                    data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
                     if not data or data.get('error') or not data.get('pallets'):
-                        error_msg = data.get('error', f"No se encontraron datos para: {identifier}")
+                        error_msg = data.get('error', f"No se encontraron datos")
                         st.warning(error_msg)
                         st.session_state.diagram_data = None
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
                 
-                date_msg = f" (filtrado entre {fecha_inicio_str} y {fecha_fin_str})" if fecha_inicio_str or fecha_fin_str else ""
-                st.success(f"✅ Diagrama generado para venta {identifier}{date_msg}")
+                # Mensaje dinámico
+                metadata = data.get('search_metadata', {})
+                if sale_id and (fecha_inicio_str or fecha_fin_str):
+                    st.success(f"✅ Diagrama generado para venta {sale_id} (filtrado {fecha_inicio_str} - {fecha_fin_str})")
+                elif sale_id:
+                    st.success(f"✅ Diagrama generado para venta {sale_id}")
+                else:
+                    total_sales = metadata.get('total_sales', 0)
+                    st.success(f"✅ Diagrama generado: {total_sales} ventas entre {fecha_inicio_str} y {fecha_fin_str}")
                 st.rerun()
             
             elif search_mode == "📦 Por paquete":  # Por paquete
