@@ -353,6 +353,74 @@ def get_traceability_by_picking_id(
         return None
 
 
+def get_traceability_by_supplier(
+    username: str,
+    password: str,
+    supplier_id: int,
+    start_date: str,
+    end_date: str,
+    include_siblings: bool = True
+):
+    """Obtiene trazabilidad de todas las recepciones de un proveedor en un rango de fechas."""
+    try:
+        params = {
+            "username": username,
+            "password": password,
+            "supplier_id": supplier_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "include_siblings": str(include_siblings).lower(),
+        }
+        endpoint = f"{API_URL}/api/v1/containers/traceability/by-supplier"
+        resp = requests.get(endpoint, params=params, timeout=180)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+        return None
+
+
+@st.cache_data(ttl=600)
+def get_suppliers_list(username: str, password: str):
+    """Obtiene lista de proveedores con recepciones."""
+    try:
+        from shared.odoo_client import OdooClient
+        client = OdooClient(username=username, password=password)
+        
+        # Obtener proveedores que tienen recepciones
+        pickings = client.search_read(
+            "stock.picking",
+            [
+                ("picking_type_id", "in", [1, 217, 164]),  # RFP, VILKUN, SAN JOSE
+                ("state", "=", "done"),
+            ],
+            ["partner_id"],
+            limit=5000
+        )
+        
+        # Extraer IDs únicos de proveedores
+        supplier_ids = set()
+        for p in pickings:
+            partner_rel = p.get("partner_id")
+            if partner_rel:
+                sid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
+                if sid:
+                    supplier_ids.add(sid)
+        
+        # Obtener detalles de proveedores
+        if supplier_ids:
+            suppliers = client.read("res.partner", list(supplier_ids), ["id", "name"])
+            # Ordenar por nombre
+            suppliers.sort(key=lambda x: x.get("name", ""))
+            return suppliers
+        
+        return []
+    except Exception as e:
+        st.error(f"Error obteniendo proveedores: {str(e)}")
+        return []
+
+
 def get_trazabilidad_pallets(username: str, password: str, pallet_names: list):
     """Obtiene trazabilidad completa de uno o varios pallets."""
     try:

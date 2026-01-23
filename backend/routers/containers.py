@@ -327,6 +327,90 @@ async def get_traceability_by_picking_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/traceability/by-supplier")
+async def get_traceability_by_supplier(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    supplier_id: int = Query(..., description="ID del proveedor"),
+    start_date: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
+):
+    """
+    Obtiene trazabilidad de todas las recepciones de un proveedor en un rango de fechas.
+    Por ejemplo: todas las recepciones de un proveedor en los últimos 7 días.
+    """
+    try:
+        from shared.odoo_client import OdooClient
+        client = OdooClient(username=username, password=password)
+        
+        # Buscar recepciones del proveedor en el rango de fechas
+        pickings = client.search_read(
+            "stock.picking",
+            [
+                ("partner_id", "=", supplier_id),
+                ("picking_type_id", "in", [1, 217, 164]),  # RFP, VILKUN, SAN JOSE
+                ("state", "=", "done"),
+                ("scheduled_date", ">=", f"{start_date} 00:00:00"),
+                ("scheduled_date", "<=", f"{end_date} 23:59:59"),
+            ],
+            ["id", "name", "scheduled_date"],
+            limit=100
+        )
+        
+        if not pickings:
+            return {"error": f"No se encontraron recepciones del proveedor en el rango {start_date} - {end_date}"}
+        
+        # Obtener todos los package_ids de estas recepciones
+        picking_ids = [p["id"] for p in pickings]
+        move_lines = client.search_read(
+            "stock.move.line",
+            [
+                ("picking_id", "in", picking_ids),
+                ("result_package_id", "!=", False),
+                ("qty_done", ">", 0),
+                ("state", "=", "done"),
+            ],
+            ["result_package_id"],
+            limit=5000
+        )
+        
+        # Extraer package_ids únicos
+        package_ids = set()
+        for ml in move_lines:
+            result_rel = ml.get("result_package_id")
+            if result_rel:
+                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                if result_id:
+                    package_ids.add(result_id)
+        
+        if not package_ids:
+            return {"error": "No se encontraron pallets en las recepciones"}
+        
+        # Obtener trazabilidad HACIA ADELANTE de todos esos pallets
+        service = TraceabilityService(username=username, password=password)
+        data = service._get_forward_traceability_for_packages(
+            list(package_ids), 
+            limit=10000, 
+            include_siblings=include_siblings
+        )
+        data.pop("move_lines", None)
+        
+        # Agregar metadata sobre la búsqueda
+        data["search_metadata"] = {
+            "supplier_id": supplier_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "total_recepciones": len(pickings),
+            "total_pallets": len(package_ids)
+        }
+        
+        return data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/traceability/by-identifier/visjs")
 async def get_traceability_by_identifier_visjs(
     username: str = Query(..., description="Usuario Odoo"),
