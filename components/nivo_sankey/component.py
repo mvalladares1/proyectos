@@ -282,20 +282,20 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
             
             // Clonar datos
-            const graph = sankey({
-                nodes: data.nodes.map(d => ({...d})),
-                links: data.links.map(d => ({...d}))
-            });
+            const graph = sankey({{
+                nodes: data.nodes.map(d => ({{...d}})),
+                links: data.links.map(d => ({{...d}}))
+            }});
             
             // Rotar coordenadas para orientación vertical
             // x -> y, y -> x
-            graph.nodes.forEach(node => {
+            graph.nodes.forEach(node => {{
                 const x0 = node.x0, x1 = node.x1, y0 = node.y0, y1 = node.y1;
                 node.x0 = y0;
                 node.x1 = y1;
                 node.y0 = x0;
                 node.y1 = x1;
-            });
+            }});
             
             // Función para dibujar links verticales
             function verticalLink(d) {{
