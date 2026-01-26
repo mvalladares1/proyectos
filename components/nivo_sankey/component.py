@@ -312,14 +312,22 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .map(n => n.date)
                 .filter(d => d && d !== '9999-99-99');
             
-            if (validDates.length > 0) {{
-                const minDate = d3.min(validDates);
-                const maxDate = d3.max(validDates);
+            const uniqueDates = [...new Set(validDates)].sort();
+            
+            if (uniqueDates.length > 0) {{
+                let dateScale;
                 
-                // Escala temporal para posición X (que será Y después de rotar)
-                const dateScale = d3.scaleTime()
-                    .domain([new Date(minDate), new Date(maxDate)])
-                    .range([50, innerWidth - 50]);
+                if (uniqueDates.length === 1) {{
+                    // Solo una fecha única - usar posición central
+                    dateScale = () => innerWidth / 2;
+                }} else {{
+                    // Múltiples fechas - crear escala
+                    const minDate = uniqueDates[0];
+                    const maxDate = uniqueDates[uniqueDates.length - 1];
+                    dateScale = d3.scaleTime()
+                        .domain([new Date(minDate + 'T00:00:00'), new Date(maxDate + 'T23:59:59')])
+                        .range([80, innerWidth - 80]);
+                }}
                 
                 // Agrupar nodos por fecha para distribuirlos verticalmente
                 const nodesByDate = new Map();
@@ -334,9 +342,9 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     // Calcular X basado en fecha
                     let targetX;
                     if (dateKey === '9999-99-99') {{
-                        targetX = innerWidth - 30;
+                        targetX = innerWidth - 50;
                     }} else {{
-                        targetX = dateScale(new Date(dateKey));
+                        targetX = dateScale(new Date(dateKey + 'T12:00:00'));
                     }}
                     
                     // Ordenar nodos de esta fecha por tipo para mejor distribución vertical
@@ -345,7 +353,8 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     
                     // Distribuir verticalmente con espacio uniforme
                     const totalHeight = nodes.reduce((sum, n) => sum + (n.y1 - n.y0), 0);
-                    const spacing = Math.min(15, (innerHeight - totalHeight) / (nodes.length + 1));
+                    const availableSpace = innerHeight - totalHeight;
+                    const spacing = Math.max(5, Math.min(20, availableSpace / (nodes.length + 1)));
                     let currentY = spacing;
                     
                     nodes.forEach(node => {{
@@ -362,6 +371,9 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                         currentY += nodeHeight + spacing;
                     }});
                 }});
+            }} else {{
+                // Sin fechas válidas - usar layout original de Sankey
+                console.log('No valid dates found, using default Sankey layout');
             }}
             
             // Rotar coordenadas para orientación vertical (de arriba a abajo)
@@ -373,6 +385,14 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 node.y0 = x0;
                 node.y1 = x1;
             }});
+            
+            // Debug: verificar que los nodos tienen posiciones válidas
+            console.log('Nodes after positioning:', graph.nodes.slice(0, 3).map(n => ({{
+                name: n.name, 
+                x0: n.x0, 
+                y0: n.y0,
+                date: n.date
+            }})));
             
             // Función para dibujar links verticales
             function verticalLink(d) {{
