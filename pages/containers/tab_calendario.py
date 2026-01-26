@@ -396,13 +396,15 @@ def render_gantt_chart(pedidos: List[Dict]):
         nombre_display = f"{p.get('name', 'N/A')} - {p.get('partner_name', 'N/A')[:25]}"
         
         # Barra base (gris claro - tiempo total estimado)
-        duracion_total = p["_fecha_entrega"] - p["_fecha_inicio_estimada"]
+        # Convertir a timestamps para que plotly pueda serializar
+        fecha_inicio_ts = p["_fecha_inicio_estimada"].timestamp() * 1000
+        fecha_fin_ts = p["_fecha_entrega"].timestamp() * 1000
         
         fig.add_trace(go.Bar(
             name="",
-            x=[duracion_total],
+            x=[fecha_fin_ts - fecha_inicio_ts],
             y=[nombre_display],
-            base=p["_fecha_inicio_estimada"],
+            base=fecha_inicio_ts,
             orientation='h',
             marker=dict(
                 color='rgba(200, 200, 200, 0.3)',
@@ -424,13 +426,13 @@ def render_gantt_chart(pedidos: List[Dict]):
         # Barra de avance (color según tipo de fruta)
         avance_pct = p.get("avance_pct", 0) / 100
         if avance_pct > 0:
-            duracion_avance = duracion_total.total_seconds() * avance_pct
+            duracion_avance = (fecha_fin_ts - fecha_inicio_ts) * avance_pct
             
             fig.add_trace(go.Bar(
                 name="",
-                x=[timedelta(seconds=duracion_avance)],
+                x=[duracion_avance],
                 y=[nombre_display],
-                base=p["_fecha_inicio_estimada"],
+                base=fecha_inicio_ts,
                 orientation='h',
                 marker=dict(color=p["_color_fruta"]),
                 showlegend=False,
@@ -444,7 +446,7 @@ def render_gantt_chart(pedidos: List[Dict]):
         # Marcador de urgencia si aplica
         if p["_nivel_urgencia"] in ["critico", "atrasado"]:
             fig.add_trace(go.Scatter(
-                x=[p["_fecha_entrega"]],
+                x=[fecha_fin_ts],
                 y=[nombre_display],
                 mode='markers',
                 marker=dict(
@@ -722,7 +724,7 @@ def render(username: str, password: str):
     # =========================================================================
     # CARGAR Y PROCESAR DATOS
     # =========================================================================
-    if actualizar or "calendario_pedidos" not in st.session_state:
+    if actualizar:
         with st.spinner("📊 Cargando pedidos..."):
             pedidos_raw = fetch_all_pedidos(
                 username, password,
@@ -736,6 +738,7 @@ def render(username: str, password: str):
                 st.success(f"✓ {len(pedidos_procesados)} pedidos cargados")
             else:
                 st.warning("No se encontraron pedidos")
+                st.session_state["calendario_pedidos"] = []
                 return
     
     pedidos = st.session_state.get("calendario_pedidos", [])
