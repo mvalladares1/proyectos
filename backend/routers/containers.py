@@ -418,7 +418,7 @@ async def get_traceability_by_sale(
     sale_identifier: str = Query(None, description="Código de venta (opcional si hay fechas)"),
     start_date: str = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: str = Query(None, description="Fecha fin (YYYY-MM-DD)"),
-    include_siblings: bool = Query(True, description="Incluir pallets hermanos del mismo proceso"),
+    include_siblings: bool = Query(False, description="Incluir pallets hermanos del mismo proceso"),
     output_format: str = Query("sankey", description="Formato de salida: 'sankey' o 'raw'")
 ):
     """
