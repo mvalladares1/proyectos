@@ -341,6 +341,9 @@ class TraceabilityService:
                                         pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                                         if pkg_id and pkg_id not in traced_packages:
                                             packages_to_trace.add(pkg_id)
+                                            print(f"[TraceabilityService] Agregando paquete {pkg_id} (input de {ref}, output {result_id})")
+                                    else:
+                                        print(f"[TraceabilityService] No seguir pkg {pkg_rel} - loc_id={loc_id}, VENDORS={self.PARTNER_VENDORS_LOCATION_ID}")
                         else:
                             # Modo "Todos": seguir todos los inputs
                             if pkg_rel:
@@ -351,6 +354,10 @@ class TraceabilityService:
                     processed_references.add(ref)
                 
                 traced_packages.update(current_packages)
+                
+                # Debug: mostrar cuántos paquetes nuevos se agregaron para la siguiente iteración
+                new_packages = packages_to_trace - traced_packages
+                print(f"[TraceabilityService] Iteración {iteration} terminada. Paquetes pendientes: {len(new_packages)}")
                 
             except Exception as e:
                 print(f"[TraceabilityService] Error en iteración {iteration}: {e}")
