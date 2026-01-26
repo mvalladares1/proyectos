@@ -543,35 +543,50 @@ def render_vista_semanal(pedidos: List[Dict]):
                 if carga_dia > (CAPACIDAD_DIARIA_SALA * 2):
                     st.warning("⚠️ Sobrecarga")
                 
-                st.divider()
+                st.markdown("<br>", unsafe_allow_html=True)
                 
-                # Lista de pedidos
-                for p in pedidos_dia[:3]:  # Mostrar máximo 3
+                # Contenedor con scroll para todos los pedidos
+                pedidos_html = ""
+                for p in pedidos_dia:
                     color = p["_color_fruta"]
                     avance = p.get("avance_pct", 0)
+                    kg = p.get("kg_total", 0)
                     
-                    st.markdown(
-                        f"""
-                        <div style="
-                            border-left: 4px solid {color};
-                            padding: 5px;
-                            margin-bottom: 5px;
-                            background-color: {color}15;
-                            border-radius: 3px;
-                            font-size: 11px;
-                        ">
-                            <div style="font-weight: bold;">{p.get('name')}</div>
-                            <div>{p['_emoji_urgencia']} {p.get('partner_name', '')[:20]}</div>
-                            <div>🍇 {p['_tipo_fruta'].capitalize()}</div>
-                            <div>📊 {avance:.0f}% | {p.get('kg_total', 0):,.0f} kg</div>
+                    pedidos_html += f"""
+                    <div style="
+                        border-left: 4px solid {color};
+                        padding: 6px;
+                        margin-bottom: 6px;
+                        background-color: {color}15;
+                        border-radius: 3px;
+                        font-size: 10px;
+                    ">
+                        <div style="font-weight: bold; font-size: 11px;">{p.get('name')}</div>
+                        <div style="margin-top: 2px;">{p['_emoji_urgencia']} {p.get('partner_name', '')[:25]}</div>
+                        <div style="margin-top: 2px;">🍇 {p['_tipo_fruta'].capitalize()}</div>
+                        <div style="margin-top: 2px; display: flex; justify-content: space-between;">
+                            <span>📊 {avance:.0f}%</span>
+                            <span>{kg:,.0f} kg</span>
                         </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                    </div>
+                    """
                 
-                if len(pedidos_dia) > 3:
-                    st.caption(f"+ {len(pedidos_dia) - 3} más")
+                # Mostrar con scroll si hay muchos pedidos
+                max_height = "450px" if len(pedidos_dia) > 4 else "auto"
+                st.markdown(
+                    f"""
+                    <div style="
+                        max-height: {max_height};
+                        overflow-y: auto;
+                        padding-right: 5px;
+                    ">
+                        {pedidos_html}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             else:
+                st.markdown("<br><br>", unsafe_allow_html=True)
                 st.info("Sin pedidos")
 
 
