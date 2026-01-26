@@ -550,7 +550,8 @@ async def get_traceability_by_sale(
         data = service._get_traceability_for_packages(
             list(package_ids),
             limit=trace_limit,
-            include_siblings=include_siblings
+            include_siblings=include_siblings,
+            filter_sale_origins=list(ventas_por_origin.keys()) if not sale_identifier else None
         )
         
         data.pop("move_lines", None)

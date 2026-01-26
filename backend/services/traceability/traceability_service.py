@@ -222,7 +222,8 @@ class TraceabilityService:
         self, 
         initial_package_ids: List[int], 
         limit: int,
-        include_siblings: bool = True
+        include_siblings: bool = True,
+        filter_sale_origins: List[str] = None
     ) -> Dict:
         """
         Trazabilidad hacia ATRÁS desde los paquetes iniciales.
@@ -233,6 +234,7 @@ class TraceabilityService:
             include_siblings: 
                 - True: Trae TODOS los movimientos de cada proceso (todos los hermanos)
                 - False: "Conexión directa" - Trae todo pero filtra para mostrar solo la cadena conectada
+            filter_sale_origins: Lista de origins (S00XXX) para filtrar solo esas ventas
         
         Estrategia: Siempre recopilamos TODOS los datos (como "Todos"), 
         y luego si include_siblings=False, filtramos para quedarnos solo con la cadena conectada.
@@ -437,8 +439,8 @@ class TraceabilityService:
         result = self._process_move_lines(all_move_lines, virtual_ids)
         result["move_lines"] = all_move_lines
         
-        # Resolver proveedores y clientes (pasar initial_package_ids para filtrar ventas)
-        self._resolve_partners(result, initial_package_ids)
+        # Resolver proveedores y clientes (pasar initial_package_ids y filter_sale_origins para filtrar ventas)
+        self._resolve_partners(result, initial_package_ids, filter_sale_origins)
         
         # Enriquecer con fechas
         self._enrich_with_pallet_dates(result)
@@ -1313,6 +1315,11 @@ class TraceabilityService:
                     int(origin[1:])  # Intentar convertir lo que sigue después de "S"
                 except (ValueError, IndexError):
                     continue  # No es un formato de venta válido
+                
+                # Si tenemos filtro de ventas, solo procesar las ventas que están en la lista
+                if filter_sale_origins and origin not in filter_sale_origins:
+                    print(f"[TraceabilityService] Skipping sale {origin} (not in allowed list: {filter_sale_origins})")
+                    continue
                 
                 if origin not in sales_by_origin:
                     partner_rel = picking.get("partner_id")
