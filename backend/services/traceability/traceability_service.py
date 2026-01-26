@@ -1282,7 +1282,7 @@ class TraceabilityService:
                             }
                         pinfo["supplier_id"] = sid
             
-            # Clientes - Filtrar solo ventas (origin empieza con "S")
+            # Clientes - Usar origin (código de venta) como identificador único
             for pkg_id, picking_id in sale_pallet_pickings.items():
                 picking = pickings_by_id.get(picking_id, {})
                 origin = picking.get("origin", "")
@@ -1305,20 +1305,22 @@ class TraceabilityService:
                 date_done = self._convert_utc_to_chile(date_done_utc)
                 scheduled_date = self._convert_utc_to_chile(scheduled_date_utc)
                 
+                cname = "Cliente"
                 if partner_rel:
-                    cid = partner_rel[0] if isinstance(partner_rel, (list, tuple)) else partner_rel
                     cname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
-                    # Guardar cliente con fecha de concreción
-                    if cid not in result["customers"]:
-                        result["customers"][cid] = {
-                            "name": cname,
-                            "date_done": date_done,  # Fecha real de venta concretada
-                            "scheduled_date": scheduled_date,
-                            "sale_order": origin  # Referencia de venta
-                        }
-                    # Link: PALLET → CUSTOMER
-                    pallet_qty = result["pallets"].get(pkg_id, {}).get("qty", 1)
-                    result["links"].append(("PALLET", pkg_id, "CUSTOMER", cid, pallet_qty))
+                
+                # Usar el origin (S00XXX) como identificador único para cada venta
+                # Esto permite separar múltiples ventas al mismo cliente
+                if origin not in result["customers"]:
+                    result["customers"][origin] = {
+                        "name": cname,
+                        "date_done": date_done,  # Fecha real de venta concretada
+                        "scheduled_date": scheduled_date,
+                        "sale_order": origin  # Referencia de venta
+                    }
+                # Link: PALLET → CUSTOMER (usando origin como ID)
+                pallet_qty = result["pallets"].get(pkg_id, {}).get("qty", 1)
+                result["links"].append(("PALLET", pkg_id, "CUSTOMER", origin, pallet_qty))
         except Exception as e:
             print(f"[TraceabilityService] Error resolving partners: {e}")
         
