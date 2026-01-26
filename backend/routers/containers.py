@@ -438,33 +438,64 @@ async def get_traceability_by_sale(
         client = OdooClient(username=username, password=password)
         service = TraceabilityService(username=username, password=password)
         
-        # Construir filtros de búsqueda
-        sale_domain = [
-            ("picking_type_id.code", "=", "outgoing"),
-            ("state", "=", "done"),
-            ("origin", "!=", False),  # Debe tener origin
-        ]
-        
-        # Agregar filtro de código si se proporciona
+        # Estrategia: buscar por sale.order primero, luego obtener sus pickings
         if sale_identifier:
-            sale_domain.append(("origin", "=ilike", sale_identifier))
+            # Búsqueda específica por código de venta
+            sale_domain = [
+                ("picking_type_id.code", "=", "outgoing"),
+                ("state", "=", "done"),
+                ("origin", "!=", False),
+                ("origin", "=ilike", sale_identifier)
+            ]
+            
+            # Agregar filtro de fechas si se proporciona (usar date_done en picking)
+            if start_date:
+                sale_domain.append(("date_done", ">=", f"{start_date} 00:00:00"))
+            if end_date:
+                sale_domain.append(("date_done", "<=", f"{end_date} 23:59:59"))
+            
+            pickings = client.search_read(
+                "stock.picking",
+                sale_domain,
+                ["id", "name", "origin", "date_done"],
+                limit=10
+            )
         else:
-            # Si no hay código específico, filtrar solo origins que empiecen con "S"
-            sale_domain.append(("origin", "=ilike", "S%"))
-        
-        # Agregar filtro de fechas si se proporciona
-        if start_date:
-            sale_domain.append(("date_done", ">=", f"{start_date} 00:00:00"))
-        if end_date:
-            sale_domain.append(("date_done", "<=", f"{end_date} 23:59:59"))
-        
-        # Buscar ventas (buscar por origin, no por name)
-        pickings = client.search_read(
-            "stock.picking",
-            sale_domain,
-            ["id", "name", "origin", "date_done"],
-            limit=50 if not sale_identifier else 10
-        )
+            # Búsqueda por período: usar sale.order con date_order
+            sale_order_domain = [
+                ("state", "in", ["sale", "done"]),
+            ]
+            
+            if start_date:
+                sale_order_domain.append(("date_order", ">=", f"{start_date} 00:00:00"))
+            if end_date:
+                sale_order_domain.append(("date_order", "<=", f"{end_date} 23:59:59"))
+            
+            # Buscar órdenes de venta
+            sale_orders = client.search_read(
+                "sale.order",
+                sale_order_domain,
+                ["id", "name"],
+                limit=50
+            )
+            
+            if not sale_orders:
+                return {"error": f"No se encontraron órdenes de venta en el rango {start_date} - {end_date}"}
+            
+            # Obtener los names (códigos S*) de las órdenes
+            sale_order_names = [so["name"] for so in sale_orders]
+            
+            # Buscar pickings outgoing con esos origins
+            pickings = client.search_read(
+                "stock.picking",
+                [
+                    ("picking_type_id.code", "=", "outgoing"),
+                    ("state", "=", "done"),
+                    ("origin", "in", sale_order_names)
+                ],
+                ["id", "name", "origin", "date_done"],
+                limit=200
+            )
         
         if not pickings:
             if sale_identifier:
