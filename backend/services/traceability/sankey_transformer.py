@@ -133,26 +133,35 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "PROCESS"
             )
     
-    # Agregar nodos de clientes
+    # Agregar nodos de clientes/ventas
     for cid, cinfo in customers.items():
-        # Customers ahora son diccionarios con name y date_done
+        # Customers ahora son diccionarios con name, date_done y sale_order
         if isinstance(cinfo, dict):
             cname = cinfo.get("name", "Cliente")
             date_done = cinfo.get("date_done", "")
+            sale_order = cinfo.get("sale_order", "")
         else:
             # Compatibilidad con formato antiguo (string)
             cname = cinfo
             date_done = ""
+            sale_order = ""
+        
+        # Construir label con código de venta
+        if sale_order:
+            label = f"🔵 {sale_order} - {cname}"
+        else:
+            label = f"🔵 {cname}"
         
         add_node(
             f"CUST:{cid}",
-            f"🔵 {cname}",
+            label,
             "#3498db",  # Azul
             {
                 "type": "CUSTOMER",
                 "id": cid,
                 "name": cname,
-                "date": date_done
+                "date": date_done,
+                "sale_order": sale_order
             },
             "CUSTOMER"
         )
