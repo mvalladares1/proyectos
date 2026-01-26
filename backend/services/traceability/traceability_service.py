@@ -1282,7 +1282,9 @@ class TraceabilityService:
                             }
                         pinfo["supplier_id"] = sid
             
-            # Clientes - Usar origin (código de venta) como identificador único
+            # Clientes - Agrupar por origin (código de venta) primero
+            sales_by_origin = {}  # origin -> {info, pallets[]}
+            
             for pkg_id, picking_id in sale_pallet_pickings.items():
                 picking = pickings_by_id.get(picking_id, {})
                 origin = picking.get("origin", "")
@@ -1297,30 +1299,42 @@ class TraceabilityService:
                 except (ValueError, IndexError):
                     continue  # No es un formato de venta válido
                 
-                partner_rel = picking.get("partner_id")
-                date_done_utc = picking.get("date_done", "")  # Fecha de concreción de la venta
-                scheduled_date_utc = picking.get("scheduled_date", "")
-                
-                # Convertir fechas UTC a hora Chile
-                date_done = self._convert_utc_to_chile(date_done_utc)
-                scheduled_date = self._convert_utc_to_chile(scheduled_date_utc)
-                
-                cname = "Cliente"
-                if partner_rel:
-                    cname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
-                
-                # Usar el origin (S00XXX) como identificador único para cada venta
-                # Esto permite separar múltiples ventas al mismo cliente
-                if origin not in result["customers"]:
-                    result["customers"][origin] = {
+                if origin not in sales_by_origin:
+                    partner_rel = picking.get("partner_id")
+                    date_done_utc = picking.get("date_done", "")
+                    scheduled_date_utc = picking.get("scheduled_date", "")
+                    
+                    # Convertir fechas UTC a hora Chile
+                    date_done = self._convert_utc_to_chile(date_done_utc)
+                    scheduled_date = self._convert_utc_to_chile(scheduled_date_utc)
+                    
+                    cname = "Cliente"
+                    if partner_rel:
+                        cname = partner_rel[1] if isinstance(partner_rel, (list, tuple)) and len(partner_rel) > 1 else "Cliente"
+                    
+                    sales_by_origin[origin] = {
                         "name": cname,
-                        "date_done": date_done,  # Fecha real de venta concretada
+                        "date_done": date_done,
                         "scheduled_date": scheduled_date,
-                        "sale_order": origin  # Referencia de venta
+                        "sale_order": origin,
+                        "pallets": []
                     }
-                # Link: PALLET → CUSTOMER (usando origin como ID)
-                pallet_qty = result["pallets"].get(pkg_id, {}).get("qty", 1)
-                result["links"].append(("PALLET", pkg_id, "CUSTOMER", origin, pallet_qty))
+                
+                sales_by_origin[origin]["pallets"].append(pkg_id)
+            
+            # Crear UN nodo por venta y sus links
+            for origin, sale_info in sales_by_origin.items():
+                result["customers"][origin] = {
+                    "name": sale_info["name"],
+                    "date_done": sale_info["date_done"],
+                    "scheduled_date": sale_info["scheduled_date"],
+                    "sale_order": origin
+                }
+                
+                # Crear links de todos los pallets a este nodo de venta
+                for pkg_id in sale_info["pallets"]:
+                    pallet_qty = result["pallets"].get(pkg_id, {}).get("qty", 1)
+                    result["links"].append(("PALLET", pkg_id, "CUSTOMER", origin, pallet_qty))
         except Exception as e:
             print(f"[TraceabilityService] Error resolving partners: {e}")
         
