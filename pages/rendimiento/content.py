@@ -1000,19 +1000,29 @@ def _render_visjs_diagram(visjs_data: dict):
         st.error("❌ pyvis no está instalado. Ejecuta: pip install pyvis")
         return
     
-    # Opción para mostrar timeline
-    show_timeline = st.checkbox("📅 Mostrar Línea de Tiempo", value=True)
+    # Opciones de visualización
+    col1, col2 = st.columns(2)
+    with col1:
+        show_timeline = st.checkbox("📅 Mostrar Línea de Tiempo", value=True)
+    with col2:
+        chronological_view = st.checkbox("🗓️ Ordenar cronológicamente", value=False, 
+                                          help="Posiciona los nodos de izquierda (antiguo) a derecha (nuevo) según su fecha")
     
     if show_timeline and visjs_data.get("timeline_data"):
         # Vista combinada: timeline arriba, red abajo
         render_combined_view(
             visjs_data,
             network_height="500px",
-            timeline_height="750px"
+            timeline_height="750px",
+            chronological=chronological_view
         )
     else:
         # Solo red
-        render_visjs_network(visjs_data, height="700px")
+        if chronological_view:
+            from components.visjs_network.component import render_visjs_network_chronological
+            render_visjs_network_chronological(visjs_data, height="700px")
+        else:
+            render_visjs_network(visjs_data, height="700px")
 
 
 def _render_connections_table(traceability_data: dict):

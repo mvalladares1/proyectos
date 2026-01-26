@@ -3,6 +3,7 @@ Componente de visualización vis.js para Streamlit.
 """
 from .component import (
     render_visjs_network,
+    render_visjs_network_chronological,
     render_visjs_timeline,
     render_combined_view,
     PYVIS_AVAILABLE,
@@ -10,6 +11,7 @@ from .component import (
 
 __all__ = [
     "render_visjs_network",
+    "render_visjs_network_chronological",
     "render_visjs_timeline", 
     "render_combined_view",
     "PYVIS_AVAILABLE",

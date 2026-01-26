@@ -4,12 +4,352 @@ Genera HTML interactivo con vis.js Network y Timeline.
 """
 import streamlit as st
 import streamlit.components.v1 as components
-from typing import Dict
+from typing import Dict, List, Tuple
 import json
 import math
+from datetime import datetime
 
 # vis.js se carga desde CDN, no necesitamos pyvis
 PYVIS_AVAILABLE = True  # Mantenemos por compatibilidad
+
+# Niveles Y para cada tipo de nodo (flujo de arriba a abajo)
+NODE_Y_LEVELS = {
+    "SUPPLIER": 0,
+    "PALLET_IN": 1,
+    "PROCESS": 2,
+    "PALLET_OUT": 3,
+    "CUSTOMER": 4,
+}
+
+
+def _calculate_chronological_positions(nodes: List[Dict], width: int = 2000, height: int = 600) -> List[Dict]:
+    """
+    Calcula posiciones X,Y para nodos basadas en:
+    - X: fecha cronológica (izquierda=antiguo, derecha=nuevo)
+    - Y: tipo de nodo (arriba=proveedor, abajo=cliente)
+    
+    Args:
+        nodes: Lista de nodos con date y nodeType
+        width: Ancho del canvas
+        height: Alto del canvas
+        
+    Returns:
+        Lista de nodos con x, y, fixed añadidos
+    """
+    # Extraer fechas válidas
+    dates = []
+    for n in nodes:
+        date_str = n.get("date", "")
+        if date_str:
+            try:
+                dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
+                dates.append(dt)
+            except:
+                pass
+    
+    if not dates:
+        # Sin fechas, usar layout jerárquico simple
+        return nodes
+    
+    min_date = min(dates)
+    max_date = max(dates)
+    date_range = (max_date - min_date).days or 1  # Evitar división por 0
+    
+    # Márgenes
+    margin_x = 100
+    margin_y = 50
+    usable_width = width - 2 * margin_x
+    usable_height = height - 2 * margin_y
+    
+    # Separación Y por nivel
+    y_spacing = usable_height / 4  # 5 niveles (0-4)
+    
+    positioned_nodes = []
+    for n in nodes:
+        node = {**n}
+        node_type = n.get("nodeType", "PROCESS")
+        date_str = n.get("date", "")
+        
+        # Calcular Y basado en tipo
+        level = NODE_Y_LEVELS.get(node_type, 2)
+        y = margin_y + level * y_spacing
+        
+        # Calcular X basado en fecha
+        if date_str:
+            try:
+                dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
+                days_from_start = (dt - min_date).days
+                x = margin_x + (days_from_start / date_range) * usable_width
+            except:
+                x = width / 2  # Centro si no hay fecha válida
+        else:
+            # Sin fecha: posición basada en tipo
+            x = margin_x + (level / 4) * usable_width
+        
+        node["x"] = x
+        node["y"] = y
+        node["fixed"] = {"x": True, "y": False}  # X fijo, Y puede moverse con física
+        
+        positioned_nodes.append(node)
+    
+    return positioned_nodes
+
+
+def render_visjs_network_chronological(
+    data: Dict,
+    height: str = "700px",
+) -> None:
+    """
+    Renderiza una red de trazabilidad ordenada cronológicamente.
+    
+    - Eje X: fechas (izquierda=antiguo, derecha=nuevo)
+    - Eje Y: tipo de nodo (arriba=proveedor, abajo=cliente)
+    - Física habilitada solo en Y para ajuste vertical
+    
+    Args:
+        data: Dict con nodes, edges del visjs_transformer
+        height: Altura del contenedor
+    """
+    if not PYVIS_AVAILABLE:
+        st.error("⚠️ pyvis no está instalado. Ejecuta: `pip install pyvis`")
+        return
+    
+    nodes = data.get("nodes", [])
+    edges = data.get("edges", [])
+    stats = data.get("stats", {})
+    
+    if not nodes:
+        st.warning("No hay datos para visualizar")
+        return
+    
+    # Mostrar estadísticas
+    st.markdown("### 📊 Estadísticas de la red")
+    cols = st.columns(6)
+    stats_display = [
+        ("🏭 Proveedores", stats.get("suppliers", 0)),
+        ("📦 Pallets In", stats.get("pallets_in", 0)),
+        ("🔄 Procesos", stats.get("processes", 0)),
+        ("📤 Pallets Out", stats.get("pallets_out", 0)),
+        ("👤 Clientes", stats.get("customers", 0)),
+        ("🔗 Conexiones", stats.get("total_edges", 0)),
+    ]
+    for col, (label, value) in zip(cols, stats_display):
+        col.metric(label, value)
+    
+    # Preparar nodos con información de fecha y tipo
+    nodes_with_info = []
+    for n in nodes:
+        node_id = n["id"]
+        node_type = n.get("nodeType", "PROCESS")
+        if not node_type:
+            # Inferir tipo del ID
+            if node_id.startswith("SUPP:"):
+                node_type = "SUPPLIER"
+            elif node_id.startswith("PKG:"):
+                color = n.get("color", "")
+                node_type = "PALLET_OUT" if "#2ecc71" in color else "PALLET_IN"
+            elif node_id.startswith("PROC:"):
+                node_type = "PROCESS"
+            elif node_id.startswith("CUST:"):
+                node_type = "CUSTOMER"
+        
+        nodes_with_info.append({
+            "id": node_id,
+            "label": n.get("label", node_id),
+            "title": n.get("title", "").replace("\n", "<br>"),
+            "nodeType": node_type,
+            "group": node_type.lower() if node_type else "process",
+            "date": n.get("date", ""),
+        })
+    
+    # Calcular posiciones cronológicas
+    nodes_positioned = _calculate_chronological_positions(nodes_with_info, width=2000, height=600)
+    
+    edges_base = [{
+        "from": e["from"],
+        "to": e["to"],
+        "value": e.get("value", 1),
+        "width": max(1, min(6, e.get("value", 1) / 300)),
+        "title": f"<b>{e.get('value', 0):,.0f} kg</b>",
+    } for e in edges]
+    
+    nodes_json = json.dumps(nodes_positioned)
+    edges_json = json.dumps(edges_base)
+    
+    network_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/dist/vis-network.min.js"></script>
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            html, body {{ height: 100%; overflow: hidden; }}
+            body {{ background: #0d1117; font-family: Arial, sans-serif; }}
+            
+            #network {{
+                width: 100%;
+                height: 100%;
+            }}
+            
+            /* Legend */
+            .legend {{
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                background: rgba(22, 27, 34, 0.95);
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid #30363d;
+                font-size: 11px;
+                color: #c9d1d9;
+                z-index: 1000;
+            }}
+            .legend-item {{
+                display: flex;
+                align-items: center;
+                margin: 5px 0;
+            }}
+            .legend-shape {{
+                width: 12px;
+                height: 12px;
+                margin-right: 8px;
+                border-radius: 2px;
+            }}
+            .legend-dot {{ border-radius: 50%; }}
+            
+            /* Info panel */
+            .info-panel {{
+                position: fixed;
+                top: 10px;
+                left: 10px;
+                background: rgba(22, 27, 34, 0.95);
+                padding: 10px 14px;
+                border-radius: 8px;
+                border: 1px solid #30363d;
+                font-size: 10px;
+                color: #8b949e;
+                z-index: 1000;
+            }}
+            .info-panel .title {{
+                font-weight: bold;
+                color: #f0f6fc;
+                margin-bottom: 4px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="info-panel">
+            <div class="title">📅 Vista Cronológica</div>
+            <div>← Antiguo | Nuevo →</div>
+            <div style="margin-top: 4px;">↑ Proveedor | Cliente ↓</div>
+        </div>
+        
+        <div class="legend">
+            <div style="font-weight: bold; margin-bottom: 8px; color: #f0f6fc;">🗺️ Leyenda</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #9b59b6; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>Proveedor</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #f39c12;"></div>Pallet IN</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #e74c3c;"></div>Proceso</div>
+            <div class="legend-item"><div class="legend-shape legend-dot" style="background: #2ecc71;"></div>Pallet OUT</div>
+            <div class="legend-item"><div class="legend-shape" style="background: #3498db;"></div>Cliente</div>
+        </div>
+        
+        <div id="network"></div>
+        
+        <script>
+            var groupOptions = {{
+                supplier: {{
+                    shape: 'triangle',
+                    color: {{ background: '#9b59b6', border: '#8e44ad', highlight: {{ background: '#a569bd' }}, hover: {{ background: '#a569bd' }} }},
+                    size: 22
+                }},
+                pallet_in: {{
+                    shape: 'dot',
+                    color: {{ background: '#f39c12', border: '#d68910', highlight: {{ background: '#f5b041' }}, hover: {{ background: '#f5b041' }} }},
+                    size: 16
+                }},
+                process: {{
+                    shape: 'square',
+                    color: {{ background: '#e74c3c', border: '#c0392b', highlight: {{ background: '#ec7063' }}, hover: {{ background: '#ec7063' }} }},
+                    size: 18
+                }},
+                pallet_out: {{
+                    shape: 'dot',
+                    color: {{ background: '#2ecc71', border: '#27ae60', highlight: {{ background: '#58d68d' }}, hover: {{ background: '#58d68d' }} }},
+                    size: 16
+                }},
+                customer: {{
+                    shape: 'square',
+                    color: {{ background: '#3498db', border: '#2980b9', highlight: {{ background: '#5dade2' }}, hover: {{ background: '#5dade2' }} }},
+                    size: 20
+                }}
+            }};
+            
+            var edgeOptions = {{
+                color: {{ color: 'rgba(139, 148, 158, 0.4)', highlight: '#58a6ff', hover: '#58a6ff' }},
+                smooth: {{ enabled: true, type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.3 }},
+                arrows: {{ to: {{ enabled: true, scaleFactor: 0.4 }} }},
+                hoverWidth: 1.5
+            }};
+            
+            var nodeOptions = {{
+                font: {{ size: 10, color: '#c9d1d9', face: 'Arial' }},
+                borderWidth: 2
+            }};
+            
+            var interactionOptions = {{
+                hover: true,
+                tooltipDelay: 50,
+                zoomView: true,
+                dragView: true,
+                dragNodes: true,
+                navigationButtons: false
+            }};
+            
+            var nodesData = {nodes_json};
+            var edgesData = {edges_json};
+            
+            // Network con física vertical suave
+            var network = new vis.Network(
+                document.getElementById('network'),
+                {{
+                    nodes: new vis.DataSet(nodesData),
+                    edges: new vis.DataSet(edgesData)
+                }},
+                {{
+                    physics: {{
+                        enabled: true,
+                        solver: 'repulsion',
+                        repulsion: {{
+                            nodeDistance: 80,
+                            centralGravity: 0.0,
+                            springLength: 100,
+                            springConstant: 0.01,
+                            damping: 0.5
+                        }},
+                        stabilization: {{ iterations: 100 }}
+                    }},
+                    interaction: interactionOptions,
+                    nodes: nodeOptions,
+                    edges: edgeOptions,
+                    groups: groupOptions
+                }}
+            );
+            
+            // Fit después de estabilizar
+            network.once('stabilizationIterationsDone', function() {{
+                network.fit({{ animation: {{ duration: 300 }} }});
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    
+    # Mostrar controles
+    st.markdown("### 🕸️ Red de Trazabilidad (Cronológica)")
+    st.caption("🖱️ Arrastra para navegar | 🔍 Scroll para zoom | 📍 Hover para detalles | ⬅️ Antiguo → Nuevo ➡️")
+    
+    # Renderizar con altura completa
+    components.html(network_html, height=800, scrolling=False)
 
 
 def render_visjs_network(
@@ -445,14 +785,24 @@ def render_combined_view(
     data: Dict,
     network_height: str = "500px",
     timeline_height: str = "450px",
+    chronological: bool = False,
 ) -> None:
     """
     Renderiza red + timeline combinados.
+    
+    Args:
+        data: Dict con nodes, edges, timeline_data
+        network_height: Altura de la red
+        timeline_height: Altura del timeline
+        chronological: Si True, usa vista cronológica para la red
     """
     # Timeline arriba
     render_visjs_timeline(data, height=timeline_height)
     
     st.divider()
     
-    # Red abajo
-    render_visjs_network(data, height=network_height)
+    # Red abajo - elegir entre cronológica o física libre
+    if chronological:
+        render_visjs_network_chronological(data, height=network_height)
+    else:
+        render_visjs_network(data, height=network_height)
