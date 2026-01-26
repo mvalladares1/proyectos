@@ -273,11 +273,14 @@ class TraceabilityService:
             print(f"[TraceabilityService] Iteración {iteration}: {len(current_packages)} paquetes a procesar")
             
             try:
-                # Buscar dónde estos paquetes son SALIDA (result_package_id)
+                # Buscar dónde estos paquetes son SALIDA (result_package_id) - proceso que los creó
+                # O dónde son ENTRADA (package_id) - para encontrar referencias relacionadas
                 out_moves = self.odoo.search_read(
                     "stock.move.line",
                     [
+                        "|",
                         ("result_package_id", "in", current_packages),
+                        ("package_id", "in", current_packages),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
                     ],
