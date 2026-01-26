@@ -309,15 +309,14 @@ def render_kpis(kpis: Dict):
         st.metric("📋 Pedidos", f"{kpis['total_pedidos']:,}")
     
     with col2:
-        st.metric("📦 KG Total", f"{kpis['kg_total']/1000:,.1f}t")
+        st.metric("📦 KG Total", f"{kpis['kg_total']:,.0f}")
     
     with col3:
-        st.metric("📊 Carga Sem.", f"{kpis['carga_semanal']/1000:,.1f}t")
+        st.metric("📊 Carga Sem.", f"{kpis['carga_semanal']:,.0f}")
     
     with col4:
-        delta_cap = kpis['capacidad_disponible'] / 1000
-        st.metric("🏭 Cap. Disp.", f"{delta_cap:,.1f}t", 
-                 delta=f"{delta_cap:,.1f}t disp.", delta_color="normal")
+        st.metric("🏭 Cap. Disp.", f"{kpis['capacidad_disponible']:,.0f}", 
+                 delta=f"{kpis['capacidad_disponible']:,.0f} kg disp.", delta_color="normal")
     
     with col5:
         st.metric("⚡ Críticos", kpis['pedidos_criticos'], 
@@ -521,9 +520,10 @@ def render_vista_semanal(pedidos: List[Dict]):
             
             st.markdown(
                 f"""
-                <div style="text-align: center; padding: 10px; border-radius: 5px; {header_style}">
-                    <div style="font-weight: bold;">{nombre_dia}</div>
-                    <div>{dia.day}/{dia.month}</div>
+                <div style="text-align: center; padding: 8px; border-radius: 5px; margin-bottom: 8px; {header_style}">
+                    <div style="font-weight: bold; font-size: 14px;">{nombre_dia}</div>
+                    <div style="font-size: 18px; font-weight: bold;">{dia.day}</div>
+                    <div style="font-size: 11px; opacity: 0.8;">{dia.strftime('%b')}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -534,13 +534,13 @@ def render_vista_semanal(pedidos: List[Dict]):
             
             if pedidos_dia:
                 # Carga total del día
-                carga_dia = sum(p.get("kg_total", 0) for p in pedidos_dia) / 1000
+                carga_dia = sum(p.get("kg_total", 0) for p in pedidos_dia)
                 
                 st.markdown(f"**{len(pedidos_dia)} pedidos**")
-                st.markdown(f"📦 {carga_dia:.1f}t")
+                st.markdown(f"📦 {carga_dia:,.0f} kg")
                 
                 # Alerta de sobrecarga
-                if carga_dia > (CAPACIDAD_DIARIA_SALA * 2 / 1000):
+                if carga_dia > (CAPACIDAD_DIARIA_SALA * 2):
                     st.warning("⚠️ Sobrecarga")
                 
                 st.divider()
@@ -563,7 +563,7 @@ def render_vista_semanal(pedidos: List[Dict]):
                             <div style="font-weight: bold;">{p.get('name')}</div>
                             <div>{p['_emoji_urgencia']} {p.get('partner_name', '')[:20]}</div>
                             <div>🍇 {p['_tipo_fruta'].capitalize()}</div>
-                            <div>📊 {avance:.0f}% | {p.get('kg_total', 0)/1000:.1f}t</div>
+                            <div>📊 {avance:.0f}% | {p.get('kg_total', 0):,.0f} kg</div>
                         </div>
                         """,
                         unsafe_allow_html=True
@@ -579,7 +579,21 @@ def render_vista_diaria(pedidos: List[Dict]):
     """Renderiza vista diaria detallada de hoy."""
     hoy = datetime.now().date()
     
-    st.markdown(f"### 🗓️ {hoy.strftime('%A %d de %B, %Y')}")
+    # Traducción de día de la semana al español
+    dias_es = {
+        'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
+    }
+    meses_es = {
+        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo', 'April': 'Abril',
+        'May': 'Mayo', 'June': 'Junio', 'July': 'Julio', 'August': 'Agosto',
+        'September': 'Septiembre', 'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+    }
+    
+    dia_nombre = dias_es.get(hoy.strftime('%A'), hoy.strftime('%A'))
+    mes_nombre = meses_es.get(hoy.strftime('%B'), hoy.strftime('%B'))
+    
+    st.markdown(f"### 🗓️ {dia_nombre} {hoy.day} de {mes_nombre}, {hoy.year}")
     
     # Filtrar pedidos de hoy y próximos días
     pedidos_hoy = [p for p in pedidos if p["_fecha_entrega"].date() == hoy]
@@ -600,11 +614,12 @@ def render_vista_diaria(pedidos: List[Dict]):
                     st.caption(f"📅 Entrega: {p['_fecha_entrega'].strftime('%d/%m/%Y')} ({p['_dias_restantes']} días)")
                 
                 with col2:
-                    st.metric("KG", f"{p.get('kg_total', 0)/1000:.1f}t")
-                    st.progress(p.get("avance_pct", 0) / 100)
+                    st.metric("KG Total", f"{p.get('kg_total', 0):,.0f}")
+                    avance_val = min(p.get("avance_pct", 0) / 100, 1.0)
+                    st.progress(avance_val, text=f"{p.get('avance_pct', 0):.0f}%")
                 
                 with col3:
-                    st.metric("Avance", f"{p.get('avance_pct', 0):.0f}%")
+                    st.metric("Producido", f"{p.get('kg_producidos', 0):,.0f}")
                     if st.button("Ver", key=f"ver_{p.get('id')}"):
                         st.info(f"Abrir detalle de {p.get('name')}")
                 
@@ -640,8 +655,8 @@ def render_vista_diaria(pedidos: List[Dict]):
         for sala, kg in salas_carga.items():
             porcentaje = (kg / CAPACIDAD_DIARIA_SALA) * 100
             st.markdown(f"**{sala}**")
-            st.progress(min(porcentaje / 100, 1.0))
-            st.caption(f"{kg/1000:.1f}t / {CAPACIDAD_DIARIA_SALA/1000:.0f}t ({porcentaje:.0f}%)")
+            st.progress(min(porcentaje / 100, 1.0), text=f"{porcentaje:.0f}%")
+            st.caption(f"{kg:,.0f} kg / {CAPACIDAD_DIARIA_SALA:,.0f} kg")
     else:
         st.info("Sin carga programada para hoy")
 
