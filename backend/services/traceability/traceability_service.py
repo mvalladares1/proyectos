@@ -1285,6 +1285,8 @@ class TraceabilityService:
             # Clientes - Agrupar por origin (código de venta) primero
             sales_by_origin = {}  # origin -> {info, pallets[]}
             
+            print(f"[TraceabilityService] Procesando {len(sale_pallet_pickings)} pallets de venta")
+            
             for pkg_id, picking_id in sale_pallet_pickings.items():
                 picking = pickings_by_id.get(picking_id, {})
                 origin = picking.get("origin", "")
@@ -1319,8 +1321,13 @@ class TraceabilityService:
                         "sale_order": origin,
                         "pallets": []
                     }
+                    print(f"[TraceabilityService] Nueva venta detectada: {origin} - {cname}")
                 
                 sales_by_origin[origin]["pallets"].append(pkg_id)
+            
+            print(f"[TraceabilityService] Total ventas únicas: {len(sales_by_origin)}")
+            for origin, sale_info in sales_by_origin.items():
+                print(f"  - {origin}: {len(sale_info['pallets'])} pallets")
             
             # Crear UN nodo por venta y sus links
             for origin, sale_info in sales_by_origin.items():
