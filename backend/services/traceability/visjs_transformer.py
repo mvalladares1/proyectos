@@ -127,13 +127,13 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             products = list(pinfo.get("products", {}).keys())
             prods_str = ", ".join(products[:2])
             
-            # Usar create_date si existe, sino first_date
-            create_date = pinfo.get("create_date", "")
-            date = create_date[:10] if create_date else (pinfo.get("first_date", "")[:10] if pinfo.get("first_date") else "")
+            # Usar pack_date si existe, sino first_date (igual que sankey_transformer)
+            pallet_date = pinfo.get("pack_date") or pinfo.get("first_date", "")
+            date = pallet_date[:10] if pallet_date else ""
             
             title = f"Pallet: {name}\nCantidad: {qty:.0f} kg\nProductos: {prods_str}"
             if date:
-                title += f"\nFecha creación: {date}"
+                title += f"\nFecha pack: {date}"
             
             nodes.append(_create_node(
                 node_id,
