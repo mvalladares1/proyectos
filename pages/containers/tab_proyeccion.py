@@ -35,9 +35,9 @@ def fetch_proyecciones(username: str, password: str, start_date: str, end_date: 
         if state:
             params["state"] = state
         
-        # Usamos el mismo endpoint pero con fechas futuras
+        # Usamos el endpoint específico para proyecciones
         response = httpx.get(
-            f"{API_URL}/api/v1/containers/",
+            f"{API_URL}/api/v1/containers/proyecciones",
             params=params,
             timeout=60.0
         )
@@ -250,10 +250,19 @@ def render(username: str, password: str):
     productos_data = []
     for proy in proyecciones:
         for linea in proy.get("lineas", []):
+            # Extraer nombre del producto
+            prod = linea.get("product_id", {})
+            if isinstance(prod, dict):
+                prod_name = prod.get("name", "N/A")
+            elif isinstance(prod, (list, tuple)) and len(prod) > 1:
+                prod_name = prod[1]
+            else:
+                prod_name = "N/A"
+            
             productos_data.append({
                 "so": proy.get("name"),
                 "cliente": proy.get("partner_name"),
-                "producto": linea.get("product_name", "N/A"),
+                "producto": prod_name,
                 "kg": linea.get("product_uom_qty", 0),
                 "fecha": proy.get("commitment_date") or proy.get("date_order")
             })

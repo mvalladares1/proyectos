@@ -310,6 +310,210 @@ class ContainersService:
         
         return containers
 
+    def get_proyecciones(self, 
+                        start_date: Optional[str] = None, 
+                        end_date: Optional[str] = None,
+                        partner_id: Optional[int] = None,
+                        state: Optional[str] = None) -> List[Dict]:
+        """
+        Obtiene pedidos de venta para proyección futura.
+        Busca directamente en sale.order por commitment_date, 
+        sin requerir que tengan fabricaciones creadas.
+        """
+        # PASO 1: Buscar sale.order por fecha de compromiso
+        sale_domain = []
+        
+        # Filtrar por fecha de compromiso o fecha de pedido
+        if start_date:
+            sale_domain.append("|")
+            sale_domain.append(("commitment_date", ">=", start_date))
+            sale_domain.append(("date_order", ">=", start_date))
+        if end_date:
+            sale_domain.append("|")
+            sale_domain.append(("commitment_date", "<=", end_date))
+            sale_domain.append(("date_order", "<=", end_date))
+        
+        # Filtros opcionales
+        if partner_id:
+            sale_domain.append(("partner_id", "=", partner_id))
+        if state:
+            sale_domain.append(("state", "=", state))
+        
+        sale_fields = [
+            "name", "partner_id", "date_order", "commitment_date",
+            "state", "amount_total", "currency_id", "origin",
+            "user_id", "order_line", "validity_date"
+        ]
+        fallback_sale_fields = [
+            "name", "partner_id", "date_order", "commitment_date",
+            "state", "amount_total", "currency_id", "origin",
+            "user_id", "order_line"
+        ]
+        
+        try:
+            sale_ids = self.odoo.search(
+                "sale.order",
+                sale_domain,
+                limit=1000,
+                order="commitment_date desc, date_order desc"
+            )
+            
+            print(f"[PROYECCIONES] Domain: {sale_domain}")
+            print(f"[PROYECCIONES] Found {len(sale_ids)} sale orders")
+            
+            if not sale_ids:
+                return []
+            
+            try:
+                sales_raw = self.odoo.read("sale.order", sale_ids, sale_fields)
+            except Exception as e:
+                print(f"Error fetching sales with extra fields: {e}")
+                sales_raw = self.odoo.read("sale.order", sale_ids, fallback_sale_fields)
+        except Exception as e:
+            print(f"Error fetching sales for proyecciones: {e}")
+            return []
+        
+        # PASO 2: Obtener líneas de venta
+        all_line_ids = []
+        for s in sales_raw:
+            all_line_ids.extend(s.get("order_line", []))
+        
+        lines_map = {}
+        if all_line_ids:
+            try:
+                lines_raw = self.odoo.read(
+                    "sale.order.line",
+                    all_line_ids,
+                    ["order_id", "product_id", "name", "product_uom_qty", 
+                     "product_uom", "price_unit", "price_subtotal", 
+                     "qty_delivered", "qty_invoiced"]
+                )
+                for l in lines_raw:
+                    order_id = l.get("order_id")
+                    if order_id:
+                        oid = order_id[0] if isinstance(order_id, (list, tuple)) else order_id
+                        if oid not in lines_map:
+                            lines_map[oid] = []
+                        lines_map[oid].append(clean_record(l))
+            except Exception as e:
+                print(f"Error fetching lines: {e}")
+        
+        # PASO 3: Buscar fabricaciones existentes para estos pedidos (si las hay)
+        sale_names = [s.get("name") for s in sales_raw if s.get("name")]
+        productions_map = {}  # sale_name -> [productions]
+        
+        if sale_names:
+            try:
+                prod_domain = [("x_studio_po_asociada", "in", sale_names)]
+                prod_fields = [
+                    "name", "product_id", "product_qty", "qty_produced",
+                    "state", "date_planned_start", "x_studio_po_asociada"
+                ]
+                
+                prod_ids = self.odoo.search("mrp.production", prod_domain)
+                if prod_ids:
+                    prods_raw = self.odoo.read("mrp.production", prod_ids, prod_fields)
+                    
+                    for p in prods_raw:
+                        po_asociada = p.get("x_studio_po_asociada", "").strip()
+                        if not po_asociada:
+                            continue
+                        
+                        if po_asociada not in productions_map:
+                            productions_map[po_asociada] = []
+                        
+                        product = p.get("product_id")
+                        product_name = product[1] if isinstance(product, (list, tuple)) else "N/A"
+                        
+                        productions_map[po_asociada].append({
+                            "id": p["id"],
+                            "name": p.get("name", ""),
+                            "product_name": product_name,
+                            "product_qty": p.get("product_qty", 0) or 0,
+                            "qty_produced": p.get("qty_produced", 0) or 0,
+                            "state": p.get("state", ""),
+                            "state_display": local_get_state_display(p.get("state", "")),
+                            "date_planned_start": p.get("date_planned_start", "")
+                        })
+            except Exception as e:
+                print(f"Error fetching productions for proyecciones: {e}")
+        
+        # PASO 4: Construir resultado
+        proyecciones = []
+        
+        for sale in sales_raw:
+            sale_id = sale["id"]
+            sale_name = sale.get("name", "")
+            
+            # Partner name
+            partner = sale.get("partner_id")
+            partner_name = partner[1] if partner and isinstance(partner, (list, tuple)) and len(partner) > 1 else "N/A"
+            
+            sale_clean = clean_record(sale)
+            
+            # Líneas
+            lines_data = lines_map.get(sale_id, [])
+            
+            # KG totales
+            kg_total = sum([l.get("product_uom_qty", 0) or 0 for l in lines_data])
+            
+            # KG por producto
+            kg_por_producto = {}
+            for line in lines_data:
+                prod = line.get("product_id", {})
+                prod_name = prod.get("name", "N/A") if isinstance(prod, dict) else "N/A"
+                kg = line.get("product_uom_qty", 0) or 0
+                if prod_name in kg_por_producto:
+                    kg_por_producto[prod_name] += kg
+                else:
+                    kg_por_producto[prod_name] = kg
+            
+            # Producciones (si existen)
+            productions = productions_map.get(sale_name, [])
+            kg_producidos = sum([p.get("qty_produced", 0) for p in productions])
+            
+            kg_disponibles = kg_total - kg_producidos
+            avance_pct = (kg_producidos / kg_total * 100) if kg_total > 0 else 0
+            
+            # Producto principal
+            producto_principal = "N/A"
+            if lines_data:
+                prod = lines_data[0].get("product_id")
+                if isinstance(prod, dict):
+                    producto_principal = prod.get("name", "N/A")
+            
+            # Convertir monto a CLP
+            currency_id = sale_clean.get("currency_id", {})
+            amount_original = sale_clean.get("amount_total", 0)
+            amount_clp = self._convert_to_clp(amount_original, currency_id)
+            
+            proyecciones.append({
+                "id": sale_id,
+                "name": sale_clean.get("name", ""),
+                "partner_id": sale_clean.get("partner_id", {}),
+                "partner_name": partner_name,
+                "date_order": sale_clean.get("date_order", ""),
+                "commitment_date": sale_clean.get("commitment_date", ""),
+                "validity_date": sale_clean.get("validity_date", ""),
+                "state": sale_clean.get("state", ""),
+                "origin": sale_clean.get("origin", ""),
+                "currency_id": currency_id,
+                "amount_total": amount_clp,
+                "amount_original": amount_original,
+                "user_id": sale_clean.get("user_id", {}),
+                "producto_principal": producto_principal,
+                "kg_total": kg_total,
+                "kg_producidos": kg_producidos,
+                "kg_disponibles": kg_disponibles,
+                "kg_por_producto": kg_por_producto,
+                "avance_pct": round(avance_pct, 2),
+                "num_fabricaciones": len(productions),
+                "lineas": lines_data,  # Cambié de "lines" a "lineas" para consistencia
+                "productions": productions
+            })
+        
+        return proyecciones
+
     def get_container_detail(self, sale_id: int) -> Dict:
         """
         Obtiene el detalle completo de un container/venta específico.

@@ -54,6 +54,31 @@ async def get_containers_summary(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/proyecciones")
+async def get_proyecciones(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    start_date: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    partner_id: Optional[int] = Query(None, description="ID del cliente"),
+    state: Optional[str] = Query(None, description="Estado del pedido (sale, draft, etc.)")
+):
+    """
+    Obtiene pedidos de venta para proyección futura.
+    Busca directamente en sale.order por commitment_date, sin requerir fabricaciones.
+    """
+    try:
+        service = ContainersService(username=username, password=password)
+        return service.get_proyecciones(
+            start_date=start_date,
+            end_date=end_date,
+            partner_id=partner_id,
+            state=state
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/partners/list")
 async def get_partners(
     username: str = Query(..., description="Usuario Odoo"),
