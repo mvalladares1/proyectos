@@ -268,23 +268,45 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             // Tooltip
             const tooltip = d3.select('#tooltip');
             
-            // Configurar Sankey - usamos configuración horizontal y luego rotamos
+            // Ordenar nodos por fecha antes de pasarlos al Sankey
+            const sortedNodes = data.nodes.map(d => ({{...d}})).sort((a, b) => {{
+                const dateA = a.date || '9999-99-99';
+                const dateB = b.date || '9999-99-99';
+                return dateA.localeCompare(dateB);
+            }});
+            
+            // Crear mapeo de id viejo a id nuevo después del ordenamiento
+            const oldToNewId = new Map();
+            sortedNodes.forEach((node, newIdx) => {{
+                oldToNewId.set(node.id, newIdx);
+                node.id = newIdx;
+            }});
+            
+            // Actualizar los links con los nuevos IDs
+            const sortedLinks = data.links.map(link => ({{
+                ...link,
+                source: oldToNewId.get(link.source),
+                target: oldToNewId.get(link.target)
+            }})).filter(l => l.source !== undefined && l.target !== undefined);
+            
+            // Configurar Sankey - orientación vertical (de arriba a abajo)
             const sankey = d3.sankey()
                 .nodeId(d => d.id)
                 .nodeWidth(15)
                 .nodePadding(12)
-                .nodeAlign(d3.sankeyLeft)  // Alinear a la izquierda para respetar el orden temporal
+                .nodeAlign(d3.sankeyLeft)
                 .nodeSort((a, b) => {{
+                    // Ordenar por fecha dentro de cada columna
                     const dateA = a.date || '9999-99-99';
                     const dateB = b.date || '9999-99-99';
                     return dateA.localeCompare(dateB);
                 }})
-                .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
+                .extent([[0, 0], [innerHeight, innerWidth]]);
             
-            // Clonar datos
+            // Ejecutar Sankey
             const graph = sankey({{
-                nodes: data.nodes.map(d => ({{...d}})),
-                links: data.links.map(d => ({{...d}}))
+                nodes: sortedNodes,
+                links: sortedLinks
             }});
             
             // Rotar coordenadas para orientación vertical
