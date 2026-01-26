@@ -184,8 +184,8 @@ def _transform_to_d3_format(plotly_data: dict, highlight_package: str = None) ->
 
 def _generate_d3_sankey_html(data: Dict, height: int) -> str:
     """
-    Genera el HTML completo con D3.js Sankey con posicionamiento temporal en eje X.
-    Los nodos se posicionan horizontalmente según su fecha real.
+    Genera el HTML con D3 Sankey donde los nodos se posicionan en X según su fecha.
+    Usa d3-sankey para el layout vertical y grosor de links, pero posición X temporal.
     """
     data_json = json.dumps(data, ensure_ascii=False)
     
@@ -218,10 +218,10 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 pointer-events: none;
             }}
             .link {{
-                fill-opacity: 0.4;
+                fill-opacity: 0.35;
             }}
             .link:hover {{
-                fill-opacity: 0.7;
+                fill-opacity: 0.6;
             }}
             .tooltip {{
                 position: absolute;
@@ -233,7 +233,7 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 line-height: 1.5;
                 pointer-events: none;
                 z-index: 1000;
-                max-width: 280px;
+                max-width: 300px;
             }}
             .zoom-controls {{
                 position: absolute;
@@ -259,7 +259,7 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 background: #f0f0f0;
             }}
             .time-axis text {{
-                font-size: 11px;
+                font-size: 10px;
             }}
         </style>
     </head>
@@ -276,19 +276,17 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             const data = {data_json};
             
             const container = document.getElementById('chart');
-            const width = container.clientWidth || 1200;
+            const width = container.clientWidth || 1400;
             const height = {height};
             
-            // Márgenes para etiquetas y eje temporal
-            const margin = {{ top: 80, right: 50, bottom: 60, left: 50 }};
+            const margin = {{ top: 70, right: 120, bottom: 40, left: 120 }};
             const innerWidth = width - margin.left - margin.right;
             const innerHeight = height - margin.top - margin.bottom;
             
-            // Tooltip
             const tooltip = d3.select('#tooltip');
             
             // ============================================================
-            // PASO 1: Extraer fechas y crear escala temporal en eje X
+            // PASO 1: Crear escala temporal en eje X
             // ============================================================
             const validDates = data.nodes
                 .map(d => d.date)
@@ -296,126 +294,89 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .map(date => new Date(date + 'T12:00:00'));
             
             if (validDates.length === 0) {{
-                document.getElementById('chart').innerHTML = '<p>No hay fechas válidas para mostrar el timeline</p>';
+                document.getElementById('chart').innerHTML = '<p style="padding:20px;">No hay fechas válidas para mostrar</p>';
                 throw new Error('No valid dates');
             }}
             
             const minDate = d3.min(validDates);
             const maxDate = d3.max(validDates);
             
-            // Agregar margen temporal
             const dayPadding = 1;
             const paddedMinDate = d3.timeDay.offset(minDate, -dayPadding);
             const paddedMaxDate = d3.timeDay.offset(maxDate, dayPadding);
             
-            // Escala temporal para posición X (horizontal, de izquierda a derecha)
             const timeScale = d3.scaleTime()
                 .domain([paddedMinDate, paddedMaxDate])
                 .range([0, innerWidth]);
             
             // ============================================================
-            // PASO 2: Agrupar nodos por fecha y tipo para distribuir en Y
+            // PASO 2: Configurar Sankey para calcular layout vertical
             // ============================================================
-            const nodesByDate = new Map();
-            data.nodes.forEach(node => {{
-                const dateKey = node.date || '9999-99-99';
-                if (!nodesByDate.has(dateKey)) {{
-                    nodesByDate.set(dateKey, []);
-                }}
-                nodesByDate.get(dateKey).push(node);
+            const nodeWidth = 18;
+            
+            const sankey = d3.sankey()
+                .nodeId(d => d.id)
+                .nodeWidth(nodeWidth)
+                .nodePadding(15)
+                .nodeAlign(d3.sankeyLeft)
+                .nodeSort((a, b) => {{
+                    // Ordenar por fecha primero, luego por tipo
+                    const dateA = a.date || '9999-99-99';
+                    const dateB = b.date || '9999-99-99';
+                    if (dateA !== dateB) return dateA.localeCompare(dateB);
+                    const typeOrder = {{'SUPPLIER': 0, 'PALLET_IN': 1, 'PROCESS': 2, 'PALLET_OUT': 3, 'CUSTOMER': 4}};
+                    return (typeOrder[a.node_type] || 99) - (typeOrder[b.node_type] || 99);
+                }})
+                .extent([[0, 0], [innerWidth, innerHeight]]);
+            
+            // Clonar datos para sankey
+            const graph = sankey({{
+                nodes: data.nodes.map(d => ({{...d}})),
+                links: data.links.map(d => ({{...d}}))
             }});
             
-            // Ordenar nodos dentro de cada fecha por tipo (vertical)
-            const typeOrder = {{'SUPPLIER': 0, 'RECEPTION': 1, 'PALLET_IN': 2, 'PROCESS': 3, 'PALLET_OUT': 4, 'CUSTOMER': 5}};
-            nodesByDate.forEach((nodes, dateKey) => {{
-                nodes.sort((a, b) => {{
-                    const orderA = typeOrder[a.node_type] ?? 99;
-                    const orderB = typeOrder[b.node_type] ?? 99;
-                    return orderA - orderB;
-                }});
-            }});
-            
             // ============================================================
-            // PASO 3: Calcular posiciones de nodos manualmente
+            // PASO 3: Sobreescribir posición X según fecha real
             // ============================================================
-            const nodeWidth = 15;
-            const nodeHeight = 25;
-            const nodeVerticalPadding = 35;
-            
-            // Calcular posiciones
-            const processedNodes = data.nodes.map((node, idx) => {{
-                const dateKey = node.date || '9999-99-99';
-                const nodesInDate = nodesByDate.get(dateKey) || [];
-                const indexInDate = nodesInDate.indexOf(node);
-                
-                // Posición X basada en fecha
+            graph.nodes.forEach(node => {{
+                const dateStr = node.date || '9999-99-99';
                 let x;
-                if (dateKey === '9999-99-99') {{
-                    x = innerWidth - 30;
+                if (dateStr === '9999-99-99') {{
+                    x = innerWidth - 20;
                 }} else {{
-                    x = timeScale(new Date(dateKey + 'T12:00:00'));
+                    x = timeScale(new Date(dateStr + 'T12:00:00'));
                 }}
-                
-                // Posición Y: distribuir verticalmente los nodos del mismo día
-                const y = 30 + indexInDate * (nodeHeight + nodeVerticalPadding);
-                
-                return {{
-                    ...node,
-                    x0: x - nodeWidth / 2,
-                    x1: x + nodeWidth / 2,
-                    y0: y,
-                    y1: y + nodeHeight,
-                    originalIndex: idx
-                }};
+                // Mantener altura calculada por sankey, pero mover X
+                const originalWidth = node.x1 - node.x0;
+                node.x0 = x - originalWidth / 2;
+                node.x1 = x + originalWidth / 2;
             }});
             
-            // Crear mapa de nodos por ID para los links
-            const nodeById = new Map(processedNodes.map(n => [n.id, n]));
-            
             // ============================================================
-            // PASO 4: Procesar links
-            // ============================================================
-            const processedLinks = data.links.map(link => {{
-                const source = nodeById.get(link.source);
-                const target = nodeById.get(link.target);
-                if (!source || !target) return null;
-                return {{
-                    ...link,
-                    source: source,
-                    target: target,
-                    width: Math.max(2, Math.min(link.value / 10, 15))
-                }};
-            }}).filter(l => l !== null);
-            
-            // ============================================================
-            // PASO 5: Crear SVG y dibujar
+            // PASO 4: Crear SVG
             // ============================================================
             const svg = d3.select('#chart')
                 .append('svg')
                 .attr('width', width)
                 .attr('height', height);
             
-            // Grupo principal con transformación
             const g = svg.append('g')
                 .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
             
-            // Grupo para el contenido (zoom aplicará aquí)
             const contentGroup = g.append('g').attr('class', 'content');
             
             // ============================================================
-            // PASO 6: Dibujar eje temporal en X (arriba)
+            // PASO 5: Eje temporal arriba
             // ============================================================
             const timeAxisGroup = g.append('g')
                 .attr('class', 'time-axis')
-                .attr('transform', `translate(0, -20)`);
+                .attr('transform', `translate(0, -25)`);
             
-            // Grid lines verticales
             const timeGridGroup = contentGroup.append('g').attr('class', 'time-grid');
             
             function updateTimeline(transform) {{
                 const newTimeScale = transform.rescaleX(timeScale);
                 
-                // Determinar intervalo de ticks según zoom
                 const daysDiff = (paddedMaxDate - paddedMinDate) / (1000 * 60 * 60 * 24);
                 const effectiveRange = daysDiff / transform.k;
                 
@@ -439,17 +400,10 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     .tickFormat(tickFormat);
                 
                 timeAxisGroup.call(timeAxis);
+                timeAxisGroup.selectAll('text').attr('font-size', '10px').attr('fill', '#555');
+                timeAxisGroup.selectAll('line').attr('stroke', '#bbb');
+                timeAxisGroup.select('.domain').attr('stroke', '#bbb');
                 
-                // Estilizar
-                timeAxisGroup.selectAll('text')
-                    .attr('font-size', '11px')
-                    .attr('fill', '#666');
-                timeAxisGroup.selectAll('line')
-                    .attr('stroke', '#ccc');
-                timeAxisGroup.select('.domain')
-                    .attr('stroke', '#ccc');
-                
-                // Grid vertical
                 const tickValues = newTimeScale.ticks(tickInterval);
                 timeGridGroup.selectAll('line')
                     .data(tickValues)
@@ -458,152 +412,132 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                     .attr('x2', d => newTimeScale(d))
                     .attr('y1', 0)
                     .attr('y2', innerHeight)
-                    .attr('stroke', '#e0e0e0')
-                    .attr('stroke-dasharray', '3,3');
+                    .attr('stroke', '#e8e8e8')
+                    .attr('stroke-dasharray', '4,4');
             }}
             
-            // Función para dibujar links curvos horizontales
-            function horizontalLink(d) {{
+            // ============================================================
+            // PASO 6: Dibujar links con curvas Sankey horizontales
+            // ============================================================
+            function sankeyLinkHorizontal(d) {{
                 const x0 = d.source.x1;
                 const x1 = d.target.x0;
-                const y0 = (d.source.y0 + d.source.y1) / 2;
-                const y1 = (d.target.y0 + d.target.y1) / 2;
-                const curvature = 0.5;
+                const y0 = d.y0;
+                const y1 = d.y1;
                 const xi = d3.interpolateNumber(x0, x1);
-                const x2 = xi(curvature);
-                const x3 = xi(1 - curvature);
-                const halfWidth = Math.max(1, d.width / 2);
+                const x2 = xi(0.5);
+                const x3 = xi(0.5);
                 
-                return `M${{x0}},${{y0 - halfWidth}}
-                        C${{x2}},${{y0 - halfWidth}} ${{x3}},${{y1 - halfWidth}} ${{x1}},${{y1 - halfWidth}}
-                        L${{x1}},${{y1 + halfWidth}}
-                        C${{x3}},${{y1 + halfWidth}} ${{x2}},${{y0 + halfWidth}} ${{x0}},${{y0 + halfWidth}}
-                        Z`;
+                return `M${{x0}},${{y0}}
+                        C${{x2}},${{y0}} ${{x3}},${{y1}} ${{x1}},${{y1}}`;
             }}
             
-            // Dibujar links
             const linkGroup = contentGroup.append('g').attr('class', 'links');
+            
             linkGroup.selectAll('path')
-                .data(processedLinks)
+                .data(graph.links)
                 .join('path')
                 .attr('class', 'link')
-                .attr('d', horizontalLink)
-                .attr('fill', d => d.source.color || '#aaa')
-                .attr('stroke', 'none')
+                .attr('d', d3.sankeyLinkHorizontal())
+                .attr('stroke', d => d.source.color || '#aaa')
+                .attr('stroke-width', d => Math.max(1, d.width))
+                .attr('fill', 'none')
+                .attr('stroke-opacity', 0.4)
                 .on('mouseover', function(event, d) {{
-                    d3.select(this).attr('fill-opacity', 0.7);
+                    d3.select(this).attr('stroke-opacity', 0.7);
                     tooltip
                         .style('display', 'block')
-                        .html(`<strong>${{d.source.name}} → ${{d.target.name}}</strong><br/>Cantidad: ${{d.value.toLocaleString()}} kg`)
-                        .style('left', (event.pageX + 10) + 'px')
-                        .style('top', (event.pageY - 10) + 'px');
+                        .html(`<strong>${{d.source.name}}</strong><br/>↓<br/><strong>${{d.target.name}}</strong><br/><br/>Cantidad: ${{d.value.toLocaleString()}} kg`)
+                        .style('left', (event.pageX + 15) + 'px')
+                        .style('top', (event.pageY - 15) + 'px');
                 }})
                 .on('mousemove', function(event) {{
                     tooltip
-                        .style('left', (event.pageX + 10) + 'px')
-                        .style('top', (event.pageY - 10) + 'px');
+                        .style('left', (event.pageX + 15) + 'px')
+                        .style('top', (event.pageY - 15) + 'px');
                 }})
                 .on('mouseout', function() {{
-                    d3.select(this).attr('fill-opacity', 0.4);
+                    d3.select(this).attr('stroke-opacity', 0.4);
                     tooltip.style('display', 'none');
                 }});
             
-            // Dibujar nodos
+            // ============================================================
+            // PASO 7: Dibujar nodos
+            // ============================================================
             const nodeGroup = contentGroup.append('g').attr('class', 'nodes');
+            
             const node = nodeGroup.selectAll('g')
-                .data(processedNodes)
+                .data(graph.nodes)
                 .join('g')
                 .attr('class', 'node');
             
             node.append('rect')
                 .attr('x', d => d.x0)
                 .attr('y', d => d.y0)
-                .attr('width', d => d.x1 - d.x0)
-                .attr('height', d => d.y1 - d.y0)
+                .attr('width', d => Math.max(4, d.x1 - d.x0))
+                .attr('height', d => Math.max(4, d.y1 - d.y0))
                 .attr('fill', d => d.color || '#69b3a2')
-                .attr('stroke', d => d.highlight ? '#FF6B00' : '#333')
-                .attr('stroke-width', d => d.highlight ? 4 : 0.5)
+                .attr('stroke', d => d.highlight ? '#FF6B00' : '#444')
+                .attr('stroke-width', d => d.highlight ? 3 : 0.5)
                 .attr('rx', 2)
-                .attr('ry', 2)
-                .style('filter', d => d.highlight ? 'drop-shadow(0 0 10px #FFD700)' : 'none')
+                .style('filter', d => d.highlight ? 'drop-shadow(0 0 8px #FFD700)' : 'none')
                 .on('mouseover', function(event, d) {{
                     d3.select(this).attr('opacity', 0.8);
                     tooltip
                         .style('display', 'block')
                         .html(d.tooltip || d.name)
-                        .style('left', (event.pageX + 10) + 'px')
-                        .style('top', (event.pageY - 10) + 'px');
+                        .style('left', (event.pageX + 15) + 'px')
+                        .style('top', (event.pageY - 15) + 'px');
                 }})
                 .on('mousemove', function(event) {{
                     tooltip
-                        .style('left', (event.pageX + 10) + 'px')
-                        .style('top', (event.pageY - 10) + 'px');
+                        .style('left', (event.pageX + 15) + 'px')
+                        .style('top', (event.pageY - 15) + 'px');
                 }})
                 .on('mouseout', function() {{
                     d3.select(this).attr('opacity', 1);
                     tooltip.style('display', 'none');
                 }});
             
-            // Etiquetas de nodos (arriba de cada nodo)
+            // Etiquetas
             node.append('text')
-                .attr('x', d => (d.x0 + d.x1) / 2)
-                .attr('y', d => d.y0 - 5)
-                .attr('text-anchor', 'middle')
-                .attr('transform', d => {{
-                    const x = (d.x0 + d.x1) / 2;
-                    const y = d.y0 - 5;
-                    const shouldRotate = d.node_type === 'PALLET_IN' || 
-                                        d.node_type === 'PALLET_OUT' || 
-                                        d.node_type === 'PROCESS';
-                    if (shouldRotate) {{
-                        return `rotate(-35, ${{x}}, ${{y}})`;
-                    }}
-                    return '';
-                }})
+                .attr('x', d => d.x0 < innerWidth / 2 ? d.x1 + 6 : d.x0 - 6)
+                .attr('y', d => (d.y0 + d.y1) / 2)
+                .attr('dy', '0.35em')
+                .attr('text-anchor', d => d.x0 < innerWidth / 2 ? 'start' : 'end')
                 .attr('font-size', '9px')
                 .attr('fill', '#333')
-                .attr('font-weight', '500')
+                .attr('font-weight', d => d.highlight ? 'bold' : '500')
                 .text(d => {{
                     const name = d.name || '';
-                    return name.length > 20 ? name.substring(0, 18) + '...' : name;
+                    return name.length > 25 ? name.substring(0, 23) + '...' : name;
                 }});
             
             // ============================================================
-            // PASO 7: Configurar zoom
+            // PASO 8: Zoom
             // ============================================================
             const zoom = d3.zoom()
-                .scaleExtent([0.3, 5])
+                .scaleExtent([0.3, 4])
                 .on('zoom', (event) => {{
                     contentGroup.attr('transform', event.transform);
                     updateTimeline(event.transform);
                 }});
             
             svg.call(zoom);
-            
-            // Inicializar timeline
             updateTimeline(d3.zoomIdentity);
             
-            // Botones de zoom
-            d3.select('#zoom-in').on('click', () => {{
-                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
-            }});
-            d3.select('#zoom-out').on('click', () => {{
-                svg.transition().duration(300).call(zoom.scaleBy, 0.67);
-            }});
-            d3.select('#zoom-reset').on('click', () => {{
-                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
-            }});
+            d3.select('#zoom-in').on('click', () => svg.transition().duration(300).call(zoom.scaleBy, 1.4));
+            d3.select('#zoom-out').on('click', () => svg.transition().duration(300).call(zoom.scaleBy, 0.7));
+            d3.select('#zoom-reset').on('click', () => svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity));
             
-            // ============================================================
-            // PASO 8: Título del eje
-            // ============================================================
+            // Título
             g.append('text')
                 .attr('x', innerWidth / 2)
-                .attr('y', -45)
+                .attr('y', -50)
                 .attr('text-anchor', 'middle')
                 .attr('font-size', '12px')
                 .attr('font-weight', 'bold')
-                .attr('fill', '#555')
+                .attr('fill', '#444')
                 .text('📅 Línea de Tiempo');
         </script>
     </body>
