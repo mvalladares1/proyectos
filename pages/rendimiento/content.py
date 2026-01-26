@@ -56,6 +56,14 @@ except ImportError:
     NIVO_AVAILABLE = False
     render_nivo_sankey = None
 
+# Importar componente Flow Timeline
+try:
+    from components.flow_timeline import render_flow_timeline
+    FLOW_TIMELINE_AVAILABLE = True
+except ImportError:
+    FLOW_TIMELINE_AVAILABLE = False
+    render_flow_timeline = None
+
 
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
@@ -326,6 +334,10 @@ def _render_sankey(username: str, password: str):
     # Agregar Nivo Sankey si está disponible
     if NIVO_AVAILABLE:
         diagram_types.append("📊 Sankey (D3)")
+    
+    # Agregar Flow Timeline si está disponible
+    if FLOW_TIMELINE_AVAILABLE:
+        diagram_types.append("📅 Flow Timeline")
     
     # Agregar vis.js si está disponible
     if VISJS_AVAILABLE:
@@ -649,6 +661,12 @@ def _render_sankey(username: str, password: str):
                     data = transform_to_sankey(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"  # Guardar modo de búsqueda
+                
+                elif diagram_type == "📅 Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "flow_timeline"
                     
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     from backend.services.traceability import transform_to_visjs
@@ -692,6 +710,12 @@ def _render_sankey(username: str, password: str):
                     data = transform_to_sankey(raw_data)
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
+                
+                elif diagram_type == "📅 Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "flow_timeline"
                     
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     from backend.services.traceability import transform_to_visjs
@@ -735,7 +759,19 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "� Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                    # Obtener datos crudos y transformar a vis.js (misma estructura)
+                    raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
+                    if not raw_data or not raw_data.get('pallets'):
+                        st.warning("No hay datos suficientes para generar el diagrama en el período seleccionado.")
+                        st.session_state.diagram_data = None
+                        return
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "flow_timeline"
+                
+                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
                     # Obtener datos crudos y transformar a vis.js
                     raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
                     if not raw_data or not raw_data.get('pallets'):
@@ -789,7 +825,19 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "� Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                    raw_data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
+                    if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
+                        error_msg = raw_data.get('error', f"No se encontraron datos")
+                        st.warning(error_msg)
+                        st.session_state.diagram_data = None
+                        return
+                    from backend.services.traceability import transform_to_visjs
+                    data = transform_to_visjs(raw_data)
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "flow_timeline"
+                
+                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
                     raw_data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
                     if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
                         error_msg = raw_data.get('error', f"No se encontraron datos")
@@ -845,7 +893,16 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "� Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
+                    if not data or not data.get('nodes'):
+                        st.warning(f"No se encontraron datos para: {identifier}")
+                        st.session_state.diagram_data = None
+                        return
+                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data_type = "flow_timeline"
+                
+                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
@@ -897,6 +954,8 @@ def _render_sankey(username: str, password: str):
             _render_sankey_stats(data)
         elif data_type == "reactflow" and TIMELINE_FLOW_AVAILABLE:
             _render_reactflow_diagram(data)
+        elif data_type == "flow_timeline" and FLOW_TIMELINE_AVAILABLE:
+            _render_flow_timeline_diagram(data)
         elif data_type == "visjs" and VISJS_AVAILABLE:
             _render_visjs_diagram(data)
         elif data_type == "table":
@@ -992,6 +1051,15 @@ def _render_nivo_sankey(sankey_data: dict):
         height=dynamic_height, 
         highlight_package=highlight_package
     )
+
+
+def _render_flow_timeline_diagram(visjs_data: dict):
+    """Renderiza el diagrama Flow Timeline con D3."""
+    if not FLOW_TIMELINE_AVAILABLE:
+        st.error("❌ Componente Flow Timeline no disponible")
+        return
+    
+    render_flow_timeline(visjs_data, height=800)
 
 
 def _render_visjs_diagram(visjs_data: dict):
