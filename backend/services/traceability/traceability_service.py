@@ -297,19 +297,51 @@ class TraceabilityService:
                     if ref and ref not in processed_references:
                         new_references.add(ref)
                 
-                # Para cada proceso, obtener TODOS los movimientos
+                # Para cada proceso, obtener movimientos según include_siblings
                 for ref in new_references:
-                    ref_moves = self.odoo.search_read(
-                        "stock.move.line",
-                        [
-                            ("reference", "=", ref),
-                            ("qty_done", ">", 0),
-                            ("state", "=", "done"),
-                        ],
-                        fields,
-                        limit=500,
-                        order="date asc"
-                    )
+                    if include_siblings:
+                        # Modo "Todos": Obtener TODOS los movimientos del proceso
+                        ref_moves = self.odoo.search_read(
+                            "stock.move.line",
+                            [
+                                ("reference", "=", ref),
+                                ("qty_done", ">", 0),
+                                ("state", "=", "done"),
+                            ],
+                            fields,
+                            limit=500,
+                            order="date asc"
+                        )
+                    else:
+                        # Modo "Conexión directa": Solo los movimientos INPUT del proceso que consumen los paquetes que estamos trazando
+                        ref_moves = self.odoo.search_read(
+                            "stock.move.line",
+                            [
+                                ("reference", "=", ref),
+                                ("qty_done", ">", 0),
+                                ("state", "=", "done"),
+                                ("result_package_id", "in", current_packages),  # Solo los que producen nuestros paquetes
+                            ],
+                            fields,
+                            limit=500,
+                            order="date asc"
+                        )
+                        
+                        # Luego buscar sus INPUTs
+                        if ref_moves:
+                            input_moves = self.odoo.search_read(
+                                "stock.move.line",
+                                [
+                                    ("reference", "=", ref),
+                                    ("qty_done", ">", 0),
+                                    ("state", "=", "done"),
+                                    ("package_id", "!=", False),  # Solo los que consumen paquetes
+                                ],
+                                fields,
+                                limit=500,
+                                order="date asc"
+                            )
+                            ref_moves.extend(input_moves)
                     
                     for ml in ref_moves:
                         if ml["id"] not in processed_move_ids:
