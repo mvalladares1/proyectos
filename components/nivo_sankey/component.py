@@ -293,52 +293,78 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             const sankey = d3.sankey()
                 .nodeId(d => d.id)
                 .nodeWidth(15)
-                .nodePadding(12)
+                .nodePadding(8)
                 .nodeAlign(d3.sankeyLeft)
-                .nodeSort(null)  // Desactivar ordenamiento interno
+                .nodeSort(null)
                 .extent([[0, 0], [innerHeight, innerWidth]]);
             
-            // Ejecutar Sankey
+            // Ejecutar Sankey para obtener layout inicial y grosor de links
             const graph = sankey({{
                 nodes: sortedNodes,
                 links: sortedLinks
             }});
             
             // ============================================================
-            // FORZAR ORDENAMIENTO POR FECHA (antes de rotar)
+            // FORZAR POSICIÓN HORIZONTAL SEGÚN FECHA (antes de rotar)
             // ============================================================
-            // Agrupar nodos por columna (depth = x0 antes de rotar)
-            const columns = new Map();
-            graph.nodes.forEach(node => {{
-                const colKey = Math.round(node.x0);
-                if (!columns.has(colKey)) columns.set(colKey, []);
-                columns.get(colKey).push(node);
-            }});
+            // Extraer fechas válidas para crear escala temporal
+            const validDates = graph.nodes
+                .map(n => n.date)
+                .filter(d => d && d !== '9999-99-99');
             
-            // Para cada columna, reordenar posiciones Y según fecha
-            columns.forEach((nodesInCol) => {{
-                if (nodesInCol.length <= 1) return;
+            if (validDates.length > 0) {{
+                const minDate = d3.min(validDates);
+                const maxDate = d3.max(validDates);
                 
-                // Guardar posiciones Y originales ordenadas
-                const yPositions = nodesInCol.map(n => ({{ y0: n.y0, y1: n.y1 }}))
-                    .sort((a, b) => a.y0 - b.y0);
+                // Escala temporal para posición X (que será Y después de rotar)
+                const dateScale = d3.scaleTime()
+                    .domain([new Date(minDate), new Date(maxDate)])
+                    .range([50, innerWidth - 50]);
                 
-                // Ordenar nodos por fecha
-                nodesInCol.sort((a, b) => {{
-                    const dateA = a.date || '9999-99-99';
-                    const dateB = b.date || '9999-99-99';
-                    return dateA.localeCompare(dateB);
+                // Agrupar nodos por fecha para distribuirlos verticalmente
+                const nodesByDate = new Map();
+                graph.nodes.forEach(node => {{
+                    const dateKey = node.date || '9999-99-99';
+                    if (!nodesByDate.has(dateKey)) nodesByDate.set(dateKey, []);
+                    nodesByDate.get(dateKey).push(node);
                 }});
                 
-                // Asignar posiciones Y según nuevo orden
-                nodesInCol.forEach((node, idx) => {{
-                    const nodeHeight = node.y1 - node.y0;
-                    node.y0 = yPositions[idx].y0;
-                    node.y1 = node.y0 + nodeHeight;
+                // Asignar posición X según fecha y distribuir verticalmente
+                nodesByDate.forEach((nodes, dateKey) => {{
+                    // Calcular X basado en fecha
+                    let targetX;
+                    if (dateKey === '9999-99-99') {{
+                        targetX = innerWidth - 30;
+                    }} else {{
+                        targetX = dateScale(new Date(dateKey));
+                    }}
+                    
+                    // Ordenar nodos de esta fecha por tipo para mejor distribución vertical
+                    const typeOrder = {{'SUPPLIER': 0, 'PALLET_IN': 1, 'PROCESS': 2, 'PALLET_OUT': 3, 'CUSTOMER': 4}};
+                    nodes.sort((a, b) => (typeOrder[a.node_type] || 99) - (typeOrder[b.node_type] || 99));
+                    
+                    // Distribuir verticalmente con espacio uniforme
+                    const totalHeight = nodes.reduce((sum, n) => sum + (n.y1 - n.y0), 0);
+                    const spacing = Math.min(15, (innerHeight - totalHeight) / (nodes.length + 1));
+                    let currentY = spacing;
+                    
+                    nodes.forEach(node => {{
+                        const nodeHeight = node.y1 - node.y0;
+                        const nodeWidth = node.x1 - node.x0;
+                        
+                        // Asignar nueva posición X (basada en fecha)
+                        node.x0 = targetX - nodeWidth / 2;
+                        node.x1 = targetX + nodeWidth / 2;
+                        
+                        // Asignar nueva posición Y (distribuida verticalmente)
+                        node.y0 = currentY;
+                        node.y1 = currentY + nodeHeight;
+                        currentY += nodeHeight + spacing;
+                    }});
                 }});
-            }});
+            }}
             
-            // Rotar coordenadas para orientación vertical
+            // Rotar coordenadas para orientación vertical (de arriba a abajo)
             // x -> y, y -> x
             graph.nodes.forEach(node => {{
                 const x0 = node.x0, x1 = node.x1, y0 = node.y0, y1 = node.y1;
