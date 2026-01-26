@@ -46,6 +46,9 @@ def _prepare_flow_data(data: Dict) -> Dict:
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
     
+    # Crear mapa de nodos por ID
+    nodes_by_id = {n.get("id", ""): n for n in nodes}
+    
     # Extraer fechas válidas y rango
     dates_set = set()
     for n in nodes:
@@ -63,6 +66,19 @@ def _prepare_flow_data(data: Dict) -> Dict:
     dates_sorted = sorted(dates_set)
     min_date = dates_sorted[0]
     max_date = dates_sorted[-1]
+    
+    # Construir grafo de conexiones para heredar fechas
+    node_connections = {}  # node_id -> [connected_node_ids]
+    for e in edges:
+        src = e.get("from", "")
+        tgt = e.get("to", "")
+        if src and tgt:
+            if src not in node_connections:
+                node_connections[src] = []
+            if tgt not in node_connections:
+                node_connections[tgt] = []
+            node_connections[src].append(tgt)
+            node_connections[tgt].append(src)
     
     # Procesar nodos
     processed_nodes = []
@@ -88,6 +104,19 @@ def _prepare_flow_data(data: Dict) -> Dict:
                 node_type = "PROCESS"
         
         date_str = n.get("date", "")[:10] if n.get("date") else ""
+        
+        # Si no tiene fecha, heredar de nodos conectados
+        if not date_str and node_id in node_connections:
+            for connected_id in node_connections[node_id]:
+                connected_node = nodes_by_id.get(connected_id, {})
+                connected_date = connected_node.get("date", "")[:10] if connected_node.get("date") else ""
+                if connected_date:
+                    date_str = connected_date
+                    break
+        
+        # Si aún no tiene fecha, usar la fecha mínima del rango
+        if not date_str:
+            date_str = min_date
         
         processed_nodes.append({
             "id": node_id,

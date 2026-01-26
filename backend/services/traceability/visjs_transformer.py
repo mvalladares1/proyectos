@@ -78,18 +78,32 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
     
     # Mapear recepciones a proveedores para conexiones directas
     reception_to_supplier = {}
+    reception_dates = {}  # ref -> fecha
+    
     for ref, pinfo in processes.items():
         if pinfo.get("is_reception"):
             supplier_id = pinfo.get("supplier_id")
             if supplier_id:
                 reception_to_supplier[ref] = supplier_id
-                # Usar scheduled_date para la fecha de recepción
-                date = pinfo.get("scheduled_date", "")[:10] if pinfo.get("scheduled_date") else ""
-                if not date:
-                    date = pinfo.get("date", "")[:10] if pinfo.get("date") else ""
-                if date:
+            
+            # Buscar cualquier fecha disponible: scheduled_date > date_done > date
+            date = ""
+            if pinfo.get("scheduled_date"):
+                date = pinfo.get("scheduled_date", "")[:10]
+            elif pinfo.get("date_done"):
+                date = pinfo.get("date_done", "")[:10]
+            elif pinfo.get("date"):
+                date = pinfo.get("date", "")[:10]
+            
+            if date:
+                reception_dates[ref] = date
+                if supplier_id:
                     if supplier_id not in supplier_first_dates or date < supplier_first_dates[supplier_id]:
                         supplier_first_dates[supplier_id] = date
+    
+    # Debug: imprimir lo que encontramos
+    print(f"[VisJS] Suppliers: {len(suppliers)}, Recepciones encontradas: {len(reception_dates)}")
+    print(f"[VisJS] supplier_first_dates: {supplier_first_dates}")
     
     # Agregar nodos de proveedores con información detallada
     for sid, sdata in suppliers.items():
@@ -152,8 +166,8 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 origen = pinfo.get("origen", "")
                 transportista = pinfo.get("transportista", "")
                 
-                # Usar scheduled_date como fecha principal
-                node_date = scheduled_date or date_done or (pinfo.get("date", "")[:10] if pinfo.get("date") else "")
+                # Usar la fecha que ya calculamos, o cualquier disponible
+                node_date = reception_dates.get(ref, "") or scheduled_date or date_done or (pinfo.get("date", "")[:10] if pinfo.get("date") else "")
                 
                 # Construir título detallado
                 title = f"Recepción: {ref}"
@@ -393,15 +407,24 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
         })
     
     # Estadísticas
+    receptions_count = len([p for p in processes.values() if p.get("is_reception")])
     stats = {
         "suppliers": len(suppliers),
-        "receptions": len([p for p in processes.values() if p.get("is_reception")]),
+        "receptions": receptions_count,
         "pallets_in": len([p for p in pallets.values() if p.get("direction") == "IN"]),
         "pallets_out": len([p for p in pallets.values() if p.get("direction") == "OUT"]),
         "processes": len([p for p in processes.values() if not p.get("is_reception")]),
         "customers": len(customers),
         "total_edges": len(edges),
     }
+    
+    # Debug: contar nodos por tipo
+    nodes_by_type = {}
+    for n in nodes:
+        ntype = n.get("nodeType", "UNKNOWN")
+        nodes_by_type[ntype] = nodes_by_type.get(ntype, 0) + 1
+    print(f"[VisJS] Nodos creados por tipo: {nodes_by_type}")
+    print(f"[VisJS] Total edges: {len(edges)}")
     
     return {
         "nodes": nodes,
