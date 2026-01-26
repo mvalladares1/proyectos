@@ -505,16 +505,16 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             
             // Crear eje temporal debajo del diagrama
             // Extraer fechas válidas de los nodos
-            const validDates = graph.nodes
+            const timelineDates = graph.nodes
                 .map(d => d.date)
                 .filter(date => date && date !== '9999-99-99')
                 .map(date => new Date(date));
             
             let timeScale, minDate, maxDate, timeAxisGroup, timeGridGroup, timeLabel;
             
-            if (validDates.length > 0) {{
-                minDate = d3.min(validDates);
-                maxDate = d3.max(validDates);
+            if (timelineDates.length > 0) {{
+                minDate = d3.min(timelineDates);
+                maxDate = d3.max(timelineDates);
                 
                 // Escala temporal
                 timeScale = d3.scaleTime()
