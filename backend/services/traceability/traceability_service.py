@@ -892,6 +892,11 @@ class TraceabilityService:
         # Agregar los procesos a la cola para seguir hacia atrás
         queue.extend(first_level_processes)
         
+        # Debug: mostrar qué hay en graph_backward para los procesos del primer nivel
+        for proc in first_level_processes:
+            backward = graph_backward.get(proc, [])
+            print(f"[TraceabilityService] {proc} tiene inputs: {backward[:5]}{'...' if len(backward) > 5 else ''}")
+        
         # BFS hacia atrás (inputs)
         visited = set(initial_package_ids)
         while queue:
