@@ -860,7 +860,8 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data_type = "table"
                 
                 # Mensaje dinámico
-                metadata = data.get('search_metadata', {})
+                stored_data = st.session_state.diagram_data or {}
+                metadata = stored_data.get('search_metadata', {})
                 if sale_id and (fecha_inicio_str or fecha_fin_str):
                     st.success(f"✅ Diagrama generado para venta {sale_id} (filtrado {fecha_inicio_str} - {fecha_fin_str})")
                 elif sale_id:
