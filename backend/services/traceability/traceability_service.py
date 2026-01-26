@@ -892,8 +892,13 @@ class TraceabilityService:
                 ref = node.replace("RECV:", "")
                 proc_info = processes.get(ref, {})
                 supplier_id = proc_info.get("supplier_id")
+                print(f"[TraceabilityService] Recepción {ref}: supplier_id={supplier_id}, picking_id={proc_info.get('picking_id')}")
                 if supplier_id:
                     connected_nodes.add(f"SUPPLIER:{supplier_id}")
+                    print(f"[TraceabilityService] Agregando SUPPLIER:{supplier_id}")
+        
+        # Debug: mostrar proveedores disponibles
+        print(f"[TraceabilityService] Proveedores en result: {list(suppliers.keys())}")
         
         for node in list(connected_nodes):
             if node.startswith("PALLET:"):
