@@ -18,17 +18,19 @@ from datetime import datetime
 # Niveles Y para cada tipo de nodo
 NODE_LEVELS = {
     "SUPPLIER": 0,
-    "PALLET_IN": 1,
-    "PROCESS": 2,
-    "PALLET_OUT": 3,
-    "CUSTOMER": 4,
+    "RECEPTION": 1,
+    "PALLET_IN": 2,
+    "PROCESS": 3,
+    "PALLET_OUT": 4,
+    "CUSTOMER": 5,
 }
 
-LEVEL_NAMES = ["Proveedores", "Pallets IN", "Procesos", "Pallets OUT", "Clientes"]
+LEVEL_NAMES = ["Proveedores", "Recepciones", "Pallets IN", "Procesos", "Pallets OUT", "Clientes"]
 
 # Colores por tipo
 NODE_COLORS = {
     "SUPPLIER": "#9b59b6",
+    "RECEPTION": "#1abc9c",
     "PALLET_IN": "#f39c12", 
     "PROCESS": "#e74c3c",
     "PALLET_OUT": "#2ecc71",
@@ -72,6 +74,8 @@ def _prepare_flow_data(data: Dict) -> Dict:
         if not node_type:
             if node_id.startswith("SUPP:"):
                 node_type = "SUPPLIER"
+            elif node_id.startswith("RECV:"):
+                node_type = "RECEPTION"
             elif node_id.startswith("PKG:"):
                 color = n.get("color", {})
                 bg = color.get("background", "") if isinstance(color, dict) else ""
@@ -134,9 +138,10 @@ def render_flow_timeline(
     
     # Mostrar estadísticas
     st.markdown("### 📊 Estadísticas")
-    cols = st.columns(6)
+    cols = st.columns(7)
     stats_display = [
         ("🏭 Proveedores", stats.get("suppliers", 0)),
+        ("📥 Recepciones", stats.get("receptions", 0)),
         ("📦 Pallets In", stats.get("pallets_in", 0)),
         ("🔄 Procesos", stats.get("processes", 0)),
         ("📤 Pallets Out", stats.get("pallets_out", 0)),
@@ -347,8 +352,8 @@ def render_flow_timeline(
             const datesData = {dates_json};
             const dateRange = {date_range_json};
             
-            const levelNames = ['Proveedores', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
-            const levelCount = 5;
+            const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
+            const levelCount = 6;
             
             // Dimensiones
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
