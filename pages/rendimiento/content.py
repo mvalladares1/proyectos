@@ -759,7 +759,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "� Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                elif diagram_type == "📅 Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
                     # Obtener datos crudos y transformar a vis.js (misma estructura)
                     raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
                     if not raw_data or not raw_data.get('pallets'):
@@ -771,7 +771,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "flow_timeline"
                 
-                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     # Obtener datos crudos y transformar a vis.js
                     raw_data = get_traceability_raw(username, password, fecha_inicio_str, fecha_fin_str)
                     if not raw_data or not raw_data.get('pallets'):
@@ -825,7 +825,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "� Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                elif diagram_type == "📅 Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
                     raw_data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
                     if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
                         error_msg = raw_data.get('error', f"No se encontraron datos")
@@ -837,7 +837,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "flow_timeline"
                 
-                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     raw_data = get_traceability_by_sale(username, password, sale_id, fecha_inicio_str, fecha_fin_str, include_siblings, "raw")
                     if not raw_data or raw_data.get('error') or not raw_data.get('pallets'):
                         error_msg = raw_data.get('error', f"No se encontraron datos")
@@ -894,7 +894,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
-                elif diagram_type == "� Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
+                elif diagram_type == "📅 Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
@@ -903,7 +903,7 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "flow_timeline"
                 
-                elif diagram_type == "�🕸️ vis.js Network" and VISJS_AVAILABLE:
+                elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
                     data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
                     if not data or not data.get('nodes'):
                         st.warning(f"No se encontraron datos para: {identifier}")
