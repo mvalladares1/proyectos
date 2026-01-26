@@ -437,8 +437,8 @@ class TraceabilityService:
         result = self._process_move_lines(all_move_lines, virtual_ids)
         result["move_lines"] = all_move_lines
         
-        # Resolver proveedores y clientes
-        self._resolve_partners(result)
+        # Resolver proveedores y clientes (pasar initial_package_ids para filtrar ventas)
+        self._resolve_partners(result, initial_package_ids)
         
         # Enriquecer con fechas
         self._enrich_with_pallet_dates(result)
@@ -1218,8 +1218,13 @@ class TraceabilityService:
         if direction == "OUT":
             pallets[pid]["direction"] = "OUT"
     
-    def _resolve_partners(self, result: Dict):
-        """Resuelve proveedores y clientes desde los pickings."""
+    def _resolve_partners(self, result: Dict, initial_package_ids: List[int] = None):
+        """Resuelve proveedores y clientes desde los pickings.
+        
+        Args:
+            result: Diccionario con datos procesados
+            initial_package_ids: IDs de paquetes iniciales para filtrar solo ventas de esos pallets
+        """
         reception_picking_ids = result.get("reception_picking_ids", [])
         sale_picking_ids = result.get("sale_picking_ids", [])
         sale_pallet_pickings = result.get("sale_pallet_pickings", {})
@@ -1283,11 +1288,19 @@ class TraceabilityService:
                         pinfo["supplier_id"] = sid
             
             # Clientes - Agrupar por origin (código de venta) primero
+            # FILTRAR: Solo procesar pallets que están en initial_package_ids si se proporcionó
             sales_by_origin = {}  # origin -> {info, pallets[]}
             
-            print(f"[TraceabilityService] Procesando {len(sale_pallet_pickings)} pallets de venta")
+            # Filtrar sale_pallet_pickings si tenemos initial_package_ids
+            filtered_sale_pickings = sale_pallet_pickings
+            if initial_package_ids:
+                initial_set = set(initial_package_ids)
+                filtered_sale_pickings = {pkg_id: picking_id for pkg_id, picking_id in sale_pallet_pickings.items() if pkg_id in initial_set}
+                print(f"[TraceabilityService] Filtrando ventas: {len(sale_pallet_pickings)} pallets totales → {len(filtered_sale_pickings)} pallets iniciales")
             
-            for pkg_id, picking_id in sale_pallet_pickings.items():
+            print(f"[TraceabilityService] Procesando {len(filtered_sale_pickings)} pallets de venta")
+            
+            for pkg_id, picking_id in filtered_sale_pickings.items():
                 picking = pickings_by_id.get(picking_id, {})
                 origin = picking.get("origin", "")
                 
