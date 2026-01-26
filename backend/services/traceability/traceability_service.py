@@ -299,49 +299,17 @@ class TraceabilityService:
                 
                 # Para cada proceso, obtener movimientos según include_siblings
                 for ref in new_references:
-                    if include_siblings:
-                        # Modo "Todos": Obtener TODOS los movimientos del proceso
-                        ref_moves = self.odoo.search_read(
-                            "stock.move.line",
-                            [
-                                ("reference", "=", ref),
-                                ("qty_done", ">", 0),
-                                ("state", "=", "done"),
-                            ],
-                            fields,
-                            limit=500,
-                            order="date asc"
-                        )
-                    else:
-                        # Modo "Conexión directa": Solo los movimientos INPUT del proceso que consumen los paquetes que estamos trazando
-                        ref_moves = self.odoo.search_read(
-                            "stock.move.line",
-                            [
-                                ("reference", "=", ref),
-                                ("qty_done", ">", 0),
-                                ("state", "=", "done"),
-                                ("result_package_id", "in", current_packages),  # Solo los que producen nuestros paquetes
-                            ],
-                            fields,
-                            limit=500,
-                            order="date asc"
-                        )
-                        
-                        # Luego buscar sus INPUTs
-                        if ref_moves:
-                            input_moves = self.odoo.search_read(
-                                "stock.move.line",
-                                [
-                                    ("reference", "=", ref),
-                                    ("qty_done", ">", 0),
-                                    ("state", "=", "done"),
-                                    ("package_id", "!=", False),  # Solo los que consumen paquetes
-                                ],
-                                fields,
-                                limit=500,
-                                order="date asc"
-                            )
-                            ref_moves.extend(input_moves)
+                    ref_moves = self.odoo.search_read(
+                        "stock.move.line",
+                        [
+                            ("reference", "=", ref),
+                            ("qty_done", ">", 0),
+                            ("state", "=", "done"),
+                        ],
+                        fields,
+                        limit=500,
+                        order="date asc"
+                    )
                     
                     for ml in ref_moves:
                         if ml["id"] not in processed_move_ids:
@@ -349,14 +317,30 @@ class TraceabilityService:
                             processed_move_ids.add(ml["id"])
                         
                         # Los INPUTS que NO vienen de recepción se siguen hacia atrás
+                        # PERO: si include_siblings=False, solo seguir inputs que realmente se necesitan
                         pkg_rel = ml.get("package_id")
+                        result_rel = ml.get("result_package_id")
                         loc_id = ml.get("location_id")
                         loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
                         
-                        if pkg_rel:
-                            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                            if pkg_id and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
-                                packages_to_trace.add(pkg_id)
+                        # Si es modo "conexión directa", solo seguir packages que son outputs del proceso
+                        # (los que encontramos en out_moves), no todos los inputs del proceso
+                        if not include_siblings:
+                            # Solo agregar a la cola si este movimiento produce uno de current_packages
+                            if result_rel:
+                                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                                if result_id in current_packages:
+                                    # Este movimiento produce uno de nuestros paquetes, seguir su input
+                                    if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                                        pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                                        if pkg_id:
+                                            packages_to_trace.add(pkg_id)
+                        else:
+                            # Modo "Todos": seguir todos los inputs
+                            if pkg_rel:
+                                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                                if pkg_id and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                                    packages_to_trace.add(pkg_id)
                     
                     processed_references.add(ref)
                 
