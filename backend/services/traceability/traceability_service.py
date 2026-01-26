@@ -316,40 +316,45 @@ class TraceabilityService:
                         order="date asc"
                     )
                     
+                    # Primero, verificar si este proceso produce alguno de nuestros paquetes
+                    process_produces_our_packages = False
+                    process_inputs = set()  # Inputs del proceso (package_id que entran)
+                    
                     for ml in ref_moves:
                         if ml["id"] not in processed_move_ids:
                             all_move_lines.append(ml)
                             processed_move_ids.add(ml["id"])
                         
-                        # Los INPUTS que NO vienen de recepción se siguen hacia atrás
-                        # PERO: si include_siblings=False, solo seguir inputs que realmente se necesitan
                         pkg_rel = ml.get("package_id")
                         result_rel = ml.get("result_package_id")
                         loc_id = ml.get("location_id")
                         loc_id = loc_id[0] if isinstance(loc_id, (list, tuple)) else loc_id
+                        loc_dest_id = ml.get("location_dest_id")
+                        loc_dest_id = loc_dest_id[0] if isinstance(loc_dest_id, (list, tuple)) else loc_dest_id
                         
-                        # Si es modo "conexión directa", solo seguir packages que son outputs del proceso
-                        # (los que están en nuestra cadena de trazabilidad)
-                        if not include_siblings:
-                            # Solo agregar a la cola si este movimiento produce uno de nuestros paquetes
-                            if result_rel:
-                                result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                                # Verificar si el output está en nuestra cadena (current o ya trazados)
-                                if result_id in current_packages or result_id in traced_packages:
-                                    # Este movimiento produce uno de nuestros paquetes, seguir su input
-                                    if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
-                                        pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                                        if pkg_id and pkg_id not in traced_packages:
-                                            packages_to_trace.add(pkg_id)
-                                            print(f"[TraceabilityService] Agregando paquete {pkg_id} (input de {ref}, output {result_id})")
-                                    else:
-                                        print(f"[TraceabilityService] No seguir pkg {pkg_rel} - loc_id={loc_id}, VENDORS={self.PARTNER_VENDORS_LOCATION_ID}")
-                        else:
-                            # Modo "Todos": seguir todos los inputs
-                            if pkg_rel:
-                                pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                                if pkg_id and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                        # Verificar si este movimiento produce uno de nuestros paquetes
+                        if result_rel:
+                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                            if result_id in current_packages or result_id in traced_packages:
+                                process_produces_our_packages = True
+                        
+                        # Recolectar inputs del proceso (paquetes que entran, no desde proveedores)
+                        if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                            pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                            if pkg_id:
+                                process_inputs.add(pkg_id)
+                    
+                    # Si el proceso produce alguno de nuestros paquetes, seguir TODOS sus inputs
+                    if not include_siblings:
+                        if process_produces_our_packages and process_inputs:
+                            for pkg_id in process_inputs:
+                                if pkg_id not in traced_packages and pkg_id not in current_packages:
                                     packages_to_trace.add(pkg_id)
+                            print(f"[TraceabilityService] Proceso {ref} produce nuestros paquetes. Siguiendo {len(process_inputs)} inputs.")
+                    else:
+                        # Modo "Todos": seguir todos los inputs
+                        for pkg_id in process_inputs:
+                            packages_to_trace.add(pkg_id)
                     
                     processed_references.add(ref)
                 
@@ -896,10 +901,17 @@ class TraceabilityService:
         for proc in first_level_processes:
             backward = graph_backward.get(proc, [])
             print(f"[TraceabilityService] {proc} tiene inputs: {backward[:5]}{'...' if len(backward) > 5 else ''}")
+            # Ver si esos inputs tienen algo hacia atrás
+            for inp in backward[:3]:
+                inp_back = graph_backward.get(inp, [])
+                if inp_back:
+                    print(f"[TraceabilityService]   {inp} <- {inp_back}")
         
         # BFS hacia atrás (inputs)
         visited = set(initial_package_ids)
+        bfs_iterations = 0
         while queue:
+            bfs_iterations += 1
             current = queue.pop(0)
             if current in visited:
                 continue
@@ -910,6 +922,10 @@ class TraceabilityService:
                 if source not in connected_nodes:
                     connected_nodes.add(source)
                     queue.append(source)
+                    if source.startswith("RECV:"):
+                        print(f"[TraceabilityService] BFS encontró recepción: {source}")
+        
+        print(f"[TraceabilityService] BFS completado en {bfs_iterations} iteraciones, visitados: {len(visited)}")
         
         # Agregar proveedores y clientes conectados
         for node in list(connected_nodes):
