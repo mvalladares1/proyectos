@@ -831,6 +831,16 @@ class TraceabilityService:
         print(f"[TraceabilityService] Filtrando conexión directa desde {len(initial_package_ids)} pallets iniciales")
         print(f"[TraceabilityService] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
         
+        # Debug: mostrar todos los procesos y si son recepciones
+        for ref, pinfo in processes.items():
+            is_recv = pinfo.get("is_reception", False)
+            supplier_id = pinfo.get("supplier_id")
+            print(f"[TraceabilityService] Proceso: {ref}, is_reception={is_recv}, supplier_id={supplier_id}")
+        
+        # Debug: mostrar links de recepciones
+        recv_links = [l for l in links if l[0] == "RECV"]
+        print(f"[TraceabilityService] Links de RECV: {recv_links[:5]}...")  # Mostrar primeros 5
+        
         # Construir grafo bidireccional desde los links
         # node_id -> tipo:id (ej: "PALLET:123", "PROCESS:ref", "RECV:ref")
         graph_forward = {}  # source -> [targets]
@@ -863,8 +873,11 @@ class TraceabilityService:
         first_level_processes = set()
         for pkg_id in initial_package_ids:
             node = f"PALLET:{pkg_id}"
+            backward_sources = graph_backward.get(node, [])
+            if backward_sources:
+                print(f"[TraceabilityService] PALLET:{pkg_id} <- {backward_sources}")
             # Buscar procesos donde este pallet es output
-            for source in graph_backward.get(node, []):
+            for source in backward_sources:
                 if source.startswith("PROCESS:") or source.startswith("RECV:"):
                     first_level_processes.add(source)
                     connected_nodes.add(source)
