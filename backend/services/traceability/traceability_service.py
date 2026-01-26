@@ -1220,12 +1220,13 @@ class TraceabilityService:
         if direction == "OUT":
             pallets[pid]["direction"] = "OUT"
     
-    def _resolve_partners(self, result: Dict, initial_package_ids: List[int] = None):
+    def _resolve_partners(self, result: Dict, initial_package_ids: List[int] = None, filter_sale_origins: List[str] = None):
         """Resuelve proveedores y clientes desde los pickings.
         
         Args:
             result: Diccionario con datos procesados
             initial_package_ids: IDs de paquetes iniciales para filtrar solo ventas de esos pallets
+            filter_sale_origins: Lista de códigos de venta (origins) permitidos para filtrar nodos de cliente
         """
         reception_picking_ids = result.get("reception_picking_ids", [])
         sale_picking_ids = result.get("sale_picking_ids", [])
