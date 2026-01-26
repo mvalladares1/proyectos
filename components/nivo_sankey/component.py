@@ -295,18 +295,47 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 .nodeWidth(15)
                 .nodePadding(12)
                 .nodeAlign(d3.sankeyLeft)
-                .nodeSort((a, b) => {{
-                    // Ordenar por fecha dentro de cada columna
-                    const dateA = a.date || '9999-99-99';
-                    const dateB = b.date || '9999-99-99';
-                    return dateA.localeCompare(dateB);
-                }})
+                .nodeSort(null)  // Desactivar ordenamiento interno
                 .extent([[0, 0], [innerHeight, innerWidth]]);
             
             // Ejecutar Sankey
             const graph = sankey({{
                 nodes: sortedNodes,
                 links: sortedLinks
+            }});
+            
+            // ============================================================
+            // FORZAR ORDENAMIENTO POR FECHA (antes de rotar)
+            // ============================================================
+            // Agrupar nodos por columna (depth = x0 antes de rotar)
+            const columns = new Map();
+            graph.nodes.forEach(node => {{
+                const colKey = Math.round(node.x0);
+                if (!columns.has(colKey)) columns.set(colKey, []);
+                columns.get(colKey).push(node);
+            }});
+            
+            // Para cada columna, reordenar posiciones Y según fecha
+            columns.forEach((nodesInCol) => {{
+                if (nodesInCol.length <= 1) return;
+                
+                // Guardar posiciones Y originales ordenadas
+                const yPositions = nodesInCol.map(n => ({{ y0: n.y0, y1: n.y1 }}))
+                    .sort((a, b) => a.y0 - b.y0);
+                
+                // Ordenar nodos por fecha
+                nodesInCol.sort((a, b) => {{
+                    const dateA = a.date || '9999-99-99';
+                    const dateB = b.date || '9999-99-99';
+                    return dateA.localeCompare(dateB);
+                }});
+                
+                // Asignar posiciones Y según nuevo orden
+                nodesInCol.forEach((node, idx) => {{
+                    const nodeHeight = node.y1 - node.y0;
+                    node.y0 = yPositions[idx].y0;
+                    node.y1 = node.y0 + nodeHeight;
+                }});
             }});
             
             // Rotar coordenadas para orientación vertical
