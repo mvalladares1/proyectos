@@ -153,10 +153,15 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             node_id = f"RECV:{ref}"
             if node_id not in node_ids:
                 supplier_id = pinfo.get("supplier_id")
-                supplier_name = ""
+                supplier_name = "Proveedor"
                 if supplier_id:
                     sdata = suppliers.get(supplier_id, {})
-                    supplier_name = sdata.get("name", "Proveedor") if isinstance(sdata, dict) else sdata
+                    if isinstance(sdata, dict):
+                        supplier_name = sdata.get("name", "Proveedor")
+                        if supplier_name == "Proveedor":
+                            print(f"[VisJS] Recepción {ref}: supplier_id={supplier_id}, sdata={sdata}")
+                    else:
+                        supplier_name = sdata if sdata else "Proveedor"
                 
                 # Información detallada de la recepción
                 scheduled_date = pinfo.get("scheduled_date", "")[:10] if pinfo.get("scheduled_date") else ""

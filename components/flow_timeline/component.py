@@ -371,6 +371,7 @@ def render_flow_timeline(
             <button class="control-btn" onclick="zoomIn()" title="Zoom In">+</button>
             <button class="control-btn" onclick="zoomOut()" title="Zoom Out">−</button>
             <button class="control-btn" onclick="resetZoom()" title="Reset">⟲</button>
+            <button class="control-btn" onclick="toggleFullscreen()" title="Pantalla completa">⛶</button>
         </div>
         
         <div class="tooltip" id="tooltip" style="display: none;"></div>
@@ -634,6 +635,18 @@ def render_flow_timeline(
             
             window.resetZoom = function() {{
                 svg.transition().call(zoom.transform, d3.zoomIdentity);
+            }};
+            
+            // Fullscreen toggle
+            window.toggleFullscreen = function() {{
+                const container = document.getElementById('container');
+                if (!document.fullscreenElement) {{
+                    container.requestFullscreen().catch(err => {{
+                        console.error('Error al entrar en pantalla completa:', err);
+                    }});
+                }} else {{
+                    document.exitFullscreen();
+                }}
             }};
         </script>
     </body>
