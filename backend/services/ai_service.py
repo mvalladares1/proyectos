@@ -10,8 +10,11 @@ from datetime import datetime
 class AIService:
     """Servicio para generar resúmenes de trazabilidad usando Ollama"""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434"):
-        self.ollama_url = ollama_url
+    def __init__(self, ollama_url: str = None):
+        # Usar variable de entorno o default
+        # En Docker Linux, usar host.docker.internal o la IP del gateway
+        import os
+        self.ollama_url = ollama_url or os.getenv("OLLAMA_URL", "http://172.17.0.1:11434")
         self.model = "llama3.2"  # Modelo pequeño y rápido
         
     async def generate_traceability_summary(
