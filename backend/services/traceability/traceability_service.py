@@ -328,11 +328,11 @@ class TraceabilityService:
                     process_produces_our_packages = False
                     process_inputs = set()  # Inputs del proceso (package_id que entran)
                     process_inputs_direct = set()  # Inputs directamente ligados a nuestros outputs
+                    staged_moves = []
                     
                     for ml in ref_moves:
                         if ml["id"] not in processed_move_ids:
-                            all_move_lines.append(ml)
-                            processed_move_ids.add(ml["id"])
+                            staged_moves.append(ml)
                         
                         pkg_rel = ml.get("package_id")
                         result_rel = ml.get("result_package_id")
@@ -356,6 +356,13 @@ class TraceabilityService:
                             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                             if pkg_id:
                                 process_inputs.add(pkg_id)
+                    
+                    # Solo anexar movimientos de procesos relevantes en modo conexión directa
+                    if include_siblings or process_produces_our_packages:
+                        for ml in staged_moves:
+                            if ml["id"] not in processed_move_ids:
+                                all_move_lines.append(ml)
+                                processed_move_ids.add(ml["id"])
                     
                     # Si el proceso produce alguno de nuestros paquetes, seguir inputs
                     if not include_siblings:
