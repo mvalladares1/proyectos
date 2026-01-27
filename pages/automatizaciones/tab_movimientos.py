@@ -476,7 +476,10 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
             
             data = resp.json()
             
-            # Validar respuesta
+            # DEBUG: Mostrar respuesta completa
+            st.write("🔍 DEBUG - Respuesta del API:", data)
+            
+            # Validar respuesta básica
             valid, error_msg = _validate_api_response(data, ["found"])
             if not valid:
                 st.toast(f"❌ Respuesta inválida: {error_msg}", icon="⚠️")
@@ -488,13 +491,35 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
                 _play_sound("error")
                 return
             
-            # Validar campos requeridos
-            valid, error_msg = _validate_api_response(
-                data,
-                ["status", "products", "total_quantity"]
-            )
+            # Validar según estado del pallet
+            pallet_status = data.get("status", "unknown")
+            
+            if pallet_status == "empty":
+                mensaje_vacio = data.get("message", "Pallet vacío o sin stock")
+                st.toast(f"⚠️ {mensaje_vacio}", icon="⚠️")
+                _play_sound("error")
+                return
+            
+            # Validar campos requeridos según estado (sin validar 'products' aún)
+            if pallet_status == "in_stock":
+                required_fields = ["status", "total_quantity", "location_id", "location_name"]
+            elif pallet_status == "in_reception":
+                required_fields = ["status", "total_quantity", "location_dest_name"]
+            else:
+                st.toast(f"⚠️ Estado desconocido: {pallet_status}", icon="⚠️")
+                _play_sound("error")
+                return
+            
+            valid, error_msg = _validate_api_response(data, required_fields)
             if not valid:
                 st.toast(f"⚠️ Datos incompletos: {error_msg}", icon="⚠️")
+                _play_sound("error")
+                return
+            
+            # Validar que products exista y no esté vacío
+            products = data.get("products", [])
+            if not products or len(products) == 0:
+                st.toast(f"⚠️ Pallet sin productos asociados", icon="⚠️")
                 _play_sound("error")
                 return
             
@@ -516,9 +541,9 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
         pallet_status = data.get("status", "in_stock")
         
         # Determinar ubicación según estado
-        if pallet_status == "pending_reception":
-            ubicacion_display = f"📥 {data.get('destination_name', 'En recepción')}"
-            location_id = data.get("destination_id")
+        if pallet_status == "in_reception":
+            ubicacion_display = f"📥 {data.get('location_dest_name', 'En recepción')}"
+            location_id = None  # No tiene location_id en recepción
         else:
             ubicacion_display = data.get("location_name", "N/A")
             location_id = data.get("location_id")
@@ -536,7 +561,7 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
         st.session_state.mov_pallets.append(pallet)
         
         # Mensaje diferenciado según estado
-        if pallet_status == "pending_reception":
+        if pallet_status == "in_reception":
             st.toast(f"✅ {code} (En recepción - se cambiará ruta)", icon="📥")
         else:
             st.toast(f"✅ {code} agregado", icon="📦")
@@ -559,7 +584,7 @@ def _play_sound(sound_type: str):
 def _render_pallet_card(pallet: dict, index: int = 0):
     """Renderiza una tarjeta de pallet con badge de estado y FROM → TO"""
     # Determinar estado
-    if pallet.get("status") == "pending_reception":
+    if pallet.get("status") == "in_reception":
         status_emoji = "📥"
         status_text = "En Recepción"
         border_color = "#FFC107"
