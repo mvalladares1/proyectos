@@ -133,10 +133,26 @@ class MultipleMoveRequest(BaseModel):
 @router.post("/move-multiple")
 async def move_multiple_pallets(request: MultipleMoveRequest):
     """
-    Mueve múltiples pallets a una ubicación destino en una sola operación.
+    Mueve múltiples pallets a una ubicación destino usando movimiento DIRECTO.
+    NO crea transferencias - actualiza quants directamente y registra en log.
     """
     try:
         service = StockService(username=request.username, password=request.password)
-        return service.move_multiple_pallets(request.pallet_codes, request.target_location_id)
+        
+        # Obtener el usuario_id del usuario actual
+        usuario_id = None
+        try:
+            users = service.odoo.search_read(
+                "res.users",
+                [("login", "=", request.username)],
+                ["id"],
+                limit=1
+            )
+            if users:
+                usuario_id = users[0]["id"]
+        except:
+            pass  # Si falla, continuar sin usuario_id
+        
+        return service.move_multiple_pallets(request.pallet_codes, request.target_location_id, usuario_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

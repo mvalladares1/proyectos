@@ -329,7 +329,8 @@ class AnalisisStockTeoricoService:
         # Filtrado SOLO por tipo_fruta y manejo (sin restricción de cuenta contable)
         # display_type='product' excluye líneas de COGS que duplican
         # Incluye líneas CON producto (categoría PRODUCTOS) y SIN producto (texto libre)
-        # Excluye cuentas de servicios, otros ingresos y activos fijos
+        # Excluye solo servicios de cámaras (41010202) y ventas de activos fijos (71010204)
+        # INCLUYE cuenta 43010111 (Otros Ingresos) porque son ventas válidas (fierro, pallets, etc.)
         lineas = self.odoo.search_read(
             'account.move.line',
             [
@@ -338,7 +339,7 @@ class AnalisisStockTeoricoService:
                 ['move_id.payment_state', '!=', 'reversed'],  # Excluir facturas revertidas
                 ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
                 ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
-                ['account_id.code', 'not in', ['41010202', '43010111', '71010204']],  # Excluir servicios/otros/activos
+                ['account_id.code', 'not in', ['41010202', '71010204']],  # Excluir solo servicios cámaras y activos fijos
                 '|',  # OR condition
                     ['product_id', '=', False],  # Incluir texto libre
                     '&',  # AND condition para productos
@@ -484,8 +485,24 @@ class AnalisisStockTeoricoService:
                 if not nombre_desc or nombre_desc.upper() in ['N/A', 'FALSE', 'NONE']:
                     continue
                 
+                # Excluir solo si la descripción ES PRINCIPALMENTE sobre estos conceptos
+                # (no si solo los menciona como parte del empaque)
                 nombre_desc_upper = nombre_desc.upper()
-                if any(keyword in nombre_desc_upper for keyword in EXCLUIR_KEYWORDS):
+                
+                # Detectar si es venta de insumos/servicios (no fruta):
+                # - Comienza con el keyword
+                # - O es muy corta y contiene el keyword (< 30 caracteres)
+                es_insumo_servicio = False
+                for keyword in EXCLUIR_KEYWORDS:
+                    if nombre_desc_upper.startswith(keyword):
+                        es_insumo_servicio = True
+                        break
+                    # Si la descripción es corta y contiene keyword, probablemente no es fruta
+                    if len(nombre_desc) < 30 and keyword in nombre_desc_upper:
+                        es_insumo_servicio = True
+                        break
+                
+                if es_insumo_servicio:
                     continue
                 
                 key = f"TEXTO LIBRE||{nombre_desc}"
