@@ -569,7 +569,7 @@ def _render_sankey(username: str, password: str):
             with col_f1:
                 fecha_inicio = st.date_input(
                     "Desde",
-                    value=datetime(2025, 1, 1),
+                    value=datetime(2026, 1, 1),
                     format="DD/MM/YYYY",
                     key="sale_fecha_inicio",
                 )
@@ -1414,21 +1414,26 @@ def render_ai_summary(search_context: dict, traceability_data: dict, api_url: st
                     result = response.json()
                     summary = result.get("summary", "")
                     
-                    # Mostrar resumen
-                    st.markdown("#### 📋 Resumen")
-                    st.info(summary)
-                    
-                    # Guardar en session_state para persistir
-                    st.session_state[f"ai_summary_{hash(str(search_context))}"] = summary
+                    if summary:
+                        # Mostrar resumen
+                        st.markdown("#### 📋 Resumen")
+                        st.info(summary)
+                        
+                        # Guardar en session_state para persistir
+                        st.session_state[f"ai_summary_{hash(str(search_context))}"] = summary
+                    else:
+                        st.warning("⚠️ El resumen está vacío. Respuesta completa: " + str(result))
                 else:
-                    st.error(f"❌ Error al generar resumen: {response.status_code}")
+                    st.error(f"❌ Error al generar resumen: {response.status_code} - {response.text}")
                     
             except requests.exceptions.Timeout:
                 st.error("⏱️ Tiempo de espera agotado. El modelo puede estar tardando demasiado.")
             except requests.exceptions.ConnectionError:
-                st.warning("⚠️ No se pudo conectar con Ollama. Asegúrate de que esté corriendo: `ollama serve`")
+                st.warning("⚠️ No se pudo conectar con la API. Verifica la conexión.")
             except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+                st.error(f"❌ Error inesperado: {type(e).__name__}: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
     
     # Mostrar resumen guardado si existe
     summary_key = f"ai_summary_{hash(str(search_context))}"
