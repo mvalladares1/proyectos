@@ -70,11 +70,11 @@ class StockService:
             if picking_types:
                 picking_type_id = picking_types[0]["id"]
             
-            # Buscar transportista ADMINISTRATOR
+            # Buscar transportista ADMINISTRADOR
             carrier_id = None
             carriers = self.odoo.search_read(
                 "res.partner",
-                [("name", "=", "ADMINISTRATOR")],
+                [("name", "=", "ADMINISTRADOR")],
                 ["id"],
                 limit=1
             )
