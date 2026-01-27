@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys
 import os
+import requests
 from typing import Optional
 
 # Add project root to path
@@ -568,7 +569,7 @@ def _render_sankey(username: str, password: str):
             with col_f1:
                 fecha_inicio = st.date_input(
                     "Desde",
-                    value=datetime(2025, 1, 1),
+                    value=datetime(2026, 1, 1),
                     format="DD/MM/YYYY",
                     key="sale_fecha_inicio",
                 )
@@ -680,6 +681,16 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"  # Guardar modo de búsqueda
                 
+                # Guardar raw_data y contexto para IA
+                st.session_state.raw_traceability_data = raw_data
+                st.session_state.search_context = {
+                    "search_type": "supplier",
+                    "supplier_id": supplier_id,
+                    "supplier_name": selected_supplier,
+                    "start_date": fecha_inicio_str,
+                    "end_date": fecha_fin_str
+                }
+                
                 st.success(f"✅ Diagrama generado para {selected_supplier}")
                 st.rerun()
             
@@ -728,10 +739,17 @@ def _render_sankey(username: str, password: str):
                 else:  # Tabla
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"
-                    st.session_state.diagram_data = raw_data
-                    st.session_state.diagram_data_type = "table"
                 
+                # Guardar raw_data y contexto para IA
                 selected_info = st.session_state.found_recepciones[seleccion_idx]
+                st.session_state.raw_traceability_data = raw_data
+                st.session_state.search_context = {
+                    "search_type": "guide",
+                    "guide_number": selected_info.get('guia_despacho', 'N/A'),
+                    "picking_id": selected_picking_id,
+                    "supplier": selected_info.get('productor', 'N/A')
+                }
+                
                 st.success(f"✅ Diagrama generado para guía {selected_info['guia_despacho']} - {selected_info['productor']}")
                 st.rerun()
             
@@ -794,6 +812,17 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                
+                # Guardar raw_data y contexto para IA
+                st.session_state.raw_traceability_data = raw_data if 'raw_data' in locals() else data
+                st.session_state.search_context = {
+                    "search_type": "date_range",
+                    "start_date": fecha_inicio_str,
+                    "end_date": fecha_fin_str
+                }
+                
+                st.success(f"✅ Diagrama generado para período {fecha_inicio_str} a {fecha_fin_str}")
+                st.rerun()
             
             elif search_mode == "📦 Por paquete":
                 # Guardar el identificador para resaltado
@@ -845,7 +874,6 @@ def _render_sankey(username: str, password: str):
                             "identifier": identifier.strip(),
                             "include_siblings": str(include_siblings).lower(),
                         }
-                        import requests, os
                         API_URL = os.getenv("API_URL", "http://127.0.0.1:8002")
                         resp = requests.get(
                             f"{API_URL}/api/v1/containers/traceability/by-identifier",
@@ -865,6 +893,14 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                    
+                    # Guardar raw_data y contexto para IA
+                    st.session_state.raw_traceability_data = data
+                    st.session_state.search_context = {
+                        "search_type": "pallet",
+                        "pallet_id": identifier,
+                        "pallet_name": identifier
+                    }
                 
                 st.success(f"✅ Diagrama generado para paquete: {identifier}")
                 st.rerun()
@@ -941,6 +977,21 @@ def _render_sankey(username: str, password: str):
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
                 
+                # Guardar raw_data y contexto para IA
+                st.session_state.raw_traceability_data = raw_data if 'raw_data' in locals() else data
+                if sale_id:
+                    st.session_state.search_context = {
+                        "search_type": "sale",
+                        "sale_id": sale_id,
+                        "customer_name": "Cliente"
+                    }
+                else:
+                    st.session_state.search_context = {
+                        "search_type": "date_range",
+                        "start_date": fecha_inicio_str,
+                        "end_date": fecha_fin_str
+                    }
+                
                 # Mensaje dinámico
                 if sale_id:
                     st.success(f"✅ Diagrama generado para venta: {sale_id}")
@@ -970,6 +1021,14 @@ def _render_sankey(username: str, password: str):
             _render_visjs_diagram(data)
         elif data_type == "table":
             _render_connections_table(data)
+        
+        # Renderizar resumen de IA si tenemos raw_data y contexto
+        if hasattr(st.session_state, 'raw_traceability_data') and hasattr(st.session_state, 'search_context'):
+            render_ai_summary(
+                search_context=st.session_state.search_context,
+                traceability_data=st.session_state.raw_traceability_data,
+                api_url=os.getenv("API_URL", "http://localhost:8000")
+            )
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
 
@@ -1319,4 +1378,69 @@ def _render_analisis_completo(username: str, password: str):
     """Renderiza el nuevo tab de análisis completo (4 en 1)."""
     from .tab_analisis_completo import render as render_analisis_completo
     render_analisis_completo(username, password)
+
+
+def render_ai_summary(search_context: dict, traceability_data: dict, api_url: str):
+    """
+    Renderiza un botón para generar resumen con IA y muestra el resultado.
+    
+    Args:
+        search_context: Contexto de búsqueda (tipo, parámetros, etc.)
+        traceability_data: Datos completos de trazabilidad
+        api_url: URL base de la API
+    """
+    st.markdown("---")
+    st.markdown("### 🤖 Resumen Inteligente")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.caption("Genera un resumen detallado de la trazabilidad usando IA local (Ollama)")
+    with col2:
+        generate_btn = st.button("✨ Generar Resumen", use_container_width=True, type="primary")
+    
+    if generate_btn:
+        with st.spinner("🔄 Generando resumen con IA..."):
+            try:
+                response = requests.post(
+                    f"{api_url}/api/v1/containers/traceability/ai-summary",
+                    json={
+                        "search_context": search_context,
+                        "traceability_data": traceability_data
+                    },
+                    timeout=90
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    st.write("🔍 DEBUG - Respuesta completa:", result)  # DEBUG
+                    summary = result.get("summary", "")
+                    st.write("🔍 DEBUG - Summary extraído:", repr(summary))  # DEBUG
+                    
+                    if summary:
+                        # Mostrar resumen
+                        st.markdown("#### 📋 Resumen")
+                        st.info(summary)
+                        
+                        # Guardar en session_state para persistir
+                        st.session_state[f"ai_summary_{hash(str(search_context))}"] = summary
+                    else:
+                        st.warning("⚠️ El resumen está vacío. Respuesta completa: " + str(result))
+                else:
+                    st.error(f"❌ Error al generar resumen: {response.status_code} - {response.text}")
+                    
+            except requests.exceptions.Timeout:
+                st.error("⏱️ Tiempo de espera agotado. El modelo puede estar tardando demasiado.")
+            except requests.exceptions.ConnectionError:
+                st.warning("⚠️ No se pudo conectar con la API. Verifica la conexión.")
+            except Exception as e:
+                st.error(f"❌ Error inesperado: {type(e).__name__}: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+    
+    # Mostrar resumen guardado si existe
+    summary_key = f"ai_summary_{hash(str(search_context))}"
+    if summary_key in st.session_state and not generate_btn:
+        st.markdown("#### 📋 Resumen")
+        st.info(st.session_state[summary_key])
+
 
