@@ -400,6 +400,8 @@ def render_flow_timeline(
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
             const minNodeSpacing = {min_node_spacing};
+            const xJitterStep = 12;
+            const xJitterMax = 60;
             
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
@@ -466,7 +468,7 @@ def render_flow_timeline(
                 // Actualizar posiciones de nodos
                 g.selectAll('.node')
                     .attr('transform', d => {{
-                        const x = newXScale(d.parsedDate || xScale.domain()[0]);
+                        const x = newXScale(d.parsedDate || xScale.domain()[0]) + (d.xOffset || 0);
                         return `translate(${{x}},${{d.y}})`;
                     }});
                 
@@ -484,9 +486,9 @@ def render_flow_timeline(
                 const target = nodeMap[edge.target];
                 if (!source || !target) return '';
                 
-                const x0 = scale(source.parsedDate || xScale.domain()[0]);
+                const x0 = scale(source.parsedDate || xScale.domain()[0]) + (source.xOffset || 0);
                 const y0 = source.y;
-                const x1 = scale(target.parsedDate || xScale.domain()[1]);
+                const x1 = scale(target.parsedDate || xScale.domain()[1]) + (target.xOffset || 0);
                 const y1 = target.y;
                 
                 // Curva Bézier vertical (de arriba a abajo)
@@ -534,6 +536,10 @@ def render_flow_timeline(
                 
                 nodes.forEach((node, i) => {{
                     node.y = bandTop + 15 + (i + 1) * nodeSpacing;
+                    const center = (nodes.length - 1) / 2;
+                    const rawOffset = (i - center) * xJitterStep;
+                    const clampedOffset = Math.max(-xJitterMax, Math.min(xJitterMax, rawOffset));
+                    node.xOffset = clampedOffset;
                 }});
             }});
             
@@ -574,7 +580,7 @@ def render_flow_timeline(
                 .append('g')
                 .attr('class', 'node')
                 .attr('transform', d => {{
-                    const x = xScale(d.parsedDate || xScale.domain()[0]);
+                    const x = xScale(d.parsedDate || xScale.domain()[0]) + (d.xOffset || 0);
                     return `translate(${{x}},${{d.y}})`;
                 }})
                 .on('mouseover', function(event, d) {{
