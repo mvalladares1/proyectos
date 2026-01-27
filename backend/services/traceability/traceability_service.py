@@ -13,6 +13,7 @@ class TraceabilityService:
     
     PARTNER_VENDORS_LOCATION_ID = 4  # Partners/Vendors location
     PARTNER_CUSTOMERS_LOCATION_ID = 5  # Partners/Customers location
+    EXCLUDED_REFERENCE_PATTERNS = ["RF/INT/", "Quantity Updated", "Cantidad de producto confirmada"]
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
@@ -37,6 +38,13 @@ class TraceabilityService:
         except (ValueError, AttributeError) as e:
             print(f"[TraceabilityService] Error converting datetime: {utc_datetime_str} - {e}")
             return utc_datetime_str
+
+    def _get_reference_exclusion_domain(self) -> List:
+        """Construye dominio para excluir referencias que distorsionan la trazabilidad."""
+        domain = []
+        for pattern in self.EXCLUDED_REFERENCE_PATTERNS:
+            domain.append(("reference", "not ilike", pattern))
+        return domain
     
     def get_traceability_by_identifier(
         self,
@@ -285,7 +293,7 @@ class TraceabilityService:
                         ("package_id", "in", current_packages),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=limit,
                     order="date asc"
@@ -310,7 +318,7 @@ class TraceabilityService:
                             ("reference", "=", ref),
                             ("qty_done", ">", 0),
                             ("state", "=", "done"),
-                        ],
+                        ] + self._get_reference_exclusion_domain(),
                         fields,
                         limit=500,
                         order="date asc"
@@ -319,6 +327,7 @@ class TraceabilityService:
                     # Primero, verificar si este proceso produce alguno de nuestros paquetes
                     process_produces_our_packages = False
                     process_inputs = set()  # Inputs del proceso (package_id que entran)
+                    process_inputs_direct = set()  # Inputs directamente ligados a nuestros outputs
                     
                     for ml in ref_moves:
                         if ml["id"] not in processed_move_ids:
@@ -337,6 +346,10 @@ class TraceabilityService:
                             result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
                             if result_id in current_packages or result_id in traced_packages:
                                 process_produces_our_packages = True
+                                if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                                    if pkg_id:
+                                        process_inputs_direct.add(pkg_id)
                         
                         # Recolectar inputs del proceso (paquetes que entran, no desde proveedores)
                         if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
@@ -344,13 +357,15 @@ class TraceabilityService:
                             if pkg_id:
                                 process_inputs.add(pkg_id)
                     
-                    # Si el proceso produce alguno de nuestros paquetes, seguir TODOS sus inputs
+                    # Si el proceso produce alguno de nuestros paquetes, seguir inputs
                     if not include_siblings:
-                        if process_produces_our_packages and process_inputs:
-                            for pkg_id in process_inputs:
-                                if pkg_id not in traced_packages and pkg_id not in current_packages:
-                                    packages_to_trace.add(pkg_id)
-                            print(f"[TraceabilityService] Proceso {ref} produce nuestros paquetes. Siguiendo {len(process_inputs)} inputs.")
+                        if process_produces_our_packages:
+                            inputs_to_follow = process_inputs_direct or process_inputs
+                            if inputs_to_follow:
+                                for pkg_id in inputs_to_follow:
+                                    if pkg_id not in traced_packages and pkg_id not in current_packages:
+                                        packages_to_trace.add(pkg_id)
+                            print(f"[TraceabilityService] Proceso {ref} produce nuestros paquetes. Siguiendo {len(inputs_to_follow)} inputs.")
                     else:
                         # Modo "Todos": seguir todos los inputs
                         for pkg_id in process_inputs:
@@ -395,7 +410,7 @@ class TraceabilityService:
                         ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=500,
                     order="date asc"
@@ -428,7 +443,7 @@ class TraceabilityService:
                         ("location_dest_id", "=", self.PARTNER_CUSTOMERS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=500,
                     order="date asc"
@@ -531,7 +546,7 @@ class TraceabilityService:
                         ("package_id", "in", current_packages),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=limit,
                     order="date asc"
@@ -556,7 +571,7 @@ class TraceabilityService:
                             ("reference", "=", ref),
                             ("qty_done", ">", 0),
                             ("state", "=", "done"),
-                        ],
+                        ] + self._get_reference_exclusion_domain(),
                         fields,
                         limit=500,
                         order="date asc"
@@ -613,7 +628,7 @@ class TraceabilityService:
                         ("location_dest_id", "=", self.PARTNER_CUSTOMERS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=1000,
                     order="date asc"
@@ -637,7 +652,7 @@ class TraceabilityService:
                     ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
                     ("qty_done", ">", 0),
                     ("state", "=", "done"),
-                ],
+                ] + self._get_reference_exclusion_domain(),
                 fields,
                 limit=500,
                 order="date asc"
@@ -1042,7 +1057,7 @@ class TraceabilityService:
             ("result_package_id", "!=", False),
             ("qty_done", ">", 0),
             ("state", "=", "done"),
-        ]
+        ] + self._get_reference_exclusion_domain()
         if start_date:
             domain.append(("date", ">=", start_date))
         if end_date:
@@ -1100,7 +1115,7 @@ class TraceabilityService:
             ("result_package_id", "in", list(package_ids)),
             ("qty_done", ">", 0),
             ("state", "=", "done"),
-        ]
+        ] + self._get_reference_exclusion_domain()
         
         try:
             all_move_lines = self.odoo.search_read(

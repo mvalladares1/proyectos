@@ -460,9 +460,8 @@ async def get_traceability_by_sale(
                 detail="Debes proporcionar sale_identifier O ambas fechas (start_date y end_date)"
             )
         
-        from shared.odoo_client import OdooClient
-        client = OdooClient(username=username, password=password)
         service = TraceabilityService(username=username, password=password)
+        client = service.odoo
         
         # Estrategia: buscar por sale.order primero, luego obtener sus pickings
         if sale_identifier:
@@ -541,22 +540,30 @@ async def get_traceability_by_sale(
         
         # Si es búsqueda de venta específica y hay múltiples pickings del mismo origin, usar todos
         # Si es por período, ya están limitados
-        picking_ids = []
+        picking_ids = set()
         for origin, pids in ventas_por_origin.items():
-            picking_ids.extend(pids)
+            picking_ids.update(pids)
         
         # Obtener package_ids de todas las ventas seleccionadas
-        move_lines = client.search_read(
-            "stock.move.line",
-            [
-                ("picking_id", "in", picking_ids),
-                ("package_id", "!=", False),
-                ("qty_done", ">", 0),
-                ("state", "=", "done"),
-            ],
-            ["package_id"],
-            limit=5000
-        )
+        def _chunked(iterable, size):
+            iterable = list(iterable)
+            for i in range(0, len(iterable), size):
+                yield iterable[i:i + size]
+
+        move_lines = []
+        for picking_chunk in _chunked(list(picking_ids), 500):
+            chunk_lines = client.search_read(
+                "stock.move.line",
+                [
+                    ("picking_id", "in", picking_chunk),
+                    ("package_id", "!=", False),
+                    ("qty_done", ">", 0),
+                    ("state", "=", "done"),
+                ],
+                ["package_id"],
+                limit=5000
+            )
+            move_lines.extend(chunk_lines)
         
         # Extraer package_ids únicos
         package_ids = set()

@@ -70,7 +70,7 @@
     "reconciliacion.reconciliar_kg": []
   },
   "maintenance": {
-    "enabled": true,
+    "enabled": false,
     "message": "El sistema está siendo ajustado en este momento."
   }
 }
