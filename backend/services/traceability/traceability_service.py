@@ -13,6 +13,7 @@ class TraceabilityService:
     
     PARTNER_VENDORS_LOCATION_ID = 4  # Partners/Vendors location
     PARTNER_CUSTOMERS_LOCATION_ID = 5  # Partners/Customers location
+    EXCLUDED_REFERENCE_PATTERNS = ["RF/INT/", "Quantity Updated", "Cantidad de producto confirmada"]
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
@@ -37,6 +38,13 @@ class TraceabilityService:
         except (ValueError, AttributeError) as e:
             print(f"[TraceabilityService] Error converting datetime: {utc_datetime_str} - {e}")
             return utc_datetime_str
+
+    def _get_reference_exclusion_domain(self) -> List:
+        """Construye dominio para excluir referencias que distorsionan la trazabilidad."""
+        domain = []
+        for pattern in self.EXCLUDED_REFERENCE_PATTERNS:
+            domain.append(("reference", "not ilike", pattern))
+        return domain
     
     def get_traceability_by_identifier(
         self,
@@ -285,7 +293,7 @@ class TraceabilityService:
                         ("package_id", "in", current_packages),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=limit,
                     order="date asc"
@@ -310,7 +318,7 @@ class TraceabilityService:
                             ("reference", "=", ref),
                             ("qty_done", ">", 0),
                             ("state", "=", "done"),
-                        ],
+                        ] + self._get_reference_exclusion_domain(),
                         fields,
                         limit=500,
                         order="date asc"
@@ -402,7 +410,7 @@ class TraceabilityService:
                         ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=500,
                     order="date asc"
@@ -435,7 +443,7 @@ class TraceabilityService:
                         ("location_dest_id", "=", self.PARTNER_CUSTOMERS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=500,
                     order="date asc"
@@ -538,7 +546,7 @@ class TraceabilityService:
                         ("package_id", "in", current_packages),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=limit,
                     order="date asc"
@@ -563,7 +571,7 @@ class TraceabilityService:
                             ("reference", "=", ref),
                             ("qty_done", ">", 0),
                             ("state", "=", "done"),
-                        ],
+                        ] + self._get_reference_exclusion_domain(),
                         fields,
                         limit=500,
                         order="date asc"
@@ -620,7 +628,7 @@ class TraceabilityService:
                         ("location_dest_id", "=", self.PARTNER_CUSTOMERS_LOCATION_ID),
                         ("qty_done", ">", 0),
                         ("state", "=", "done"),
-                    ],
+                    ] + self._get_reference_exclusion_domain(),
                     fields,
                     limit=1000,
                     order="date asc"
@@ -644,7 +652,7 @@ class TraceabilityService:
                     ("location_id", "=", self.PARTNER_VENDORS_LOCATION_ID),
                     ("qty_done", ">", 0),
                     ("state", "=", "done"),
-                ],
+                ] + self._get_reference_exclusion_domain(),
                 fields,
                 limit=500,
                 order="date asc"
@@ -1049,7 +1057,7 @@ class TraceabilityService:
             ("result_package_id", "!=", False),
             ("qty_done", ">", 0),
             ("state", "=", "done"),
-        ]
+        ] + self._get_reference_exclusion_domain()
         if start_date:
             domain.append(("date", ">=", start_date))
         if end_date:
@@ -1107,7 +1115,7 @@ class TraceabilityService:
             ("result_package_id", "in", list(package_ids)),
             ("qty_done", ">", 0),
             ("state", "=", "done"),
-        ]
+        ] + self._get_reference_exclusion_domain()
         
         try:
             all_move_lines = self.odoo.search_read(
