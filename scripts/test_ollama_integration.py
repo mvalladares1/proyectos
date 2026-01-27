@@ -7,7 +7,7 @@ import httpx
 import json
 
 OLLAMA_URL = "http://localhost:11434"
-MODEL = "granite4"
+MODEL = "llama3.2"
 
 async def test_ollama_connection():
     """Prueba la conexión con Ollama"""
