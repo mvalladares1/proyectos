@@ -19,7 +19,7 @@ class AIService:
         # En Docker Linux, usar host.docker.internal o la IP del gateway
         import os
         self.ollama_url = ollama_url or os.getenv("OLLAMA_URL", "http://172.17.0.1:11434")
-        self.model = "llama3.2"  # Modelo pequeño y rápido
+        self.model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")  # Modelo 1B es más rápido
         
     async def generate_traceability_summary(
         self,
@@ -47,7 +47,7 @@ class AIService:
             return f"Error construyendo prompt: {type(e).__name__}: {str(e)}"
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     f"{self.ollama_url}/api/generate",
                     json={
@@ -57,7 +57,7 @@ class AIService:
                         "options": {
                             "temperature": 0.3,  # Más determinístico
                             "top_p": 0.9,
-                            "num_predict": 500,  # Máximo de tokens
+                            "num_predict": 250,  # Máximo de tokens (reducido para velocidad)
                         }
                     }
                 )
