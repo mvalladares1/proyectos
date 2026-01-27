@@ -695,8 +695,8 @@ class TraceabilityService:
         customers = result.get("customers", {})
         links = result.get("links", [])
         
-        print(f"[TraceabilityService] Filtrando FORWARD conexión directa desde {len(initial_package_ids)} pallets iniciales")
-        print(f"[TraceabilityService] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
+        print(f"[TraceabilityService FORWARD] Filtrando FORWARD conexión directa desde {len(initial_package_ids)} pallets iniciales")
+        print(f"[TraceabilityService FORWARD] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
         
         # Construir grafo dirigido desde los links
         graph_forward = {}  # source -> [targets]
@@ -833,8 +833,9 @@ class TraceabilityService:
         customers = result.get("customers", {})
         links = result.get("links", [])
         
-        print(f"[TraceabilityService] Filtrando conexión directa desde {len(initial_package_ids)} pallets iniciales")
-        print(f"[TraceabilityService] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
+        print(f"[TraceabilityService BACKWARD] Filtrando conexión directa desde {len(initial_package_ids)} pallets iniciales")
+        print(f"[TraceabilityService BACKWARD] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
+        print(f"[TraceabilityService BACKWARD] Suppliers ANTES del filtro: {len(suppliers)} suppliers")
         
         # Debug: mostrar todos los procesos y si son recepciones
         for ref, pinfo in processes.items():
@@ -965,10 +966,19 @@ class TraceabilityService:
                 filtered_processes[ref] = pinfo
         
         # Filtrar proveedores
+        print(f"[TraceabilityService BACKWARD] Antes de filtrar suppliers: {len(suppliers)} suppliers")
+        # Mostrar los primeros 3 suppliers y su contenido
+        for i, (sid, sinfo) in enumerate(suppliers.items()):
+            if i < 3:
+                print(f"  Supplier {sid}: {sinfo}")
+        
         filtered_suppliers = {}
         for sid, sinfo in suppliers.items():
             if f"SUPPLIER:{sid}" in connected_nodes:
+                print(f"[TraceabilityService BACKWARD] ✓ Filtrando supplier {sid}: {sinfo}")
                 filtered_suppliers[sid] = sinfo
+        
+        print(f"[TraceabilityService BACKWARD] Después de filtrar: {len(filtered_suppliers)} suppliers")
         
         # Filtrar clientes
         filtered_customers = {}

@@ -385,43 +385,49 @@ def render_flow_timeline(
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
             
-            // Dimensiones
+            // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
-            const containerEl = document.getElementById('diagram');
-            const width = containerEl.clientWidth - margin.left - margin.right;
-            const height = containerEl.clientHeight - margin.top - margin.bottom;
+            let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform;
             
-            // Escalas
-            const parseDate = d3.timeParse("%Y-%m-%d");
-            const minDate = parseDate(dateRange.min);
-            const maxDate = parseDate(dateRange.max);
-            
-            // Añadir padding temporal
-            const timePadding = (maxDate - minDate) * 0.05 || 86400000; // 5% o 1 día
-            const xScale = d3.scaleTime()
-                .domain([new Date(minDate - timePadding), new Date(maxDate.getTime() + timePadding)])
-                .range([0, width]);
-            
-            const yBandHeight = height / levelCount;
-            
-            // SVG principal
-            const svg = d3.select('#diagram')
-                .append('svg')
-                .attr('width', containerEl.clientWidth)
-                .attr('height', containerEl.clientHeight);
-            
-            // Grupo con zoom
-            const g = svg.append('g')
-                .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
-            
-            // Zoom behavior
-            const zoom = d3.zoom()
-                .scaleExtent([0.5, 10])
-                .on('zoom', zoomed);
-            
-            svg.call(zoom);
-            
-            let currentTransform = d3.zoomIdentity;
+            function initDiagram() {{
+                containerEl = document.getElementById('diagram');
+                width = containerEl.clientWidth - margin.left - margin.right;
+                height = containerEl.clientHeight - margin.top - margin.bottom;
+                
+                // Escalas
+                const parseDate = d3.timeParse("%Y-%m-%d");
+                const minDate = parseDate(dateRange.min);
+                const maxDate = parseDate(dateRange.max);
+                
+                // Añadir padding temporal
+                const timePadding = (maxDate - minDate) * 0.05 || 86400000; // 5% o 1 día
+                xScale = d3.scaleTime()
+                    .domain([new Date(minDate - timePadding), new Date(maxDate.getTime() + timePadding)])
+                    .range([0, width]);
+                
+                yBandHeight = height / levelCount;
+                
+                // Limpiar SVG anterior si existe
+                d3.select('#diagram').selectAll('*').remove();
+                
+                // SVG principal
+                svg = d3.select('#diagram')
+                    .append('svg')
+                    .attr('width', containerEl.clientWidth)
+                    .attr('height', containerEl.clientHeight);
+                
+                // Grupo con zoom
+                g = svg.append('g')
+                    .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+                
+                // Zoom behavior
+                zoom = d3.zoom()
+                    .scaleExtent([0.5, 10])
+                    .on('zoom', zoomed);
+                
+                svg.call(zoom);
+                
+                currentTransform = d3.zoomIdentity;
             
             function zoomed(event) {{
                 currentTransform = event.transform;
@@ -444,24 +450,26 @@ def render_flow_timeline(
                 updateTimeline(newXScale);
             }}
             
-            // Bandas de niveles
-            for (let i = 0; i < levelCount; i++) {{
-                g.append('rect')
-                    .attr('class', 'level-band')
-                    .attr('x', -margin.left)
-                    .attr('y', i * yBandHeight)
-                    .attr('width', width + margin.left + margin.right)
-                    .attr('height', yBandHeight)
-                    .attr('fill', i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)');
-                
-                // Labels de niveles
-                g.append('text')
-                    .attr('class', 'level-label')
-                    .attr('x', -10)
-                    .attr('y', i * yBandHeight + yBandHeight / 2)
-                    .attr('text-anchor', 'end')
-                    .attr('dominant-baseline', 'middle')
-                    .text(levelNames[i]);
+            function renderDiagram() {{
+                // Bandas de niveles
+                for (let i = 0; i < levelCount; i++) {{
+                    g.append('rect')
+                        .attr('class', 'level-band')
+                        .attr('x', -margin.left)
+                        .attr('y', i * yBandHeight)
+                        .attr('width', width + margin.left + margin.right)
+                        .attr('height', yBandHeight)
+                        .attr('fill', i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)');
+                    
+                    // Labels de niveles
+                    g.append('text')
+                        .attr('class', 'level-label')
+                        .attr('x', -10)
+                        .attr('y', i * yBandHeight + yBandHeight / 2)
+                        .attr('text-anchor', 'end')
+                        .attr('dominant-baseline', 'middle')
+                        .text(levelNames[i]);
+                }}
             }}
             
             // Procesar nodos - calcular posiciones Y dentro de cada banda
@@ -589,6 +597,10 @@ def render_flow_timeline(
                 .text(d => d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label);
             
             // Timeline en la parte inferior
+                updateTimeline(xScale);
+            }}
+            
+            // Timeline
             const timelineSvg = d3.select('#timeline')
                 .append('svg')
                 .attr('width', containerEl.clientWidth)
@@ -610,6 +622,11 @@ def render_flow_timeline(
             }}
             
             updateTimeline(xScale);
+            }}
+            
+            // Inicializar diagrama
+            initDiagram();
+            renderDiagram();
             
             // Tooltip functions
             function showTooltip(event, html) {{
@@ -648,6 +665,14 @@ def render_flow_timeline(
                     document.exitFullscreen();
                 }}
             }};
+            
+            // Listener para redimensionar al entrar/salir de fullscreen
+            document.addEventListener('fullscreenchange', function() {{
+                setTimeout(function() {{
+                    initDiagram();
+                    renderDiagram();
+                }}, 100);
+            }});
         </script>
     </body>
     </html>
