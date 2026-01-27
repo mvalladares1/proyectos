@@ -42,6 +42,16 @@ def render(username: str, password: str):
             help="🕒 Presiona Enter o haz clic en Consultar para buscar"
         )
 
+    # Filtro de origen/planta
+    with st.expander("🏭 Filtrar por Origen/Planta", expanded=False):
+        col_orig1, col_orig2, col_orig3 = st.columns(3)
+        with col_orig1:
+            check_rfp_g = st.checkbox("🏭 RFP", value=True, key="gestion_rfp")
+        with col_orig2:
+            check_vilkun_g = st.checkbox("🌿 VILKÚN", value=True, key="gestion_vilkun")
+        with col_orig3:
+            check_sanjose_g = st.checkbox("🏘️ SAN JOSE", value=True, key="gestion_sanjose")
+
     # Botones de acción
     col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1, 3.5])
     with col_btn1:
@@ -52,9 +62,19 @@ def render(username: str, password: str):
             fetch_gestion_overview.clear()
             st.toast("✅ Caché limpiado")
 
+    # Construir lista de orígenes según checkboxes
+    origen_list_g = []
+    if check_rfp_g:
+        origen_list_g.append("RFP")
+    if check_vilkun_g:
+        origen_list_g.append("VILKUN")
+    if check_sanjose_g:
+        origen_list_g.append("SAN JOSE")
+
     # Cargar datos solo cuando el usuario haga clic en consultar
     fecha_inicio_str = fecha_inicio_g.strftime("%Y-%m-%d")
     fecha_fin_str = fecha_fin_g.strftime("%Y-%m-%d")
+
 
     # CARGAR SOLO CUANDO SE PRESIONA BOTÓN
     if btn_consultar or st.session_state.get('gestion_loaded', False):
@@ -82,7 +102,8 @@ def render(username: str, password: str):
                 # Usar funciones con caché (automáticamente devuelve caché si existe)
                 overview = fetch_gestion_overview(username, password, fecha_inicio_str, fecha_fin_str)
                 data_gestion = fetch_gestion_data(username, password, fecha_inicio_str, fecha_fin_str, 
-                                                  status_filter, qc_filter, search_text if search_text else None)
+                                                  status_filter, qc_filter, search_text if search_text else None,
+                                                  origen=origen_list_g if origen_list_g else None)
 
                 st.session_state.gestion_overview = overview
                 st.session_state.gestion_data = data_gestion

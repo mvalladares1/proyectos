@@ -156,9 +156,8 @@ class AnalisisStockTeoricoService:
         Incluye productos archivados usando active_test=False.
         """
         # Líneas de facturas de proveedor - SOLO diario "Facturas de Proveedores"
-        # Filtrado por cuentas específicas para evitar duplicaciones contables
-        # display_type='product' excluye líneas de COGS (costo de venta) que duplican
-        lineas = self.odoo.search_read(
+        # display_type='product' excluye líneas de COGS (costo de venta)
+        lineas_raw = self.odoo.search_read(
             'account.move.line',
             [
                 ['move_id.move_type', '=', 'in_invoice'],
@@ -168,15 +167,39 @@ class AnalisisStockTeoricoService:
                 ['product_id', '!=', False],
                 ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
                 ['product_id.type', '!=', 'service'],
-                ['account_id.code', 'in', ['21020107', '21020106']],  # Solo cuentas de facturas por recibir
                 ['debit', '>', 0],  # Solo líneas con débito (compra real)
                 ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta]
             ],
-            ['product_id', 'quantity', 'debit', 'account_id'],
+            ['product_id', 'quantity', 'debit', 'account_id', 'move_id'],
             limit=100000
         )
+        
+        # DEDUPLICAR: Las reclasificaciones contables tienen los MISMOS kg y monto,
+        # pero pueden estar en fechas diferentes. Agrupar por factura + producto + cantidad + monto (SIN fecha).
+        # Priorizar cuentas 21020xxx (Facturas por Recibir) sobre reclasificaciones.
+        deduplicados = {}
+        for linea in lineas_raw:
+            move_id = linea.get('move_id', [None])[0] if linea.get('move_id') else None
+            prod_id = linea.get('product_id', [None])[0] if linea.get('product_id') else None
+            cantidad = round(linea.get('quantity', 0), 2)
+            monto = round(linea.get('debit', 0), 2)
+            cuenta = linea.get('account_id', [None, ''])[1] if linea.get('account_id') else ''
+            
+            # Clave única: factura + producto + cantidad + monto (SIN fecha)
+            key = (move_id, prod_id, cantidad, monto)
+            
+            # Si no existe, agregar
+            if key not in deduplicados:
+                deduplicados[key] = linea
+            else:
+                # Priorizar cuentas 21020xxx sobre reclasificaciones
+                cuenta_existente = deduplicados[key].get('account_id', [None, ''])[1] if deduplicados[key].get('account_id') else ''
+                if ('21020' in cuenta and '21020' not in cuenta_existente):
+                    deduplicados[key] = linea
+        
+        lineas = list(deduplicados.values())
         
         print(f"[DEBUG COMPRAS] Fecha: {fecha_desde} a {fecha_hasta}")
         print(f"[DEBUG COMPRAS] Líneas encontradas (diario Facturas Proveedores): {len(lineas)}")
@@ -468,7 +491,13 @@ class AnalisisStockTeoricoService:
             'PALLET', 'TARIMA',
             'ARRENDAMIENTO', 'ARRIENDO', 'RENTAL',
             'SERVOCOP', 'REPALETIZACION',
-            'TRACTOR', 'MTD', 'FIERRO'
+            'TRACTOR', 'MTD', 'FIERRO',
+            # Servicios agrícolas y no-fruta
+            'SEMILLA', 'SEED',
+            'HORTALIZA', 'VEGETABLE',
+            'CULTIVO', 'CULTIVATION',
+            'ASESOR', 'CONSULTING',
+            'SERVICIO', 'SERVICE'
         ]
         
         # Agrupar por tipo + manejo

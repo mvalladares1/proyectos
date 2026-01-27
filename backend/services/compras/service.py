@@ -470,10 +470,11 @@ class ComprasService:
         
         if oc_ids:
             # Leer todas las líneas de PO de estas OCs
+            # NOTA: Agregamos price_subtotal como fallback para cuando price_unit = 0
             po_lines = self.odoo.search_read(
                 'purchase.order.line',
                 [['order_id', 'in', oc_ids]],
-                ['id', 'order_id', 'product_id', 'name', 'product_qty', 'qty_received', 'qty_invoiced', 'price_unit'],
+                ['id', 'order_id', 'product_id', 'name', 'product_qty', 'qty_received', 'qty_invoiced', 'price_unit', 'price_subtotal'],
                 limit=5000
             )
             
@@ -482,6 +483,13 @@ class ComprasService:
                 qty_received = float(line.get('qty_received') or 0)
                 qty_invoiced = float(line.get('qty_invoiced') or 0)
                 price_unit = float(line.get('price_unit') or 0)
+                product_qty = float(line.get('product_qty') or 0)
+                price_subtotal = float(line.get('price_subtotal') or 0)
+                
+                # Si price_unit = 0 pero hay price_subtotal, calcular precio unitario
+                # Esto ocurre en algunos casos de OCs especiales
+                if price_unit == 0 and price_subtotal > 0 and product_qty > 0:
+                    price_unit = price_subtotal / product_qty
                 
                 # Solo considerar si hay recepción sin facturar
                 qty_pendiente = qty_received - qty_invoiced
