@@ -768,6 +768,7 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
                 
                 st.balloons()
                 st.toast("✅ Movimiento completado!", icon="🎉")
+                st.rerun()
                 
             else:
                 error_msg = f"Error HTTP: {resp.status_code}"
@@ -930,12 +931,32 @@ def render(username: str, password: str):
     if st.session_state.mov_camara:
         st.success(f"✅ **Destino:** {st.session_state.mov_camara['name']}")
         
-        # Inyectar auto-focus en textarea después de seleccionar cámara
+        # Inyectar auto-focus y auto-scroll al textarea después de seleccionar cámara
         st.markdown("""
         <script>
         setTimeout(() => {
-            autoFocusTextarea();
-        }, 500);
+            // Buscar el textarea de pallets
+            const textareas = document.querySelectorAll('textarea');
+            let palletTextarea = null;
+            
+            for (let textarea of textareas) {
+                const placeholder = textarea.getAttribute('placeholder');
+                if (placeholder && placeholder.includes('uno por línea')) {
+                    palletTextarea = textarea;
+                    break;
+                }
+            }
+            
+            if (palletTextarea) {
+                // Hacer scroll al textarea
+                palletTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Esperar a que termine el scroll y luego hacer focus
+                setTimeout(() => {
+                    palletTextarea.focus();
+                }, 600);
+            }
+        }, 300);
         </script>
         """, unsafe_allow_html=True)
     else:

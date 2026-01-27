@@ -85,8 +85,13 @@ def get_qc_icon(status):
 # --------------------- Llamadas API con caché ---------------------
 
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_gestion_data(_username, _password, fecha_inicio, fecha_fin, status_filter=None, qc_filter=None, search_text=None):
-    """Obtiene datos de gestión con caché de 2 minutos."""
+def fetch_gestion_data(_username, _password, fecha_inicio, fecha_fin, status_filter=None, qc_filter=None, search_text=None, origen=None):
+    """
+    Obtiene datos de gestión con caché de 2 minutos.
+    
+    Parámetros:
+        origen: Lista de orígenes a filtrar (RFP, VILKUN, SAN JOSE)
+    """
     params = {
         "username": _username, "password": _password,
         "fecha_inicio": fecha_inicio,
@@ -99,13 +104,27 @@ def fetch_gestion_data(_username, _password, fecha_inicio, fecha_fin, status_fil
     if search_text:
         params["search_text"] = search_text
     
+    # Construir URL con múltiples orígenes
+    url = f"{API_URL}/api/v1/recepciones-mp/gestion"
+    if origen and len(origen) > 0:
+        from urllib.parse import urlencode
+        query_string = urlencode(params)
+        for orig in origen:
+            query_string += f"&origen={orig}"
+        url = f"{url}?{query_string}"
+        params = None  # Ya están en la URL
+    
     try:
-        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/gestion", params=params, timeout=120)
+        if params:
+            resp = requests.get(url, params=params, timeout=120)
+        else:
+            resp = requests.get(url, timeout=120)
         if resp.status_code == 200:
             return resp.json()
-    except:
-        pass
+    except Exception as e:
+        print(f"Error fetching gestion data: {e}")
     return None
+
 
 
 @st.cache_data(ttl=120, show_spinner=False)

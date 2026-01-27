@@ -125,11 +125,16 @@ async def get_recepciones_gestion(
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     status_filter: Optional[str] = Query(None, description="Filtro estado validación"),
     qc_filter: Optional[str] = Query(None, description="Filtro estado QC"),
-    search_text: Optional[str] = Query(None, description="Buscar por número de albarán")
+    search_text: Optional[str] = Query(None, description="Buscar por número de albarán"),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, SAN JOSE")
 ):
     """
     Lista de recepciones con estados de validación y control de calidad.
     Similar al endpoint /compras/ordenes pero para recepciones de MP.
+    
+    Parámetros:
+        origen: Lista de orígenes. Valores válidos: "RFP" (ID 1), "VILKUN" (ID 217), "SAN JOSE" (ID 164).
+                Si no se especifica, muestra recepciones de todos los orígenes.
     """
     try:
         service = RecepcionesGestionService(username=username, password=password)
@@ -137,10 +142,12 @@ async def get_recepciones_gestion(
             fecha_inicio, fecha_fin,
             status_filter=status_filter,
             qc_filter=qc_filter,
-            search_text=search_text
+            search_text=search_text,
+            origen=origen
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get('/gestion/overview')

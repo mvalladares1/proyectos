@@ -1,5 +1,7 @@
 # Environment
 .env
+.env.local
+.env.production
 venv/
 .venv/
 
@@ -25,6 +27,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node.js (Stock Picking Frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
 # IDE
 .idea/
 .vscode/
@@ -45,3 +54,7 @@ debug_traceability.py
 # OS
 .DS_Store
 Thumbs.db
+
+# Stock Picking specific
+stock-picking/frontend/dist/
+stock-picking/backend/*.db

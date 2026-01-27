@@ -125,17 +125,37 @@ class RecepcionesGestionService:
     #                    DATOS PRINCIPALES
     # ============================================================
     
+    # Mapeo de orígenes a picking_type_id
+    ORIGEN_PICKING_MAP = {
+        "RFP": 1,
+        "VILKUN": 217,
+        "SAN JOSE": 164
+    }
+
     def get_recepciones_gestion(self, fecha_inicio: str, fecha_fin: str,
                                  status_filter: str = None,
                                  qc_filter: str = None,
-                                 search_text: str = None) -> List[Dict]:
+                                 search_text: str = None,
+                                 origen: List[str] = None) -> List[Dict]:
         """
         Obtiene las recepciones de MP con estados de validación y QC.
         Similar a get_ordenes_compra en ComprasService.
+        
+        Parámetros:
+            origen: Lista de orígenes a incluir. Valores válidos: "RFP", "VILKUN", "SAN JOSE".
+                    Si no se especifica, muestra recepciones de todos los orígenes.
         """
+        # Determinar picking_type_ids según origen
+        if origen and len(origen) > 0:
+            picking_type_ids = [self.ORIGEN_PICKING_MAP.get(o.upper(), 1) for o in origen if o.upper() in self.ORIGEN_PICKING_MAP]
+            if not picking_type_ids:
+                picking_type_ids = [1, 217, 164]  # Default: todos
+        else:
+            picking_type_ids = [1, 217, 164]  # Default: todos los orígenes
+        
         # Dominio base para recepciones de MP
         domain = [
-            ['picking_type_id', '=', 1],  # Recepciones
+            ['picking_type_id', 'in', picking_type_ids],
             ['x_studio_categora_de_producto', '=', 'MP'],
             ['scheduled_date', '>=', fecha_inicio],
             ['scheduled_date', '<=', fecha_fin + ' 23:59:59']

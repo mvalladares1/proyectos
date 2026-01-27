@@ -35,7 +35,7 @@ odoo = OdooClient(username=USERNAME, password=PASSWORD)
 # ============================================================================
 print("\n🔄 Obteniendo COMPRAS (Facturas de Proveedores)...")
 
-compras_lineas = odoo.search_read(
+compras_lineas_raw = odoo.search_read(
     'account.move.line',
     [
         ['move_id.move_type', '=', 'in_invoice'],
@@ -43,15 +43,47 @@ compras_lineas = odoo.search_read(
         ['move_id.journal_id.name', '=', 'Facturas de Proveedores'],
         ['product_id', '!=', False],
         ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],  # PRODUCTOS (plural)
-        ['product_id.type', '!=', 'service'],  # Excluir servicios        ['account_id.code', 'in', ['21020107', '21020106']],  # Solo cuentas de facturas por recibir
-        ['debit', '>', 0],  # Solo líneas con débito (compra real)        ['date', '>=', FECHA_DESDE],
+        ['product_id.type', '!=', 'service'],  # Excluir servicios
+        ['debit', '>', 0],  # Solo líneas con débito (compra real)
+        ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
+        ['date', '>=', FECHA_DESDE],
         ['date', '<=', FECHA_HASTA]
     ],
     ['product_id', 'quantity', 'debit', 'credit', 'account_id', 'date', 'move_id', 'name'],
     limit=100000
 )
 
-print(f"✓ Total líneas de compras: {len(compras_lineas):,}")
+print(f"✓ Total líneas RAW: {len(compras_lineas_raw):,}")
+
+# DEDUPLICAR: Las reclasificaciones contables (11040101, 51010101) tienen los MISMOS
+# kg y monto que la línea original, pero pueden estar en fechas diferentes.
+# Agrupar por factura + producto + cantidad + monto (SIN fecha) y tomar solo UNA.
+# Priorizar cuentas 21020xxx (Facturas por Recibir) sobre reclasificaciones.
+deduplicados = {}
+for linea in compras_lineas_raw:
+    move_id = linea.get('move_id', [None])[0]
+    prod_id = linea.get('product_id', [None])[0]
+    cantidad = round(linea.get('quantity', 0), 2)
+    monto = round(linea.get('debit', 0), 2)
+    cuenta = linea.get('account_id', [None, ''])[1] if linea.get('account_id') else ''
+    
+    # Clave única: factura + producto + cantidad + monto (SIN fecha)
+    key = (move_id, prod_id, cantidad, monto)
+    
+    # Si no existe, agregar
+    if key not in deduplicados:
+        deduplicados[key] = linea
+    else:
+        # Si existe, priorizar cuentas 21020xxx (Facturas por Recibir) sobre reclasificaciones
+        cuenta_existente = deduplicados[key].get('account_id', [None, ''])[1] if deduplicados[key].get('account_id') else ''
+        # Si la línea actual es 21020xxx y la existente no, reemplazar
+        if ('21020' in cuenta and '21020' not in cuenta_existente):
+            deduplicados[key] = linea
+
+compras_lineas = list(deduplicados.values())
+
+print(f"✓ Total líneas de compras (deduplicadas): {len(compras_lineas):,}")
+print(f"✓ Líneas duplicadas eliminadas: {len(compras_lineas_raw) - len(compras_lineas):,}")
 
 # Obtener información de productos para compras (busca por ID, incluirá archivados)
 if compras_lineas:
@@ -272,7 +304,13 @@ EXCLUIR_KEYWORDS = [
     'PALLET', 'TARIMA',
     'ARRENDAMIENTO', 'ARRIENDO', 'RENTAL',
     'SERVOCOP', 'REPALETIZACION',
-    'TRACTOR', 'MTD', 'FIERRO'
+    'TRACTOR', 'MTD', 'FIERRO',
+    # Servicios agrícolas y no-fruta
+    'SEMILLA', 'SEED',
+    'HORTALIZA', 'VEGETABLE',
+    'CULTIVO', 'CULTIVATION',
+    'ASESOR', 'CONSULTING',
+    'SERVICIO', 'SERVICE'
 ]
 
 for linea in ventas_lineas:
@@ -365,7 +403,118 @@ df_ventas = pd.DataFrame(ventas_data)
 print(f"✓ Filas de ventas: {len(df_ventas):,}")
 
 # ============================================================================
-# 5. EXPORTAR A EXCEL
+# 5. OBTENER INSUMOS CONSUMIDOS EN FABRICACIONES CON FRUTA
+# ============================================================================
+print("\n🏭 Obteniendo insumos consumidos en fabricaciones con fruta...")
+
+# Obtener todos los consumos de fabricaciones
+consumos_fabricacion = odoo.search_read(
+    'stock.move',
+    [
+        ['raw_material_production_id', '!=', False],
+        ['state', '=', 'done'],
+        ['date', '>=', FECHA_DESDE],
+        ['date', '<=', FECHA_HASTA]
+    ],
+    ['id', 'product_id', 'quantity_done', 'price_unit', 'raw_material_production_id', 'date', 'reference'],
+    limit=50000
+)
+
+print(f"✓ Total consumos en fabricaciones: {len(consumos_fabricacion):,}")
+
+# Identificar productos de MP (fruta) vs Insumos
+productos_mp_ids = set()
+for linea in compras_lineas:
+    prod_id = linea.get('product_id', [None])[0]
+    if prod_id:
+        productos_mp_ids.add(prod_id)
+
+# Identificar fabricaciones que procesaron fruta
+fabricaciones_con_fruta = set()
+for consumo in consumos_fabricacion:
+    prod_id = consumo.get('product_id', [None])[0]
+    if prod_id in productos_mp_ids:
+        orden_id = consumo.get('raw_material_production_id', [None])[0]
+        if orden_id:
+            fabricaciones_con_fruta.add(orden_id)
+
+print(f"✓ Fabricaciones con fruta: {len(fabricaciones_con_fruta):,}")
+
+# Filtrar consumos de INSUMOS en fabricaciones con fruta
+consumos_insumos_fruta = [
+    c for c in consumos_fabricacion 
+    if c.get('product_id', [None])[0] not in productos_mp_ids  # NO es MP
+    and c.get('raw_material_production_id', [None])[0] in fabricaciones_con_fruta  # Está en fabricación con fruta
+]
+
+print(f"✓ Consumos de insumos: {len(consumos_insumos_fruta):,}")
+
+# Obtener productos de insumos
+prod_ids_insumos = list(set([c.get('product_id', [None])[0] for c in consumos_insumos_fruta if c.get('product_id')]))
+
+productos_insumos_raw = odoo.models.execute_kw(
+    odoo.db, odoo.uid, odoo.password,
+    'product.product', 'read',
+    [prod_ids_insumos, ['id', 'name', 'default_code', 'categ_id', 'active']]
+)
+
+productos_insumos = productos_insumos_raw if productos_insumos_raw else []
+product_map_insumos = {p['id']: p for p in productos_insumos}
+
+# Preparar datos de insumos para Excel
+insumos_data = []
+for consumo in consumos_insumos_fruta:
+    fecha = consumo.get('date', '')
+    fecha_obj = None
+    if fecha:
+        try:
+            fecha_obj = datetime.strptime(fecha[:10], '%Y-%m-%d')
+        except:
+            pass
+    
+    if fecha_obj:
+        prod_id = consumo.get('product_id', [None])[0]
+        producto = product_map_insumos.get(prod_id, {})
+        
+        categ = producto.get('categ_id', [None, ''])
+        categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
+        
+        # FILTRO CRÍTICO: Solo categorías de INSUMOS/INVENTARIABLES
+        # Excluir: PRODUCTOS/MP, PRODUCTOS/PSP, PRODUCTOS/PTT, PRODUCTOS/RETAIL, PRODUCTOS/SUBPRODUCTO
+        categ_upper = categ_name.upper()
+        if 'PRODUCTOS / MP' in categ_upper or 'PRODUCTOS / PSP' in categ_upper or \
+           'PRODUCTOS / PTT' in categ_upper or 'PRODUCTOS / RETAIL' in categ_upper or \
+           'PRODUCTOS / SUBPRODUCTO' in categ_upper or 'PRODUCTOS/MP' in categ_upper or \
+           'PRODUCTOS/PSP' in categ_upper or 'PRODUCTOS/PTT' in categ_upper:
+            continue  # Saltar productos de fruta
+        
+        mo_ref = consumo.get('raw_material_production_id', [None, ''])
+        mo_name = mo_ref[1] if isinstance(mo_ref, (list, tuple)) else str(mo_ref)
+        
+        cantidad = consumo.get('quantity_done', 0)
+        precio_unit = consumo.get('price_unit', 0)
+        monto = cantidad * precio_unit
+        
+        insumos_data.append({
+            'Fecha': fecha[:10],
+            'Año': fecha_obj.year,
+            'Mes': fecha_obj.month,
+            'Orden Fabricación': mo_name,
+            'Producto ID': prod_id,
+            'Producto': producto.get('name', 'Desconocido'),
+            'Código': producto.get('default_code', ''),
+            'Categoría': categ_name,
+            'Producto Activo': 'Sí' if producto.get('active', True) else 'No (Archivado)',
+            'Cantidad': cantidad,
+            'Precio Unitario': precio_unit,
+            'Monto': monto
+        })
+
+df_insumos = pd.DataFrame(insumos_data)
+print(f"✓ Filas de insumos (filtradas): {len(df_insumos):,}")
+
+# ============================================================================
+# 6. EXPORTAR A EXCEL
 # ============================================================================
 print("\n💾 Exportando a Excel...")
 
@@ -373,43 +522,19 @@ timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 filename = f"stock_teorico_detalle_{timestamp}.xlsx"
 
 with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-    # Hoja 1: Todas las compras
-    df_compras.to_excel(writer, sheet_name='Compras Detalle', index=False)
+    # Hoja 1: Detalle de Compras
+    df_compras.to_excel(writer, sheet_name='Detalle Compras', index=False)
     
-    # Hoja 2: Todas las ventas
-    df_ventas.to_excel(writer, sheet_name='Ventas Detalle', index=False)
+    # Hoja 2: Detalle de Ventas
+    df_ventas.to_excel(writer, sheet_name='Detalle Ventas', index=False)
     
-    # Hoja 3: Resumen por temporada - Compras
-    if not df_compras.empty:
-        resumen_compras = df_compras.groupby(['Temporada', 'Tipo Fruta', 'Manejo']).agg({
-            'Cantidad (kg)': 'sum',
-            'Monto': 'sum'
-        }).reset_index()
-        resumen_compras['Precio/kg'] = resumen_compras['Monto'] / resumen_compras['Cantidad (kg)']
-        resumen_compras.to_excel(writer, sheet_name='Resumen Compras', index=False)
-    
-    # Hoja 4: Resumen por temporada - Ventas
-    if not df_ventas.empty:
-        resumen_ventas = df_ventas.groupby(['Temporada', 'Tipo Fruta', 'Manejo']).agg({
-            'Cantidad (kg)': 'sum',
-            'Monto': 'sum'
-        }).reset_index()
-        resumen_ventas['Precio/kg'] = resumen_ventas['Monto'] / abs(resumen_ventas['Cantidad (kg)'])
-        resumen_ventas.to_excel(writer, sheet_name='Resumen Ventas', index=False)
-    
-    # Hoja 5: Resumen consolidado
-    df_todos = pd.concat([df_compras, df_ventas], ignore_index=True)
-    if not df_todos.empty:
-        resumen_consolidado = df_todos.groupby(['Temporada', 'Tipo Movimiento', 'Tipo Fruta', 'Manejo']).agg({
-            'Cantidad (kg)': 'sum',
-            'Monto': 'sum'
-        }).reset_index()
-        resumen_consolidado.to_excel(writer, sheet_name='Resumen Consolidado', index=False)
+    # Hoja 3: Detalle de Insumos
+    df_insumos.to_excel(writer, sheet_name='Detalle Insumos', index=False)
 
 print(f"✅ Archivo exportado: {filename}")
 
 # ============================================================================
-# 6. RESUMEN EN CONSOLA POR AÑO
+# 7. RESUMEN EN CONSOLA POR AÑO
 # ============================================================================
 print("\n" + "=" * 140)
 print("RESUMEN POR AÑO EN CONSOLA")
@@ -443,6 +568,14 @@ for ano in sorted(df_todos['Temporada'].dropna().unique()):
             pct = (row['Cantidad (kg)'] / total_kg_compras * 100) if total_kg_compras > 0 else 0
             precio = row['Monto'] / row['Cantidad (kg)'] if row['Cantidad (kg)'] > 0 else 0
             print(f"      {tipo:20} {row['Cantidad (kg)']:>12,.2f} kg ({pct:>5.1f}%)  ${row['Monto']:>15,.2f}  ${precio:>8,.2f}/kg")
+    
+    # Insumos consumidos en fabricaciones
+    if not df_insumos.empty:
+        df_insumos_ano = df_insumos[df_insumos['Año'] == ano]
+        if not df_insumos_ano.empty:
+            total_monto_insumos = df_insumos_ano['Monto'].sum()
+            print(f"\n🔧 INSUMOS CONSUMIDOS EN FABRICACIONES:")
+            print(f"   Total valorizado: ${total_monto_insumos:,.2f}")
     
     # Ventas
     df_ventas_temp = df_temp[df_temp['Tipo Movimiento'] == 'VENTA']

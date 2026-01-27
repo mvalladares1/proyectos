@@ -146,16 +146,21 @@ def render(username: str, password: str):
             else:
                 _render_vista_expanders(df_filtered)
             
-            # Export
+            # Export Excel
             st.markdown("---")
+            buffer = io.BytesIO()
             try:
-                buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, sheet_name='Compras', index=False)
-                st.download_button("📥 Descargar Excel", buffer.getvalue(), "ordenes_compra.xlsx", 
-                                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            except:
-                st.download_button("📥 Descargar CSV", df.to_csv(index=False).encode('utf-8'), "ordenes_compra.csv", "text/csv")
+                    df.to_excel(writer, sheet_name='Ordenes_Compra', index=False)
+            except ImportError:
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='Ordenes_Compra', index=False)
+            st.download_button(
+                "📥 Descargar Excel", 
+                buffer.getvalue(), 
+                "ordenes_compra.xlsx", 
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
     else:
         st.info("Haz clic en **Consultar POs** para cargar los datos.")
 
