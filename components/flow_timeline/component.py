@@ -615,13 +615,57 @@ def render_flow_timeline(
             function updateTimeline(scale) {{
                 timelineG.selectAll('*').remove();
                 
-                const axis = d3.axisBottom(scale)
-                    .ticks(d3.timeDay.every(1))
-                    .tickFormat(d3.timeFormat('%d %b %Y'));
+                // Calcular zoom level para adaptar el timeline
+                const zoomLevel = currentTransform ? currentTransform.k : 1;
+                const domain = scale.domain();
+                const rangeDays = (domain[1] - domain[0]) / (1000 * 60 * 60 * 24);
                 
-                timelineG.append('g')
+                // Decidir el intervalo según el zoom y rango de días visibles
+                let tickInterval, tickFormat;
+                if (rangeDays / zoomLevel > 60) {{
+                    // Vista amplia: mostrar meses
+                    tickInterval = d3.timeMonth.every(1);
+                    tickFormat = d3.timeFormat('%b %Y');
+                }} else if (rangeDays / zoomLevel > 14) {{
+                    // Vista media: mostrar semanas
+                    tickInterval = d3.timeWeek.every(1);
+                    tickFormat = d3.timeFormat('%d %b');
+                }} else {{
+                    // Vista cercana: mostrar días
+                    tickInterval = d3.timeDay.every(1);
+                    tickFormat = d3.timeFormat('%d %b');
+                }}
+                
+                const axis = d3.axisBottom(scale)
+                    .ticks(tickInterval)
+                    .tickFormat(tickFormat);
+                
+                // Dibujar líneas verticales de referencia en el diagrama principal
+                const tickValues = scale.ticks(tickInterval);
+                g.selectAll('.date-line').remove();
+                g.selectAll('.date-line')
+                    .data(tickValues)
+                    .enter()
+                    .append('line')
+                    .attr('class', 'date-line')
+                    .attr('x1', d => scale(d))
+                    .attr('y1', 0)
+                    .attr('x2', d => scale(d))
+                    .attr('y2', height)
+                    .attr('stroke', 'rgba(255,255,255,0.05)')
+                    .attr('stroke-width', 1);
+                
+                // Eje del timeline
+                const axisGroup = timelineG.append('g')
                     .attr('class', 'timeline-axis')
                     .call(axis);
+                
+                // Rotar etiquetas para evitar solapamiento
+                axisGroup.selectAll('text')
+                    .attr('transform', 'rotate(-45)')
+                    .style('text-anchor', 'end')
+                    .attr('dx', '-0.8em')
+                    .attr('dy', '0.15em');
             }}
             
             // Inicializar diagrama
