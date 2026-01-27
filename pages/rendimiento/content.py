@@ -739,10 +739,17 @@ def _render_sankey(username: str, password: str):
                 else:  # Tabla
                     st.session_state.diagram_data = raw_data
                     st.session_state.diagram_data_type = "table"
-                    st.session_state.diagram_data = raw_data
-                    st.session_state.diagram_data_type = "table"
                 
+                # Guardar raw_data y contexto para IA
                 selected_info = st.session_state.found_recepciones[seleccion_idx]
+                st.session_state.raw_traceability_data = raw_data
+                st.session_state.search_context = {
+                    "search_type": "guide",
+                    "guide_number": selected_info.get('guia_despacho', 'N/A'),
+                    "picking_id": selected_picking_id,
+                    "supplier": selected_info.get('productor', 'N/A')
+                }
+                
                 st.success(f"✅ Diagrama generado para guía {selected_info['guia_despacho']} - {selected_info['productor']}")
                 st.rerun()
             
@@ -805,6 +812,17 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                
+                # Guardar raw_data y contexto para IA
+                st.session_state.raw_traceability_data = raw_data if 'raw_data' in locals() else data
+                st.session_state.search_context = {
+                    "search_type": "date_range",
+                    "start_date": fecha_inicio_str,
+                    "end_date": fecha_fin_str
+                }
+                
+                st.success(f"✅ Diagrama generado para período {fecha_inicio_str} a {fecha_fin_str}")
+                st.rerun()
             
             elif search_mode == "📦 Por paquete":
                 # Guardar el identificador para resaltado
@@ -876,6 +894,14 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                    
+                    # Guardar raw_data y contexto para IA
+                    st.session_state.raw_traceability_data = data
+                    st.session_state.search_context = {
+                        "search_type": "pallet",
+                        "pallet_id": identifier,
+                        "pallet_name": identifier
+                    }
                 
                 st.success(f"✅ Diagrama generado para paquete: {identifier}")
                 st.rerun()
@@ -951,6 +977,21 @@ def _render_sankey(username: str, password: str):
                         return
                     st.session_state.diagram_data = data
                     st.session_state.diagram_data_type = "table"
+                
+                # Guardar raw_data y contexto para IA
+                st.session_state.raw_traceability_data = raw_data if 'raw_data' in locals() else data
+                if sale_id:
+                    st.session_state.search_context = {
+                        "search_type": "sale",
+                        "sale_id": sale_id,
+                        "customer_name": "Cliente"
+                    }
+                else:
+                    st.session_state.search_context = {
+                        "search_type": "date_range",
+                        "start_date": fecha_inicio_str,
+                        "end_date": fecha_fin_str
+                    }
                 
                 # Mensaje dinámico
                 if sale_id:
