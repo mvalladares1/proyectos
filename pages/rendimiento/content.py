@@ -874,7 +874,6 @@ def _render_sankey(username: str, password: str):
                             "identifier": identifier.strip(),
                             "include_siblings": str(include_siblings).lower(),
                         }
-                        import requests, os
                         API_URL = os.getenv("API_URL", "http://127.0.0.1:8002")
                         resp = requests.get(
                             f"{API_URL}/api/v1/containers/traceability/by-identifier",
