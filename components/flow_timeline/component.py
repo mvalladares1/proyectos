@@ -428,6 +428,7 @@ def render_flow_timeline(
                 svg.call(zoom);
                 
                 currentTransform = d3.zoomIdentity;
+            }}
             
             function zoomed(event) {{
                 currentTransform = event.transform;
@@ -596,8 +597,8 @@ def render_flow_timeline(
                 .attr('y', 20)
                 .text(d => d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label);
             
-            // Timeline en la parte inferior
-                updateTimeline(xScale);
+            // Actualizar timeline
+            updateTimeline(xScale);
             }}
             
             // Timeline
@@ -621,12 +622,10 @@ def render_flow_timeline(
                     .call(axis);
             }}
             
-            updateTimeline(xScale);
-            }}
-            
             // Inicializar diagrama
             initDiagram();
             renderDiagram();
+            updateTimeline(xScale);
             
             // Tooltip functions
             function showTooltip(event, html) {{
