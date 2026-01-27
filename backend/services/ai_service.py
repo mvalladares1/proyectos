@@ -3,8 +3,12 @@ Servicio para integración con Ollama (modelo de IA local)
 """
 import httpx
 import json
+import logging
+import traceback
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class AIService:
@@ -33,7 +37,14 @@ class AIService:
             Resumen generado por la IA
         """
         # Construir el prompt según el contexto
-        prompt = self._build_prompt(search_context, traceability_data)
+        try:
+            logger.info(f"[AIService] Generando resumen para search_type: {search_context.get('search_type')}")
+            prompt = self._build_prompt(search_context, traceability_data)
+            logger.info(f"[AIService] Prompt construido: {len(prompt)} caracteres")
+        except Exception as e:
+            logger.error(f"[AIService] Error construyendo prompt: {str(e)}")
+            logger.error(traceback.format_exc())
+            return f"Error construyendo prompt: {type(e).__name__}: {str(e)}"
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -57,10 +68,16 @@ class AIService:
                 else:
                     return f"Error al conectar con Ollama: {response.status_code}"
                     
-        except httpx.ConnectError:
+        except httpx.ConnectError as e:
+            logger.error(f"[AIService] Error de conexión: {str(e)}")
             return "⚠️ No se pudo conectar con Ollama. Asegúrate de que el servicio esté corriendo (ollama serve)."
+        except httpx.TimeoutException as e:
+            logger.error(f"[AIService] Timeout: {str(e)}")
+            return "⏱️ Timeout esperando respuesta de Ollama."
         except Exception as e:
-            return f"Error inesperado: {str(e)}"
+            logger.error(f"[AIService] Error inesperado: {type(e).__name__}: {str(e)}")
+            logger.error(traceback.format_exc())
+            return f"Error inesperado: {type(e).__name__}: {str(e)}"
     
     def _build_prompt(self, context: Dict[str, Any], data: Dict[str, Any]) -> str:
         """Construye el prompt según el tipo de búsqueda"""
@@ -148,6 +165,13 @@ IMPORTANTE:
         sale_id = context.get("sale_id", "N/A")
         customer = context.get("customer_name", "Cliente desconocido")
         
+        # Safe formatting
+        weight_out = stats['total_weight_out']
+        weight_str = f"{weight_out:.2f} kg" if weight_out else "N/A"
+        date_min = stats['date_range']['min'] or "N/A"
+        date_max = stats['date_range']['max'] or "N/A"
+        suppliers_str = ', '.join(stats['supplier_names']) if stats['supplier_names'] else 'N/A'
+        
         return f"""
 CONTEXTO: Trazabilidad de venta
 - ID de Venta: {sale_id}
@@ -155,10 +179,10 @@ CONTEXTO: Trazabilidad de venta
 
 DATOS:
 - Total de pallets enviados: {stats['total_pallets']}
-- Peso total: {stats['total_weight_out']:.2f} kg
+- Peso total: {weight_str}
 - Procesos involucrados: {stats['total_processes']}
-- Proveedores origen: {', '.join(stats['supplier_names']) if stats['supplier_names'] else 'N/A'}
-- Rango de fechas: {stats['date_range']['min']} a {stats['date_range']['max']}
+- Proveedores origen: {suppliers_str}
+- Rango de fechas: {date_min} a {date_max}
 
 TAREA: Genera un resumen ejecutivo de la trazabilidad de esta venta. Describe:
 1. El origen de los productos (proveedores y fechas de recepción)
@@ -172,6 +196,14 @@ TAREA: Genera un resumen ejecutivo de la trazabilidad de esta venta. Describe:
         start_date = context.get("start_date", "N/A")
         end_date = context.get("end_date", "N/A")
         
+        # Safe formatting
+        weight_in = stats['total_weight_in']
+        weight_out = stats['total_weight_out']
+        weight_in_str = f"{weight_in:.2f} kg" if weight_in else "N/A"
+        weight_out_str = f"{weight_out:.2f} kg" if weight_out else "N/A"
+        suppliers_str = ', '.join(stats['supplier_names'][:3]) if stats['supplier_names'] else 'N/A'
+        customers_str = ', '.join(stats['customer_names'][:3]) if stats['customer_names'] else 'N/A'
+        
         return f"""
 CONTEXTO: Trazabilidad por rango de fechas
 - Período: {start_date} a {end_date}
@@ -180,10 +212,10 @@ DATOS:
 - Total de pallets: {stats['total_pallets']}
 - Recepciones: {stats['total_receptions']}
 - Procesos de producción: {stats['total_processes']}
-- Proveedores activos: {stats['total_suppliers']} ({', '.join(stats['supplier_names'][:3])})
-- Clientes atendidos: {stats['total_customers']} ({', '.join(stats['customer_names'][:3])})
-- Peso total procesado: {stats['total_weight_in']:.2f} kg
-- Peso total despachado: {stats['total_weight_out']:.2f} kg
+- Proveedores activos: {stats['total_suppliers']} ({suppliers_str})
+- Clientes atendidos: {stats['total_customers']} ({customers_str})
+- Peso total procesado: {weight_in_str}
+- Peso total despachado: {weight_out_str}
 
 TAREA: Genera un resumen del flujo de trazabilidad en este período. Describe:
 1. Volumen de recepciones y principales proveedores
@@ -197,16 +229,22 @@ TAREA: Genera un resumen del flujo de trazabilidad en este período. Describe:
         pallet_id = context.get("pallet_id", "N/A")
         pallet_name = context.get("pallet_name", "N/A")
         
+        # Safe formatting
+        date_min = stats['date_range']['min'] or "N/A"
+        date_max = stats['date_range']['max'] or "N/A"
+        suppliers_str = ', '.join(stats['supplier_names']) if stats['supplier_names'] else 'Producción interna'
+        customers_str = ', '.join(stats['customer_names']) if stats['customer_names'] else 'Stock interno'
+        
         return f"""
 CONTEXTO: Trazabilidad de pallet específico
 - ID Pallet: {pallet_id}
 - Nombre: {pallet_name}
 
 DATOS:
-- Proveedores origen: {', '.join(stats['supplier_names']) if stats['supplier_names'] else 'Producción interna'}
+- Proveedores origen: {suppliers_str}
 - Procesos aplicados: {stats['total_processes']}
-- Cliente destino: {', '.join(stats['customer_names']) if stats['customer_names'] else 'Stock interno'}
-- Rango temporal: {stats['date_range']['min']} a {stats['date_range']['max']}
+- Cliente destino: {customers_str}
+- Rango temporal: {date_min} a {date_max}
 - Enlaces en la cadena: {stats['total_links']}
 
 TAREA: Genera un resumen detallado de la trazabilidad de este pallet. Describe:
@@ -220,17 +258,24 @@ TAREA: Genera un resumen detallado de la trazabilidad de este pallet. Describe:
         """Prompt para búsqueda por guía de despacho"""
         guide_number = context.get("guide_number", "N/A")
         
+        # Safe formatting
+        weight_out = stats['total_weight_out']
+        weight_str = f"{weight_out:.2f} kg" if weight_out else "N/A"
+        suppliers_str = ', '.join(stats['supplier_names']) if stats['supplier_names'] else 'N/A'
+        customers_str = ', '.join(stats['customer_names']) if stats['customer_names'] else 'N/A'
+        date_max = stats['date_range']['max'] or "N/A"
+        
         return f"""
 CONTEXTO: Trazabilidad por guía de despacho
 - Guía de Despacho: {guide_number}
 
 DATOS:
 - Pallets en la guía: {stats['total_pallets']}
-- Peso total: {stats['total_weight_out']:.2f} kg
-- Proveedores origen: {', '.join(stats['supplier_names']) if stats['supplier_names'] else 'N/A'}
+- Peso total: {weight_str}
+- Proveedores origen: {suppliers_str}
 - Procesos involucrados: {stats['total_processes']}
-- Cliente destino: {', '.join(stats['customer_names']) if stats['customer_names'] else 'N/A'}
-- Fecha: {stats['date_range']['max']}
+- Cliente destino: {customers_str}
+- Fecha: {date_max}
 
 TAREA: Genera un resumen de la trazabilidad de esta guía de despacho. Describe:
 1. Composición del despacho (pallets y productos)
@@ -241,6 +286,13 @@ TAREA: Genera un resumen de la trazabilidad de esta guía de despacho. Describe:
     
     def _build_generic_context(self, context: Dict, stats: Dict) -> str:
         """Prompt genérico"""
+        
+        # Safe formatting
+        weight_in = stats['total_weight_in']
+        weight_out = stats['total_weight_out']
+        weight_in_str = f"{weight_in:.2f} kg" if weight_in else "N/A"
+        weight_out_str = f"{weight_out:.2f} kg" if weight_out else "N/A"
+        
         return f"""
 CONTEXTO: Análisis de trazabilidad general
 
@@ -250,8 +302,8 @@ DATOS:
 - Procesos: {stats['total_processes']}
 - Proveedores: {stats['total_suppliers']}
 - Clientes: {stats['total_customers']}
-- Peso entrada: {stats['total_weight_in']:.2f} kg
-- Peso salida: {stats['total_weight_out']:.2f} kg
+- Peso entrada: {weight_in_str}
+- Peso salida: {weight_out_str}
 
 TAREA: Genera un resumen general del flujo de trazabilidad. Describe el flujo completo desde proveedores hasta clientes, destacando volúmenes, procesos clave y observaciones relevantes.
 """
