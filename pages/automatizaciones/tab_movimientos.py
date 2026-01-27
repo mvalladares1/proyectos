@@ -476,9 +476,6 @@ def _agregar_pallet(code: str, username: str, password: str, api_url: str):
             
             data = resp.json()
             
-            # DEBUG: Mostrar respuesta completa
-            st.write("🔍 DEBUG - Respuesta del API:", data)
-            
             # Validar respuesta básica
             valid, error_msg = _validate_api_response(data, ["found"])
             if not valid:
@@ -708,6 +705,10 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
                 elif "moved" in result:
                     success_count = result.get("moved", 0)
                     error_count = len(result.get("errors", []))
+                # Si hay details[] (formato detallado por pallet)
+                elif "details" in result and isinstance(result["details"], list):
+                    success_count = sum(1 for d in result["details"] if d.get("success"))
+                    error_count = sum(1 for d in result["details"] if not d.get("success"))
                 # Si solo hay message de éxito
                 elif "message" in result:
                     success_count = len(pallet_codes)
@@ -763,6 +764,7 @@ def _ejecutar_movimiento(username: str, password: str, api_url: str):
                 st.session_state.mov_pallets = []
                 st.session_state.mov_camara = None
                 st.session_state.pallet_input = ""
+                st.session_state.pallet_textarea_value = ""
                 
                 st.balloons()
                 st.toast("✅ Movimiento completado!", icon="🎉")
@@ -1008,8 +1010,17 @@ def render(username: str, password: str):
                     _render_pallet_card(pallet, idx)
                 with col2:
                     if st.button("❌", key=f"remove_{idx}", help="Eliminar"):
+                        removed_code = st.session_state.mov_pallets[idx]["code"]
                         st.session_state.mov_pallets.pop(idx)
+                        
+                        # Limpiar también del textarea para evitar que se vuelva a agregar
+                        current_textarea = st.session_state.get("pallet_textarea_value", "")
+                        lines = [line.strip() for line in current_textarea.split("\n") if line.strip()]
+                        lines = [line for line in lines if line != removed_code]
+                        st.session_state.pallet_textarea_value = "\n".join(lines)
+                        
                         st.toast("🗑️ Pallet eliminado", icon="✅")
+                        st.rerun()
 
     # === HISTORIAL DEL DÍA ===
     if st.session_state.get("show_historial", False) and st.session_state.mov_historial_dia:
