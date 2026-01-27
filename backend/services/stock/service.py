@@ -70,6 +70,17 @@ class StockService:
             if picking_types:
                 picking_type_id = picking_types[0]["id"]
             
+            # Buscar transportista ADMINISTRATOR
+            carrier_id = None
+            carriers = self.odoo.search_read(
+                "res.partner",
+                [("name", "=", "ADMINISTRATOR")],
+                ["id"],
+                limit=1
+            )
+            if carriers:
+                carrier_id = carriers[0]["id"]
+            
             # Crear un único Picking para todos los movimientos
             # Usamos la primera ubicación encontrada como origen del picking (lo más común)
             first_loc_id = quants[0]["location_id"][0]
@@ -79,8 +90,14 @@ class StockService:
                 "location_id": first_loc_id,
                 "location_dest_id": location_dest_id,
                 "origin": f"Dashboard Move Multi: {pallet_code}",
-                "move_type": "direct"
+                "move_type": "direct",
+                "x_studio_es_transferencia_interna": True,  # Marcar como transferencia interna
             }
+            
+            # Agregar transportista si se encontró
+            if carrier_id:
+                picking_vals["x_studio_rut_transportista"] = carrier_id
+            
             picking_id = self.odoo.execute("stock.picking", "create", picking_vals)
             
             # Crear un Stock Move por cada Quant
@@ -96,38 +113,19 @@ class StockService:
                 }
                 self.odoo.execute("stock.move", "create", move_vals)
             
-            # Confirmar y Asignar Picking
+            # Solo confirmar el Picking (NO asignar ni validar automáticamente)
+            # El usuario debe ir a Odoo y hacer: Comprobar Disponibilidad -> Validar manualmente
             self.odoo.execute("stock.picking", "action_confirm", [picking_id])
-            self.odoo.execute("stock.picking", "action_assign", [picking_id])
             
-            # Buscar las move lines creadas y asignar package y qty_done
-            # NOTA: En Odoo 16, stock.move.line usa reserved_uom_qty, no product_uom_qty
-            m_lines = self.odoo.search_read(
-                "stock.move.line",
-                [("picking_id", "=", picking_id)],
-                ["id", "product_id", "reserved_uom_qty"]
-            )
-            
-            for ml in m_lines:
-                # Intentar matchear con el quant original por producto (simplificado)
-                # En un flujo directo, la qty_done suele ser igual a la reserved_uom_qty
-                self.odoo.execute(
-                    "stock.move.line", 
-                    "write", 
-                    [ml["id"]],
-                    {
-                        "package_id": package_id, 
-                        "result_package_id": package_id, 
-                        "qty_done": ml["reserved_uom_qty"]
-                    }
-                )
-            
-            # Validar Picking
-            self.odoo.execute("stock.picking", "button_validate", [picking_id])
+            # Obtener el nombre de la transferencia creada
+            picking_data = self.odoo.read("stock.picking", [picking_id], ["name"])
+            picking_name = picking_data[0]["name"] if picking_data else f"ID {picking_id}"
             
             return {
                 "success": True, 
-                "message": f"✅ Transferencia Realizada: {pallet_code} ({len(quants)} items) movido a destino.",
+                "message": f"✅ Transferencia {picking_name} creada para {pallet_code} ({len(quants)} items). Ir a Odoo para VALIDAR.",
+                "picking_id": picking_id,
+                "picking_name": picking_name,
                 "type": "transfer"
             }
 
