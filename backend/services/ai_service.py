@@ -19,7 +19,8 @@ class AIService:
         # En Docker Linux, usar host.docker.internal o la IP del gateway
         import os
         self.ollama_url = ollama_url or os.getenv("OLLAMA_URL", "http://172.17.0.1:11434")
-        self.model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")  # Modelo 1B es más rápido
+        # Usar modelo pequeño para velocidad en CPU
+        self.model = os.getenv("OLLAMA_MODEL", "llama3.2")
         
     async def generate_traceability_summary(
         self,
