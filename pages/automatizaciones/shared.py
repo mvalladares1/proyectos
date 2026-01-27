@@ -107,15 +107,29 @@ CSS_GLOBAL = """
 def get_tuneles(_username, _password):
     """Obtiene la lista de túneles disponibles."""
     try:
+        url = f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/procesos"
         response = requests.get(
-            f"{API_URL}/api/v1/automatizaciones/tuneles-estaticos/procesos",
+            url,
             params={"username": _username, "password": _password},
             timeout=10
         )
         if response.status_code == 200:
             return response.json()
+        else:
+            print(f"❌ Error HTTP {response.status_code} al obtener túneles: {response.text[:200]}")
+            st.error(f"Error HTTP {response.status_code} desde API: {response.text[:100]}")
         return []
-    except:
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ Error de conexión a {API_URL}: {e}")
+        st.error(f"No se pudo conectar al backend en {API_URL}. Verifique que esté corriendo.")
+        return []
+    except requests.exceptions.Timeout:
+        print(f"❌ Timeout conectando a {API_URL}")
+        st.error(f"Timeout conectando al backend en {API_URL}")
+        return []
+    except Exception as e:
+        print(f"❌ Error inesperado obteniendo túneles: {type(e).__name__} - {e}")
+        st.error(f"Error inesperado: {e}")
         return []
 
 

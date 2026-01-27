@@ -147,27 +147,23 @@ if compras_lineas:
         }
 
 # ============================================================================
-# 2. OBTENER TODAS LAS VENTAS (FACTURAS CLIENTES)
+# 2. OBTENER COSTO DE VENTAS (FACTURAS CLIENTES)
 # ============================================================================
-print("\n🔄 Obteniendo VENTAS (Facturas de Cliente)...")
+print("\n🔄 Obteniendo COSTO DE VENTAS (Facturas de Cliente)...")
 
-# Incluye líneas CON producto (categoría PRODUCTOS) y SIN producto (texto libre)
-# Excluye solo servicios de cámaras (41010202) y ventas de activos fijos (71010204)
-# INCLUYE cuenta 43010111 (Otros Ingresos) porque son ventas válidas (fierro, pallets, etc.)
+# Buscar líneas con débito en facturas de cliente (esto podría ser el costo de venta)
+# Primero hagamos una búsqueda amplia para ver qué cuentas aparecen
 ventas_lineas = odoo.search_read(
     'account.move.line',
     [
         ['move_id.move_type', '=', 'out_invoice'],
         ['move_id.state', '=', 'posted'],
-        ['move_id.payment_state', '!=', 'reversed'],  # Excluir facturas revertidas
+        ['move_id.payment_state', '!=', 'reversed'],
         ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
-        ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
-        ['account_id.code', 'not in', ['41010202', '71010204']],  # Excluir solo servicios cámaras y activos fijos
-        '|',  # OR condition
-            ['product_id', '=', False],  # Incluir texto libre
-            '&',  # AND condition para productos
-                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
-                ['product_id.type', '!=', 'service'],
+        ['display_type', '=', 'product'],
+        ['product_id', '!=', False],
+        ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
+        ['debit', '>', 0],  # Solo débitos (costo de venta)
         ['date', '>=', FECHA_DESDE],
         ['date', '<=', FECHA_HASTA]
     ],
@@ -291,79 +287,31 @@ df_compras = pd.DataFrame(compras_data)
 print(f"✓ Filas de compras: {len(df_compras):,}")
 
 # ============================================================================
-# 4. PREPARAR DATOS PARA EXCEL - VENTAS
+# 4. PREPARAR DATOS PARA EXCEL - VENTAS (COSTO DE VENTA)
 # ============================================================================
-print("\n📊 Preparando datos de VENTAS para Excel...")
+print("\n📊 Preparando datos de COSTO DE VENTAS para Excel...")
 
 ventas_data = []
-
-# Palabras clave a excluir en texto libre (basura)
-EXCLUIR_KEYWORDS = [
-    'FLETE', 'FREIGHT',
-    'TERMOGRAFO', 'THERMOGRAPH',
-    'PALLET', 'TARIMA',
-    'ARRENDAMIENTO', 'ARRIENDO', 'RENTAL',
-    'SERVOCOP', 'REPALETIZACION',
-    'TRACTOR', 'MTD', 'FIERRO',
-    # Servicios agrícolas y no-fruta
-    'SEMILLA', 'SEED',
-    'HORTALIZA', 'VEGETABLE',
-    'CULTIVO', 'CULTIVATION',
-    'ASESOR', 'CONSULTING',
-    'SERVICIO', 'SERVICE'
-]
 
 for linea in ventas_lineas:
     prod_id = linea.get('product_id', [None])[0] if linea.get('product_id') else None
     
-    # Si NO hay product_id, es una línea de texto libre
     if not prod_id:
-        prod_name = str(linea.get('name', '') or '').strip()
-        
-        # Excluir si está vacío o contiene keywords de basura
-        if not prod_name or prod_name.upper() in ['N/A', 'FALSE', 'NONE']:
-            continue
-        
-        # Excluir solo si la descripción ES PRINCIPALMENTE sobre estos conceptos
-        # (no si solo los menciona como parte del empaque)
-        prod_name_upper = prod_name.upper()
-        
-        # Detectar si es venta de insumos/servicios (no fruta):
-        # - Comienza con el keyword
-        # - O es muy corta y contiene el keyword (< 30 caracteres)
-        # - O keyword está al principio o es la palabra principal
-        es_insumo_servicio = False
-        for keyword in EXCLUIR_KEYWORDS:
-            if prod_name_upper.startswith(keyword):
-                es_insumo_servicio = True
-                break
-            # Si la descripción es corta y contiene keyword, probablemente no es fruta
-            if len(prod_name) < 30 and keyword in prod_name_upper:
-                es_insumo_servicio = True
-                break
-        
-        if es_insumo_servicio:
-            continue
-        
-        categ_name = 'TEXTO LIBRE'
-        tipo_fruta = 'Sin tipo'
-        manejo = 'Sin manejo'
-        codigo = ''
-        activo = 'N/A'
-    else:
-        # Si hay product_id, obtener toda la info del producto
-        producto = product_map_ventas.get(prod_id, {})
-        tmpl_id = producto.get('product_tmpl_id', [None])[0] if producto.get('product_tmpl_id') else None
-        template_info = template_map_ventas.get(tmpl_id, {}) if tmpl_id else {}
-        
-        categ = producto.get('categ_id', [None, ''])
-        categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
-        
-        prod_name = producto.get('name', 'Desconocido')
-        tipo_fruta = template_info.get('tipo', 'Sin tipo')
-        manejo = template_info.get('manejo', 'Sin manejo')
-        codigo = producto.get('default_code', '')
-        activo = 'Sí' if producto.get('active', True) else 'No (Archivado)'
+        continue  # Saltamos si no hay producto (no debería pasar con filtro 51010101)
+    
+    # Obtener info del producto
+    producto = product_map_ventas.get(prod_id, {})
+    tmpl_id = producto.get('product_tmpl_id', [None])[0] if producto.get('product_tmpl_id') else None
+    template_info = template_map_ventas.get(tmpl_id, {}) if tmpl_id else {}
+    
+    categ = producto.get('categ_id', [None, ''])
+    categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
+    
+    prod_name = producto.get('name', 'Desconocido')
+    tipo_fruta = template_info.get('tipo', 'Sin tipo')
+    manejo = template_info.get('manejo', 'Sin manejo')
+    codigo = producto.get('default_code', '')
+    activo = 'Sí' if producto.get('active', True) else 'No (Archivado)'
     
     account = linea.get('account_id', [None, ''])
     account_name = account[1] if isinstance(account, (list, tuple)) else str(account)
@@ -374,8 +322,8 @@ for linea in ventas_lineas:
     fecha = linea.get('date', '')
     fecha_obj = datetime.strptime(fecha, '%Y-%m-%d') if fecha else None
     
-    # Calcular monto neto (credit - debit)
-    monto_neto = linea.get('credit', 0) - linea.get('debit', 0)
+    # En cuenta 51010101 (COSTO DE VENTA), el débito es el costo de lo vendido
+    monto_costo = linea.get('debit', 0)
     
     ventas_data.append({
         'Fecha': fecha,
@@ -384,7 +332,7 @@ for linea in ventas_lineas:
         'Mes': fecha_obj.month if fecha_obj else None,
         'Tipo Movimiento': 'VENTA',
         'Factura': move_name,
-        'Producto ID': prod_id if prod_id else 'TEXTO LIBRE',
+        'Producto ID': prod_id,
         'Producto': prod_name,
         'Código': codigo,
         'Producto Activo': activo,
@@ -395,12 +343,12 @@ for linea in ventas_lineas:
         'Cantidad (kg)': linea.get('quantity', 0),
         'Débito': linea.get('debit', 0),
         'Crédito': linea.get('credit', 0),
-        'Monto': monto_neto,  # Monto neto (credit - debit)
-        'Precio/kg': monto_neto / abs(linea.get('quantity', 1)) if linea.get('quantity', 0) != 0 else 0
+        'Monto': monto_costo,  # Costo de venta (débito)
+        'Precio/kg': monto_costo / abs(linea.get('quantity', 1)) if linea.get('quantity', 0) != 0 else 0
     })
 
 df_ventas = pd.DataFrame(ventas_data)
-print(f"✓ Filas de ventas: {len(df_ventas):,}")
+print(f"✓ Filas de costo de ventas: {len(df_ventas):,}")
 
 # ============================================================================
 # 5. OBTENER INSUMOS CONSUMIDOS EN FABRICACIONES CON FRUTA
