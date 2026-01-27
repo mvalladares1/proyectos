@@ -1412,7 +1412,9 @@ def render_ai_summary(search_context: dict, traceability_data: dict, api_url: st
                 
                 if response.status_code == 200:
                     result = response.json()
+                    st.write("🔍 DEBUG - Respuesta completa:", result)  # DEBUG
                     summary = result.get("summary", "")
+                    st.write("🔍 DEBUG - Summary extraído:", repr(summary))  # DEBUG
                     
                     if summary:
                         # Mostrar resumen
