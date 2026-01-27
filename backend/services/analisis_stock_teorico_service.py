@@ -328,6 +328,8 @@ class AnalisisStockTeoricoService:
         # Líneas de facturas de cliente - SOLO diario "Facturas de Cliente"
         # Filtrado SOLO por tipo_fruta y manejo (sin restricción de cuenta contable)
         # display_type='product' excluye líneas de COGS que duplican
+        # Incluye líneas CON producto (categoría PRODUCTOS) y SIN producto (texto libre)
+        # Excluye cuentas de servicios, otros ingresos y activos fijos
         lineas = self.odoo.search_read(
             'account.move.line',
             [
@@ -335,14 +337,17 @@ class AnalisisStockTeoricoService:
                 ['move_id.state', '=', 'posted'],
                 ['move_id.payment_state', '!=', 'reversed'],  # Excluir facturas revertidas
                 ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
-                ['product_id', '!=', False],
-                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
-                ['product_id.type', '!=', 'service'],
                 ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
+                ['account_id.code', 'not in', ['41010202', '43010111', '71010204']],  # Excluir servicios/otros/activos
+                '|',  # OR condition
+                    ['product_id', '=', False],  # Incluir texto libre
+                    '&',  # AND condition para productos
+                        ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
+                        ['product_id.type', '!=', 'service'],
                 ['date', '>=', fecha_desde],
                 ['date', '<=', fecha_hasta]
             ],
-            ['product_id', 'quantity', 'credit', 'debit'],
+            ['product_id', 'quantity', 'credit', 'debit', 'name'],
             limit=100000
         )
         
@@ -455,21 +460,50 @@ class AnalisisStockTeoricoService:
         print(f"[DEBUG VENTAS] Productos incluidos: {productos_incluidos}")
         print(f"[DEBUG VENTAS] Productos mapeados: {len(productos_map)}")
         
+        # Palabras clave a excluir en texto libre (basura)
+        EXCLUIR_KEYWORDS = [
+            'FLETE', 'FREIGHT',
+            'TERMOGRAFO', 'THERMOGRAPH',
+            'PALLET', 'TARIMA',
+            'ARRENDAMIENTO', 'ARRIENDO', 'RENTAL',
+            'SERVOCOP', 'REPALETIZACION',
+            'TRACTOR', 'MTD', 'FIERRO'
+        ]
+        
         # Agrupar por tipo + manejo
         agrupado = {}
         
         for linea in lineas:
-            prod_id = linea.get('product_id', [None])[0]
-            if not prod_id or prod_id not in productos_map:
-                continue
+            prod_id = linea.get('product_id', [None])[0] if linea.get('product_id') else None
             
-            prod = productos_map[prod_id]
-            key = f"{prod['tipo_fruta']}||{prod['manejo']}"
+            # Si NO hay product_id, es texto libre - usar descripción
+            if not prod_id:
+                nombre_desc = str(linea.get('name', '') or '').strip()
+                
+                # Excluir si está vacío o contiene keywords de basura
+                if not nombre_desc or nombre_desc.upper() in ['N/A', 'FALSE', 'NONE']:
+                    continue
+                
+                nombre_desc_upper = nombre_desc.upper()
+                if any(keyword in nombre_desc_upper for keyword in EXCLUIR_KEYWORDS):
+                    continue
+                
+                key = f"TEXTO LIBRE||{nombre_desc}"
+                tipo_fruta = 'TEXTO LIBRE'
+                manejo = nombre_desc
+            elif prod_id in productos_map:
+                prod = productos_map[prod_id]
+                key = f"{prod['tipo_fruta']}||{prod['manejo']}"
+                tipo_fruta = prod['tipo_fruta']
+                manejo = prod['manejo']
+            else:
+                # Producto no en el mapa (no debería pasar)
+                continue
             
             if key not in agrupado:
                 agrupado[key] = {
-                    'tipo_fruta': prod['tipo_fruta'],
-                    'manejo': prod['manejo'],
+                    'tipo_fruta': tipo_fruta,
+                    'manejo': manejo,
                     'kg': 0,
                     'monto': 0
                 }

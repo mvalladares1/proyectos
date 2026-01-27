@@ -119,6 +119,8 @@ if compras_lineas:
 # ============================================================================
 print("\n🔄 Obteniendo VENTAS (Facturas de Cliente)...")
 
+# Incluye líneas CON producto (categoría PRODUCTOS) y SIN producto (texto libre)
+# Excluye cuentas de servicios, otros ingresos y activos fijos
 ventas_lineas = odoo.search_read(
     'account.move.line',
     [
@@ -126,10 +128,13 @@ ventas_lineas = odoo.search_read(
         ['move_id.state', '=', 'posted'],
         ['move_id.payment_state', '!=', 'reversed'],  # Excluir facturas revertidas
         ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
-        ['product_id', '!=', False],
-        ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],  # PRODUCTOS (plural)
-        ['product_id.type', '!=', 'service'],  # Excluir servicios
         ['display_type', '=', 'product'],  # Solo líneas de producto, excluir COGS
+        ['account_id.code', 'not in', ['41010202', '43010111', '71010204']],  # Excluir servicios/otros/activos
+        '|',  # OR condition
+            ['product_id', '=', False],  # Incluir texto libre
+            '&',  # AND condition para productos
+                ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
+                ['product_id.type', '!=', 'service'],
         ['date', '>=', FECHA_DESDE],
         ['date', '<=', FECHA_HASTA]
     ],
@@ -226,11 +231,10 @@ for linea in compras_lineas:
     
     fecha = linea.get('date', '')
     fecha_obj = datetime.strptime(fecha, '%Y-%m-%d') if fecha else None
-    temporada = fecha_obj.year if fecha_obj and fecha_obj.month >= 11 else (fecha_obj.year - 1 if fecha_obj else None)
     
     compras_data.append({
         'Fecha': fecha,
-        'Temporada': temporada + 1 if temporada else None,  # Temporada siguiente
+        'Temporada': fecha_obj.year if fecha_obj else None,  # Temporada siguiente
         'Año': fecha_obj.year if fecha_obj else None,
         'Mes': fecha_obj.month if fecha_obj else None,
         'Tipo Movimiento': 'COMPRA',
@@ -259,19 +263,52 @@ print(f"✓ Filas de compras: {len(df_compras):,}")
 print("\n📊 Preparando datos de VENTAS para Excel...")
 
 ventas_data = []
+
+# Palabras clave a excluir en texto libre (basura)
+EXCLUIR_KEYWORDS = [
+    'FLETE', 'FREIGHT',
+    'TERMOGRAFO', 'THERMOGRAPH',
+    'PALLET', 'TARIMA',
+    'ARRENDAMIENTO', 'ARRIENDO', 'RENTAL',
+    'SERVOCOP', 'REPALETIZACION',
+    'TRACTOR', 'MTD', 'FIERRO'
+]
+
 for linea in ventas_lineas:
-    prod_id = linea.get('product_id', [None])[0]
+    prod_id = linea.get('product_id', [None])[0] if linea.get('product_id') else None
+    
+    # Si NO hay product_id, es una línea de texto libre
     if not prod_id:
-        continue
-    
-    producto = product_map_ventas.get(prod_id, {})
-    tmpl_id = producto.get('product_tmpl_id', [None])[0] if producto.get('product_tmpl_id') else None
-    template_info = template_map_ventas.get(tmpl_id, {}) if tmpl_id else {}
-    
-    categ = producto.get('categ_id', [None, ''])
-    categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
-    
-    prod_name = producto.get('name', 'Desconocido')
+        prod_name = str(linea.get('name', '') or '').strip()
+        
+        # Excluir si está vacío o contiene keywords de basura
+        if not prod_name or prod_name.upper() in ['N/A', 'FALSE', 'NONE']:
+            continue
+        
+        # Excluir si contiene palabras clave de basura
+        prod_name_upper = prod_name.upper()
+        if any(keyword in prod_name_upper for keyword in EXCLUIR_KEYWORDS):
+            continue
+        
+        categ_name = 'TEXTO LIBRE'
+        tipo_fruta = 'Sin tipo'
+        manejo = 'Sin manejo'
+        codigo = ''
+        activo = 'N/A'
+    else:
+        # Si hay product_id, obtener toda la info del producto
+        producto = product_map_ventas.get(prod_id, {})
+        tmpl_id = producto.get('product_tmpl_id', [None])[0] if producto.get('product_tmpl_id') else None
+        template_info = template_map_ventas.get(tmpl_id, {}) if tmpl_id else {}
+        
+        categ = producto.get('categ_id', [None, ''])
+        categ_name = categ[1] if isinstance(categ, (list, tuple)) else str(categ)
+        
+        prod_name = producto.get('name', 'Desconocido')
+        tipo_fruta = template_info.get('tipo', 'Sin tipo')
+        manejo = template_info.get('manejo', 'Sin manejo')
+        codigo = producto.get('default_code', '')
+        activo = 'Sí' if producto.get('active', True) else 'No (Archivado)'
     
     account = linea.get('account_id', [None, ''])
     account_name = account[1] if isinstance(account, (list, tuple)) else str(account)
@@ -281,25 +318,24 @@ for linea in ventas_lineas:
     
     fecha = linea.get('date', '')
     fecha_obj = datetime.strptime(fecha, '%Y-%m-%d') if fecha else None
-    temporada = fecha_obj.year if fecha_obj and fecha_obj.month >= 11 else (fecha_obj.year - 1 if fecha_obj else None)
     
     # Calcular monto neto (credit - debit)
     monto_neto = linea.get('credit', 0) - linea.get('debit', 0)
     
     ventas_data.append({
         'Fecha': fecha,
-        'Temporada': temporada + 1 if temporada else None,
+        'Temporada': fecha_obj.year if fecha_obj else None,
         'Año': fecha_obj.year if fecha_obj else None,
         'Mes': fecha_obj.month if fecha_obj else None,
         'Tipo Movimiento': 'VENTA',
         'Factura': move_name,
-        'Producto ID': prod_id,
+        'Producto ID': prod_id if prod_id else 'TEXTO LIBRE',
         'Producto': prod_name,
-        'Código': producto.get('default_code', ''),
-        'Producto Activo': 'Sí' if producto.get('active', True) else 'No (Archivado)',
+        'Código': codigo,
+        'Producto Activo': activo,
         'Categoría': categ_name,
-        'Tipo Fruta': template_info.get('tipo', 'Sin tipo'),
-        'Manejo': template_info.get('manejo', 'Sin manejo'),
+        'Tipo Fruta': tipo_fruta,
+        'Manejo': manejo,
         'Cuenta': account_name,
         'Cantidad (kg)': linea.get('quantity', 0),
         'Débito': linea.get('debit', 0),
@@ -356,19 +392,19 @@ with pd.ExcelWriter(filename, engine='openpyxl') as writer:
 print(f"✅ Archivo exportado: {filename}")
 
 # ============================================================================
-# 6. RESUMEN EN CONSOLA POR TEMPORADA
+# 6. RESUMEN EN CONSOLA POR AÑO
 # ============================================================================
 print("\n" + "=" * 140)
-print("RESUMEN POR TEMPORADA EN CONSOLA")
+print("RESUMEN POR AÑO EN CONSOLA")
 print("=" * 140)
 
 df_todos = pd.concat([df_compras, df_ventas], ignore_index=True)
 
-for temporada in sorted(df_todos['Temporada'].dropna().unique()):
-    df_temp = df_todos[df_todos['Temporada'] == temporada]
+for ano in sorted(df_todos['Temporada'].dropna().unique()):
+    df_temp = df_todos[df_todos['Temporada'] == ano]
     
     print(f"\n{'=' * 140}")
-    print(f"TEMPORADA {int(temporada)}")
+    print(f"AÑO {int(ano)}")
     print("=" * 140)
     
     # Compras
