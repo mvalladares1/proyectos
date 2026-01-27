@@ -47,20 +47,29 @@ class AIService:
             return f"Error construyendo prompt: {type(e).__name__}: {str(e)}"
         
         try:
+            logger.info(f"[AIService] Conectando a Ollama: {self.ollama_url}")
+            logger.info(f"[AIService] Modelo: {self.model}")
+            logger.info(f"[AIService] Longitud del prompt: {len(prompt)} caracteres")
+            
             async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{self.ollama_url}/api/generate",
-                    json={
-                        "model": self.model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {
-                            "temperature": 0.3,  # Más determinístico
-                            "top_p": 0.9,
-                            "num_predict": 250,  # Máximo de tokens (reducido para velocidad)
-                        }
+                url = f"{self.ollama_url}/api/generate"
+                payload = {
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.3,
+                        "top_p": 0.9,
+                        "num_predict": 250,
                     }
-                )
+                }
+                
+                logger.info(f"[AIService] POST a {url}")
+                logger.info(f"[AIService] Payload: {json.dumps(payload, ensure_ascii=False)[:500]}...")
+                
+                response = await client.post(url, json=payload)
+                
+                logger.info(f"[AIService] Respuesta recibida: {response.status_code}")
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -70,9 +79,13 @@ class AIService:
                     
         except httpx.ConnectError as e:
             logger.error(f"[AIService] Error de conexión: {str(e)}")
-            return "⚠️ No se pudo conectar con Ollama. Asegúrate de que el servicio esté corriendo (ollama serve)."
+            logger.error(f"[AIService] URL: {self.ollama_url}")
+            logger.error(traceback.format_exc())
+            return "⚠️ No se pudo conectar con Ollama. Asegúrate de que el servicio esté corriendo (ollama serve) y escuchando en 0.0.0.0:11434."
         except httpx.TimeoutException as e:
             logger.error(f"[AIService] Timeout: {str(e)}")
+            logger.error(f"[AIService] URL: {self.ollama_url}")
+            logger.error(f"[AIService] El timeout fue de 120 segundos")
             return "⏱️ Timeout esperando respuesta de Ollama."
         except Exception as e:
             logger.error(f"[AIService] Error inesperado: {type(e).__name__}: {str(e)}")
