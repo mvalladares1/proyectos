@@ -387,7 +387,7 @@ def render_flow_timeline(
             
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
-            let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform;
+            let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform, timelineSvg, timelineG;
             
             function initDiagram() {{
                 containerEl = document.getElementById('diagram');
@@ -428,6 +428,16 @@ def render_flow_timeline(
                 svg.call(zoom);
                 
                 currentTransform = d3.zoomIdentity;
+                
+                // Crear timeline
+                d3.select('#timeline').selectAll('*').remove();
+                timelineSvg = d3.select('#timeline')
+                    .append('svg')
+                    .attr('width', containerEl.clientWidth)
+                    .attr('height', 50);
+                
+                timelineG = timelineSvg.append('g')
+                    .attr('transform', `translate(${{margin.left}}, 10)`);
             }}
             
             function zoomed(event) {{
@@ -601,15 +611,7 @@ def render_flow_timeline(
             updateTimeline(xScale);
             }}
             
-            // Timeline
-            const timelineSvg = d3.select('#timeline')
-                .append('svg')
-                .attr('width', containerEl.clientWidth)
-                .attr('height', 50);
-            
-            const timelineG = timelineSvg.append('g')
-                .attr('transform', `translate(${{margin.left}}, 10)`);
-            
+            // Función para actualizar timeline
             function updateTimeline(scale) {{
                 timelineG.selectAll('*').remove();
                 
