@@ -186,6 +186,21 @@ def render_flow_timeline(
     if not flow_data.get("dateRange"):
         st.warning("No hay fechas válidas para crear el timeline")
         return
+
+    # Ajustar altura dinámica para reducir superposición
+    min_node_spacing = 18
+    band_padding = 20
+    max_nodes_in_bucket = 1
+    bucket_counts = {}
+    for n in flow_data.get("nodes", []):
+        key = (n.get("date", ""), n.get("level", 0))
+        bucket_counts[key] = bucket_counts.get(key, 0) + 1
+        if bucket_counts[key] > max_nodes_in_bucket:
+            max_nodes_in_bucket = bucket_counts[key]
+
+    required_band_height = max(100, band_padding + (max_nodes_in_bucket + 1) * min_node_spacing)
+    required_height = required_band_height * len(LEVEL_NAMES) + 80
+    height = max(height, int(required_height))
     
     nodes_json = json.dumps(flow_data["nodes"])
     edges_json = json.dumps(flow_data["edges"])
@@ -384,6 +399,7 @@ def render_flow_timeline(
             
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
+            const minNodeSpacing = {min_node_spacing};
             
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
@@ -514,7 +530,7 @@ def render_flow_timeline(
                 const level = nodes[0].level;
                 const bandTop = level * yBandHeight;
                 const bandHeight = yBandHeight;
-                const nodeSpacing = Math.min(30, (bandHeight - 20) / (nodes.length + 1));
+                const nodeSpacing = Math.max(minNodeSpacing, (bandHeight - 20) / (nodes.length + 1));
                 
                 nodes.forEach((node, i) => {{
                     node.y = bandTop + 15 + (i + 1) * nodeSpacing;
