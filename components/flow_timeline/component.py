@@ -388,6 +388,7 @@ def render_flow_timeline(
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
             let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform, timelineSvg, timelineG;
+            let parseDate, nodeMap;
             
             function initDiagram() {{
                 containerEl = document.getElementById('diagram');
@@ -395,7 +396,7 @@ def render_flow_timeline(
                 height = containerEl.clientHeight - margin.top - margin.bottom;
                 
                 // Escalas
-                const parseDate = d3.timeParse("%Y-%m-%d");
+                parseDate = d3.timeParse("%Y-%m-%d");
                 const minDate = parseDate(dateRange.min);
                 const maxDate = parseDate(dateRange.max);
                 
@@ -461,6 +462,23 @@ def render_flow_timeline(
                 updateTimeline(newXScale);
             }}
             
+            // Función para generar links curvos tipo Sankey
+            function generateLink(edge, scale) {{
+                const source = nodeMap[edge.source];
+                const target = nodeMap[edge.target];
+                if (!source || !target) return '';
+                
+                const x0 = scale(source.parsedDate || xScale.domain()[0]);
+                const y0 = source.y;
+                const x1 = scale(target.parsedDate || xScale.domain()[1]);
+                const y1 = target.y;
+                
+                // Curva Bézier vertical (de arriba a abajo)
+                const midY = (y0 + y1) / 2;
+                
+                return `M${{x0}},${{y0}} C${{x0}},${{midY}} ${{x1}},${{midY}} ${{x1}},${{y1}}`;
+            }}
+            
             function renderDiagram() {{
                 // Bandas de niveles
                 for (let i = 0; i < levelCount; i++) {{
@@ -481,10 +499,9 @@ def render_flow_timeline(
                         .attr('dominant-baseline', 'middle')
                         .text(levelNames[i]);
                 }}
-            }}
-            
-            // Procesar nodos - calcular posiciones Y dentro de cada banda
-            const nodesByDateAndLevel = {{}};
+                
+                // Procesar nodos - calcular posiciones Y dentro de cada banda
+                const nodesByDateAndLevel = {{}};
             nodesData.forEach(node => {{
                 node.parsedDate = node.date ? parseDate(node.date) : null;
                 const key = `${{node.date || 'nodate'}}_${{node.level}}`;
@@ -505,25 +522,8 @@ def render_flow_timeline(
             }});
             
             // Crear mapa de nodos por ID
-            const nodeMap = {{}};
+            nodeMap = {{}};
             nodesData.forEach(n => nodeMap[n.id] = n);
-            
-            // Función para generar links curvos tipo Sankey
-            function generateLink(edge, scale) {{
-                const source = nodeMap[edge.source];
-                const target = nodeMap[edge.target];
-                if (!source || !target) return '';
-                
-                const x0 = scale(source.parsedDate || xScale.domain()[0]);
-                const y0 = source.y;
-                const x1 = scale(target.parsedDate || xScale.domain()[1]);
-                const y1 = target.y;
-                
-                // Curva Bézier vertical (de arriba a abajo)
-                const midY = (y0 + y1) / 2;
-                
-                return `M${{x0}},${{y0}} C${{x0}},${{midY}} ${{x1}},${{midY}} ${{x1}},${{y1}}`;
-            }}
             
             // Dibujar links
             const links = g.append('g')
