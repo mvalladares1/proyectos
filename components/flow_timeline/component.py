@@ -186,21 +186,6 @@ def render_flow_timeline(
     if not flow_data.get("dateRange"):
         st.warning("No hay fechas válidas para crear el timeline")
         return
-
-    # Ajustar altura dinámica para reducir superposición
-    min_node_spacing = 18
-    band_padding = 20
-    max_nodes_in_bucket = 1
-    bucket_counts = {}
-    for n in flow_data.get("nodes", []):
-        key = (n.get("date", ""), n.get("level", 0))
-        bucket_counts[key] = bucket_counts.get(key, 0) + 1
-        if bucket_counts[key] > max_nodes_in_bucket:
-            max_nodes_in_bucket = bucket_counts[key]
-
-    required_band_height = max(100, band_padding + (max_nodes_in_bucket + 1) * min_node_spacing)
-    required_height = required_band_height * len(LEVEL_NAMES) + 80
-    height = max(height, int(required_height))
     
     nodes_json = json.dumps(flow_data["nodes"])
     edges_json = json.dumps(flow_data["edges"])
@@ -399,9 +384,6 @@ def render_flow_timeline(
             
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
-            const minNodeSpacing = {min_node_spacing};
-            const xJitterStep = 12;
-            const xJitterMax = 60;
             
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
@@ -468,7 +450,7 @@ def render_flow_timeline(
                 // Actualizar posiciones de nodos
                 g.selectAll('.node')
                     .attr('transform', d => {{
-                        const x = newXScale(d.parsedDate || xScale.domain()[0]) + (d.xOffset || 0);
+                        const x = newXScale(d.parsedDate || xScale.domain()[0]);
                         return `translate(${{x}},${{d.y}})`;
                     }});
                 
@@ -486,9 +468,9 @@ def render_flow_timeline(
                 const target = nodeMap[edge.target];
                 if (!source || !target) return '';
                 
-                const x0 = scale(source.parsedDate || xScale.domain()[0]) + (source.xOffset || 0);
+                const x0 = scale(source.parsedDate || xScale.domain()[0]);
                 const y0 = source.y;
-                const x1 = scale(target.parsedDate || xScale.domain()[1]) + (target.xOffset || 0);
+                const x1 = scale(target.parsedDate || xScale.domain()[1]);
                 const y1 = target.y;
                 
                 // Curva Bézier vertical (de arriba a abajo)
@@ -532,14 +514,10 @@ def render_flow_timeline(
                 const level = nodes[0].level;
                 const bandTop = level * yBandHeight;
                 const bandHeight = yBandHeight;
-                const nodeSpacing = Math.max(minNodeSpacing, (bandHeight - 20) / (nodes.length + 1));
+                const nodeSpacing = Math.min(30, (bandHeight - 20) / (nodes.length + 1));
                 
                 nodes.forEach((node, i) => {{
                     node.y = bandTop + 15 + (i + 1) * nodeSpacing;
-                    const center = (nodes.length - 1) / 2;
-                    const rawOffset = (i - center) * xJitterStep;
-                    const clampedOffset = Math.max(-xJitterMax, Math.min(xJitterMax, rawOffset));
-                    node.xOffset = clampedOffset;
                 }});
             }});
             
@@ -580,7 +558,7 @@ def render_flow_timeline(
                 .append('g')
                 .attr('class', 'node')
                 .attr('transform', d => {{
-                    const x = xScale(d.parsedDate || xScale.domain()[0]) + (d.xOffset || 0);
+                    const x = xScale(d.parsedDate || xScale.domain()[0]);
                     return `translate(${{x}},${{d.y}})`;
                 }})
                 .on('mouseover', function(event, d) {{
