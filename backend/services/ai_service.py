@@ -39,18 +39,18 @@ class AIService:
         """
         # Construir el prompt según el contexto
         try:
-            logger.info(f"[AIService] Generando resumen para search_type: {search_context.get('search_type')}")
+            print(f"[AIService] Generando resumen para search_type: {search_context.get('search_type')}", flush=True)
             prompt = self._build_prompt(search_context, traceability_data)
-            logger.info(f"[AIService] Prompt construido: {len(prompt)} caracteres")
+            print(f"[AIService] Prompt construido: {len(prompt)} caracteres", flush=True)
         except Exception as e:
             logger.error(f"[AIService] Error construyendo prompt: {str(e)}")
             logger.error(traceback.format_exc())
             return f"Error construyendo prompt: {type(e).__name__}: {str(e)}"
         
         try:
-            logger.info(f"[AIService] Conectando a Ollama: {self.ollama_url}")
-            logger.info(f"[AIService] Modelo: {self.model}")
-            logger.info(f"[AIService] Longitud del prompt: {len(prompt)} caracteres")
+            print(f"[AIService] Conectando a Ollama: {self.ollama_url}", flush=True)
+            print(f"[AIService] Modelo: {self.model}", flush=True)
+            print(f"[AIService] Longitud del prompt: {len(prompt)} caracteres", flush=True)
             
             async with httpx.AsyncClient(timeout=120.0) as client:
                 url = f"{self.ollama_url}/api/generate"
@@ -65,12 +65,12 @@ class AIService:
                     }
                 }
                 
-                logger.info(f"[AIService] POST a {url}")
-                logger.info(f"[AIService] Payload: {json.dumps(payload, ensure_ascii=False)[:500]}...")
+                print(f"[AIService] POST a {url}", flush=True)
+                print(f"[AIService] Payload model: {payload['model']}, prompt length: {len(payload['prompt'])}", flush=True)
                 
                 response = await client.post(url, json=payload)
                 
-                logger.info(f"[AIService] Respuesta recibida: {response.status_code}")
+                print(f"[AIService] Respuesta recibida: {response.status_code}", flush=True)
                 
                 if response.status_code == 200:
                     result = response.json()
