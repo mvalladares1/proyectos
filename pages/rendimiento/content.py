@@ -1027,7 +1027,7 @@ def _render_sankey(username: str, password: str):
             render_ai_summary(
                 search_context=st.session_state.search_context,
                 traceability_data=st.session_state.raw_traceability_data,
-                api_url=os.getenv("BACKEND_URL", "http://localhost:8000")
+                api_url=os.getenv("API_URL", "http://localhost:8000")
             )
     else:
         st.info("👆 Ajusta filtros y haz clic en **Generar Diagrama**")
