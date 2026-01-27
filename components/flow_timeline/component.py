@@ -616,8 +616,8 @@ def render_flow_timeline(
                 timelineG.selectAll('*').remove();
                 
                 const axis = d3.axisBottom(scale)
-                    .ticks(d3.timeMonth.every(1))
-                    .tickFormat(d3.timeFormat('%b %Y'));
+                    .ticks(d3.timeDay.every(1))
+                    .tickFormat(d3.timeFormat('%d %b %Y'));
                 
                 timelineG.append('g')
                     .attr('class', 'timeline-axis')
