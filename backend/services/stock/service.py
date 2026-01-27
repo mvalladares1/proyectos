@@ -898,155 +898,156 @@ class StockService:
                 # CASO A: PALLET EN STOCK REAL (tiene quants)
                 # ============================================================
                 if quants:
-                reserved = [q for q in quants if q.get("reserved_quantity", 0) > 0]
-                if reserved:
-                    total_reserved = sum(q.get("reserved_quantity", 0) for q in reserved)
-                    results["error_count"] += 1
-                    results["details"].append({
-                        "pallet": code,
-                        "success": False,
-                        "message": f"❌ Tiene {len(reserved)} quants con {total_reserved:.2f} kg reservados - liberar primero en Odoo"
-                    })
-                    continue
-                
-                # 4. VALIDACIÓN: Verificar que todos los quants estén en la MISMA ubicación origen
-                unique_locations = set(q["location_id"][0] for q in quants)
-                if len(unique_locations) > 1:
-                    location_names = ", ".join([q["location_id"][1] for q in quants[:3]])  # Mostrar primeras 3
-                    results["error_count"] += 1
-                    results["details"].append({
-                        "pallet": code,
-                        "success": False,
-                        "message": f"❌ Quants en {len(unique_locations)} ubicaciones diferentes ({location_names}...) - inconsistencia de datos"
-                    })
-                    continue
-                
-                location_orig_id = quants[0]["location_id"][0]
-                location_orig_name = quants[0]["location_id"][1]
-                
-                # 5. VALIDACIÓN: Verificar que origen sea ubicación interna
-                try:
-                    origin_location = self.odoo.search_read(
-                        "stock.location",
-                        [("id", "=", location_orig_id)],
-                        ["usage"],
-                        limit=1
-                    )
-                    
-                    if origin_location and origin_location[0]["usage"] not in ["internal", "view"]:
+                    # 3. VALIDACIÓN: Verificar que no haya cantidades reservadas
+                    reserved = [q for q in quants if q.get("reserved_quantity", 0) > 0]
+                    if reserved:
+                        total_reserved = sum(q.get("reserved_quantity", 0) for q in reserved)
                         results["error_count"] += 1
                         results["details"].append({
                             "pallet": code,
                             "success": False,
-                            "message": f"❌ Origen es tipo '{origin_location[0]['usage']}' (no movible directamente)"
+                            "message": f"❌ Tiene {len(reserved)} quants con {total_reserved:.2f} kg reservados - liberar primero en Odoo"
                         })
                         continue
-                except:
-                    pass  # Si falla, continuar (no bloquear por esto)
-                
-                # 6. VALIDACIÓN: Verificar que origen y destino sean diferentes
-                if location_orig_id == location_dest_id:
-                    results["error_count"] += 1
-                    results["details"].append({
-                        "pallet": code,
-                        "success": False,
-                        "message": f"⚠️ Ya está en {location_orig_name}"
-                    })
-                    continue
-                
-                # 7. MOVIMIENTO DIRECTO (con rollback en caso de error)
-                total_kg = 0.0
-                detalles_productos = []
-                quants_moved = []  # Para rollback si falla
-                
-                try:
-                    for quant in quants:
-                        # Guardar estado previo para posible rollback
-                        quants_moved.append({
-                            "id": quant["id"],
-                            "original_location": location_orig_id
+                    
+                    # 4. VALIDACIÓN: Verificar que todos los quants estén en la MISMA ubicación origen
+                    unique_locations = set(q["location_id"][0] for q in quants)
+                    if len(unique_locations) > 1:
+                        location_names = ", ".join([q["location_id"][1] for q in quants[:3]])  # Mostrar primeras 3
+                        results["error_count"] += 1
+                        results["details"].append({
+                            "pallet": code,
+                            "success": False,
+                            "message": f"❌ Quants en {len(unique_locations)} ubicaciones diferentes ({location_names}...) - inconsistencia de datos"
                         })
+                        continue
+                    
+                    location_orig_id = quants[0]["location_id"][0]
+                    location_orig_name = quants[0]["location_id"][1]
+                    
+                    # 5. VALIDACIÓN: Verificar que origen sea ubicación interna
+                    try:
+                        origin_location = self.odoo.search_read(
+                            "stock.location",
+                            [("id", "=", location_orig_id)],
+                            ["usage"],
+                            limit=1
+                        )
                         
-                        # Actualizar ubicación del quant
-                        self.odoo.execute("stock.quant", "write", [quant["id"]], {
-                            "location_id": location_dest_id
-                        })
-                        
-                        total_kg += quant["quantity"]
-                        
-                        # Guardar detalle para el log
-                        producto = quant["product_id"][1] if quant.get("product_id") else "Sin producto"
-                        lote = quant["lot_id"][1] if quant.get("lot_id") else "Sin lote"
-                        detalles_productos.append(f"- {producto} / {lote}: {quant['quantity']} kg")
-                        
-                except Exception as move_error:
-                    # ROLLBACK: Revertir todos los quants ya movidos
-                    for qm in quants_moved:
-                        try:
-                            self.odoo.execute("stock.quant", "write", [qm["id"]], {
-                                "location_id": qm["original_location"]
+                        if origin_location and origin_location[0]["usage"] not in ["internal", "view"]:
+                            results["error_count"] += 1
+                            results["details"].append({
+                                "pallet": code,
+                                "success": False,
+                                "message": f"❌ Origen es tipo '{origin_location[0]['usage']}' (no movible directamente)"
                             })
-                        except:
-                            pass  # Si falla el rollback, al menos lo intentamos
+                            continue
+                    except:
+                        pass  # Si falla, continuar (no bloquear por esto)
                     
-                    results["error_count"] += 1
+                    # 6. VALIDACIÓN: Verificar que origen y destino sean diferentes
+                    if location_orig_id == location_dest_id:
+                        results["error_count"] += 1
+                        results["details"].append({
+                            "pallet": code,
+                            "success": False,
+                            "message": f"⚠️ Ya está en {location_orig_name}"
+                        })
+                        continue
+                    
+                    # 7. MOVIMIENTO DIRECTO (con rollback en caso de error)
+                    total_kg = 0.0
+                    detalles_productos = []
+                    quants_moved = []  # Para rollback si falla
+                    
+                    try:
+                        for quant in quants:
+                            # Guardar estado previo para posible rollback
+                            quants_moved.append({
+                                "id": quant["id"],
+                                "original_location": location_orig_id
+                                })
+                            
+                            # Actualizar ubicación del quant
+                            self.odoo.execute("stock.quant", "write", [quant["id"]], {
+                                "location_id": location_dest_id
+                            })
+                            
+                            total_kg += quant["quantity"]
+                            
+                            # Guardar detalle para el log
+                            producto = quant["product_id"][1] if quant.get("product_id") else "Sin producto"
+                            lote = quant["lot_id"][1] if quant.get("lot_id") else "Sin lote"
+                            detalles_productos.append(f"- {producto} / {lote}: {quant['quantity']} kg")
+                            
+                    except Exception as move_error:
+                        # ROLLBACK: Revertir todos los quants ya movidos
+                        for qm in quants_moved:
+                            try:
+                                self.odoo.execute("stock.quant", "write", [qm["id"]], {
+                                    "location_id": qm["original_location"]
+                                })
+                            except:
+                                pass  # Si falla el rollback, al menos lo intentamos
+                        
+                        results["error_count"] += 1
+                        results["details"].append({
+                            "pallet": code,
+                            "success": False,
+                            "message": f"❌ Error al mover quants (revertido): {str(move_error)}"
+                        })
+                        continue
+                    
+                    # 8. Registrar en log de transferencias (NO debe fallar el movimiento si esto falla)
+                    try:
+                        # Validar que el modelo de log existe
+                        log_model_exists = self.odoo.search_read(
+                            "ir.model",
+                            [("model", "=", "x_trasferencias_dashboard_v2")],
+                            ["id"],
+                            limit=1
+                        )
+                        
+                        if not log_model_exists:
+                            print(f"⚠️ Modelo de log no existe - movimiento exitoso pero sin registro")
+                        else:
+                            log_vals = {
+                                "x_name": f"MOV-{code}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                                "x_fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "x_paquete_id": package_id,
+                                "x_ubicacion_origen_id": location_orig_id,
+                                "x_ubicacion_destino_id": location_dest_id,
+                                "x_usuario_id": usuario_id if usuario_id else False,
+                                "x_total_kg": total_kg,
+                                "x_cantidad_quants": len(quants),
+                                "x_detalles": "\n".join(detalles_productos),
+                                "x_estado": "completado",
+                                "x_origen_sistema": "dashboard"
+                            }
+                            
+                            self.odoo.execute("x_trasferencias_dashboard_v2", "create", log_vals)
+                            
+                    except Exception as log_error:
+                        # No fallar el movimiento si el log falla - solo advertir
+                        print(f"⚠️ Error al registrar log para {code}: {log_error}")
+                        # El movimiento continúa siendo exitoso
+                    
+                    # 9. Éxito
+                    results["success_count"] += 1
+                    results["total_kg"] += total_kg
+                    
+                    # Obtener nombre de ubicación destino para mensaje más claro
+                    location_dest_name = location_dest[0]["name"] if location_dest else f"ID {location_dest_id}"
+                    
                     results["details"].append({
                         "pallet": code,
-                        "success": False,
-                        "message": f"❌ Error al mover quants (revertido): {str(move_error)}"
+                        "success": True,
+                        "message": f"✅ {len(quants)} quants ({total_kg:.2f} kg) → {location_dest_name}",
+                        "kg": total_kg,
+                        "quants_count": len(quants),
+                        "from": location_orig_name,
+                        "to": location_dest_name
                     })
-                    continue
-                
-                # 8. Registrar en log de transferencias (NO debe fallar el movimiento si esto falla)
-                try:
-                    # Validar que el modelo de log existe
-                    log_model_exists = self.odoo.search_read(
-                        "ir.model",
-                        [("model", "=", "x_trasferencias_dashboard_v2")],
-                        ["id"],
-                        limit=1
-                    )
-                    
-                    if not log_model_exists:
-                        print(f"⚠️ Modelo de log no existe - movimiento exitoso pero sin registro")
-                    else:
-                        log_vals = {
-                            "x_name": f"MOV-{code}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                            "x_fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "x_paquete_id": package_id,
-                            "x_ubicacion_origen_id": location_orig_id,
-                            "x_ubicacion_destino_id": location_dest_id,
-                            "x_usuario_id": usuario_id if usuario_id else False,
-                            "x_total_kg": total_kg,
-                            "x_cantidad_quants": len(quants),
-                            "x_detalles": "\n".join(detalles_productos),
-                            "x_estado": "completado",
-                            "x_origen_sistema": "dashboard"
-                        }
-                        
-                        self.odoo.execute("x_trasferencias_dashboard_v2", "create", log_vals)
-                        
-                except Exception as log_error:
-                    # No fallar el movimiento si el log falla - solo advertir
-                    print(f"⚠️ Error al registrar log para {code}: {log_error}")
-                    # El movimiento continúa siendo exitoso
-                
-                # 9. Éxito
-                results["success_count"] += 1
-                results["total_kg"] += total_kg
-                
-                # Obtener nombre de ubicación destino para mensaje más claro
-                location_dest_name = location_dest[0]["name"] if location_dest else f"ID {location_dest_id}"
-                
-                results["details"].append({
-                    "pallet": code,
-                    "success": True,
-                    "message": f"✅ {len(quants)} quants ({total_kg:.2f} kg) → {location_dest_name}",
-                    "kg": total_kg,
-                    "quants_count": len(quants),
-                    "from": location_orig_name,
-                    "to": location_dest_name
-                })
                 
                 # ============================================================
                 # CASO B: PALLET EN PRE-RECEPCIÓN (sin quants, buscar en recepciones)
