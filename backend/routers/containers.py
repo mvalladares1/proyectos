@@ -3,6 +3,7 @@ Router de Pedidos de Venta - Seguimiento de producción por pedido
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+from pydantic import BaseModel
 
 from backend.services.containers import ContainersService
 from backend.services.traceability import (
@@ -11,6 +12,7 @@ from backend.services.traceability import (
     transform_to_reactflow,
     transform_to_visjs
 )
+from backend.services.ai_service import ai_service
 
 router = APIRouter(prefix="/api/v1/containers", tags=["containers"])
 
@@ -662,3 +664,32 @@ async def get_container_detail(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# === ENDPOINTS DE IA ===
+
+class AITraceabilitySummaryRequest(BaseModel):
+    """Request para generar resumen de trazabilidad con IA"""
+    search_context: dict  # Tipo de búsqueda y parámetros
+    traceability_data: dict  # Datos completos de trazabilidad
+
+
+@router.post("/traceability/ai-summary")
+async def generate_ai_traceability_summary(request: AITraceabilitySummaryRequest):
+    """
+    Genera un resumen inteligente de la trazabilidad usando IA (Ollama).
+    
+    El contexto de búsqueda debe incluir:
+    - search_type: 'sale' | 'date_range' | 'pallet' | 'guide' | 'generic'
+    - Parámetros específicos según el tipo (sale_id, pallet_id, etc.)
+    
+    Los datos de trazabilidad son el resultado completo del servicio de trazabilidad.
+    """
+    try:
+        summary = await ai_service.generate_traceability_summary(
+            search_context=request.search_context,
+            traceability_data=request.traceability_data
+        )
+        return {"summary": summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando resumen: {str(e)}")
