@@ -858,6 +858,65 @@ def render(username: str, password: str):
                     # Botón para limpiar
                     if st.button("🗑️ Limpiar", key="btn_clear_excel_det"):
                         st.session_state.excel_detallado_data = None
+            
+            # NUEVO: Botón extra para descargar Excel de DEFECTOS (mora y frambuesa)
+            st.markdown("---")
+            st.subheader("📊 Reporte de Defectos (Mora y Frambuesa)")
+            
+            def_col1, def_col2 = st.columns([1,3])
+            with def_col1:
+                # Inicializar estado
+                if 'excel_defectos_data' not in st.session_state:
+                    st.session_state.excel_defectos_data = None
+            
+                if st.button("🔬 Generar Reporte de Defectos", type="primary", key="btn_generar_excel_defectos"):
+                    try:
+                        with st.spinner("Generando reporte de defectos en el servidor..."):
+                            # Usar los mismos parámetros de filtro
+                            params_defectos = {
+                                'username': username,
+                                'password': password,
+                                'fecha_inicio': params['fecha_inicio'],
+                                'fecha_fin': params['fecha_fin'],
+                                'solo_hechas': params.get('solo_hechas', True),
+                            }
+                            
+                            # Pasar origen si existe
+                            if origen_filtro:
+                                params_defectos['origen'] = origen_filtro
+                            
+                            resp = requests.get(
+                                f"{API_URL}/api/v1/recepciones-mp/report-defectos.xlsx",
+                                params=params_defectos,
+                                timeout=180
+                            )
+                        
+                        if resp.status_code == 200:
+                            xlsx_bytes = resp.content
+                            fname = f"recepciones_defectos_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
+                            # Guardar en session_state
+                            st.session_state.excel_defectos_data = (xlsx_bytes, fname)
+                            st.success("✅ Reporte de defectos generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
+                        else:
+                            st.error(f"Error al generar reporte de defectos: {resp.status_code} - {resp.text}")
+                    except Exception as e:
+                        st.error(f"Error al solicitar reporte de defectos: {e}")
+        
+            with def_col2:
+                # Mostrar botón de descarga si hay datos disponibles
+                if st.session_state.excel_defectos_data:
+                    xlsx_bytes, fname = st.session_state.excel_defectos_data
+                    st.download_button(
+                        "📥 Descargar Reporte de Defectos (Excel)", 
+                        xlsx_bytes, 
+                        file_name=fname, 
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        key="btn_download_excel_defectos"
+                    )
+                    # Botón para limpiar
+                    if st.button("🗑️ Limpiar", key="btn_clear_excel_defectos"):
+                        st.session_state.excel_defectos_data = None
+                        st.rerun()
 
             st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
