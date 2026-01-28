@@ -46,6 +46,84 @@ class TraceabilityService:
             domain.append(("reference", "not ilike", pattern))
         return domain
     
+    def _analyze_pallet_origin_quality(self, moves, pallet_origin_analysis):
+        """
+        Analiza la calidad del origen de cada pallet sin filtrar moves.
+        Clasifica pallets en: ORIGEN_CLARO, ORIGEN_AMBIGUO, ORIGEN_DESCONOCIDO
+        
+        Args:
+            moves: Lista de moves donde result_package_id está en los pallets
+            pallet_origin_analysis: Dict para almacenar análisis de cada pallet
+            
+        Returns:
+            None (modifica pallet_origin_analysis in-place)
+        """
+        # Agrupar moves por result_package_id
+        moves_by_pallet = {}
+        for move in moves:
+            result_pkg = move.get("result_package_id")
+            if not result_pkg:
+                continue
+            
+            pkg_id = result_pkg[0] if isinstance(result_pkg, (list, tuple)) else result_pkg
+            if pkg_id not in moves_by_pallet:
+                moves_by_pallet[pkg_id] = []
+            moves_by_pallet[pkg_id].append(move)
+        
+        # Analizar cada pallet
+        for pkg_id, pkg_moves in moves_by_pallet.items():
+            if pkg_id in pallet_origin_analysis:
+                # Ya analizado antes
+                continue
+            
+            candidate_processes = [m.get("reference") for m in pkg_moves]
+            analysis = {
+                "candidate_processes": candidate_processes,
+                "total_candidates": len(candidate_processes),
+                "selected_process": None,
+                "selection_reason": None,
+                "origin_quality": None
+            }
+            
+            if len(pkg_moves) == 1:
+                # Un solo proceso - origen claro
+                analysis["selected_process"] = pkg_moves[0].get("reference")
+                analysis["selection_reason"] = "single_process"
+                analysis["origin_quality"] = "ORIGEN_CLARO"
+            else:
+                # Múltiples procesos - aplicar jerarquía de selección
+                origin_move = None
+                
+                # 1. Buscar move con package_id vacío (creación)
+                for move in pkg_moves:
+                    pkg_in = move.get("package_id")
+                    if not pkg_in or pkg_in == False:
+                        origin_move = move
+                        analysis["selection_reason"] = "empty_package_id"
+                        analysis["origin_quality"] = "ORIGEN_CLARO"
+                        break
+                
+                # 2. Si no encontramos creación, buscar Manufacturing Order
+                if not origin_move:
+                    for move in pkg_moves:
+                        ref = move.get("reference", "")
+                        if "/MO/" in ref or ref.startswith("MOCS/") or ref.startswith("RF/MO/"):
+                            origin_move = move
+                            analysis["selection_reason"] = "mo_pattern"
+                            analysis["origin_quality"] = "ORIGEN_AMBIGUO"
+                            break
+                
+                # 3. Si no hay MO, usar el más antiguo (orphan)
+                if not origin_move:
+                    sorted_moves = sorted(pkg_moves, key=lambda m: m.get("date", ""))
+                    origin_move = sorted_moves[0]
+                    analysis["selection_reason"] = "oldest_date"
+                    analysis["origin_quality"] = "ORIGEN_DESCONOCIDO"
+                
+                analysis["selected_process"] = origin_move.get("reference") if origin_move else None
+            
+            pallet_origin_analysis[pkg_id] = analysis
+    
     def get_traceability_by_identifier(
         self,
         identifier: str,
@@ -129,7 +207,13 @@ class TraceabilityService:
             print(f"[TraceabilityService] Venta {sale_origin}: {len(package_ids)} paquetes encontrados")
             
             # Buscar toda la historia de esos paquetes según el modo seleccionado
-            return self._get_traceability_for_packages(list(package_ids), limit, include_siblings=include_siblings)
+            # Pasar sale_origin para filtrar solo esa venta en modo conexión directa
+            return self._get_traceability_for_packages(
+                list(package_ids), 
+                limit, 
+                include_siblings=include_siblings,
+                filter_sale_origins=[sale_origin]
+            )
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por venta: {e}")
@@ -263,6 +347,7 @@ class TraceabilityService:
         # Cola de paquetes a trazabilizar
         packages_to_trace = set(initial_package_ids)
         traced_packages = set()
+        pallet_origin_analysis = {}  # {pallet_id: {candidate_processes, selected, reason, quality}}
         
         max_iterations = 50
         iteration = 0
@@ -298,6 +383,13 @@ class TraceabilityService:
                     limit=limit,
                     order="date asc"
                 )
+                
+                # Analizar calidad de origen para pallets que son outputs
+                if not include_siblings:
+                    output_moves = [m for m in out_moves if m.get("result_package_id") and (
+                        (m.get("result_package_id")[0] if isinstance(m.get("result_package_id"), (list, tuple)) 
+                         else m.get("result_package_id")) in current_packages)]
+                    self._analyze_pallet_origin_quality(output_moves, pallet_origin_analysis)
                 
                 # Recopilar referencias
                 new_references = set()
@@ -491,11 +583,15 @@ class TraceabilityService:
         self._enrich_with_pallet_dates(result)
         self._enrich_with_mrp_dates(result)
         
+        # Enriquecer con análisis de calidad de origen (solo en modo conexión directa)
+        if not include_siblings:
+            self._enrich_with_origin_quality(result, pallet_origin_analysis)
+        
         # =====================================================
         # FASE 2: Si include_siblings=False, filtrar el resultado procesado
         # =====================================================
         if not include_siblings:
-            result = self._filter_direct_connection_result(result, initial_package_ids)
+            result = self._filter_direct_connection_result(result, initial_package_ids, filter_sale_origins)
         
         return result
     
@@ -700,6 +796,10 @@ class TraceabilityService:
         self._enrich_with_pallet_dates(result)
         self._enrich_with_mrp_dates(result)
         
+        # Enriquecer con análisis de calidad de origen (solo en modo conexión directa)
+        if not include_siblings:
+            self._enrich_with_origin_quality(result, pallet_origin_analysis)
+        
         # =====================================================
         # FASE 2: Si include_siblings=False, filtrar el resultado procesado
         # =====================================================
@@ -849,15 +949,17 @@ class TraceabilityService:
     def _filter_direct_connection_result(
         self, 
         result: Dict,
-        initial_package_ids: List[int]
+        initial_package_ids: List[int],
+        filter_sale_origins: List[str] = None
     ) -> Dict:
         """
         Filtra el resultado procesado para quedarnos solo con la cadena conectada.
         
         Estrategia:
-        1. Usar los links ya construidos para hacer BFS desde los pallets iniciales
-        2. Marcar todos los nodos alcanzables (hacia atrás y adelante)
-        3. Filtrar el resultado para quedarnos solo con nodos conectados
+        1. Si filter_sale_origins está presente, agrupar pallets iniciales por venta
+        2. Para cada venta, hacer BFS independiente para encontrar su cadena
+        3. Combinar todas las cadenas conectadas
+        4. Si no hay filter_sale_origins, hacer BFS desde todos los pallets juntos
         """
         pallets = result.get("pallets", {})
         processes = result.get("processes", {})
@@ -866,7 +968,58 @@ class TraceabilityService:
         links = result.get("links", [])
         
         print(f"[TraceabilityService BACKWARD] Filtrando conexión directa desde {len(initial_package_ids)} pallets iniciales")
+        print(f"[TraceabilityService BACKWARD] filter_sale_origins: {filter_sale_origins}")
         print(f"[TraceabilityService BACKWARD] Antes del filtro: {len(pallets)} pallets, {len(processes)} procesos, {len(links)} links")
+        
+        # Si hay filter_sale_origins, necesitamos agrupar pallets por venta
+        if filter_sale_origins:
+            # Agrupar pallets iniciales por su venta de destino
+            sale_pallet_pickings = result.get("sale_pallet_pickings", {})
+            pallets_by_sale = {}
+            
+            for pkg_id in initial_package_ids:
+                # Buscar a qué venta pertenece este pallet
+                picking_info = sale_pallet_pickings.get(pkg_id)
+                if picking_info:
+                    origin = picking_info.get("origin", "")
+                    if origin in filter_sale_origins:
+                        if origin not in pallets_by_sale:
+                            pallets_by_sale[origin] = []
+                        pallets_by_sale[origin].append(pkg_id)
+            
+            print(f"[TraceabilityService BACKWARD] Pallets agrupados por venta:")
+            for origin, pkg_ids in pallets_by_sale.items():
+                print(f"  {origin}: {len(pkg_ids)} pallets")
+            
+            # Filtrar cada venta por separado y combinar resultados
+            if pallets_by_sale:
+                # Por ahora, solo filtrar por la primera venta para simplificar
+                # TODO: En el futuro, combinar múltiples cadenas
+                first_sale = list(pallets_by_sale.keys())[0]
+                first_sale_pallets = pallets_by_sale[first_sale]
+                print(f"[TraceabilityService BACKWARD] Filtrando solo por venta: {first_sale} ({len(first_sale_pallets)} pallets)")
+                return self._filter_single_sale_chain(result, first_sale_pallets, first_sale)
+        
+        # Si no hay filter_sale_origins, filtrar normalmente desde todos los pallets
+        return self._filter_single_sale_chain(result, initial_package_ids, None)
+    
+    def _filter_single_sale_chain(
+        self,
+        result: Dict,
+        initial_package_ids: List[int],
+        sale_origin: str = None
+    ) -> Dict:
+        """
+        Filtra el resultado para quedarse solo con la cadena conectada a los pallets iniciales.
+        """
+        pallets = result.get("pallets", {})
+        processes = result.get("processes", {})
+        suppliers = result.get("suppliers", {})
+        customers = result.get("customers", {})
+        links = result.get("links", [])
+        
+        print(f"[TraceabilityService BACKWARD] Filtrando cadena {'de venta ' + sale_origin if sale_origin else 'general'}")
+        print(f"[TraceabilityService BACKWARD] Pallets iniciales: {len(initial_package_ids)}")
         print(f"[TraceabilityService BACKWARD] Suppliers ANTES del filtro: {len(suppliers)} suppliers")
         
         # Debug: mostrar todos los procesos y si son recepciones
@@ -921,11 +1074,15 @@ class TraceabilityService:
                     connected_nodes.add(source)
         
         # Agregar todos los outputs (hermanos) de los procesos del primer nivel
-        for proc_node in first_level_processes:
-            for target in graph_forward.get(proc_node, []):
-                if target.startswith("PALLET:"):
-                    connected_nodes.add(target)
-                    queue.append(target)
+        # SOLO si no estamos filtrando por venta específica
+        if not sale_origin:
+            for proc_node in first_level_processes:
+                for target in graph_forward.get(proc_node, []):
+                    if target.startswith("PALLET:"):
+                        connected_nodes.add(target)
+                        queue.append(target)
+        else:
+            print(f"[TraceabilityService] Saltando hermanos - filtrando por venta {sale_origin}")
         
         # Agregar los procesos a la cola para seguir hacia atrás
         queue.extend(first_level_processes)
@@ -1016,7 +1173,16 @@ class TraceabilityService:
         filtered_customers = {}
         for cid, cinfo in customers.items():
             if f"CUSTOMER:{cid}" in connected_nodes:
-                filtered_customers[cid] = cinfo
+                # Si estamos filtrando por sale_origin específico, solo incluir ese cliente
+                if sale_origin:
+                    customer_sale_order = cinfo.get("sale_order", "")
+                    if customer_sale_order == sale_origin:
+                        filtered_customers[cid] = cinfo
+                        print(f"[TraceabilityService BACKWARD] ✓ Incluyendo cliente {cid} de venta {sale_origin}")
+                    else:
+                        print(f"[TraceabilityService BACKWARD] ✗ Excluyendo cliente {cid} (venta {customer_sale_order} != {sale_origin})")
+                else:
+                    filtered_customers[cid] = cinfo
         
         # Filtrar links
         filtered_links = []
@@ -1554,4 +1720,184 @@ class TraceabilityService:
                         pinfo["product_id"] = product_id
                         pinfo["product_name"] = product_name
         except Exception as e:
-            print(f"[TraceabilityService] Error fetching MRP dates: {e}")
+            print(f"[TraceabilityService] Error fetching MRP dates: {e}")    
+    def _enrich_with_origin_quality(self, result: Dict, pallet_origin_analysis: Dict):
+        """
+        Enriquece pallets con metadata de calidad de origen para marcadores visuales.
+        
+        Args:
+            result: Dict con pallets, processes, etc.
+            pallet_origin_analysis: Dict con análisis de origen por pallet_id
+        """
+        pallets = result.get("pallets", {})
+        
+        # Identificar pallets SIN_ORIGEN (nunca aparecen como output en el análisis)
+        all_output_pallets = set(pallet_origin_analysis.keys())
+        all_pallets = set(pallets.keys())
+        pallets_without_origin = all_pallets - all_output_pallets
+        
+        # Para pallets SIN_ORIGEN, buscar su origen real en la base de datos (SIN filtros de exclusión)
+        print(f"[TraceabilityService] Buscando origen real de {len(pallets_without_origin)} pallets sin origen...")
+        recovered_origins = {}
+        if pallets_without_origin:
+            try:
+                # Buscar TODOS los moves donde estos pallets son output (sin exclusiones)
+                origin_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("result_package_id", "in", list(pallets_without_origin)),
+                        ("state", "=", "done"),
+                        ("qty_done", ">", 0)
+                    ],
+                    ["id", "result_package_id", "package_id", "reference", "date"],
+                    limit=len(pallets_without_origin) * 10  # Max 10 moves por pallet
+                )
+                
+                # Agrupar por pallet y aplicar el mismo algoritmo de análisis
+                moves_by_pallet = {}
+                for move in origin_moves:
+                    result_rel = move.get("result_package_id")
+                    if result_rel:
+                        result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                        if result_id not in moves_by_pallet:
+                            moves_by_pallet[result_id] = []
+                        moves_by_pallet[result_id].append(move)
+                
+                # Analizar cada pallet
+                for pallet_id, moves in moves_by_pallet.items():
+                    # Aplicar jerarquía de selección
+                    creation_moves = [m for m in moves if not m.get("package_id")]
+                    
+                    if len(moves) == 1:
+                        # Un solo proceso: ORIGEN_CLARO
+                        selected = moves[0]
+                        recovered_origins[pallet_id] = {
+                            "origin_quality": "ORIGEN_CLARO",
+                            "selected_process": selected.get("reference"),
+                            "candidate_processes": [selected.get("reference")],
+                            "selection_reason": "single_process",
+                            "total_candidates": 1
+                        }
+                    elif len(creation_moves) == 1:
+                        # Un solo proceso de creación: ORIGEN_CLARO
+                        selected = creation_moves[0]
+                        recovered_origins[pallet_id] = {
+                            "origin_quality": "ORIGEN_CLARO",
+                            "selected_process": selected.get("reference"),
+                            "candidate_processes": [m.get("reference") for m in moves],
+                            "selection_reason": "empty_package_id",
+                            "total_candidates": len(moves)
+                        }
+                    else:
+                        # Múltiples candidatos: buscar patrón MO
+                        candidates = [m.get("reference") for m in moves]
+                        mo_moves = [m for m in moves if "/MO/" in m.get("reference", "") or
+                                   m.get("reference", "").startswith("MOCS/") or
+                                   m.get("reference", "").startswith("RF/MO/")]
+                        
+                        if mo_moves:
+                            selected = mo_moves[0]
+                            recovered_origins[pallet_id] = {
+                                "origin_quality": "ORIGEN_AMBIGUO",
+                                "selected_process": selected.get("reference"),
+                                "candidate_processes": candidates,
+                                "selection_reason": "mo_pattern",
+                                "total_candidates": len(moves)
+                            }
+                        else:
+                            # Seleccionar el más antiguo
+                            sorted_moves = sorted(moves, key=lambda m: m.get("date", ""))
+                            selected = sorted_moves[0]
+                            recovered_origins[pallet_id] = {
+                                "origin_quality": "ORIGEN_DESCONOCIDO",
+                                "selected_process": selected.get("reference"),
+                                "candidate_processes": candidates,
+                                "selection_reason": "oldest_date",
+                                "total_candidates": len(moves)
+                            }
+                
+                print(f"[TraceabilityService] Recuperados {len(recovered_origins)} orígenes reales")
+                
+            except Exception as e:
+                print(f"[TraceabilityService] Error buscando orígenes: {e}")
+        
+        # Enriquecer cada pallet con su metadata
+        for pallet_id, pallet_info in pallets.items():
+            if pallet_id in pallet_origin_analysis:
+                # Origen ya analizado en el flujo normal
+                analysis = pallet_origin_analysis[pallet_id]
+                pallet_info["origin_quality"] = analysis["origin_quality"]
+                pallet_info["origin_process"] = analysis["selected_process"]
+                pallet_info["candidate_processes"] = analysis["candidate_processes"]
+                pallet_info["selection_reason"] = analysis["selection_reason"]
+                pallet_info["total_candidates"] = analysis["total_candidates"]
+            elif pallet_id in recovered_origins:
+                # Origen recuperado de la base de datos
+                analysis = recovered_origins[pallet_id]
+                pallet_info["origin_quality"] = analysis["origin_quality"] + "_RECOVERED"
+                pallet_info["origin_process"] = analysis["selected_process"]
+                pallet_info["candidate_processes"] = analysis["candidate_processes"]
+                pallet_info["selection_reason"] = analysis["selection_reason"]
+                pallet_info["total_candidates"] = analysis["total_candidates"]
+            elif pallet_id in pallets_without_origin:
+                # Pallet que REALMENTE nunca fue producido
+                pallet_info["origin_quality"] = "SIN_ORIGEN"
+                pallet_info["origin_process"] = None
+                pallet_info["candidate_processes"] = []
+                pallet_info["selection_reason"] = "never_produced"
+                pallet_info["total_candidates"] = 0
+            else:
+                # No hay información (puede ser pallet de venta inicial)
+                pallet_info["origin_quality"] = "NO_ANALIZADO"
+                pallet_info["origin_process"] = None
+                pallet_info["candidate_processes"] = []
+                pallet_info["selection_reason"] = None
+                pallet_info["total_candidates"] = 0
+        
+        # Generar reporte de problemas
+        quality_summary = {}
+        
+        problematic_pallets = []
+        for pallet_id, pallet_info in pallets.items():
+            quality = pallet_info.get("origin_quality", "NO_ANALIZADO")
+            quality_summary[quality] = quality_summary.get(quality, 0) + 1
+            
+            # Marcar pallets problemáticos para reporte
+            if quality in ["ORIGEN_DESCONOCIDO", "SIN_ORIGEN", "ORIGEN_DESCONOCIDO_RECOVERED"]:
+                problematic_pallets.append({
+                    "pallet_id": pallet_id,
+                    "pallet_name": pallet_info.get("name"),
+                    "quality": quality,
+                    "process": pallet_info.get("origin_process"),
+                    "candidates": pallet_info.get("candidate_processes"),
+                    "reason": pallet_info.get("selection_reason")
+                })
+        
+        # Agregar reporte al resultado
+        result["origin_quality_summary"] = quality_summary
+        result["problematic_pallets"] = problematic_pallets
+        
+        # Agrupar categorías recuperadas para reporte
+        claro_total = quality_summary.get("ORIGEN_CLARO", 0) + quality_summary.get("ORIGEN_CLARO_RECOVERED", 0)
+        ambiguo_total = quality_summary.get("ORIGEN_AMBIGUO", 0) + quality_summary.get("ORIGEN_AMBIGUO_RECOVERED", 0)
+        desconocido_total = quality_summary.get("ORIGEN_DESCONOCIDO", 0) + quality_summary.get("ORIGEN_DESCONOCIDO_RECOVERED", 0)
+        sin_origen = quality_summary.get("SIN_ORIGEN", 0)
+        no_analizado = quality_summary.get("NO_ANALIZADO", 0)
+        
+        print(f"\n[TraceabilityService] === REPORTE DE CALIDAD DE ORIGEN ===")
+        print(f"  ORIGEN_CLARO:      {claro_total:4d} pallets")
+        if quality_summary.get("ORIGEN_CLARO_RECOVERED", 0) > 0:
+            print(f"    (Recuperados: {quality_summary.get('ORIGEN_CLARO_RECOVERED', 0)})")
+        print(f"  ORIGEN_AMBIGUO:    {ambiguo_total:4d} pallets")
+        if quality_summary.get("ORIGEN_AMBIGUO_RECOVERED", 0) > 0:
+            print(f"    (Recuperados: {quality_summary.get('ORIGEN_AMBIGUO_RECOVERED', 0)})")
+        print(f"  ORIGEN_DESCONOCIDO:{desconocido_total:4d} pallets ⚠️")
+        if quality_summary.get("ORIGEN_DESCONOCIDO_RECOVERED", 0) > 0:
+            print(f"    (Recuperados: {quality_summary.get('ORIGEN_DESCONOCIDO_RECOVERED', 0)})")
+        print(f"  SIN_ORIGEN:        {sin_origen:4d} pallets 🔴")
+        print(f"  NO_ANALIZADO:      {no_analizado:4d} pallets")
+        print(f"  Total problemáticos: {len(problematic_pallets)} pallets")
+        if problematic_pallets:
+            print(f"\n  Ejemplos de pallets problemáticos:")
+            for p in problematic_pallets[:5]:
+                print(f"    - {p['pallet_name']} ({p['quality']}): {p.get('process', 'N/A')} ({p['reason']})")

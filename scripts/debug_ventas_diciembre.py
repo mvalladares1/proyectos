@@ -33,8 +33,8 @@ sale_orders = client.search_read(
     "sale.order",
     [
         ("state", "in", ["sale", "done"]),
-        ("date_order", ">=", "2025-12-01 00:00:00"),
-        ("date_order", "<=", "2025-12-31 23:59:59"),
+        ("date_order", ">=", "2025-11-01 00:00:00"),
+        ("date_order", "<=", "2025-11-30 23:59:59"),
     ],
     ["id", "name", "date_order", "partner_id"],
     limit=100
@@ -276,7 +276,7 @@ try:
         print(f"  {origin}: {stats['inputs']} inputs, {stats['outputs']} outputs")
     
     print("\n" + "=" * 80)
-    print("VALIDACIÓN COMPLETADA")
+    print("VALIDACIÓN NIVEL 1 COMPLETADA")
     print("=" * 80)
     print(f"\n✓ Tiempo de ejecución: {elapsed:.2f} segundos")
     print(f"✓ Resultado esperado: ~200-500 pallets, ~50-100 procesos")
@@ -288,6 +288,144 @@ try:
         print("\n⚠️  ADVERTENCIA: Muchos procesos. Revisar si hay expansión innecesaria.")
     else:
         print("\n✓ Los números lucen razonables. El fix parece estar funcionando.")
+    
+    # ========================================================================
+    # NIVEL 2: TRAZABILIDAD DE LOS INPUTS DE LOS PROCESOS
+    # ========================================================================
+    print("\n" + "=" * 80)
+    print("NIVEL 2: TRAZANDO UN NIVEL MÁS ATRÁS")
+    print("=" * 80)
+    
+    # Identificar todos los pallets que son inputs de los procesos actuales
+    # (excluyendo los pallets de venta iniciales y las recepciones)
+    input_pallets = set()
+    reception_refs = set()
+    
+    # Identificar recepciones (no tienen inputs, son punto de inicio)
+    for proc_id, proc_data in all_processes.items():
+        origin = proc_data.get("origin", "")
+        if "/IN/" in origin or "/RFP/" in origin or origin.startswith("RF/IN/"):
+            reception_refs.add(origin)
+    
+    print(f"\nDebug - Formato de primeros 10 links:")
+    for i, link in enumerate(all_links[:10]):
+        print(f"  Link {i}: {link}")
+    
+    # Buscar links que sean PALLET -> PROCESS
+    print(f"\nDebug - Buscando links PALLET -> PROCESS:")
+    pallet_to_process_count = 0
+    process_to_pallet_count = 0
+    
+    for link in all_links:
+        if isinstance(link, tuple) and len(link) >= 3:
+            link_type = link[0]
+            
+            # Contar diferentes tipos
+            if link_type == "PALLET":
+                if len(link) >= 3 and isinstance(link[2], str) and "PROCESS:" in link[2]:
+                    pallet_to_process_count += 1
+                    if pallet_to_process_count <= 5:
+                        print(f"  PALLET->PROCESS: {link}")
+            
+            elif link_type == "PROCESS":
+                if len(link) >= 3 and isinstance(link[2], str) and "PALLET:" in link[2]:
+                    process_to_pallet_count += 1
+                    if process_to_pallet_count <= 5:
+                        print(f"  PROCESS->PALLET: {link}")
+    
+    print(f"\nTotal links PALLET -> PROCESS: {pallet_to_process_count}")
+    print(f"Total links PROCESS -> PALLET: {process_to_pallet_count}")
+    
+    # Extraer pallets input buscando en ambas direcciones
+    for link in all_links:
+        if isinstance(link, tuple) and len(link) >= 3:
+            # PALLET -> PROCESS (pallet es input)
+            if link[0] == "PALLET" and isinstance(link[1], int) and len(link) >= 3:
+                if isinstance(link[2], str) and "PROCESS:" in link[2]:
+                    pallet_id = link[1]
+                    if pallet_id not in total_packages:
+                        input_pallets.add(pallet_id)
+            
+            # PROCESS -> PALLET (si queremos buscar outputs de procesos que no sean de venta)
+            elif link[0] == "PROCESS" and len(link) >= 3:
+                # El target es PALLET:id
+                if isinstance(link[2], str) and "PALLET:" in link[2]:
+                    try:
+                        pallet_id = int(link[2].replace("PALLET:", ""))
+                        # Solo si no es pallet de venta
+                        if pallet_id not in total_packages:
+                            # Ver si hay algún proceso que lo use como input
+                            # (lo agregaremos en una segunda pasada)
+                            pass
+                    except ValueError:
+                        pass
+    
+    print(f"\nPallets que son inputs de procesos (nivel 1): {len(input_pallets)}")
+    print(f"Recepciones identificadas: {len(reception_refs)}")
+    
+    # Debug: mostrar algunos input pallets
+    if input_pallets:
+        sample_inputs = list(input_pallets)[:10]
+        print(f"\nEjemplo de pallets input: {sample_inputs}")
+    
+    if input_pallets:
+        print("\n➤ Ejecutando trazabilidad nivel 2 desde los inputs...")
+        start_time_2 = time.time()
+        
+        result_level2 = traz_service._get_traceability_for_packages(
+            initial_package_ids=list(input_pallets),
+            limit=10000,
+            include_siblings=False
+        )
+        
+        elapsed_2 = time.time() - start_time_2
+        
+        print(f"✓ Trazabilidad nivel 2 completada en {elapsed_2:.2f} segundos")
+        
+        # Analizar resultados nivel 2
+        pallets_l2 = result_level2.get("pallets", {})
+        processes_l2 = result_level2.get("processes", {})
+        suppliers_l2 = result_level2.get("suppliers", {})
+        links_l2 = result_level2.get("links", [])
+        
+        print("\n" + "=" * 80)
+        print("RESULTADOS NIVEL 2:")
+        print("=" * 80)
+        print(f"\nPallets adicionales: {len(pallets_l2)}")
+        print(f"Procesos adicionales: {len(processes_l2)}")
+        print(f"Proveedores adicionales: {len(suppliers_l2)}")
+        print(f"Links adicionales: {len(links_l2)}")
+        
+        # Mostrar procesos de nivel 2
+        if processes_l2:
+            print("\nTop 10 procesos de nivel 2:")
+            print("-" * 80)
+            processes_l2_by_origin = {}
+            for proc_id, proc_data in processes_l2.items():
+                origin = proc_data.get("origin", "Sin origin")
+                if origin not in processes_l2_by_origin:
+                    processes_l2_by_origin[origin] = []
+                processes_l2_by_origin[origin].append(proc_data)
+            
+            sorted_l2 = sorted(processes_l2_by_origin.items(), key=lambda x: len(x[1]), reverse=True)
+            for origin, procs in sorted_l2[:10]:
+                print(f"  {origin}: {len(procs)} procesos")
+        
+        # Totales combinados
+        print("\n" + "=" * 80)
+        print("TOTALES COMBINADOS (NIVEL 1 + NIVEL 2):")
+        print("=" * 80)
+        total_pallets_combined = len(all_pallets) + len(pallets_l2)
+        total_processes_combined = len(all_processes) + len(processes_l2)
+        total_suppliers_combined = len(all_suppliers) + len(suppliers_l2)
+        
+        print(f"\nPallets totales: {total_pallets_combined}")
+        print(f"Procesos totales: {total_processes_combined}")
+        print(f"Proveedores totales: {total_suppliers_combined}")
+        print(f"Tiempo total: {elapsed + elapsed_2:.2f} segundos")
+    else:
+        print("\n⚠️  No se encontraron pallets intermedios para trazar nivel 2")
+        print("Esto significa que los procesos de nivel 1 solo tienen recepciones como inputs.")
 
 except Exception as e:
     print(f"\n❌ Error en trazabilidad: {e}")

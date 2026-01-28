@@ -118,6 +118,15 @@ def _prepare_flow_data(data: Dict) -> Dict:
         if not date_str:
             date_str = min_date
         
+        # Extraer información de calidad de origen si es pallet
+        origin_quality = None
+        origin_process = None
+        selection_reason = None
+        if node_type in ["PALLET_IN", "PALLET_OUT"]:
+            origin_quality = n.get("origin_quality", "")
+            origin_process = n.get("origin_process", "")
+            selection_reason = n.get("selection_reason", "")
+        
         processed_nodes.append({
             "id": node_id,
             "label": n.get("label", node_id),
@@ -127,6 +136,9 @@ def _prepare_flow_data(data: Dict) -> Dict:
             "date": date_str,
             "color": NODE_COLORS.get(node_type, "#888"),
             "value": n.get("value", 1),
+            "originQuality": origin_quality,
+            "originProcess": origin_process,
+            "selectionReason": selection_reason,
         })
     
     # Procesar edges
@@ -180,6 +192,33 @@ def render_flow_timeline(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
+    # Filtros de calidad de origen
+    st.markdown("### 🔍 Filtros de Calidad de Origen")
+    filter_cols = st.columns(5)
+    with filter_cols[0]:
+        show_claro = st.checkbox("✅ Origen Claro", value=True, key="flow_claro")
+    with filter_cols[1]:
+        show_ambiguo = st.checkbox("⚠️ Origen Ambiguo", value=True, key="flow_ambiguo")
+    with filter_cols[2]:
+        show_desconocido = st.checkbox("❓ Origen Desconocido", value=True, key="flow_desconocido")
+    with filter_cols[3]:
+        show_sin_origen = st.checkbox("🔴 Sin Origen", value=True, key="flow_sin_origen")
+    with filter_cols[4]:
+        show_no_analizado = st.checkbox("⚪ Sin Analizar", value=True, key="flow_no_analizado")
+    
+    # Crear objeto de filtros para JavaScript
+    origin_filters = {
+        "ORIGEN_CLARO": show_claro,
+        "ORIGEN_CLARO_RECOVERED": show_claro,
+        "ORIGEN_AMBIGUO": show_ambiguo,
+        "ORIGEN_AMBIGUO_RECOVERED": show_ambiguo,
+        "ORIGEN_DESCONOCIDO": show_desconocido,
+        "ORIGEN_DESCONOCIDO_RECOVERED": show_desconocido,
+        "SIN_ORIGEN": show_sin_origen,
+        "NO_ANALIZADO": show_no_analizado,
+        "": True,  # Nodos sin información (proveedores, procesos, clientes)
+    }
+    
     # Preparar datos
     flow_data = _prepare_flow_data(data)
     
@@ -191,6 +230,7 @@ def render_flow_timeline(
     edges_json = json.dumps(flow_data["edges"])
     dates_json = json.dumps(flow_data["dates"])
     date_range_json = json.dumps(flow_data["dateRange"])
+    origin_filters_json = json.dumps(origin_filters)
     
     html = f"""
     <!DOCTYPE html>
@@ -378,6 +418,7 @@ def render_flow_timeline(
         
         <script>
             const nodesData = {nodes_json};
+            const originFilters = {origin_filters_json};
             const edgesData = {edges_json};
             const datesData = {dates_json};
             const dateRange = {date_range_json};
@@ -562,7 +603,32 @@ def render_flow_timeline(
                     return `translate(${{x}},${{d.y}})`;
                 }})
                 .on('mouseover', function(event, d) {{
-                    showTooltip(event, `<div class="tooltip-title">${{d.label}}</div>${{d.title || ''}}`);
+                    let tooltipHtml = `<div class="tooltip-title">${{d.label}}</div>${{d.title || ''}}`;
+                    
+                    // Agregar información de calidad de origen si existe
+                    if (d.originQuality) {{
+                        tooltipHtml += `<hr style="margin: 5px 0; border: none; border-top: 1px solid rgba(255,255,255,0.2);">`;
+                        
+                        // Emoji según calidad
+                        let emoji = '';
+                        if (d.originQuality.includes('CLARO')) emoji = '✅';
+                        else if (d.originQuality.includes('AMBIGUO')) emoji = '⚠️';
+                        else if (d.originQuality.includes('DESCONOCIDO')) emoji = '❓';
+                        else if (d.originQuality.includes('SIN_ORIGEN')) emoji = '🔴';
+                        else if (d.originQuality === 'NO_ANALIZADO') emoji = '⚪';
+                        
+                        tooltipHtml += `<div style="margin-top: 5px;"><strong>${{emoji}} Calidad:</strong> ${{d.originQuality}}</div>`;
+                        
+                        if (d.originProcess) {{
+                            tooltipHtml += `<div><strong>Proceso:</strong> ${{d.originProcess}}</div>`;
+                        }}
+                        
+                        if (d.selectionReason) {{
+                            tooltipHtml += `<div><strong>Razón:</strong> ${{d.selectionReason}}</div>`;
+                        }}
+                    }}
+                    
+                    showTooltip(event, tooltipHtml);
                 }})
                 .on('mouseout', hideTooltip);
             
@@ -672,6 +738,32 @@ def render_flow_timeline(
             initDiagram();
             renderDiagram();
             updateTimeline(xScale);
+            applyOriginFilters();
+            
+            // Aplicar filtros de calidad de origen
+            function applyOriginFilters() {{
+                g.selectAll('.node').style('opacity', d => {{
+                    // Si el nodo no tiene originQuality, siempre mostrarlo
+                    if (!d.originQuality || d.originQuality === '') return 1;
+                    // Aplicar filtro según el estado del checkbox
+                    return originFilters[d.originQuality] ? 1 : 0.1;
+                }});
+                
+                // También filtrar los links basados en si ambos nodos están visibles
+                g.selectAll('.link').style('opacity', function(d) {{
+                    const sourceNode = nodeMap[d.source];
+                    const targetNode = nodeMap[d.target];
+                    
+                    const sourceVisible = !sourceNode.originQuality || 
+                                        sourceNode.originQuality === '' || 
+                                        originFilters[sourceNode.originQuality];
+                    const targetVisible = !targetNode.originQuality || 
+                                        targetNode.originQuality === '' || 
+                                        originFilters[targetNode.originQuality];
+                    
+                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
+                }});
+            }}
             
             // Tooltip functions
             function showTooltip(event, html) {{
