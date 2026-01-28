@@ -526,8 +526,18 @@ class TraceabilityService:
                             # No hacer fallback a todos los inputs del proceso
                             inputs_to_follow = process_inputs_for_current_packages
                             if not inputs_to_follow and fallback_to_process_inputs:
-                                inputs_to_follow = process_inputs
-                                print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Fallback a {len(inputs_to_follow)} inputs del proceso.")
+                                # Solo permitir fallback si este proceso es el ORIGEN seleccionado del pallet
+                                selected_matches = False
+                                for result_id in current_packages:
+                                    analysis = pallet_origin_analysis.get(result_id)
+                                    if analysis and analysis.get("selected_process") == ref:
+                                        selected_matches = True
+                                        break
+                                if selected_matches:
+                                    inputs_to_follow = process_inputs
+                                    print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Fallback a {len(inputs_to_follow)} inputs del proceso (origen seleccionado).")
+                                else:
+                                    print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Sin fallback (no es origen seleccionado).")
                             if inputs_to_follow:
                                 for pkg_id in inputs_to_follow:
                                     if pkg_id not in traced_packages and pkg_id not in current_packages:
