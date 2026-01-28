@@ -477,6 +477,8 @@ class TraceabilityService:
                     process_produces_our_packages = False
                     process_inputs = set()  # Inputs del proceso (package_id que entran)
                     process_inputs_for_current_packages = set()  # Inputs QUE PRODUJERON los current_packages específicamente
+                    process_inputs_by_lot = {}  # lot_id -> set(pkg_id)
+                    output_lot_by_result = {}  # result_id -> lot_id
                     staged_moves = []
                     
                     for ml in ref_moves:
@@ -501,6 +503,8 @@ class TraceabilityService:
                                 # Si este movimiento específicamente produce uno de CURRENT_PACKAGES,
                                 # entonces su input es relevante para la trazabilidad directa
                                 if result_id in current_packages:
+                                    if lot_id:
+                                        output_lot_by_result[result_id] = lot_id
                                     if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
                                         pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                                         if pkg_id:
@@ -511,6 +515,10 @@ class TraceabilityService:
                             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                             if pkg_id:
                                 process_inputs.add(pkg_id)
+                                if lot_id:
+                                    if lot_id not in process_inputs_by_lot:
+                                        process_inputs_by_lot[lot_id] = set()
+                                    process_inputs_by_lot[lot_id].add(pkg_id)
                     
                     # Solo anexar movimientos de procesos relevantes en modo conexión directa
                     if include_siblings or process_produces_our_packages:
@@ -533,9 +541,18 @@ class TraceabilityService:
                                     if analysis and analysis.get("selected_process") == ref:
                                         selected_matches = True
                                         break
+
                                 if selected_matches:
-                                    inputs_to_follow = process_inputs
-                                    print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Fallback a {len(inputs_to_follow)} inputs del proceso (origen seleccionado).")
+                                    # Fallback por lot_id (más preciso)
+                                    for result_id in current_packages:
+                                        lot_id = output_lot_by_result.get(result_id)
+                                        if lot_id and lot_id in process_inputs_by_lot:
+                                            inputs_to_follow.update(process_inputs_by_lot[lot_id])
+
+                                    if inputs_to_follow:
+                                        print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Fallback por lote: {len(inputs_to_follow)} inputs.")
+                                    else:
+                                        print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Sin fallback (sin lote asociado).")
                                 else:
                                     print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Sin fallback (no es origen seleccionado).")
                             if inputs_to_follow:
