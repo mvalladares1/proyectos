@@ -348,8 +348,10 @@ class TraceabilityService:
             
             print(f"[TraceabilityService] Paquete {package_name}: {len(package_ids)} IDs encontrados")
             
-            # Buscar hacia ATRÁS según el modo seleccionado
-            return self._get_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
+            # Buscar hacia ATRÁS y HACIA ADELANTE para tener trazabilidad completa
+            backward = self._get_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
+            forward = self._get_forward_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
+            return self._merge_traceability_results(backward, forward)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
@@ -1385,6 +1387,42 @@ class TraceabilityService:
             "links": [],
             "move_lines": []
         }
+
+    def _merge_traceability_results(self, base: Dict, extra: Dict) -> Dict:
+        """Combina resultados de trazabilidad evitando duplicados."""
+        if not base:
+            return extra
+        if not extra:
+            return base
+
+        merged = {
+            "pallets": {**base.get("pallets", {}), **extra.get("pallets", {})},
+            "processes": {**base.get("processes", {}), **extra.get("processes", {})},
+            "suppliers": {**base.get("suppliers", {}), **extra.get("suppliers", {})},
+            "customers": {**base.get("customers", {}), **extra.get("customers", {})},
+            "links": [],
+            "move_lines": []
+        }
+
+        # Deduplicar links
+        link_set = set()
+        for link in base.get("links", []):
+            link_set.add(tuple(link))
+        for link in extra.get("links", []):
+            link_set.add(tuple(link))
+        merged["links"] = list(link_set)
+
+        # Deduplicar move_lines por id
+        move_by_id = {}
+        for ml in base.get("move_lines", []):
+            if isinstance(ml, dict) and "id" in ml:
+                move_by_id[ml["id"]] = ml
+        for ml in extra.get("move_lines", []):
+            if isinstance(ml, dict) and "id" in ml:
+                move_by_id[ml["id"]] = ml
+        merged["move_lines"] = list(move_by_id.values())
+
+        return merged
     
     def _process_move_lines(self, move_lines: List[Dict], virtual_ids: Set[int]) -> Dict:
         """Procesa los movimientos y extrae pallets, procesos y conexiones."""
@@ -1789,26 +1827,27 @@ class TraceabilityService:
         if pallets_without_origin:
             try:
                 # Buscar TODOS los moves donde estos pallets son output (sin exclusiones)
-                origin_moves = self.odoo.search_read(
-                    "stock.move.line",
-                    [
-                        ("result_package_id", "in", list(pallets_without_origin)),
-                        ("state", "=", "done"),
-                        ("qty_done", ">", 0)
-                    ],
-                    ["id", "result_package_id", "package_id", "reference", "date"],
-                    limit=len(pallets_without_origin) * 10  # Max 10 moves por pallet
-                )
-                
-                # Agrupar por pallet y aplicar el mismo algoritmo de análisis
                 moves_by_pallet = {}
-                for move in origin_moves:
-                    result_rel = move.get("result_package_id")
-                    if result_rel:
-                        result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                        if result_id not in moves_by_pallet:
-                            moves_by_pallet[result_id] = []
-                        moves_by_pallet[result_id].append(move)
+
+                pallet_list = list(pallets_without_origin)
+                batch_size = 200
+                for i in range(0, len(pallet_list), batch_size):
+                    batch = pallet_list[i:i + batch_size]
+                    origin_moves = self.odoo.search_read(
+                        "stock.move.line",
+                        [
+                            ("result_package_id", "in", batch),
+                            ("state", "=", "done"),
+                            ("qty_done", ">", 0)
+                        ],
+                        ["id", "result_package_id", "package_id", "reference", "date"],
+                    )
+
+                    for move in origin_moves:
+                        result_rel = move.get("result_package_id")
+                        if result_rel:
+                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                            moves_by_pallet.setdefault(result_id, []).append(move)
                 
                 # Analizar cada pallet
                 for pallet_id, moves in moves_by_pallet.items():
