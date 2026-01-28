@@ -349,7 +349,12 @@ class TraceabilityService:
             print(f"[TraceabilityService] Paquete {package_name}: {len(package_ids)} IDs encontrados")
             
             # Buscar hacia ATRÁS y HACIA ADELANTE para tener trazabilidad completa
-            backward = self._get_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
+            backward = self._get_traceability_for_packages(
+                package_ids,
+                limit,
+                include_siblings=include_siblings,
+                fallback_to_process_inputs=True
+            )
             forward = self._get_forward_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
             return self._merge_traceability_results(backward, forward)
             
@@ -364,7 +369,8 @@ class TraceabilityService:
         initial_package_ids: List[int], 
         limit: int,
         include_siblings: bool = True,
-        filter_sale_origins: List[str] = None
+        filter_sale_origins: List[str] = None,
+        fallback_to_process_inputs: bool = False
     ) -> Dict:
         """
         Trazabilidad hacia ATRÁS desde los paquetes iniciales.
@@ -376,6 +382,8 @@ class TraceabilityService:
                 - True: Trae TODOS los movimientos de cada proceso (todos los hermanos)
                 - False: "Conexión directa" - Trae todo pero filtra para mostrar solo la cadena conectada
             filter_sale_origins: Lista de origins (S00XXX) para filtrar solo esas ventas
+            fallback_to_process_inputs: Si True, cuando no se identifican inputs directos para un paquete,
+                            se siguen los inputs del proceso para no cortar la trazabilidad.
         
         Estrategia: Siempre recopilamos TODOS los datos (como "Todos"), 
         y luego si include_siblings=False, filtramos para quedarnos solo con la cadena conectada.
@@ -517,6 +525,9 @@ class TraceabilityService:
                             # CLAVE: Solo seguir inputs que produjeron ESPECÍFICAMENTE los current_packages
                             # No hacer fallback a todos los inputs del proceso
                             inputs_to_follow = process_inputs_for_current_packages
+                            if not inputs_to_follow and fallback_to_process_inputs:
+                                inputs_to_follow = process_inputs
+                                print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Fallback a {len(inputs_to_follow)} inputs del proceso.")
                             if inputs_to_follow:
                                 for pkg_id in inputs_to_follow:
                                     if pkg_id not in traced_packages and pkg_id not in current_packages:
