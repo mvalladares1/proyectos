@@ -327,17 +327,28 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
-    # Listener para recibir mensajes de click en paquetes desde el diagrama
-    st.components.v1.html("""
+    # Leer de localStorage si hay un paquete para trazar
+    trace_from_storage = st.components.v1.html("""
     <script>
-        window.addEventListener('message', function(event) {
-            if (event.data && event.data.type === 'trace_package' && event.data.package) {
-                console.log('Received trace_package message:', event.data.package);
-                const url = new URL(window.location.href);
-                url.searchParams.set('trace_pkg', event.data.package);
-                window.location.href = url.toString();
+        const pkg = localStorage.getItem('streamlit_trace_pkg');
+        const time = localStorage.getItem('streamlit_trace_pkg_time');
+        if (pkg && time) {
+            // Solo usar si es reciente (menos de 5 segundos)
+            const elapsed = Date.now() - parseInt(time);
+            if (elapsed < 5000) {
+                // Limpiar para no volver a usarlo
+                localStorage.removeItem('streamlit_trace_pkg');
+                localStorage.removeItem('streamlit_trace_pkg_time');
+                // Enviar a Streamlit via query param
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('trace_pkg', pkg);
+                window.parent.location.href = url.toString();
+            } else {
+                // Expirado, limpiar
+                localStorage.removeItem('streamlit_trace_pkg');
+                localStorage.removeItem('streamlit_trace_pkg_time');
             }
-        });
+        }
     </script>
     """, height=0)
     

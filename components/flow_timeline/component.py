@@ -433,27 +433,21 @@ def render_flow_timeline(
                 if (!cleaned) return;
                 console.log('Tracing package:', cleaned);
                 
-                // Enviar mensaje a todos los frames padres
-                const message = {{type: 'trace_package', package: cleaned}};
+                // Guardar en localStorage para que la página padre lo lea
+                localStorage.setItem('streamlit_trace_pkg', cleaned);
+                localStorage.setItem('streamlit_trace_pkg_time', Date.now().toString());
+                console.log('Saved to localStorage:', cleaned);
                 
-                // Intentar enviar a parent, top, y todos los frames intermedios
-                let current = window;
-                while (current !== window.top) {{
-                    current = current.parent;
-                    try {{
-                        current.postMessage(message, '*');
-                        console.log('Posted message to parent frame');
-                    }} catch(e) {{
-                        console.log('Could not post to frame:', e);
-                    }}
-                }}
-                
-                // También enviar a top directamente
+                // Forzar recarga de la página principal
                 try {{
-                    window.top.postMessage(message, '*');
-                    console.log('Posted message to top');
+                    window.top.location.reload();
                 }} catch(e) {{
-                    console.log('Could not post to top:', e);
+                    // Si no podemos recargar, intentar con el padre
+                    try {{
+                        window.parent.location.reload();
+                    }} catch(e2) {{
+                        console.log('Could not reload, check localStorage manually');
+                    }}
                 }}
             }}
             
