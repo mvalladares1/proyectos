@@ -730,7 +730,11 @@ def render_flow_timeline(
             initDiagram();
             renderDiagram();
             updateTimeline(xScale);
-            applyOriginFilters();
+            
+            // Aplicar filtros después de que todo esté renderizado
+            setTimeout(() => {{
+                applyOriginFilters();
+            }}, 100);
             
             // Aplicar filtros de calidad de origen
             function applyOriginFilters() {{

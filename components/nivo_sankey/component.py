@@ -321,17 +321,88 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 document.body.innerHTML = '<div style="padding: 20px; color: orange;">Advertencia: No hay links para renderizar</div>';
             }}
             
-            // Clonar datos
+            // Detectar y eliminar ciclos antes de computar sankey
+            function detectAndBreakCycles(nodes, links) {{
+                // Construir grafo de adyacencia
+                const adjacency = new Map();
+                nodes.forEach(n => adjacency.set(n.id, []));
+                
+                links.forEach(link => {{
+                    const sourceId = link.source;
+                    const targetId = link.target;
+                    if (adjacency.has(sourceId)) {{
+                        adjacency.get(sourceId).push({{ target: targetId, link: link }});
+                    }}
+                }});
+                
+                // DFS para detectar ciclos
+                const visited = new Set();
+                const recStack = new Set();
+                const cyclicLinks = new Set();
+                
+                function hasCycle(nodeId, path = []) {{
+                    if (recStack.has(nodeId)) {{
+                        // Encontrado ciclo - marcar el link que lo cierra
+                        const cycleStart = path.indexOf(nodeId);
+                        if (cycleStart >= 0 && cycleStart < path.length - 1) {{
+                            const problematicLink = path[path.length - 1].link;
+                            if (problematicLink) cyclicLinks.add(problematicLink);
+                        }}
+                        return true;
+                    }}
+                    
+                    if (visited.has(nodeId)) return false;
+                    
+                    visited.add(nodeId);
+                    recStack.add(nodeId);
+                    
+                    const neighbors = adjacency.get(nodeId) || [];
+                    for (const edge of neighbors) {{
+                        if (hasCycle(edge.target, [...path, edge])) {{
+                            // Propagar para marcar más links si es necesario
+                        }}
+                    }}
+                    
+                    recStack.delete(nodeId);
+                    return false;
+                }}
+                
+                // Ejecutar DFS desde cada nodo
+                nodes.forEach(node => {{
+                    if (!visited.has(node.id)) {{
+                        hasCycle(node.id);
+                    }}
+                }});
+                
+                // Filtrar links cíclicos
+                const cleanLinks = links.filter(link => !cyclicLinks.has(link));
+                
+                if (cyclicLinks.size > 0) {{
+                    console.warn(`Removidos ${{cyclicLinks.size}} links cíclicos`);
+                }}
+                
+                return cleanLinks;
+            }}
+            
+            // Clonar datos y limpiar ciclos
             let graph;
             try {{
+                const clonedNodes = data.nodes.map(d => ({{...d}}));
+                const clonedLinks = data.links.map(d => ({{...d}}));
+                
+                // Limpiar ciclos
+                const cleanLinks = detectAndBreakCycles(clonedNodes, clonedLinks);
+                
+                console.log(`Procesando: ${{clonedNodes.length}} nodos, ${{cleanLinks.length}} links (removidos ${{clonedLinks.length - cleanLinks.length}} ciclos)`);
+                
                 graph = sankey({{
-                    nodes: data.nodes.map(d => ({{...d}})),
-                    links: data.links.map(d => ({{...d}}))
+                    nodes: clonedNodes,
+                    links: cleanLinks
                 }});
                 console.log('Sankey graph computed successfully');
             }} catch (error) {{
                 console.error('Error computing sankey:', error);
-                document.body.innerHTML = '<div style="padding: 20px; color: red;">Error al computar Sankey: ' + error.message + '</div>';
+                document.body.innerHTML = '<div style="padding: 20px; color: red;">Error al computar Sankey: ' + error.message + '<br/><br/>Esto puede deberse a ciclos en los datos. Revisa la consola para más detalles.</div>';
                 throw error;
             }}
             
