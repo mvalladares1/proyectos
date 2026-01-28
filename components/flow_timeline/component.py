@@ -432,9 +432,18 @@ def render_flow_timeline(
                 const cleaned = pkgName.replace(/^[^A-Za-z0-9]+\\s*/, '').trim();
                 if (!cleaned) return;
                 console.log('Tracing package:', cleaned);
-                const url = new URL(window.parent.location.href);
-                url.searchParams.set('trace_pkg', cleaned);
-                window.parent.location.href = url.toString();
+                
+                // Navegar a la misma página con el query param
+                // Usar top.location en lugar de parent para salir del iframe
+                try {{
+                    const url = new URL(window.top.location.href);
+                    url.searchParams.set('trace_pkg', cleaned);
+                    window.top.location.href = url.toString();
+                }} catch(e) {{
+                    // Si falla por seguridad, intentar con postMessage
+                    console.log('Fallback to postMessage');
+                    window.top.postMessage({{type: 'trace_package', package: cleaned}}, '*');
+                }}
             }}
             
             // Dimensiones - serán actualizadas en resize
