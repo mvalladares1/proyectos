@@ -327,6 +327,19 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
+    # Verificar si hay un paquete a trazar desde click en diagrama
+    qp = st.query_params
+    trace_pkg = qp.get("trace_pkg")
+    if trace_pkg and st.session_state.get("last_trace_pkg") != trace_pkg:
+        # Auto-configurar para trazar este paquete
+        st.session_state.search_mode_selector = "📦 Por paquete"
+        st.session_state.package_input = trace_pkg
+        st.session_state.last_trace_pkg = trace_pkg
+        st.session_state.auto_generate_trace_pkg = True
+        # Limpiar query param
+        del qp["trace_pkg"]
+        st.rerun()
+    
     # Selector de tipo de diagrama
     st.markdown("### 📊 Tipo de Visualización")
     

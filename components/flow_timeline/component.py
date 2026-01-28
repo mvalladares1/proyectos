@@ -425,6 +425,17 @@ def render_flow_timeline(
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
             
+            // Función para trazar un paquete (click en PALLET_OUT con origen)
+            function tracePackage(pkgName) {{{{
+                if (!pkgName) return;
+                // Limpiar emojis del inicio del label
+                const cleaned = pkgName.replace(/^[^A-Za-z0-9]+\s*/, '').trim();
+                if (!cleaned) return;
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('trace_pkg', cleaned);
+                window.parent.location.href = url.toString();
+            }}}}
+            
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
             let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform, timelineSvg, timelineG;
@@ -612,6 +623,21 @@ def render_flow_timeline(
                     const x = xScale(d.parsedDate || xScale.domain()[0]);
                     return `translate(${{x}},${{d.y}})`;
                 }})
+                .style('cursor', d => {{
+                    // Solo PALLET_OUT con origen válido son clickeables
+                    if (d.nodeType === 'PALLET_OUT' && d.originQuality && 
+                        !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
+                        return 'pointer';
+                    }}
+                    return 'default';
+                }})
+                .on('click', function(event, d) {{
+                    // Solo permitir click en PALLET_OUT con origen válido (CLARO, AMBIGUO, DESCONOCIDO)
+                    if (d.nodeType === 'PALLET_OUT' && d.originQuality && 
+                        !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
+                        tracePackage(d.label);
+                    }}
+                }})
                 .on('mouseover', function(event, d) {{
                     let tooltipHtml = `<div class="tooltip-title">${{d.label}}</div>${{d.title || ''}}`;
                     
@@ -635,6 +661,11 @@ def render_flow_timeline(
                         
                         if (d.selectionReason) {{
                             tooltipHtml += `<div><strong>Razón:</strong> ${{d.selectionReason}}</div>`;
+                        }}
+                        
+                        // Indicar si es clickeable para trazar
+                        if (d.nodeType === 'PALLET_OUT' && !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
+                            tooltipHtml += `<div style="margin-top: 8px; padding: 4px 8px; background: rgba(52,152,219,0.3); border-radius: 4px; font-size: 11px;">👆 Click para trazar este pallet</div>`;
                         }}
                     }}
                     
