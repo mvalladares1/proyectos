@@ -624,16 +624,16 @@ def render_flow_timeline(
                     return `translate(${{x}},${{d.y}})`;
                 }})
                 .style('cursor', d => {{
-                    // Solo PALLET_OUT con origen válido son clickeables
-                    if (d.nodeType === 'PALLET_OUT' && d.originQuality && 
+                    // Solo PALLET_IN con origen válido son clickeables (para trazar hacia atrás)
+                    if (d.nodeType === 'PALLET_IN' && d.originQuality && 
                         !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
                         return 'pointer';
                     }}
                     return 'default';
                 }})
                 .on('click', function(event, d) {{
-                    // Solo permitir click en PALLET_OUT con origen válido (CLARO, AMBIGUO, DESCONOCIDO)
-                    if (d.nodeType === 'PALLET_OUT' && d.originQuality && 
+                    // Solo permitir click en PALLET_IN con origen válido (CLARO, AMBIGUO, DESCONOCIDO)
+                    if (d.nodeType === 'PALLET_IN' && d.originQuality && 
                         !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
                         tracePackage(d.label);
                     }}
@@ -664,8 +664,8 @@ def render_flow_timeline(
                         }}
                         
                         // Indicar si es clickeable para trazar
-                        if (d.nodeType === 'PALLET_OUT' && !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
-                            tooltipHtml += `<div style="margin-top: 8px; padding: 4px 8px; background: rgba(52,152,219,0.3); border-radius: 4px; font-size: 11px;">👆 Click para trazar este pallet</div>`;
+                        if (d.nodeType === 'PALLET_IN' && !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
+                            tooltipHtml += `<div style="margin-top: 8px; padding: 4px 8px; background: rgba(52,152,219,0.3); border-radius: 4px; font-size: 11px;">👆 Click para trazar origen</div>`;
                         }}
                     }}
                     
