@@ -327,33 +327,6 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
-    # Inyectar script en la página principal para leer localStorage
-    # st.markdown se inyecta directamente, no en iframe
-    st.markdown("""
-    <script>
-        (function checkTracePackage() {
-            const pkg = localStorage.getItem('streamlit_trace_pkg');
-            const time = localStorage.getItem('streamlit_trace_pkg_time');
-            if (pkg && time) {
-                const elapsed = Date.now() - parseInt(time);
-                if (elapsed < 5000) {
-                    // Limpiar inmediatamente
-                    localStorage.removeItem('streamlit_trace_pkg');
-                    localStorage.removeItem('streamlit_trace_pkg_time');
-                    // Redirigir con query param
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('trace_pkg', pkg);
-                    console.log('Redirecting to:', url.toString());
-                    window.location.href = url.toString();
-                } else {
-                    localStorage.removeItem('streamlit_trace_pkg');
-                    localStorage.removeItem('streamlit_trace_pkg_time');
-                }
-            }
-        })();
-    </script>
-    """, unsafe_allow_html=True)
-    
     # Verificar si hay un paquete a trazar desde click en diagrama
     qp = st.query_params
     trace_pkg = qp.get("trace_pkg")

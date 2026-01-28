@@ -433,28 +433,30 @@ def render_flow_timeline(
                 if (!cleaned) return;
                 console.log('Tracing package:', cleaned);
                 
-                // Guardar en localStorage para que la página padre lo lea
-                localStorage.setItem('streamlit_trace_pkg', cleaned);
-                localStorage.setItem('streamlit_trace_pkg_time', Date.now().toString());
-                console.log('Saved to localStorage:', cleaned);
+                // Crear un form oculto y enviarlo al padre
+                // El form submit sí puede navegar cross-frame
+                const currentUrl = window.top.location.href;
+                const url = new URL(currentUrl);
+                url.searchParams.set('trace_pkg', cleaned);
                 
-                // Construir URL correctamente manteniendo el path de Streamlit
-                try {{
-                    const topUrl = new URL(window.top.location.href);
-                    topUrl.searchParams.set('trace_pkg', cleaned);
-                    console.log('Navigating to:', topUrl.toString());
-                    window.top.location.href = topUrl.toString();
-                }} catch(e) {{
-                    console.log('Error navigating:', e);
-                    // Fallback: intentar con parent
-                    try {{
-                        const parentUrl = new URL(window.parent.location.href);
-                        parentUrl.searchParams.set('trace_pkg', cleaned);
-                        window.parent.location.href = parentUrl.toString();
-                    }} catch(e2) {{
-                        console.log('Fallback also failed:', e2);
-                    }}
-                }}
+                // Crear form en el documento top
+                const form = document.createElement('form');
+                form.method = 'GET';
+                form.action = url.pathname;
+                form.target = '_top';
+                
+                // Agregar todos los params actuales más el nuevo
+                url.searchParams.forEach((value, key) => {{
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    form.appendChild(input);
+                }});
+                
+                document.body.appendChild(form);
+                console.log('Submitting form to:', url.pathname, 'with params:', url.searchParams.toString());
+                form.submit();
             }}
             
             // Dimensiones - serán actualizadas en resize
