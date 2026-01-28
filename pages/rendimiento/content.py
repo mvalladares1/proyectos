@@ -327,6 +327,20 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
+    # Listener para recibir mensajes de click en paquetes desde el diagrama
+    st.components.v1.html("""
+    <script>
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'trace_package' && event.data.package) {
+                console.log('Received trace_package message:', event.data.package);
+                const url = new URL(window.location.href);
+                url.searchParams.set('trace_pkg', event.data.package);
+                window.location.href = url.toString();
+            }
+        });
+    </script>
+    """, height=0)
+    
     # Verificar si hay un paquete a trazar desde click en diagrama
     qp = st.query_params
     trace_pkg = qp.get("trace_pkg")

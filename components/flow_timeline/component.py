@@ -433,16 +433,27 @@ def render_flow_timeline(
                 if (!cleaned) return;
                 console.log('Tracing package:', cleaned);
                 
-                // Navegar a la misma página con el query param
-                // Usar top.location en lugar de parent para salir del iframe
+                // Enviar mensaje a todos los frames padres
+                const message = {{type: 'trace_package', package: cleaned}};
+                
+                // Intentar enviar a parent, top, y todos los frames intermedios
+                let current = window;
+                while (current !== window.top) {{
+                    current = current.parent;
+                    try {{
+                        current.postMessage(message, '*');
+                        console.log('Posted message to parent frame');
+                    }} catch(e) {{
+                        console.log('Could not post to frame:', e);
+                    }}
+                }}
+                
+                // También enviar a top directamente
                 try {{
-                    const url = new URL(window.top.location.href);
-                    url.searchParams.set('trace_pkg', cleaned);
-                    window.top.location.href = url.toString();
+                    window.top.postMessage(message, '*');
+                    console.log('Posted message to top');
                 }} catch(e) {{
-                    // Si falla por seguridad, intentar con postMessage
-                    console.log('Fallback to postMessage');
-                    window.top.postMessage({{type: 'trace_package', package: cleaned}}, '*');
+                    console.log('Could not post to top:', e);
                 }}
             }}
             
