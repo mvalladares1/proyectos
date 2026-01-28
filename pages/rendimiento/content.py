@@ -135,36 +135,46 @@ def _merge_traceability_data(data_list: list, output_format: str = "visjs") -> d
 def _check_localstorage_trace_pkg():
     """
     Lee localStorage para detectar si el usuario hizo click en un paquete en Flow Timeline.
-    Usa streamlit-javascript o un workaround con query params.
+    Usa polling continuo para detectar cambios.
     """
     import streamlit.components.v1 as components
     
-    # Inyectar JS que lee localStorage y redirige con query param si hay paquete pendiente
-    # Este script se ejecuta en el contexto de la página principal (no iframe)
+    # Inyectar JS que hace polling de localStorage y redirige cuando detecta un paquete
     components.html("""
     <script>
         (function() {
-            const pkg = localStorage.getItem('flow_timeline_trace_pkg');
-            const ts = localStorage.getItem('flow_timeline_trace_timestamp');
-            if (pkg && ts) {
-                // Verificar que no sea muy antiguo (max 30 segundos)
-                const age = Date.now() - parseInt(ts);
-                if (age < 30000) {
-                    // Limpiar localStorage
-                    localStorage.removeItem('flow_timeline_trace_pkg');
-                    localStorage.removeItem('flow_timeline_trace_timestamp');
-                    
-                    // Añadir trace_pkg a la URL actual y recargar
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('trace_pkg', pkg);
-                    console.log('Redirecting to trace package:', pkg);
-                    window.location.href = url.toString();
-                } else {
-                    // Limpiar datos antiguos
-                    localStorage.removeItem('flow_timeline_trace_pkg');
-                    localStorage.removeItem('flow_timeline_trace_timestamp');
+            // Función que verifica localStorage
+            function checkForTracePackage() {
+                const pkg = localStorage.getItem('flow_timeline_trace_pkg');
+                const ts = localStorage.getItem('flow_timeline_trace_timestamp');
+                if (pkg && ts) {
+                    const age = Date.now() - parseInt(ts);
+                    // Solo procesar si es reciente (menos de 30 segundos)
+                    if (age < 30000) {
+                        // Limpiar localStorage inmediatamente para evitar loops
+                        localStorage.removeItem('flow_timeline_trace_pkg');
+                        localStorage.removeItem('flow_timeline_trace_timestamp');
+                        
+                        // Construir URL con el paquete
+                        const url = new URL(window.parent.location.href);
+                        url.searchParams.set('trace_pkg', pkg);
+                        console.log('Detected trace package, redirecting to:', url.toString());
+                        
+                        // Navegar en el padre
+                        window.parent.location.href = url.toString();
+                    } else {
+                        // Limpiar datos antiguos
+                        localStorage.removeItem('flow_timeline_trace_pkg');
+                        localStorage.removeItem('flow_timeline_trace_timestamp');
+                    }
                 }
             }
+            
+            // Verificar inmediatamente
+            checkForTracePackage();
+            
+            // Seguir verificando cada 500ms
+            setInterval(checkForTracePackage, 500);
         })();
     </script>
     """, height=0)
