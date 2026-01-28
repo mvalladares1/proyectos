@@ -10,7 +10,7 @@ Características:
 """
 import streamlit as st
 import streamlit.components.v1 as components
-from typing import Dict, List
+from typing import Dict, List, Optional
 import json
 from datetime import datetime
 
@@ -161,14 +161,22 @@ def _prepare_flow_data(data: Dict) -> Dict:
 def render_flow_timeline(
     data: Dict,
     height: int = 800,
-) -> None:
+) -> Optional[str]:
     """
     Renderiza un diagrama de flujo con timeline usando D3.js.
     
     Args:
         data: Dict con nodes, edges del visjs_transformer
         height: Altura total del componente
+        
+    Returns:
+        ID del paquete clickeado para trazar, o None
     """
+    # Verificar si hay un paquete pendiente de trazar (guardado en session_state desde localStorage)
+    trace_pkg = st.session_state.pop('_flow_timeline_trace_pkg', None)
+    if trace_pkg:
+        return trace_pkg
+    
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
     stats = data.get("stats", {})
@@ -433,22 +441,21 @@ def render_flow_timeline(
                 if (!cleaned) return;
                 console.log('Tracing package:', cleaned);
                 
-                // Obtener la URL base del padre (puede fallar por CORS, usar fallback)
-                let baseUrl;
+                // Guardar en localStorage para que el componente Python lo detecte
                 try {{
-                    baseUrl = window.top.location.href;
+                    localStorage.setItem('flow_timeline_trace_pkg', cleaned);
+                    localStorage.setItem('flow_timeline_trace_timestamp', Date.now().toString());
+                    console.log('Saved trace request to localStorage:', cleaned);
+                    
+                    // Mostrar feedback visual
+                    const notification = document.createElement('div');
+                    notification.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#f39c12;color:#000;padding:12px 24px;border-radius:8px;z-index:10000;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+                    notification.textContent = '🔍 Trazando paquete ' + cleaned + '... Haz click en "Generar" para actualizar.';
+                    document.body.appendChild(notification);
+                    setTimeout(() => notification.remove(), 4000);
                 }} catch(e) {{
-                    // Fallback: usar referrer o construir desde location
-                    baseUrl = document.referrer || window.location.href;
+                    console.error('Error saving to localStorage:', e);
                 }}
-                
-                const url = new URL(baseUrl);
-                url.searchParams.set('trace_pkg', cleaned);
-                
-                // Abrir en nueva pestaña - esto SÍ funciona desde iframes
-                const newUrl = url.toString();
-                console.log('Opening trace in new tab:', newUrl);
-                window.open(newUrl, '_blank');
             }}
             
             // Dimensiones - serán actualizadas en resize

@@ -66,6 +66,44 @@ except ImportError:
     render_flow_timeline = None
 
 
+def _check_localstorage_trace_pkg():
+    """
+    Lee localStorage para detectar si el usuario hizo click en un paquete en Flow Timeline.
+    Usa streamlit-javascript o un workaround con query params.
+    """
+    import streamlit.components.v1 as components
+    
+    # Inyectar JS que lee localStorage y redirige con query param si hay paquete pendiente
+    # Este script se ejecuta en el contexto de la página principal (no iframe)
+    components.html("""
+    <script>
+        (function() {
+            const pkg = localStorage.getItem('flow_timeline_trace_pkg');
+            const ts = localStorage.getItem('flow_timeline_trace_timestamp');
+            if (pkg && ts) {
+                // Verificar que no sea muy antiguo (max 30 segundos)
+                const age = Date.now() - parseInt(ts);
+                if (age < 30000) {
+                    // Limpiar localStorage
+                    localStorage.removeItem('flow_timeline_trace_pkg');
+                    localStorage.removeItem('flow_timeline_trace_timestamp');
+                    
+                    // Añadir trace_pkg a la URL actual y recargar
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('trace_pkg', pkg);
+                    console.log('Redirecting to trace package:', pkg);
+                    window.location.href = url.toString();
+                } else {
+                    // Limpiar datos antiguos
+                    localStorage.removeItem('flow_timeline_trace_pkg');
+                    localStorage.removeItem('flow_timeline_trace_timestamp');
+                }
+            }
+        })();
+    </script>
+    """, height=0)
+
+
 def render(username: str, password: str):
     """Renderiza el contenido principal del dashboard."""
     
@@ -327,7 +365,11 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
-    # Verificar si hay un paquete a trazar desde click en diagrama
+    # Verificar si hay un paquete a trazar desde click en diagrama (localStorage)
+    # Usamos un componente HTML para leer localStorage y pasarlo a un placeholder
+    _check_localstorage_trace_pkg()
+    
+    # Verificar si hay un paquete a trazar desde query params
     qp = st.query_params
     trace_pkg = qp.get("trace_pkg")
     if trace_pkg and st.session_state.get("last_trace_pkg") != trace_pkg:
