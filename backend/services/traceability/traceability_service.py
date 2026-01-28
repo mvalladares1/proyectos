@@ -677,6 +677,7 @@ class TraceabilityService:
         all_move_lines = []
         processed_move_ids = set()
         processed_references = set()
+        pallet_origin_analysis = {}
         
         # Cola de paquetes a trazabilizar HACIA ADELANTE
         packages_to_trace = set(initial_package_ids)
@@ -847,6 +848,9 @@ class TraceabilityService:
         
         # Enriquecer con análisis de calidad de origen (solo en modo conexión directa)
         if not include_siblings:
+            output_moves = [m for m in all_move_lines if m.get("result_package_id")]
+            if output_moves:
+                self._analyze_pallet_origin_quality(output_moves, pallet_origin_analysis)
             self._enrich_with_origin_quality(result, pallet_origin_analysis)
         
         # =====================================================
