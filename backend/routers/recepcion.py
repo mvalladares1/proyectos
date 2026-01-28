@@ -113,6 +113,47 @@ async def get_recepciones_report_xlsx(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get('/report-defectos.xlsx')
+async def get_recepciones_defectos_xlsx(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    origen: Optional[List[str]] = Query(None, description="Orígenes: RFP, VILKUN, SAN JOSE"),
+    solo_hechas: bool = Query(True, description="Solo recepciones en estado 'done'"),
+):
+    """
+    Genera Excel detallado con información de defectos para mora y frambuesa.
+    Incluye todos los campos de quality.check: hongos, inmadura, sobremadura, etc.
+    """
+    try:
+        from backend.services.recepcion_defectos_service import generar_reporte_defectos_excel
+        
+        xlsx_bytes = generar_reporte_defectos_excel(
+            username=username,
+            password=password,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            origenes=origen,
+            solo_hechas=solo_hechas
+        )
+        
+        buf = BytesIO(xlsx_bytes)
+        filename = f"recepciones_defectos_{fecha_inicio}_a_{fecha_fin}.xlsx"
+        
+        return StreamingResponse(
+            buf,
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[ERROR] Error en get_recepciones_defectos_xlsx: {str(e)}")
+        print(f"[ERROR] Traceback completo:\n{error_trace}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================
 #              ENDPOINTS DE GESTIÓN DE RECEPCIONES
 # ============================================================

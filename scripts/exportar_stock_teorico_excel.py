@@ -151,8 +151,9 @@ if compras_lineas:
 # ============================================================================
 print("\n🔄 Obteniendo COSTO DE VENTAS (Facturas de Cliente)...")
 
-# Buscar líneas con débito en facturas de cliente (esto podría ser el costo de venta)
-# Primero hagamos una búsqueda amplia para ver qué cuentas aparecen
+# Buscar líneas de COSTO DE VENTA en facturas de cliente
+# Cuentas 51010101 (PSP), 51010102 (PTT), 51010103 (RETAIL)
+# Esto refleja el costo de la fruta que se vendió, NO el precio de venta
 ventas_lineas = odoo.search_read(
     'account.move.line',
     [
@@ -160,10 +161,8 @@ ventas_lineas = odoo.search_read(
         ['move_id.state', '=', 'posted'],
         ['move_id.payment_state', '!=', 'reversed'],
         ['move_id.journal_id.name', '=', 'Facturas de Cliente'],
-        ['display_type', '=', 'product'],
+        ['account_id.code', 'in', ['51010101', '51010102', '51010103']],  # COSTO DE VENTA PSP/PTT/RETAIL
         ['product_id', '!=', False],
-        ['product_id.categ_id.complete_name', 'ilike', 'PRODUCTOS'],
-        ['debit', '>', 0],  # Solo débitos (costo de venta)
         ['date', '>=', FECHA_DESDE],
         ['date', '<=', FECHA_HASTA]
     ],
