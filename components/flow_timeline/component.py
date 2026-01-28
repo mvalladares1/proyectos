@@ -430,84 +430,6 @@ def render_flow_timeline(
             let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform, timelineSvg, timelineG;
             let parseDate, nodeMap;
             
-            // Definir applyOriginFilters globalmente para que esté disponible para los checkboxes
-            window.applyOriginFilters = function() {{
-                console.log('Aplicando filtros de origen...');
-                
-                // Verificar que los checkboxes existan
-                const claroBox = document.getElementById('filter-claro');
-                const ambiguoBox = document.getElementById('filter-ambiguo');
-                const desconocidoBox = document.getElementById('filter-desconocido');
-                const sinOrigenBox = document.getElementById('filter-sin-origen');
-                const noAnalizadoBox = document.getElementById('filter-no-analizado');
-                
-                if (!claroBox || !ambiguoBox || !desconocidoBox || !sinOrigenBox || !noAnalizadoBox) {{
-                    console.error('No se encontraron todos los checkboxes de filtro');
-                    return;
-                }}
-                
-                // Leer estado actual de los checkboxes
-                const showClaro = claroBox.checked;
-                const showAmbiguo = ambiguoBox.checked;
-                const showDesconocido = desconocidoBox.checked;
-                const showSinOrigen = sinOrigenBox.checked;
-                const showNoAnalizado = noAnalizadoBox.checked;
-                
-                console.log('Estados de filtros:', {{
-                    showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado
-                }});
-                
-                // Crear mapa de filtros
-                const filters = {{
-                    'ORIGEN_CLARO': showClaro,
-                    'ORIGEN_CLARO_RECOVERED': showClaro,
-                    'ORIGEN_AMBIGUO': showAmbiguo,
-                    'ORIGEN_AMBIGUO_RECOVERED': showAmbiguo,
-                    'ORIGEN_DESCONOCIDO': showDesconocido,
-                    'ORIGEN_DESCONOCIDO_RECOVERED': showDesconocido,
-                    'SIN_ORIGEN': showSinOrigen,
-                    'NO_ANALIZADO': showNoAnalizado,
-                    '': true  // Siempre mostrar nodos sin clasificación
-                }};
-                
-                // Verificar que g existe
-                if (typeof g === 'undefined' || !g) {{
-                    console.error('Variable g no está definida o es null');
-                    return;
-                }}
-                
-                const nodes = g.selectAll('.node');
-                const links = g.selectAll('.link');
-                
-                console.log(`Filtrando ${{nodes.size()}} nodos y ${{links.size()}} links`);
-                
-                nodes.style('opacity', d => {{
-                    // Si el nodo no tiene originQuality, siempre mostrarlo
-                    if (!d.originQuality || d.originQuality === '') return 1;
-                    // Aplicar filtro según el estado del checkbox
-                    return filters[d.originQuality] ? 1 : 0.1;
-                }});
-                
-                // También filtrar los links basados en si ambos nodos están visibles
-                links.style('opacity', function(d) {{
-                    const sourceNode = nodeMap[d.source];
-                    const targetNode = nodeMap[d.target];
-                    
-                    if (!sourceNode || !targetNode) return 0.4;
-                    
-                    const sourceVisible = !sourceNode.originQuality || 
-                                        sourceNode.originQuality === '' || 
-                                        filters[sourceNode.originQuality];
-                    const targetVisible = !targetNode.originQuality || 
-                                        targetNode.originQuality === '' || 
-                                        filters[targetNode.originQuality];
-                    
-                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
-                }});
-                
-                console.log('Filtros aplicados exitosamente');
-            }};
-            
             function initDiagram() {{
                 containerEl = document.getElementById('diagram');
                 width = containerEl.clientWidth - margin.left - margin.right;
@@ -815,6 +737,65 @@ def render_flow_timeline(
             initDiagram();
             renderDiagram();
             updateTimeline(xScale);
+            
+            // Redefinir applyOriginFilters ahora que g y nodeMap existen
+            window.applyOriginFilters = function() {{
+                console.log('Aplicando filtros de origen...');
+                
+                const claroBox = document.getElementById('filter-claro');
+                const ambiguoBox = document.getElementById('filter-ambiguo');
+                const desconocidoBox = document.getElementById('filter-desconocido');
+                const sinOrigenBox = document.getElementById('filter-sin-origen');
+                const noAnalizadoBox = document.getElementById('filter-no-analizado');
+                
+                if (!claroBox) {{ console.error('filter-claro no encontrado'); return; }}
+                
+                const showClaro = claroBox.checked;
+                const showAmbiguo = ambiguoBox.checked;
+                const showDesconocido = desconocidoBox.checked;
+                const showSinOrigen = sinOrigenBox.checked;
+                const showNoAnalizado = noAnalizadoBox.checked;
+                
+                console.log('Estados:', {{ showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado }});
+                
+                const filters = {{
+                    'ORIGEN_CLARO': showClaro,
+                    'ORIGEN_CLARO_RECOVERED': showClaro,
+                    'ORIGEN_AMBIGUO': showAmbiguo,
+                    'ORIGEN_AMBIGUO_RECOVERED': showAmbiguo,
+                    'ORIGEN_DESCONOCIDO': showDesconocido,
+                    'ORIGEN_DESCONOCIDO_RECOVERED': showDesconocido,
+                    'SIN_ORIGEN': showSinOrigen,
+                    'NO_ANALIZADO': showNoAnalizado,
+                    '': true
+                }};
+                
+                if (!g) {{ console.error('g no existe'); return; }}
+                
+                const nodes = g.selectAll('.node');
+                const links = g.selectAll('.link');
+                
+                console.log(`Filtrando ${{nodes.size()}} nodos y ${{links.size()}} links`);
+                
+                nodes.style('opacity', d => {{
+                    if (!d.originQuality || d.originQuality === '') return 1;
+                    const visible = filters[d.originQuality];
+                    console.log(`Nodo ${{d.id}} quality=${{d.originQuality}} visible=${{visible}}`);
+                    return visible ? 1 : 0.1;
+                }});
+                
+                links.style('opacity', function(d) {{
+                    const sourceNode = nodeMap[d.source];
+                    const targetNode = nodeMap[d.target];
+                    if (!sourceNode || !targetNode) return 0.4;
+                    
+                    const sourceVisible = !sourceNode.originQuality || sourceNode.originQuality === '' || filters[sourceNode.originQuality];
+                    const targetVisible = !targetNode.originQuality || targetNode.originQuality === '' || filters[targetNode.originQuality];
+                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
+                }});
+                
+                console.log('Filtros aplicados');
+            }};
             
             // Aplicar filtros después de que todo esté renderizado
             setTimeout(() => {{

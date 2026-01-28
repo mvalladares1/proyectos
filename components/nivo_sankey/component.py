@@ -287,73 +287,6 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             // Variables globales para acceso desde filtros
             let node, link;
             
-            // Definir applyOriginFilters globalmente
-            window.applyOriginFilters = function() {{
-                console.log('Aplicando filtros en Sankey...');
-                
-                // Verificar que los checkboxes existan
-                const claroBox = document.getElementById('filter-claro');
-                const ambiguoBox = document.getElementById('filter-ambiguo');
-                const desconocidoBox = document.getElementById('filter-desconocido');
-                const sinOrigenBox = document.getElementById('filter-sin-origen');
-                const noAnalizadoBox = document.getElementById('filter-no-analizado');
-                
-                if (!claroBox || !ambiguoBox || !desconocidoBox || !sinOrigenBox || !noAnalizadoBox) {{
-                    console.error('Checkboxes no encontrados');
-                    return;
-                }}
-                
-                // Leer estado actual
-                const showClaro = claroBox.checked;
-                const showAmbiguo = ambiguoBox.checked;
-                const showDesconocido = desconocidoBox.checked;
-                const showSinOrigen = sinOrigenBox.checked;
-                const showNoAnalizado = noAnalizadoBox.checked;
-                
-                console.log('Estados:', {{ showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado }});
-                
-                // Crear mapa de filtros
-                const filters = {{
-                    'ORIGEN_CLARO': showClaro,
-                    'ORIGEN_CLARO_RECOVERED': showClaro,
-                    'ORIGEN_AMBIGUO': showAmbiguo,
-                    'ORIGEN_AMBIGUO_RECOVERED': showAmbiguo,
-                    'ORIGEN_DESCONOCIDO': showDesconocido,
-                    'ORIGEN_DESCONOCIDO_RECOVERED': showDesconocido,
-                    'SIN_ORIGEN': showSinOrigen,
-                    'NO_ANALIZADO': showNoAnalizado,
-                    '': true
-                }};
-                
-                // Verificar que node y link existen
-                if (!node || !link) {{
-                    console.error('node o link no están definidos aún');
-                    return;
-                }}
-                
-                console.log(`Filtrando ${{node.size()}} nodos y ${{link.size()}} links`);
-                
-                // Filtrar nodos
-                node.style('opacity', d => {{
-                    if (!d.originQuality || d.originQuality === '') return 1;
-                    return filters[d.originQuality] ? 1 : 0.1;
-                }});
-                
-                // Filtrar links
-                link.style('fill-opacity', function(d) {{
-                    const sourceVisible = !d.source.originQuality || 
-                                        d.source.originQuality === '' || 
-                                        filters[d.source.originQuality];
-                    const targetVisible = !d.target.originQuality || 
-                                        d.target.originQuality === '' || 
-                                        filters[d.target.originQuality];
-                    
-                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
-                }});
-                
-                console.log('Filtros aplicados');
-            }};
-            
             // Márgenes para etiquetas y eje temporal
             const margin = {{ top: 30, right: 20, bottom: 70, left: 20 }};
             const innerWidth = width - margin.left - margin.right;
@@ -737,6 +670,58 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
             
             // Inicializar timeline
             updateTimeline(1);
+            
+            // Redefinir applyOriginFilters ahora que node y link existen
+            window.applyOriginFilters = function() {{
+                console.log('Aplicando filtros en Sankey...');
+                
+                const claroBox = document.getElementById('filter-claro');
+                const ambiguoBox = document.getElementById('filter-ambiguo');
+                const desconocidoBox = document.getElementById('filter-desconocido');
+                const sinOrigenBox = document.getElementById('filter-sin-origen');
+                const noAnalizadoBox = document.getElementById('filter-no-analizado');
+                
+                if (!claroBox) {{ console.error('filter-claro no encontrado'); return; }}
+                
+                const showClaro = claroBox.checked;
+                const showAmbiguo = ambiguoBox.checked;
+                const showDesconocido = desconocidoBox.checked;
+                const showSinOrigen = sinOrigenBox.checked;
+                const showNoAnalizado = noAnalizadoBox.checked;
+                
+                console.log('Estados:', {{ showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado }});
+                
+                const filters = {{
+                    'ORIGEN_CLARO': showClaro,
+                    'ORIGEN_CLARO_RECOVERED': showClaro,
+                    'ORIGEN_AMBIGUO': showAmbiguo,
+                    'ORIGEN_AMBIGUO_RECOVERED': showAmbiguo,
+                    'ORIGEN_DESCONOCIDO': showDesconocido,
+                    'ORIGEN_DESCONOCIDO_RECOVERED': showDesconocido,
+                    'SIN_ORIGEN': showSinOrigen,
+                    'NO_ANALIZADO': showNoAnalizado,
+                    '': true
+                }};
+                
+                if (!node || !link) {{ console.error('node o link no existen'); return; }}
+                
+                console.log(`Filtrando ${{node.size()}} nodos y ${{link.size()}} links`);
+                
+                node.style('opacity', d => {{
+                    if (!d.originQuality || d.originQuality === '') return 1;
+                    const visible = filters[d.originQuality];
+                    console.log(`Nodo ${{d.id}} quality=${{d.originQuality}} visible=${{visible}}`);
+                    return visible ? 1 : 0.1;
+                }});
+                
+                link.style('fill-opacity', function(d) {{
+                    const sourceVisible = !d.source.originQuality || d.source.originQuality === '' || filters[d.source.originQuality];
+                    const targetVisible = !d.target.originQuality || d.target.originQuality === '' || filters[d.target.originQuality];
+                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
+                }});
+                
+                console.log('Filtros aplicados');
+            }};
             
             // Aplicar filtros después de renderizar
             setTimeout(() => {{
