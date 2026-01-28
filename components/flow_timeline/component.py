@@ -476,9 +476,19 @@ def render_flow_timeline(
                 g = svg.append('g')
                     .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                 
-                // Zoom behavior
+                // Zoom behavior - filtrar para no capturar clicks en nodos
                 zoom = d3.zoom()
                     .scaleExtent([0.5, 10])
+                    .filter(event => {{
+                        // No aplicar zoom si el click es en un nodo
+                        if (event.type === 'mousedown' || event.type === 'click') {{
+                            const target = event.target;
+                            if (target.closest && target.closest('.node')) {{
+                                return false;
+                            }}
+                        }}
+                        return !event.button;
+                    }})
                     .on('zoom', zoomed);
                 
                 svg.call(zoom);
@@ -676,15 +686,16 @@ def render_flow_timeline(
             // Formas de nodos según tipo
             nodes.each(function(d) {{
                 const node = d3.select(this);
+                let shape;
                 
                 if (d.nodeType === 'SUPPLIER') {{
                     // Triángulo para proveedores
-                    node.append('path')
+                    shape = node.append('path')
                         .attr('d', d3.symbol().type(d3.symbolTriangle).size(200))
                         .attr('fill', d.color);
                 }} else if (d.nodeType === 'PROCESS') {{
                     // Cuadrado para procesos
-                    node.append('rect')
+                    shape = node.append('rect')
                         .attr('x', -8)
                         .attr('y', -8)
                         .attr('width', 16)
@@ -693,7 +704,7 @@ def render_flow_timeline(
                         .attr('fill', d.color);
                 }} else if (d.nodeType === 'CUSTOMER') {{
                     // Cuadrado redondeado para clientes
-                    node.append('rect')
+                    shape = node.append('rect')
                         .attr('x', -9)
                         .attr('y', -9)
                         .attr('width', 18)
@@ -702,9 +713,19 @@ def render_flow_timeline(
                         .attr('fill', d.color);
                 }} else {{
                     // Círculo para pallets
-                    node.append('circle')
+                    shape = node.append('circle')
                         .attr('r', nodeRadius)
                         .attr('fill', d.color);
+                }}
+                
+                // Click handler directo en la forma para PALLET_IN
+                if (d.nodeType === 'PALLET_IN') {{
+                    shape.style('cursor', 'pointer')
+                        .on('click', function(event) {{
+                            event.stopPropagation();
+                            console.log('Direct click on PALLET_IN shape:', d.label);
+                            tracePackage(d.label);
+                        }});
                 }}
             }});
             
