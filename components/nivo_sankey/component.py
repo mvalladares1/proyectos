@@ -707,17 +707,26 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 
                 console.log(`Filtrando ${{node.size()}} nodos y ${{link.size()}} links`);
                 
-                node.style('opacity', d => {{
-                    if (!d.originQuality || d.originQuality === '') return 1;
+                node.each(function(d) {{
+                    if (!d.originQuality || d.originQuality === '') {{
+                        d3.select(this).style('display', null).style('opacity', 1).style('pointer-events', 'all');
+                        return;
+                    }}
                     const visible = filters[d.originQuality];
                     console.log(`Nodo ${{d.id}} quality=${{d.originQuality}} visible=${{visible}}`);
-                    return visible ? 1 : 0.1;
+                    d3.select(this)
+                        .style('display', visible ? null : 'none')
+                        .style('opacity', visible ? 1 : 0)
+                        .style('pointer-events', visible ? 'all' : 'none');
                 }});
                 
-                link.style('fill-opacity', function(d) {{
+                link.each(function(d) {{
                     const sourceVisible = !d.source.originQuality || d.source.originQuality === '' || filters[d.source.originQuality];
                     const targetVisible = !d.target.originQuality || d.target.originQuality === '' || filters[d.target.originQuality];
-                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
+                    const showLink = sourceVisible && targetVisible;
+                    d3.select(this)
+                        .style('display', showLink ? null : 'none')
+                        .style('fill-opacity', showLink ? 0.4 : 0);
                 }});
                 
                 console.log('Filtros aplicados');

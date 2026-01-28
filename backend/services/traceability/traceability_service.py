@@ -86,10 +86,22 @@ class TraceabilityService:
             }
             
             if len(pkg_moves) == 1:
-                # Un solo proceso - origen claro
-                analysis["selected_process"] = pkg_moves[0].get("reference")
-                analysis["selection_reason"] = "single_process"
-                analysis["origin_quality"] = "ORIGEN_CLARO"
+                # Un solo proceso - validar si realmente es origen claro
+                single_move = pkg_moves[0]
+                ref = single_move.get("reference", "")
+                pkg_in = single_move.get("package_id")
+
+                analysis["selected_process"] = ref
+
+                if not pkg_in or pkg_in is False:
+                    analysis["selection_reason"] = "single_empty_package_id"
+                    analysis["origin_quality"] = "ORIGEN_CLARO"
+                elif "/MO/" in ref or ref.startswith("MOCS/") or ref.startswith("RF/MO/"):
+                    analysis["selection_reason"] = "single_mo_pattern"
+                    analysis["origin_quality"] = "ORIGEN_CLARO"
+                else:
+                    analysis["selection_reason"] = "single_non_mo"
+                    analysis["origin_quality"] = "ORIGEN_DESCONOCIDO"
             else:
                 # Múltiples procesos - aplicar jerarquía de selección
                 origin_move = None

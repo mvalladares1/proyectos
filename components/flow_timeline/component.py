@@ -784,27 +784,36 @@ def render_flow_timeline(
                 nodes.each(function(d) {{
                     const hasQuality = d.originQuality && d.originQuality !== '';
                     const isVisible = !hasQuality || filters[d.originQuality];
-                    const opacity = isVisible ? 1 : 0.1;
                     
                     if (hasQuality && sampleLog < 5) {{
-                        console.log(`Nodo ${{d.id}}: quality=${{d.originQuality}}, visible=${{isVisible}}, opacity=${{opacity}}`);
+                        console.log(`Nodo ${{d.id}}: quality=${{d.originQuality}}, visible=${{isVisible}}`);
                         sampleLog++;
                     }}
                     
-                    d3.select(this).style('opacity', opacity);
+                    d3.select(this)
+                        .style('display', isVisible ? null : 'none')
+                        .style('pointer-events', isVisible ? 'all' : 'none')
+                        .style('opacity', isVisible ? 1 : 0);
                     
                     if (isVisible) visibleCount++;
                     else hiddenCount++;
                 }});
                 
-                links.style('opacity', function(d) {{
+                links.each(function(d) {{
                     const sourceNode = nodeMap[d.source];
                     const targetNode = nodeMap[d.target];
-                    if (!sourceNode || !targetNode) return 0.4;
+                    if (!sourceNode || !targetNode) {{
+                        d3.select(this).style('display', null).style('opacity', 0.4);
+                        return;
+                    }}
                     
                     const sourceVisible = !sourceNode.originQuality || sourceNode.originQuality === '' || filters[sourceNode.originQuality];
                     const targetVisible = !targetNode.originQuality || targetNode.originQuality === '' || filters[targetNode.originQuality];
-                    return (sourceVisible && targetVisible) ? 0.4 : 0.05;
+                    const showLink = sourceVisible && targetVisible;
+                    
+                    d3.select(this)
+                        .style('display', showLink ? null : 'none')
+                        .style('opacity', showLink ? 0.4 : 0);
                 }});
                 
                 console.log(`✓ Filtros aplicados - ${{visibleCount}} visibles, ${{hiddenCount}} ocultos`);
