@@ -13,7 +13,12 @@ class TraceabilityService:
     
     PARTNER_VENDORS_LOCATION_ID = 4  # Partners/Vendors location
     PARTNER_CUSTOMERS_LOCATION_ID = 5  # Partners/Customers location
-    EXCLUDED_REFERENCE_PATTERNS = ["RF/INT/", "Quantity Updated", "Cantidad de producto confirmada"]
+    EXCLUDED_REFERENCE_PATTERNS = [
+        "RF/INT/",
+        "Quantity Updated",
+        "Cantidad de producto confirmada",
+        "Cantidad de producto actualizada",
+    ]
     
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
@@ -70,6 +75,24 @@ class TraceabilityService:
                 moves_by_pallet[pkg_id] = []
             moves_by_pallet[pkg_id].append(move)
         
+        def is_excluded_ref(ref: str) -> bool:
+            if not ref:
+                return False
+            ref_upper = ref.upper()
+            for pattern in self.EXCLUDED_REFERENCE_PATTERNS:
+                if pattern.upper() in ref_upper:
+                    return True
+            return False
+
+        def is_origin_ref(ref: str) -> bool:
+            if not ref:
+                return False
+            ref_upper = ref.upper()
+            return (
+                "RF/MO" in ref_upper
+                or "MO" in ref_upper
+            )
+
         # Analizar cada pallet
         for pkg_id, pkg_moves in moves_by_pallet.items():
             if pkg_id in pallet_origin_analysis:
@@ -85,6 +108,8 @@ class TraceabilityService:
                 "origin_quality": None
             }
             
+            non_excluded_moves = [m for m in pkg_moves if not is_excluded_ref(m.get("reference", ""))]
+
             if len(pkg_moves) == 1:
                 # Un solo proceso - validar si realmente es origen claro
                 single_move = pkg_moves[0]
@@ -93,10 +118,13 @@ class TraceabilityService:
 
                 analysis["selected_process"] = ref
 
-                if not pkg_in or pkg_in is False:
+                if is_excluded_ref(ref):
+                    analysis["selection_reason"] = "single_excluded_ref"
+                    analysis["origin_quality"] = "ORIGEN_DESCONOCIDO"
+                elif not pkg_in or pkg_in is False:
                     analysis["selection_reason"] = "single_empty_package_id"
                     analysis["origin_quality"] = "ORIGEN_CLARO"
-                elif "/MO/" in ref or ref.startswith("MOCS/") or ref.startswith("RF/MO/"):
+                elif is_origin_ref(ref):
                     analysis["selection_reason"] = "single_mo_pattern"
                     analysis["origin_quality"] = "ORIGEN_CLARO"
                 else:
@@ -105,9 +133,16 @@ class TraceabilityService:
             else:
                 # Múltiples procesos - aplicar jerarquía de selección
                 origin_move = None
+
+                if not non_excluded_moves:
+                    analysis["selected_process"] = pkg_moves[0].get("reference")
+                    analysis["selection_reason"] = "only_excluded_refs"
+                    analysis["origin_quality"] = "ORIGEN_DESCONOCIDO"
+                    pallet_origin_analysis[pkg_id] = analysis
+                    continue
                 
                 # 1. Buscar move con package_id vacío (creación)
-                for move in pkg_moves:
+                for move in non_excluded_moves:
                     pkg_in = move.get("package_id")
                     if not pkg_in or pkg_in == False:
                         origin_move = move
@@ -117,9 +152,9 @@ class TraceabilityService:
                 
                 # 2. Si no encontramos creación, buscar Manufacturing Order
                 if not origin_move:
-                    for move in pkg_moves:
+                    for move in non_excluded_moves:
                         ref = move.get("reference", "")
-                        if "/MO/" in ref or ref.startswith("MOCS/") or ref.startswith("RF/MO/"):
+                        if is_origin_ref(ref):
                             origin_move = move
                             analysis["selection_reason"] = "mo_pattern"
                             analysis["origin_quality"] = "ORIGEN_AMBIGUO"
@@ -127,7 +162,7 @@ class TraceabilityService:
                 
                 # 3. Si no hay MO, usar el más antiguo (orphan)
                 if not origin_move:
-                    sorted_moves = sorted(pkg_moves, key=lambda m: m.get("date", ""))
+                    sorted_moves = sorted(non_excluded_moves, key=lambda m: m.get("date", ""))
                     origin_move = sorted_moves[0]
                     analysis["selection_reason"] = "oldest_date"
                     analysis["origin_quality"] = "ORIGEN_DESCONOCIDO"

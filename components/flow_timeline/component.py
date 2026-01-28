@@ -429,6 +429,9 @@ def render_flow_timeline(
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
             let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform, timelineSvg, timelineG;
             let parseDate, nodeMap;
+            let isLargeDataset = false;
+            let zoomRafPending = false;
+            let lastZoomEvent = null;
             
             function initDiagram() {{
                 containerEl = document.getElementById('diagram');
@@ -482,24 +485,32 @@ def render_flow_timeline(
             }}
             
             function zoomed(event) {{
-                currentTransform = event.transform;
-                
-                // Actualizar escala X con zoom
-                const newXScale = currentTransform.rescaleX(xScale);
-                
-                // Actualizar posiciones de nodos
-                g.selectAll('.node')
-                    .attr('transform', d => {{
-                        const x = newXScale(d.parsedDate || xScale.domain()[0]);
-                        return `translate(${{x}},${{d.y}})`;
-                    }});
-                
-                // Actualizar links
-                g.selectAll('.link')
-                    .attr('d', d => generateLink(d, newXScale));
-                
-                // Actualizar timeline
-                updateTimeline(newXScale);
+                lastZoomEvent = event;
+                if (zoomRafPending) return;
+                zoomRafPending = true;
+                requestAnimationFrame(() => {{
+                    zoomRafPending = false;
+                    if (!lastZoomEvent) return;
+
+                    currentTransform = lastZoomEvent.transform;
+
+                    // Actualizar escala X con zoom
+                    const newXScale = currentTransform.rescaleX(xScale);
+
+                    // Actualizar posiciones de nodos
+                    g.selectAll('.node')
+                        .attr('transform', d => {{
+                            const x = newXScale(d.parsedDate || xScale.domain()[0]);
+                            return `translate(${{x}},${{d.y}})`;
+                        }});
+
+                    // Actualizar links
+                    g.selectAll('.link')
+                        .attr('d', d => generateLink(d, newXScale));
+
+                    // Actualizar timeline
+                    updateTimeline(newXScale);
+                }});
             }}
             
             // Función para generar links curvos tipo Sankey
@@ -666,11 +677,14 @@ def render_flow_timeline(
                 }}
             }});
             
-            // Labels de nodos
-            nodes.append('text')
-                .attr('class', 'node-label')
-                .attr('y', 20)
-                .text(d => d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label);
+            // Labels de nodos (omitir en datasets grandes para mejorar rendimiento)
+            isLargeDataset = nodesData.length > 2000;
+            if (!isLargeDataset) {{
+                nodes.append('text')
+                    .attr('class', 'node-label')
+                    .attr('y', 20)
+                    .text(d => d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label);
+            }}
             
             // Actualizar timeline
             updateTimeline(xScale);
