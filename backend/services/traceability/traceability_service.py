@@ -50,6 +50,24 @@ class TraceabilityService:
         for pattern in self.EXCLUDED_REFERENCE_PATTERNS:
             domain.append(("reference", "not ilike", pattern))
         return domain
+
+    def _is_excluded_ref(self, ref: str) -> bool:
+        if not ref:
+            return False
+        ref_upper = ref.upper()
+        for pattern in self.EXCLUDED_REFERENCE_PATTERNS:
+            if pattern.upper() in ref_upper:
+                return True
+        return False
+
+    def _is_origin_ref(self, ref: str) -> bool:
+        if not ref:
+            return False
+        ref_upper = ref.upper()
+        return (
+            "RF/MO" in ref_upper
+            or "MO" in ref_upper
+        )
     
     def _analyze_pallet_origin_quality(self, moves, pallet_origin_analysis):
         """
@@ -75,24 +93,6 @@ class TraceabilityService:
                 moves_by_pallet[pkg_id] = []
             moves_by_pallet[pkg_id].append(move)
         
-        def is_excluded_ref(ref: str) -> bool:
-            if not ref:
-                return False
-            ref_upper = ref.upper()
-            for pattern in self.EXCLUDED_REFERENCE_PATTERNS:
-                if pattern.upper() in ref_upper:
-                    return True
-            return False
-
-        def is_origin_ref(ref: str) -> bool:
-            if not ref:
-                return False
-            ref_upper = ref.upper()
-            return (
-                "RF/MO" in ref_upper
-                or "MO" in ref_upper
-            )
-
         # Analizar cada pallet
         for pkg_id, pkg_moves in moves_by_pallet.items():
             if pkg_id in pallet_origin_analysis:
@@ -108,7 +108,7 @@ class TraceabilityService:
                 "origin_quality": None
             }
             
-            non_excluded_moves = [m for m in pkg_moves if not is_excluded_ref(m.get("reference", ""))]
+            non_excluded_moves = [m for m in pkg_moves if not self._is_excluded_ref(m.get("reference", ""))]
 
             if len(pkg_moves) == 1:
                 # Un solo proceso - validar si realmente es origen claro
@@ -118,13 +118,13 @@ class TraceabilityService:
 
                 analysis["selected_process"] = ref
 
-                if is_excluded_ref(ref):
+                if self._is_excluded_ref(ref):
                     analysis["selection_reason"] = "single_excluded_ref"
                     analysis["origin_quality"] = "ORIGEN_DESCONOCIDO"
                 elif not pkg_in or pkg_in is False:
                     analysis["selection_reason"] = "single_empty_package_id"
                     analysis["origin_quality"] = "ORIGEN_CLARO"
-                elif is_origin_ref(ref):
+                elif self._is_origin_ref(ref):
                     analysis["selection_reason"] = "single_mo_pattern"
                     analysis["origin_quality"] = "ORIGEN_CLARO"
                 else:
@@ -154,7 +154,7 @@ class TraceabilityService:
                 if not origin_move:
                     for move in non_excluded_moves:
                         ref = move.get("reference", "")
-                        if is_origin_ref(ref):
+                        if self._is_origin_ref(ref):
                             origin_move = move
                             analysis["selection_reason"] = "mo_pattern"
                             analysis["origin_quality"] = "ORIGEN_AMBIGUO"
@@ -1818,6 +1818,15 @@ class TraceabilityService:
                     if len(moves) == 1:
                         # Un solo proceso: ORIGEN_CLARO
                         selected = moves[0]
+                        if self._is_excluded_ref(selected.get("reference", "")):
+                            recovered_origins[pallet_id] = {
+                                "origin_quality": "ORIGEN_DESCONOCIDO",
+                                "selected_process": selected.get("reference"),
+                                "candidate_processes": [selected.get("reference")],
+                                "selection_reason": "single_excluded_ref",
+                                "total_candidates": 1
+                            }
+                            continue
                         recovered_origins[pallet_id] = {
                             "origin_quality": "ORIGEN_CLARO",
                             "selected_process": selected.get("reference"),
@@ -1838,9 +1847,7 @@ class TraceabilityService:
                     else:
                         # Múltiples candidatos: buscar patrón MO
                         candidates = [m.get("reference") for m in moves]
-                        mo_moves = [m for m in moves if "/MO/" in m.get("reference", "") or
-                                   m.get("reference", "").startswith("MOCS/") or
-                                   m.get("reference", "").startswith("RF/MO/")]
+                        mo_moves = [m for m in moves if self._is_origin_ref(m.get("reference", ""))]
                         
                         if mo_moves:
                             selected = mo_moves[0]
