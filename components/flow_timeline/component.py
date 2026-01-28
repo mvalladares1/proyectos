@@ -738,12 +738,30 @@ def render_flow_timeline(
             
             // Aplicar filtros de calidad de origen
             function applyOriginFilters() {{
+                console.log('Aplicando filtros de origen...');
+                
+                // Verificar que los checkboxes existan
+                const claroBox = document.getElementById('filter-claro');
+                const ambiguoBox = document.getElementById('filter-ambiguo');
+                const desconocidoBox = document.getElementById('filter-desconocido');
+                const sinOrigenBox = document.getElementById('filter-sin-origen');
+                const noAnalizadoBox = document.getElementById('filter-no-analizado');
+                
+                if (!claroBox || !ambiguoBox || !desconocidoBox || !sinOrigenBox || !noAnalizadoBox) {{
+                    console.error('No se encontraron todos los checkboxes de filtro');
+                    return;
+                }}
+                
                 // Leer estado actual de los checkboxes
-                const showClaro = document.getElementById('filter-claro').checked;
-                const showAmbiguo = document.getElementById('filter-ambiguo').checked;
-                const showDesconocido = document.getElementById('filter-desconocido').checked;
-                const showSinOrigen = document.getElementById('filter-sin-origen').checked;
-                const showNoAnalizado = document.getElementById('filter-no-analizado').checked;
+                const showClaro = claroBox.checked;
+                const showAmbiguo = ambiguoBox.checked;
+                const showDesconocido = desconocidoBox.checked;
+                const showSinOrigen = sinOrigenBox.checked;
+                const showNoAnalizado = noAnalizadoBox.checked;
+                
+                console.log('Estados de filtros:', {{
+                    showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado
+                }});
                 
                 // Crear mapa de filtros
                 const filters = {{
@@ -758,7 +776,18 @@ def render_flow_timeline(
                     '': true  // Siempre mostrar nodos sin clasificación
                 }};
                 
-                g.selectAll('.node').style('opacity', d => {{
+                // Verificar que g existe
+                if (typeof g === 'undefined') {{
+                    console.error('Variable g no está definida');
+                    return;
+                }}
+                
+                const nodes = g.selectAll('.node');
+                const links = g.selectAll('.link');
+                
+                console.log(`Filtrando ${{nodes.size()}} nodos y ${{links.size()}} links`);
+                
+                nodes.style('opacity', d => {{
                     // Si el nodo no tiene originQuality, siempre mostrarlo
                     if (!d.originQuality || d.originQuality === '') return 1;
                     // Aplicar filtro según el estado del checkbox
@@ -766,9 +795,11 @@ def render_flow_timeline(
                 }});
                 
                 // También filtrar los links basados en si ambos nodos están visibles
-                g.selectAll('.link').style('opacity', function(d) {{
+                links.style('opacity', function(d) {{
                     const sourceNode = nodeMap[d.source];
                     const targetNode = nodeMap[d.target];
+                    
+                    if (!sourceNode || !targetNode) return 0.4;
                     
                     const sourceVisible = !sourceNode.originQuality || 
                                         sourceNode.originQuality === '' || 
@@ -779,6 +810,8 @@ def render_flow_timeline(
                     
                     return (sourceVisible && targetVisible) ? 0.4 : 0.05;
                 }});
+                
+                console.log('Filtros aplicados exitosamente');
             }}
             
             // Tooltip functions

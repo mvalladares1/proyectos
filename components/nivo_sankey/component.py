@@ -321,64 +321,68 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
                 document.body.innerHTML = '<div style="padding: 20px; color: orange;">Advertencia: No hay links para renderizar</div>';
             }}
             
-            // Detectar y eliminar ciclos antes de computar sankey
+            // Detectar y eliminar ciclos usando algoritmo de Tarjan
             function detectAndBreakCycles(nodes, links) {{
-                // Construir grafo de adyacencia
-                const adjacency = new Map();
-                nodes.forEach(n => adjacency.set(n.id, []));
+                console.log('Iniciando detección de ciclos...');
+                
+                // Construir mapa de índices de nodos
+                const nodeIndexMap = new Map();
+                nodes.forEach((n, i) => nodeIndexMap.set(n.id, i));
+                
+                // Construir grafo de adyacencia con índices
+                const adjacency = Array(nodes.length).fill(null).map(() => []);
+                const linksByEdge = new Map();  // key: 'source->target', value: link
                 
                 links.forEach(link => {{
-                    const sourceId = link.source;
-                    const targetId = link.target;
-                    if (adjacency.has(sourceId)) {{
-                        adjacency.get(sourceId).push({{ target: targetId, link: link }});
+                    const sourceIdx = nodeIndexMap.get(link.source);
+                    const targetIdx = nodeIndexMap.get(link.target);
+                    
+                    if (sourceIdx !== undefined && targetIdx !== undefined) {{
+                        adjacency[sourceIdx].push(targetIdx);
+                        linksByEdge.set(`${{sourceIdx}}->${{targetIdx}}`, link);
                     }}
                 }});
                 
                 // DFS para detectar ciclos
-                const visited = new Set();
-                const recStack = new Set();
-                const cyclicLinks = new Set();
+                const WHITE = 0, GRAY = 1, BLACK = 2;
+                const colors = Array(nodes.length).fill(WHITE);
+                const cyclicEdges = new Set();
                 
-                function hasCycle(nodeId, path = []) {{
-                    if (recStack.has(nodeId)) {{
-                        // Encontrado ciclo - marcar el link que lo cierra
-                        const cycleStart = path.indexOf(nodeId);
-                        if (cycleStart >= 0 && cycleStart < path.length - 1) {{
-                            const problematicLink = path[path.length - 1].link;
-                            if (problematicLink) cyclicLinks.add(problematicLink);
-                        }}
-                        return true;
-                    }}
+                function dfs(u) {{
+                    colors[u] = GRAY;
                     
-                    if (visited.has(nodeId)) return false;
-                    
-                    visited.add(nodeId);
-                    recStack.add(nodeId);
-                    
-                    const neighbors = adjacency.get(nodeId) || [];
-                    for (const edge of neighbors) {{
-                        if (hasCycle(edge.target, [...path, edge])) {{
-                            // Propagar para marcar más links si es necesario
+                    for (const v of adjacency[u]) {{
+                        if (colors[v] === GRAY) {{
+                            // Encontrado back edge (ciclo)
+                            const edgeKey = `${{u}}->${{v}}`;
+                            cyclicEdges.add(edgeKey);
+                            console.log(`Ciclo detectado: ${{nodes[u].id}} -> ${{nodes[v].id}}`);
+                        }} else if (colors[v] === WHITE) {{
+                            dfs(v);
                         }}
                     }}
                     
-                    recStack.delete(nodeId);
-                    return false;
+                    colors[u] = BLACK;
                 }}
                 
-                // Ejecutar DFS desde cada nodo
-                nodes.forEach(node => {{
-                    if (!visited.has(node.id)) {{
-                        hasCycle(node.id);
+                // Ejecutar DFS desde cada nodo no visitado
+                for (let i = 0; i < nodes.length; i++) {{
+                    if (colors[i] === WHITE) {{
+                        dfs(i);
                     }}
+                }}
+                
+                // Filtrar links que causan ciclos
+                const cleanLinks = links.filter(link => {{
+                    const sourceIdx = nodeIndexMap.get(link.source);
+                    const targetIdx = nodeIndexMap.get(link.target);
+                    const edgeKey = `${{sourceIdx}}->${{targetIdx}}`;
+                    return !cyclicEdges.has(edgeKey);
                 }});
                 
-                // Filtrar links cíclicos
-                const cleanLinks = links.filter(link => !cyclicLinks.has(link));
-                
-                if (cyclicLinks.size > 0) {{
-                    console.warn(`Removidos ${{cyclicLinks.size}} links cíclicos`);
+                const removedCount = links.length - cleanLinks.length;
+                if (removedCount > 0) {{
+                    console.warn(`Removidos ${{removedCount}} links cíclicos`);
                 }}
                 
                 return cleanLinks;
