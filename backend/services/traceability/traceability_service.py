@@ -348,15 +348,8 @@ class TraceabilityService:
             
             print(f"[TraceabilityService] Paquete {package_name}: {len(package_ids)} IDs encontrados")
             
-            # Buscar hacia ATRÁS y HACIA ADELANTE para tener trazabilidad completa
-            backward = self._get_traceability_for_packages(
-                package_ids,
-                limit,
-                include_siblings=include_siblings,
-                fallback_to_process_inputs=True
-            )
-            forward = self._get_forward_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
-            return self._merge_traceability_results(backward, forward)
+            # Buscar hacia ATRÁS según el modo seleccionado
+            return self._get_traceability_for_packages(package_ids, limit, include_siblings=include_siblings)
             
         except Exception as e:
             print(f"[TraceabilityService] Error en trazabilidad por paquete: {e}")
@@ -369,8 +362,7 @@ class TraceabilityService:
         initial_package_ids: List[int], 
         limit: int,
         include_siblings: bool = True,
-        filter_sale_origins: List[str] = None,
-        fallback_to_process_inputs: bool = False
+        filter_sale_origins: List[str] = None
     ) -> Dict:
         """
         Trazabilidad hacia ATRÁS desde los paquetes iniciales.
@@ -382,8 +374,6 @@ class TraceabilityService:
                 - True: Trae TODOS los movimientos de cada proceso (todos los hermanos)
                 - False: "Conexión directa" - Trae todo pero filtra para mostrar solo la cadena conectada
             filter_sale_origins: Lista de origins (S00XXX) para filtrar solo esas ventas
-            fallback_to_process_inputs: Si True, cuando no se identifican inputs directos para un paquete,
-                            se siguen los inputs del proceso para no cortar la trazabilidad.
         
         Estrategia: Siempre recopilamos TODOS los datos (como "Todos"), 
         y luego si include_siblings=False, filtramos para quedarnos solo con la cadena conectada.
@@ -477,8 +467,6 @@ class TraceabilityService:
                     process_produces_our_packages = False
                     process_inputs = set()  # Inputs del proceso (package_id que entran)
                     process_inputs_for_current_packages = set()  # Inputs QUE PRODUJERON los current_packages específicamente
-                    process_inputs_by_lot = {}  # lot_id -> set(pkg_id)
-                    output_lot_by_result = {}  # result_id -> lot_id
                     staged_moves = []
                     
                     for ml in ref_moves:
@@ -503,8 +491,6 @@ class TraceabilityService:
                                 # Si este movimiento específicamente produce uno de CURRENT_PACKAGES,
                                 # entonces su input es relevante para la trazabilidad directa
                                 if result_id in current_packages:
-                                    if lot_id:
-                                        output_lot_by_result[result_id] = lot_id
                                     if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
                                         pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                                         if pkg_id:
@@ -515,10 +501,6 @@ class TraceabilityService:
                             pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
                             if pkg_id:
                                 process_inputs.add(pkg_id)
-                                if lot_id:
-                                    if lot_id not in process_inputs_by_lot:
-                                        process_inputs_by_lot[lot_id] = set()
-                                    process_inputs_by_lot[lot_id].add(pkg_id)
                     
                     # Solo anexar movimientos de procesos relevantes en modo conexión directa
                     if include_siblings or process_produces_our_packages:
@@ -533,28 +515,6 @@ class TraceabilityService:
                             # CLAVE: Solo seguir inputs que produjeron ESPECÍFICAMENTE los current_packages
                             # No hacer fallback a todos los inputs del proceso
                             inputs_to_follow = process_inputs_for_current_packages
-                            if not inputs_to_follow and fallback_to_process_inputs:
-                                # Solo permitir fallback si este proceso es el ORIGEN seleccionado del pallet
-                                selected_matches = False
-                                for result_id in current_packages:
-                                    analysis = pallet_origin_analysis.get(result_id)
-                                    if analysis and analysis.get("selected_process") == ref:
-                                        selected_matches = True
-                                        break
-
-                                if selected_matches:
-                                    # Fallback por lot_id (más preciso)
-                                    for result_id in current_packages:
-                                        lot_id = output_lot_by_result.get(result_id)
-                                        if lot_id and lot_id in process_inputs_by_lot:
-                                            inputs_to_follow.update(process_inputs_by_lot[lot_id])
-
-                                    if inputs_to_follow:
-                                        print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Fallback por lote: {len(inputs_to_follow)} inputs.")
-                                    else:
-                                        print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Sin fallback (sin lote asociado).")
-                                else:
-                                    print(f"[TraceabilityService] Proceso {ref} sin inputs directos. Sin fallback (no es origen seleccionado).")
                             if inputs_to_follow:
                                 for pkg_id in inputs_to_follow:
                                     if pkg_id not in traced_packages and pkg_id not in current_packages:
@@ -715,7 +675,6 @@ class TraceabilityService:
         all_move_lines = []
         processed_move_ids = set()
         processed_references = set()
-        pallet_origin_analysis = {}
         
         # Cola de paquetes a trazabilizar HACIA ADELANTE
         packages_to_trace = set(initial_package_ids)
@@ -886,9 +845,6 @@ class TraceabilityService:
         
         # Enriquecer con análisis de calidad de origen (solo en modo conexión directa)
         if not include_siblings:
-            output_moves = [m for m in all_move_lines if m.get("result_package_id")]
-            if output_moves:
-                self._analyze_pallet_origin_quality(output_moves, pallet_origin_analysis)
             self._enrich_with_origin_quality(result, pallet_origin_analysis)
         
         # =====================================================
@@ -1429,42 +1385,6 @@ class TraceabilityService:
             "links": [],
             "move_lines": []
         }
-
-    def _merge_traceability_results(self, base: Dict, extra: Dict) -> Dict:
-        """Combina resultados de trazabilidad evitando duplicados."""
-        if not base:
-            return extra
-        if not extra:
-            return base
-
-        merged = {
-            "pallets": {**base.get("pallets", {}), **extra.get("pallets", {})},
-            "processes": {**base.get("processes", {}), **extra.get("processes", {})},
-            "suppliers": {**base.get("suppliers", {}), **extra.get("suppliers", {})},
-            "customers": {**base.get("customers", {}), **extra.get("customers", {})},
-            "links": [],
-            "move_lines": []
-        }
-
-        # Deduplicar links
-        link_set = set()
-        for link in base.get("links", []):
-            link_set.add(tuple(link))
-        for link in extra.get("links", []):
-            link_set.add(tuple(link))
-        merged["links"] = list(link_set)
-
-        # Deduplicar move_lines por id
-        move_by_id = {}
-        for ml in base.get("move_lines", []):
-            if isinstance(ml, dict) and "id" in ml:
-                move_by_id[ml["id"]] = ml
-        for ml in extra.get("move_lines", []):
-            if isinstance(ml, dict) and "id" in ml:
-                move_by_id[ml["id"]] = ml
-        merged["move_lines"] = list(move_by_id.values())
-
-        return merged
     
     def _process_move_lines(self, move_lines: List[Dict], virtual_ids: Set[int]) -> Dict:
         """Procesa los movimientos y extrae pallets, procesos y conexiones."""
@@ -1869,27 +1789,26 @@ class TraceabilityService:
         if pallets_without_origin:
             try:
                 # Buscar TODOS los moves donde estos pallets son output (sin exclusiones)
+                origin_moves = self.odoo.search_read(
+                    "stock.move.line",
+                    [
+                        ("result_package_id", "in", list(pallets_without_origin)),
+                        ("state", "=", "done"),
+                        ("qty_done", ">", 0)
+                    ],
+                    ["id", "result_package_id", "package_id", "reference", "date"],
+                    limit=len(pallets_without_origin) * 10  # Max 10 moves por pallet
+                )
+                
+                # Agrupar por pallet y aplicar el mismo algoritmo de análisis
                 moves_by_pallet = {}
-
-                pallet_list = list(pallets_without_origin)
-                batch_size = 200
-                for i in range(0, len(pallet_list), batch_size):
-                    batch = pallet_list[i:i + batch_size]
-                    origin_moves = self.odoo.search_read(
-                        "stock.move.line",
-                        [
-                            ("result_package_id", "in", batch),
-                            ("state", "=", "done"),
-                            ("qty_done", ">", 0)
-                        ],
-                        ["id", "result_package_id", "package_id", "reference", "date"],
-                    )
-
-                    for move in origin_moves:
-                        result_rel = move.get("result_package_id")
-                        if result_rel:
-                            result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
-                            moves_by_pallet.setdefault(result_id, []).append(move)
+                for move in origin_moves:
+                    result_rel = move.get("result_package_id")
+                    if result_rel:
+                        result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                        if result_id not in moves_by_pallet:
+                            moves_by_pallet[result_id] = []
+                        moves_by_pallet[result_id].append(move)
                 
                 # Analizar cada pallet
                 for pallet_id, moves in moves_by_pallet.items():
