@@ -222,6 +222,9 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
             qty = pinfo.get("qty", 0)
             products = list(pinfo.get("products", {}).keys())
             prods_str = ", ".join(products[:2])
+            origin_quality = pinfo.get("origin_quality", "")
+            origin_process = pinfo.get("origin_process", "")
+            selection_reason = pinfo.get("selection_reason", "")
             
             # Usar pack_date si existe, sino first_date (igual que sankey_transformer)
             pallet_date = pinfo.get("pack_date") or pinfo.get("first_date", "")
@@ -237,7 +240,10 @@ def transform_to_visjs(traceability_data: Dict) -> Dict:
                 node_type,
                 title=title,
                 value=qty,
-                date=date
+                date=date,
+                origin_quality=origin_quality,
+                origin_process=origin_process,
+                selection_reason=selection_reason
             ))
             node_ids.add(node_id)
             
@@ -445,7 +451,10 @@ def _create_node(
     node_type: str,
     title: str = "",
     value: float = None,
-    date: str = ""
+    date: str = "",
+    origin_quality: str = "",
+    origin_process: str = "",
+    selection_reason: str = ""
 ) -> Dict:
     """Crea un nodo en formato vis.js con nivel jerárquico explícito."""
     colors = NODE_COLORS.get(node_type, NODE_COLORS["PROCESS"])
@@ -459,6 +468,9 @@ def _create_node(
         "color": colors["background"],
         "date": date,  # Fecha para posicionamiento en timeline
         "nodeType": node_type,  # Tipo para agrupación visual
+        "origin_quality": origin_quality,
+        "origin_process": origin_process,
+        "selection_reason": selection_reason,
     }
     
     return node

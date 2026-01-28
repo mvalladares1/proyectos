@@ -26,7 +26,16 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
     nodes = []
     node_index = {}
     
-    def add_node(nid: str, label: str, color: str, detail: Dict, node_type: str) -> int:
+    def add_node(
+        nid: str,
+        label: str,
+        color: str,
+        detail: Dict,
+        node_type: str,
+        origin_quality: str = "",
+        origin_process: str = "",
+        selection_reason: str = ""
+    ) -> int:
         """Agrega un nodo si no existe y retorna su índice."""
         if nid not in node_index:
             node_index[nid] = len(nodes)
@@ -36,7 +45,10 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "detail": detail,
                 "type": node_type,
                 "x": None,
-                "y": None
+                "y": None,
+                "origin_quality": origin_quality,
+                "origin_process": origin_process,
+                "selection_reason": selection_reason,
             })
         return node_index[nid]
     
@@ -107,7 +119,10 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "date": pallet_date,
                 "lots": ", ".join(pinfo.get("lot_names", []))
             },
-            f"PALLET_{direction}"
+            f"PALLET_{direction}",
+            origin_quality=pinfo.get("origin_quality", ""),
+            origin_process=pinfo.get("origin_process", ""),
+            selection_reason=pinfo.get("selection_reason", "")
         )
     
     # Agregar nodos de procesos (solo los que no son recepciones)
