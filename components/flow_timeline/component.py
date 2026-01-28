@@ -438,15 +438,21 @@ def render_flow_timeline(
                 localStorage.setItem('streamlit_trace_pkg_time', Date.now().toString());
                 console.log('Saved to localStorage:', cleaned);
                 
-                // Forzar recarga de la página principal
+                // Construir URL correctamente manteniendo el path de Streamlit
                 try {{
-                    window.top.location.reload();
+                    const topUrl = new URL(window.top.location.href);
+                    topUrl.searchParams.set('trace_pkg', cleaned);
+                    console.log('Navigating to:', topUrl.toString());
+                    window.top.location.href = topUrl.toString();
                 }} catch(e) {{
-                    // Si no podemos recargar, intentar con el padre
+                    console.log('Error navigating:', e);
+                    // Fallback: intentar con parent
                     try {{
-                        window.parent.location.reload();
+                        const parentUrl = new URL(window.parent.location.href);
+                        parentUrl.searchParams.set('trace_pkg', cleaned);
+                        window.parent.location.href = parentUrl.toString();
                     }} catch(e2) {{
-                        console.log('Could not reload, check localStorage manually');
+                        console.log('Fallback also failed:', e2);
                     }}
                 }}
             }}
