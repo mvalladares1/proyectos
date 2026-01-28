@@ -135,49 +135,40 @@ def _merge_traceability_data(data_list: list, output_format: str = "visjs") -> d
 def _check_localstorage_trace_pkg():
     """
     Lee localStorage para detectar si el usuario hizo click en un paquete en Flow Timeline.
-    Usa polling continuo para detectar cambios.
+    Usa st.markdown para inyectar script en el contexto principal (no iframe).
     """
-    import streamlit.components.v1 as components
-    
-    # Inyectar JS que hace polling de localStorage y redirige cuando detecta un paquete
-    components.html("""
+    # Usar st.markdown con script - se ejecuta en el documento principal, no en iframe
+    st.markdown("""
     <script>
         (function() {
-            // Función que verifica localStorage
             function checkForTracePackage() {
                 const pkg = localStorage.getItem('flow_timeline_trace_pkg');
                 const ts = localStorage.getItem('flow_timeline_trace_timestamp');
                 if (pkg && ts) {
                     const age = Date.now() - parseInt(ts);
-                    // Solo procesar si es reciente (menos de 30 segundos)
                     if (age < 30000) {
-                        // Limpiar localStorage inmediatamente para evitar loops
                         localStorage.removeItem('flow_timeline_trace_pkg');
                         localStorage.removeItem('flow_timeline_trace_timestamp');
                         
-                        // Construir URL con el paquete
-                        const url = new URL(window.parent.location.href);
+                        const url = new URL(window.location.href);
                         url.searchParams.set('trace_pkg', pkg);
-                        console.log('Detected trace package, redirecting to:', url.toString());
-                        
-                        // Navegar en el padre
-                        window.parent.location.href = url.toString();
+                        console.log('Navigating to trace package:', url.toString());
+                        window.location.href = url.toString();
                     } else {
-                        // Limpiar datos antiguos
                         localStorage.removeItem('flow_timeline_trace_pkg');
                         localStorage.removeItem('flow_timeline_trace_timestamp');
                     }
                 }
             }
             
-            // Verificar inmediatamente
+            // Verificar inmediatamente y luego cada 500ms
             checkForTracePackage();
-            
-            // Seguir verificando cada 500ms
-            setInterval(checkForTracePackage, 500);
+            if (!window._tracePackagePolling) {
+                window._tracePackagePolling = setInterval(checkForTracePackage, 500);
+            }
         })();
     </script>
-    """, height=0)
+    """, unsafe_allow_html=True)
 
 
 def render(username: str, password: str):
