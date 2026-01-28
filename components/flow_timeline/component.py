@@ -433,30 +433,22 @@ def render_flow_timeline(
                 if (!cleaned) return;
                 console.log('Tracing package:', cleaned);
                 
-                // Crear un form oculto y enviarlo al padre
-                // El form submit sí puede navegar cross-frame
-                const currentUrl = window.top.location.href;
-                const url = new URL(currentUrl);
+                // Obtener la URL base del padre (puede fallar por CORS, usar fallback)
+                let baseUrl;
+                try {{
+                    baseUrl = window.top.location.href;
+                }} catch(e) {{
+                    // Fallback: usar referrer o construir desde location
+                    baseUrl = document.referrer || window.location.href;
+                }}
+                
+                const url = new URL(baseUrl);
                 url.searchParams.set('trace_pkg', cleaned);
                 
-                // Crear form en el documento top
-                const form = document.createElement('form');
-                form.method = 'GET';
-                form.action = url.pathname;
-                form.target = '_top';
-                
-                // Agregar todos los params actuales más el nuevo
-                url.searchParams.forEach((value, key) => {{
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = key;
-                    input.value = value;
-                    form.appendChild(input);
-                }});
-                
-                document.body.appendChild(form);
-                console.log('Submitting form to:', url.pathname, 'with params:', url.searchParams.toString());
-                form.submit();
+                // Abrir en nueva pestaña - esto SÍ funciona desde iframes
+                const newUrl = url.toString();
+                console.log('Opening trace in new tab:', newUrl);
+                window.open(newUrl, '_blank');
             }}
             
             // Dimensiones - serán actualizadas en resize
