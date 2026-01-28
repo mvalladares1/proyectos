@@ -449,10 +449,10 @@ def render_flow_timeline(
                     
                     // Mostrar feedback visual
                     const notification = document.createElement('div');
-                    notification.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#f39c12;color:#000;padding:12px 24px;border-radius:8px;z-index:10000;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-                    notification.textContent = '🔍 Trazando paquete ' + cleaned + '... Haz click en "Generar" para actualizar.';
+                    notification.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#27ae60;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.3);animation:pulse 0.5s;';
+                    notification.innerHTML = '🌳 Agregando <b>' + cleaned + '</b> al árbol de trazabilidad...';
                     document.body.appendChild(notification);
-                    setTimeout(() => notification.remove(), 4000);
+                    setTimeout(() => notification.remove(), 2000);
                 }} catch(e) {{
                     console.error('Error saving to localStorage:', e);
                 }}

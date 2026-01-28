@@ -66,6 +66,72 @@ except ImportError:
     render_flow_timeline = None
 
 
+def _merge_traceability_data(data_list: list, output_format: str = "visjs") -> dict:
+    """
+    Combina múltiples resultados de trazabilidad en uno solo.
+    
+    Args:
+        data_list: Lista de diccionarios con datos de trazabilidad
+        output_format: 'visjs' o 'sankey'
+        
+    Returns:
+        Diccionario combinado con todos los nodos y edges únicos
+    """
+    if not data_list:
+        return {}
+    
+    if len(data_list) == 1:
+        return data_list[0]
+    
+    # Combinar nodos y edges
+    all_nodes = {}
+    all_edges = set()
+    combined_stats = {}
+    timeline_data = []
+    
+    for data in data_list:
+        if not data:
+            continue
+            
+        # Nodos (usar ID como key para evitar duplicados)
+        for node in data.get("nodes", []):
+            node_id = node.get("id")
+            if node_id and node_id not in all_nodes:
+                all_nodes[node_id] = node
+        
+        # Edges (usar tuple (from, to) para evitar duplicados)
+        for edge in data.get("edges", []):
+            edge_key = (edge.get("from"), edge.get("to"))
+            if edge_key not in all_edges:
+                all_edges.add(edge_key)
+        
+        # Stats (sumar)
+        for key, value in data.get("stats", {}).items():
+            if isinstance(value, (int, float)):
+                combined_stats[key] = combined_stats.get(key, 0) + value
+            else:
+                combined_stats[key] = value
+        
+        # Timeline data
+        timeline_data.extend(data.get("timeline_data", []))
+    
+    # Reconstruir edges desde el set
+    edges_list = []
+    for data in data_list:
+        for edge in data.get("edges", []):
+            edge_key = (edge.get("from"), edge.get("to"))
+            if edge_key in all_edges:
+                edges_list.append(edge)
+                all_edges.discard(edge_key)  # Evitar duplicados
+    
+    return {
+        "nodes": list(all_nodes.values()),
+        "edges": edges_list,
+        "stats": combined_stats,
+        "timeline_data": timeline_data,
+    }
+
+
 def _check_localstorage_trace_pkg():
     """
     Lee localStorage para detectar si el usuario hizo click en un paquete en Flow Timeline.
@@ -365,21 +431,26 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
+    # Inicializar lista de paquetes trazados si no existe
+    if "traced_packages" not in st.session_state:
+        st.session_state.traced_packages = []
+    
     # Verificar si hay un paquete a trazar desde click en diagrama (localStorage)
-    # Usamos un componente HTML para leer localStorage y pasarlo a un placeholder
     _check_localstorage_trace_pkg()
     
-    # Verificar si hay un paquete a trazar desde query params
+    # Verificar si hay un paquete a trazar desde query params (click en diagrama)
     qp = st.query_params
     trace_pkg = qp.get("trace_pkg")
-    if trace_pkg and st.session_state.get("last_trace_pkg") != trace_pkg:
-        # Auto-configurar para trazar este paquete
-        st.session_state.search_mode_selector = "📦 Por paquete"
-        st.session_state.package_input = trace_pkg
-        st.session_state.last_trace_pkg = trace_pkg
-        st.session_state.auto_generate_trace_pkg = True
-        # Limpiar query param
+    if trace_pkg:
+        # Limpiar query param primero
         del qp["trace_pkg"]
+        
+        # Agregar a la lista de paquetes trazados (si no está ya)
+        if trace_pkg not in st.session_state.traced_packages:
+            st.session_state.traced_packages.append(trace_pkg)
+            st.session_state.search_mode_selector = "📦 Por paquete"
+            # Marcar para regenerar automáticamente
+            st.session_state.auto_regenerate_diagram = True
         st.rerun()
     
     # Selector de tipo de diagrama
@@ -567,13 +638,48 @@ def _render_sankey(username: str, password: str):
             delivery_guide = None
     elif search_mode == "📦 Por paquete":
         st.markdown("### 📦 Buscar por Paquete")
+        
+        # Mostrar paquetes ya trazados (árbol expandido)
+        if st.session_state.traced_packages:
+            st.markdown("#### 🌳 Árbol de Trazabilidad")
+            st.caption("Haz click en ❌ para quitar un paquete del árbol")
+            
+            # Mostrar cada paquete con botón para quitar
+            cols_per_row = 4
+            pkgs = st.session_state.traced_packages.copy()
+            for i in range(0, len(pkgs), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j, col in enumerate(cols):
+                    idx = i + j
+                    if idx < len(pkgs):
+                        pkg = pkgs[idx]
+                        with col:
+                            col_pkg, col_btn = st.columns([3, 1])
+                            col_pkg.markdown(f"📦 **{pkg}**")
+                            if col_btn.button("❌", key=f"remove_pkg_{pkg}", help=f"Quitar {pkg}"):
+                                st.session_state.traced_packages.remove(pkg)
+                                # Regenerar diagrama si quedan paquetes
+                                if st.session_state.traced_packages:
+                                    st.session_state.auto_regenerate_diagram = True
+                                else:
+                                    st.session_state.diagram_data = None
+                                st.rerun()
+            
+            # Botón para limpiar todo
+            if st.button("🗑️ Limpiar todo", key="clear_all_packages"):
+                st.session_state.traced_packages = []
+                st.session_state.diagram_data = None
+                st.rerun()
+            
+            st.markdown("---")
+        
         col_id, col_mode = st.columns([3, 2])
         with col_id:
             identifier = st.text_input(
-                "Código de paquete",
+                "Agregar paquete al árbol" if st.session_state.traced_packages else "Código de paquete",
                 placeholder="Ej: 104520, PACK0001234",
                 key="package_input",
-                help="Ingresa el nombre o código del paquete"
+                help="Ingresa el nombre o código del paquete para agregarlo al árbol de trazabilidad"
             )
         with col_mode:
             connection_mode = st.selectbox(
@@ -583,7 +689,12 @@ def _render_sankey(username: str, password: str):
                 help="'Conexión directa' muestra solo la cadena conectada. 'Todos' incluye pallets hermanos del mismo proceso."
             )
         include_siblings = connection_mode == "🌐 Todos (con hermanos)"
-        st.caption("💡 Ingresa el código exacto del paquete para ver su trazabilidad completa")
+        
+        if st.session_state.traced_packages:
+            st.caption("💡 Haz click en un nodo naranja (PALLET_IN) en el diagrama para expandir su trazabilidad")
+        else:
+            st.caption("💡 Ingresa el código exacto del paquete para ver su trazabilidad completa")
+        
         fecha_inicio = None
         fecha_fin = None
         delivery_guide = None
@@ -667,14 +778,22 @@ def _render_sankey(username: str, password: str):
     elif search_mode == "📥 Por guía de despacho":
         can_generate = selected_picking_id is not None
     elif search_mode == "📦 Por paquete":
-        can_generate = bool(identifier and identifier.strip())
+        # Puede generar si hay paquetes en la lista O un nuevo identificador
+        can_generate = bool(st.session_state.traced_packages) or bool(identifier and identifier.strip())
     elif search_mode == "🚚 Por venta":
         # Válido si tiene código O tiene fechas (exclusivo)
         can_generate = bool(identifier and identifier.strip()) or bool(fecha_inicio and fecha_fin)
     elif search_mode == "🏭 Por proveedor":
         can_generate = supplier_id is not None
     
-    if st.button("🔄 Generar Diagrama", type="primary", disabled=not can_generate):
+    # Auto-regenerar si se marcó desde click en diagrama
+    should_generate = st.button("🔄 Generar Diagrama", type="primary", disabled=not can_generate)
+    
+    if st.session_state.pop("auto_regenerate_diagram", False):
+        should_generate = True
+        st.info("🔄 Regenerando diagrama con nuevo paquete...")
+    
+    if should_generate:
         spinner_msg = "Obteniendo datos de trazabilidad..."
         
         with st.spinner(spinner_msg):
@@ -870,53 +989,69 @@ def _render_sankey(username: str, password: str):
                 st.rerun()
             
             elif search_mode == "📦 Por paquete":
-                # Guardar el identificador para resaltado
-                st.session_state.search_identifier = identifier.strip()
+                # Si hay un nuevo paquete en el input, agregarlo a la lista
+                if identifier and identifier.strip():
+                    new_pkg = identifier.strip()
+                    if new_pkg not in st.session_state.traced_packages:
+                        st.session_state.traced_packages.append(new_pkg)
+                
+                # Usar la lista de paquetes trazados
+                packages_to_trace = st.session_state.traced_packages
+                
+                if not packages_to_trace:
+                    st.warning("No hay paquetes para trazar")
+                    return
+                
+                # Guardar identificadores para resaltado
+                st.session_state.search_identifier = ",".join(packages_to_trace)
                 
                 # Determinar el formato de salida según el tipo de diagrama
+                output_format = "visjs" if diagram_type in ["📅 Flow Timeline", "🕸️ vis.js Network"] else "sankey"
+                
+                # Obtener trazabilidad de cada paquete y combinar
+                all_data = []
+                with st.status(f"Trazando {len(packages_to_trace)} paquete(s)...", expanded=True) as status:
+                    for i, pkg in enumerate(packages_to_trace):
+                        st.write(f"📦 Obteniendo trazabilidad de {pkg}...")
+                        data = get_traceability_by_identifier(username, password, pkg, output_format=output_format, include_siblings=include_siblings)
+                        if data and data.get('nodes'):
+                            all_data.append(data)
+                        else:
+                            st.write(f"⚠️ Sin datos para {pkg}")
+                    status.update(label=f"✅ Trazabilidad obtenida para {len(all_data)}/{len(packages_to_trace)} paquetes", state="complete")
+                
+                if not all_data:
+                    st.warning("No se encontraron datos para ninguno de los paquetes")
+                    st.session_state.diagram_data = None
+                    return
+                
+                # Combinar todos los resultados
+                combined_data = _merge_traceability_data(all_data, output_format)
+                
                 if diagram_type == "📈 Sankey (Plotly)":
-                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
-                    if not data or not data.get('nodes'):
-                        st.warning(f"No se encontraron datos para: {identifier}")
-                        st.session_state.diagram_data = None
-                        return
-                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data = combined_data
                     st.session_state.diagram_data_type = "sankey"
                 
                 elif diagram_type == "📊 Sankey (D3)" and NIVO_AVAILABLE:
-                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="sankey", include_siblings=include_siblings)
-                    if not data or not data.get('nodes'):
-                        st.warning(f"No se encontraron datos para: {identifier}")
-                        st.session_state.diagram_data = None
-                        return
-                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data = combined_data
                     st.session_state.diagram_data_type = "nivo_sankey"
                 
                 elif diagram_type == "📅 Flow Timeline" and FLOW_TIMELINE_AVAILABLE:
-                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
-                    if not data or not data.get('nodes'):
-                        st.warning(f"No se encontraron datos para: {identifier}")
-                        st.session_state.diagram_data = None
-                        return
-                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data = combined_data
                     st.session_state.diagram_data_type = "flow_timeline"
                 
                 elif diagram_type == "🕸️ vis.js Network" and VISJS_AVAILABLE:
-                    data = get_traceability_by_identifier(username, password, identifier.strip(), output_format="visjs", include_siblings=include_siblings)
-                    if not data or not data.get('nodes'):
-                        st.warning(f"No se encontraron datos para: {identifier}")
-                        st.session_state.diagram_data = None
-                        return
-                    st.session_state.diagram_data = data
+                    st.session_state.diagram_data = combined_data
                     st.session_state.diagram_data_type = "visjs"
                     
                 elif diagram_type == "📋 Tabla de Conexiones":
-                    # Para tabla, usar raw data del endpoint base
+                    # Para tabla, usar raw data - por ahora solo el primer paquete
+                    # TODO: Combinar datos raw de múltiples paquetes
                     try:
                         params = {
                             "username": username,
                             "password": password,
-                            "identifier": identifier.strip(),
+                            "identifier": packages_to_trace[0],
                             "include_siblings": str(include_siblings).lower(),
                         }
                         API_URL = os.getenv("API_URL", "http://127.0.0.1:8002")
@@ -933,7 +1068,7 @@ def _render_sankey(username: str, password: str):
                         data = None
                     
                     if not data or not data.get('pallets'):
-                        st.warning(f"No se encontraron datos para: {identifier}")
+                        st.warning(f"No se encontraron datos para: {packages_to_trace[0]}")
                         st.session_state.diagram_data = None
                         return
                     st.session_state.diagram_data = data
