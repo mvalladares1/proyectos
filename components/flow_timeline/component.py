@@ -192,32 +192,7 @@ def render_flow_timeline(
     for col, (label, value) in zip(cols, stats_display):
         col.metric(label, value)
     
-    # Filtros de calidad de origen
-    st.markdown("### 🔍 Filtros de Calidad de Origen")
-    filter_cols = st.columns(5)
-    with filter_cols[0]:
-        show_claro = st.checkbox("✅ Origen Claro", value=True, key="flow_claro")
-    with filter_cols[1]:
-        show_ambiguo = st.checkbox("⚠️ Origen Ambiguo", value=True, key="flow_ambiguo")
-    with filter_cols[2]:
-        show_desconocido = st.checkbox("❓ Origen Desconocido", value=True, key="flow_desconocido")
-    with filter_cols[3]:
-        show_sin_origen = st.checkbox("🔴 Sin Origen", value=True, key="flow_sin_origen")
-    with filter_cols[4]:
-        show_no_analizado = st.checkbox("⚪ Sin Analizar", value=True, key="flow_no_analizado")
-    
-    # Crear objeto de filtros para JavaScript
-    origin_filters = {
-        "ORIGEN_CLARO": show_claro,
-        "ORIGEN_CLARO_RECOVERED": show_claro,
-        "ORIGEN_AMBIGUO": show_ambiguo,
-        "ORIGEN_AMBIGUO_RECOVERED": show_ambiguo,
-        "ORIGEN_DESCONOCIDO": show_desconocido,
-        "ORIGEN_DESCONOCIDO_RECOVERED": show_desconocido,
-        "SIN_ORIGEN": show_sin_origen,
-        "NO_ANALIZADO": show_no_analizado,
-        "": True,  # Nodos sin información (proveedores, procesos, clientes)
-    }
+    # Los filtros se manejan ahora en JavaScript para evitar recargas de página
     
     # Preparar datos
     flow_data = _prepare_flow_data(data)
@@ -230,7 +205,6 @@ def render_flow_timeline(
     edges_json = json.dumps(flow_data["edges"])
     dates_json = json.dumps(flow_data["dates"])
     date_range_json = json.dumps(flow_data["dateRange"])
-    origin_filters_json = json.dumps(origin_filters)
     
     html = f"""
     <!DOCTYPE html>
@@ -398,6 +372,25 @@ def render_flow_timeline(
             <div id="timeline"></div>
         </div>
         
+        <div class="filters" style="position: absolute; top: 10px; left: 10px; z-index: 100; background: rgba(13, 17, 23, 0.95); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="color: #fff; font-weight: bold; margin-bottom: 10px; font-size: 14px;">🔍 Filtros de Calidad</div>
+            <label style="display: block; color: #fff; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-claro" checked onchange="applyOriginFilters()"> ✅ Origen Claro
+            </label>
+            <label style="display: block; color: #fff; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-ambiguo" checked onchange="applyOriginFilters()"> ⚠️ Origen Ambiguo
+            </label>
+            <label style="display: block; color: #fff; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-desconocido" checked onchange="applyOriginFilters()"> ❓ Origen Desconocido
+            </label>
+            <label style="display: block; color: #fff; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-sin-origen" checked onchange="applyOriginFilters()"> 🔴 Sin Origen
+            </label>
+            <label style="display: block; color: #fff; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-no-analizado" checked onchange="applyOriginFilters()"> ⚪ Sin Analizar
+            </label>
+        </div>
+        
         <div class="legend">
             <div class="legend-title">🗺️ Leyenda</div>
             <div class="legend-item"><div class="legend-color" style="background: #9b59b6;"></div>Proveedor</div>
@@ -418,7 +411,6 @@ def render_flow_timeline(
         
         <script>
             const nodesData = {nodes_json};
-            const originFilters = {origin_filters_json};
             const edgesData = {edges_json};
             const datesData = {dates_json};
             const dateRange = {date_range_json};
@@ -742,11 +734,31 @@ def render_flow_timeline(
             
             // Aplicar filtros de calidad de origen
             function applyOriginFilters() {{
+                // Leer estado actual de los checkboxes
+                const showClaro = document.getElementById('filter-claro').checked;
+                const showAmbiguo = document.getElementById('filter-ambiguo').checked;
+                const showDesconocido = document.getElementById('filter-desconocido').checked;
+                const showSinOrigen = document.getElementById('filter-sin-origen').checked;
+                const showNoAnalizado = document.getElementById('filter-no-analizado').checked;
+                
+                // Crear mapa de filtros
+                const filters = {{
+                    'ORIGEN_CLARO': showClaro,
+                    'ORIGEN_CLARO_RECOVERED': showClaro,
+                    'ORIGEN_AMBIGUO': showAmbiguo,
+                    'ORIGEN_AMBIGUO_RECOVERED': showAmbiguo,
+                    'ORIGEN_DESCONOCIDO': showDesconocido,
+                    'ORIGEN_DESCONOCIDO_RECOVERED': showDesconocido,
+                    'SIN_ORIGEN': showSinOrigen,
+                    'NO_ANALIZADO': showNoAnalizado,
+                    '': true  // Siempre mostrar nodos sin clasificación
+                }};
+                
                 g.selectAll('.node').style('opacity', d => {{
                     // Si el nodo no tiene originQuality, siempre mostrarlo
                     if (!d.originQuality || d.originQuality === '') return 1;
                     // Aplicar filtro según el estado del checkbox
-                    return originFilters[d.originQuality] ? 1 : 0.1;
+                    return filters[d.originQuality] ? 1 : 0.1;
                 }});
                 
                 // También filtrar los links basados en si ambos nodos están visibles
@@ -756,10 +768,10 @@ def render_flow_timeline(
                     
                     const sourceVisible = !sourceNode.originQuality || 
                                         sourceNode.originQuality === '' || 
-                                        originFilters[sourceNode.originQuality];
+                                        filters[sourceNode.originQuality];
                     const targetVisible = !targetNode.originQuality || 
                                         targetNode.originQuality === '' || 
-                                        originFilters[targetNode.originQuality];
+                                        filters[targetNode.originQuality];
                     
                     return (sourceVisible && targetVisible) ? 0.4 : 0.05;
                 }});

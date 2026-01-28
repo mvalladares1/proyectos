@@ -23,39 +23,11 @@ def render_nivo_sankey(data: dict, height: int = 800, highlight_package: str = N
         st.warning("No hay datos para renderizar")
         return
     
-    # Filtros de calidad de origen
-    st.subheader("🎯 Filtros de Calidad de Origen")
-    filter_cols = st.columns(5)
-    
-    with filter_cols[0]:
-        show_claro = st.checkbox("✅ Origen Claro", value=True, key="sankey_claro")
-    with filter_cols[1]:
-        show_ambiguo = st.checkbox("⚠️ Origen Ambiguo", value=True, key="sankey_ambiguo")
-    with filter_cols[2]:
-        show_desconocido = st.checkbox("❓ Origen Desconocido", value=True, key="sankey_desconocido")
-    with filter_cols[3]:
-        show_sin_origen = st.checkbox("🔴 Sin Origen", value=True, key="sankey_sin_origen")
-    with filter_cols[4]:
-        show_no_analizado = st.checkbox("⚪ Sin Analizar", value=True, key="sankey_no_analizado")
-    
-    # Mapeo de filtros para JavaScript
-    origin_filters = {
-        "ORIGEN_CLARO": show_claro,
-        "ORIGEN_CLARO_RECOVERED": show_claro,
-        "ORIGEN_AMBIGUO": show_ambiguo,
-        "ORIGEN_AMBIGUO_RECOVERED": show_ambiguo,
-        "ORIGEN_DESCONOCIDO": show_desconocido,
-        "ORIGEN_DESCONOCIDO_RECOVERED": show_desconocido,
-        "SIN_ORIGEN": show_sin_origen,
-        "NO_ANALIZADO": show_no_analizado,
-        "": True,  # Siempre mostrar nodos sin clasificación (proveedores, clientes, procesos)
-    }
-    
     # Transformar datos de formato Plotly a formato D3
     d3_data = _transform_to_d3_format(data, highlight_package)
     
     # Generar HTML con D3
-    html_content = _generate_d3_sankey_html(d3_data, height, origin_filters)
+    html_content = _generate_d3_sankey_html(d3_data, height)
     
     # Renderizar
     components.html(html_content, height=height + 50, scrolling=True)
@@ -218,12 +190,11 @@ def _transform_to_d3_format(plotly_data: dict, highlight_package: str = None) ->
     }
 
 
-def _generate_d3_sankey_html(data: Dict, height: int, origin_filters: dict) -> str:
+def _generate_d3_sankey_html(data: Dict, height: int) -> str:
     """
     Genera el HTML completo con D3.js Sankey en orientación VERTICAL.
     """
     data_json = json.dumps(data, ensure_ascii=False)
-    origin_filters_json = json.dumps(origin_filters)
     
     html = f"""
     <!DOCTYPE html>
@@ -273,6 +244,24 @@ def _generate_d3_sankey_html(data: Dict, height: int, origin_filters: dict) -> s
         </style>
     </head>
     <body>
+        <div class="filters" style="position: absolute; top: 10px; left: 10px; z-index: 100; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+            <div style="font-weight: bold; margin-bottom: 10px; font-size: 14px; color: #333;">🔍 Filtros de Calidad</div>
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-claro" checked onchange="applyOriginFilters()"> ✅ Origen Claro
+            </label>
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-ambiguo" checked onchange="applyOriginFilters()"> ⚠️ Origen Ambiguo
+            </label>
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-desconocido" checked onchange="applyOriginFilters()"> ❓ Origen Desconocido
+            </label>
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-sin-origen" checked onchange="applyOriginFilters()"> 🔴 Sin Origen
+            </label>
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="filter-no-analizado" checked onchange="applyOriginFilters()"> ⚪ Sin Analizar
+            </label>
+        </div>
         <div class="zoom-controls">
             <button class="zoom-btn" id="zoom-in" title="Acercar">+</button>
             <button class="zoom-btn" id="zoom-out" title="Alejar">−</button>
@@ -283,7 +272,6 @@ def _generate_d3_sankey_html(data: Dict, height: int, origin_filters: dict) -> s
         
         <script>
             const data = {data_json};
-            const originFilters = {origin_filters_json};
             
             const container = document.getElementById('chart');
             const width = container.clientWidth || 1200;
@@ -319,11 +307,33 @@ def _generate_d3_sankey_html(data: Dict, height: int, origin_filters: dict) -> s
                 }})
                 .extent([[0, 0], [innerHeight, innerWidth]]);  // Intercambiado para vertical
             
+            // Debug: verificar datos
+            console.log('Sankey data:', data);
+            console.log('Nodes:', data.nodes.length, 'Links:', data.links.length);
+            
+            // Validar que hay nodos y links
+            if (!data.nodes || data.nodes.length === 0) {{
+                document.body.innerHTML = '<div style="padding: 20px; color: red;">Error: No hay nodos para renderizar</div>';
+                throw new Error('No nodes to render');
+            }}
+            
+            if (!data.links || data.links.length === 0) {{
+                document.body.innerHTML = '<div style="padding: 20px; color: orange;">Advertencia: No hay links para renderizar</div>';
+            }}
+            
             // Clonar datos
-            const graph = sankey({{
-                nodes: data.nodes.map(d => ({{...d}})),
-                links: data.links.map(d => ({{...d}}))
-            }});
+            let graph;
+            try {{
+                graph = sankey({{
+                    nodes: data.nodes.map(d => ({{...d}})),
+                    links: data.links.map(d => ({{...d}}))
+                }});
+                console.log('Sankey graph computed successfully');
+            }} catch (error) {{
+                console.error('Error computing sankey:', error);
+                document.body.innerHTML = '<div style="padding: 20px; color: red;">Error al computar Sankey: ' + error.message + '</div>';
+                throw error;
+            }}
             
             // Rotar coordenadas para orientación vertical
             // x -> y, y -> x
@@ -579,22 +589,42 @@ def _generate_d3_sankey_html(data: Dict, height: int, origin_filters: dict) -> s
             
             // Aplicar filtros de calidad de origen
             function applyOriginFilters() {{
+                // Leer estado actual de los checkboxes
+                const showClaro = document.getElementById('filter-claro').checked;
+                const showAmbiguo = document.getElementById('filter-ambiguo').checked;
+                const showDesconocido = document.getElementById('filter-desconocido').checked;
+                const showSinOrigen = document.getElementById('filter-sin-origen').checked;
+                const showNoAnalizado = document.getElementById('filter-no-analizado').checked;
+                
+                // Crear mapa de filtros
+                const filters = {{
+                    'ORIGEN_CLARO': showClaro,
+                    'ORIGEN_CLARO_RECOVERED': showClaro,
+                    'ORIGEN_AMBIGUO': showAmbiguo,
+                    'ORIGEN_AMBIGUO_RECOVERED': showAmbiguo,
+                    'ORIGEN_DESCONOCIDO': showDesconocido,
+                    'ORIGEN_DESCONOCIDO_RECOVERED': showDesconocido,
+                    'SIN_ORIGEN': showSinOrigen,
+                    'NO_ANALIZADO': showNoAnalizado,
+                    '': true  // Siempre mostrar nodos sin clasificación
+                }};
+                
                 // Filtrar nodos
                 node.style('opacity', d => {{
                     // Si el nodo no tiene originQuality, siempre mostrarlo
                     if (!d.originQuality || d.originQuality === '') return 1;
                     // Aplicar filtro según el estado del checkbox
-                    return originFilters[d.originQuality] ? 1 : 0.1;
+                    return filters[d.originQuality] ? 1 : 0.1;
                 }});
                 
                 // Filtrar links según visibilidad de nodos origen/destino
                 link.style('fill-opacity', function(d) {{
                     const sourceVisible = !d.source.originQuality || 
                                         d.source.originQuality === '' || 
-                                        originFilters[d.source.originQuality];
+                                        filters[d.source.originQuality];
                     const targetVisible = !d.target.originQuality || 
                                         d.target.originQuality === '' || 
-                                        originFilters[d.target.originQuality];
+                                        filters[d.target.originQuality];
                     
                     return (sourceVisible && targetVisible) ? 0.4 : 0.05;
                 }});
