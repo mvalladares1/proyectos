@@ -327,30 +327,32 @@ def _render_sankey(username: str, password: str):
     """Renderiza el tab del diagrama de trazabilidad."""
     st.subheader("🔗 Diagrama de Trazabilidad")
     
-    # Leer de localStorage si hay un paquete para trazar
-    trace_from_storage = st.components.v1.html("""
+    # Inyectar script en la página principal para leer localStorage
+    # st.markdown se inyecta directamente, no en iframe
+    st.markdown("""
     <script>
-        const pkg = localStorage.getItem('streamlit_trace_pkg');
-        const time = localStorage.getItem('streamlit_trace_pkg_time');
-        if (pkg && time) {
-            // Solo usar si es reciente (menos de 5 segundos)
-            const elapsed = Date.now() - parseInt(time);
-            if (elapsed < 5000) {
-                // Limpiar para no volver a usarlo
-                localStorage.removeItem('streamlit_trace_pkg');
-                localStorage.removeItem('streamlit_trace_pkg_time');
-                // Enviar a Streamlit via query param
-                const url = new URL(window.parent.location.href);
-                url.searchParams.set('trace_pkg', pkg);
-                window.parent.location.href = url.toString();
-            } else {
-                // Expirado, limpiar
-                localStorage.removeItem('streamlit_trace_pkg');
-                localStorage.removeItem('streamlit_trace_pkg_time');
+        (function checkTracePackage() {
+            const pkg = localStorage.getItem('streamlit_trace_pkg');
+            const time = localStorage.getItem('streamlit_trace_pkg_time');
+            if (pkg && time) {
+                const elapsed = Date.now() - parseInt(time);
+                if (elapsed < 5000) {
+                    // Limpiar inmediatamente
+                    localStorage.removeItem('streamlit_trace_pkg');
+                    localStorage.removeItem('streamlit_trace_pkg_time');
+                    // Redirigir con query param
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('trace_pkg', pkg);
+                    console.log('Redirecting to:', url.toString());
+                    window.location.href = url.toString();
+                } else {
+                    localStorage.removeItem('streamlit_trace_pkg');
+                    localStorage.removeItem('streamlit_trace_pkg_time');
+                }
             }
-        }
+        })();
     </script>
-    """, height=0)
+    """, unsafe_allow_html=True)
     
     # Verificar si hay un paquete a trazar desde click en diagrama
     qp = st.query_params
