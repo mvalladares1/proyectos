@@ -244,22 +244,29 @@ def _generate_d3_sankey_html(data: Dict, height: int) -> str:
         </style>
     </head>
     <body>
-        <div class="filters" style="position: absolute; top: 10px; left: 10px; z-index: 100; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+        <script>
+            // Definir stub inmediatamente
+            window.applyOriginFilters = function() {{
+                console.log('Filter stub called - waiting for full implementation');
+            }};
+        </script>
+        
+        <div class="filters" style="position: absolute; top: 10px; right: 10px; z-index: 100; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
             <div style="font-weight: bold; margin-bottom: 10px; font-size: 14px; color: #333;">🔍 Filtros de Calidad</div>
             <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
-                <input type="checkbox" id="filter-claro" checked onchange="applyOriginFilters()"> ✅ Origen Claro
+                <input type="checkbox" id="filter-claro" checked onchange="window.applyOriginFilters()"> ✅ Origen Claro
             </label>
             <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
-                <input type="checkbox" id="filter-ambiguo" checked onchange="applyOriginFilters()"> ⚠️ Origen Ambiguo
+                <input type="checkbox" id="filter-ambiguo" checked onchange="window.applyOriginFilters()"> ⚠️ Origen Ambiguo
             </label>
             <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
-                <input type="checkbox" id="filter-desconocido" checked onchange="applyOriginFilters()"> ❓ Origen Desconocido
+                <input type="checkbox" id="filter-desconocido" checked onchange="window.applyOriginFilters()"> ❓ Origen Desconocido
             </label>
             <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
-                <input type="checkbox" id="filter-sin-origen" checked onchange="applyOriginFilters()"> 🔴 Sin Origen
+                <input type="checkbox" id="filter-sin-origen" checked onchange="window.applyOriginFilters()"> 🔴 Sin Origen
             </label>
             <label style="display: block; margin-bottom: 5px; cursor: pointer; user-select: none;">
-                <input type="checkbox" id="filter-no-analizado" checked onchange="applyOriginFilters()"> ⚪ Sin Analizar
+                <input type="checkbox" id="filter-no-analizado" checked onchange="window.applyOriginFilters()"> ⚪ Sin Analizar
             </label>
         </div>
         <div class="zoom-controls">
