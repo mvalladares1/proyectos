@@ -738,9 +738,9 @@ def render_flow_timeline(
             renderDiagram();
             updateTimeline(xScale);
             
-            // Redefinir applyOriginFilters ahora que g y nodeMap existen
-            window.applyOriginFilters = function() {{
-                console.log('Aplicando filtros de origen...');
+            // Función local para aplicar filtros (tiene acceso a g y nodeMap por closure)
+            function applyOriginFilters() {{
+                console.log('✓ Aplicando filtros de origen...');
                 
                 const claroBox = document.getElementById('filter-claro');
                 const ambiguoBox = document.getElementById('filter-ambiguo');
@@ -748,7 +748,7 @@ def render_flow_timeline(
                 const sinOrigenBox = document.getElementById('filter-sin-origen');
                 const noAnalizadoBox = document.getElementById('filter-no-analizado');
                 
-                if (!claroBox) {{ console.error('filter-claro no encontrado'); return; }}
+                if (!claroBox) {{ console.error('✗ Checkboxes no encontrados'); return; }}
                 
                 const showClaro = claroBox.checked;
                 const showAmbiguo = ambiguoBox.checked;
@@ -756,7 +756,7 @@ def render_flow_timeline(
                 const showSinOrigen = sinOrigenBox.checked;
                 const showNoAnalizado = noAnalizadoBox.checked;
                 
-                console.log('Estados:', {{ showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado }});
+                console.log('✓ Estados:', {{ showClaro, showAmbiguo, showDesconocido, showSinOrigen, showNoAnalizado }});
                 
                 const filters = {{
                     'ORIGEN_CLARO': showClaro,
@@ -770,18 +770,31 @@ def render_flow_timeline(
                     '': true
                 }};
                 
-                if (!g) {{ console.error('g no existe'); return; }}
+                if (!g) {{ console.error('✗ Variable g no disponible'); return; }}
                 
                 const nodes = g.selectAll('.node');
                 const links = g.selectAll('.link');
                 
-                console.log(`Filtrando ${{nodes.size()}} nodos y ${{links.size()}} links`);
+                console.log(`✓ Filtrando ${{nodes.size()}} nodos y ${{links.size()}} links`);
                 
-                nodes.style('opacity', d => {{
-                    if (!d.originQuality || d.originQuality === '') return 1;
-                    const visible = filters[d.originQuality];
-                    console.log(`Nodo ${{d.id}} quality=${{d.originQuality}} visible=${{visible}}`);
-                    return visible ? 1 : 0.1;
+                let visibleCount = 0;
+                let hiddenCount = 0;
+                let sampleLog = 0;
+                
+                nodes.each(function(d) {{
+                    const hasQuality = d.originQuality && d.originQuality !== '';
+                    const isVisible = !hasQuality || filters[d.originQuality];
+                    const opacity = isVisible ? 1 : 0.1;
+                    
+                    if (hasQuality && sampleLog < 5) {{
+                        console.log(`Nodo ${{d.id}}: quality=${{d.originQuality}}, visible=${{isVisible}}, opacity=${{opacity}}`);
+                        sampleLog++;
+                    }}
+                    
+                    d3.select(this).style('opacity', opacity);
+                    
+                    if (isVisible) visibleCount++;
+                    else hiddenCount++;
                 }});
                 
                 links.style('opacity', function(d) {{
@@ -794,12 +807,28 @@ def render_flow_timeline(
                     return (sourceVisible && targetVisible) ? 0.4 : 0.05;
                 }});
                 
-                console.log('Filtros aplicados');
-            }};
+                console.log(`✓ Filtros aplicados - ${{visibleCount}} visibles, ${{hiddenCount}} ocultos`);
+            }}
             
-            // Aplicar filtros después de que todo esté renderizado
+            // Adjuntar event listeners DESPUÉS del render
             setTimeout(() => {{
-                window.applyOriginFilters();
+                console.log('✓ Adjuntando event listeners a checkboxes...');
+                const checkboxes = ['filter-claro', 'filter-ambiguo', 'filter-desconocido', 'filter-sin-origen', 'filter-no-analizado'];
+                checkboxes.forEach(id => {{
+                    const checkbox = document.getElementById(id);
+                    if (checkbox) {{
+                        checkbox.addEventListener('change', function() {{
+                            console.log(`✓ Checkbox ${{id}} changed to ${{this.checked}}`);
+                            applyOriginFilters();
+                        }});
+                        console.log(`✓ Listener adjuntado a ${{id}}`);
+                    }} else {{
+                        console.error(`✗ No se encontró checkbox ${{id}}`);
+                    }}
+                }});
+                
+                // Aplicar filtros inicialmente
+                applyOriginFilters();
             }}, 100);
             
             // Tooltip functions
