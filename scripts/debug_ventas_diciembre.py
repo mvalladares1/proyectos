@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Script para investigar ventas reales en diciembre 2025.
+Script para investigar ventas reales en diciembre 2025 y validar trazabilidad.
 Solo cuenta pickings outgoing con origin que empieza con "S".
 """
 import sys
 sys.path.insert(0, '/home/feli/proyectos')
 
 from shared.odoo_client import OdooClient
+from backend.services.traceability.traceability_service import TraceabilityService
 from datetime import datetime
 import os
+import time
 
 # Configuración
 username = os.getenv("ODOO_USERNAME", "frios@riofuturo.cl")
@@ -169,3 +171,127 @@ for ml in all_move_lines:
 
 print(f"Total pallets en todas las ventas: {len(total_packages)}")
 print("=" * 80)
+
+# ========================================================================
+# VALIDACIÓN DE TRAZABILIDAD
+# ========================================================================
+print("\n" + "=" * 80)
+print("VALIDANDO TRAZABILIDAD CON EL FIX APLICADO")
+print("=" * 80)
+
+# Inicializar servicio de trazabilidad (reusa el mismo client)
+traz_service = TraceabilityService(username=username, password=password)
+
+# Obtener IDs de paquetes para trazar
+package_ids_list = list(total_packages)
+print(f"\nPaquetes a trazar: {len(package_ids_list)}")
+
+# Ejecutar trazabilidad con include_siblings=False (modo directo)
+print("\n➤ Ejecutando trazabilidad hacia atrás (include_siblings=False)...")
+start_time = time.time()
+
+try:
+    result = traz_service._get_traceability_for_packages(
+        initial_package_ids=package_ids_list,
+        limit=10000,
+        include_siblings=False
+    )
+    
+    elapsed = time.time() - start_time
+    
+    print(f"✓ Trazabilidad completada en {elapsed:.2f} segundos")
+    print("\n" + "=" * 80)
+    print("RESULTADOS DE TRAZABILIDAD:")
+    print("=" * 80)
+    
+    # Analizar resultados
+    all_pallets = result.get("pallets", {})
+    all_processes = result.get("processes", {})
+    all_suppliers = result.get("suppliers", {})
+    all_links = result.get("links", [])
+    
+    print(f"\nPallets totales: {len(all_pallets)}")
+    print(f"Procesos totales: {len(all_processes)}")
+    print(f"Proveedores totales: {len(all_suppliers)}")
+    print(f"Links totales: {len(all_links)}")
+    
+    # Agrupar procesos por tipo
+    processes_by_origin = {}
+    for proc_id, proc_data in all_processes.items():
+        origin = proc_data.get("origin", "Sin origin")
+        if origin not in processes_by_origin:
+            processes_by_origin[origin] = []
+        processes_by_origin[origin].append(proc_data)
+    
+    print(f"\nOrgenes de procesos encontrados: {len(processes_by_origin)}")
+    print("\nTop 10 procesos por cantidad:")
+    print("-" * 80)
+    sorted_origins = sorted(processes_by_origin.items(), key=lambda x: len(x[1]), reverse=True)
+    for origin, procs in sorted_origins[:10]:
+        print(f"  {origin}: {len(procs)} procesos")
+        # Verificar si alguno es RF/INT/ (debería estar excluido)
+        if "RF/INT/" in origin:
+            print(f"    ⚠️  ALERTA: Proceso RF/INT/ encontrado (debería estar excluido)")
+    
+    # Contar inputs/outputs por proceso
+    print("\n" + "=" * 80)
+    print("ANÁLISIS DE INPUTS/OUTPUTS:")
+    print("=" * 80)
+    
+    # Los links pueden ser tuplas o diccionarios dependiendo del formato
+    process_stats = {}
+    for link in all_links:
+        # Si es tupla, convertir a dict
+        if isinstance(link, tuple):
+            # Formato: (tipo, source, target, ...) o similar
+            if len(link) >= 3:
+                source = str(link[1]) if len(link) > 1 else ""
+                target = str(link[2]) if len(link) > 2 else ""
+            else:
+                continue
+        else:
+            source = link.get("source", "")
+            target = link.get("target", "")
+        
+        # Identificar si empieza con PROCESS:
+        if source and "PROCESS:" in str(source):
+            # Este proceso tiene un output
+            if source not in process_stats:
+                process_stats[source] = {"inputs": 0, "outputs": 0}
+            process_stats[source]["outputs"] += 1
+        
+        if target and "PROCESS:" in str(target):
+            # Este proceso tiene un input
+            if target not in process_stats:
+                process_stats[target] = {"inputs": 0, "outputs": 0}
+            process_stats[target]["inputs"] += 1
+    
+    # Top procesos por inputs
+    print("\nTop 10 procesos con más inputs:")
+    print("-" * 80)
+    sorted_by_inputs = sorted(process_stats.items(), key=lambda x: x[1]["inputs"], reverse=True)
+    for proc_id, stats in sorted_by_inputs[:10]:
+        proc_data = all_processes.get(proc_id, {})
+        origin = proc_data.get("origin", "Sin origin")
+        print(f"  {origin}: {stats['inputs']} inputs, {stats['outputs']} outputs")
+    
+    print("\n" + "=" * 80)
+    print("VALIDACIÓN COMPLETADA")
+    print("=" * 80)
+    print(f"\n✓ Tiempo de ejecución: {elapsed:.2f} segundos")
+    print(f"✓ Resultado esperado: ~200-500 pallets, ~50-100 procesos")
+    print(f"✓ Resultado obtenido: {len(all_pallets)} pallets, {len(all_processes)} procesos")
+    
+    if len(all_pallets) > 1000:
+        print("\n⚠️  ALERTA: Demasiados pallets. El fix puede no estar funcionando correctamente.")
+    elif len(all_processes) > 200:
+        print("\n⚠️  ADVERTENCIA: Muchos procesos. Revisar si hay expansión innecesaria.")
+    else:
+        print("\n✓ Los números lucen razonables. El fix parece estar funcionando.")
+
+except Exception as e:
+    print(f"\n❌ Error en trazabilidad: {e}")
+    import traceback
+    traceback.print_exc()
+
+print("\n" + "=" * 80)

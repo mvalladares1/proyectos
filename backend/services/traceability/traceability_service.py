@@ -327,7 +327,7 @@ class TraceabilityService:
                     # Primero, verificar si este proceso produce alguno de nuestros paquetes
                     process_produces_our_packages = False
                     process_inputs = set()  # Inputs del proceso (package_id que entran)
-                    process_inputs_direct = set()  # Inputs directamente ligados a nuestros outputs
+                    process_inputs_for_current_packages = set()  # Inputs QUE PRODUJERON los current_packages específicamente
                     staged_moves = []
                     
                     for ml in ref_moves:
@@ -344,12 +344,18 @@ class TraceabilityService:
                         # Verificar si este movimiento produce uno de nuestros paquetes
                         if result_rel:
                             result_id = result_rel[0] if isinstance(result_rel, (list, tuple)) else result_rel
+                            
+                            # Si produce alguno de nuestros paquetes trazados
                             if result_id in current_packages or result_id in traced_packages:
                                 process_produces_our_packages = True
-                                if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
-                                    pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
-                                    if pkg_id:
-                                        process_inputs_direct.add(pkg_id)
+                                
+                                # Si este movimiento específicamente produce uno de CURRENT_PACKAGES,
+                                # entonces su input es relevante para la trazabilidad directa
+                                if result_id in current_packages:
+                                    if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
+                                        pkg_id = pkg_rel[0] if isinstance(pkg_rel, (list, tuple)) else pkg_rel
+                                        if pkg_id:
+                                            process_inputs_for_current_packages.add(pkg_id)
                         
                         # Recolectar inputs del proceso (paquetes que entran, no desde proveedores)
                         if pkg_rel and loc_id != self.PARTNER_VENDORS_LOCATION_ID:
@@ -367,12 +373,16 @@ class TraceabilityService:
                     # Si el proceso produce alguno de nuestros paquetes, seguir inputs
                     if not include_siblings:
                         if process_produces_our_packages:
-                            inputs_to_follow = process_inputs_direct or process_inputs
+                            # CLAVE: Solo seguir inputs que produjeron ESPECÍFICAMENTE los current_packages
+                            # No hacer fallback a todos los inputs del proceso
+                            inputs_to_follow = process_inputs_for_current_packages
                             if inputs_to_follow:
                                 for pkg_id in inputs_to_follow:
                                     if pkg_id not in traced_packages and pkg_id not in current_packages:
                                         packages_to_trace.add(pkg_id)
-                            print(f"[TraceabilityService] Proceso {ref} produce nuestros paquetes. Siguiendo {len(inputs_to_follow)} inputs.")
+                                print(f"[TraceabilityService] Proceso {ref} produce nuestros paquetes. Siguiendo {len(inputs_to_follow)} inputs.")
+                            else:
+                                print(f"[TraceabilityService] Proceso {ref} produce nuestros paquetes pero sin inputs directos identificables.")
                     else:
                         # Modo "Todos": seguir todos los inputs
                         for pkg_id in process_inputs:
