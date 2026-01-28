@@ -425,16 +425,17 @@ def render_flow_timeline(
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
             
-            // Función para trazar un paquete (click en PALLET_OUT con origen)
-            function tracePackage(pkgName) {{{{
+            // Función para trazar un paquete (click en PALLET_IN con origen)
+            function tracePackage(pkgName) {{
                 if (!pkgName) return;
                 // Limpiar emojis del inicio del label
-                const cleaned = pkgName.replace(/^[^A-Za-z0-9]+\s*/, '').trim();
+                const cleaned = pkgName.replace(/^[^A-Za-z0-9]+\\s*/, '').trim();
                 if (!cleaned) return;
+                console.log('Tracing package:', cleaned);
                 const url = new URL(window.parent.location.href);
                 url.searchParams.set('trace_pkg', cleaned);
                 window.parent.location.href = url.toString();
-            }}}}
+            }}
             
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
@@ -624,17 +625,16 @@ def render_flow_timeline(
                     return `translate(${{x}},${{d.y}})`;
                 }})
                 .style('cursor', d => {{
-                    // Solo PALLET_IN con origen válido son clickeables (para trazar hacia atrás)
-                    if (d.nodeType === 'PALLET_IN' && d.originQuality && 
-                        !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
+                    // PALLET_IN son clickeables para trazar hacia atrás
+                    if (d.nodeType === 'PALLET_IN') {{
                         return 'pointer';
                     }}
                     return 'default';
                 }})
                 .on('click', function(event, d) {{
-                    // Solo permitir click en PALLET_IN con origen válido (CLARO, AMBIGUO, DESCONOCIDO)
-                    if (d.nodeType === 'PALLET_IN' && d.originQuality && 
-                        !d.originQuality.includes('SIN_ORIGEN') && d.originQuality !== 'NO_ANALIZADO') {{
+                    // Click en PALLET_IN para trazar su origen
+                    if (d.nodeType === 'PALLET_IN') {{
+                        console.log('Click on PALLET_IN:', d);
                         tracePackage(d.label);
                     }}
                 }})
