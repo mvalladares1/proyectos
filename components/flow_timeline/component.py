@@ -10,7 +10,7 @@ Características:
 """
 import streamlit as st
 import streamlit.components.v1 as components
-from typing import Dict, List, Optional
+from typing import Dict, List
 import json
 from datetime import datetime
 
@@ -161,22 +161,14 @@ def _prepare_flow_data(data: Dict) -> Dict:
 def render_flow_timeline(
     data: Dict,
     height: int = 800,
-) -> Optional[str]:
+) -> None:
     """
     Renderiza un diagrama de flujo con timeline usando D3.js.
     
     Args:
         data: Dict con nodes, edges del visjs_transformer
         height: Altura total del componente
-        
-    Returns:
-        ID del paquete clickeado para trazar, o None
     """
-    # Verificar si hay un paquete pendiente de trazar (guardado en session_state desde localStorage)
-    trace_pkg = st.session_state.pop('_flow_timeline_trace_pkg', None)
-    if trace_pkg:
-        return trace_pkg
-    
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
     stats = data.get("stats", {})
@@ -433,31 +425,6 @@ def render_flow_timeline(
             const levelNames = ['Proveedores', 'Recepciones', 'Pallets IN', 'Procesos', 'Pallets OUT', 'Clientes'];
             const levelCount = 6;
             
-            // Función para trazar un paquete (click en PALLET_IN con origen)
-            function tracePackage(pkgName) {{
-                if (!pkgName) return;
-                // Limpiar emojis del inicio del label
-                const cleaned = pkgName.replace(/^[^A-Za-z0-9]+\\s*/, '').trim();
-                if (!cleaned) return;
-                console.log('Tracing package:', cleaned);
-                
-                // Guardar en localStorage para que el componente Python lo detecte
-                try {{
-                    localStorage.setItem('flow_timeline_trace_pkg', cleaned);
-                    localStorage.setItem('flow_timeline_trace_timestamp', Date.now().toString());
-                    console.log('Saved trace request to localStorage:', cleaned);
-                    
-                    // Mostrar feedback visual
-                    const notification = document.createElement('div');
-                    notification.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#27ae60;color:#fff;padding:12px 24px;border-radius:8px;z-index:10000;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.3);animation:pulse 0.5s;';
-                    notification.innerHTML = '🌳 Agregando <b>' + cleaned + '</b> al árbol de trazabilidad...';
-                    document.body.appendChild(notification);
-                    setTimeout(() => notification.remove(), 2000);
-                }} catch(e) {{
-                    console.error('Error saving to localStorage:', e);
-                }}
-            }}
-            
             // Dimensiones - serán actualizadas en resize
             const margin = {{ top: 30, right: 20, bottom: 10, left: 100 }};
             let containerEl, width, height, xScale, yBandHeight, svg, g, zoom, currentTransform, timelineSvg, timelineG;
@@ -497,19 +464,9 @@ def render_flow_timeline(
                 g = svg.append('g')
                     .attr('transform', `translate(${{margin.left}},${{margin.top}})`);
                 
-                // Zoom behavior - filtrar para no capturar clicks en nodos
+                // Zoom behavior
                 zoom = d3.zoom()
                     .scaleExtent([0.5, 10])
-                    .filter(event => {{
-                        // No aplicar zoom si el click es en un nodo
-                        if (event.type === 'mousedown' || event.type === 'click') {{
-                            const target = event.target;
-                            if (target.closest && target.closest('.node')) {{
-                                return false;
-                            }}
-                        }}
-                        return !event.button;
-                    }})
                     .on('zoom', zoomed);
                 
                 svg.call(zoom);
@@ -737,16 +694,6 @@ def render_flow_timeline(
                     shape = node.append('circle')
                         .attr('r', nodeRadius)
                         .attr('fill', d.color);
-                }}
-                
-                // Click handler directo en la forma para PALLET_IN
-                if (d.nodeType === 'PALLET_IN') {{
-                    shape.style('cursor', 'pointer')
-                        .on('click', function(event) {{
-                            event.stopPropagation();
-                            console.log('Direct click on PALLET_IN shape:', d.label);
-                            tracePackage(d.label);
-                        }});
                 }}
             }});
             
