@@ -885,6 +885,10 @@ def render(username: str, password: str):
                                 # Obtener origen filtro desde session_state
                                 origen_filtro_usado = st.session_state.get('origen_filtro_usado', [])
                                 
+                                # Si no hay origen guardado, usar todos por defecto
+                                if not origen_filtro_usado:
+                                    origen_filtro_usado = ["RFP", "VILKUN", "SAN JOSE"]
+                                
                                 # Usar los mismos parámetros de filtro
                                 params_defectos = {
                                     'username': username,
@@ -894,9 +898,10 @@ def render(username: str, password: str):
                                     'solo_hechas': params.get('solo_hechas', True),
                                 }
                                 
-                                # Pasar origen si existe
+                                # Pasar origen como lista (múltiples parámetros origen=X&origen=Y)
                                 if origen_filtro_usado:
-                                    params_defectos['origen'] = ','.join(origen_filtro_usado)
+                                    # requests maneja listas creando múltiples query params
+                                    params_defectos['origen'] = origen_filtro_usado
                             
                                 resp = requests.get(
                                     f"{API_URL}/api/v1/recepciones-mp/report-defectos.xlsx",

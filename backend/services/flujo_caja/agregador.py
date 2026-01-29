@@ -75,14 +75,12 @@ class AgregadorFlujo:
             # Clasificar cuenta
             concepto_id, es_pendiente = self.clasificador(codigo_cuenta)
             
-            if concepto_id is None:
-                continue
-            
             # Invertir signo para cuentas de ingreso (41) y costo (51)
             # En contabilidad: ingresos son créditos (negativos), pero en flujo de efectivo
             # representan entradas de dinero (positivos)
+            # TAMBIEN: Cuentas por cobrar (1103) que se acreditan al cobrar (entrada)
             monto_efectivo = balance
-            if codigo_cuenta.startswith('41'):
+            if codigo_cuenta.startswith('41') or codigo_cuenta.startswith('1103'):
                 monto_efectivo = -balance  # Invertir: crédito -> ingreso de efectivo
             
             # Acumular monto
@@ -170,9 +168,15 @@ class AgregadorFlujo:
                     'montos_por_mes': {m: 0.0 for m in self.meses_lista}
                 }
             
-            etiquetas[etiqueta_limpia]['monto'] += balance
+            
+            # Invertir signo si es cuenta de ingreso (41) o CxC (1103)
+            monto_etiqueta = balance
+            if codigo_cuenta.startswith('41') or codigo_cuenta.startswith('1103'):
+                monto_etiqueta = -balance
+            
+            etiquetas[etiqueta_limpia]['monto'] += monto_etiqueta
             if mes_str and mes_str in self.meses_lista:
-                etiquetas[etiqueta_limpia]['montos_por_mes'][mes_str] += balance
+                etiquetas[etiqueta_limpia]['montos_por_mes'][mes_str] += monto_etiqueta
     
     def procesar_lineas_parametrizadas(self, lineas: List[Dict], 
                                        clasificar_fn,

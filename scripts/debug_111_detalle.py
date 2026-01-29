@@ -41,6 +41,15 @@ for concepto in op_data.get('conceptos', []):
             for mes, m in cuenta.get('montos_por_mes', {}).items():
                 if m != 0:
                     print(f"        {mes}: ${m:,.0f}")
+            
+            # Ver etiquetas si existen
+            if 'etiquetas' in cuenta:
+                print(f"        [ETIQUETAS]:")
+                for tag_data in cuenta.get('etiquetas', []):
+                    tag_nombre = tag_data.get('nombre', 'Unknown')
+                    monto_tag = tag_data.get('monto', 0)
+                    if abs(monto_tag) > 1000000: # Solo > 1M
+                        print(f"           - {tag_nombre[:40]}: ${monto_tag:,.0f}")
 
 print("\n" + "=" * 70)
 print("FIN DEBUG")

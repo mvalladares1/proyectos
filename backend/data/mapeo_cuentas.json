@@ -14,8 +14,6 @@
   "cuentas_efectivo": {
     "efectivo": {
       "prefijos": [
-        "110",
-        "111",
         "1101",
         "1102"
       ],
@@ -24,11 +22,7 @@
       "descripcion": "Efectivo en caja y bancos"
     },
     "equivalentes": {
-      "prefijos": [
-        "1103",
-        "1104",
-        "1105"
-      ],
+      "prefijos": [],
       "codigos_incluir": [],
       "codigos_excluir": [],
       "descripcion": "Equivalentes de efectivo (depósitos a plazo < 90 días)"
@@ -248,10 +242,16 @@
       "fecha_asignacion": "2026-01-05T14:10:00.000000",
       "usuario": "system"
     },
-    "41010101": {
+    "11030101": {
       "concepto_id": "1.1.1",
-      "nombre": "Ingresos por Ventas de Productos Terminados",
-      "fecha_asignacion": "2026-01-29T11:00:00.000000",
+      "nombre": "Deudores por Ventas (Pago Cliente)",
+      "fecha_asignacion": "2026-01-29T12:00:00.000000",
+      "usuario": "system"
+    },
+    "11030103": {
+      "concepto_id": "1.1.1",
+      "nombre": "Deudores por Ventas Exp US$ (Pago Cliente)",
+      "fecha_asignacion": "2026-01-29T12:00:00.000000",
       "usuario": "system"
     }
   },

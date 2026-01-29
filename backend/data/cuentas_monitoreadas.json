@@ -15,14 +15,15 @@
             "11010303"
         ],
         "prefijos": [
-            "110",
-            "111"
+            "1101",
+            "1102"
         ]
     },
     "cuentas_contrapartida": {
         "descripcion": "Cuentas de contrapartida a clasificar en IAS 7 (Proveedores, Préstamos, etc.)",
         "codigos": [
-            "41010101",
+            "11030101",
+            "11030103",
             "21010101",
             "21010102",
             "21010103",
