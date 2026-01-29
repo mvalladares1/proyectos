@@ -196,13 +196,21 @@ class ProyeccionFlujo:
             peso = subtotal / total_base
             monto_parte = monto_flujo * peso
             
-            # Clasificar
+            # Obtener cuenta contable (necesaria para in_invoice y para detalle)
             acc_id = line['account_id'][0] if isinstance(line.get('account_id'), (list, tuple)) else line.get('account_id')
             acc_code = cuentas_info.get(acc_id, {}).get('code', '')
             
-            categoria, _ = self.clasificar_cuenta(acc_code)
-            if not categoria:
-                categoria = "UNCLASSIFIED"
+            # Clasificar según tipo de documento
+            # Facturas de cliente (out_invoice) -> 1.1.1 Cobros procedentes de ventas
+            # Facturas de proveedor (in_invoice) -> clasificación por cuenta
+            if es_ingreso:
+                # Facturas de cliente van directo a concepto 1.1.1
+                categoria = "1.1.1"
+            else:
+                # Facturas de proveedor: usar clasificación por cuenta contable
+                categoria, _ = self.clasificar_cuenta(acc_code)
+                if not categoria:
+                    categoria = "UNCLASSIFIED"
             
             montos_por_concepto[categoria] = montos_por_concepto.get(categoria, 0) + monto_parte
             

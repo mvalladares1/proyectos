@@ -358,17 +358,21 @@ class ComprasService:
         Args:
             fecha_desde: Fecha desde la cual calcular uso (YYYY-MM-DD). Si es None, no filtra.
         
-        Lógica de cálculo:
+        Lógica de cálculo (CORREGIDA para evitar duplicación):
         - Línea Total = x_studio_linea_credito_monto
-        - Usado = Facturas no pagadas + Recepciones reales sin facturar
+        - Usado = Facturas no pagadas + Recepciones sin facturar
         - Disponible = Línea Total - Usado
         
         Detalle:
         1. Facturas de proveedor con amount_residual > 0 (no pagadas)
-        2. Recepciones reales sin facturar: stock.move en estado 'done' con
-           purchase_line_id donde qty_received > qty_invoiced
+        2. Recepciones sin facturar: purchase.order.line donde qty_received > qty_invoiced
+           (esto ya incluye TODAS las recepciones físicas realizadas, ya que Odoo actualiza
+           qty_received automáticamente cuando se completa un picking)
         3. OCs tentativas (informativo): OCs confirmadas sin factura asociada
-           (no afecta disponibilidad, solo referencia)
+           (no afectan disponibilidad, solo referencia en el detalle)
+        
+        IMPORTANTE: NO se cuentan pickings done porque ya están reflejados en qty_received
+        de las líneas de PO. Contarlos causa DUPLICACIÓN y porcentajes absurdos (>100%).
         """
         # Intentar obtener del caché
         cache_key = self._cache._make_key("lineas_credito", fecha_desde or "all")
@@ -529,95 +533,22 @@ class ComprasService:
                     recepciones_sin_facturar_by_partner[pid][oc_name]['lineas_count'] += 1
             
         
-        # === 4. STOCK.PICKING EN TODOS LOS ESTADOS EXCEPTO BORRADOR/CANCELADO ===
-        # Solo considerar recepciones con quantity_done > 0 (algo realmente recibido)
-        # NO contar la demanda como compromiso si no hay nada hecho
-        recepciones_preparadas_by_partner = {}
+        # === 4. PICKINGS DONE - ELIMINADO PARA EVITAR DUPLICACIÓN ===
+        # IMPORTANTE: Los pickings done ya están reflejados en qty_received de purchase.order.line
+        # Contar ambos genera DUPLICACIÓN de compromisos y causa porcentajes absurdos (>100%)
+        # 
+        # JUSTIFICACIÓN:
+        # - Cuando se hace un picking done, Odoo actualiza automáticamente qty_received en la línea de PO
+        # - Por lo tanto, calcular "recepciones sin facturar" (qty_received - qty_invoiced) ya incluye
+        #   TODAS las recepciones realizadas, sin importar el estado del picking
+        # - Contar pickings done ADEMÁS de las líneas PO es duplicar el mismo compromiso
+        #
+        # RESULTADO:
+        # - Uso = Facturas no pagadas + Recepciones sin facturar (desde purchase.order.line)
+        # - OCs tentativas son solo informativas en el detalle, NO afectan el uso
         
-        try:
-            if oc_ids:
-                # Buscar pickings de compra en estado 'done' (ya procesados)
-                # No incluir assigned/waiting porque aún no hay recepción real
-                pickings = self.odoo.search_read(
-                    'stock.picking',
-                    [
-                        ['purchase_id', 'in', oc_ids],
-                        ['state', '=', 'done'],  # Solo pickings completados
-                        ['picking_type_code', '=', 'incoming']  # Solo recepciones
-                    ],
-                    ['id', 'name', 'purchase_id', 'partner_id', 'scheduled_date', 'move_ids', 'state'],
-                    limit=1000
-                )
-                
-                
-                if pickings:
-                    picking_ids = [p['id'] for p in pickings]
-                    picking_info_map = {p['id']: p for p in pickings}
-                
-                    # Obtener move lines de estos pickings para calcular valores
-                    moves = self.odoo.search_read(
-                        'stock.move',
-                        [['picking_id', 'in', picking_ids]],
-                        ['id', 'picking_id', 'product_id', 'product_uom_qty', 'quantity_done', 'price_unit', 'purchase_line_id'],
-                        limit=5000
-                    )
-                    
-                    # Procesar cada move y calcular el valor RECIBIDO (no pendiente)
-                    for move in moves:
-                        qty_done = float(move.get('quantity_done') or 0)
-                        price_unit = float(move.get('price_unit') or 0)
-                        
-                        # SOLO considerar si hay cantidad HECHA (realmente recibida)
-                        if qty_done <= 0:
-                            continue
-                        
-                        # Calcular monto de lo recibido
-                        monto_recibido = qty_done * price_unit
-                        
-                        # Obtener info del picking
-                        picking_info = move.get('picking_id')
-                        picking_id = picking_info[0] if isinstance(picking_info, (list, tuple)) else picking_info
-                        picking_data = picking_info_map.get(picking_id, {})
-                        
-                        # Obtener partner_id del picking o de la OC
-                        partner_info = picking_data.get('partner_id')
-                        pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
-                        
-                        # Si no tiene partner, buscar en la OC
-                        if not pid:
-                            purchase_info = picking_data.get('purchase_id')
-                            oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
-                            oc_data = oc_info_map.get(oc_id, {})
-                            partner_info = oc_data.get('partner_id')
-                            pid = partner_info[0] if isinstance(partner_info, (list, tuple)) else partner_info
-                        
-                        if pid:
-                            picking_name = picking_data.get('name', '')
-                            if pid not in recepciones_preparadas_by_partner:
-                                recepciones_preparadas_by_partner[pid] = {}
-                            
-                            if picking_name not in recepciones_preparadas_by_partner[pid]:
-                                purchase_info = picking_data.get('purchase_id')
-                                oc_id = purchase_info[0] if isinstance(purchase_info, (list, tuple)) else purchase_info
-                                oc_data = oc_info_map.get(oc_id, {})
-                                
-                                recepciones_preparadas_by_partner[pid][picking_name] = {
-                                    'picking_id': picking_id,
-                                    'name': picking_name,
-                                    'oc_id': oc_id,
-                                    'oc_name': oc_data.get('name', ''),
-                                    'date': picking_data.get('scheduled_date'),
-                                    'currency_id': oc_data.get('currency_id'),
-                                    'monto_pendiente': 0,
-                                    'lineas_count': 0
-                                }
-                            
-                            recepciones_preparadas_by_partner[pid][picking_name]['monto_pendiente'] += monto_recibido
-                            recepciones_preparadas_by_partner[pid][picking_name]['lineas_count'] += 1
-                    
-        except Exception as e:
-            print(f"[ERROR PICKINGS] Error al obtener pickings: {e}")
-            # Continuar sin pickings, no bloquear la carga
+        recepciones_preparadas_by_partner = {}
+        # Dejamos la variable vacía para no romper el código posterior que la usa
 
 
         
@@ -694,27 +625,15 @@ class ComprasService:
                 monto_recepciones += oc_amount
                 num_recepciones += 1
             
-            # Recepciones PREPARADAS - también afectan la línea (con conversión de moneda)
+            # Recepciones PREPARADAS - NO SE USAN PARA EVITAR DUPLICACIÓN
+            # Ya están incluidas en qty_received de las líneas de PO
             preparadas_partner = recepciones_preparadas_by_partner.get(partner_id, {})
-            monto_preparadas = 0.0
+            monto_preparadas = 0.0  # Siempre 0 porque recepciones_preparadas_by_partner está vacío
             num_preparadas = 0
-            for pick_name, pick_data in preparadas_partner.items():
-                pick_amount = float(pick_data.get('monto_pendiente') or 0)
-                # Detectar moneda de la OC
-                pick_currency = pick_data.get('currency_id')
-                pick_currency_name = ''
-                if isinstance(pick_currency, (list, tuple)) and len(pick_currency) > 1:
-                    pick_currency_name = pick_currency[1]
-                elif isinstance(pick_currency, str):
-                    pick_currency_name = pick_currency
-                # Convertir si está en USD
-                if pick_currency_name and 'USD' in pick_currency_name.upper():
-                    pick_amount = CurrencyService.convert_usd_to_clp(pick_amount)
-                monto_preparadas += pick_amount
-                num_preparadas += 1
             
-            # Total usado = Facturas + Recepciones reales + Recepciones preparadas
-            monto_usado = monto_facturas + monto_recepciones + monto_preparadas
+            # Total usado = Facturas + Recepciones reales
+            # NO incluir monto_preparadas porque duplica las recepciones ya contadas en monto_recepciones
+            monto_usado = monto_facturas + monto_recepciones
             
             # Calcular disponible basado en uso real
             disponible = linea_total - monto_usado
@@ -783,47 +702,12 @@ class ComprasService:
                     'estado': 'Recepcionado sin facturar'
                 })
             
-            # Preparar detalle de recepciones HECHAS sin facturar (picking state=done)
-            for pick_name, pick_data in preparadas_partner.items():
-                pick_monto_original = float(pick_data.get('monto_pendiente') or 0)
-                pick_monto = pick_monto_original
-                pick_currency = pick_data.get('currency_id')
-                pick_currency_name = ''
-                if isinstance(pick_currency, (list, tuple)) and len(pick_currency) > 1:
-                    pick_currency_name = pick_currency[1]
-                elif isinstance(pick_currency, str):
-                    pick_currency_name = pick_currency
-                pick_is_usd = pick_currency_name and 'USD' in pick_currency_name.upper()
-                if pick_is_usd:
-                    pick_monto = CurrencyService.convert_usd_to_clp(pick_monto_original)
-                
-                detalle_facturas.append({
-                    'tipo': 'Recep. Hecha',
-                    'numero': pick_data.get('name', ''),
-                    'picking_id': pick_data.get('picking_id'),  # Para enlace Odoo
-                    'oc_id': pick_data.get('oc_id'),  # Para enlace Odoo  
-                    'oc_name': pick_data.get('oc_name', ''),
-                    'monto': round(pick_monto, 0),
-                    'monto_original': round(pick_monto_original, 2) if pick_is_usd else None,
-                    'moneda_original': 'USD' if pick_is_usd else 'CLP',
-                    'tipo_cambio': round(exchange_rate, 2) if pick_is_usd else None,
-                    'fecha': str(pick_data.get('date') or '')[:10],
-                    'fecha_vencimiento': '',
-                    'origen': pick_data.get('oc_name', ''),
-                    'estado': 'Hecho (pendiente factura)'
-                })
+            # Preparar detalle de recepciones HECHAS - ELIMINADO PARA EVITAR DUPLICACIÓN
+            # Ya están reflejadas en las recepciones sin facturar (purchase.order.line)
+            # (preparadas_partner siempre está vacío ahora)
             
             # Preparar detalle de OCs sin factura (TENTATIVAS) - solo informativo
-            # Excluir OCs que ya tienen recepciones preparadas para evitar duplicados
-            ocs_con_picking_preparado = set()
-            for pick_name, pick_data in preparadas_partner.items():
-                if pick_data.get('oc_id'):
-                    ocs_con_picking_preparado.add(pick_data['oc_id'])
-            
             for oc in ocs_partner:
-                # Si esta OC ya tiene picking preparado, saltar
-                if oc.get('id') in ocs_con_picking_preparado:
-                    continue
                 oc_monto_original = float(oc.get('amount_total') or 0)
                 oc_monto = oc_monto_original
                 oc_currency = oc.get('currency_id')

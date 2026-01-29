@@ -1,6 +1,10 @@
 """
 Tab: Líneas de Crédito
 Monitoreo de líneas de crédito activas y uso por proveedor.
+
+Calcula el uso real de la línea basado en:
+- Facturas pendientes de pago
+- Recepciones sin facturar (material recibido)
 """
 import streamlit as st
 import pandas as pd
@@ -26,7 +30,7 @@ def render(username: str, password: str):
             "📅 Calcular uso desde", 
             value=fecha_default,
             format="DD/MM/YYYY",
-            help="Solo considera facturas y OCs desde esta fecha para calcular el uso de línea"
+            help="Filtra facturas y recepciones desde esta fecha para el cálculo de uso de línea"
         )
     with col_btn:
         st.write("")
@@ -159,26 +163,25 @@ def _render_proveedor_card(prov):
                 st.success(estado_texto)
         
         st.markdown("---")
-        kp_cols = st.columns(6)
+        kp_cols = st.columns(5)
         with kp_cols[0]:
-            st.metric("Linea Total", fmt_moneda(prov['linea_total']))
+            st.metric("Línea Total", fmt_moneda(prov['linea_total']))
         with kp_cols[1]:
-            st.metric("Facturas", fmt_moneda(prov.get('monto_facturas', 0)), 
-                     delta=str(prov.get('num_facturas', 0)) + " pend.", delta_color="off")
+            st.metric("💰 Facturas", fmt_moneda(prov.get('monto_facturas', 0)), 
+                     delta=str(prov.get('num_facturas', 0)) + " pend.", delta_color="off",
+                     help="Facturas pendientes de pago")
         with kp_cols[2]:
-            monto_recep_total = prov.get('monto_recepciones', 0) + prov.get('monto_preparadas', 0)
-            num_recep_total = prov.get('num_recepciones', 0) + prov.get('num_preparadas', 0)
-            st.metric("Recepciones", fmt_moneda(monto_recep_total),
-                     delta=str(num_recep_total) + " recep.", delta_color="off")
+            st.metric("📦 Recepciones", fmt_moneda(prov.get('monto_recepciones', 0)),
+                     delta=str(prov.get('num_recepciones', 0)) + " OCs", delta_color="off",
+                     help="Material recibido pendiente de facturar")
         with kp_cols[3]:
-            st.metric("OCs Tentativas", fmt_moneda(prov.get('monto_ocs', 0)),
-                     delta=str(prov.get('num_ocs', 0)) + " OCs", delta_color="off")
+            st.metric("🔴 Total Usado", fmt_moneda(prov['monto_usado']),
+                     delta=str(int(pct)) + "%", delta_color="inverse",
+                     help="Facturas + Recepciones sin facturar")
         with kp_cols[4]:
-            st.metric("Total Usado", fmt_moneda(prov['monto_usado']),
-                     delta=str(int(pct)) + "%", delta_color="inverse")
-        with kp_cols[5]:
-            st.metric("Disponible", fmt_moneda(max(prov['disponible'], 0)),
-                     delta=str(int(pct_disp)) + "%", delta_color="normal")
+            st.metric("🟢 Disponible", fmt_moneda(max(prov['disponible'], 0)),
+                     delta=str(int(pct_disp)) + "%", delta_color="normal",
+                     help="Cupo disponible para nuevas compras")
         
         st.markdown("---")
         
@@ -190,8 +193,9 @@ def _render_proveedor_card(prov):
 
 
 def _render_detalle_compromisos(detalle):
-    """Renderiza tabla de compromisos (facturas + OCs)."""
+    """Renderiza tabla de compromisos (facturas + recepciones + OCs tentativas)."""
     st.markdown("##### 📋 Detalle de compromisos")
+    st.caption("💰 Facturas pendientes + 📦 Recepciones sin facturar + 📄 OCs tentativas (informativas)")
     df_det = pd.DataFrame(detalle)
     
     def format_monto_con_conversion(row):
@@ -202,9 +206,8 @@ def _render_detalle_compromisos(detalle):
     
     ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
     def get_odoo_link(row):
-        if row.get('picking_id'):
-            return f"{ODOO_BASE}id={row['picking_id']}&menu_id=350&cids=1&action=540&model=stock.picking&view_type=form"
-        elif row.get('oc_id'):
+        # Solo OCs tienen link (las recepciones se referencian por OC)
+        if row.get('oc_id'):
             return f"{ODOO_BASE}id={row['oc_id']}&menu_id=411&cids=1&action=627&model=purchase.order&view_type=form"
         return None
     
@@ -266,26 +269,35 @@ def _render_info_ayuda():
     """Renderiza información de ayuda."""
     with st.expander("ℹ️ ¿Cómo funciona?"):
         st.markdown("""
-        ### Líneas de Crédito
+        ### 📊 Líneas de Crédito
         
-        Este módulo monitorea proveedores con el campo `x_studio_linea_credito_activa = True`.
+        Este módulo monitorea proveedores con línea de crédito activa en Odoo.
         
         | Concepto | Descripción |
         |----------|-------------|
-        | **Línea Total** | Campo `x_studio_linea_credito_monto` del proveedor |
-        | **Facturas** | Facturas con `amount_residual > 0` (pendientes pago) |
-        | **Recep. Sin Fact.** | Recepciones reales (stock.move done) sin facturar |
-        | **OCs Tentativas** | OCs confirmadas sin factura (solo informativo) |
-        | **Usado** | Facturas + Recepciones reales (**no incluye OCs tentativas**) |
-        | **Disponible** | Línea Total - Usado |
+        | **Línea Total** | Monto máximo de crédito otorgado al proveedor |
+        | **💰 Facturas** | Facturas pendientes de pago (`amount_residual > 0`) |
+        | **📦 Recepciones** | Material recibido pendiente de facturar (de líneas de OC) |
+        | **📄 OCs Tentativas** | OCs sin recepción ni factura (solo informativo en detalle) |
+        | **🔴 Usado** | Facturas + Recepciones (**compromiso real**) |
+        | **🟢 Disponible** | Línea Total - Usado |
         
-        ### Alertas
+        ### 🚦 Alertas de Estado
         
-        - 🔴 **Sin cupo**: Disponible ≤ 0
-        - 🟡 **Cupo bajo**: Uso ≥ 80%
-        - 🟢 **Disponible**: Uso < 80%
+        - 🔴 **Sin cupo**: Disponible ≤ 0 (no se puede comprar más)
+        - 🟡 **Cupo bajo**: Uso ≥ 80% (próximo a agotar crédito)
+        - 🟢 **Disponible**: Uso < 80% (crédito saludable)
         
-        ### Objetivo
+        ### 💡 ¿Qué incluye "Recepciones sin facturar"?
         
-        Identificar qué facturas pagar primero para liberar cupo de crédito.
+        Se calcula desde las líneas de órdenes de compra:
+        - `qty_received`: Cantidad física recibida en bodega
+        - `qty_invoiced`: Cantidad ya facturada
+        - `Pendiente`: (qty_received - qty_invoiced) × precio_unitario
+        
+        Esto ya incluye TODAS las recepciones físicas realizadas, sin importar el estado del picking.
+        
+        ### 🎯 Objetivo
+        
+        Identificar proveedores críticos y qué facturas pagar para liberar cupo de crédito.
         """)

@@ -3,15 +3,22 @@ DEBUG: Analizar líneas de crédito y detectar montos absurdos
 Objetivo: Identificar qué tipo de documentos están generando montos incorrectos
 y cuándo debe o no cubrirse la línea de crédito.
 
-LÓGICA ACTUAL:
-- Uso = Facturas no pagadas + Recepciones sin facturar + Pickings done (sin facturar)
+LÓGICA CORREGIDA:
+- Uso = Facturas no pagadas + Recepciones sin facturar (desde purchase.order.line)
 - OCs tentativas son solo informativas, NO afectan el uso
 
-POSIBLES PROBLEMAS:
-1. price_unit en stock.move puede ser 0 o incorrecto
-2. Doble conteo: recepciones (purchase.order.line) vs pickings (stock.move)
-3. Sin filtro de fecha en pickings done
-4. Conversión USD incorrecta
+PROBLEMA IDENTIFICADO Y CORREGIDO:
+❌ ANTES: Se contaban recepciones (purchase.order.line) Y pickings done (stock.move)
+   Esto causaba DUPLICACIÓN porque qty_received de las líneas PO ya incluye los pickings done
+   Resultado: Porcentajes absurdos como 180036%, 431%, etc.
+
+✅ AHORA: Solo se cuentan recepciones desde purchase.order.line (qty_received - qty_invoiced)
+   Esto ya incluye TODAS las recepciones físicas realizadas
+   Los pickings done NO se cuentan porque ya están reflejados en qty_received
+
+NOTAS ADICIONALES:
+- price_unit en stock.move puede ser 0 o incorrecto (otra razón para no usarlos)
+- Conversión USD a CLP se hace para todos los montos en dólares
 """
 import sys
 import os
