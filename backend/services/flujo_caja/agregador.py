@@ -237,19 +237,16 @@ class AgregadorFlujo:
                                clasificar_fn, cuentas_info: Dict,
                                agrupacion: str = 'mensual') -> None:
         """
-        Procesa facturas en borrador para proyección.
+        Procesa facturas para proyección.
         
-        Args:
-            facturas: Lista de facturas draft
-            lineas: Diccionario {move_id: [lineas]}
-            clasificar_fn: Función de clasificación
-            cuentas_info: Info de cuentas {id: {code, name}}
-            agrupacion: 'mensual' o 'semanal'
+        - Facturas cliente (out_invoice): Usa amount_residual directo -> 1.1.1
+        - Facturas proveedor (in_invoice): Procesa por línea y cuenta
         """
         from .constants import CATEGORIA_NEUTRAL
         
         for factura in facturas:
             move_id = factura['id']
+            move_type = factura.get('move_type', '')
             fecha_proy = factura.get('invoice_date_due') or factura.get('invoice_date') or factura.get('date')
             
             if not fecha_proy:
@@ -268,7 +265,37 @@ class AgregadorFlujo:
             if mes_proy not in self.meses_lista:
                 continue
             
-            # Procesar líneas de la factura
+            # FACTURAS DE CLIENTE -> Usar amount_residual (monto pendiente)
+            if move_type in ['out_invoice', 'out_refund']:
+                # Usar amount_residual para posted, amount_total para draft
+                if factura.get('state') == 'posted':
+                    monto = factura.get('amount_residual', 0)
+                else:
+                    monto = factura.get('amount_total', 0)
+                
+                if monto == 0:
+                    continue
+                
+                # Para out_refund (notas de crédito), invertir signo
+                if move_type == 'out_refund':
+                    monto = -monto
+                
+                concepto_id = "1.1.1"
+                
+                # Acumular
+                if concepto_id not in self.montos_por_concepto_mes:
+                    self.montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in self.meses_lista}
+                
+                self.montos_por_concepto_mes[concepto_id][mes_proy] += monto
+                
+                # Trackear como "Facturas por cobrar"
+                codigo_cuenta = "CXC"
+                acc_display = "CXC Cuentas por Cobrar Proyectadas"
+                self._agregar_cuenta(concepto_id, codigo_cuenta, acc_display, monto, mes_proy, 0)
+                
+                continue  # No procesar líneas para facturas cliente
+            
+            # FACTURAS DE PROVEEDOR -> Procesar por línea y cuenta
             for linea in lineas.get(move_id, []):
                 acc_data = linea.get('account_id')
                 if not acc_data:
@@ -282,18 +309,14 @@ class AgregadorFlujo:
                 if codigo_cuenta.startswith('110') or codigo_cuenta.startswith('111'):
                     continue
                 
+                # Clasificar por cuenta
                 concepto_id, _ = clasificar_fn(codigo_cuenta)
                 if concepto_id is None or concepto_id == CATEGORIA_NEUTRAL:
                     continue
                 
                 # Calcular monto de efectivo
-                move_type = factura.get('move_type', '')
                 balance = linea.get('balance', 0)
-                
-                if move_type in ['out_invoice', 'out_refund']:
-                    monto_efectivo = -balance
-                else:
-                    monto_efectivo = balance
+                monto_efectivo = balance
                 
                 # Acumular
                 if concepto_id not in self.montos_por_concepto_mes:
@@ -304,24 +327,6 @@ class AgregadorFlujo:
                 # Trackear
                 acc_display = f"{codigo_cuenta} {cuenta.get('name', '')}"
                 self._agregar_cuenta(concepto_id, codigo_cuenta, acc_display, monto_efectivo, mes_proy, acc_id)
-                
-                # Etiqueta
-                etiqueta = linea.get('name', 'Sin etiqueta')
-                etiqueta_limpia = str(etiqueta)[:60].strip() if etiqueta else "Sin etiqueta"
-                
-                cuenta_data = self.cuentas_por_concepto[concepto_id][codigo_cuenta]
-                if 'etiquetas' not in cuenta_data:
-                    cuenta_data['etiquetas'] = {}
-                
-                if etiqueta_limpia not in cuenta_data['etiquetas']:
-                    cuenta_data['etiquetas'][etiqueta_limpia] = {
-                        'monto': 0.0,
-                        'montos_por_mes': {m: 0.0 for m in self.meses_lista}
-                    }
-                
-                cuenta_data['etiquetas'][etiqueta_limpia]['monto'] += monto_efectivo
-                if mes_proy in self.meses_lista:
-                    cuenta_data['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_proy] += monto_efectivo
     
     def obtener_resultados(self) -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict]]:
         """

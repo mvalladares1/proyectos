@@ -291,7 +291,9 @@ class OdooQueryManager:
     def get_facturas_draft(self, fecha_inicio: str, fecha_fin: str,
                           company_id: int = None) -> List[Dict]:
         """
-        Obtiene facturas en borrador para proyección.
+        Obtiene facturas para proyección:
+        - Facturas en borrador (draft)
+        - Facturas posted con payment_state pendiente (not_paid, in_payment, partial)
         
         Args:
             fecha_inicio: Fecha inicio
@@ -299,28 +301,42 @@ class OdooQueryManager:
             company_id: ID de compañía
             
         Returns:
-            Lista de facturas draft
+            Lista de facturas para proyección
         """
+        # Dominio: draft O (posted con payment pendiente)
+        # Usamos invoice_date_due para facturas pendientes
         domain = [
-            ['state', '=', 'draft'],
             ['move_type', 'in', ['out_invoice', 'in_invoice', 'out_refund', 'in_refund']],
-            ['date', '>=', fecha_inicio],
-            ['date', '<=', fecha_fin]
+            '|',
+            # Facturas draft
+            ['state', '=', 'draft'],
+            # Facturas posted pendientes de pago
+            '&',
+            ['state', '=', 'posted'],
+            ['payment_state', 'in', ['not_paid', 'in_payment', 'partial']]
         ]
         
         if company_id:
             domain.append(['company_id', '=', company_id])
         
+        # Filtro por fecha: usar invoice_date_due para proyección
+        domain_con_fecha = domain + [
+            '|',
+            '&', ['invoice_date_due', '>=', fecha_inicio], ['invoice_date_due', '<=', fecha_fin],
+            '&', ['date', '>=', fecha_inicio], ['date', '<=', fecha_fin]
+        ]
+        
         try:
             facturas = self.odoo.search_read(
                 'account.move',
-                domain,
-                ['id', 'move_type', 'invoice_date', 'invoice_date_due', 'line_ids', 'date'],
+                domain_con_fecha,
+                ['id', 'move_type', 'invoice_date', 'invoice_date_due', 'line_ids', 'date', 
+                 'state', 'payment_state', 'amount_total', 'amount_residual'],
                 limit=5000
             )
             return facturas or []
         except Exception as e:
-            print(f"[OdooQueryManager] Error obteniendo facturas draft: {e}")
+            print(f"[OdooQueryManager] Error obteniendo facturas para proyección: {e}")
             return []
     
     def get_lineas_facturas(self, line_ids: List[int]) -> List[Dict]:

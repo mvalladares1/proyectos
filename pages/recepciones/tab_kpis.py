@@ -809,81 +809,94 @@ def render(username: str, password: str):
                     )
 
             # Botón extra: descargar Excel DETALLADO (una fila por producto) desde el backend
-            det_col1, det_col2 = st.columns([1,3])
-            with det_col1:
-                # Inicializar estado
-                if 'excel_detallado_data' not in st.session_state:
-                    st.session_state.excel_detallado_data = None
-            
-                if st.button("📊 Generar Excel Detallado", type="primary", key="btn_generar_excel_det"):
-                    try:
-                        with st.spinner("Generando Excel detallado en el servidor..."):
-                            # Construir parámetros pasando las listas de filtros
-                            params_excel = {**params, 'include_prev_week': False, 'include_month_accum': False}
-
-                            # Convertir listas a strings separados por comas para query params
-                            if tipo_fruta_filtro:
-                                params_excel['tipo_fruta'] = ",".join(tipo_fruta_filtro) if isinstance(tipo_fruta_filtro, list) else tipo_fruta_filtro
-                            if clasif_filtro:
-                                params_excel['clasificacion'] = ",".join(clasif_filtro) if isinstance(clasif_filtro, list) else clasif_filtro
-                            if manejo_filtro:
-                                params_excel['manejo'] = ",".join(manejo_filtro) if isinstance(manejo_filtro, list) else manejo_filtro
-                            if productor_filtro:
-                                params_excel['productor'] = ",".join(productor_filtro) if isinstance(productor_filtro, list) else productor_filtro
-
-                            resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params=params_excel, timeout=180)
-
-                        if resp.status_code == 200:
-                            xlsx_bytes = resp.content
-                            fname = f"recepciones_detalle_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
-                            # Guardar en session_state
-                            st.session_state.excel_detallado_data = (xlsx_bytes, fname)
-                            st.success("✅ Excel generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
-                        else:
-                            st.error(f"Error al generar Excel detallado: {resp.status_code} - {resp.text}")
-                    except Exception as e:
-                        st.error(f"Error al solicitar Excel detallado: {e}")
-        
-            with det_col2:
-                # Mostrar botón de descarga si hay datos disponibles
-                if st.session_state.excel_detallado_data:
-                    xlsx_bytes, fname = st.session_state.excel_detallado_data
-                    st.download_button(
-                        "📥 Descargar Excel (Detallado - Por Producto)", 
-                        xlsx_bytes, 
-                        file_name=fname, 
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key="btn_download_excel_det"
-                    )
-                    # Botón para limpiar
-                    if st.button("🗑️ Limpiar", key="btn_clear_excel_det"):
+            @st.fragment
+            def render_excel_detallado():
+                """Fragment para generar Excel detallado sin hacer re-render de toda la página."""
+                det_col1, det_col2 = st.columns([1,3])
+                with det_col1:
+                    # Inicializar estado
+                    if 'excel_detallado_data' not in st.session_state:
                         st.session_state.excel_detallado_data = None
+                
+                    if st.button("📊 Generar Excel Detallado", type="primary", key="btn_generar_excel_det"):
+                        try:
+                            with st.spinner("Generando Excel detallado en el servidor..."):
+                                # Construir parámetros pasando las listas de filtros
+                                params_excel = {**params, 'include_prev_week': False, 'include_month_accum': False}
+
+                                # Convertir listas a strings separados por comas para query params
+                                if tipo_fruta_filtro:
+                                    params_excel['tipo_fruta'] = ",".join(tipo_fruta_filtro) if isinstance(tipo_fruta_filtro, list) else tipo_fruta_filtro
+                                if clasif_filtro:
+                                    params_excel['clasificacion'] = ",".join(clasif_filtro) if isinstance(clasif_filtro, list) else clasif_filtro
+                                if manejo_filtro:
+                                    params_excel['manejo'] = ",".join(manejo_filtro) if isinstance(manejo_filtro, list) else manejo_filtro
+                                if productor_filtro:
+                                    params_excel['productor'] = ",".join(productor_filtro) if isinstance(productor_filtro, list) else productor_filtro
+
+                                resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params=params_excel, timeout=180)
+
+                            if resp.status_code == 200:
+                                xlsx_bytes = resp.content
+                                fname = f"recepciones_detalle_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
+                                # Guardar en session_state
+                                st.session_state.excel_detallado_data = (xlsx_bytes, fname)
+                                st.success("✅ Excel generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
+                            else:
+                                st.error(f"Error al generar Excel detallado: {resp.status_code} - {resp.text}")
+                        except Exception as e:
+                            st.error(f"Error al solicitar Excel detallado: {e}")
+            
+                with det_col2:
+                    # Mostrar botón de descarga si hay datos disponibles
+                    if st.session_state.excel_detallado_data:
+                        xlsx_bytes, fname = st.session_state.excel_detallado_data
+                        st.download_button(
+                            "📥 Descargar Excel (Detallado - Por Producto)", 
+                            xlsx_bytes, 
+                            file_name=fname, 
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            key="btn_download_excel_det"
+                        )
+                        # Botón para limpiar
+                        if st.button("🗑️ Limpiar", key="btn_clear_excel_det"):
+                            st.session_state.excel_detallado_data = None
+            
+            # Renderizar fragment de Excel detallado
+            render_excel_detallado()
             
             # NUEVO: Botón extra para descargar Excel de DEFECTOS (mora y frambuesa)
             st.markdown("---")
-            st.subheader("📊 Reporte de Defectos (Mora y Frambuesa)")
             
-            def_col1, def_col2 = st.columns([1,3])
-            with def_col1:
-                # Inicializar estado
-                if 'excel_defectos_data' not in st.session_state:
-                    st.session_state.excel_defectos_data = None
+            @st.fragment
+            def render_excel_defectos():
+                """Fragment para generar Excel de defectos sin hacer re-render de toda la página."""
+                st.subheader("📊 Reporte de Defectos (Mora y Frambuesa)")
             
-                if st.button("🔬 Generar Reporte de Defectos", type="primary", key="btn_generar_excel_defectos"):
-                    try:
-                        with st.spinner("Generando reporte de defectos en el servidor..."):
-                            # Usar los mismos parámetros de filtro
-                            params_defectos = {
-                                'username': username,
-                                'password': password,
-                                'fecha_inicio': params['fecha_inicio'],
-                                'fecha_fin': params['fecha_fin'],
-                                'solo_hechas': params.get('solo_hechas', True),
-                            }
-                            
-                            # Pasar origen si existe
-                            if origen_filtro:
-                                params_defectos['origen'] = origen_filtro
+                def_col1, def_col2 = st.columns([1,3])
+                with def_col1:
+                    # Inicializar estado
+                    if 'excel_defectos_data' not in st.session_state:
+                        st.session_state.excel_defectos_data = None
+                
+                    if st.button("🔬 Generar Reporte de Defectos", type="primary", key="btn_generar_excel_defectos"):
+                        try:
+                            with st.spinner("Generando reporte de defectos en el servidor..."):
+                                # Obtener origen filtro desde session_state
+                                origen_filtro_usado = st.session_state.get('origen_filtro_usado', [])
+                                
+                                # Usar los mismos parámetros de filtro
+                                params_defectos = {
+                                    'username': username,
+                                    'password': password,
+                                    'fecha_inicio': params['fecha_inicio'],
+                                    'fecha_fin': params['fecha_fin'],
+                                    'solo_hechas': params.get('solo_hechas', True),
+                                }
+                                
+                                # Pasar origen si existe
+                                if origen_filtro_usado:
+                                    params_defectos['origen'] = ','.join(origen_filtro_usado)
                             
                             resp = requests.get(
                                 f"{API_URL}/api/v1/recepciones-mp/report-defectos.xlsx",
@@ -899,24 +912,26 @@ def render(username: str, password: str):
                             st.success("✅ Reporte de defectos generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
                         else:
                             st.error(f"Error al generar reporte de defectos: {resp.status_code} - {resp.text}")
-                    except Exception as e:
-                        st.error(f"Error al solicitar reporte de defectos: {e}")
-        
-            with def_col2:
-                # Mostrar botón de descarga si hay datos disponibles
-                if st.session_state.excel_defectos_data:
-                    xlsx_bytes, fname = st.session_state.excel_defectos_data
-                    st.download_button(
-                        "📥 Descargar Reporte de Defectos (Excel)", 
-                        xlsx_bytes, 
-                        file_name=fname, 
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key="btn_download_excel_defectos"
-                    )
-                    # Botón para limpiar
-                    if st.button("🗑️ Limpiar", key="btn_clear_excel_defectos"):
-                        st.session_state.excel_defectos_data = None
-                        st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al solicitar reporte de defectos: {e}")
+            
+                with def_col2:
+                    # Mostrar botón de descarga si hay datos disponibles
+                    if st.session_state.excel_defectos_data:
+                        xlsx_bytes, fname = st.session_state.excel_defectos_data
+                        st.download_button(
+                            "📥 Descargar Reporte de Defectos (Excel)", 
+                            xlsx_bytes, 
+                            file_name=fname, 
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            key="btn_download_excel_defectos"
+                        )
+                        # Botón para limpiar
+                        if st.button("🗑️ Limpiar", key="btn_clear_excel_defectos"):
+                            st.session_state.excel_defectos_data = None
+            
+            # Renderizar fragment de defectos
+            render_excel_defectos()
 
             st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
