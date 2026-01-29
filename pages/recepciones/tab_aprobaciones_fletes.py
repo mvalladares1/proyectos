@@ -12,7 +12,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from shared import format_currency
+from recepciones.shared import fmt_dinero
 
 # Configuración
 API_URL = "http://127.0.0.1:8000/api/v1"
@@ -157,14 +157,14 @@ def render_kpis_periodo(username, password):
             monto_total = kpis.get('monto_total', 0)
             st.metric(
                 "💰 Monto Total",
-                format_currency(monto_total, decimals=0)
+                fmt_dinero(monto_total, decimales=0)
             )
         
         with col5:
             promedio = kpis.get('promedio_por_oc', 0)
             st.metric(
                 "📊 Promedio/OC",
-                format_currency(promedio, decimals=0)
+                fmt_dinero(promedio, decimales=0)
             )
 
 
@@ -239,8 +239,8 @@ def render_tabla_aprobaciones(username, password):
             balance = ahorro_total - sobrecosto_total
             st.metric(
                 "💰 Balance Total",
-                format_currency(balance, decimals=0),
-                delta=f"Ahorro: {format_currency(ahorro_total, decimals=0)}" if balance > 0 else f"Sobrecosto: {format_currency(sobrecosto_total, decimals=0)}",
+                fmt_dinero(balance, decimales=0),
+                delta=f"Ahorro: {fmt_dinero(ahorro_total, decimales=0)}" if balance > 0 else f"Sobrecosto: {fmt_dinero(sobrecosto_total, decimales=0)}",
                 delta_color="normal" if balance >= 0 else "inverse"
             )
         
@@ -288,7 +288,7 @@ def render_tabla_aprobaciones(username, password):
                 color_negociacion = "orange"
         
         # Título del expander con link a Odoo
-        titulo_expander = f"{'✅' if oc['tiene_info_logistica'] else '❌'} {emoji_negociacion} **[{oc['oc_name']}]({oc['oc_url']})** - {oc['proveedor']} - {format_currency(oc['oc_amount'], decimals=0)}"
+        titulo_expander = f"{'✅' if oc['tiene_info_logistica'] else '❌'} {emoji_negociacion} **[{oc['oc_name']}]({oc['oc_url']})** - {oc['proveedor']} - {fmt_dinero(oc['oc_amount'], decimales=0)}"
         
         with st.expander(titulo_expander):
             col1, col2, col3 = st.columns([1, 3, 1])
@@ -319,14 +319,14 @@ def render_tabla_aprobaciones(username, password):
                     if oc.get('tipo_vehiculo'):
                         st.markdown(f"**🚛 Tipo Vehículo:** {oc['tipo_vehiculo']}")
                     
-                    st.markdown(f"**💰 Costo Real:** {format_currency(oc['costo_real'], decimals=0)}")
+                    st.markdown(f"**💰 Costo Real:** {fmt_dinero(oc['costo_real'], decimales=0)}")
                     
                     if oc['costo_ruta_negociado'] and oc['costo_ruta_negociado'] > 0:
-                        st.markdown(f"**💵 Costo Negociado:** {format_currency(oc['costo_ruta_negociado'], decimals=0)}")
+                        st.markdown(f"**💵 Costo Negociado:** {fmt_dinero(oc['costo_ruta_negociado'], decimales=0)}")
                     
                     # Análisis de desviación
                     if oc.get('costo_presupuestado'):
-                        st.markdown(f"**📊 Costo Presupuestado:** {format_currency(oc['costo_presupuestado'], decimals=0)}")
+                        st.markdown(f"**📊 Costo Presupuestado:** {fmt_dinero(oc['costo_presupuestado'], decimales=0)}")
                         
                         if oc.get('ruta_presupuesto_nombre'):
                             st.markdown(f"**📍 Ruta Presupuesto:** {oc['ruta_presupuesto_nombre']} ({oc['ruta_presupuesto_km']:.0f} km)")
@@ -334,13 +334,13 @@ def render_tabla_aprobaciones(username, password):
                         if oc.get('desviacion_pct') is not None:
                             desv = oc['desviacion_pct']
                             if oc['desviacion_favorable']:
-                                st.success(f"✅ **Desviación: {desv:+.1f}%** (Ahorro de {format_currency(oc['costo_presupuestado'] - oc['costo_real'], decimals=0)})")
+                                st.success(f"✅ **Desviación: {desv:+.1f}%** (Ahorro de {fmt_dinero(oc['costo_presupuestado'] - oc['costo_real'], decimales=0)})")
                             else:
-                                st.warning(f"⚠️ **Desviación: {desv:+.1f}%** (Sobrecosto de {format_currency(oc['costo_real'] - oc['costo_presupuestado'], decimals=0)})")
+                                st.warning(f"⚠️ **Desviación: {desv:+.1f}%** (Sobrecosto de {fmt_dinero(oc['costo_real'] - oc['costo_presupuestado'], decimales=0)})")
                     
                     if oc['cantidad_kg'] > 0:
                         st.markdown(f"**⚖️ Cantidad:** {oc['cantidad_kg']:,.0f} kg")
-                        st.markdown(f"**📊 Costo/kg:** {format_currency(oc['costo_por_kg'], decimals=2)}")
+                        st.markdown(f"**📊 Costo/kg:** {fmt_dinero(oc['costo_por_kg'], decimales=2)}")
                 else:
                     st.warning("⚠️ No hay información del sistema de logística para esta OC")
                 
@@ -353,7 +353,7 @@ def render_tabla_aprobaciones(username, password):
                         precio_unit = line.get('price_unit', 0)
                         subtotal = line.get('price_subtotal', 0)
                         
-                        st.markdown(f"  - {producto}: {cantidad} x {format_currency(precio_unit)} = {format_currency(subtotal)}")
+                        st.markdown(f"  - {producto}: {cantidad} x {fmt_dinero(precio_unit)} = {fmt_dinero(subtotal)}")
             
             with col3:
                 if st.button(f"✅ Aprobar", key=f"btn_aprobar_{oc['oc_id']}", type="primary"):
