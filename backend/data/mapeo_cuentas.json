@@ -247,6 +247,12 @@
       "nombre": "Intereses Leasing",
       "fecha_asignacion": "2026-01-05T14:10:00.000000",
       "usuario": "system"
+    },
+    "41010101": {
+      "concepto_id": "1.1.1",
+      "nombre": "Ingresos por Ventas de Productos Terminados",
+      "fecha_asignacion": "2026-01-29T11:00:00.000000",
+      "usuario": "system"
     }
   },
   "historial_cambios": [

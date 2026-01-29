@@ -22,6 +22,7 @@
     "cuentas_contrapartida": {
         "descripcion": "Cuentas de contrapartida a clasificar en IAS 7 (Proveedores, Préstamos, etc.)",
         "codigos": [
+            "41010101",
             "21010101",
             "21010102",
             "21010103",

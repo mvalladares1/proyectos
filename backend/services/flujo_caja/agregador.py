@@ -78,14 +78,21 @@ class AgregadorFlujo:
             if concepto_id is None:
                 continue
             
+            # Invertir signo para cuentas de ingreso (41) y costo (51)
+            # En contabilidad: ingresos son créditos (negativos), pero en flujo de efectivo
+            # representan entradas de dinero (positivos)
+            monto_efectivo = balance
+            if codigo_cuenta.startswith('41'):
+                monto_efectivo = -balance  # Invertir: crédito -> ingreso de efectivo
+            
             # Acumular monto
             if concepto_id not in self.montos_por_concepto_mes:
                 self.montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in self.meses_lista}
             
-            self.montos_por_concepto_mes[concepto_id][mes_str] += balance
+            self.montos_por_concepto_mes[concepto_id][mes_str] += monto_efectivo
             
             # Trackear cuenta para drill-down
-            self._agregar_cuenta(concepto_id, codigo_cuenta, acc_display, balance, mes_str, acc_data[0])
+            self._agregar_cuenta(concepto_id, codigo_cuenta, acc_display, monto_efectivo, mes_str, acc_data[0])
     
     def _agregar_cuenta(self, concepto_id: str, codigo: str, display: str, 
                        monto: float, mes: str, account_id: int):

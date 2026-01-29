@@ -865,13 +865,13 @@ def render(username: str, password: str):
             # Renderizar fragment de Excel detallado
             render_excel_detallado()
             
-            # NUEVO: Botón extra para descargar Excel de DEFECTOS (mora y frambuesa)
+            # NUEVO: Botón extra para descargar Reporte de Calidad Detallado
             st.markdown("---")
             
             @st.fragment
             def render_excel_defectos():
-                """Fragment para generar Excel de defectos sin hacer re-render de toda la página."""
-                st.subheader("📊 Reporte de Defectos (Mora y Frambuesa)")
+                """Fragment para generar Reporte de Calidad Detallado sin hacer re-render de toda la página."""
+                st.subheader("📊 Reporte de Calidad Detallado")
             
                 def_col1, def_col2 = st.columns([1,3])
                 with def_col1:
@@ -879,9 +879,9 @@ def render(username: str, password: str):
                     if 'excel_defectos_data' not in st.session_state:
                         st.session_state.excel_defectos_data = None
                 
-                    if st.button("🔬 Generar Reporte de Defectos", type="primary", key="btn_generar_excel_defectos"):
+                    if st.button("� Generar Reporte de Calidad Detallado", type="primary", key="btn_generar_excel_defectos"):
                         try:
-                            with st.spinner("Generando reporte de defectos en el servidor..."):
+                            with st.spinner("Generando reporte de calidad detallado en el servidor..."):
                                 # Obtener origen filtro desde session_state
                                 origen_filtro_usado = st.session_state.get('origen_filtro_usado', [])
                                 
@@ -898,29 +898,29 @@ def render(username: str, password: str):
                                 if origen_filtro_usado:
                                     params_defectos['origen'] = ','.join(origen_filtro_usado)
                             
-                            resp = requests.get(
-                                f"{API_URL}/api/v1/recepciones-mp/report-defectos.xlsx",
-                                params=params_defectos,
-                                timeout=180
-                            )
+                                resp = requests.get(
+                                    f"{API_URL}/api/v1/recepciones-mp/report-defectos.xlsx",
+                                    params=params_defectos,
+                                    timeout=180
+                                )
                         
-                        if resp.status_code == 200:
-                            xlsx_bytes = resp.content
-                            fname = f"recepciones_defectos_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
-                            # Guardar en session_state
-                            st.session_state.excel_defectos_data = (xlsx_bytes, fname)
-                            st.success("✅ Reporte de defectos generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
-                        else:
-                            st.error(f"Error al generar reporte de defectos: {resp.status_code} - {resp.text}")
+                            if resp.status_code == 200:
+                                xlsx_bytes = resp.content
+                                fname = f"recepciones_calidad_detallado_{params['fecha_inicio']}_a_{params['fecha_fin']}.xlsx".replace('/', '-')
+                                # Guardar en session_state
+                                st.session_state.excel_defectos_data = (xlsx_bytes, fname)
+                                st.success("✅ Reporte de calidad detallado generado correctamente. Haz clic en 'Descargar' para obtenerlo.")
+                            else:
+                                st.error(f"Error al generar reporte de calidad detallado: {resp.status_code} - {resp.text}")
                         except Exception as e:
-                            st.error(f"Error al solicitar reporte de defectos: {e}")
+                            st.error(f"Error al solicitar reporte de calidad detallado: {e}")
             
                 with def_col2:
                     # Mostrar botón de descarga si hay datos disponibles
                     if st.session_state.excel_defectos_data:
                         xlsx_bytes, fname = st.session_state.excel_defectos_data
                         st.download_button(
-                            "📥 Descargar Reporte de Defectos (Excel)", 
+                            "📥 Descargar Reporte de Calidad Detallado", 
                             xlsx_bytes, 
                             file_name=fname, 
                             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -930,7 +930,7 @@ def render(username: str, password: str):
                         if st.button("🗑️ Limpiar", key="btn_clear_excel_defectos"):
                             st.session_state.excel_defectos_data = None
             
-            # Renderizar fragment de defectos
+            # Renderizar fragment de calidad detallado
             render_excel_defectos()
 
             st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
