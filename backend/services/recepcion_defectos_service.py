@@ -69,10 +69,11 @@ def generar_reporte_defectos_excel(
         'deshidratado': _determinar_campo(campos_quality, ['x_studio_deshidratado']),
         'crumble': _determinar_campo(campos_quality, ['x_studio_crumble']),
         'dano_mecanico': _determinar_campo(campos_quality, ['x_studio_dao_mecanico', 'x_studio_dano_mecanico']),
-        'dano_insecto': _determinar_campo(campos_quality, ['x_studio_presencia_de_insectos', 'x_studio_totdaoinsecto']),
+        'dano_insecto': _determinar_campo(campos_quality, ['x_studio_presencia_de_insectos', 'x_studio_totdaoinsecto', 'x_studio_dao_insecto']),
         'deformes': _determinar_campo(campos_quality, ['x_studio_frutos_deformes', 'x_studio_deformes']),
         'fruta_verde': _determinar_campo(campos_quality, ['x_studio_fruta_verde']),
         'herida_partida': _determinar_campo(campos_quality, ['x_studio_heridapartidamolida', 'x_studio_heridapartiduramolida']),
+        'materias_extranas': _determinar_campo(campos_quality, ['x_studio_materias_extraas', 'x_studio_materias_extranas']),
     }
     
     # Mapeo de picking types
@@ -196,15 +197,19 @@ def generar_reporte_defectos_excel(
         movs_recepcion = [m for m in movimientos if m.get('picking_id') and m['picking_id'][0] == picking_id]
         qcs_recepcion = quality_by_picking.get(picking_id, [])
         
+        # Si NO hay quality checks, saltar esta recepción (es IQF/BLOCK sin control de calidad)
+        if not qcs_recepcion:
+            continue
+            
         # Para cada quality check (pallet)
         for qc in qcs_recepcion:
             n_pallet = _get_field(qc, campos_quality_usar.get('pallet'))
             calificacion = _get_field(qc, campos_quality_usar.get('clasificacion'))
             temperatura = _get_field(qc, campos_quality_usar.get('temperatura'), 0)
-            total_defectos_pct = _get_field(qc, campos_quality_usar.get('total_defectos'), 0)
+            total_defectos_gramos = _get_field(qc, campos_quality_usar.get('total_defectos'), 0)
             tipo_fruta_from_qc = _get_field(qc, campos_quality_usar.get('tipo_fruta_qc'))
             
-            # Defectos
+            # Defectos en gramos
             hongos = _get_field(qc, campos_quality_usar.get('hongos'), 0)
             inmadura = _get_field(qc, campos_quality_usar.get('inmadura'), 0)
             sobremadura = _get_field(qc, campos_quality_usar.get('sobremadura'), 0)
@@ -215,6 +220,14 @@ def generar_reporte_defectos_excel(
             deformes = _get_field(qc, campos_quality_usar.get('deformes'), 0)
             fruta_verde = _get_field(qc, campos_quality_usar.get('fruta_verde'), 0)
             herida_partida = _get_field(qc, campos_quality_usar.get('herida_partida'), 0)
+            materias_extranas = _get_field(qc, campos_quality_usar.get('materias_extranas'), 0)
+            
+            # Calcular % defectos si tenemos gramos de muestra
+            # Típicamente es de 500g o 1000g de muestra
+            total_defectos_pct = 0
+            if total_defectos_gramos > 0:
+                # Asumimos muestra de 1000g para calcular porcentaje
+                total_defectos_pct = round((total_defectos_gramos / 1000) * 100, 2)
             
             # Para cada producto
             for mov in movs_recepcion:
@@ -267,10 +280,11 @@ def generar_reporte_defectos_excel(
                     'Deshidratado (g)': deshidratado,
                     'Crumble (g)': crumble,
                     'Daño Mecánico (g)': dano_mecanico,
-                   'Daño Insecto (g)': dano_insecto,
+                    'Daño Insecto (g)': dano_insecto,
                     'Deformes (g)': deformes,
                     'Fruta Verde (g)': fruta_verde,
                     'Herida/Partida (g)': herida_partida,
+                    'Materias Extrañas (g)': materias_extranas,
                 })
     
     # Generar Excel

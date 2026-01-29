@@ -22,7 +22,8 @@ from backend.routers import (
     comercial,
     flujo_caja,
     reconciliacion,
-    odf_reconciliation
+    odf_reconciliation,
+    aprobaciones_fletes
 )
 
 # Crear aplicación
@@ -65,6 +66,7 @@ app.include_router(comercial.router)
 app.include_router(flujo_caja.router)
 app.include_router(reconciliacion.router)
 app.include_router(odf_reconciliation.router)
+app.include_router(aprobaciones_fletes.router)
 
 
 @app.get("/")
