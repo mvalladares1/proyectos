@@ -63,6 +63,8 @@ def generar_reporte_defectos_excel(
         'clasificacion': _determinar_campo(campos_quality, ['x_studio_calific_final', 'x_studio_calificacin_final']),
         'total_defectos': _determinar_campo(campos_quality, ['x_studio_total_def_calidad', 'x_studio_total_de_defectos_']),
         'temperatura': _determinar_campo(campos_quality, ['x_studio_temperatura']),
+        'pct_iqf': _determinar_campo(campos_quality, ['x_studio_total_iqf_', 'x_studio_total_iqf']),
+        'pct_block': _determinar_campo(campos_quality, ['x_studio_total_block_', 'x_studio_total_block']),
         'hongos': _determinar_campo(campos_quality, ['x_studio_hongos']),
         'inmadura': _determinar_campo(campos_quality, ['x_studio_inmadura']),
         'sobremadura': _determinar_campo(campos_quality, ['x_studio_sobremadura', 'x_studio_sobre_madura']),
@@ -208,6 +210,8 @@ def generar_reporte_defectos_excel(
             temperatura = _get_field(qc, campos_quality_usar.get('temperatura'), 0)
             total_defectos_gramos = _get_field(qc, campos_quality_usar.get('total_defectos'), 0)
             tipo_fruta_from_qc = _get_field(qc, campos_quality_usar.get('tipo_fruta_qc'))
+            pct_iqf = _get_field(qc, campos_quality_usar.get('pct_iqf'), 0)
+            pct_block = _get_field(qc, campos_quality_usar.get('pct_block'), 0)
             
             # Defectos en gramos
             hongos = _get_field(qc, campos_quality_usar.get('hongos'), 0)
@@ -272,6 +276,8 @@ def generar_reporte_defectos_excel(
                     'Kg': qty,
                     'N° Pallet': n_pallet,
                     'Calificación': calificacion,
+                    '% IQF': pct_iqf,
+                    '% BLOCK': pct_block,
                     'Temperatura °C': temperatura,
                     '% Defectos': total_defectos_pct,
                     'Hongos (g)': hongos,
