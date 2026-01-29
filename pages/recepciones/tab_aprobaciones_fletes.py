@@ -12,10 +12,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from recepciones.shared import fmt_dinero
-
-# Configuración
-API_URL = "http://127.0.0.1:8000/api/v1"
+from recepciones.shared import fmt_dinero, API_URL
 
 
 def render_tab(username, password):
@@ -37,7 +34,7 @@ def get_ocs_pendientes(username, password):
     """Obtiene OCs pendientes con datos consolidados"""
     try:
         response = requests.get(
-            f"{API_URL}/aprobaciones-fletes/pendientes",
+            f"{API_URL}/api/v1/aprobaciones-fletes/pendientes",
             params={'username': username, 'password': password},
             timeout=60
         )
@@ -59,7 +56,7 @@ def get_kpis_fletes(username, password, dias=30):
     """Obtiene KPIs de fletes"""
     try:
         response = requests.get(
-            f"{API_URL}/aprobaciones-fletes/kpis",
+            f"{API_URL}/api/v1/aprobaciones-fletes/kpis",
             params={'username': username, 'password': password, 'dias': dias},
             timeout=30
         )
@@ -79,7 +76,7 @@ def aprobar_oc(username, password, oc_id):
     """Aprueba una OC"""
     try:
         response = requests.post(
-            f"{API_URL}/aprobaciones-fletes/aprobar",
+            f"{API_URL}/api/v1/aprobaciones-fletes/aprobar",
             params={'username': username, 'password': password, 'oc_id': oc_id},
             timeout=30
         )
@@ -100,7 +97,7 @@ def aprobar_multiples_ocs(username, password, oc_ids):
             params[f'oc_ids'] = oc_id
         
         response = requests.post(
-            f"{API_URL}/aprobaciones-fletes/aprobar-multiples",
+            f"{API_URL}/api/v1/aprobaciones-fletes/aprobar-multiples",
             params=params,
             timeout=60
         )
