@@ -361,7 +361,10 @@ def _get_field(data_dict, field_name, default=''):
     if not field_name:
         return default
     value = data_dict.get(field_name, default)
-    return value if value else default
+    # No usar evaluación booleana para permitir 0, False, etc.
+    if value is None or value == '':
+        return default
+    return value
 
 
 def _extract_many2one(value):

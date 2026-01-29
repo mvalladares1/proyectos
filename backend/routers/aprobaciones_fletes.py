@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import List, Optional
 from backend.services.aprobaciones_fletes_service import AprobacionesFletesService
 
-router = APIRouter(prefix='/aprobaciones-fletes', tags=['Aprobaciones Fletes'])
+router = APIRouter(prefix='/api/v1/aprobaciones-fletes', tags=['Aprobaciones Fletes'])
 
 
 @router.get('/pendientes')
