@@ -10,6 +10,7 @@ import xmlrpc.client
 from datetime import datetime
 import time
 import requests
+import json
 from typing import Dict, List, Optional
 
 
@@ -57,6 +58,9 @@ def obtener_costes_rutas():
         response = requests.get(API_LOGISTICA_COSTES, timeout=10)
         if response.status_code == 200:
             data = response.json()
+            # Puede ser directamente una lista o un diccionario con 'value'
+            if isinstance(data, list):
+                return data
             return data.get('value', [])
         return []
     except Exception as e:
@@ -93,29 +97,61 @@ def calcular_comparacion_presupuesto(oc_monto: float, ruta_info: Optional[Dict],
     resultado['costo_calculado'] = ruta_info.get('total_cost', 0)
     resultado['kilometers'] = ruta_info.get('total_distance_km', 0)
     
-    # Buscar costo presupuestado en base de datos de rutas
+    # Buscar costo presupuestado - el campo 'routes' puede ser:
+    # 1. Un ID numérico (int)
+    # 2. Un string con ID numérico
+    # 3. Un JSON string con array de objetos [{"route_name": ..., "cost_type": ..., "cost_value": ...}]
     routes_field = ruta_info.get('routes', False)
-    if routes_field and isinstance(routes_field, (int, str)):
-        # Buscar en costes por ID de ruta
-        route_id = int(routes_field) if routes_field else None
-        if route_id:
-            for coste in costes_rutas:
-                if coste.get('id') == route_id:
-                    resultado['route_name'] = coste.get('route_name')
-                    # Determinar tipo de camión y costo presupuestado
-                    if coste.get('truck_8_cost'):
-                        resultado['costo_presupuestado'] = coste.get('truck_8_cost')
+    
+    if routes_field:
+        # Caso 1 y 2: Si es False, None o vacío, skip
+        if routes_field == False or routes_field == 'false':
+            pass
+        # Caso 3: Intentar parsear como JSON
+        elif isinstance(routes_field, str) and routes_field.startswith('['):
+            try:
+                routes_data = json.loads(routes_field)
+                if isinstance(routes_data, list) and len(routes_data) > 0:
+                    # Tomar el primer elemento del array
+                    route_info = routes_data[0]
+                    resultado['route_name'] = route_info.get('route_name')
+                    resultado['costo_presupuestado'] = route_info.get('cost_value')
+                    
+                    # Mapear cost_type a tipo de camión
+                    cost_type = route_info.get('cost_type', '')
+                    if cost_type == 'truck_8':
                         resultado['tipo_camion'] = '🚛 Camión 8 Ton'
-                    elif coste.get('truck_12_14_cost'):
-                        resultado['costo_presupuestado'] = coste.get('truck_12_14_cost')
+                    elif cost_type == 'truck_12_14':
                         resultado['tipo_camion'] = '🚚 Camión 12-14 Ton'
-                    elif coste.get('short_rampla_cost'):
-                        resultado['costo_presupuestado'] = coste.get('short_rampla_cost')
+                    elif cost_type == 'short_rampla':
                         resultado['tipo_camion'] = '🚐 Rampla Corta'
-                    elif coste.get('rampla_cost'):
-                        resultado['costo_presupuestado'] = coste.get('rampla_cost')
+                    elif cost_type == 'rampla':
                         resultado['tipo_camion'] = '🚛 Rampla'
-                    break
+            except (json.JSONDecodeError, KeyError, TypeError):
+                pass
+        # Caso 1 y 2: Es un ID numérico, buscar en costes_rutas
+        elif isinstance(routes_field, (int, str)):
+            try:
+                route_id = int(routes_field)
+                for coste in costes_rutas:
+                    if coste.get('id') == route_id:
+                        resultado['route_name'] = coste.get('route_name')
+                        # Determinar tipo de camión y costo presupuestado
+                        if coste.get('truck_8_cost'):
+                            resultado['costo_presupuestado'] = coste.get('truck_8_cost')
+                            resultado['tipo_camion'] = '🚛 Camión 8 Ton'
+                        elif coste.get('truck_12_14_cost'):
+                            resultado['costo_presupuestado'] = coste.get('truck_12_14_cost')
+                            resultado['tipo_camion'] = '🚚 Camión 12-14 Ton'
+                        elif coste.get('short_rampla_cost'):
+                            resultado['costo_presupuestado'] = coste.get('short_rampla_cost')
+                            resultado['tipo_camion'] = '🚐 Rampla Corta'
+                        elif coste.get('rampla_cost'):
+                            resultado['costo_presupuestado'] = coste.get('rampla_cost')
+                            resultado['tipo_camion'] = '🚛 Rampla'
+                        break
+            except (ValueError, TypeError):
+                pass
     
     # Calcular diferencias
     if resultado['costo_calculado'] and oc_monto:
