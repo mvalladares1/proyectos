@@ -172,21 +172,31 @@ def calcular_comparacion_presupuesto(oc_monto: float, ruta_info: Optional[Dict],
         if resultado['costo_calculado'] > 0:
             resultado['diferencia_porcentaje'] = (diferencia / resultado['costo_calculado']) * 100
             
-            # Alertas
-            if abs(resultado['diferencia_porcentaje']) > 20:
-                resultado['alerta'] = '🔴 Diferencia >20%'
-            elif abs(resultado['diferencia_porcentaje']) > 10:
-                resultado['alerta'] = '🟡 Diferencia >10%'
+            # Alertas: Positivo = SOBRECOSTO (malo), Negativo = AHORRO (bueno)
+            if resultado['diferencia_porcentaje'] > 20:
+                resultado['alerta'] = '🔴 Sobrecosto >20%'
+            elif resultado['diferencia_porcentaje'] > 10:
+                resultado['alerta'] = '🟡 Sobrecosto >10%'
+            elif resultado['diferencia_porcentaje'] < -20:
+                resultado['alerta'] = '🟢 Ahorro >20%'
+            elif resultado['diferencia_porcentaje'] < -10:
+                resultado['alerta'] = '🟢 Ahorro >10%'
             else:
                 resultado['alerta'] = '🟢 Dentro de rango'
     
     # Comparar con presupuesto
-    if resultado['costo_presupuestado'] and oc_monto:
+    if resultado['costo_presupuestado'] and oc_monto and resultado['costo_presupuestado'] > 0:
         dif_presupuesto = oc_monto - resultado['costo_presupuestado']
-        dif_presupuesto_pct = (dif_presupuesto / resultado['costo_presupuestado']) * 100 if resultado['costo_presupuestado'] > 0 else 0
+        dif_presupuesto_pct = (dif_presupuesto / resultado['costo_presupuestado']) * 100
         
-        if abs(dif_presupuesto_pct) > abs(resultado.get('diferencia_porcentaje', 0)):
-            resultado['alerta_presupuesto'] = f"{'🔴' if abs(dif_presupuesto_pct) > 20 else '🟡'} Vs presupuesto: {dif_presupuesto_pct:+.1f}%"
+        # Solo crear alerta si hay sobrecosto significativo (positivo)
+        if resultado.get('diferencia_porcentaje') is None or abs(dif_presupuesto_pct) > abs(resultado.get('diferencia_porcentaje', 0)):
+            if dif_presupuesto_pct > 20:
+                resultado['alerta_presupuesto'] = f"🔴 Sobrecosto vs presupuesto: {dif_presupuesto_pct:+.1f}%"
+            elif dif_presupuesto_pct > 10:
+                resultado['alerta_presupuesto'] = f"🟡 Sobrecosto vs presupuesto: {dif_presupuesto_pct:+.1f}%"
+            elif dif_presupuesto_pct < -10:
+                resultado['alerta_presupuesto'] = f"🟢 Ahorro vs presupuesto: {dif_presupuesto_pct:+.1f}%"
     
     return resultado
 
@@ -492,7 +502,7 @@ def render_tab(username, password):
         max_monto = st.number_input("💰 Monto Máximo", min_value=0, value=int(df['monto'].max()) if not df.empty else 10000000, step=100000, key="max_monto_fletes")
     
     with col8:
-        filtro_alerta = st.selectbox("⚠️ Alertas", ["Todas", "Solo con alertas", "Solo sin alertas"], key="filtro_alerta_fletes")
+        filtro_alerta = st.selectbox("⚠️ Estado Info", ["Todas", "Info Completa", "Info Incompleta"], key="filtro_alerta_fletes")
     
     # Aplicar filtros
     df_filtrado = df.copy()
@@ -515,10 +525,21 @@ def render_tab(username, password):
     
     df_filtrado = df_filtrado[(df_filtrado['monto'] >= min_monto) & (df_filtrado['monto'] <= max_monto)]
     
-    if filtro_alerta == "Solo con alertas":
-        df_filtrado = df_filtrado[df_filtrado['alerta'].notna() & (df_filtrado['alerta'].str.contains('🔴|🟡'))]
-    elif filtro_alerta == "Solo sin alertas":
-        df_filtrado = df_filtrado[df_filtrado['alerta'].isna() | (df_filtrado['alerta'].str.contains('🟢'))]
+    # Aplicar filtro de estado de información
+    if filtro_alerta == "Info Completa":
+        # Info completa = tiene ruta Y tiene presupuesto Y tiene tipo de camión
+        df_filtrado = df_filtrado[
+            (df_filtrado['tiene_ruta'] == True) & 
+            (df_filtrado['costo_presupuestado'].notna()) & 
+            (df_filtrado['tipo_camion'].notna())
+        ]
+    elif filtro_alerta == "Info Incompleta":
+        # Info incompleta = NO tiene ruta O NO tiene presupuesto O NO tiene tipo de camión
+        df_filtrado = df_filtrado[
+            (df_filtrado['tiene_ruta'] == False) | 
+            (df_filtrado['costo_presupuestado'].isna()) | 
+            (df_filtrado['tipo_camion'].isna())
+        ]
     
     st.markdown(f"**Mostrando {len(df_filtrado)} de {len(df)} OCs de Fletes**")
     
@@ -527,7 +548,7 @@ def render_tab(username, password):
     # Selector de vista
     modo_vista = st.radio(
         "Seleccionar Vista:",
-        ["📂 Expanders (Detallado)", "📋 Tabla Completa"],
+        ["📂 Expanders (Detallado)", "📋 Tabla con Selección Múltiple"],
         horizontal=True,
         key="modo_vista_fletes"
     )
@@ -535,7 +556,7 @@ def render_tab(username, password):
     st.markdown("---")
     
     # Vista de tabla o expanders
-    if modo_vista == "📋 Tabla Completa":
+    if modo_vista == "📋 Tabla con Selección Múltiple":
         render_vista_tabla_mejorada(df_filtrado, models, uid, username, password)
     else:
         render_vista_expanders(df_filtrado, models, uid, username, password)
@@ -546,8 +567,8 @@ def render_tab(username, password):
 
 
 def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, password):
-    """Vista de tabla con formato de dataframe real"""
-    st.markdown("### 📋 Tabla Completa de Aprobaciones")
+    """Vista de tabla con selección múltiple para aprobar"""
+    st.markdown("### 📋 Tabla con Aprobación Múltiple")
     
     if df.empty:
         st.info("No hay OCs que mostrar con los filtros aplicados")
@@ -556,24 +577,9 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
     # Preparar datos para tabla
     df_display = df.copy()
     
-    # Crear columnas para la tabla
-    df_tabla = pd.DataFrame({
-        'OC': df_display['oc_name'],
-        'Proveedor': df_display['proveedor'].str[:35],
-        'Monto OC': df_display['monto'].apply(lambda x: f"${x:,.0f}"),
-        'Costo Calculado': df_display['costo_calculado_str'],
-        'Presupuesto': df_display['costo_presupuestado_str'],
-        'Tipo Camión': df_display['tipo_camion_str'],
-        'Ruta': df_display['route_name_str'],
-        'Diferencia %': df_display['diferencia_porcentaje'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else 'Sin datos'),
-        'Alerta': df_display['alerta'].apply(lambda x: x if pd.notna(x) else '⚪ Sin info'),
-        'Estado': df_display['estado_actividad'],
-        'Fecha Límite': df_display['fecha_limite']
-    })
-    
     # Configurar paginación
-    items_por_pagina = 25
-    total_paginas = (len(df_tabla) - 1) // items_por_pagina + 1
+    items_por_pagina = 20
+    total_paginas = (len(df_display) - 1) // items_por_pagina + 1
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -587,20 +593,129 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
     
     inicio = (pagina_actual - 1) * items_por_pagina
     fin = inicio + items_por_pagina
-    df_pagina = df_tabla.iloc[inicio:fin]
+    df_pagina = df_display.iloc[inicio:fin]
     
     st.markdown(f"**Página {pagina_actual} de {total_paginas}**")
     
-    # Mostrar tabla
-    st.dataframe(
-        df_pagina,
-        use_container_width=True,
-        hide_index=True,
-        height=600
-    )
+    # Checkbox para seleccionar todas
+    seleccionar_todas = st.checkbox("✅ Seleccionar todas en esta página", key="select_all_table")
+    
+    # Lista para guardar las OCs seleccionadas
+    ocs_seleccionadas = []
+    
+    # Mostrar tabla con checkboxes
+    for idx, row in df_pagina.iterrows():
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([0.5, 1.2, 1.5, 1, 1, 1.2, 1, 0.8])
+        
+        with col1:
+            seleccionado = st.checkbox(
+                "",
+                value=seleccionar_todas,
+                key=f"check_{row['oc_name']}_{row['actividad_id']}"
+            )
+            if seleccionado:
+                ocs_seleccionadas.append(row)
+        
+        with col2:
+            st.markdown(f"**{row['oc_name']}**")
+        
+        with col3:
+            st.markdown(f"{row['proveedor'][:25]}")
+        
+        with col4:
+            st.markdown(f"${row['monto']:,.0f}")
+        
+        with col5:
+            st.markdown(row['costo_calculado_str'])
+        
+        with col6:
+            st.markdown(row['tipo_camion_str'])
+        
+        with col7:
+            estado_icon = "⏰" if row['estado_actividad'] == 'overdue' else "🔵"
+            st.markdown(f"{estado_icon}")
+        
+        with col8:
+            # Mostrar si tiene info completa
+            if row.get('tiene_ruta') and row.get('costo_presupuestado') and row.get('tipo_camion'):
+                st.markdown("✅")
+            else:
+                st.markdown("⚠️")
     
     st.markdown("---")
-    st.info("💡 Para aprobar o rechazar OCs individuales, usa la vista 'Expanders (Detallado)'")
+    
+    # Botones de acción
+    if len(ocs_seleccionadas) > 0:
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            total_monto = sum(oc['monto'] for oc in ocs_seleccionadas)
+            st.info(f"**{len(ocs_seleccionadas)} OCs seleccionadas** | Monto total: ${total_monto:,.0f}")
+        
+        with col2:
+            if st.button("✅ Aprobar Seleccionadas", type="primary", key="aprobar_seleccionadas"):
+                with st.spinner("Aprobando OCs seleccionadas..."):
+                    exitosas = 0
+                    fallidas = 0
+                    progress_bar = st.progress(0)
+                    
+                    for idx, oc in enumerate(ocs_seleccionadas):
+                        exito, _ = aprobar_actividad(models, uid, username, password, oc['actividad_id'])
+                        if exito:
+                            exitosas += 1
+                        else:
+                            fallidas += 1
+                        progress_bar.progress((idx + 1) / len(ocs_seleccionadas))
+                        time.sleep(0.2)
+                    
+                    progress_bar.empty()
+                    
+                    if fallidas == 0:
+                        st.success(f"✅ {exitosas} OCs aprobadas correctamente")
+                        st.balloons()
+                    else:
+                        st.warning(f"⚠️ {exitosas} OCs aprobadas, {fallidas} fallidas")
+                    
+                    st.cache_data.clear()
+                    time.sleep(2)
+                    st.rerun()
+        
+        with col3:
+            with st.expander("❌ Rechazar Seleccionadas"):
+                with st.form(key="form_rechazar_seleccionadas"):
+                    motivo = st.text_area("Motivo del rechazo:")
+                    rechazar = st.form_submit_button("Confirmar Rechazo")
+                    
+                    if rechazar:
+                        if not motivo:
+                            st.warning("⚠️ Debe ingresar un motivo")
+                        else:
+                            with st.spinner("Rechazando OCs..."):
+                                exitosas = 0
+                                fallidas = 0
+                                progress_bar = st.progress(0)
+                                
+                                for idx, oc in enumerate(ocs_seleccionadas):
+                                    exito, _ = rechazar_actividad(models, uid, username, password, oc['actividad_id'], motivo)
+                                    if exito:
+                                        exitosas += 1
+                                    else:
+                                        fallidas += 1
+                                    progress_bar.progress((idx + 1) / len(ocs_seleccionadas))
+                                    time.sleep(0.2)
+                                
+                                progress_bar.empty()
+                                st.success(f"❌ {exitosas} OCs rechazadas")
+                                st.cache_data.clear()
+                                time.sleep(2)
+                                st.rerun()
+    else:
+        st.info("👆 Selecciona OCs para aprobar o rechazar en lote")
+    
+    st.markdown("---")
+    
+    # Leyenda
+    st.caption("✅ = Info Completa | ⚠️ = Info Incompleta | ⏰ = Vencida | 🔵 = En plazo")
 
 
 def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
@@ -677,7 +792,7 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                         else:
                             st.caption("Distancia: No disponible")
                     
-                    if row.get('diferencia') is not None:
+                    if row.get('diferencia') is not None and row.get('diferencia_porcentaje') is not None:
                         dif_color = "green" if row['diferencia'] < 0 else "red"
                         st.markdown(f"Diferencia vs calculado: **:{dif_color}[${row['diferencia']:+,.0f}]** ({row['diferencia_porcentaje']:+.1f}%)")
                     
