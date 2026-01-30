@@ -96,45 +96,84 @@ class AprobacionesFletesService:
     
     def get_ocs_pendientes_aprobacion(self) -> List[Dict[str, Any]]:
         """
-        Obtiene OCs de TRANSPORTES + SERVICIOS pendientes de aprobación de Máximo.
-        Solo trae OCs en estado 'to approve' con activity asignada a Máximo.
+        Obtiene OCs de TRANSPORTES (FLETE) pendientes de aprobación de Máximo.
+        Solo trae OCs que tengan actividad de aprobación asignada a Máximo (ID: 241).
         """
-        # Buscar ID de Máximo Sepúlveda
-        usuarios = self.odoo.search_read(
-            'res.users',
-            [('login', 'ilike', 'msepulveda')],
-            ['id', 'name', 'login'],
-            limit=1
+        MAXIMO_ID = 241
+        
+        # Buscar actividades de aprobación de Máximo en purchase.order
+        actividades = self.odoo.search_read(
+            'mail.activity',
+            [
+                ('user_id', '=', MAXIMO_ID),
+                ('activity_type_id', '=', 9),  # Grant Approval
+                ('res_model', '=', 'purchase.order')
+            ],
+            ['res_id', 'summary', 'date_deadline'],
+            limit=500
         )
         
-        if not usuarios:
-            print("⚠️ No se encontró usuario Máximo Sepúlveda")
+        if not actividades:
+            print("ℹ️ No hay actividades pendientes para Máximo")
             return []
         
-        maximo_id = usuarios[0]['id']
-        print(f"✅ Usuario Máximo encontrado: ID {maximo_id} - {usuarios[0]['name']}")
+        # Extraer IDs de OCs
+        oc_ids = [act['res_id'] for act in actividades]
+        print(f"✅ {len(oc_ids)} OCs con actividad de Máximo")
         
-        # Buscar OCs pendientes
-        domain = [
-            ('state', 'in', ['to approve', 'sent']),  # Estados pendientes de aprobación
-            ('x_studio_selection_field_yUNPd', '=', 'TRANSPORTES'),
-            ('x_studio_categora_de_producto', '=', 'SERVICIOS'),
-        ]
-        
+        # Filtrar solo TRANSPORTES (categoría SERVICIOS + producto FLETE)
         campos = [
             'id', 'name', 'partner_id', 'amount_total', 'currency_id',
             'state', 'date_order', 'user_id', 'origin',
-            'x_studio_selection_field_yUNPd',
             'x_studio_categora_de_producto',
-            'notes',  # Puede contener info de la ruta
+            'notes', 'order_line'
         ]
         
-        ocs = self.odoo.search_read('purchase.order', domain, campos, limit=200)
+        ocs = self.odoo.search_read(
+            'purchase.order',
+            [
+                ('id', 'in', oc_ids),
+                ('x_studio_categora_de_producto', '=', 'SERVICIOS')
+            ],
+            campos,
+            limit=500
+        )
         
-        print(f"📋 OCs de TRANSPORTES + SERVICIOS encontradas: {len(ocs)}")
+        # Filtrar solo las que tienen productos FLETE
+        ocs_transportes = []
+        for oc in ocs:
+            if not oc.get('order_line'):
+                continue
+            
+            # Verificar si alguna línea tiene producto FLETE
+            tiene_flete = False
+            for line_id in oc['order_line']:
+                line = self.odoo.search_read(
+                    'purchase.order.line',
+                    [('id', '=', line_id)],
+                    ['product_id'],
+                    limit=1
+                )
+                
+                if line and line[0].get('product_id'):
+                    producto = self.odoo.search_read(
+                        'product.product',
+                        [('id', '=', line[0]['product_id'][0])],
+                        ['name'],
+                        limit=1
+                    )
+                    
+                    if producto and 'FLETE' in producto[0]['name'].upper():
+                        tiene_flete = True
+                        break
+            
+            if tiene_flete:
+                ocs_transportes.append(oc)
+        
+        print(f"📋 OCs de TRANSPORTES (FLETE) con actividad de Máximo: {len(ocs_transportes)}")
         
         # Enriquecer con información de líneas
-        for oc in ocs:
+        for oc in ocs_transportes:
             oc_id = oc['id']
             
             # Obtener líneas de la OC
@@ -147,7 +186,7 @@ class AprobacionesFletesService:
             
             oc['lines'] = lines
         
-        return ocs
+        return ocs_transportes
     
     def get_rutas_logistica(self, con_oc: bool = True) -> List[Dict[str, Any]]:
         """

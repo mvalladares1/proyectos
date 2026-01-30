@@ -437,7 +437,27 @@ class OdooQueryManager:
                     'lazy': False
                 }
             )
-            return grupos or []
+            
+            # Deduplicar/Agrupar manualmente para asegurar unicidad
+            # Clave: (account_id, name, period)
+            agrupados = {}
+            for g in (grupos or []):
+                acc_data = g.get('account_id')
+                if not acc_data: continue
+                acc_id = acc_data[0] if isinstance(acc_data, (list, tuple)) else acc_data
+                
+                name = g.get('name', '')
+                period = g.get(groupby_key, '')
+                
+                key = (acc_id, name, period)
+                
+                if key not in agrupados:
+                    agrupados[key] = g.copy()
+                else:
+                    # Sumar balance si ya existe
+                    agrupados[key]['balance'] = agrupados[key].get('balance', 0) + g.get('balance', 0)
+            
+            return list(agrupados.values())
         except Exception as e:
             print(f"[OdooQueryManager] Error obteniendo etiquetas: {e}")
             return []

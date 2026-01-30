@@ -1,387 +1,402 @@
 """
-Tab de Aprobaciones de Fletes para Máximo Sepúlveda.
-Consolida datos de Odoo + Sistema de Logística para mostrar:
-- OCs pendientes de aprobación
-- Costos reales vs presupuestados
-- % de desviación
-- KPIs de negociación
-- Aprobaciones masivas
+Tab de Aprobaciones de Fletes - Exclusivo para Maximo Sepúlveda y Felipe Horst
+Muestra únicamente OCs de FLETES/TRANSPORTES pendientes de aprobación
+Conecta directamente con Odoo sin pasar por el backend
 """
 
 import streamlit as st
 import pandas as pd
-import requests
-from datetime import datetime, timedelta
-from recepciones.shared import fmt_dinero, API_URL
+import xmlrpc.client
+from datetime import datetime
+import time
+
+
+URL = 'https://riofuturo.server98c6e.oerpondemand.net'
+DB = 'riofuturo-master'
+
+USUARIOS = {
+    'Maximo Sepúlveda': 241,
+    'Felipe Horst': 17,
+    'Francisco Luttecke': 258
+}
+
+
+def get_odoo_connection(username, password):
+    """Conexión a Odoo"""
+    try:
+        common = xmlrpc.client.ServerProxy(f'{URL}/xmlrpc/2/common')
+        uid = common.authenticate(DB, username, password, {})
+        models = xmlrpc.client.ServerProxy(f'{URL}/xmlrpc/2/object')
+        return models, uid
+    except Exception as e:
+        st.error(f"Error de conexión a Odoo: {e}")
+        return None, None
+
+
+@st.cache_data(ttl=60)
+def obtener_actividades_usuario(_models, _uid, username, password, user_id):
+    """Obtener todas las actividades pendientes de un usuario"""
+    try:
+        actividades = _models.execute_kw(
+            DB, _uid, password,
+            'mail.activity', 'search_read',
+            [[
+                ('user_id', '=', user_id),
+                ('res_model', '=', 'purchase.order'),
+                ('activity_type_id.name', 'in', ['Grant Approval', 'Approval'])
+            ]],
+            {'fields': ['id', 'res_id', 'res_name', 'activity_type_id', 'date_deadline', 'summary', 'state'], 'limit': 300}
+        )
+        return actividades
+    except Exception as e:
+        st.error(f"Error al obtener actividades: {e}")
+        return []
+
+
+@st.cache_data(ttl=60)
+def obtener_detalles_oc_fletes(_models, _uid, username, password, oc_ids):
+    """Obtener detalles de OCs - SOLO FLETES"""
+    if not oc_ids:
+        return []
+    
+    try:
+        ocs = _models.execute_kw(
+            DB, _uid, password,
+            'purchase.order', 'search_read',
+            [[('id', 'in', oc_ids)]],
+            {'fields': ['id', 'name', 'state', 'partner_id', 'amount_total', 
+                       'x_studio_selection_field_yUNPd', 'x_studio_categora_de_producto', 'create_date', 'user_id']}
+        )
+        
+        # Filtrar solo fletes
+        ocs_fletes = []
+        for oc in ocs:
+            lineas = _models.execute_kw(
+                DB, _uid, password,
+                'purchase.order.line', 'search_read',
+                [[('order_id', '=', oc['id'])]],
+                {'fields': ['product_id', 'name'], 'limit': 1}
+            )
+            
+            producto_nombre = ''
+            if lineas and lineas[0].get('product_id'):
+                producto_nombre = lineas[0]['product_id'][1]
+                oc['producto'] = producto_nombre
+            elif lineas and lineas[0].get('name'):
+                producto_nombre = lineas[0]['name']
+                oc['producto'] = producto_nombre
+            else:
+                oc['producto'] = 'N/A'
+            
+            # FILTRO: Solo fletes
+            es_flete = False
+            
+            if 'FLETE' in producto_nombre.upper() or 'TRANSPORTE' in producto_nombre.upper():
+                es_flete = True
+            
+            if oc.get('x_studio_categora_de_producto') == 'SERVICIOS':
+                area = oc.get('x_studio_selection_field_yUNPd', '')
+                if area and isinstance(area, (list, tuple)):
+                    area = area[1]
+                if 'TRANSPORTES' in str(area).upper():
+                    es_flete = True
+            
+            if es_flete:
+                ocs_fletes.append(oc)
+        
+        return ocs_fletes
+    except Exception as e:
+        st.error(f"Error al obtener detalles de OCs: {e}")
+        return []
+
+
+def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
+    """Obtener todas las actividades de una OC para ver el flujo"""
+    try:
+        actividades = models.execute_kw(
+            DB, uid, password,
+            'mail.activity', 'search_read',
+            [[
+                ('res_model', '=', 'purchase.order'),
+                ('res_id', '=', oc_id)
+            ]],
+            {'fields': ['id', 'user_id', 'activity_type_id', 'state', 'date_deadline', 'create_date']}
+        )
+        return actividades
+    except Exception as e:
+        return []
+
+
+def aprobar_actividad(models, uid, username, password, activity_id):
+    """Aprobar una actividad"""
+    try:
+        models.execute_kw(
+            DB, uid, password,
+            'mail.activity', 'action_feedback',
+            [[activity_id]],
+            {'feedback': 'Aprobado desde dashboard'}
+        )
+        return True, "Aprobación exitosa"
+    except Exception as e:
+        return False, str(e)
+
+
+def rechazar_actividad(models, uid, username, password, activity_id, motivo):
+    """Rechazar una actividad"""
+    try:
+        models.execute_kw(
+            DB, uid, password,
+            'mail.activity', 'action_feedback',
+            [[activity_id]],
+            {'feedback': f'RECHAZADO: {motivo}'}
+        )
+        return True, "Rechazo registrado"
+    except Exception as e:
+        return False, str(e)
 
 
 def render_tab(username, password):
     """Renderiza el tab de aprobaciones de fletes"""
     
-    st.header("✅ Aprobaciones de Órdenes de Compra - Fletes y Transportes")
+    st.header("🚚 Aprobaciones de Fletes y Transportes")
+    st.info("📦 Esta pestaña muestra únicamente Órdenes de Compra de FLETES y TRANSPORTES")
     
-    # KPIs del período
-    render_kpis_periodo(username, password)
-    
-    st.markdown("---")
-    
-    # Tabla de OCs pendientes con datos consolidados
-    render_tabla_aprobaciones(username, password)
-
-
-@st.cache_data(ttl=300)  # Cache 5 minutos
-def get_ocs_pendientes(username, password):
-    """Obtiene OCs pendientes con datos consolidados"""
-    try:
-        response = requests.get(
-            f"{API_URL}/api/v1/aprobaciones-fletes/pendientes",
-            params={'username': username, 'password': password},
-            timeout=60
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('data', [])
-        else:
-            st.error(f"Error al obtener OCs: {response.status_code}")
-            return []
-    
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
-        return []
-
-
-@st.cache_data(ttl=300)
-def get_kpis_fletes(username, password, dias=30):
-    """Obtiene KPIs de fletes"""
-    try:
-        response = requests.get(
-            f"{API_URL}/api/v1/aprobaciones-fletes/kpis",
-            params={'username': username, 'password': password, 'dias': dias},
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('kpis', {})
-        else:
-            return {}
-    
-    except Exception as e:
-        st.error(f"Error al obtener KPIs: {e}")
-        return {}
-
-
-def aprobar_oc(username, password, oc_id):
-    """Aprueba una OC"""
-    try:
-        response = requests.post(
-            f"{API_URL}/api/v1/aprobaciones-fletes/aprobar",
-            params={'username': username, 'password': password, 'oc_id': oc_id},
-            timeout=30
-        )
-        
-        return response.status_code == 200
-    
-    except Exception as e:
-        st.error(f"Error al aprobar OC: {e}")
-        return False
-
-
-def aprobar_multiples_ocs(username, password, oc_ids):
-    """Aprueba múltiples OCs"""
-    try:
-        # FastAPI espera lista en query params: oc_ids=1&oc_ids=2&oc_ids=3
-        params = {'username': username, 'password': password}
-        for oc_id in oc_ids:
-            params[f'oc_ids'] = oc_id
-        
-        response = requests.post(
-            f"{API_URL}/api/v1/aprobaciones-fletes/aprobar-multiples",
-            params=params,
-            timeout=60
-        )
-        
-        if response.status_code == 200:
-            return response.json().get('resultado', {})
-        else:
-            return None
-    
-    except Exception as e:
-        st.error(f"Error al aprobar OCs: {e}")
-        return None
-
-
-def render_kpis_periodo(username, password):
-    """Renderiza KPIs del período"""
-    
-    col1, col2 = st.columns([3, 1])
-    
+    # Selector de usuario
+    col1, col2 = st.columns([2, 1])
     with col1:
-        st.subheader("📊 KPIs del Período")
+        usuario_seleccionado = st.selectbox(
+            "Seleccionar Usuario:",
+            list(USUARIOS.keys()),
+            index=0,
+            key="usuario_fletes"
+        )
     
     with col2:
-        dias = st.selectbox("Período", [7, 15, 30, 60, 90], index=2, key="periodo_kpis")
-    
-    kpis = get_kpis_fletes(username, password, dias)
-    
-    if kpis:
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric(
-                "Total OCs",
-                kpis.get('total_ocs', 0),
-                help=f"OCs de fletes en los últimos {dias} días"
-            )
-        
-        with col2:
-            pendientes = kpis.get('pendientes', 0)
-            st.metric(
-                "⏳ Pendientes",
-                pendientes,
-                delta=f"-{pendientes}" if pendientes > 0 else "Al día",
-                delta_color="inverse"
-            )
-        
-        with col3:
-            st.metric(
-                "✅ Aprobadas",
-                kpis.get('aprobadas', 0)
-            )
-        
-        with col4:
-            monto_total = kpis.get('monto_total', 0)
-            st.metric(
-                "💰 Monto Total",
-                fmt_dinero(monto_total, decimales=0)
-            )
-        
-        with col5:
-            promedio = kpis.get('promedio_por_oc', 0)
-            st.metric(
-                "📊 Promedio/OC",
-                fmt_dinero(promedio, decimales=0)
-            )
-
-
-def render_tabla_aprobaciones(username, password):
-    """Renderiza tabla de OCs pendientes con aprobaciones"""
-    
-    st.subheader("📋 Órdenes de Compra Pendientes de Aprobación")
-    
-    # Botón para refrescar datos
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button("🔄 Refrescar Datos", key="btn_refresh"):
+        if st.button("🔄 Refrescar Datos", key="refresh_fletes"):
             st.cache_data.clear()
             st.rerun()
     
-    # Obtener datos
-    with st.spinner("Cargando órdenes pendientes..."):
-        ocs = get_ocs_pendientes(username, password)
+    user_id = USUARIOS[usuario_seleccionado]
     
-    if not ocs:
-        st.info("✅ No hay órdenes de compra pendientes de aprobación")
+    # Obtener conexión
+    models, uid = get_odoo_connection(username, password)
+    if not models or not uid:
+        st.error("No se pudo conectar a Odoo")
         return
     
-    st.info(f"📦 {len(ocs)} órdenes pendientes de aprobación")
+    # Obtener actividades pendientes
+    with st.spinner(f"Cargando aprobaciones de {usuario_seleccionado}..."):
+        actividades = obtener_actividades_usuario(models, uid, username, password, user_id)
+        
+        if not actividades:
+            st.success(f"✅ No hay aprobaciones de FLETES pendientes para {usuario_seleccionado}")
+            st.balloons()
+            return
+        
+        # Obtener detalles de OCs (filtradas por fletes)
+        oc_ids = [act['res_id'] for act in actividades]
+        ocs_detalles = obtener_detalles_oc_fletes(models, uid, username, password, oc_ids)
+        
+        if not ocs_detalles:
+            st.success(f"✅ No hay aprobaciones de FLETES pendientes para {usuario_seleccionado}")
+            st.info("ℹ️ Hay actividades pendientes pero no son de fletes/transportes")
+            st.balloons()
+            return
     
-    # Calcular estadísticas de negociación
-    ocs_con_desviacion = [oc for oc in ocs if oc.get('desviacion_pct') is not None]
+    # Crear diccionario de OCs por ID
+    ocs_dict = {oc['id']: oc for oc in ocs_detalles}
     
-    if ocs_con_desviacion:
-        negociaciones_favorables = sum(1 for oc in ocs_con_desviacion if oc['desviacion_favorable'])
-        negociaciones_desfavorables = len(ocs_con_desviacion) - negociaciones_favorables
-        desviacion_promedio = sum(oc['desviacion_pct'] for oc in ocs_con_desviacion) / len(ocs_con_desviacion)
-        ahorro_total = sum((oc['costo_presupuestado'] - oc['costo_real']) for oc in ocs_con_desviacion if oc['desviacion_favorable'])
-        sobrecosto_total = sum((oc['costo_real'] - oc['costo_presupuestado']) for oc in ocs_con_desviacion if not oc['desviacion_favorable'])
-        
-        st.markdown("### 📊 Análisis de Negociación")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric(
-                "OCs Analizadas",
-                len(ocs_con_desviacion),
-                help="OCs con información de costos presupuestados"
-            )
-        
-        with col2:
-            st.metric(
-                "✅ Negociaciones Favorables",
-                negociaciones_favorables,
-                delta=f"{(negociaciones_favorables/len(ocs_con_desviacion)*100):.0f}%",
-                delta_color="normal"
-            )
-        
-        with col3:
-            st.metric(
-                "⚠️ Negociaciones Desfavorables",
-                negociaciones_desfavorables,
-                delta=f"{(negociaciones_desfavorables/len(ocs_con_desviacion)*100):.0f}%",
-                delta_color="inverse"
-            )
-        
-        with col4:
-            color_desviacion = "normal" if desviacion_promedio <= 0 else "inverse"
-            st.metric(
-                "📈 Desviación Promedio",
-                f"{desviacion_promedio:+.1f}%",
-                delta="Favorable" if desviacion_promedio <= 0 else "Desfavorable",
-                delta_color=color_desviacion
-            )
-        
-        with col5:
-            balance = ahorro_total - sobrecosto_total
-            st.metric(
-                "💰 Balance Total",
-                fmt_dinero(balance, decimales=0),
-                delta=f"Ahorro: {fmt_dinero(ahorro_total, decimales=0)}" if balance > 0 else f"Sobrecosto: {fmt_dinero(sobrecosto_total, decimales=0)}",
-                delta_color="normal" if balance >= 0 else "inverse"
-            )
-        
-        st.markdown("---")
+    # Combinar datos
+    datos_completos = []
+    for act in actividades:
+        oc = ocs_dict.get(act['res_id'])
+        if oc:
+            proveedor = oc['partner_id'][1] if oc.get('partner_id') and isinstance(oc['partner_id'], (list, tuple)) else 'N/A'
+            area = oc.get('x_studio_selection_field_yUNPd')
+            if area and isinstance(area, (list, tuple)):
+                area = area[1]
+            
+            datos_completos.append({
+                'actividad_id': act['id'],
+                'oc_id': oc['id'],
+                'oc_name': oc['name'],
+                'proveedor': proveedor,
+                'monto': oc.get('amount_total', 0),
+                'area': str(area) if area else 'N/A',
+                'producto': oc.get('producto', 'N/A'),
+                'estado_oc': oc['state'],
+                'estado_actividad': act.get('state', 'N/A'),
+                'fecha_limite': act.get('date_deadline', 'N/A'),
+                'fecha_creacion': oc.get('create_date', 'N/A'),
+                'tipo_actividad': act['activity_type_id'][1] if act.get('activity_type_id') else 'N/A'
+            })
     
-    # Convertir a DataFrame para mostrar
-    df_data = []
-    for oc in ocs:
-        df_data.append({
-            'ID': oc['oc_id'],
-            'OC': oc['oc_name'],
-            'Estado': oc['oc_state'],
-            'Proveedor': oc['proveedor'],
-            'Monto': oc['oc_amount'],
-            'Fecha': oc['fecha_orden'][:10] if oc['fecha_orden'] else '',
-            'Ruta': oc['ruta_name'] if oc['tiene_info_logistica'] else 'N/A',
-            'Distancia (km)': f"{oc['distancia_km']:.1f}" if oc['tiene_info_logistica'] and oc['distancia_km'] > 0 else 'N/A',
-            'Costo Real': oc['costo_real'] if oc['tiene_info_logistica'] else 0,
-            'Info Logística': '✅' if oc['tiene_info_logistica'] else '❌',
-        })
+    df = pd.DataFrame(datos_completos)
     
-    df = pd.DataFrame(df_data)
+    # Métricas principales
+    st.markdown("### 📊 Resumen")
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Selector de OCs para aprobación masiva
-    st.markdown("### Selecciona OCs para aprobar")
+    with col1:
+        st.metric("Total OCs Fletes", len(df))
     
-    # Usar checkbox para selección masiva
-    if st.checkbox("Seleccionar todas", key="select_all"):
-        selected_ids = [oc['oc_id'] for oc in ocs]
-    else:
-        selected_ids = []
+    with col2:
+        total_monto = df['monto'].sum()
+        st.metric("Monto Total", f"${total_monto:,.0f}")
     
-    # Mostrar tabla con checkboxes individuales
-    for idx, oc in enumerate(ocs):
-        # Determinar emoji de estado de negociación
-        emoji_negociacion = ""
-        color_negociacion = "blue"
-        
-        if oc.get('desviacion_pct') is not None:
-            if oc['desviacion_favorable']:
-                emoji_negociacion = "✅💰"  # Negociación favorable
-                color_negociacion = "green"
-            else:
-                emoji_negociacion = "⚠️📈"  # Negociación desfavorable
-                color_negociacion = "orange"
-        
-        # Título del expander con link a Odoo
-        titulo_expander = f"{'✅' if oc['tiene_info_logistica'] else '❌'} {emoji_negociacion} **[{oc['oc_name']}]({oc['oc_url']})** - {oc['proveedor']} - {fmt_dinero(oc['oc_amount'], decimales=0)}"
-        
-        with st.expander(titulo_expander):
-            col1, col2, col3 = st.columns([1, 3, 1])
+    with col3:
+        vencidas = len(df[df['estado_actividad'] == 'overdue'])
+        st.metric("Vencidas", vencidas, delta=f"{vencidas} OCs" if vencidas > 0 else "0 OCs")
+    
+    with col4:
+        hoy = len(df[df['fecha_limite'] == datetime.now().strftime('%Y-%m-%d')])
+        st.metric("Vencen Hoy", hoy)
+    
+    st.markdown("---")
+    
+    # Filtros
+    st.markdown("### 🔍 Filtros")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        estados_disponibles = ['Todos'] + sorted(df['estado_actividad'].unique().tolist())
+        filtro_estado = st.selectbox("Estado", estados_disponibles, key="filtro_estado_fletes")
+    
+    with col2:
+        areas_disponibles = ['Todas'] + sorted(df['area'].unique().tolist())
+        filtro_area = st.selectbox("Área", areas_disponibles, key="filtro_area_fletes")
+    
+    with col3:
+        min_monto = st.number_input("Monto Mínimo", min_value=0, value=0, step=100000, key="min_monto_fletes")
+    
+    with col4:
+        max_monto = st.number_input("Monto Máximo", min_value=0, value=int(df['monto'].max()), step=100000, key="max_monto_fletes")
+    
+    # Aplicar filtros
+    df_filtrado = df.copy()
+    if filtro_estado != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['estado_actividad'] == filtro_estado]
+    if filtro_area != 'Todas':
+        df_filtrado = df_filtrado[df_filtrado['area'] == filtro_area]
+    df_filtrado = df_filtrado[(df_filtrado['monto'] >= min_monto) & (df_filtrado['monto'] <= max_monto)]
+    
+    st.markdown(f"**Mostrando {len(df_filtrado)} de {len(df)} OCs de Fletes**")
+    
+    st.markdown("---")
+    
+    # Tabla de OCs con acciones
+    st.markdown("### 📋 Órdenes de Compra Pendientes")
+    
+    # Ordenar por monto descendente
+    df_filtrado = df_filtrado.sort_values('monto', ascending=False)
+    
+    # Mostrar cada OC con opciones de aprobación
+    for idx, row in df_filtrado.iterrows():
+        with st.expander(f"🚚 **{row['oc_name']}** - {row['proveedor'][:40]} - **${row['monto']:,.0f}**"):
+            col1, col2 = st.columns([2, 1])
             
             with col1:
-                is_selected = st.checkbox(
-                    f"Seleccionar",
-                    value=oc['oc_id'] in selected_ids,
-                    key=f"check_oc_{oc['oc_id']}"
-                )
+                st.markdown(f"""
+                **Detalles de la Orden:**
+                - **OC:** {row['oc_name']}
+                - **Proveedor:** {row['proveedor']}
+                - **Monto:** ${row['monto']:,.0f}
+                - **Área:** {row['area']}
+                - **Estado OC:** {row['estado_oc']}
+                - **Estado Aprobación:** {row['estado_actividad']}
+                - **Fecha Límite:** {row['fecha_limite']}
+                - **Producto:** {row['producto'][:80]}
+                """)
                 
-                if is_selected and oc['oc_id'] not in selected_ids:
-                    selected_ids.append(oc['oc_id'])
-                elif not is_selected and oc['oc_id'] in selected_ids:
-                    selected_ids.remove(oc['oc_id'])
+                # Mostrar flujo de aprobaciones
+                with st.spinner("Cargando flujo de aprobaciones..."):
+                    todas_acts = obtener_todas_actividades_oc(models, uid, username, password, row['oc_id'])
+                    if todas_acts:
+                        st.markdown("**Flujo de Aprobaciones:**")
+                        for act in todas_acts:
+                            usuario = act['user_id'][1] if act.get('user_id') and isinstance(act['user_id'], (list, tuple)) else 'N/A'
+                            tipo = act['activity_type_id'][1] if act.get('activity_type_id') else 'N/A'
+                            estado_icon = "✅" if act['state'] == 'done' else "⏳" if act['state'] == 'overdue' else "🔵"
+                            st.markdown(f"  {estado_icon} {usuario} - {tipo} - {act['state']}")
             
             with col2:
-                # Información detallada
-                st.markdown(f"**Estado:** {oc['oc_state']}")
-                st.markdown(f"**Fecha:** {oc['fecha_orden'][:10] if oc['fecha_orden'] else 'N/A'}")
-                st.markdown(f"**Creado por:** {oc['usuario_creador']}")
+                st.markdown("**Acciones:**")
                 
-                if oc['tiene_info_logistica']:
-                    st.markdown(f"**🚚 Ruta:** {oc['ruta_name']}")
-                    st.markdown(f"**📏 Distancia:** {oc['distancia_km']:.1f} km")
-                    
-                    # Tipo de vehículo
-                    if oc.get('tipo_vehiculo'):
-                        st.markdown(f"**🚛 Tipo Vehículo:** {oc['tipo_vehiculo']}")
-                    
-                    st.markdown(f"**💰 Costo Real:** {fmt_dinero(oc['costo_real'], decimales=0)}")
-                    
-                    if oc['costo_ruta_negociado'] and oc['costo_ruta_negociado'] > 0:
-                        st.markdown(f"**💵 Costo Negociado:** {fmt_dinero(oc['costo_ruta_negociado'], decimales=0)}")
-                    
-                    # Análisis de desviación
-                    if oc.get('costo_presupuestado'):
-                        st.markdown(f"**📊 Costo Presupuestado:** {fmt_dinero(oc['costo_presupuestado'], decimales=0)}")
-                        
-                        if oc.get('ruta_presupuesto_nombre'):
-                            st.markdown(f"**📍 Ruta Presupuesto:** {oc['ruta_presupuesto_nombre']} ({oc['ruta_presupuesto_km']:.0f} km)")
-                        
-                        if oc.get('desviacion_pct') is not None:
-                            desv = oc['desviacion_pct']
-                            if oc['desviacion_favorable']:
-                                st.success(f"✅ **Desviación: {desv:+.1f}%** (Ahorro de {fmt_dinero(oc['costo_presupuestado'] - oc['costo_real'], decimales=0)})")
-                            else:
-                                st.warning(f"⚠️ **Desviación: {desv:+.1f}%** (Sobrecosto de {fmt_dinero(oc['costo_real'] - oc['costo_presupuestado'], decimales=0)})")
-                    
-                    if oc['cantidad_kg'] > 0:
-                        st.markdown(f"**⚖️ Cantidad:** {oc['cantidad_kg']:,.0f} kg")
-                        st.markdown(f"**📊 Costo/kg:** {fmt_dinero(oc['costo_por_kg'], decimales=2)}")
-                else:
-                    st.warning("⚠️ No hay información del sistema de logística para esta OC")
-                
-                # Mostrar líneas de la OC
-                if oc.get('lines'):
-                    st.markdown("**Líneas de la OC:**")
-                    for line in oc['lines']:
-                        producto = line.get('product_id', [False, 'N/A'])[1] if line.get('product_id') else line.get('name', 'N/A')
-                        cantidad = line.get('product_qty', 0)
-                        precio_unit = line.get('price_unit', 0)
-                        subtotal = line.get('price_subtotal', 0)
-                        
-                        st.markdown(f"  - {producto}: {cantidad} x {fmt_dinero(precio_unit)} = {fmt_dinero(subtotal)}")
-            
-            with col3:
-                if st.button(f"✅ Aprobar", key=f"btn_aprobar_{oc['oc_id']}", type="primary"):
+                # Botón aprobar
+                if st.button(f"✅ Aprobar", key=f"aprobar_flete_{row['actividad_id']}"):
                     with st.spinner("Aprobando..."):
-                        if aprobar_oc(username, password, oc['oc_id']):
-                            st.success(f"✅ OC {oc['oc_name']} aprobada")
+                        exito, mensaje = aprobar_actividad(models, uid, username, password, row['actividad_id'])
+                        if exito:
+                            st.success(f"✅ {row['oc_name']} aprobada correctamente")
                             st.cache_data.clear()
+                            time.sleep(1)
                             st.rerun()
                         else:
-                            st.error("❌ Error al aprobar OC")
-    
-    # Botón de aprobación masiva
-    st.markdown("---")
-    if selected_ids:
-        col1, col2, col3 = st.columns([1, 2, 2])
-        
-        with col1:
-            st.info(f"📦 {len(selected_ids)} OCs seleccionadas")
-        
-        with col2:
-            if st.button(f"✅ Aprobar {len(selected_ids)} OCs seleccionadas", type="primary", key="btn_aprobar_masivo"):
-                with st.spinner(f"Aprobando {len(selected_ids)} órdenes..."):
-                    resultado = aprobar_multiples_ocs(username, password, selected_ids)
+                            st.error(f"❌ Error: {mensaje}")
+                
+                # Botón rechazar
+                with st.form(key=f"form_rechazar_flete_{row['actividad_id']}"):
+                    motivo = st.text_area("Motivo del rechazo:", key=f"motivo_flete_{row['actividad_id']}")
+                    rechazar = st.form_submit_button("❌ Rechazar")
                     
-                    if resultado:
-                        st.success(f"✅ {resultado['aprobadas']} OCs aprobadas correctamente")
-                        
-                        if resultado['fallidas'] > 0:
-                            st.warning(f"⚠️ {resultado['fallidas']} OCs fallaron")
-                        
-                        st.cache_data.clear()
-                        st.rerun()
+                    if rechazar:
+                        if not motivo:
+                            st.warning("⚠️ Debe ingresar un motivo")
+                        else:
+                            with st.spinner("Rechazando..."):
+                                exito, mensaje = rechazar_actividad(models, uid, username, password, row['actividad_id'], motivo)
+                                if exito:
+                                    st.success(f"❌ {row['oc_name']} rechazada")
+                                    st.cache_data.clear()
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Error: {mensaje}")
+            
+            st.markdown("---")
+    
+    # Sección de aprobación masiva
+    st.markdown("---")
+    st.markdown("### ⚡ Aprobación Masiva")
+    st.warning("⚠️ Esta acción aprobará TODAS las OCs de fletes filtradas actualmente visibles")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info(f"Se aprobarán {len(df_filtrado)} OCs de fletes por un total de ${df_filtrado['monto'].sum():,.0f}")
+    
+    with col2:
+        if st.button("✅ Aprobar Todas", type="primary", key="aprobar_todas_fletes"):
+            with st.spinner("Aprobando todas las OCs..."):
+                exitosas = 0
+                fallidas = 0
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for idx, (index, row) in enumerate(df_filtrado.iterrows()):
+                    status_text.text(f"Aprobando {row['oc_name']}...")
+                    exito, _ = aprobar_actividad(models, uid, username, password, row['actividad_id'])
+                    if exito:
+                        exitosas += 1
                     else:
-                        st.error("❌ Error en aprobación masiva")
+                        fallidas += 1
+                    
+                    progress_bar.progress((idx + 1) / len(df_filtrado))
+                    time.sleep(0.2)
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+                if fallidas == 0:
+                    st.success(f"✅ {exitosas} OCs aprobadas correctamente")
+                    st.balloons()
+                else:
+                    st.warning(f"⚠️ {exitosas} OCs aprobadas, {fallidas} fallidas")
+                
+                st.cache_data.clear()
+                time.sleep(2)
+                st.rerun()
+    
+    # Footer
+    st.markdown("---")
+    st.markdown(f"*Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")

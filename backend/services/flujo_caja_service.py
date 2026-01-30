@@ -448,6 +448,9 @@ class FlujoCajaService:
         # 7. Procesar etiquetas
         try:
             account_ids_to_query = set()
+            
+            etiquetas = self.odoo_manager.get_etiquetas_por_mes(asientos_ids, list(cuentas_efectivo_ids) + list(cuentas_monitoreadas), agrupacion)
+            agregador.procesar_etiquetas(etiquetas)
             _, cuentas_por_concepto = agregador.obtener_resultados()
             for concepto_id, cuentas in cuentas_por_concepto.items():
                 for codigo, cuenta_data in cuentas.items():
