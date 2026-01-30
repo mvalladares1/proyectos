@@ -232,7 +232,7 @@ def obtener_detalles_oc_fletes(_models, _uid, username, password, oc_ids):
             DB, _uid, password,
             'purchase.order', 'search_read',
             [[('id', 'in', oc_ids)]],
-            {'fields': ['id', 'name', 'state', 'partner_id', 'amount_total', 
+            {'fields': ['id', 'name', 'state', 'partner_id', 'amount_untaxed', 
                        'x_studio_selection_field_yUNPd', 'x_studio_categora_de_producto', 
                        'create_date', 'user_id', 'date_order']}
         )
@@ -416,14 +416,14 @@ def render_tab(username, password):
             
             # Buscar en logística
             ruta_info = buscar_ruta_en_logistica(oc['name'], rutas_logistica)
-            comparacion = calcular_comparacion_presupuesto(oc.get('amount_total', 0), ruta_info, costes_rutas)
+            comparacion = calcular_comparacion_presupuesto(oc.get('amount_untaxed', 0), ruta_info, costes_rutas)
             
             datos_completos.append({
                 'actividad_id': act['id'],
                 'oc_id': oc['id'],
                 'oc_name': oc['name'],
                 'proveedor': proveedor,
-                'monto': oc.get('amount_total', 0),
+                'monto': oc.get('amount_untaxed', 0),
                 'area': str(area) if area else 'N/A',
                 'producto': oc.get('producto', 'N/A'),
                 'estado_oc': oc['state'],
@@ -577,9 +577,29 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
     # Preparar datos para tabla
     df_display = df.copy()
     
+    # Agregar columna de info completa
+    df_display['info_completa'] = df_display.apply(
+        lambda x: '✅' if (x['tiene_ruta'] and pd.notna(x['costo_presupuestado']) and pd.notna(x['tipo_camion'])) else '⚠️',
+        axis=1
+    )
+    
+    # Crear dataframe para mostrar
+    df_tabla = pd.DataFrame({
+        'OC': df_display['oc_name'],
+        'Proveedor': df_display['proveedor'].str[:30],
+        'Monto OC': df_display['monto'].apply(lambda x: f"${x:,.0f}"),
+        'Costo Calc.': df_display['costo_calculado_str'],
+        'Presupuesto': df_display['costo_presupuestado_str'],
+        'Tipo Camión': df_display['tipo_camion_str'].str[:20],
+        'Alerta': df_display['alerta'].fillna('⚪'),
+        'Estado': df_display['estado_actividad'].apply(lambda x: '⏰' if x == 'overdue' else '🔵'),
+        'Info': df_display['info_completa'],
+        'ID': df_display['actividad_id']  # Oculto pero necesario
+    })
+    
     # Configurar paginación
-    items_por_pagina = 20
-    total_paginas = (len(df_display) - 1) // items_por_pagina + 1
+    items_por_pagina = 25
+    total_paginas = (len(df_tabla) - 1) // items_por_pagina + 1
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -593,54 +613,44 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
     
     inicio = (pagina_actual - 1) * items_por_pagina
     fin = inicio + items_por_pagina
-    df_pagina = df_display.iloc[inicio:fin]
+    df_pagina = df_tabla.iloc[inicio:fin]
     
     st.markdown(f"**Página {pagina_actual} de {total_paginas}**")
     
-    # Checkbox para seleccionar todas
-    seleccionar_todas = st.checkbox("✅ Seleccionar todas en esta página", key="select_all_table")
+    # Mostrar tabla
+    st.dataframe(
+        df_pagina.drop(columns=['ID']),  # No mostrar ID
+        use_container_width=True,
+        hide_index=True,
+        height=600
+    )
     
-    # Lista para guardar las OCs seleccionadas
-    ocs_seleccionadas = []
+    st.markdown("---")
     
-    # Mostrar tabla con checkboxes
+    # Selección de OCs para aprobar
+    st.markdown("#### 🎯 Seleccionar OCs para Aprobar/Rechazar")
+    
+    # Crear lista de OCs disponibles en esta página
+    ocs_disponibles = []
     for idx, row in df_pagina.iterrows():
-        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([0.5, 1.2, 1.5, 1, 1, 1.2, 1, 0.8])
-        
-        with col1:
-            seleccionado = st.checkbox(
-                "",
-                value=seleccionar_todas,
-                key=f"check_{row['oc_name']}_{row['actividad_id']}"
-            )
-            if seleccionado:
-                ocs_seleccionadas.append(row)
-        
-        with col2:
-            st.markdown(f"**{row['oc_name']}**")
-        
-        with col3:
-            st.markdown(f"{row['proveedor'][:25]}")
-        
-        with col4:
-            st.markdown(f"${row['monto']:,.0f}")
-        
-        with col5:
-            st.markdown(row['costo_calculado_str'])
-        
-        with col6:
-            st.markdown(row['tipo_camion_str'])
-        
-        with col7:
-            estado_icon = "⏰" if row['estado_actividad'] == 'overdue' else "🔵"
-            st.markdown(f"{estado_icon}")
-        
-        with col8:
-            # Mostrar si tiene info completa
-            if row.get('tiene_ruta') and row.get('costo_presupuestado') and row.get('tipo_camion'):
-                st.markdown("✅")
-            else:
-                st.markdown("⚠️")
+        oc_original = df_display[df_display['actividad_id'] == row['ID']].iloc[0]
+        ocs_disponibles.append({
+            'label': f"{row['OC']} - {row['Proveedor']} - {row['Monto OC']}",
+            'data': oc_original
+        })
+    
+    # Multiselect para elegir OCs
+    ocs_seleccionadas_labels = st.multiselect(
+        "Selecciona las OCs que deseas aprobar o rechazar:",
+        [oc['label'] for oc in ocs_disponibles],
+        key="multiselect_ocs"
+    )
+    
+    # Obtener los datos de las OCs seleccionadas
+    ocs_seleccionadas = [
+        oc['data'] for oc in ocs_disponibles 
+        if oc['label'] in ocs_seleccionadas_labels
+    ]
     
     st.markdown("---")
     
