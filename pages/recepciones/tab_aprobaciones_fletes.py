@@ -76,12 +76,12 @@ def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optio
     return None
 
 
-def calcular_comparacion_presupuesto(oc_monto: float, ruta_info: Optional[Dict], costes_rutas: List[Dict]) -> Dict:
+def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, ruta_info: Optional[Dict], costes_rutas: List[Dict]) -> Dict:
     """Calcular comparación entre monto OC y presupuesto de logística"""
     resultado = {
         'tiene_ruta': False,
-        'costo_calculado': None,
-        'costo_calculado_str': '⚠️ No registrada en logística',
+        'costo_calculado': costo_lineas_odoo,  # Costo desde líneas de Odoo (PxQ)
+        'costo_calculado_str': f"${costo_lineas_odoo:,.0f}" if costo_lineas_odoo else '⚠️ Sin líneas',
         'costo_presupuestado': None,
         'costo_presupuestado_str': '⚠️ Sin presupuesto',
         'tipo_camion': None,
@@ -98,8 +98,6 @@ def calcular_comparacion_presupuesto(oc_monto: float, ruta_info: Optional[Dict],
         return resultado
     
     resultado['tiene_ruta'] = True
-    resultado['costo_calculado'] = ruta_info.get('total_cost', 0)
-    resultado['costo_calculado_str'] = f"${resultado['costo_calculado']:,.0f}" if resultado['costo_calculado'] else '⚠️ Sin costo'
     resultado['kilometers'] = ruta_info.get('total_distance_km', 0)
     resultado['route_name_str'] = 'Procesando...'
     
@@ -263,12 +261,12 @@ def obtener_detalles_oc_fletes(_models, _uid, username, password, oc_ids):
                 })
                 continue
             
-            # Obtener producto/servicio
+            # Obtener producto/servicio y calcular costo desde líneas
             lineas = _models.execute_kw(
                 DB, _uid, password,
                 'purchase.order.line', 'search_read',
                 [[('order_id', '=', oc['id'])]],
-                {'fields': ['product_id', 'name'], 'limit': 1}
+                {'fields': ['product_id', 'name', 'price_unit', 'product_qty', 'price_subtotal']}
             )
             
             if lineas and lineas[0].get('product_id'):
@@ -277,6 +275,9 @@ def obtener_detalles_oc_fletes(_models, _uid, username, password, oc_ids):
                 oc['producto'] = lineas[0]['name']
             else:
                 oc['producto'] = 'N/A'
+            
+            # Calcular costo desde líneas (PxQ)
+            oc['costo_lineas'] = sum(linea.get('price_subtotal', 0) for linea in lineas)
             
             ocs_fletes.append(oc)
         
@@ -416,7 +417,12 @@ def render_tab(username, password):
             
             # Buscar en logística
             ruta_info = buscar_ruta_en_logistica(oc['name'], rutas_logistica)
-            comparacion = calcular_comparacion_presupuesto(oc.get('amount_untaxed', 0), ruta_info, costes_rutas)
+            comparacion = calcular_comparacion_presupuesto(
+                oc.get('amount_untaxed', 0), 
+                oc.get('costo_lineas', 0),
+                ruta_info, 
+                costes_rutas
+            )
             
             datos_completos.append({
                 'actividad_id': act['id'],
