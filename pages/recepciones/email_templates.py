@@ -7,6 +7,16 @@ from datetime import datetime
 from typing import Dict
 
 
+def formato_numero_chileno(numero: float, decimales: int = 0) -> str:
+    """Formatea número con separador de miles chileno (punto) y decimal (coma)"""
+    if decimales == 0:
+        formato = f"{numero:,.0f}"
+    else:
+        formato = f"{numero:,.{decimales}f}"
+    # Reemplazar separadores: coma por punto (miles) y punto por coma (decimal)
+    return formato.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
 def get_proforma_email_template(
     transportista: str,
     fecha_desde: str,
@@ -241,23 +251,23 @@ def get_proforma_email_template(
                     
                     <div class="summary-item">
                         <span class="summary-label">🛣️ Kilómetros Totales Recorridos:</span>
-                        <span class="summary-value">{total_kms:,.0f} km</span>
+                        <span class="summary-value">{formato_numero_chileno(total_kms, 0)} km</span>
                     </div>
                     
                     <div class="summary-item">
                         <span class="summary-label">⚖️ Carga Total Transportada:</span>
-                        <span class="summary-value">{total_kilos:,.1f} kg</span>
+                        <span class="summary-value">{formato_numero_chileno(total_kilos, 1)} kg</span>
                     </div>
                     
                     <div class="summary-item">
                         <span class="summary-label">💵 Costo Promedio por Kilómetro:</span>
-                        <span class="summary-value">${(total_costo / total_kms):,.0f}/km</span>
+                        <span class="summary-value">${formato_numero_chileno(total_costo / total_kms, 0)}/km</span>
                     </div>
                     
                     <!-- Total destacado -->
                     <div class="total-box">
                         <span class="total-label">MONTO TOTAL:</span>
-                        <span class="total-value">${total_costo:,.0f}</span>
+                        <span class="total-value">${formato_numero_chileno(total_costo, 0)}</span>
                     </div>
                 </div>
                 
@@ -368,9 +378,9 @@ def get_proforma_email_template_simple(
                 <h3>Resumen del Período</h3>
                 <ul>
                     <li><strong>Cantidad de Órdenes de Compra:</strong> {cant_ocs}</li>
-                    <li><strong>Total Kilómetros:</strong> {total_kms:,.0f} km</li>
-                    <li><strong>Total Kilos:</strong> {total_kilos:,.1f} kg</li>
-                    <li><strong>Monto Total:</strong> ${total_costo:,.0f}</li>
+                    <li><strong>Total Kilómetros:</strong> {formato_numero_chileno(total_kms, 0)} km</li>
+                    <li><strong>Total Kilos:</strong> {formato_numero_chileno(total_kilos, 1)} kg</li>
+                    <li><strong>Monto Total:</strong> ${formato_numero_chileno(total_costo, 0)}</li>
                 </ul>
             </div>
             

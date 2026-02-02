@@ -21,6 +21,16 @@ API_LOGISTICA_RUTAS = 'https://riofuturoprocesos.com/api/logistica/rutas'
 API_LOGISTICA_COSTES = 'https://riofuturoprocesos.com/api/logistica/db/coste-rutas'
 
 
+def formato_numero_chileno(numero: float, decimales: int = 0) -> str:
+    """Formatea número con separador de miles chileno (punto) y decimal (coma)"""
+    if decimales == 0:
+        formato = f"{numero:,.0f}"
+    else:
+        formato = f"{numero:,.{decimales}f}"
+    # Reemplazar separadores: coma por punto (miles) y punto por coma (decimal)
+    return formato.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
 def get_odoo_connection(username, password):
     """Conexión a Odoo"""
     try:
@@ -50,6 +60,68 @@ def obtener_rutas_logistica():
     except Exception as e:
         st.warning(f"No se pudo conectar al sistema de logística: {e}")
         return []
+
+
+def obtener_kg_de_oc_mp(numero_ruta: str, rutas_logistica: List[Dict]) -> Optional[float]:
+    """Obtiene los kg de la OC de MP asociada a una ruta de transporte
+    
+    Flujo:
+    OC Flete (OC11476) -> Número Ruta (RT00259) -> OC MP (OC11427) -> Kg reales
+    """
+    try:
+        # Buscar la ruta por su número
+        for ruta in rutas_logistica:
+            ruta_name = ruta.get('ruta_name', '') or ruta.get('name', '')
+            
+            if numero_ruta and numero_ruta in ruta_name:
+                # Extraer kg de la carga asociada
+                total_qnt = ruta.get('total_qnt', 0)
+                if total_qnt and total_qnt > 0:
+                    return float(total_qnt)
+                
+                # Intentar obtener de las cargas individuales
+                cargas = ruta.get('loads', [])
+                if cargas:
+                    total_kg = sum(float(c.get('quantity', 0)) for c in cargas if isinstance(cargas, list))
+                    if total_kg > 0:
+                        return total_kg
+        
+        return None
+    except Exception as e:
+        return None
+
+
+def obtener_nombre_ruta_real(ruta_data: Optional[Dict]) -> str:
+    """Extrae el nombre real de la ruta desde los datos de logística"""
+    if not ruta_data:
+        return 'Sin ruta'
+    
+    try:
+        # Intentar obtener de routes field
+        routes_field = ruta_data.get('routes', False)
+        if routes_field and isinstance(routes_field, str) and routes_field.startswith('['):
+            routes_data = json.loads(routes_field)
+            if isinstance(routes_data, list) and len(routes_data) > 0:
+                route_info = routes_data[0]
+                route_name = route_info.get('route_name', '')
+                if route_name:
+                    return route_name
+        
+        # Fallback: construir desde origen/destino
+        origen = ruta_data.get('origin', '') or ruta_data.get('origen', '')
+        destino = ruta_data.get('destination', '') or ruta_data.get('destino', '')
+        
+        if origen and destino:
+            return f"{origen} - {destino}"
+        
+        # Último fallback: nombre de ruta
+        ruta_name = ruta_data.get('ruta_name', '') or ruta_data.get('name', '')
+        if ruta_name:
+            return ruta_name
+        
+        return 'Sin ruta'
+    except:
+        return 'Sin ruta'
 
 
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
@@ -178,10 +250,10 @@ def generar_pdf_proforma(datos_consolidados: Dict, fecha_desde: str, fecha_hasta
                 oc_data['oc_name'],
                 oc_data['fecha'],
                 oc_data['ruta'][:25] if oc_data['ruta'] else 'Sin ruta',  # Truncar si es muy largo
-                f"{oc_data['kms']:.0f}" if oc_data['kms'] else '0',
-                f"{oc_data['kilos']:.1f}" if oc_data['kilos'] else '0',
-                f"${oc_data['costo']:,.0f}",
-                f"${oc_data['costo_por_km']:.0f}" if oc_data['costo_por_km'] else '$0',
+                formato_numero_chileno(oc_data['kms'], 0) if oc_data['kms'] else '0',
+                formato_numero_chileno(oc_data['kilos'], 1) if oc_data['kilos'] else '0',
+                f"${formato_numero_chileno(oc_data['costo'], 0)}",
+                f"${formato_numero_chileno(oc_data['costo_por_km'], 0)}" if oc_data['costo_por_km'] else '$0',
                 oc_data['tipo_camion'][:15] if oc_data['tipo_camion'] else 'N/A'
             ])
         
@@ -191,10 +263,10 @@ def generar_pdf_proforma(datos_consolidados: Dict, fecha_desde: str, fecha_hasta
             'TOTALES',
             '',
             '',
-            f"{data['totales']['kms']:.0f}",
-            f"{data['totales']['kilos']:.1f}",
-            f"${data['totales']['costo']:,.0f}",
-            f"${promedio_km:.0f}",
+            formato_numero_chileno(data['totales']['kms'], 0),
+            formato_numero_chileno(data['totales']['kilos'], 1),
+            f"${formato_numero_chileno(data['totales']['costo'], 0)}",
+            f"${formato_numero_chileno(promedio_km, 0)}",
             ''
         ])
         
@@ -236,7 +308,7 @@ def generar_pdf_proforma(datos_consolidados: Dict, fecha_desde: str, fecha_hasta
         
         # Info adicional
         story.append(Spacer(1, 0.3*inch))
-        info_text = f"Total de OCs: {len(data['ocs'])} | Total Kms: {data['totales']['kms']:,.0f} | Total Kilos: {data['totales']['kilos']:,.1f}"
+        info_text = f"Total de OCs: {len(data['ocs'])} | Total Kms: {formato_numero_chileno(data['totales']['kms'], 0)} | Total Kilos: {formato_numero_chileno(data['totales']['kilos'], 1)}"
         story.append(Paragraph(info_text, subtitle_style))
     
     # Construir PDF
@@ -342,7 +414,7 @@ def render(username: str, password: str):
         return
     
     # Filtros
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
         fecha_desde = st.date_input(
@@ -358,12 +430,21 @@ def render(username: str, password: str):
             key="proforma_fecha_hasta"
         )
     
+    with col3:
+        st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
+        cargar_datos = st.button("🔄 Cargar Datos", type="primary", use_container_width=True)
+    
     # Convertir a string
     fecha_desde_str = fecha_desde.strftime('%Y-%m-%d')
     fecha_hasta_str = fecha_hasta.strftime('%Y-%m-%d')
     
+    # Solo cargar datos si se presiona el botón
+    if not cargar_datos:
+        st.info("👆 Selecciona el rango de fechas y presiona **Cargar Datos** para comenzar")
+        return
+    
     # Obtener datos
-    with st.spinner("Cargando OCs de transportes..."):
+    with st.spinner("Cargando OCs de transportes y datos de logística..."):
         ocs = obtener_ocs_transportes(models, uid, username, password, fecha_desde_str, fecha_hasta_str)
         rutas_logistica = obtener_rutas_logistica()
     
@@ -414,21 +495,35 @@ def render(username: str, password: str):
         ruta_info = buscar_ruta_en_logistica(oc['name'], rutas_logistica)
         
         kms = ruta_info.get('total_distance_km', 0) if ruta_info else 0
-        kilos = ruta_info.get('total_qnt', 0) if ruta_info else 0  # Campo correcto de la API
         costo = oc['costo_lineas']
         costo_por_km = (costo / kms) if kms > 0 else 0
         
-        # Obtener nombre de ruta
-        ruta_nombre = 'Sin ruta'
+        # Obtener número de ruta y buscar kg en OC de MP
+        numero_ruta = ruta_info.get('ruta_name', '') if ruta_info else ''
+        kilos = 0
+        if ruta_info:
+            # Intentar obtener kg de la OC de MP asociada a la ruta
+            kilos_mp = obtener_kg_de_oc_mp(numero_ruta, rutas_logistica)
+            if kilos_mp > 0:
+                kilos = kilos_mp
+            else:
+                # Fallback al total_qnt del sistema de logística
+                kilos = ruta_info.get('total_qnt', 0)
+        
+        # Obtener nombre de ruta real de la app logística y tipo de camión
+        nombre_ruta_logistica = 'Sin nombre'
         tipo_camion = 'N/A'
         if ruta_info:
+            # Usar la función para obtener nombre de ruta real desde la app logística
+            nombre_ruta_logistica = obtener_nombre_ruta_real(ruta_info)
+            
+            # Obtener tipo de camión
             routes_field = ruta_info.get('routes', False)
             if routes_field and isinstance(routes_field, str) and routes_field.startswith('['):
                 try:
                     routes_data = json.loads(routes_field)
                     if isinstance(routes_data, list) and len(routes_data) > 0:
                         route_info = routes_data[0]
-                        ruta_nombre = route_info.get('route_name', 'Sin nombre')
                         cost_type = route_info.get('cost_type', '')
                         if cost_type == 'truck_8':
                             tipo_camion = '🚛 Camión 8 Ton'
@@ -446,7 +541,8 @@ def render(username: str, password: str):
             'OC': oc['name'],
             'Fecha': oc['date_order'][:10] if oc.get('date_order') else 'N/A',
             'Transportista': transportista,
-            'Ruta': ruta_nombre,
+            'Ruta': nombre_ruta_logistica,
+            'Número Ruta': numero_ruta if numero_ruta else 'N/A',
             'Kms': kms,
             'Kilos': kilos,
             'Costo': costo,
@@ -456,6 +552,13 @@ def render(username: str, password: str):
         })
     
     df = pd.DataFrame(datos_tabla)
+    
+    # Crear versión con formato chileno para visualización
+    df_display = df.copy()
+    df_display['Kms'] = df_display['Kms'].apply(lambda x: formato_numero_chileno(x, 0))
+    df_display['Kilos'] = df_display['Kilos'].apply(lambda x: formato_numero_chileno(x, 1))
+    df_display['Costo'] = df_display['Costo'].apply(lambda x: f"${formato_numero_chileno(x, 0)}")
+    df_display['$/km'] = df_display['$/km'].apply(lambda x: f"${formato_numero_chileno(x, 0)}")
     
     # Detectar datos faltantes
     def detectar_datos_faltantes(df_data):
@@ -505,26 +608,43 @@ def render(username: str, password: str):
     
     with tab_select:
         st.info("👉 Usa este modo para seleccionar OCs que ya tienen todos los datos completos")
-        edited_df = st.data_editor(
-            df,
+        
+        # Botón seleccionar todas
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 4])
+        with col_btn1:
+            if st.button("✅ Seleccionar Todas", use_container_width=True):
+                df_display['Sel'] = True
+                st.rerun()
+        with col_btn2:
+            if st.button("❌ Deseleccionar Todas", use_container_width=True):
+                df_display['Sel'] = False
+                st.rerun()
+        
+        edited_df_display = st.data_editor(
+            df_display,
             column_config={
                 'Sel': st.column_config.CheckboxColumn('Sel', default=False),
                 'OC': st.column_config.TextColumn('OC', width='small'),
                 'Fecha': st.column_config.TextColumn('Fecha', width='small'),
                 'Transportista': st.column_config.TextColumn('Transportista', width='medium'),
                 'Ruta': st.column_config.TextColumn('Ruta', width='medium'),
-                'Kms': st.column_config.NumberColumn('Kms', format='%.0f'),
-                'Kilos': st.column_config.NumberColumn('Kilos', format='%.2f'),
-                'Costo': st.column_config.NumberColumn('Costo', format='$%.0f'),
-                '$/km': st.column_config.NumberColumn('$/km', format='$%.0f'),
+                'Número Ruta': st.column_config.TextColumn('Número Ruta', width='small'),
+                'Kms': st.column_config.TextColumn('Kms', width='small'),
+                'Kilos': st.column_config.TextColumn('Kilos', width='small'),
+                'Costo': st.column_config.TextColumn('Costo', width='medium'),
+                '$/km': st.column_config.TextColumn('$/km', width='small'),
                 'Tipo Camión': st.column_config.TextColumn('Tipo Camión', width='medium'),
                 '_oc_id': None  # Ocultar
             },
-            disabled=['OC', 'Fecha', 'Transportista', 'Ruta', 'Kms', 'Kilos', 'Costo', '$/km', 'Tipo Camión'],
+            disabled=['OC', 'Fecha', 'Transportista', 'Ruta', 'Número Ruta', 'Kms', 'Kilos', 'Costo', '$/km', 'Tipo Camión'],
             hide_index=True,
             key='editor_proforma_simple',
             use_container_width=True
         )
+        
+        # Sincronizar selección con df original
+        df['Sel'] = edited_df_display['Sel']
+        edited_df = df
     
     with tab_editor:
         st.info("✏️ Usa este editor para **completar datos faltantes** antes de generar la proforma")
@@ -549,7 +669,8 @@ def render(username: str, password: str):
                 'OC': st.column_config.TextColumn('OC', width='small', disabled=True),
                 'Fecha': st.column_config.TextColumn('Fecha', width='small', disabled=True),
                 'Transportista': st.column_config.TextColumn('Transportista', width='medium', disabled=True),
-                'Ruta': st.column_config.TextColumn('Ruta', width='medium', help='Editable: Ingresa la ruta completa'),
+                'Ruta': st.column_config.TextColumn('Ruta', width='medium', help='Editable: Nombre completo de la ruta'),
+                'Número Ruta': st.column_config.TextColumn('Número Ruta', width='small', help='Editable: Número de ruta (ej: RT00259)'),
                 'Kms': st.column_config.NumberColumn('Kms', format='%.0f', help='Editable: Kilómetros del viaje'),
                 'Kilos': st.column_config.NumberColumn('Kilos', format='%.1f', help='Editable: Kilos transportados'),
                 'Costo': st.column_config.NumberColumn('Costo', format='$%.0f', help='Editable: Costo total del flete'),
@@ -614,7 +735,7 @@ def render(username: str, password: str):
                 ocs_transp = seleccionados[seleccionados['Transportista'] == transportista]
                 
                 st.markdown(f"#### 🚛 {transportista}")
-                st.markdown(f"**{len(ocs_transp)} OCs** | **{ocs_transp['Kms'].sum():,.0f} km** | **{ocs_transp['Kilos'].sum():,.1f} kg** | **${ocs_transp['Costo'].sum():,.0f}**")
+                st.markdown(f"**{len(ocs_transp)} OCs** | **{formato_numero_chileno(ocs_transp['Kms'].sum(), 0)} km** | **{formato_numero_chileno(ocs_transp['Kilos'].sum(), 1)} kg** | **${formato_numero_chileno(ocs_transp['Costo'].sum(), 0)}**")
                 
                 # Tabla preview
                 preview_data = []
@@ -623,10 +744,10 @@ def render(username: str, password: str):
                         'OC': row['OC'],
                         'Fecha': row['Fecha'],
                         'Ruta': row['Ruta'],
-                        'Kms': f"{row['Kms']:.0f}",
-                        'Kilos': f"{row['Kilos']:.1f}",
-                        'Costo': f"${row['Costo']:,.0f}",
-                        '$/km': f"${row['$/km']:.0f}",
+                        'Kms': formato_numero_chileno(row['Kms'], 0),
+                        'Kilos': formato_numero_chileno(row['Kilos'], 1),
+                        'Costo': f"${formato_numero_chileno(row['Costo'], 0)}",
+                        '$/km': f"${formato_numero_chileno(row['$/km'], 0)}",
                         'Tipo': row['Tipo Camión']
                     })
                 
@@ -642,14 +763,20 @@ def render(username: str, password: str):
         }).reset_index()
         transportistas.rename(columns={'OC': 'Cant OCs'}, inplace=True)
         
+        # Crear versión formateada para display
+        transportistas_display = transportistas.copy()
+        transportistas_display['Kms'] = transportistas_display['Kms'].apply(lambda x: formato_numero_chileno(x, 0))
+        transportistas_display['Kilos'] = transportistas_display['Kilos'].apply(lambda x: formato_numero_chileno(x, 1))
+        transportistas_display['Costo'] = transportistas_display['Costo'].apply(lambda x: f"${formato_numero_chileno(x, 0)}")
+        
         st.dataframe(
-            transportistas,
+            transportistas_display,
             column_config={
                 'Transportista': st.column_config.TextColumn('Transportista'),
                 'Cant OCs': st.column_config.NumberColumn('OCs', format='%d'),
-                'Kms': st.column_config.NumberColumn('Kms Totales', format='%.0f'),
-                'Kilos': st.column_config.NumberColumn('Kilos Totales', format='%.2f'),
-                'Costo': st.column_config.NumberColumn('Costo Total', format='$%.0f')
+                'Kms': st.column_config.TextColumn('Kms Totales'),
+                'Kilos': st.column_config.TextColumn('Kilos Totales'),
+                'Costo': st.column_config.TextColumn('Costo Total')
             },
             hide_index=True,
             use_container_width=True
