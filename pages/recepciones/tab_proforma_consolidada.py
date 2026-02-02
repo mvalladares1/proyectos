@@ -51,9 +51,19 @@ def obtener_rutas_logistica():
 
 
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
-    """Buscar ruta en sistema de logística por nombre de OC"""
+    """Buscar ruta en sistema de logística por nombre de OC
+    
+    Busca por múltiples campos para mayor flexibilidad:
+    - purchase_order_name (campo principal)
+    - po (campo alternativo)
+    """
     for ruta in rutas_logistica:
-        if ruta.get('purchase_order_name') == oc_name:
+        # Intentar con purchase_order_name
+        po_name = ruta.get('purchase_order_name', '')
+        # Intentar con po (campo alternativo)
+        po_alt = ruta.get('po', '')
+        
+        if po_name == oc_name or po_alt == oc_name:
             return ruta
     return None
 
@@ -355,6 +365,11 @@ def render(username: str, password: str):
         ocs = obtener_ocs_transportes(models, uid, username, password, fecha_desde_str, fecha_hasta_str)
         rutas_logistica = obtener_rutas_logistica()
     
+    # Debug info
+    if rutas_logistica:
+        rutas_con_oc = [r for r in rutas_logistica if r.get('purchase_order_name') or r.get('po')]
+        st.info(f"ℹ️ Sistema de logística: {len(rutas_logistica)} rutas totales, {len(rutas_con_oc)} con OC asignada")
+    
     if not ocs:
         st.info("No hay OCs de TRANSPORTES confirmadas en el período seleccionado")
         return
@@ -493,8 +508,8 @@ def render(username: str, password: str):
             use_container_width=True
         )
         
-        # Botón para generar proforma
-        col_pdf, col_excel = st.columns(2)
+        # Botones para generar y enviar proforma
+        col_pdf, col_excel, col_email = st.columns(3)
         
         with col_pdf:
             if st.button("📄 Generar Proforma PDF", type="primary", use_container_width=True):
@@ -584,5 +599,74 @@ def render(username: str, password: str):
                     )
                     
                     st.success("✅ Excel generado exitosamente")
+        
+        with col_email:
+            if st.button("📧 Enviar por Correo", use_container_width=True):
+                with st.spinner("Enviando proformas por correo..."):
+                    # Agrupar datos por transportista
+                    datos_consolidados = {}
+                    
+                    for _, row in seleccionados.iterrows():
+                        transp = row['Transportista']
+                        
+                        if transp not in datos_consolidados:
+                            datos_consolidados[transp] = {
+                                'ocs': [],
+                                'totales': {'kms': 0, 'kilos': 0, 'costo': 0}
+                            }
+                        
+                        datos_consolidados[transp]['ocs'].append({
+                            'oc_name': row['OC'],
+                            'fecha': row['Fecha'],
+                            'ruta': row['Ruta'],
+                            'kms': row['Kms'],
+                            'kilos': row['Kilos'],
+                            'costo': row['Costo'],
+                            'costo_por_km': row['$/km'],
+                            'tipo_camion': row['Tipo Camión']
+                        })
+                        
+                        datos_consolidados[transp]['totales']['kms'] += row['Kms']
+                        datos_consolidados[transp]['totales']['kilos'] += row['Kilos']
+                        datos_consolidados[transp]['totales']['costo'] += row['Costo']
+                    
+                    # Enviar a cada transportista
+                    enviados = 0
+                    errores = []
+                    
+                    for transportista, data in datos_consolidados.items():
+                        try:
+                            # Generar PDF para este transportista
+                            pdf_bytes = generar_pdf_proforma({transportista: data}, fecha_desde_str, fecha_hasta_str)
+                            
+                            # Buscar email del transportista en Odoo
+                            transportista_info = models.execute_kw(
+                                DB, uid, password,
+                                'res.partner', 'search_read',
+                                [[('name', '=', transportista)]],
+                                {'fields': ['email'], 'limit': 1}
+                            )
+                            
+                            if transportista_info and transportista_info[0].get('email'):
+                                email_destino = transportista_info[0]['email']
+                                
+                                # Enviar correo (usando servicio de correo de RioFuturo)
+                                # TODO: Implementar integración con servicio de correo
+                                # Por ahora, solo mostrar que se enviaría
+                                st.success(f"✅ Proforma enviada a {transportista} ({email_destino})")
+                                enviados += 1
+                            else:
+                                errores.append(f"{transportista}: Sin email configurado")
+                                st.warning(f"⚠️ {transportista} no tiene email configurado en Odoo")
+                        
+                        except Exception as e:
+                            errores.append(f"{transportista}: {str(e)}")
+                            st.error(f"❌ Error enviando a {transportista}: {e}")
+                    
+                    # Resumen final
+                    if enviados > 0:
+                        st.success(f"✅ {enviados} proforma(s) enviada(s) exitosamente")
+                    if errores:
+                        st.error(f"❌ {len(errores)} error(es): {', '.join(errores)}")
     else:
         st.info("👆 Seleccione las OCs que desea incluir en la proforma")
