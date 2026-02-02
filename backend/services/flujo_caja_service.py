@@ -479,15 +479,17 @@ class FlujoCajaService:
             # Procesar con inversión de signo para CxC
             agregador.procesar_lineas_cxc(lineas_monitoreadas, self._clasificar_cuenta, agrupacion)
         
-        # 7. Procesar etiquetas
+        # 7. Procesar etiquetas (EXCLUYENDO cuentas monitoreadas que ya se procesaron en Query B)
         try:
             # Obtener account_ids de las cuentas ya procesadas
             _, cuentas_por_concepto = agregador.obtener_resultados()
             account_ids_to_query = set()
             for concepto_id, cuentas in cuentas_por_concepto.items():
                 for codigo, cuenta_data in cuentas.items():
-                    if cuenta_data.get('account_id'):
-                        account_ids_to_query.add(cuenta_data['account_id'])
+                    acc_id = cuenta_data.get('account_id')
+                    # EXCLUIR cuentas monitoreadas (ya tienen etiquetas de Query B)
+                    if acc_id and acc_id not in monitoreadas_ids:
+                        account_ids_to_query.add(acc_id)
             
             if account_ids_to_query:
                 grupos_etiquetas = self.odoo_manager.get_etiquetas_por_mes(
@@ -510,35 +512,10 @@ class FlujoCajaService:
         except Exception as e:
             print(f"[FlujoCaja] Error procesando cuentas parametrizadas: {e}")
         
-        # 9. Procesar facturas draft
-        try:
-            facturas_draft = self.odoo_manager.get_facturas_draft(fecha_inicio, fecha_fin, company_id)
-            if facturas_draft:
-                all_line_ids = []
-                factura_por_linea = {}
-                for factura in facturas_draft:
-                    for lid in factura.get('line_ids', []):
-                        all_line_ids.append(lid)
-                        factura_por_linea[lid] = factura
-                
-                lineas = self.odoo_manager.get_lineas_facturas(all_line_ids)
-                
-                # Agrupar por move_id
-                lines_by_move = {}
-                for l in lineas:
-                    mid = l['move_id'][0] if isinstance(l.get('move_id'), (list, tuple)) else l.get('move_id')
-                    lines_by_move.setdefault(mid, []).append(l)
-                
-                # Obtener info de cuentas
-                account_ids = list(set(
-                    l['account_id'][0] if isinstance(l.get('account_id'), (list, tuple)) else l.get('account_id')
-                    for l in lineas if l.get('account_id')
-                ))
-                cuentas_info = self.odoo_manager.get_account_info_batch(account_ids)
-                
-                agregador.procesar_facturas_draft(facturas_draft, lines_by_move, self._clasificar_cuenta, cuentas_info, agrupacion)
-        except Exception as e:
-            print(f"[FlujoCaja] Error procesando facturas draft: {e}")
+        # 9. Procesar facturas draft - DESHABILITADO
+        # La proyección ahora se maneja en Query B usando payment_state
+        # (not_paid, in_payment, partial) en lugar de state='draft'
+        # Esto evita duplicación y el problema de "CXC - Cuentas por Cobrar Proyectadas"
         
         # 10. Construir resultado
         conceptos_por_actividad, subtotales_por_actividad = agregador.construir_conceptos_por_actividad()
