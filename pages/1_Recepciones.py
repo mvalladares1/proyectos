@@ -136,7 +136,11 @@ if "aprobaciones" in tabs_disponibles:
 
 if "aprobaciones_fletes" in tabs_disponibles:
     with tabs_ui[tab_index]:
-        @st.fragme
+        @st.fragment
+        def _frag_aprobaciones_fletes():
+            tab_aprobaciones_fletes.render_tab(username, password)
+        _frag_aprobaciones_fletes()
+    tab_index += 1
 
 if "proforma_fletes" in tabs_disponibles:
     with tabs_ui[tab_index]:
@@ -144,8 +148,5 @@ if "proforma_fletes" in tabs_disponibles:
         def _frag_proforma_fletes():
             tab_proforma_consolidada.render(username, password)
         _frag_proforma_fletes()
-    tab_index += 1nt
-        def _frag_aprobaciones_fletes():
-            tab_aprobaciones_fletes.render_tab(username, password)
-        _frag_aprobaciones_fletes()
+    tab_index += 1
     tab_index += 1
