@@ -500,6 +500,13 @@ def render(username: str, password: str):
         
         # Obtener número de ruta y buscar kg en OC de MP
         numero_ruta = ruta_info.get('ruta_name', '') if ruta_info else ''
+        
+        # Debug: mostrar info de ruta para las primeras 3 OCs
+        if len(datos_tabla) < 3 and ruta_info:
+            st.write(f"DEBUG OC {oc['name']}:")
+            st.write(f"  - ruta_name: {ruta_info.get('ruta_name', 'NO EXISTE')}")
+            st.write(f"  - Campos disponibles: {list(ruta_info.keys())}")
+        
         kilos = 0
         if ruta_info:
             # Intentar obtener kg de la OC de MP asociada a la ruta
