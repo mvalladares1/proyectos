@@ -446,15 +446,14 @@ def render(username: str, password: str):
     if 'proforma_fecha_carga' not in st.session_state:
         st.session_state.proforma_fecha_carga = None
     
-    # Solo cargar datos si se presiona el botón o cambió el rango de fechas
+    # Solo cargar datos si se presiona el botón
     rango_actual = f"{fecha_desde_str}_{fecha_hasta_str}"
-    if cargar_datos or st.session_state.proforma_fecha_carga != rango_actual:
-        if cargar_datos:  # Solo si se presionó el botón
-            # Obtener datos
-            with st.spinner("Cargando OCs de transportes y datos de logística..."):
-                st.session_state.proforma_ocs_cargadas = obtener_ocs_transportes(models, uid, username, password, fecha_desde_str, fecha_hasta_str)
-                st.session_state.proforma_rutas_logistica = obtener_rutas_logistica()
-                st.session_state.proforma_fecha_carga = rango_actual
+    if cargar_datos:
+        # Obtener datos
+        with st.spinner("Cargando OCs de transportes y datos de logística..."):
+            st.session_state.proforma_ocs_cargadas = obtener_ocs_transportes(models, uid, username, password, fecha_desde_str, fecha_hasta_str)
+            st.session_state.proforma_rutas_logistica = obtener_rutas_logistica()
+            st.session_state.proforma_fecha_carga = rango_actual
     
     # Verificar si hay datos cargados
     if st.session_state.proforma_ocs_cargadas is None:
