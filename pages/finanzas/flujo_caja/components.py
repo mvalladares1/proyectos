@@ -221,13 +221,19 @@ function setFacturasData(data) {
     facturasData = data;
 }
 
-function showFacturasModal(estadoNombre, mes, cuentaCodigo) {
+function showFacturasModal(estadoNombre, periodo, cuentaCodigo) {
     const key = estadoNombre + '_' + cuentaCodigo;
     const facturas = facturasData[key] || [];
     
-    // Filtrar facturas por mes seleccionado
+    // Detectar si es semana (contiene W) o mes
+    const esSemana = periodo.includes('W');
+    
+    // Filtrar facturas por período seleccionado
     const facturasMes = facturas.filter(f => {
-        const montoMes = f.montos_por_mes && f.montos_por_mes[mes];
+        if (!f.montos_por_mes) return false;
+        
+        // Buscar el período exacto
+        const montoMes = f.montos_por_mes[periodo];
         return montoMes && montoMes !== 0;
     });
     
@@ -235,11 +241,21 @@ function showFacturasModal(estadoNombre, mes, cuentaCodigo) {
     const title = document.getElementById('modal-title');
     const body = document.getElementById('modal-body');
     
-    // Formatear nombre del mes
-    const mesDate = new Date(mes + '-01');
-    const mesNombre = mesDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+    // Formatear nombre del período
+    let periodoNombre;
+    if (esSemana) {
+        // Formato: 2025-W40 -> "Semana 40, 2025"
+        const parts = periodo.replace('-W', 'W').split('W');
+        const year = parts[0];
+        const week = parts[1];
+        periodoNombre = `Semana ${parseInt(week)}, ${year}`;
+    } else {
+        const mesDate = new Date(periodo + '-01');
+        periodoNombre = mesDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+        periodoNombre = periodoNombre.charAt(0).toUpperCase() + periodoNombre.slice(1);
+    }
     
-    title.innerHTML = `<strong>${estadoNombre}</strong> - ${mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1)}`;
+    title.innerHTML = `<strong>${estadoNombre}</strong> - ${periodoNombre}`;
     
     if (facturasMes.length === 0) {
         body.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">No hay facturas para este período</p>';
@@ -259,7 +275,7 @@ function showFacturasModal(estadoNombre, mes, cuentaCodigo) {
         
         let totalMes = 0;
         facturasMes.forEach(f => {
-            const montoMes = f.montos_por_mes[mes] || 0;
+            const montoMes = f.montos_por_mes[periodo] || 0;
             totalMes += montoMes;
             const fmtMontoMes = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(montoMes);
             const fmtMontoTotal = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(f.monto);

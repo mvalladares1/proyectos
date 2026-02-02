@@ -317,7 +317,8 @@ def render(username: str, password: str):
         meses_ordenados = []
         
         if vista_semanal:
-            semanas_por_mes = agrupar_semanas_por_mes(meses_lista)
+            # Pasar fechas de filtro para excluir semanas fuera del rango
+            semanas_por_mes = agrupar_semanas_por_mes(meses_lista, fecha_inicio_str, fecha_fin_str)
             meses_ordenados = list(semanas_por_mes.keys())
         
         # ========== GENERAR TABLA HTML ==========
