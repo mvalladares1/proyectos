@@ -457,29 +457,141 @@ def render(username: str, password: str):
     
     df = pd.DataFrame(datos_tabla)
     
-    # Tabla editable
-    st.markdown("### 📋 Seleccione las OCs a incluir en la proforma")
+    # Detectar datos faltantes
+    def detectar_datos_faltantes(df_data):
+        """Detecta OCs con datos faltantes o incompletos"""
+        problemas = []
+        for idx, row in df_data.iterrows():
+            issues = []
+            if not row['Ruta'] or row['Ruta'] == 'Sin ruta':
+                issues.append('Ruta')
+            if row['Kms'] == 0 or pd.isna(row['Kms']):
+                issues.append('Kms')
+            if row['Kilos'] == 0 or pd.isna(row['Kilos']):
+                issues.append('Kilos')
+            if row['Costo'] == 0 or pd.isna(row['Costo']):
+                issues.append('Costo')
+            if not row['Tipo Camión'] or row['Tipo Camión'] == 'N/A':
+                issues.append('Tipo Camión')
+            
+            if issues:
+                problemas.append({
+                    'indice': idx,
+                    'oc': row['OC'],
+                    'transportista': row['Transportista'],
+                    'campos_faltantes': issues
+                })
+        return problemas
     
-    edited_df = st.data_editor(
-        df,
-        column_config={
-            'Sel': st.column_config.CheckboxColumn('Sel', default=False),
-            'OC': st.column_config.TextColumn('OC', width='small'),
-            'Fecha': st.column_config.TextColumn('Fecha', width='small'),
-            'Transportista': st.column_config.TextColumn('Transportista', width='medium'),
-            'Ruta': st.column_config.TextColumn('Ruta', width='medium'),
-            'Kms': st.column_config.NumberColumn('Kms', format='%.0f'),
-            'Kilos': st.column_config.NumberColumn('Kilos', format='%.2f'),
-            'Costo': st.column_config.NumberColumn('Costo', format='$%.0f'),
-            '$/km': st.column_config.NumberColumn('$/km', format='$%.0f'),
-            'Tipo Camión': st.column_config.TextColumn('Tipo Camión', width='medium'),
-            '_oc_id': None  # Ocultar
-        },
-        disabled=['OC', 'Fecha', 'Transportista', 'Ruta', 'Kms', 'Kilos', 'Costo', '$/km', 'Tipo Camión'],
-        hide_index=True,
-        key='editor_proforma',
-        use_container_width=True
-    )
+    # Analizar datos faltantes
+    datos_faltantes = detectar_datos_faltantes(df)
+    
+    if datos_faltantes:
+        st.warning(f"⚠️ Se detectaron {len(datos_faltantes)} OCs con datos incompletos")
+        
+        with st.expander(f"🔍 Ver detalles de {len(datos_faltantes)} OCs con datos faltantes"):
+            for problema in datos_faltantes:
+                st.markdown(f"**{problema['oc']}** ({problema['transportista']}): Faltan datos de **{', '.join(problema['campos_faltantes'])}**")
+    
+    # Tabla editable con opción de completar datos
+    st.markdown("### 📋 Seleccione y complete las OCs para la proforma")
+    
+    # Inicializar session state para datos editados si no existe
+    if 'df_proforma_editado' not in st.session_state:
+        st.session_state.df_proforma_editado = df.copy()
+    
+    # Tabs: Selección simple vs Editor completo
+    tab_select, tab_editor = st.tabs(["✓ Selección Rápida", "✏️ Editor Completo (Completar Datos)"])
+    
+    with tab_select:
+        st.info("👉 Usa este modo para seleccionar OCs que ya tienen todos los datos completos")
+        edited_df = st.data_editor(
+            df,
+            column_config={
+                'Sel': st.column_config.CheckboxColumn('Sel', default=False),
+                'OC': st.column_config.TextColumn('OC', width='small'),
+                'Fecha': st.column_config.TextColumn('Fecha', width='small'),
+                'Transportista': st.column_config.TextColumn('Transportista', width='medium'),
+                'Ruta': st.column_config.TextColumn('Ruta', width='medium'),
+                'Kms': st.column_config.NumberColumn('Kms', format='%.0f'),
+                'Kilos': st.column_config.NumberColumn('Kilos', format='%.2f'),
+                'Costo': st.column_config.NumberColumn('Costo', format='$%.0f'),
+                '$/km': st.column_config.NumberColumn('$/km', format='$%.0f'),
+                'Tipo Camión': st.column_config.TextColumn('Tipo Camión', width='medium'),
+                '_oc_id': None  # Ocultar
+            },
+            disabled=['OC', 'Fecha', 'Transportista', 'Ruta', 'Kms', 'Kilos', 'Costo', '$/km', 'Tipo Camión'],
+            hide_index=True,
+            key='editor_proforma_simple',
+            use_container_width=True
+        )
+    
+    with tab_editor:
+        st.info("✏️ Usa este editor para **completar datos faltantes** antes de generar la proforma")
+        
+        # Añadir columna de estado
+        df_editor = st.session_state.df_proforma_editado.copy()
+        
+        # Marcar OCs con problemas
+        df_editor['Estado'] = df_editor.apply(
+            lambda row: '⚠️ Incompleto' if any(
+                p['oc'] == row['OC'] for p in datos_faltantes
+            ) else '✅ Completo',
+            axis=1
+        )
+        
+        # Editor completo con todos los campos editables
+        edited_df_completo = st.data_editor(
+            df_editor,
+            column_config={
+                'Sel': st.column_config.CheckboxColumn('☑️ Incluir', default=False),
+                'Estado': st.column_config.TextColumn('Estado', width='small'),
+                'OC': st.column_config.TextColumn('OC', width='small', disabled=True),
+                'Fecha': st.column_config.TextColumn('Fecha', width='small', disabled=True),
+                'Transportista': st.column_config.TextColumn('Transportista', width='medium', disabled=True),
+                'Ruta': st.column_config.TextColumn('Ruta', width='medium', help='Editable: Ingresa la ruta completa'),
+                'Kms': st.column_config.NumberColumn('Kms', format='%.0f', help='Editable: Kilómetros del viaje'),
+                'Kilos': st.column_config.NumberColumn('Kilos', format='%.1f', help='Editable: Kilos transportados'),
+                'Costo': st.column_config.NumberColumn('Costo', format='$%.0f', help='Editable: Costo total del flete'),
+                '$/km': st.column_config.NumberColumn('$/km', format='$%.0f', help='Auto-calculado'),
+                'Tipo Camión': st.column_config.SelectboxColumn(
+                    'Tipo Camión',
+                    options=['🚚 Camión 8 Ton', '🚛 Camión 12-14 Ton', '🚛 Camión 18 Ton', '🚛 Camión 24 Ton', 'N/A'],
+                    help='Selecciona el tipo de camión'
+                ),
+                '_oc_id': None  # Ocultar
+            },
+            disabled=['OC', 'Fecha', 'Transportista', '$/km'],
+            hide_index=True,
+            key='editor_proforma_completo',
+            use_container_width=True
+        )
+        
+        # Recalcular $/km automáticamente
+        edited_df_completo['$/km'] = edited_df_completo.apply(
+            lambda row: (row['Costo'] / row['Kms']) if row['Kms'] > 0 else 0,
+            axis=1
+        )
+        
+        # Actualizar session state
+        st.session_state.df_proforma_editado = edited_df_completo.copy()
+        
+        # Usar los datos editados como definitivos
+        edited_df = edited_df_completo
+        
+        # Botones de ayuda
+        col_help1, col_help2 = st.columns(2)
+        with col_help1:
+            if st.button("🔄 Restaurar datos originales", help="Volver a los datos originales de Odoo"):
+                st.session_state.df_proforma_editado = df.copy()
+                st.rerun()
+        
+        with col_help2:
+            nuevos_faltantes = detectar_datos_faltantes(edited_df_completo)
+            if nuevos_faltantes:
+                st.warning(f"⚠️ Aún quedan {len(nuevos_faltantes)} OCs incompletas")
+            else:
+                st.success("✅ Todas las OCs tienen datos completos")
     
     # Resumen de seleccionados
     seleccionados = edited_df[edited_df['Sel'] == True]
@@ -487,6 +599,39 @@ def render(username: str, password: str):
     
     if n_sel > 0:
         st.markdown(f"### ✅ {n_sel} OCs seleccionadas")
+        
+        # Detectar si hay datos faltantes en seleccionados
+        problemas_seleccionados = detectar_datos_faltantes(seleccionados)
+        if problemas_seleccionados:
+            st.error(f"❌ {len(problemas_seleccionados)} OCs seleccionadas tienen datos incompletos. Ve al **Editor Completo** para corregirlas.")
+            with st.expander("Ver OCs con problemas"):
+                for p in problemas_seleccionados:
+                    st.markdown(f"- **{p['oc']}**: Faltan {', '.join(p['campos_faltantes'])}")
+        
+        # Vista previa de datos consolidados
+        with st.expander("👁️ Vista Previa - Cómo se verá en el PDF"):
+            for transportista in seleccionados['Transportista'].unique():
+                ocs_transp = seleccionados[seleccionados['Transportista'] == transportista]
+                
+                st.markdown(f"#### 🚛 {transportista}")
+                st.markdown(f"**{len(ocs_transp)} OCs** | **{ocs_transp['Kms'].sum():,.0f} km** | **{ocs_transp['Kilos'].sum():,.1f} kg** | **${ocs_transp['Costo'].sum():,.0f}**")
+                
+                # Tabla preview
+                preview_data = []
+                for _, row in ocs_transp.iterrows():
+                    preview_data.append({
+                        'OC': row['OC'],
+                        'Fecha': row['Fecha'],
+                        'Ruta': row['Ruta'],
+                        'Kms': f"{row['Kms']:.0f}",
+                        'Kilos': f"{row['Kilos']:.1f}",
+                        'Costo': f"${row['Costo']:,.0f}",
+                        '$/km': f"${row['$/km']:.0f}",
+                        'Tipo': row['Tipo Camión']
+                    })
+                
+                st.table(pd.DataFrame(preview_data))
+                st.divider()
         
         # Agrupar por transportista
         transportistas = seleccionados.groupby('Transportista').agg({
@@ -509,6 +654,10 @@ def render(username: str, password: str):
             hide_index=True,
             use_container_width=True
         )
+        
+        # Advertencia final antes de generar
+        if problemas_seleccionados:
+            st.warning("⚠️ **ADVERTENCIA**: Algunas OCs tienen datos incompletos. El PDF se generará con los datos disponibles, pero puede verse incompleto.")
         
         # Botones para generar y enviar proforma
         col_pdf, col_excel, col_email = st.columns(3)

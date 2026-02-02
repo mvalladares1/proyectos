@@ -149,6 +149,35 @@ ENTERPRISE_CSS = """
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+/* Vista Semanal: Header de Meses (fila superior) */
+.excel-table thead tr.header-meses th {
+    position: sticky;
+    top: 0;
+    z-index: 51;
+}
+
+.excel-table thead tr.header-meses th.mes-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-bottom: 2px solid #764ba2;
+    font-size: 14px !important;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: none;
+}
+
+/* Vista Semanal: Header de Semanas (fila inferior) */
+.excel-table thead tr.header-semanas th {
+    position: sticky;
+    top: 52px;  /* Altura de la fila de meses */
+    z-index: 50;
+    background: linear-gradient(180deg, #2d3748 0%, #1e293b 100%) !important;
+    font-size: 11px !important;
+    padding: 8px 12px !important;
+    border-bottom: 3px solid #3b82f6;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
 .excel-table thead th.frozen {
     z-index: 150;
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;

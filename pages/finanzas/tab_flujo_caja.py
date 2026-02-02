@@ -43,7 +43,10 @@ from .flujo_caja import (
     generate_sparkline,
     get_heatmap_class,
     fmt_monto_html,
-    nombre_mes_corto
+    nombre_mes_corto,
+    es_vista_semanal,
+    agrupar_semanas_por_mes,
+    nombre_semana_corto
 )
 
 
@@ -308,17 +311,49 @@ def render(username: str, password: str):
         # Serializar facturas para JavaScript
         facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
         
+        # ========== DETECTAR VISTA SEMANAL ==========
+        vista_semanal = es_vista_semanal(meses_lista)
+        semanas_por_mes = {}
+        meses_ordenados = []
+        
+        if vista_semanal:
+            semanas_por_mes = agrupar_semanas_por_mes(meses_lista)
+            meses_ordenados = list(semanas_por_mes.keys())
+        
         # ========== GENERAR TABLA HTML ==========
         html_parts = [ENTERPRISE_CSS, MODAL_CSS, '<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
         
         # HEADER
-        html_parts.append('<thead><tr>')
-        html_parts.append('<th class="frozen">CONCEPTO</th>')
-        for mes in meses_lista:
-            html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
-        html_parts.append('<th><strong>TOTAL</strong></th>')
-        html_parts.append('</tr></thead>')
+        if vista_semanal and semanas_por_mes:
+            # Vista semanal: Header de dos filas
+            # Fila 1: Meses con colspan
+            html_parts.append('<thead>')
+            html_parts.append('<tr class="header-meses">')
+            html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
+            
+            for mes in meses_ordenados:
+                num_semanas = len(semanas_por_mes[mes])
+                html_parts.append(f'<th colspan="{num_semanas}" class="mes-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center; font-size: 14px; font-weight: 700; border-bottom: none;">{mes}</th>')
+            
+            html_parts.append('<th rowspan="2"><strong>TOTAL</strong></th>')
+            html_parts.append('</tr>')
+            
+            # Fila 2: Semanas (S1, S2, S3, S4)
+            html_parts.append('<tr class="header-semanas">')
+            for mes in meses_ordenados:
+                for i, semana in enumerate(semanas_por_mes[mes], 1):
+                    html_parts.append(f'<th style="font-size: 11px; background: #2d3748; padding: 4px 8px;">S{i}</th>')
+            html_parts.append('</tr>')
+            html_parts.append('</thead>')
+        else:
+            # Vista mensual: Header simple
+            html_parts.append('<thead><tr>')
+            html_parts.append('<th class="frozen">CONCEPTO</th>')
+            for mes in meses_lista:
+                html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
+            html_parts.append('<th><strong>TOTAL</strong></th>')
+            html_parts.append('</tr></thead>')
         
         # BODY
         html_parts.append('<tbody>')

@@ -13,7 +13,10 @@ from .formatters import (
     generate_sparkline,
     get_heatmap_class,
     fmt_monto_html,
-    nombre_mes_corto
+    nombre_mes_corto,
+    es_vista_semanal,
+    agrupar_semanas_por_mes,
+    nombre_semana_corto
 )
 
 __all__ = [
@@ -25,5 +28,8 @@ __all__ = [
     'generate_sparkline',
     'get_heatmap_class',
     'fmt_monto_html',
-    'nombre_mes_corto'
+    'nombre_mes_corto',
+    'es_vista_semanal',
+    'agrupar_semanas_por_mes',
+    'nombre_semana_corto'
 ]
