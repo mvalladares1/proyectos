@@ -142,7 +142,9 @@ class TunelesService:
                 quant_info = pallet.get('quant_info', {})
                 kg = quant_info.get('quantity', pallet['kg'])
                 lote_id = quant_info.get('lot_id', [None])[0] if quant_info.get('lot_id') else None
-                ubicacion_id = quant_info.get('location_id', [None])[0] if quant_info.get('location_id') else config['ubicacion_origen_id']
+                # FIX: Asegurar que ubicacion_id nunca sea None
+                ubicacion_id_raw = quant_info.get('location_id', [None])[0] if quant_info.get('location_id') else None
+                ubicacion_id = ubicacion_id_raw or config['ubicacion_origen_id']
                 
                 # Buscar el package_id
                 package = self.odoo.search_read(
@@ -723,7 +725,7 @@ class TunelesService:
                 'lote_id': validacion.get('lote_id'),
                 'lote_nombre': validacion.get('lote_nombre'),  # Nombre del lote original
                 'producto_id': validacion.get('producto_id'),
-                'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id']),
+                'ubicacion_id': validacion.get('ubicacion_id') or config['ubicacion_origen_id'],  # FIX: usar 'or' para manejar None explícito
                 'package_id': validacion.get('package_id'),  # ID del paquete origen
                 'manual': False
             })
@@ -1099,7 +1101,7 @@ class TunelesService:
                         'qty_done': 0.0,  # PENDIENTE: qty en 0 hasta que se confirme recepción
                         'reserved_uom_qty': 0.0,  # Sin reserva
                         'product_uom_id': 12,  # kg
-                        'location_id': pallet.get('ubicacion_id', config['ubicacion_origen_id']),
+                        'location_id': pallet.get('ubicacion_id') or config['ubicacion_origen_id'],  # FIX: usar 'or' para manejar None
                         'location_dest_id': ubicacion_virtual,
                         'state': 'draft',
                         'reference': f"{mo_name} [PENDIENTE: {pallet.get('kg', 0)} kg]",
@@ -1121,7 +1123,7 @@ class TunelesService:
                     'qty_done': pallet['kg'],
                     'reserved_uom_qty': pallet['kg'],
                     'product_uom_id': 12,  # kg
-                    'location_id': pallet.get('ubicacion_id', config['ubicacion_origen_id']),
+                    'location_id': pallet.get('ubicacion_id') or config['ubicacion_origen_id'],  # FIX: usar 'or' para manejar None
                     'location_dest_id': ubicacion_virtual,
                     'state': 'draft',
                     'reference': mo_name,
