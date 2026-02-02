@@ -168,7 +168,6 @@ class AgregadorFlujo:
                     'montos_por_mes': {m: 0.0 for m in self.meses_lista}
                 }
             
-            
             # Invertir signo si es cuenta de ingreso (41) o CxC (1103)
             monto_etiqueta = balance
             if codigo_cuenta.startswith('41') or codigo_cuenta.startswith('1103'):
