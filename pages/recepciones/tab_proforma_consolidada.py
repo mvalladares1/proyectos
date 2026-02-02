@@ -600,9 +600,13 @@ def render(username: str, password: str):
     # Tabla editable con opción de completar datos
     st.markdown("### 📋 Seleccione y complete las OCs para la proforma")
     
-    # Inicializar session state para datos editados si no existe
-    if 'df_proforma_editado' not in st.session_state:
+    # Inicializar session state para datos editados si no existe o si hay nuevos datos
+    if 'df_proforma_editado' not in st.session_state or len(st.session_state.df_proforma_editado) != len(df):
         st.session_state.df_proforma_editado = df.copy()
+    
+    # Inicializar estado de selección si no existe
+    if 'df_proforma_display' not in st.session_state:
+        st.session_state.df_proforma_display = df_display.copy()
     
     # Tabs: Selección simple vs Editor completo
     tab_select, tab_editor = st.tabs(["✓ Selección Rápida", "✏️ Editor Completo (Completar Datos)"])
@@ -613,13 +617,13 @@ def render(username: str, password: str):
         # Botón seleccionar todas
         col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 4])
         with col_btn1:
-            if st.button("✅ Seleccionar Todas", use_container_width=True):
+            if st.button("✅ Seleccionar Todas", use_container_width=True, key='btn_sel_all'):
+                st.session_state.df_proforma_display['Sel'] = True
                 df_display['Sel'] = True
-                st.rerun()
         with col_btn2:
-            if st.button("❌ Deseleccionar Todas", use_container_width=True):
+            if st.button("❌ Deseleccionar Todas", use_container_width=True, key='btn_desel_all'):
+                st.session_state.df_proforma_display['Sel'] = False
                 df_display['Sel'] = False
-                st.rerun()
         
         edited_df_display = st.data_editor(
             df_display,
@@ -643,7 +647,8 @@ def render(username: str, password: str):
             use_container_width=True
         )
         
-        # Sincronizar selección con df original
+        # Guardar el estado actualizado y sincronizar selección con df original
+        st.session_state.df_proforma_display = edited_df_display.copy()
         df['Sel'] = edited_df_display['Sel']
         edited_df = df
     
