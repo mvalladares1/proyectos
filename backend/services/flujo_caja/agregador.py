@@ -526,7 +526,7 @@ class AgregadorFlujo:
                         return (idx, -abs(montos_mes.get(mes, 0)))
                 return (len(self.meses_lista), 0)
             
-            etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:20]
+            etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:50]
             
             etiquetas_lista = []
             for nombre, datos in etiquetas_ordenadas:
