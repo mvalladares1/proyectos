@@ -497,10 +497,24 @@ class AgregadorFlujo:
         
         resultado = []
         for k, v in sorted_cuentas:
-            # Formatear etiquetas
+            # Formatear etiquetas - SOLO las que tienen monto en el período consultado
             etiquetas_dict = v.get("etiquetas", {})
+            
+            # Filtrar etiquetas que tienen al menos un monto != 0 en algún mes del rango
+            etiquetas_filtradas = []
+            for nombre, datos in etiquetas_dict.items():
+                if isinstance(datos, dict):
+                    montos_mes = datos.get("montos_por_mes", {})
+                    # Solo incluir si tiene algún valor en los meses del rango
+                    tiene_valor = any(montos_mes.get(m, 0) != 0 for m in self.meses_lista)
+                    if tiene_valor:
+                        etiquetas_filtradas.append((nombre, datos))
+                elif datos != 0:  # Si es solo un número
+                    etiquetas_filtradas.append((nombre, datos))
+            
+            # Ordenar por monto absoluto total
             etiquetas_ordenadas = sorted(
-                etiquetas_dict.items(),
+                etiquetas_filtradas,
                 key=lambda x: abs(x[1].get('monto', 0) if isinstance(x[1], dict) else x[1]),
                 reverse=True
             )[:20]
