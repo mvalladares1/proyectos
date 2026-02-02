@@ -438,15 +438,32 @@ def render(username: str, password: str):
     fecha_desde_str = fecha_desde.strftime('%Y-%m-%d')
     fecha_hasta_str = fecha_hasta.strftime('%Y-%m-%d')
     
-    # Solo cargar datos si se presiona el botón
-    if not cargar_datos:
+    # Inicializar session state para datos cargados
+    if 'proforma_ocs_cargadas' not in st.session_state:
+        st.session_state.proforma_ocs_cargadas = None
+    if 'proforma_rutas_logistica' not in st.session_state:
+        st.session_state.proforma_rutas_logistica = None
+    if 'proforma_fecha_carga' not in st.session_state:
+        st.session_state.proforma_fecha_carga = None
+    
+    # Solo cargar datos si se presiona el botón o cambió el rango de fechas
+    rango_actual = f"{fecha_desde_str}_{fecha_hasta_str}"
+    if cargar_datos or st.session_state.proforma_fecha_carga != rango_actual:
+        if cargar_datos:  # Solo si se presionó el botón
+            # Obtener datos
+            with st.spinner("Cargando OCs de transportes y datos de logística..."):
+                st.session_state.proforma_ocs_cargadas = obtener_ocs_transportes(models, uid, username, password, fecha_desde_str, fecha_hasta_str)
+                st.session_state.proforma_rutas_logistica = obtener_rutas_logistica()
+                st.session_state.proforma_fecha_carga = rango_actual
+    
+    # Verificar si hay datos cargados
+    if st.session_state.proforma_ocs_cargadas is None:
         st.info("👆 Selecciona el rango de fechas y presiona **Cargar Datos** para comenzar")
         return
     
-    # Obtener datos
-    with st.spinner("Cargando OCs de transportes y datos de logística..."):
-        ocs = obtener_ocs_transportes(models, uid, username, password, fecha_desde_str, fecha_hasta_str)
-        rutas_logistica = obtener_rutas_logistica()
+    # Usar datos desde session_state
+    ocs = st.session_state.proforma_ocs_cargadas
+    rutas_logistica = st.session_state.proforma_rutas_logistica
     
     # Debug info
     if rutas_logistica:
