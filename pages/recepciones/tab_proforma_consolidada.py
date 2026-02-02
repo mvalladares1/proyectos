@@ -69,11 +69,11 @@ def obtener_kg_de_oc_mp(numero_ruta: str, rutas_logistica: List[Dict]) -> Option
     OC Flete (OC11476) -> Número Ruta (RT00259) -> OC MP (OC11427) -> Kg reales
     """
     try:
-        # Buscar la ruta por su número
+        # Buscar la ruta por su número (campo 'name' contiene el número de ruta como RT00XXX)
         for ruta in rutas_logistica:
-            ruta_name = ruta.get('ruta_name', '') or ruta.get('name', '')
+            ruta_name = ruta.get('name', '')
             
-            if numero_ruta and numero_ruta in ruta_name:
+            if numero_ruta and ruta_name == numero_ruta:
                 # Extraer kg de la carga asociada
                 total_qnt = ruta.get('total_qnt', 0)
                 if total_qnt and total_qnt > 0:
@@ -498,14 +498,8 @@ def render(username: str, password: str):
         costo = oc['costo_lineas']
         costo_por_km = (costo / kms) if kms > 0 else 0
         
-        # Obtener número de ruta y buscar kg en OC de MP
-        numero_ruta = ruta_info.get('ruta_name', '') if ruta_info else ''
-        
-        # Debug: mostrar info de ruta para las primeras 3 OCs
-        if len(datos_tabla) < 3 and ruta_info:
-            st.write(f"DEBUG OC {oc['name']}:")
-            st.write(f"  - ruta_name: {ruta_info.get('ruta_name', 'NO EXISTE')}")
-            st.write(f"  - Campos disponibles: {list(ruta_info.keys())}")
+        # Obtener número de ruta (campo 'name' de la API de logística, ej: RT00469)
+        numero_ruta = ruta_info.get('name', '') if ruta_info else ''
         
         kilos = 0
         if ruta_info:
