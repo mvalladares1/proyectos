@@ -22,6 +22,7 @@ from recepciones import tab_curva
 from recepciones import tab_aprobaciones
 from recepciones import tab_pallets
 from recepciones import tab_aprobaciones_fletes
+from recepciones import tab_proforma_consolidada
 
 # Configuración de página
 st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
@@ -50,6 +51,7 @@ _perm_curva = tiene_acceso_pagina("recepciones", "curva_abastecimiento")
 _perm_aprobaciones = tiene_acceso_pagina("recepciones", "aprobaciones_mp")
 _perm_pallets = tiene_acceso_pagina("recepciones", "pallets_recepcion") # Permiso nuevo o reusado
 _perm_aprobaciones_fletes = tiene_acceso_pagina("recepciones", "aprobaciones_fletes")  # Nuevo permiso
+_perm_proforma_fletes = tiene_acceso_pagina("recepciones", "proforma_fletes")  # Proforma consolidada
 
 # === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
 tabs_disponibles = []
@@ -78,6 +80,10 @@ if _perm_aprobaciones:
 if _perm_aprobaciones_fletes:
     tabs_nombres.append("🚚 Aprobaciones Fletes")
     tabs_disponibles.append("aprobaciones_fletes")
+
+if _perm_proforma_fletes:
+    tabs_nombres.append("📄 Proforma Consolidada")
+    tabs_disponibles.append("proforma_fletes")
 
 # Si no tiene acceso a ningún tab, mostrar mensaje
 if not tabs_disponibles:
@@ -130,7 +136,15 @@ if "aprobaciones" in tabs_disponibles:
 
 if "aprobaciones_fletes" in tabs_disponibles:
     with tabs_ui[tab_index]:
+        @st.fragme
+
+if "proforma_fletes" in tabs_disponibles:
+    with tabs_ui[tab_index]:
         @st.fragment
+        def _frag_proforma_fletes():
+            tab_proforma_consolidada.render(username, password)
+        _frag_proforma_fletes()
+    tab_index += 1nt
         def _frag_aprobaciones_fletes():
             tab_aprobaciones_fletes.render_tab(username, password)
         _frag_aprobaciones_fletes()
