@@ -719,12 +719,18 @@ class TunelesService:
                 })
                 continue
             
+            # FIX: Verificar que el pallet tenga producto_id válido
+            producto_id_validado = validacion.get('producto_id')
+            if not producto_id_validado:
+                errores.append(f"{pallet['codigo']}: Stock encontrado pero sin producto_id en Odoo")
+                continue
+            
             pallets_validados.append({
                 'codigo': pallet['codigo'],
                 'kg': kg,
                 'lote_id': validacion.get('lote_id'),
                 'lote_nombre': validacion.get('lote_nombre'),  # Nombre del lote original
-                'producto_id': validacion.get('producto_id'),
+                'producto_id': producto_id_validado,  # Usar variable validada
                 'ubicacion_id': validacion.get('ubicacion_id') or config['ubicacion_origen_id'],  # FIX: usar 'or' para manejar None explícito
                 'package_id': validacion.get('package_id'),  # ID del paquete origen
                 'manual': False
@@ -747,6 +753,14 @@ class TunelesService:
         productos_totales = {}
         for pallet in pallets_validados:
             prod_id = pallet['producto_id']
+            
+            # FIX CRÍTICO: Filtrar pallets sin producto_id
+            if not prod_id or prod_id is None:
+                msg = f"{pallet['codigo']}: Pallet sin producto_id identificado (producto_id={prod_id})"
+                errores.append(msg)
+                print(f"ERROR validación: {msg}")
+                continue
+            
             if prod_id not in productos_totales:
                 productos_totales[prod_id] = {
                     'kg': 0,
@@ -755,7 +769,15 @@ class TunelesService:
             productos_totales[prod_id]['kg'] += pallet['kg']
             productos_totales[prod_id]['pallets'].append(pallet)
         
-        total_kg = sum(p['kg'] for p in pallets_validados)
+        # Verificar si hay errores después de filtrar
+        if errores:
+            return {
+                'success': False,
+                'errores': errores,
+                'advertencias': advertencias
+            }
+        
+        total_kg = sum(p['kg'] for p in pallets_validados if p.get('producto_id'))
         
         # 3. Crear la orden de fabricación
         try:
