@@ -11,6 +11,7 @@ import io
 from typing import Dict, List, Optional
 import requests
 import json
+import base64
 
 
 URL = 'https://riofuturo.server98c6e.oerpondemand.net'
@@ -639,20 +640,103 @@ def render(username: str, password: str):
                             # Generar PDF para este transportista
                             pdf_bytes = generar_pdf_proforma({transportista: data}, fecha_desde_str, fecha_hasta_str)
                             
-                            # Buscar email del transportista en Odoo
+                            # Buscar partner_id y email del transportista en Odoo
                             transportista_info = models.execute_kw(
                                 DB, uid, password,
                                 'res.partner', 'search_read',
                                 [[('name', '=', transportista)]],
-                                {'fields': ['email'], 'limit': 1}
+                                {'fields': ['id', 'email'], 'limit': 1}
                             )
                             
                             if transportista_info and transportista_info[0].get('email'):
+                                partner_id = transportista_info[0]['id']
                                 email_destino = transportista_info[0]['email']
                                 
-                                # Enviar correo (usando servicio de correo de RioFuturo)
-                                # TODO: Implementar integración con servicio de correo
-                                # Por ahora, solo mostrar que se enviaría
+                                # Codificar PDF en base64 para adjuntar
+                                import base64
+                                pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                                
+                                # Crear adjunto en Odoo
+                                attachment_id = models.execute_kw(
+                                    DB, uid, password,
+                                    'ir.attachment', 'create',
+                                    [{
+                                        'name': f'Proforma_Fletes_{fecha_desde_str}_{fecha_hasta_str}.pdf',
+                                        'type': 'binary',
+                                        'datas': pdf_base64,
+                                        'res_model': 'res.partner',
+                                        'res_id': partner_id,
+                                        'mimetype': 'application/pdf'
+                                    }]
+                                )
+                                
+                                # Crear y enviar correo usando mail.mail de Odoo
+                                cant_ocs = len(data['ocs'])
+                                total_costo = data['totales']['costo']
+                                
+                                mensaje_html = f"""
+                                <html>
+                                <head>
+                                    <style>
+                                        body {{ font-family: Arial, sans-serif; }}
+                                        .header {{ background-color: #1f4788; color: white; padding: 20px; text-align: center; }}
+                                        .content {{ padding: 20px; }}
+                                        .summary {{ background-color: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 5px; }}
+                                        .footer {{ text-align: center; color: #666; padding: 20px; font-size: 12px; }}
+                                    </style>
+                                </head>
+                                <body>
+                                    <div class="header">
+                                        <h2>Proforma Consolidada de Fletes</h2>
+                                    </div>
+                                    <div class="content">
+                                        <p>Estimado/a,</p>
+                                        <p>Adjuntamos la proforma consolidada de servicios de flete correspondiente al período <strong>{fecha_desde_str}</strong> al <strong>{fecha_hasta_str}</strong>.</p>
+                                        
+                                        <div class="summary">
+                                            <h3>Resumen del Período</h3>
+                                            <ul>
+                                                <li><strong>Cantidad de Órdenes de Compra:</strong> {cant_ocs}</li>
+                                                <li><strong>Total Kilómetros:</strong> {data['totales']['kms']:,.0f} km</li>
+                                                <li><strong>Total Kilos:</strong> {data['totales']['kilos']:,.1f} kg</li>
+                                                <li><strong>Monto Total:</strong> ${total_costo:,.0f}</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <p>En el documento adjunto encontrará el detalle completo de todas las órdenes de compra incluidas en este período.</p>
+                                        
+                                        <p>Cualquier consulta, no dude en contactarnos.</p>
+                                        
+                                        <p>Saludos cordiales,<br>
+                                        <strong>Río Futuro</strong></p>
+                                    </div>
+                                    <div class="footer">
+                                        Este es un correo automático generado por el sistema de gestión de Río Futuro.<br>
+                                        Generado el {datetime.now().strftime('%d/%m/%Y a las %H:%M')}
+                                    </div>
+                                </body>
+                                </html>
+                                """
+                                
+                                # Crear el correo
+                                mail_id = models.execute_kw(
+                                    DB, uid, password,
+                                    'mail.mail', 'create',
+                                    [{
+                                        'subject': f'Proforma Consolidada de Fletes - {fecha_desde_str} al {fecha_hasta_str}',
+                                        'email_to': email_destino,
+                                        'body_html': mensaje_html,
+                                        'attachment_ids': [(6, 0, [attachment_id])]
+                                    }]
+                                )
+                                
+                                # Enviar el correo
+                                models.execute_kw(
+                                    DB, uid, password,
+                                    'mail.mail', 'send',
+                                    [[mail_id]]
+                                )
+                                
                                 st.success(f"✅ Proforma enviada a {transportista} ({email_destino})")
                                 enviados += 1
                             else:
