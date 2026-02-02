@@ -262,6 +262,13 @@ class OdooQueryManager:
         
         groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
         
+        # Asegurar enteros en exclusión
+        if cuentas_efectivo_ids:
+            try:
+                cuentas_efectivo_ids = [int(x) for x in cuentas_efectivo_ids if str(x).isdigit()]
+            except:
+                pass
+        
         resultados = []
         chunk_size = 5000
         
@@ -404,6 +411,168 @@ class OdooQueryManager:
             print(f"[OdooQueryManager] Error obteniendo líneas parametrizadas: {e}")
             return []
     
+    def get_lineas_cuenta_periodo(self, account_codes: List[str], 
+                                 fecha_inicio: str, fecha_fin: str) -> List[Dict]:
+        """
+        Obtiene líneas de cuentas CxC usando x_studio_fecha_de_pago como ÚNICO criterio.
+        
+        LÓGICA DE FECHA DE PAGO:
+        - Si el move tiene x_studio_fecha_de_pago → usa ESA fecha
+        - Si NO tiene x_studio_fecha_de_pago → usa date (fecha contable) como fallback
+        
+        Esto permite que facturas de Agosto con pago acordado en Sept aparezcan en Sept,
+        y facturas de Sept con pago en Octubre NO aparezcan en Sept.
+        
+        IMPORTANTE: Cada línea devuelta incluye 'fecha_efectiva' = la fecha que determina
+        en qué período se muestra (fecha_pago si existe, sino fecha contable).
+        
+        FILTROS APLICADOS:
+        - Solo FACTURAS DE CLIENTE (out_invoice, out_refund)
+        
+        REGLA DE BORRADORES:
+        - Del PASADO: Solo publicados (excluir borradores)
+        - Del PERÍODO ACTUAL: Incluir borradores para proyección
+        """
+        if not account_codes:
+            return []
+            
+        try:
+            # 1. Obtener IDs de cuentas
+            cuentas = self.odoo.search_read(
+                'account.account',
+                [['code', 'in', account_codes]],
+                ['id', 'code']
+            )
+            account_ids = [c['id'] for c in cuentas]
+            
+            if not account_ids:
+                return []
+            
+            print(f"[CxC Query] Buscando para cuentas {account_codes} en período {fecha_inicio} a {fecha_fin}")
+                
+            # 2. Buscar MOVES que cumplan criterios:
+            #    - FACTURAS DE CLIENTE (out_invoice, out_refund)
+            #    - PUBLICADOS: cualquier fecha que caiga en rango
+            #    - BORRADORES: solo si su fecha está DENTRO del período (proyección)
+            #
+            # Lógica: (posted AND fecha_en_rango) OR (draft AND fecha_en_rango)
+            # Simplificado: fecha_en_rango AND (posted OR draft)
+            # Facturas publicadas con fecha en rango
+            # Usamos payment_state para identificar proyección (pendientes de cobro)
+            # payment_state: not_paid, in_payment, partial = PROYECCIÓN (no cobradas)
+            # payment_state: paid, reversed = YA COBRADAS (historial)
+            
+            domain_moves = [
+                ['move_type', 'in', ['out_invoice', 'out_refund']],  # Solo facturas de cliente
+                ['state', '=', 'posted'],  # Solo publicadas
+                '|',
+                # Caso A: Tiene fecha_de_pago en rango
+                '&', '&',
+                    ['x_studio_fecha_de_pago', '!=', False],
+                    ['x_studio_fecha_de_pago', '>=', fecha_inicio],
+                    ['x_studio_fecha_de_pago', '<=', fecha_fin],
+                # Caso B: NO tiene fecha_de_pago, usar date contable en rango
+                '&', '&',
+                    ['x_studio_fecha_de_pago', '=', False],
+                    ['date', '>=', fecha_inicio],
+                    ['date', '<=', fecha_fin],
+            ]
+            
+            moves = self.odoo.search_read(
+                'account.move',
+                domain_moves,
+                ['id', 'name', 'x_studio_fecha_de_pago', 'date', 'move_type', 'state', 'payment_state']
+            )
+            
+            # Crear diccionario de move_id -> (fecha_efectiva, es_proyeccion)
+            # FECHA EFECTIVA = fecha_pago si existe, sino fecha contable
+            # PROYECCIÓN = payment_state in ['not_paid', 'in_payment', 'partial']
+            move_fecha_efectiva = {}
+            move_info = {}  # Para guardar info adicional del move
+            cobradas_count = 0
+            proyeccion_count = 0
+            
+            ESTADOS_PROYECCION = ['not_paid', 'in_payment', 'partial']
+            
+            for m in moves:
+                fecha_pago = m.get('x_studio_fecha_de_pago')
+                fecha_contable = m.get('date')
+                payment_state = m.get('payment_state', 'not_paid')
+                es_proyeccion = payment_state in ESTADOS_PROYECCION
+                
+                move_fecha_efectiva[m['id']] = fecha_pago if fecha_pago else fecha_contable
+                move_info[m['id']] = {
+                    'name': m.get('name'),
+                    'payment_state': payment_state,
+                    'es_proyeccion': es_proyeccion
+                }
+                
+                if es_proyeccion:
+                    proyeccion_count += 1
+                else:
+                    cobradas_count += 1
+            
+            move_ids = list(move_fecha_efectiva.keys())
+            
+            print(f"[CxC Query] Encontrados {len(move_ids)} facturas cliente ({cobradas_count} cobradas, {proyeccion_count} pendientes/proyección)")
+            
+            if not move_ids:
+                return []
+
+            # 3. Buscar líneas de esos moves en las cuentas objetivo
+            lineas = []
+            chunk_size = 5000
+            for i in range(0, len(move_ids), chunk_size):
+                chunk = move_ids[i:i + chunk_size]
+                domain_lines = [
+                    ['account_id', 'in', account_ids],
+                    ['move_id', 'in', chunk]
+                ]
+                
+                chunk_lines = self.odoo.search_read(
+                    'account.move.line',
+                    domain_lines,
+                    ['account_id', 'name', 'balance', 'date', 'move_id'],
+                    limit=10000
+                )
+                lineas.extend(chunk_lines)
+            
+            print(f"[CxC Query] Encontradas {len(lineas)} líneas en cuentas CxC")
+            
+            # 4. Enriquecer cada línea con:
+            #    - 'name': etiqueta (nombre del move/factura)
+            #    - 'fecha_efectiva': fecha a usar para agrupar (fecha_pago o fecha_contable)
+            #    - 'es_proyeccion': True si payment_state in [not_paid, in_payment, partial]
+            #    - 'payment_state': estado de pago de la factura
+            for linea in lineas:
+                move_data = linea.get('move_id')
+                move_id = move_data[0] if isinstance(move_data, (list, tuple)) else move_data
+                move_name = move_data[1] if isinstance(move_data, (list, tuple)) else ''
+                
+                # Etiqueta: SIEMPRE usar nombre del move (factura) para nivel 3
+                # Esto agrupa todas las líneas de una factura bajo su nombre
+                if move_name:
+                    label = move_name
+                else:
+                    label = linea.get('name', '') or 'Sin etiqueta'
+                
+                linea['name'] = label
+                
+                # FECHA EFECTIVA: usar la del move (fecha_pago si existe, sino fecha_contable)
+                linea['fecha_efectiva'] = move_fecha_efectiva.get(move_id, linea.get('date'))
+                
+                # Info adicional del move para proyección
+                info = move_info.get(move_id, {})
+                linea['es_proyeccion'] = info.get('es_proyeccion', False)
+                linea['payment_state'] = info.get('payment_state', 'not_paid')
+            
+            return lineas
+        except Exception as e:
+            print(f"[OdooQueryManager] Error obteniendo líneas CxC con fecha pago: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+            
     def get_etiquetas_por_mes(self, asientos_ids: List[int],
                              account_ids: List[int],
                              agrupacion: str = 'mensual') -> List[Dict]:
@@ -421,41 +590,67 @@ class OdooQueryManager:
         if not asientos_ids or not account_ids:
             return []
         
-        groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
-        
         try:
-            grupos = self.odoo.models.execute_kw(
-                self.odoo.db, self.odoo.uid, self.odoo.password,
-                'account.move.line', 'read_group',
-                [[
-                    ['move_id', 'in', asientos_ids],
-                    ['account_id', 'in', account_ids]
-                ]],
-                {
-                    'fields': ['balance', 'account_id', 'name', 'date'],
-                    'groupby': ['account_id', 'name', groupby_key],
-                    'lazy': False
-                }
+            # Filtrar por diario de ventas
+            domain = [
+                ['move_id', 'in', asientos_ids],
+                ['account_id', 'in', account_ids],
+                ['journal_id', '=', 1]
+            ]
+            
+            # Usar search_read para obtener move_id (con nombre del asiento)
+            lineas = self.odoo.search_read(
+                'account.move.line',
+                domain,
+                ['account_id', 'name', 'balance', 'date', 'move_id'],
+                limit=10000
             )
             
-            # Deduplicar/Agrupar manualmente para asegurar unicidad
-            # Clave: (account_id, name, period)
+            # Agrupar manualmente
             agrupados = {}
-            for g in (grupos or []):
-                acc_data = g.get('account_id')
-                if not acc_data: continue
+            for linea in (lineas or []):
+                acc_data = linea.get('account_id')
+                if not acc_data: 
+                    continue
                 acc_id = acc_data[0] if isinstance(acc_data, (list, tuple)) else acc_data
                 
-                name = g.get('name', '')
-                period = g.get(groupby_key, '')
+                # Label: usar name de la línea, o si está vacío, usar move_id.name
+                line_name = linea.get('name', '')
+                move_data = linea.get('move_id')
+                move_name = move_data[1] if isinstance(move_data, (list, tuple)) else ''
                 
-                key = (acc_id, name, period)
+                label = line_name.strip() if line_name and line_name.strip() else move_name
+                
+                if not label:
+                    label = 'Sin etiqueta'
+                
+                # Periodo
+                fecha = linea.get('date', '')
+                if agrupacion == 'semanal':
+                    try:
+                        from datetime import datetime
+                        fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                        y, w, d = fecha_dt.isocalendar()
+                        period = f"{y}-W{w:02d}"
+                    except:
+                        continue
+                else:
+                    period = fecha[:7] if fecha else ''
+                
+                balance = linea.get('balance', 0)
+                
+                key = (acc_id, label, period)
                 
                 if key not in agrupados:
-                    agrupados[key] = g.copy()
+                    agrupados[key] = {
+                        'account_id': acc_data,
+                        'name': label,
+                        'date:month': period if agrupacion == 'mensual' else None,
+                        'date:week': period if agrupacion == 'semanal' else None,
+                        'balance': balance
+                    }
                 else:
-                    # Sumar balance si ya existe
-                    agrupados[key]['balance'] = agrupados[key].get('balance', 0) + g.get('balance', 0)
+                    agrupados[key]['balance'] += balance
             
             return list(agrupados.values())
         except Exception as e:

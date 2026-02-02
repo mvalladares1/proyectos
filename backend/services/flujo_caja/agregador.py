@@ -243,6 +243,96 @@ class AgregadorFlujo:
             if mes_str in self.meses_lista:
                 cuenta['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_str] += balance
     
+    def procesar_lineas_cxc(self, lineas: List[Dict], 
+                           clasificar_fn,
+                           agrupacion: str = 'mensual') -> None:
+        """
+        Procesa líneas de Cuentas por Cobrar (CxC) para flujo de caja proyectado.
+        
+        LÓGICA DE FLUJO DE CAJA PARA CxC (11030101):
+        
+        En contabilidad:
+        - Débito en CxC (balance positivo) = Factura emitida → INGRESO ESPERADO
+        - Crédito en CxC (balance negativo) = Pago recibido o NC → REDUCCIÓN de CxC
+        
+        Para flujo de caja PROYECTADO basado en fecha_de_pago:
+        - Mostramos el DÉBITO (factura) como ingreso esperado en la fecha de pago acordada
+        - Los créditos (cobros ya realizados) reducen el ingreso esperado
+        
+        El signo final:
+        - Balance positivo (débito/factura) → Flujo POSITIVO (esperamos cobrar)
+        - Balance negativo (crédito/cobro) → Flujo NEGATIVO (ya se redujo la cuenta)
+        
+        IMPORTANTE: Usa 'fecha_efectiva' de la línea (fecha_pago si existe, sino fecha_contable)
+        
+        Args:
+            lineas: Líneas de account.move.line con fecha_efectiva enriquecida
+            clasificar_fn: Función de clasificación
+            agrupacion: 'mensual' o 'semanal'
+        """
+        for linea in lineas:
+            acc_data = linea.get('account_id')
+            if not acc_data:
+                continue
+            
+            codigo_cuenta = acc_data[1].split(' ')[0] if ' ' in acc_data[1] else acc_data[1]
+            balance = linea.get('balance', 0)
+            
+            # USAR FECHA_EFECTIVA (fecha pago si existe, sino fecha contable)
+            fecha = linea.get('fecha_efectiva') or linea.get('date', '')
+            
+            # Determinar período basado en fecha_efectiva
+            if agrupacion == 'semanal':
+                try:
+                    fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                    y, w, d = fecha_dt.isocalendar()
+                    mes_str = f"{y}-W{w:02d}"
+                except:
+                    continue
+            else:
+                mes_str = fecha[:7] if fecha else None
+            
+            if not mes_str or mes_str not in self.meses_lista:
+                continue
+            
+            # Clasificar
+            concepto_id, es_pendiente = clasificar_fn(codigo_cuenta)
+            if concepto_id is None:
+                continue
+            
+            # SIGNO PARA CxC en Flujo Proyectado:
+            # - Balance positivo (débito) = factura → INGRESO esperado (mantener positivo)
+            # - Balance negativo (crédito) = pago/NC → Ya cobrado o reducido (mantener negativo)
+            # NO invertimos signo para CxC porque queremos mostrar el movimiento real
+            monto_efectivo = balance
+            
+            # Acumular
+            if concepto_id not in self.montos_por_concepto_mes:
+                self.montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in self.meses_lista}
+            
+            self.montos_por_concepto_mes[concepto_id][mes_str] += monto_efectivo
+            
+            # Trackear cuenta
+            self._agregar_cuenta(concepto_id, codigo_cuenta, acc_data[1], monto_efectivo, mes_str, acc_data[0])
+            
+            # Agregar etiqueta (ya viene enriquecida desde get_lineas_cuenta_periodo)
+            etiqueta = linea.get('name', 'Sin etiqueta')
+            etiqueta_limpia = ' '.join(str(etiqueta).split())[:60] if etiqueta else "Sin etiqueta"
+            
+            cuenta = self.cuentas_por_concepto[concepto_id][codigo_cuenta]
+            if 'etiquetas' not in cuenta:
+                cuenta['etiquetas'] = {}
+            
+            if etiqueta_limpia not in cuenta['etiquetas']:
+                cuenta['etiquetas'][etiqueta_limpia] = {
+                    'monto': 0.0,
+                    'montos_por_mes': {m: 0.0 for m in self.meses_lista}
+                }
+            
+            cuenta['etiquetas'][etiqueta_limpia]['monto'] += monto_efectivo
+            if mes_str in self.meses_lista:
+                cuenta['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_str] += monto_efectivo
+    
     def procesar_facturas_draft(self, facturas: List[Dict], lineas: Dict[int, List[Dict]],
                                clasificar_fn, cuentas_info: Dict,
                                agrupacion: str = 'mensual') -> None:
