@@ -624,6 +624,10 @@ def render(username: str, password: str):
     if 'df_proforma_display' not in st.session_state:
         st.session_state.df_proforma_display = df_display.copy()
     
+    # Inicializar DataFrame final si no existe
+    if 'df_proforma_final' not in st.session_state:
+        st.session_state.df_proforma_final = df.copy()
+    
     # Tabs: Selección simple vs Editor completo
     tab_select, tab_editor = st.tabs(["✓ Selección Rápida", "✏️ Editor Completo (Completar Datos)"])
     
@@ -670,6 +674,8 @@ def render(username: str, password: str):
         st.session_state.df_proforma_display = edited_df_display.copy()
         edited_df = df.copy()
         edited_df['Sel'] = edited_df_display['Sel']
+        # Guardar en session_state para uso posterior
+        st.session_state.df_proforma_final = edited_df.copy()
     
     with tab_editor:
         st.info("✏️ Usa este editor para **completar datos faltantes** antes de generar la proforma")
@@ -724,6 +730,8 @@ def render(username: str, password: str):
         
         # Usar los datos editados como definitivos
         edited_df = edited_df_completo
+        # Guardar en session_state para uso posterior
+        st.session_state.df_proforma_final = edited_df.copy()
         
         # Botones de ayuda y resumen
         col_help1, col_help2 = st.columns(2)
@@ -741,6 +749,10 @@ def render(username: str, password: str):
     
     # Separador visual entre tabs y sección de generación
     st.divider()
+    
+    # Usar el DataFrame final guardado en session_state
+    if 'df_proforma_final' in st.session_state and st.session_state.df_proforma_final is not None:
+        edited_df = st.session_state.df_proforma_final
     
     # Resumen de seleccionados
     seleccionados = edited_df[edited_df['Sel'] == True]
