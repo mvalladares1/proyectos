@@ -340,11 +340,13 @@ def render(username: str, password: str):
             html_parts.append('<th rowspan="2"><strong>TOTAL</strong></th>')
             html_parts.append('</tr>')
             
-            # Fila 2: Semanas (S1, S2, S3, S4)
+            # Fila 2: Semanas (número real de semana del año)
             html_parts.append('<tr class="header-semanas">')
             for mes in meses_ordenados:
-                for i, semana in enumerate(semanas_por_mes[mes], 1):
-                    html_parts.append(f'<th style="font-size: 11px; background: #2d3748; padding: 4px 8px;">S{i}</th>')
+                for semana in semanas_por_mes[mes]:
+                    # Extraer número de semana del formato 2026-W05
+                    num_semana = semana.split('-W')[1] if '-W' in semana else semana
+                    html_parts.append(f'<th style="font-size: 11px; background: #2d3748; padding: 4px 8px;">S{int(num_semana)}</th>')
             html_parts.append('</tr>')
             html_parts.append('</thead>')
         else:
