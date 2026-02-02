@@ -627,6 +627,9 @@ def render(username: str, password: str):
     # Tabs: Selección simple vs Editor completo
     tab_select, tab_editor = st.tabs(["✓ Selección Rápida", "✏️ Editor Completo (Completar Datos)"])
     
+    # Variable para el df final editado (se asigna en cada tab)
+    edited_df = df.copy()
+    
     with tab_select:
         st.info("👉 Usa este modo para seleccionar OCs que ya tienen todos los datos completos")
         
@@ -665,8 +668,8 @@ def render(username: str, password: str):
         
         # Guardar el estado actualizado y sincronizar selección con df original
         st.session_state.df_proforma_display = edited_df_display.copy()
-        df['Sel'] = edited_df_display['Sel']
-        edited_df = df
+        edited_df = df.copy()
+        edited_df['Sel'] = edited_df_display['Sel']
     
     with tab_editor:
         st.info("✏️ Usa este editor para **completar datos faltantes** antes de generar la proforma")
