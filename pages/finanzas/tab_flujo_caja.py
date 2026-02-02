@@ -488,6 +488,15 @@ def render(username: str, password: str):
                         # Detectar si es cuenta CxC para habilitar modal
                         es_cuenta_cxc = cuenta.get("es_cuenta_cxc", False)
                         
+                        # Mapeo de iconos por estado de pago
+                        ESTADO_ICONS = {
+                            'Facturas Pagadas': '✅',
+                            'Facturas Parcialmente Pagadas': '⏳',
+                            'En Proceso de Pago': '🔄',
+                            'Facturas No Pagadas': '❌',
+                            'Facturas Revertidas': '↩️'
+                        }
+                        
                         if has_etiquetas:
                             for etiqueta in etiquetas[:10]:  # Top 10 etiquetas
                                 et_nombre = etiqueta.get("nombre", "")[:50]
@@ -500,10 +509,14 @@ def render(username: str, password: str):
                                 # Indentación aumentada a 100px con borde izquierdo para indicar jerarquía
                                 html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
                                 
+                                # Obtener icono según estado de pago (si es CxC) o icono genérico
+                                icono = ESTADO_ICONS.get(et_nombre, '🏷️') if es_cuenta_cxc else '🏷️'
+                                
                                 # Nombre de etiqueta con indicador de facturas si es CxC
-                                nombre_display = f'🏷️ {et_nombre}'
                                 if es_cuenta_cxc and tiene_facturas:
-                                    nombre_display = f'📊 {et_nombre} <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                    nombre_display = f'{icono} {et_nombre} <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                else:
+                                    nombre_display = f'{icono} {et_nombre}'
                                 
                                 html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
                                 

@@ -221,6 +221,40 @@ function setFacturasData(data) {
     facturasData = data;
 }
 
+// Mapeo de iconos por estado de factura
+const ESTADO_ICONS = {
+    'Facturas Pagadas': '✅',
+    'Facturas Parcialmente Pagadas': '⏳',
+    'Facturas En Proceso de Pago': '🔄',
+    'Facturas No Pagadas': '❌',
+    'Facturas Revertidas': '↩️'
+};
+
+// Formatear fecha: 2025-10-01 -> 01-Oct-2025
+function formatFecha(fechaStr) {
+    if (!fechaStr || fechaStr === '-') return '-';
+    try {
+        const date = new Date(fechaStr + 'T00:00:00');
+        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const dia = String(date.getDate()).padStart(2, '0');
+        const mes = meses[date.getMonth()];
+        const year = date.getFullYear();
+        return `${dia}-${mes}-${year}`;
+    } catch(e) {
+        return fechaStr;
+    }
+}
+
+// Generar link a Odoo para factura
+function getOdooLink(facturaName, facturaId) {
+    // URL base de Odoo
+    const odooBase = 'https://riofuturo.odoo.com/web#id=';
+    if (facturaId) {
+        return `${odooBase}${facturaId}&model=account.move&view_type=form`;
+    }
+    return null;
+}
+
 function showFacturasModal(estadoNombre, periodo, cuentaCodigo) {
     const key = estadoNombre + '_' + cuentaCodigo;
     const facturas = facturasData[key] || [];
@@ -231,8 +265,6 @@ function showFacturasModal(estadoNombre, periodo, cuentaCodigo) {
     // Filtrar facturas por período seleccionado
     const facturasMes = facturas.filter(f => {
         if (!f.montos_por_mes) return false;
-        
-        // Buscar el período exacto
         const montoMes = f.montos_por_mes[periodo];
         return montoMes && montoMes !== 0;
     });
@@ -241,32 +273,39 @@ function showFacturasModal(estadoNombre, periodo, cuentaCodigo) {
     const title = document.getElementById('modal-title');
     const body = document.getElementById('modal-body');
     
-    // Formatear nombre del período
+    // Formatear nombre del período - usar el período real, NO basado en fechas de facturas
     let periodoNombre;
     if (esSemana) {
-        // Formato: 2025-W40 -> "Semana 40, 2025"
         const parts = periodo.replace('-W', 'W').split('W');
         const year = parts[0];
         const week = parts[1];
         periodoNombre = `Semana ${parseInt(week)}, ${year}`;
     } else {
-        const mesDate = new Date(periodo + '-01');
-        periodoNombre = mesDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
-        periodoNombre = periodoNombre.charAt(0).toUpperCase() + periodoNombre.slice(1);
+        // Período mensual: 2025-10 -> Octubre de 2025
+        const [year, month] = periodo.split('-');
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        periodoNombre = `${meses[parseInt(month) - 1]} de ${year}`;
     }
     
-    title.innerHTML = `<strong>${estadoNombre}</strong> - ${periodoNombre}`;
+    // Obtener icono del estado
+    const icon = ESTADO_ICONS[estadoNombre] || '📋';
+    
+    title.innerHTML = `<span style="margin-right: 8px;">${icon}</span><strong>${estadoNombre}</strong> - ${periodoNombre}`;
     
     if (facturasMes.length === 0) {
         body.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">No hay facturas para este período</p>';
     } else {
+        // Ordenar facturas por monto (mayor a menor en valor absoluto)
+        facturasMes.sort((a, b) => Math.abs(b.montos_por_mes[periodo] || 0) - Math.abs(a.montos_por_mes[periodo] || 0));
+        
         let tableHTML = `
             <table class="modal-table">
                 <thead>
                     <tr>
                         <th>Factura</th>
                         <th>Fecha</th>
-                        <th style="text-align: right;">Monto Mes</th>
+                        <th style="text-align: right;">Monto Período</th>
                         <th style="text-align: right;">Monto Total</th>
                     </tr>
                 </thead>
@@ -274,16 +313,25 @@ function showFacturasModal(estadoNombre, periodo, cuentaCodigo) {
         `;
         
         let totalMes = 0;
-        facturasMes.forEach(f => {
+        facturasMes.forEach((f, idx) => {
             const montoMes = f.montos_por_mes[periodo] || 0;
             totalMes += montoMes;
             const fmtMontoMes = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(montoMes);
             const fmtMontoTotal = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(f.monto);
             
+            // Generar link a Odoo
+            const odooLink = f.move_id ? getOdooLink(f.nombre, f.move_id) : null;
+            const nombreHTML = odooLink 
+                ? `<a href="${odooLink}" target="_blank" style="color: #60a5fa; text-decoration: none; font-weight: bold;" title="Abrir en Odoo">${f.nombre} 🔗</a>`
+                : `<strong>${f.nombre}</strong>`;
+            
+            // Fila alternada
+            const rowBg = idx % 2 === 0 ? '' : 'background: rgba(45, 55, 72, 0.5);';
+            
             tableHTML += `
-                <tr>
-                    <td><strong>${f.nombre}</strong></td>
-                    <td>${f.fecha || '-'}</td>
+                <tr style="${rowBg}">
+                    <td>${nombreHTML}</td>
+                    <td>${formatFecha(f.fecha)}</td>
                     <td style="text-align: right; color: ${montoMes >= 0 ? '#00e676' : '#ff5252'};">${fmtMontoMes}</td>
                     <td style="text-align: right;">${fmtMontoTotal}</td>
                 </tr>
@@ -294,8 +342,8 @@ function showFacturasModal(estadoNombre, periodo, cuentaCodigo) {
         tableHTML += `
                 </tbody>
                 <tfoot>
-                    <tr style="font-weight: bold; background: #2d3748;">
-                        <td colspan="2">Total ${facturasMes.length} facturas</td>
+                    <tr style="font-weight: bold; background: linear-gradient(135deg, #2d3748 0%, #1e293b 100%);">
+                        <td colspan="2">📊 Total ${facturasMes.length} factura${facturasMes.length !== 1 ? 's' : ''}</td>
                         <td style="text-align: right; color: ${totalMes >= 0 ? '#00e676' : '#ff5252'};">${fmtTotalMes}</td>
                         <td></td>
                     </tr>
@@ -392,6 +440,26 @@ MODAL_CSS = """
     padding: 20px 24px;
     max-height: 60vh;
     overflow-y: auto;
+}
+
+/* Scrollbar celeste para el modal */
+.modal-body::-webkit-scrollbar {
+    width: 10px;
+    background: #0a0e1a;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: #1e293b;
+    border-radius: 8px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 8px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
 }
 
 .modal-table {

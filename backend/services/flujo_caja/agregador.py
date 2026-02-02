@@ -354,10 +354,14 @@ class AgregadorFlujo:
             if payment_state not in cuenta['facturas_por_estado']:
                 cuenta['facturas_por_estado'][payment_state] = {}
             
+            # Obtener move_id para link a Odoo
+            move_id = move_data[0] if isinstance(move_data, (list, tuple)) and len(move_data) > 0 else None
+            
             # Agrupar por factura y mes
             if move_name not in cuenta['facturas_por_estado'][payment_state]:
                 cuenta['facturas_por_estado'][payment_state][move_name] = {
                     'nombre': move_name,
+                    'move_id': move_id,  # ID para link a Odoo
                     'monto_total': 0.0,
                     'montos_por_mes': {m: 0.0 for m in self.meses_lista},
                     'fecha': fecha,
@@ -606,6 +610,7 @@ class AgregadorFlujo:
                         for fact_nombre, fact_datos in facturas_estado.items():
                             facturas_lista.append({
                                 "nombre": fact_nombre,
+                                "move_id": fact_datos.get("move_id"),  # ID para link a Odoo
                                 "monto": round(fact_datos.get("monto_total", 0), 0),
                                 "montos_por_mes": {m: round(fact_datos.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista},
                                 "fecha": fact_datos.get("fecha", ""),
