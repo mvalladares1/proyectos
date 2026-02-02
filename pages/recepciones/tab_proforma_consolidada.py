@@ -504,7 +504,7 @@ def render(username: str, password: str):
         if ruta_info:
             # Intentar obtener kg de la OC de MP asociada a la ruta
             kilos_mp = obtener_kg_de_oc_mp(numero_ruta, rutas_logistica)
-            if kilos_mp > 0:
+            if kilos_mp is not None and kilos_mp > 0:
                 kilos = kilos_mp
             else:
                 # Fallback al total_qnt del sistema de logística
