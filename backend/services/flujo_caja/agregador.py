@@ -512,25 +512,19 @@ class AgregadorFlujo:
                 elif datos != 0:  # Si es solo un número
                     etiquetas_filtradas.append((nombre, datos))
             
-            # Ordenar por mes cronológico y luego por monto dentro del mes
-            # NUEVA LÓGICA: Distribuir etiquetas entre todos los meses del rango
-            # En lugar de agrupar por "primer mes", mostrar facturas de cada mes
+            # Ordenar por monto absoluto total (suma de todos los meses)
+            # para que las facturas más grandes aparezcan primero
             def orden_etiqueta(item):
                 nombre, datos = item
                 if not isinstance(datos, dict):
-                    return (len(self.meses_lista), 0)
+                    return -abs(datos) if datos else 0
+                # Sumar montos absolutos de todos los meses
                 montos_mes = datos.get("montos_por_mes", {})
-                
-                # Encontrar el ÚLTIMO mes con valor (más reciente cronológicamente)
-                # Esto distribuye mejor las facturas entre los meses
-                for idx in range(len(self.meses_lista) - 1, -1, -1):
-                    mes = self.meses_lista[idx]
-                    if montos_mes.get(mes, 0) != 0:
-                        # Retornar (índice_mes, -monto_absoluto) para ordenar por mes descendente
-                        return (idx, -abs(montos_mes.get(mes, 0)))
-                return (len(self.meses_lista), 0)
+                total = sum(abs(montos_mes.get(m, 0)) for m in self.meses_lista)
+                return -total  # Negativo para orden descendente
             
-            etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta, reverse=True)[:50]
+            # Aumentar límite a 200 para mostrar más facturas
+            etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:200]
             
             etiquetas_lista = []
             for nombre, datos in etiquetas_ordenadas:
