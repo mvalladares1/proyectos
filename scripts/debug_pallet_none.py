@@ -13,66 +13,47 @@ odoo = OdooClient(
     password=PASSWORD
 )
 
-pallets = [
-    'PACK0021850', 'PACK0021851', 'PACK0021856', 'PACK0021859', 'PACK0021869',
-    'PACK0021197', 'PACK0021198', 'PACK0021916', 'PACK0021814', 'PACK0021802',
-    'PACK0022359', 'PACK0022278', 'PACK0022319', 'PACK0023486', 'PACK0022635'
-]
+pallets = ['PACK0021869']  # El pallet problemático
 
 print("=" * 80)
-print("VERIFICANDO PALLETS - BÚSQUEDA DE producto_id=None")
+print("INVESTIGACIÓN PROFUNDA DE PACK0021869")
 print("=" * 80)
 
-packages = odoo.search_read('stock.quant.package', [('name', 'in', pallets)], ['id', 'name'])
-pkg_map = {p['name']: p['id'] for p in packages}
-pkg_ids = [p['id'] for p in packages]
+# 1. Buscar el package
+packages = odoo.search_read('stock.quant.package', [('name', '=', 'PACK0021869')], ['id', 'name'])
+if not packages:
+    print("❌ Package NO ENCONTRADO")
+    exit(1)
 
-print(f"\nPackages encontrados: {len(packages)}/{len(pallets)}")
+pkg = packages[0]
+print(f"\n✅ Package encontrado: ID={pkg['id']}, Name={pkg['name']}")
 
-quants = odoo.search_read('stock.quant', [('package_id', 'in', pkg_ids), ('quantity', '>', 0)], 
-                          ['package_id', 'product_id', 'quantity', 'lot_id', 'location_id'])
+# 2. Buscar TODOS los quants (incluso con qty=0)
+all_quants = odoo.search_read('stock.quant', [('package_id', '=', pkg['id'])], 
+                              ['package_id', 'product_id', 'quantity', 'lot_id', 'location_id'])
 
-print(f"Quants con stock: {len(quants)}\n")
-
-# Agrupar por producto para ver totales
-productos_totales = {}
-
-for pallet in pallets:
-    pkg_id = pkg_map.get(pallet)
-    if not pkg_id:
-        print(f"❌ {pallet}: NO ENCONTRADO EN ODOO")
-        continue
+print(f"\n📦 Total de quants encontrados (incluyendo qty=0): {len(all_quants)}")
+for q in all_quants:
+    prod_id = q['product_id'][0] if q['product_id'] else None
+    prod_name = q['product_id'][1] if q['product_id'] else 'SIN PRODUCTO'
+    qty = q['quantity']
+    location = q['location_id'][1] if q.get('location_id') else 'Sin ubicación'
+    lote = q['lot_id'][1] if q.get('lot_id') else 'Sin lote'
     
-    pallet_quants = [q for q in quants if q['package_id'][0] == pkg_id]
-    if pallet_quants:
-        for q in pallet_quants:
-            prod_id = q['product_id'][0] if q['product_id'] else None
-            prod_name = q['product_id'][1] if q['product_id'] else 'SIN PRODUCTO'
-            qty = q['quantity']
-            lote = q['lot_id'][1] if q.get('lot_id') else 'Sin lote'
-            
-            if prod_id is None:
-                print(f"⚠️  {pallet}: {qty} kg - producto_id=None - lote={lote} ❌ PROBLEMA!")
-            else:
-                print(f"✅ {pallet}: {qty} kg - producto_id={prod_id} - {prod_name}")
-                
-                # Agregar a totales
-                if prod_id not in productos_totales:
-                    productos_totales[prod_id] = {'kg': 0, 'pallets': []}
-                productos_totales[prod_id]['kg'] += qty
-                productos_totales[prod_id]['pallets'].append({
-                    'codigo': pallet,
-                    'kg': qty,
-                    'producto_id': prod_id
-                })
-    else:
-        print(f"⚠️  {pallet}: SIN STOCK (package existe pero 0 quants)")
+    status = "✅" if prod_id else "❌"
+    print(f"  {status} Qty: {qty} kg - producto_id: {prod_id} - {prod_name}")
+    print(f"      Ubicación: {location}")
+    print(f"      Lote: {lote}")
+    print()
 
-print("\n" + "=" * 80)
-print("TOTALES POR PRODUCTO")
+# 3. Simular lo que hace el validador
 print("=" * 80)
-for prod_id, data in productos_totales.items():
-    if prod_id is None:
-        print(f"producto_id=None: {data['kg']} kg - {len(data['pallets'])} pallets ❌")
-    else:
-        print(f"producto_id={prod_id}: {data['kg']} kg - {len(data['pallets'])} pallets")
+print("SIMULANDO VALIDACIÓN")
+print("=" * 80)
+
+from backend.services.tuneles.pallet_validator import validar_pallets_batch
+
+result = validar_pallets_batch(odoo, ['PACK0021869'], buscar_ubicacion=False)
+print(f"\nResultado de validación:")
+import json
+print(json.dumps(result, indent=2, default=str))

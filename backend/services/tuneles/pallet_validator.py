@@ -32,16 +32,22 @@ def validar_pallets_batch(odoo: OdooClient, codigos_pallets: List[str],
         ['id', 'name']
     )
     
-    # Crear mapa de packages por código
-    packages_map = {pkg['name']: pkg for pkg in packages}
+    # FIX: Manejar packages duplicados - puede haber múltiples packages con el mismo nombre
+    # Necesitamos verificar cuál tiene stock antes de decidir
+    packages_by_name = {}
+    for pkg in packages:
+        name = pkg['name']
+        if name not in packages_by_name:
+            packages_by_name[name] = []
+        packages_by_name[name].append(pkg)
     
     # Identificar pallets no encontrados
-    codigos_encontrados = set(packages_map.keys())
+    codigos_encontrados = set(packages_by_name.keys())
     codigos_no_encontrados = set(codigos_pallets) - codigos_encontrados
     
     # Buscar recepciones pendientes para no encontrados
     reception_info_map = _buscar_recepciones_pendientes(
-        odoo, codigos_no_encontrados, packages_map
+        odoo, codigos_no_encontrados, {}
     )
     
     # Agregar resultados de no encontrados
@@ -84,17 +90,32 @@ def validar_pallets_batch(odoo: OdooClient, codigos_pallets: List[str],
             quants_por_package[pkg_id] = []
         quants_por_package[pkg_id].append(quant)
     
+    # FIX: Para cada código, seleccionar el package correcto (el que tiene stock)
+    packages_seleccionados = {}
+    for codigo in codigos_encontrados:
+        pkg_list = packages_by_name[codigo]
+        
+        # Si hay múltiples packages, elegir el que tiene stock
+        pkg_con_stock = None
+        for pkg in pkg_list:
+            if quants_por_package.get(pkg['id']):
+                pkg_con_stock = pkg
+                break
+        
+        # Si ninguno tiene stock, usar el primero
+        packages_seleccionados[codigo] = pkg_con_stock if pkg_con_stock else pkg_list[0]
+    
     # Buscar recepciones para packages sin stock
     packages_sin_stock = [
-        packages_map[codigo] for codigo in codigos_encontrados 
-        if not quants_por_package.get(packages_map[codigo]['id'])
+        packages_seleccionados[codigo] for codigo in codigos_encontrados 
+        if not quants_por_package.get(packages_seleccionados[codigo]['id'])
     ]
     
     reception_info_sin_stock = _buscar_recepciones_sin_stock(odoo, packages_sin_stock)
     
     # Procesar cada package encontrado
     for codigo in codigos_encontrados:
-        package = packages_map[codigo]
+        package = packages_seleccionados[codigo]
         pkg_quants = quants_por_package.get(package['id'], [])
         
         if not pkg_quants:
