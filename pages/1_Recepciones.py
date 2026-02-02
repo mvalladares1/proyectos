@@ -149,4 +149,3 @@ if "proforma_fletes" in tabs_disponibles:
             tab_proforma_consolidada.render(username, password)
         _frag_proforma_fletes()
     tab_index += 1
-    tab_index += 1
