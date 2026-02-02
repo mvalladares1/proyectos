@@ -247,10 +247,9 @@ function formatFecha(fechaStr) {
 
 // Generar link a Odoo para factura
 function getOdooLink(facturaName, facturaId) {
-    // URL base de Odoo
-    const odooBase = 'https://riofuturo.odoo.com/web#id=';
+    // URL base de Odoo Río Futuro
     if (facturaId) {
-        return `${odooBase}${facturaId}&model=account.move&view_type=form`;
+        return `https://riofuturo.server98c6e.oerpondemand.net/web#id=${facturaId}&menu_id=489&cids=1&action=232&active_id=1&model=account.move&view_type=form`;
     }
     return null;
 }
