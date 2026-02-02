@@ -725,10 +725,10 @@ def render(username: str, password: str):
         # Usar los datos editados como definitivos
         edited_df = edited_df_completo
         
-        # Botones de ayuda
+        # Botones de ayuda y resumen
         col_help1, col_help2 = st.columns(2)
         with col_help1:
-            if st.button("🔄 Restaurar datos originales", help="Volver a los datos originales de Odoo"):
+            if st.button("🔄 Restaurar datos originales", help="Volver a los datos originales de Odoo", key="btn_restore"):
                 st.session_state.df_proforma_editado = df.copy()
                 st.rerun()
         
@@ -738,6 +738,9 @@ def render(username: str, password: str):
                 st.warning(f"⚠️ Aún quedan {len(nuevos_faltantes)} OCs incompletas")
             else:
                 st.success("✅ Todas las OCs tienen datos completos")
+    
+    # Separador visual entre tabs y sección de generación
+    st.divider()
     
     # Resumen de seleccionados
     seleccionados = edited_df[edited_df['Sel'] == True]
