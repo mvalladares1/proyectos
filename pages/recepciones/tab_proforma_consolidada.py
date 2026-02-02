@@ -66,7 +66,7 @@ def obtener_ocs_transportes(_models, _uid, username, password, fecha_desde, fech
         domain = [
             ('x_studio_categora_de_producto', '=', 'SERVICIOS'),
             ('x_studio_selection_field_yUNPd', 'ilike', 'TRANSPORTES'),
-            ('state', 'in', ['purchase', 'done']),  # Solo confirmadas
+            ('state', 'in', ['draft', 'sent', 'to approve', 'purchase', 'done']),  # Todos los estados
             ('date_order', '>=', fecha_desde),
             ('date_order', '<=', fecha_hasta)
         ]
