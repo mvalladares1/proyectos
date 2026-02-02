@@ -198,15 +198,22 @@ async def crear_orden(
         )
         
         if not resultado.get('success'):
+            error_msg = resultado.get('error') or resultado.get('errores') or 'Error desconocido'
+            print(f"[TUNELES] Error en crear_orden: {error_msg}", flush=True)
+            print(f"[TUNELES] Resultado completo: {resultado}", flush=True)
             raise HTTPException(
                 status_code=400,
-                detail=resultado.get('error') or resultado.get('errores')
+                detail=error_msg
             )
         
+        print(f"[TUNELES] Orden creada exitosamente: {resultado.get('mo_name')}", flush=True)
         return resultado
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"[TUNELES] Excepcion en crear_orden: {e}", flush=True)
+        print(f"[TUNELES] Traceback: {traceback.format_exc()}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
