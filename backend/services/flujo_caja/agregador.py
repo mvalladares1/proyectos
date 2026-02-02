@@ -1,6 +1,6 @@
-"""
-Módulo de agregación de flujos de caja.
-Procesa y agrega movimientos por concepto y período.
+﻿"""
+MÃ³dulo de agregaciÃ³n de flujos de caja.
+Procesa y agrega movimientos por concepto y perÃ­odo.
 """
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
@@ -8,14 +8,14 @@ from collections import defaultdict
 
 
 class AgregadorFlujo:
-    """Agrega flujos de efectivo por concepto y período."""
+    """Agrega flujos de efectivo por concepto y perÃ­odo."""
     
     def __init__(self, clasificador, catalogo: Dict, meses_lista: List[str]):
         """
         Args:
-            clasificador: Instancia con método clasificar_cuenta()
-            catalogo: Catálogo de conceptos NIIF
-            meses_lista: Lista de períodos ['2026-01', '2026-02', ...]
+            clasificador: Instancia con mÃ©todo clasificar_cuenta()
+            catalogo: CatÃ¡logo de conceptos NIIF
+            meses_lista: Lista de perÃ­odos ['2026-01', '2026-02', ...]
         """
         self.clasificador = clasificador
         self.catalogo = catalogo
@@ -41,8 +41,8 @@ class AgregadorFlujo:
         
         Args:
             grupos: Resultado de read_group [{account_id, date:month, balance}, ...]
-            cuentas_monitoreadas: Códigos de cuentas a filtrar (None = todas)
-            parse_periodo_fn: Función para parsear período Odoo a YYYY-MM
+            cuentas_monitoreadas: CÃ³digos de cuentas a filtrar (None = todas)
+            parse_periodo_fn: FunciÃ³n para parsear perÃ­odo Odoo a YYYY-MM
         """
         filtrar_monitoreadas = bool(cuentas_monitoreadas)
         
@@ -50,7 +50,7 @@ class AgregadorFlujo:
             acc_data = grupo.get('account_id')
             balance = grupo.get('balance', 0)
             
-            # Parsear período (mensual o semanal)
+            # Parsear perÃ­odo (mensual o semanal)
             periodo_val = grupo.get('date:month') or grupo.get('date:week', '')
             if not acc_data or not periodo_val:
                 continue
@@ -64,7 +64,7 @@ class AgregadorFlujo:
             if not mes_str or mes_str not in self.meses_lista:
                 continue
             
-            # Extraer código de cuenta del display "[code] name"
+            # Extraer cÃ³digo de cuenta del display "[code] name"
             acc_display = acc_data[1] if len(acc_data) > 1 else "Unknown"
             codigo_cuenta = acc_display.split(' ')[0] if ' ' in acc_display else acc_display
             
@@ -76,12 +76,12 @@ class AgregadorFlujo:
             concepto_id, es_pendiente = self.clasificador(codigo_cuenta)
             
             # Invertir signo para cuentas de ingreso (41) y costo (51)
-            # En contabilidad: ingresos son créditos (negativos), pero en flujo de efectivo
+            # En contabilidad: ingresos son crÃ©ditos (negativos), pero en flujo de efectivo
             # representan entradas de dinero (positivos)
             # TAMBIEN: Cuentas por cobrar (1103) que se acreditan al cobrar (entrada)
             monto_efectivo = balance
             if codigo_cuenta.startswith('41') or codigo_cuenta.startswith('1103'):
-                monto_efectivo = -balance  # Invertir: crédito -> ingreso de efectivo
+                monto_efectivo = -balance  # Invertir: crÃ©dito -> ingreso de efectivo
             
             # Acumular monto
             if concepto_id not in self.montos_por_concepto_mes:
@@ -122,9 +122,9 @@ class AgregadorFlujo:
         
         Args:
             grupos_etiquetas: Resultado de read_group con name
-            parse_periodo_fn: Función para parsear período
+            parse_periodo_fn: FunciÃ³n para parsear perÃ­odo
         """
-        # Crear mapeo account_id → (concepto_id, codigo_cuenta)
+        # Crear mapeo account_id â†’ (concepto_id, codigo_cuenta)
         account_id_to_codigo = {}
         for concepto_id, cuentas in self.cuentas_por_concepto.items():
             for codigo, cuenta_data in cuentas.items():
@@ -142,7 +142,7 @@ class AgregadorFlujo:
             
             account_id = acc_data[0] if isinstance(acc_data, (list, tuple)) else acc_data
             
-            # Parsear período
+            # Parsear perÃ­odo
             if parse_periodo_fn:
                 mes_str = parse_periodo_fn(periodo_val)
             else:
@@ -181,11 +181,11 @@ class AgregadorFlujo:
                                        clasificar_fn,
                                        agrupacion: str = 'mensual') -> None:
         """
-        Procesa líneas de cuentas parametrizadas.
+        Procesa lÃ­neas de cuentas parametrizadas.
         
         Args:
-            lineas: Líneas de account.move.line
-            clasificar_fn: Función de clasificación
+            lineas: LÃ­neas de account.move.line
+            clasificar_fn: FunciÃ³n de clasificaciÃ³n
             agrupacion: 'mensual' o 'semanal'
         """
         for linea in lineas:
@@ -197,7 +197,7 @@ class AgregadorFlujo:
             balance = linea.get('balance', 0)
             fecha = linea.get('date', '')
             
-            # Determinar período
+            # Determinar perÃ­odo
             if agrupacion == 'semanal':
                 try:
                     fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
@@ -226,7 +226,7 @@ class AgregadorFlujo:
             self._agregar_cuenta(concepto_id, codigo_cuenta, acc_data[1], balance, mes_str, acc_data[0])
             
             # Agregar etiqueta
-            etiqueta = linea.get('name', 'Sin descripción')
+            etiqueta = linea.get('name', 'Sin descripciÃ³n')
             etiqueta_limpia = ' '.join(str(etiqueta).split())[:60] if etiqueta else "Sin etiqueta"
             
             cuenta = self.cuentas_por_concepto[concepto_id][codigo_cuenta]
@@ -247,29 +247,39 @@ class AgregadorFlujo:
                            clasificar_fn,
                            agrupacion: str = 'mensual') -> None:
         """
-        Procesa líneas de Cuentas por Cobrar (CxC) para flujo de caja proyectado.
+        Procesa lÃ­neas de Cuentas por Cobrar (CxC) para flujo de caja proyectado.
         
-        LÓGICA DE FLUJO DE CAJA PARA CxC (11030101):
+        NUEVA ESTRUCTURA: Agrupa por ESTADO DE PAGO (payment_state) en lugar de facturas individuales.
         
-        En contabilidad:
-        - Débito en CxC (balance positivo) = Factura emitida → INGRESO ESPERADO
-        - Crédito en CxC (balance negativo) = Pago recibido o NC → REDUCCIÓN de CxC
+        Nivel 2: Cuenta (11030101 - Deudores por Ventas)
+        Nivel 3: Estado de Pago:
+            - "Facturas Pagadas" (payment_state = 'paid')
+            - "Facturas Parcialmente Pagadas" (payment_state = 'partial')
+            - "En Proceso de Pago" (payment_state = 'in_payment')
+            - "Facturas No Pagadas" (payment_state = 'not_paid')
         
-        Para flujo de caja PROYECTADO basado en fecha_de_pago:
-        - Mostramos el DÉBITO (factura) como ingreso esperado en la fecha de pago acordada
-        - Los créditos (cobros ya realizados) reducen el ingreso esperado
-        
-        El signo final:
-        - Balance positivo (débito/factura) → Flujo POSITIVO (esperamos cobrar)
-        - Balance negativo (crédito/cobro) → Flujo NEGATIVO (ya se redujo la cuenta)
-        
-        IMPORTANTE: Usa 'fecha_efectiva' de la línea (fecha_pago si existe, sino fecha_contable)
+        Cada estado incluye lista de facturas para modal drill-down.
         
         Args:
-            lineas: Líneas de account.move.line con fecha_efectiva enriquecida
-            clasificar_fn: Función de clasificación
+            lineas: LÃ­neas de account.move.line con fecha_efectiva y payment_state enriquecidos
+            clasificar_fn: FunciÃ³n de clasificaciÃ³n
             agrupacion: 'mensual' o 'semanal'
         """
+        # Mapeo de payment_state a etiqueta amigable
+        ESTADO_LABELS = {
+            'paid': 'Facturas Pagadas',
+            'partial': 'Facturas Parcialmente Pagadas',
+            'in_payment': 'En Proceso de Pago',
+            'not_paid': 'Facturas No Pagadas',
+            'reversed': 'Facturas Revertidas'
+        }
+        
+        # Orden de prioridad para mostrar estados
+        ESTADO_ORDEN = ['paid', 'partial', 'in_payment', 'not_paid', 'reversed']
+        
+        # Agrupar lÃ­neas por factura primero para tener info completa
+        facturas_por_move = {}  # {move_name: {payment_state, total, residual, fecha, lineas[]}}
+        
         for linea in lineas:
             acc_data = linea.get('account_id')
             if not acc_data:
@@ -277,11 +287,16 @@ class AgregadorFlujo:
             
             codigo_cuenta = acc_data[1].split(' ')[0] if ' ' in acc_data[1] else acc_data[1]
             balance = linea.get('balance', 0)
+            payment_state = linea.get('payment_state', 'not_paid')
+            
+            # Obtener nombre de factura
+            move_data = linea.get('move_id', [0, ''])
+            move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else linea.get('name', 'Sin nombre')
             
             # USAR FECHA_EFECTIVA (fecha pago si existe, sino fecha contable)
             fecha = linea.get('fecha_efectiva') or linea.get('date', '')
             
-            # Determinar período basado en fecha_efectiva
+            # Determinar perÃ­odo basado en fecha_efectiva
             if agrupacion == 'semanal':
                 try:
                     fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
@@ -300,10 +315,7 @@ class AgregadorFlujo:
             if concepto_id is None:
                 continue
             
-            # SIGNO PARA CxC en Flujo Proyectado:
-            # - Balance positivo (débito) = factura → INGRESO esperado (mantener positivo)
-            # - Balance negativo (crédito) = pago/NC → Ya cobrado o reducido (mantener negativo)
-            # NO invertimos signo para CxC porque queremos mostrar el movimiento real
+            # SIGNO PARA CxC en Flujo Proyectado
             monto_efectivo = balance
             
             # Acumular
@@ -315,24 +327,47 @@ class AgregadorFlujo:
             # Trackear cuenta
             self._agregar_cuenta(concepto_id, codigo_cuenta, acc_data[1], monto_efectivo, mes_str, acc_data[0])
             
-            # Agregar etiqueta (ya viene enriquecida desde get_lineas_cuenta_periodo)
-            etiqueta = linea.get('name', 'Sin etiqueta')
-            etiqueta_limpia = ' '.join(str(etiqueta).split())[:60] if etiqueta else "Sin etiqueta"
-            
+            # Obtener o crear estructura de cuenta
             cuenta = self.cuentas_por_concepto[concepto_id][codigo_cuenta]
             if 'etiquetas' not in cuenta:
                 cuenta['etiquetas'] = {}
+            if 'facturas_por_estado' not in cuenta:
+                cuenta['facturas_por_estado'] = {}
             
-            if etiqueta_limpia not in cuenta['etiquetas']:
-                cuenta['etiquetas'][etiqueta_limpia] = {
+            # NUEVO: Agrupar por estado de pago como etiqueta
+            estado_label = ESTADO_LABELS.get(payment_state, 'Otros')
+            
+            # Crear estructura para estado si no existe
+            if estado_label not in cuenta['etiquetas']:
+                cuenta['etiquetas'][estado_label] = {
                     'monto': 0.0,
-                    'montos_por_mes': {m: 0.0 for m in self.meses_lista}
+                    'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                    'orden': ESTADO_ORDEN.index(payment_state) if payment_state in ESTADO_ORDEN else 99
                 }
             
-            cuenta['etiquetas'][etiqueta_limpia]['monto'] += monto_efectivo
+            # Acumular monto en el estado
+            cuenta['etiquetas'][estado_label]['monto'] += monto_efectivo
             if mes_str in self.meses_lista:
-                cuenta['etiquetas'][etiqueta_limpia]['montos_por_mes'][mes_str] += monto_efectivo
-    
+                cuenta['etiquetas'][estado_label]['montos_por_mes'][mes_str] += monto_efectivo
+            
+            # NUEVO: Guardar detalle de factura para modal
+            if payment_state not in cuenta['facturas_por_estado']:
+                cuenta['facturas_por_estado'][payment_state] = {}
+            
+            # Agrupar por factura y mes
+            if move_name not in cuenta['facturas_por_estado'][payment_state]:
+                cuenta['facturas_por_estado'][payment_state][move_name] = {
+                    'nombre': move_name,
+                    'monto_total': 0.0,
+                    'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                    'fecha': fecha,
+                    'payment_state': payment_state
+                }
+            
+            cuenta['facturas_por_estado'][payment_state][move_name]['monto_total'] += monto_efectivo
+            if mes_str in self.meses_lista:
+                cuenta['facturas_por_estado'][payment_state][move_name]['montos_por_mes'][mes_str] += monto_efectivo
+
     def procesar_facturas_draft(self, facturas: List[Dict], lineas: Dict[int, List[Dict]],
                                clasificar_fn, cuentas_info: Dict,
                                agrupacion: str = 'mensual') -> None:
@@ -376,7 +411,7 @@ class AgregadorFlujo:
                 if monto == 0:
                     continue
                 
-                # Para out_refund (notas de crédito), invertir signo
+                # Para out_refund (notas de crÃ©dito), invertir signo
                 if move_type == 'out_refund':
                     monto = -monto
                 
@@ -393,9 +428,9 @@ class AgregadorFlujo:
                 acc_display = "CXC Cuentas por Cobrar Proyectadas"
                 self._agregar_cuenta(concepto_id, codigo_cuenta, acc_display, monto, mes_proy, 0)
                 
-                continue  # No procesar líneas para facturas cliente
+                continue  # No procesar lÃ­neas para facturas cliente
             
-            # FACTURAS DE PROVEEDOR -> Procesar por línea y cuenta
+            # FACTURAS DE PROVEEDOR -> Procesar por lÃ­nea y cuenta
             for linea in lineas.get(move_id, []):
                 acc_data = linea.get('account_id')
                 if not acc_data:
@@ -430,7 +465,7 @@ class AgregadorFlujo:
     
     def obtener_resultados(self) -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict]]:
         """
-        Retorna los resultados de la agregación.
+        Retorna los resultados de la agregaciÃ³n.
         
         Returns:
             Tuple (montos_por_concepto_mes, cuentas_por_concepto)
@@ -484,7 +519,12 @@ class AgregadorFlujo:
         return conceptos_por_actividad, subtotales_por_actividad
     
     def _formatear_cuentas_concepto(self, concepto_id: str) -> List[Dict]:
-        """Formatea cuentas de un concepto para resultado."""
+        """Formatea cuentas de un concepto para resultado.
+        
+        Para cuentas CxC (monitoreadas), incluye estructura especial con:
+        - Estados de pago como etiquetas (Pagadas, Parcialmente Pagadas, etc.)
+        - Facturas detalladas por estado para modal drill-down
+        """
         if concepto_id not in self.cuentas_por_concepto:
             return []
         
@@ -497,43 +537,89 @@ class AgregadorFlujo:
         
         resultado = []
         for k, v in sorted_cuentas:
-            # Formatear etiquetas - SOLO las que tienen monto en el período consultado
+            # Formatear etiquetas - SOLO las que tienen monto en el perÃ­odo consultado
             etiquetas_dict = v.get("etiquetas", {})
+            facturas_por_estado = v.get("facturas_por_estado", {})
             
-            # Filtrar etiquetas que tienen al menos un monto != 0 en algún mes del rango
+            # Filtrar etiquetas que tienen al menos un monto != 0 en algÃºn mes del rango
             etiquetas_filtradas = []
             for nombre, datos in etiquetas_dict.items():
                 if isinstance(datos, dict):
                     montos_mes = datos.get("montos_por_mes", {})
-                    # Solo incluir si tiene algún valor en los meses del rango
+                    # Solo incluir si tiene algÃºn valor en los meses del rango
                     tiene_valor = any(montos_mes.get(m, 0) != 0 for m in self.meses_lista)
                     if tiene_valor:
                         etiquetas_filtradas.append((nombre, datos))
-                elif datos != 0:  # Si es solo un número
+                elif datos != 0:  # Si es solo un nÃºmero
                     etiquetas_filtradas.append((nombre, datos))
             
-            # Ordenar por monto absoluto total (suma de todos los meses)
-            # para que las facturas más grandes aparezcan primero
-            def orden_etiqueta(item):
-                nombre, datos = item
-                if not isinstance(datos, dict):
-                    return -abs(datos) if datos else 0
-                # Sumar montos absolutos de todos los meses
-                montos_mes = datos.get("montos_por_mes", {})
-                total = sum(abs(montos_mes.get(m, 0)) for m in self.meses_lista)
-                return -total  # Negativo para orden descendente
+            # Verificar si es cuenta CxC (tiene estados de pago)
+            es_cuenta_cxc = bool(facturas_por_estado)
             
-            # Aumentar límite a 200 para mostrar más facturas
-            etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:200]
+            if es_cuenta_cxc:
+                # Ordenar por prioridad de estado (orden predefinido)
+                def orden_estado(item):
+                    nombre, datos = item
+                    if isinstance(datos, dict):
+                        return datos.get('orden', 99)
+                    return 99
+                
+                etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_estado)
+            else:
+                # Ordenar por monto absoluto total (comportamiento original)
+                def orden_etiqueta(item):
+                    nombre, datos = item
+                    if not isinstance(datos, dict):
+                        return -abs(datos) if datos else 0
+                    # Sumar montos absolutos de todos los meses
+                    montos_mes = datos.get("montos_por_mes", {})
+                    total = sum(abs(montos_mes.get(m, 0)) for m in self.meses_lista)
+                    return -total  # Negativo para orden descendente
+                
+                etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:200]
+            
+            # Mapeo de etiqueta a payment_state para enlazar facturas
+            LABEL_TO_STATE = {
+                'Facturas Pagadas': 'paid',
+                'Facturas Parcialmente Pagadas': 'partial',
+                'En Proceso de Pago': 'in_payment',
+                'Facturas No Pagadas': 'not_paid',
+                'Facturas Revertidas': 'reversed'
+            }
             
             etiquetas_lista = []
             for nombre, datos in etiquetas_ordenadas:
                 if isinstance(datos, dict):
-                    etiquetas_lista.append({
+                    etiqueta_item = {
                         "nombre": nombre[:60],
                         "monto": round(datos.get("monto", 0), 0),
                         "montos_por_mes": {m: round(datos.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista}
-                    })
+                    }
+                    
+                    # Si es cuenta CxC, agregar facturas detalladas para modal
+                    if es_cuenta_cxc and nombre in LABEL_TO_STATE:
+                        payment_state = LABEL_TO_STATE[nombre]
+                        facturas_estado = facturas_por_estado.get(payment_state, {})
+                        
+                        # Formatear lista de facturas para modal
+                        facturas_lista = []
+                        for fact_nombre, fact_datos in facturas_estado.items():
+                            facturas_lista.append({
+                                "nombre": fact_nombre,
+                                "monto": round(fact_datos.get("monto_total", 0), 0),
+                                "montos_por_mes": {m: round(fact_datos.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista},
+                                "fecha": fact_datos.get("fecha", ""),
+                                "payment_state": fact_datos.get("payment_state", "")
+                            })
+                        
+                        # Ordenar facturas por monto absoluto
+                        facturas_lista.sort(key=lambda x: abs(x.get("monto", 0)), reverse=True)
+                        
+                        # Incluir solo las primeras 200 para no sobrecargar
+                        etiqueta_item["facturas"] = facturas_lista[:200]
+                        etiqueta_item["total_facturas"] = len(facturas_estado)
+                    
+                    etiquetas_lista.append(etiqueta_item)
                 else:
                     etiquetas_lista.append({
                         "nombre": nombre[:60],
@@ -547,7 +633,8 @@ class AgregadorFlujo:
                 "monto": round(v.get("monto", 0), 0),
                 "cantidad": v.get("cantidad"),
                 "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista},
-                "etiquetas": etiquetas_lista
+                "etiquetas": etiquetas_lista,
+                "es_cuenta_cxc": es_cuenta_cxc  # Flag para frontend
             })
         
         return resultado

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 import requests
 import json
 import base64
+from .email_templates import get_proforma_email_template
 
 
 URL = 'https://riofuturo.server98c6e.oerpondemand.net'
@@ -673,59 +674,30 @@ def render(username: str, password: str):
                                 # Crear y enviar correo usando mail.mail de Odoo
                                 cant_ocs = len(data['ocs'])
                                 total_costo = data['totales']['costo']
+                                total_kms = data['totales']['kms']
+                                total_kilos = data['totales']['kilos']
                                 
-                                mensaje_html = f"""
-                                <html>
-                                <head>
-                                    <style>
-                                        body {{ font-family: Arial, sans-serif; }}
-                                        .header {{ background-color: #1f4788; color: white; padding: 20px; text-align: center; }}
-                                        .content {{ padding: 20px; }}
-                                        .summary {{ background-color: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 5px; }}
-                                        .footer {{ text-align: center; color: #666; padding: 20px; font-size: 12px; }}
-                                    </style>
-                                </head>
-                                <body>
-                                    <div class="header">
-                                        <h2>Proforma Consolidada de Fletes</h2>
-                                    </div>
-                                    <div class="content">
-                                        <p>Estimado/a,</p>
-                                        <p>Adjuntamos la proforma consolidada de servicios de flete correspondiente al período <strong>{fecha_desde_str}</strong> al <strong>{fecha_hasta_str}</strong>.</p>
-                                        
-                                        <div class="summary">
-                                            <h3>Resumen del Período</h3>
-                                            <ul>
-                                                <li><strong>Cantidad de Órdenes de Compra:</strong> {cant_ocs}</li>
-                                                <li><strong>Total Kilómetros:</strong> {data['totales']['kms']:,.0f} km</li>
-                                                <li><strong>Total Kilos:</strong> {data['totales']['kilos']:,.1f} kg</li>
-                                                <li><strong>Monto Total:</strong> ${total_costo:,.0f}</li>
-                                            </ul>
-                                        </div>
-                                        
-                                        <p>En el documento adjunto encontrará el detalle completo de todas las órdenes de compra incluidas en este período.</p>
-                                        
-                                        <p>Cualquier consulta, no dude en contactarnos.</p>
-                                        
-                                        <p>Saludos cordiales,<br>
-                                        <strong>Río Futuro</strong></p>
-                                    </div>
-                                    <div class="footer">
-                                        Este es un correo automático generado por el sistema de gestión de Río Futuro.<br>
-                                        Generado el {datetime.now().strftime('%d/%m/%Y a las %H:%M')}
-                                    </div>
-                                </body>
-                                </html>
-                                """
+                                # Generar template de email profesional
+                                email_data = get_proforma_email_template(
+                                    transportista=transportista,
+                                    fecha_desde=fecha_desde_str,
+                                    fecha_hasta=fecha_hasta_str,
+                                    cant_ocs=cant_ocs,
+                                    total_kms=total_kms,
+                                    total_kilos=total_kilos,
+                                    total_costo=total_costo,
+                                    email_remitente="finanzas@riofuturo.cl",
+                                    telefono_contacto="+56 2 2345 6789"
+                                )
                                 
                                 # Crear el correo
                                 mail_id = models.execute_kw(
                                     DB, uid, password,
                                     'mail.mail', 'create',
                                     [{
-                                        'subject': f'Proforma Consolidada de Fletes - {fecha_desde_str} al {fecha_hasta_str}',
+                                        'subject': email_data['subject'],
                                         'email_to': email_destino,
-                                        'body_html': mensaje_html,
+                                        'body_html': email_data['body_html'],
                                         'attachment_ids': [(6, 0, [attachment_id])]
                                     }]
                                 )
