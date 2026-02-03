@@ -449,13 +449,22 @@ def render(username: str, password: str):
         btn_pdf = st.button("📄 Descargar PDF", key="btn_monitor_pdf")
     
     if btn_refresh:
+        # Limpiar datos cargados para forzar recarga
+        if "monitor_data_loaded" in st.session_state:
+            del st.session_state["monitor_data_loaded"]
+        if "monitor_activos" in st.session_state:
+            del st.session_state["monitor_activos"]
+        if "monitor_cerrados" in st.session_state:
+            del st.session_state["monitor_cerrados"]
+        if "monitor_evolucion" in st.session_state:
+            del st.session_state["monitor_evolucion"]
         st.cache_data.clear()
         st.rerun()
     
     st.markdown("---")
     
-    # === CARGAR DATOS ===
-    if btn_buscar or "monitor_data_loaded" not in st.session_state:
+    # === CARGAR DATOS (solo cuando se presiona Buscar) ===
+    if btn_buscar:
         try:
             with st.spinner("Cargando datos del monitor..."):
                 # Procesos activos (del día de hoy)
@@ -535,8 +544,13 @@ def render(username: str, password: str):
     cerrados = st.session_state.get("monitor_cerrados", {})
     evolucion = st.session_state.get("monitor_evolucion", {})
     
+    # Si no hay datos, mostrar mensaje de instrucciones
+    if not st.session_state.get("monitor_data_loaded", False):
+        st.info("👆 Selecciona las fechas y filtros, luego presiona **'🔍 Buscar'** para cargar los datos del monitor")
+        return
+    
     if not activos:
-        st.info("Presiona 'Buscar' para cargar los datos del monitor")
+        st.warning("No se encontraron datos para los filtros seleccionados")
         return
     
     # KPIs de resumen
