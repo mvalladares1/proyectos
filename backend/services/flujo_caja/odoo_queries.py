@@ -591,11 +591,11 @@ class OdooQueryManager:
             return []
         
         try:
-            # Filtrar por diario de ventas
+            # Buscar líneas de los asientos en las cuentas especificadas
+            # NO filtrar por journal_id para incluir todos los diarios (ventas, bancos, ajustes, etc.)
             domain = [
                 ['move_id', 'in', asientos_ids],
-                ['account_id', 'in', account_ids],
-                ['journal_id', '=', 1]
+                ['account_id', 'in', account_ids]
             ]
             
             # Usar search_read para obtener move_id (con nombre del asiento)

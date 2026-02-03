@@ -303,7 +303,14 @@ class FlujoCajaService:
         return nombres.get(key, key)
     
     def _parse_odoo_month(self, odoo_month: str) -> str:
-        """Parsea el formato de mes de Odoo ('Enero 2026') a 'YYYY-MM'."""
+        """Parsea el formato de mes de Odoo ('Enero 2026' o '2026-01') a 'YYYY-MM'."""
+        if not odoo_month:
+            return None
+            
+        # Si ya está en formato YYYY-MM, devolverlo directamente
+        if len(odoo_month) == 7 and odoo_month[4] == '-':
+            return odoo_month
+            
         meses_es = {
             "enero": "01", "febrero": "02", "marzo": "03", "abril": "04",
             "mayo": "05", "junio": "06", "julio": "07", "agosto": "08",
@@ -442,44 +449,50 @@ class FlujoCajaService:
         groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
         parse_fn = self._parse_odoo_week if agrupacion == 'semanal' else self._parse_odoo_month
         
-        cuentas_monitoreadas = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
+        # IMPORTANTE: Solo cuentas CxC (11030xxx) se procesan como monitoreadas con fecha_de_pago
+        # Las cuentas de FINANCIAMIENTO (21xxx, 22xxx) se procesan normalmente en Query A
+        todas_cuentas_contrapartida = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
         
-        # Obtener IDs de cuentas monitoreadas PRIMERO (antes de Query A)
-        monitoreadas_ids = []
-        if cuentas_monitoreadas:
+        # Filtrar: solo CxC para Query B (cuentas que empiezan con 1103)
+        cuentas_cxc_monitoreadas = [c for c in todas_cuentas_contrapartida if c.startswith('1103')]
+        
+        # Obtener IDs de cuentas CxC monitoreadas PRIMERO (antes de Query A)
+        cxc_ids = []
+        if cuentas_cxc_monitoreadas:
             try:
                 accs = self.odoo_manager.odoo.search_read(
                     'account.account', 
-                    [['code', 'in', cuentas_monitoreadas]], 
+                    [['code', 'in', cuentas_cxc_monitoreadas]], 
                     ['id', 'code']
                 )
-                monitoreadas_ids = [a['id'] for a in accs]
-                print(f"[FlujoCaja] Cuentas monitoreadas (CxC): {[a['code'] for a in accs]} -> IDs: {monitoreadas_ids}")
+                cxc_ids = [a['id'] for a in accs]
+                print(f"[FlujoCaja] Cuentas CxC monitoreadas: {[a['code'] for a in accs]} -> IDs: {cxc_ids}")
             except Exception as e:
-                print(f"[FlujoCaja] Error buscando cuentas monitoreadas: {e}")
+                print(f"[FlujoCaja] Error buscando cuentas CxC: {e}")
 
-        # Query A: Flujo de efectivo para cuentas NO monitoreadas
-        # CRÍTICO: Excluir efectivo Y monitoreadas para evitar duplicación
-        ids_excluir = list(set(cuentas_efectivo_ids + monitoreadas_ids))
-        print(f"[FlujoCaja] Query A: Excluyendo {len(ids_excluir)} cuentas (efectivo + monitoreadas)")
+        # Query A: Flujo de efectivo para cuentas NO CxC
+        # CRÍTICO: Excluir efectivo Y CxC monitoreadas para evitar duplicación
+        # Las cuentas de FINANCIAMIENTO (21xxx, 22xxx) se procesan aquí normalmente
+        ids_excluir = list(set(cuentas_efectivo_ids + cxc_ids))
+        print(f"[FlujoCaja] Query A: Excluyendo {len(ids_excluir)} cuentas (efectivo + CxC)")
         
         grupos = self.odoo_manager.get_contrapartidas_agrupadas_mensual(
             asientos_ids, ids_excluir, agrupacion
         )
         agregador.procesar_grupos_contrapartida(grupos, None, parse_fn)
         
-        # Query B: Cuentas monitoreadas usando x_studio_fecha_de_pago
+        # Query B: Solo cuentas CxC usando x_studio_fecha_de_pago
         # SOLO estas cuentas usan la fecha de pago acordada como criterio
-        if cuentas_monitoreadas:
-            print(f"[FlujoCaja] Query B: Procesando cuentas monitoreadas {cuentas_monitoreadas} por fecha_de_pago")
+        if cuentas_cxc_monitoreadas:
+            print(f"[FlujoCaja] Query B: Procesando cuentas CxC {cuentas_cxc_monitoreadas} por fecha_de_pago")
             lineas_monitoreadas = self.odoo_manager.get_lineas_cuenta_periodo(
-                cuentas_monitoreadas, fecha_inicio, fecha_fin
+                cuentas_cxc_monitoreadas, fecha_inicio, fecha_fin
             )
-            print(f"[FlujoCaja] Query B: Encontradas {len(lineas_monitoreadas)} líneas")
+            print(f"[FlujoCaja] Query B: Encontradas {len(lineas_monitoreadas)} líneas CxC")
             # Procesar con inversión de signo para CxC
             agregador.procesar_lineas_cxc(lineas_monitoreadas, self._clasificar_cuenta, agrupacion)
         
-        # 7. Procesar etiquetas (EXCLUYENDO cuentas monitoreadas que ya se procesaron en Query B)
+        # 7. Procesar etiquetas (EXCLUYENDO cuentas CxC que ya se procesaron en Query B)
         try:
             # Obtener account_ids de las cuentas ya procesadas
             _, cuentas_por_concepto = agregador.obtener_resultados()
@@ -487,8 +500,8 @@ class FlujoCajaService:
             for concepto_id, cuentas in cuentas_por_concepto.items():
                 for codigo, cuenta_data in cuentas.items():
                     acc_id = cuenta_data.get('account_id')
-                    # EXCLUIR cuentas monitoreadas (ya tienen etiquetas de Query B)
-                    if acc_id and acc_id not in monitoreadas_ids:
+                    # EXCLUIR cuentas CxC monitoreadas (ya tienen etiquetas de Query B)
+                    if acc_id and acc_id not in cxc_ids:
                         account_ids_to_query.add(acc_id)
             
             if account_ids_to_query:
@@ -499,11 +512,11 @@ class FlujoCajaService:
         except Exception as e:
             print(f"[FlujoCaja] Error procesando etiquetas: {e}")
         
-        # 8. Procesar cuentas parametrizadas (EXCLUYENDO las monitoreadas que ya se procesaron en Query B)
+        # 8. Procesar cuentas parametrizadas (EXCLUYENDO las CxC monitoreadas que ya se procesaron en Query B)
         try:
             cuentas_parametrizadas = list(self.mapeo_cuentas.get("mapeo_cuentas", {}).keys())
-            # Excluir cuentas monitoreadas para evitar duplicación
-            cuentas_parametrizadas = [c for c in cuentas_parametrizadas if c not in cuentas_monitoreadas]
+            # Excluir solo cuentas CxC monitoreadas para evitar duplicación
+            cuentas_parametrizadas = [c for c in cuentas_parametrizadas if c not in cuentas_cxc_monitoreadas]
             if cuentas_parametrizadas:
                 lineas = self.odoo_manager.get_lineas_cuentas_parametrizadas(
                     cuentas_parametrizadas, fecha_inicio, fecha_fin, asientos_ids
