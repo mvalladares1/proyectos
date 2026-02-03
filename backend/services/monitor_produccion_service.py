@@ -29,10 +29,10 @@ class MonitorProduccionService:
                              sala: Optional[str] = None, 
                              producto: Optional[str] = None) -> Dict[str, Any]:
         """
-        Obtiene procesos activos (ni done ni cancel) para una fecha específica.
+        Obtiene procesos activos (ni done ni cancel) - TODOS los pendientes actuales.
         
         Args:
-            fecha: Fecha en formato YYYY-MM-DD
+            fecha: Fecha en formato YYYY-MM-DD (referencia, no filtra)
             planta: Filtrar por planta (VILKUN, RIO FUTURO, Todas)
             sala: Filtrar por sala de proceso
             producto: Filtrar por nombre de producto
@@ -40,11 +40,10 @@ class MonitorProduccionService:
         Returns:
             Dict con procesos activos, estadísticas y metadata
         """
-        # Construir dominio base: procesos no cerrados ni cancelados
+        # Construir dominio base: TODOS los procesos no cerrados ni cancelados
+        # Sin filtro de fecha - queremos ver TODO lo pendiente actualmente
         domain = [
-            ['state', 'not in', ['done', 'cancel']],
-            ['date_planned_start', '>=', fecha],
-            ['date_planned_start', '<=', fecha + ' 23:59:59']
+            ['state', 'not in', ['done', 'cancel']]
         ]
         
         # Filtro por sala
@@ -87,23 +86,28 @@ class MonitorProduccionService:
         }
     
     def get_procesos_cerrados_dia(self, fecha: str, planta: Optional[str] = None,
-                                   sala: Optional[str] = None) -> Dict[str, Any]:
+                                   sala: Optional[str] = None,
+                                   fecha_fin: Optional[str] = None) -> Dict[str, Any]:
         """
-        Obtiene procesos que se cerraron (pasaron a done) en una fecha específica.
+        Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
         
         Args:
-            fecha: Fecha en formato YYYY-MM-DD
+            fecha: Fecha inicio en formato YYYY-MM-DD
             planta: Filtrar por planta
             sala: Filtrar por sala
+            fecha_fin: Fecha fin en formato YYYY-MM-DD (opcional, si no se da usa fecha)
         
         Returns:
             Dict con procesos cerrados y estadísticas
         """
-        # Procesos cerrados: estado done y fecha_finished en el día
+        # Usar fecha_fin si se proporciona, sino usar fecha
+        fecha_hasta = fecha_fin or fecha
+        
+        # Procesos cerrados: estado done y fecha_finished en el rango
         domain = [
             ['state', '=', 'done'],
             ['date_finished', '>=', fecha],
-            ['date_finished', '<=', fecha + ' 23:59:59']
+            ['date_finished', '<=', fecha_hasta + ' 23:59:59']
         ]
         
         if sala and sala != "Todas":

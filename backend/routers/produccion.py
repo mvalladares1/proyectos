@@ -162,17 +162,18 @@ async def get_procesos_activos(
 async def get_procesos_cerrados_dia(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
-    fecha: str = Query(..., description="Fecha (YYYY-MM-DD)"),
+    fecha: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     planta: Optional[str] = Query(None, description="Filtrar por planta"),
-    sala: Optional[str] = Query(None, description="Filtrar por sala")
+    sala: Optional[str] = Query(None, description="Filtrar por sala"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)")
 ):
     """
-    Obtiene procesos que se cerraron (pasaron a done) en una fecha específica.
+    Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
     """
     try:
         from backend.services.monitor_produccion_service import MonitorProduccionService
         service = MonitorProduccionService(username=username, password=password)
-        return service.get_procesos_cerrados_dia(fecha, planta, sala)
+        return service.get_procesos_cerrados_dia(fecha, planta, sala, fecha_fin)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

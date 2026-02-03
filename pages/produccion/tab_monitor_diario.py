@@ -41,13 +41,16 @@ def fetch_procesos_activos(username: str, password: str, fecha: str,
 
 @st.cache_data(ttl=120, show_spinner=False)
 def fetch_procesos_cerrados(username: str, password: str, fecha: str,
-                            planta: str = None, sala: str = None):
-    """Obtiene procesos cerrados para una fecha."""
+                            planta: str = None, sala: str = None,
+                            fecha_fin: str = None):
+    """Obtiene procesos cerrados para un rango de fechas."""
     params = {
         "username": username,
         "password": password,
         "fecha": fecha
     }
+    if fecha_fin:
+        params["fecha_fin"] = fecha_fin
     if planta and planta != "Todas":
         params["planta"] = planta
     if sala and sala != "Todas":
@@ -467,18 +470,19 @@ def render(username: str, password: str):
     if btn_buscar:
         try:
             with st.spinner("Cargando datos del monitor..."):
-                # Procesos activos (del día de hoy)
+                # Procesos activos: TODOS los que no son done ni cancel
                 activos_data = fetch_procesos_activos(
                     username, password, 
                     fecha_fin.isoformat(),
                     planta_sel, sala_sel, producto_sel
                 )
                 
-                # Procesos cerrados del día
+                # Procesos cerrados en el rango de fechas seleccionado
                 cerrados_data = fetch_procesos_cerrados(
                     username, password,
-                    fecha_fin.isoformat(),
-                    planta_sel, sala_sel
+                    fecha_inicio.isoformat(),
+                    planta_sel, sala_sel,
+                    fecha_fin.isoformat()
                 )
                 
                 # Evolución en el rango
