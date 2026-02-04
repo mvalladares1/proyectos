@@ -1,6 +1,9 @@
 """
 Servicio de Trazabilidad - Obtiene datos crudos de movimientos de paquetes.
 Este servicio es la fuente de datos para los transformadores de Sankey y React Flow.
+
+NOTA: Ahora usa TraceabilityCache para consultas instantáneas.
+Los métodos legacy siguen funcionando para compatibilidad.
 """
 from typing import List, Dict, Optional, Set
 from shared.odoo_client import OdooClient
@@ -20,11 +23,109 @@ class TraceabilityService:
         "Cantidad de producto actualizada",
     ]
     
-    def __init__(self, username: str = None, password: str = None):
+    def __init__(self, username: str = None, password: str = None, use_cache: bool = True):
         self.odoo = OdooClient(username=username, password=password)
         self._virtual_location_ids = None
         self.chile_tz = pytz.timezone('America/Santiago')
         self.utc_tz = pytz.UTC
+        self.use_cache = use_cache
+        self._cache = None
+    
+    @property
+    def cache(self):
+        """Lazy load del caché."""
+        if self._cache is None and self.use_cache:
+            try:
+                from backend.services.traceability.cache import get_cache
+                self._cache = get_cache()
+            except Exception as e:
+                print(f"[TraceabilityService] No se pudo cargar caché: {e}")
+                self.use_cache = False
+        return self._cache
+    
+    def get_traceability_by_package_cached(self, package_name: str, 
+                                          direction: str = "both") -> Dict:
+        """
+        Obtiene trazabilidad usando el caché (RÁPIDO: <100ms).
+        
+        Args:
+            package_name: Nombre del paquete (ej: "PAL-001")
+            direction: "backward", "forward", o "both"
+            
+        Returns:
+            Dict con estructura de trazabilidad
+        """
+        if not self.use_cache or not self.cache or not self.cache.is_loaded:
+            print("[TraceabilityService] Caché no disponible, usando método legacy")
+            return self.get_traceability_by_identifier(package_name)
+        
+        try:
+            # Buscar package_id por nombre
+            package_id = None
+            for pkg_id, pkg_data in self.cache.packages.items():
+                if pkg_data.get('name') == package_name:
+                    package_id = pkg_id
+                    break
+            
+            if not package_id:
+                return self._empty_result()
+            
+            # Obtener trazabilidad del caché
+            backward_moves = []
+            forward_moves = []
+            
+            if direction in ["backward", "both"]:
+                backward_moves = self.cache.get_package_traceability_backward(package_id)
+            
+            if direction in ["forward", "both"]:
+                forward_moves = self.cache.get_package_traceability_forward(package_id)
+            
+            # Combinar y convertir a formato esperado
+            all_moves = backward_moves + forward_moves
+            
+            # Enriquecer con datos relacionados
+            enriched_moves = []
+            for move in all_moves:
+                enriched = move.copy()
+                
+                # Agregar datos de paquetes
+                pkg_id = move.get('package_id')
+                if pkg_id and isinstance(pkg_id, (list, tuple)):
+                    pkg_id = pkg_id[0]
+                if pkg_id and pkg_id in self.cache.packages:
+                    enriched['package_name'] = self.cache.packages[pkg_id].get('name')
+                
+                result_pkg_id = move.get('result_package_id')
+                if result_pkg_id and isinstance(result_pkg_id, (list, tuple)):
+                    result_pkg_id = result_pkg_id[0]
+                if result_pkg_id and result_pkg_id in self.cache.packages:
+                    enriched['result_package_name'] = self.cache.packages[result_pkg_id].get('name')
+                
+                # Agregar datos de picking
+                picking_id = move.get('picking_id')
+                if picking_id and isinstance(picking_id, (list, tuple)):
+                    picking_id = picking_id[0]
+                if picking_id and picking_id in self.cache.pickings:
+                    picking = self.cache.pickings[picking_id]
+                    enriched['picking_name'] = picking.get('name')
+                    enriched['origin'] = picking.get('origin')
+                
+                enriched_moves.append(enriched)
+            
+            return {
+                "moves": enriched_moves,
+                "packages": list(set(
+                    [m.get('package_name') for m in enriched_moves if m.get('package_name')] +
+                    [m.get('result_package_name') for m in enriched_moves if m.get('result_package_name')]
+                )),
+                "from_cache": True,
+                "cache_status": self.cache.get_status()
+            }
+            
+        except Exception as e:
+            print(f"[TraceabilityService] Error usando caché: {e}")
+            # Fallback a método legacy
+            return self.get_traceability_by_identifier(package_name)
     
     def _convert_utc_to_chile(self, utc_datetime_str: str) -> str:
         """Convierte fecha UTC a hora de Chile."""
