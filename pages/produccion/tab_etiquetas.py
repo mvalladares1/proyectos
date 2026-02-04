@@ -142,6 +142,8 @@ def render(username: str, password: str):
         st.session_state.etiq_pallets_cargados = []
     if "etiq_cliente_nombre" not in st.session_state:
         st.session_state.etiq_cliente_nombre = ""
+    if "etiq_ordenes_encontradas" not in st.session_state:
+        st.session_state.etiq_ordenes_encontradas = []
     
     # ==================== PASO 1: SELECCIONAR CLIENTE ====================
     st.subheader("1️⃣ Cliente")
@@ -188,63 +190,62 @@ def render(username: str, password: str):
         with st.spinner("Buscando órdenes..."):
             try:
                 ordenes = buscar_ordenes(username, password, termino_busqueda)
+                st.session_state.etiq_ordenes_encontradas = ordenes
                 
                 if ordenes:
                     st.success(f"✅ Se encontraron {len(ordenes)} órdenes")
-                    
-                    # Mostrar tabla de órdenes
-                    st.write("**Órdenes encontradas:**")
-                    
-                    for orden in ordenes:
-                        col1, col2, col3 = st.columns([2, 2, 1])
-                        
-                        with col1:
-                            st.write(f"**{orden.get('name')}**")
-                            st.caption(f"Producto: {orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else ''}")
-                        
-                        with col2:
-                            st.write(f"Estado: {orden.get('state', '')}")
-                            if orden.get('origin'):
-                                st.caption(f"Origen: {orden.get('origin')}")
-                        
-                        with col3:
-                            if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
-                                st.session_state.etiq_orden_seleccionada = orden
-                                st.rerun()
                 else:
                     st.warning("⚠️ No se encontraron órdenes")
                     
             except Exception as e:
                 st.error(f"❌ Error al buscar órdenes: {e}")
+                st.session_state.etiq_ordenes_encontradas = []
     
-    # ==================== PASO 3: CARGAR PALLETS ====================
+    # Mostrar órdenes encontradas
+    if st.session_state.etiq_ordenes_encontradas:
+        st.write("**Órdenes encontradas:**")
+        
+        for orden in st.session_state.etiq_ordenes_encontradas:
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                st.write(f"**{orden.get('name')}**")
+                st.caption(f"Producto: {orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else ''}")
+            
+            with col2:
+                st.write(f"Estado: {orden.get('state', '')}")
+                if orden.get('origin'):
+                    st.caption(f"Origen: {orden.get('origin')}")
+            
+            with col3:
+                if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
+                    st.session_state.etiq_orden_seleccionada = orden
+                    # Auto-cargar pallets al seleccionar
+                    with st.spinner("Cargando pallets..."):
+                        try:
+                            pallets = obtener_pallets_orden(username, password, orden.get('name'))
+                            st.session_state.etiq_pallets_cargados = pallets
+                            if pallets:
+                                st.success(f"✅ Se cargaron {len(pallets)} pallets")
+                            else:
+                                st.warning("⚠️ No se encontraron pallets")
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+                    st.rerun()
+    
+    # ==================== PASO 3: ORDEN SELECCIONADA ====================
     if st.session_state.etiq_orden_seleccionada:
-        st.subheader("3️⃣ Pallets de la Orden")
-        
         orden = st.session_state.etiq_orden_seleccionada
-        st.info(f"📦 Orden seleccionada: **{orden.get('name')}**")
         
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("🔄 Cargar Pallets", type="primary", use_container_width=True, key="etiq_btn_cargar"):
-                with st.spinner("Obteniendo pallets..."):
-                    try:
-                        pallets = obtener_pallets_orden(username, password, orden.get('name'))
-                        st.session_state.etiq_pallets_cargados = pallets
-                        
-                        if pallets:
-                            st.success(f"✅ Se cargaron {len(pallets)} pallets")
-                        else:
-                            st.warning("⚠️ No se encontraron pallets para esta orden")
-                            
-                    except Exception as e:
-                        st.error(f"❌ Error al cargar pallets: {e}")
+        st.divider()
+        st.subheader("3️⃣ Orden Seleccionada")
+        st.info(f"📦 **{orden.get('name')}** - {orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else ''}")
         
-        with col2:
-            if st.button("❌ Cambiar Orden", use_container_width=True, key="etiq_btn_cambiar"):
-                st.session_state.etiq_orden_seleccionada = None
-                st.session_state.etiq_pallets_cargados = []
-                st.rerun()
+        if st.button("❌ Cambiar Orden", use_container_width=False, key="etiq_btn_cambiar"):
+            st.session_state.etiq_orden_seleccionada = None
+            st.session_state.etiq_pallets_cargados = []
+            st.session_state.etiq_ordenes_encontradas = []
+            st.rerun()
     
     # ==================== PASO 4: MOSTRAR PALLETS Y GENERAR ETIQUETAS ====================
     if st.session_state.etiq_pallets_cargados:
