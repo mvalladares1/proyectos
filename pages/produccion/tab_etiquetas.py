@@ -4,8 +4,20 @@ Permite buscar órdenes de producción y generar etiquetas para cada pallet
 """
 import streamlit as st
 import httpx
+import re
 from typing import List, Dict
 from produccion.shared import API_URL
+
+
+def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
+    """
+    Extrae el código y descripción del nombre del producto.
+    Ejemplo: "[402122000] FB MK Conv. IQF A 10 kg en Caja" -> ("402122000", "FB MK Conv. IQF A 10 kg en Caja")
+    """
+    match = re.match(r'\[(\d+)\]\s*(.+)', nombre_producto)
+    if match:
+        return match.group(1), match.group(2)
+    return '', nombre_producto
 
 
 def obtener_clientes(username: str, password: str):
@@ -274,16 +286,21 @@ def render(username: str, password: str):
                 product_key = product_id[0] if isinstance(product_id, list) else product_id
                 product_name = product_id[1] if isinstance(product_id, list) else str(product_id)
                 
+                # Extraer código y descripción
+                codigo, descripcion = extraer_codigo_descripcion(product_name)
+                
                 if product_key not in pallets_por_producto:
                     pallets_por_producto[product_key] = {
                         'nombre': product_name,
+                        'codigo': codigo,
+                        'descripcion': descripcion,
                         'pallets': []
                     }
                 pallets_por_producto[product_key]['pallets'].append(pallet)
         
         # Mostrar pallets agrupados por producto
         for product_key, producto_data in pallets_por_producto.items():
-            st.markdown(f"### 📦 {producto_data['nombre']}")
+            st.markdown(f"### 📦 {producto_data['descripcion']}")
             st.caption(f"{len(producto_data['pallets'])} pallets")
             
             # Crear tabla de pallets
@@ -298,13 +315,16 @@ def render(username: str, password: str):
                     product_id = pallet.get('product_id')
                     product_name = product_id[1] if isinstance(product_id, (list, tuple)) else 'Producto desconocido'
                     
+                    # Extraer código y descripción
+                    codigo_prod, descripcion_prod = extraer_codigo_descripcion(product_name)
+                    
                     lot_id = pallet.get('lot_id')
                     lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else 'Sin lote'
                     
                     datos_etiqueta = {
                         'cliente': st.session_state.etiq_cliente_nombre,
-                        'nombre_producto': product_name,
-                        'codigo_producto': '',  # TODO: Obtener desde product_id
+                        'nombre_producto': descripcion_prod,
+                        'codigo_producto': codigo_prod,
                         'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                         'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
                         'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
