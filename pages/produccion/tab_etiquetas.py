@@ -131,17 +131,16 @@ def render(username: str, password: str):
     # ==================== PASO 1: SELECCIONAR CLIENTE ====================
     st.subheader("1️⃣ Cliente")
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        cliente_input = st.text_input(
-            "Nombre del Cliente",
-            value=st.session_state.etiq_cliente_nombre,
-            placeholder="Ej: ACME Corporation",
-            help="Este nombre aparecerá en todas las etiquetas",
-            key="etiq_cliente_input"
-        )
-        if cliente_input:
-            st.session_state.etiq_cliente_nombre = cliente_input
+    cliente_input = st.text_input(
+        "Nombre del Cliente",
+        value=st.session_state.etiq_cliente_nombre,
+        placeholder="Ingresa el nombre del cliente (texto libre)",
+        help="Este nombre aparecerá en todas las etiquetas",
+        key="etiq_cliente_input_manual",
+        max_chars=100
+    )
+    if cliente_input:
+        st.session_state.etiq_cliente_nombre = cliente_input
     
     # ==================== PASO 2: BUSCAR ORDEN ====================
     st.subheader("2️⃣ Buscar Orden de Producción")
