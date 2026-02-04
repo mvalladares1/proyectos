@@ -39,7 +39,7 @@ def fetch_procesos_activos(username: str, password: str, fecha: str,
     return response.json()
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_procesos_cerrados(username: str, password: str, fecha: str,
                             planta: str = None, sala: str = None,
                             fecha_fin: str = None):
@@ -468,6 +468,9 @@ def render(username: str, password: str):
     
     # === CARGAR DATOS (solo cuando se presiona Buscar) ===
     if btn_buscar:
+        # Limpiar cache para obtener datos frescos
+        st.cache_data.clear()
+        
         try:
             with st.spinner("Cargando datos del monitor..."):
                 # Procesos activos: TODOS los que no son done ni cancel
