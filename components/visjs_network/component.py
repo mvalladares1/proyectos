@@ -320,13 +320,16 @@ def render_visjs_network_chronological(
                         enabled: true,
                         solver: 'repulsion',
                         repulsion: {{
-                            nodeDistance: 80,
+                            nodeDistance: 120,
                             centralGravity: 0.0,
-                            springLength: 100,
-                            springConstant: 0.01,
-                            damping: 0.5
+                            springLength: 150,
+                            springConstant: 0.005,
+                            damping: 0.8
                         }},
-                        stabilization: {{ iterations: 100 }}
+                        stabilization: {{ 
+                            iterations: 150,
+                            updateInterval: 25
+                        }}
                     }},
                     interaction: interactionOptions,
                     nodes: nodeOptions,
