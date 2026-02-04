@@ -131,7 +131,7 @@ def descargar_reporte_pdf(data: dict):
 
 def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
     """Renderiza KPIs de resumen."""
-    cols = st.columns(4)
+    cols = st.columns(5)
     
     with cols[0]:
         st.metric(
@@ -141,24 +141,36 @@ def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
         )
     
     with cols[1]:
+        kg_avanzados = stats_activos.get('kg_producidos', 0)
+        kg_programados = stats_activos.get('kg_programados', 0)
+        pct = (kg_avanzados / kg_programados * 100) if kg_programados > 0 else 0
         st.metric(
-            "⏳ KG Pendientes",
-            f"{stats_activos.get('kg_pendientes', 0):,.0f}",
-            help="Kilos por producir"
+            "🔄 KG Avanzados",
+            f"{kg_avanzados:,.0f}",
+            delta=f"{pct:.1f}% del total",
+            delta_color="off",
+            help="Kilos ya producidos en procesos pendientes"
         )
     
     with cols[2]:
+        st.metric(
+            "⏳ KG Pendientes",
+            f"{stats_activos.get('kg_pendientes', 0):,.0f}",
+            help="Kilos que faltan por producir"
+        )
+    
+    with cols[3]:
         st.metric(
             "✅ Cerrados",
             stats_cerrados.get('total_procesos', 0),
             help="Procesos cerrados en el período"
         )
     
-    with cols[3]:
+    with cols[4]:
         st.metric(
-            "📦 KG Producidos",
+            "📦 KG Cerrados",
             f"{stats_cerrados.get('kg_producidos', 0):,.0f}",
-            help="Kilos producidos en el período"
+            help="Kilos de procesos cerrados en el período"
         )
 
 
