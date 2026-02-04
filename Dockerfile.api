@@ -26,11 +26,13 @@ COPY backend/ backend/
 COPY shared/ shared/
 COPY data/ data/
 
-# Crear directorio para sessions si no existe
-RUN mkdir -p data/
+# Usuario no-root para seguridad - crear antes de los directorios
+RUN useradd -m -u 1000 appuser
 
-# Crear directorio para cache de trazabilidad
-RUN mkdir -p cache/traceability
+# Crear directorio para sessions y cache con permisos correctos
+RUN mkdir -p data/ cache/traceability && \
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
@@ -39,10 +41,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Exponer puerto
 EXPOSE 8000
 
-# Usuario no-root para seguridad
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app && \
-    chmod -R 755 /app/cache
+# Cambiar a usuario no-root
 USER appuser
 
 # Comando de inicio
