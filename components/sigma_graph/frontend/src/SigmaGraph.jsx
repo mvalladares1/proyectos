@@ -12,7 +12,6 @@ const SigmaGraph = (props) => {
   const containerRef = useRef(null)
   const sigmaRef = useRef(null)
   const graphRef = useRef(null)
-  const [hoveredNode, setHoveredNode] = useState(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   useEffect(() => {
@@ -24,12 +23,13 @@ const SigmaGraph = (props) => {
 
     // Agregar nodos
     nodes.forEach((node) => {
+      const hasPos = typeof node.x === "number" && typeof node.y === "number"
       graph.addNode(node.id, {
         label: node.label,
         size: node.size || 10,
         color: node.color || "#5B8FF9",
-        x: Math.random(),
-        y: Math.random(),
+        x: hasPos ? node.x : Math.random(),
+        y: hasPos ? node.y : Math.random(),
         detail: node.detail || "",
         originalColor: node.color || "#5B8FF9",
       })
@@ -75,7 +75,6 @@ const SigmaGraph = (props) => {
 
     // Hover en nodos - opacidad
     sigma.on("enterNode", ({ node }) => {
-      setHoveredNode(node)
       
       // Obtener vecinos del nodo
       const neighbors = new Set(graph.neighbors(node))
@@ -99,7 +98,6 @@ const SigmaGraph = (props) => {
     })
 
     sigma.on("leaveNode", () => {
-      setHoveredNode(null)
 
       // Restaurar colores originales
       graph.forEachNode((n, attrs) => {

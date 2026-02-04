@@ -1106,11 +1106,26 @@ def _render_sigma_sankey(sankey_data: dict):
     max_height = 1400
     dynamic_height = min(max_height, max(min_height, num_nodes * 12))
     
+    # Controles de layout
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        layout_option = st.selectbox(
+            "Layout",
+            ["Timeline", "ForceAtlas2"],
+            index=0,
+        )
+    layout = "timeline" if layout_option == "Timeline" else "forceatlas2"
+
+    # Mostrar rango de fechas si está disponible
+    date_range = sigma_data.get("date_range", {})
+    if date_range.get("min") and date_range.get("max"):
+        st.caption(f"🗓️ Rango: {date_range['min']} → {date_range['max']}")
+
     # Renderizar Sigma
     event = sigma_graph(
         nodes=sigma_data["nodes"],
         edges=sigma_data["edges"],
-        layout="forceatlas2",
+        layout=layout,
         height=dynamic_height,
         key="trazabilidad_sigma"
     )
