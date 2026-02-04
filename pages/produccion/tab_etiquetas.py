@@ -142,32 +142,6 @@ def generar_etiqueta_html(datos: Dict) -> str:
     return html
 
 
-def generar_zpl_etiqueta(datos: Dict) -> str:
-    """
-    Genera código ZPL para impresora Zebra.
-    Tamaño: 100mm x 150mm (4" x 6" aprox)
-    """
-    barcode_value = datos.get('barcode', datos.get('numero_pallet', ''))
-    
-    # ZPL para etiqueta 100x150mm (aprox 800x1200 dots a 203dpi)
-    zpl = f"""^XA
-^PW800
-^LL1200
-^FO30,30^A0N,35,35^FD{datos.get('nombre_producto', '')}^FS
-^FO30,100^A0N,28,28^FDCODIGO PRODUCTO: {datos.get('codigo_producto', '')}^FS
-^FO30,160^A0N,28,28^FDPESO PALLET: {datos.get('peso_pallet_kg', 0)} KG^FS
-^FO30,220^A0N,28,28^FDCANTIDAD CAJAS: {datos.get('cantidad_cajas', 0)}^FS
-^FO30,280^A0N,28,28^FDFECHA ELABORACION: {datos.get('fecha_elaboracion', '')}^FS
-^FO30,340^A0N,28,28^FDFECHA VENCIMIENTO: {datos.get('fecha_vencimiento', '')}^FS
-^FO30,400^A0N,28,28^FDLOTE PRODUCCION: {datos.get('lote_produccion', '')}^FS
-^FO30,460^A0N,28,28^FDNUMERO DE PALLET: {datos.get('numero_pallet', '')}^FS
-^FO30,550^BY3
-^BCN,100,Y,N,N
-^FD{barcode_value}^FS
-^XZ"""
-    return zpl
-
-
 def render(username: str, password: str):
     """Renderiza el tab de etiquetas de pallets."""
     
@@ -178,186 +152,10 @@ def render(username: str, password: str):
         st.session_state.etiq_orden_seleccionada = None
     if "etiq_pallets_cargados" not in st.session_state:
         st.session_state.etiq_pallets_cargados = []
-    if "etiq_cliente_nombre" not in st.session_state:
-        st.session_state.etiq_cliente_nombre = ""
     if "etiq_ordenes_encontradas" not in st.session_state:
         st.session_state.etiq_ordenes_encontradas = []
     if "etiq_cargando_pallets" not in st.session_state:
         st.session_state.etiq_cargando_pallets = False
-    if "zebra_conectada" not in st.session_state:
-        st.session_state.zebra_conectada = False
-    
-    # ==================== CONFIGURACIÓN IMPRESORA ZEBRA ====================
-    with st.expander("🖨️ Configuración Impresora Zebra", expanded=False):
-        st.markdown("""
-        **Conexión por RED (recomendado):**
-        - Ingresa la IP de tu impresora Zebra
-        - Puerto por defecto: 9100
-        
-        **Conexión por USB:**
-        - Requiere instalar driver WinUSB con Zadig
-        - Si ves "Access denied", usa conexión por RED
-        """)
-        
-        # Configuración de IP para conexión por red
-        col_ip1, col_ip2 = st.columns([3, 1])
-        with col_ip1:
-            zebra_ip = st.text_input(
-                "IP de Impresora Zebra",
-                value=st.session_state.get('zebra_ip', ''),
-                placeholder="Ej: 192.168.1.100",
-                key="zebra_ip_input"
-            )
-        with col_ip2:
-            zebra_port = st.number_input(
-                "Puerto",
-                value=st.session_state.get('zebra_port', 9100),
-                min_value=1,
-                max_value=65535,
-                key="zebra_port_input"
-            )
-        
-        if zebra_ip:
-            st.session_state['zebra_ip'] = zebra_ip
-            st.session_state['zebra_port'] = zebra_port
-            st.success(f"✅ Configurado: {zebra_ip}:{zebra_port}")
-        
-        # Componente JavaScript para manejar la impresora Zebra
-        zebra_js = """
-        <div id="zebra-status" style="padding: 10px; border-radius: 5px; margin: 10px 0;">
-            <span id="status-icon">🔴</span>
-            <span id="status-text">Impresora no conectada</span>
-        </div>
-        <button id="connect-btn" onclick="connectZebra()" style="
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-        ">🔗 Conectar Zebra</button>
-        <button id="test-btn" onclick="testPrint()" style="
-            background-color: #2196F3;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        " disabled>🧪 Imprimir Prueba</button>
-        
-        <script>
-        let zebraDevice = null;
-        let zebraWriter = null;
-        
-        // Intentar reconexión automática al cargar
-        async function autoReconnect() {
-            try {
-                const devices = await navigator.usb.getDevices();
-                for (let device of devices) {
-                    if (device.vendorId === 0x0A5F) { // Zebra vendor ID
-                        await connectToDevice(device);
-                        break;
-                    }
-                }
-            } catch (e) {
-                console.log('Auto-reconnect not available:', e);
-            }
-        }
-        
-        async function connectZebra() {
-            try {
-                // Solicitar dispositivo USB (Zebra)
-                const device = await navigator.usb.requestDevice({
-                    filters: [
-                        { vendorId: 0x0A5F }, // Zebra Technologies
-                    ]
-                });
-                await connectToDevice(device);
-            } catch (e) {
-                updateStatus(false, 'Error: ' + e.message);
-            }
-        }
-        
-        async function connectToDevice(device) {
-            try {
-                zebraDevice = device;
-                await zebraDevice.open();
-                await zebraDevice.selectConfiguration(1);
-                await zebraDevice.claimInterface(0);
-                
-                // Buscar endpoint de salida
-                const endpoint = zebraDevice.configuration.interfaces[0].alternate.endpoints.find(
-                    e => e.direction === 'out'
-                );
-                
-                if (endpoint) {
-                    updateStatus(true, 'Conectada: ' + zebraDevice.productName);
-                    document.getElementById('test-btn').disabled = false;
-                    
-                    // Guardar para reconexión
-                    localStorage.setItem('zebraConnected', 'true');
-                }
-            } catch (e) {
-                updateStatus(false, 'Error conectando: ' + e.message);
-            }
-        }
-        
-        function updateStatus(connected, message) {
-            document.getElementById('status-icon').textContent = connected ? '🟢' : '🔴';
-            document.getElementById('status-text').textContent = message;
-            document.getElementById('zebra-status').style.backgroundColor = connected ? '#e8f5e9' : '#ffebee';
-        }
-        
-        async function sendToZebra(zpl) {
-            if (!zebraDevice) {
-                alert('Impresora no conectada');
-                return false;
-            }
-            try {
-                const encoder = new TextEncoder();
-                const data = encoder.encode(zpl);
-                
-                const endpoint = zebraDevice.configuration.interfaces[0].alternate.endpoints.find(
-                    e => e.direction === 'out'
-                );
-                
-                await zebraDevice.transferOut(endpoint.endpointNumber, data);
-                return true;
-            } catch (e) {
-                console.error('Error enviando a Zebra:', e);
-                // Intentar reconectar
-                updateStatus(false, 'Desconectada - Reconectando...');
-                await autoReconnect();
-                return false;
-            }
-        }
-        
-        async function testPrint() {
-            const testZpl = `^XA
-^PW800
-^LL1200
-^FO30,100^A0N,50,50^FD*** PRUEBA ZEBRA ***^FS
-^FO30,200^A0N,30,30^FDImpresora conectada correctamente^FS
-^FO30,300^A0N,30,30^FDEtiqueta 100mm x 150mm^FS
-^FO30,450^BY3
-^BCN,100,Y,N,N
-^FDTEST123^FS
-^XZ`;
-            const result = await sendToZebra(testZpl);
-            if (result) {
-                alert('✅ Etiqueta de prueba enviada');
-            }
-        }
-        
-        // Exponer función para uso externo
-        window.sendToZebra = sendToZebra;
-        
-        // Auto-reconectar al cargar
-        autoReconnect();
-        </script>
-        """
-        st.components.v1.html(zebra_js, height=150)
     
     # ==================== PASO 1: BUSCAR ORDEN ====================
     st.subheader("1️⃣ Buscar Orden de Producción")
@@ -534,30 +332,20 @@ def render(username: str, password: str):
                 }
                 
                 with col2:
-                    if st.button("🖨️ Zebra", key=f"etiq_zebra_{pallet.get('package_id')}", use_container_width=True):
-                        # Verificar que hay IP configurada
-                        zebra_ip = st.session_state.get('zebra_ip', '')
-                        zebra_port = st.session_state.get('zebra_port', 9100)
-                        
-                        if not zebra_ip:
-                            st.error("⚠️ Configura la IP de la impresora Zebra arriba")
-                        else:
-                            # Generar ZPL y enviar por API
-                            zpl_code = generar_zpl_etiqueta(datos_etiqueta)
-                            try:
-                                response = httpx.post(
-                                    f"{API_URL}/api/v1/etiquetas/imprimir_zebra",
-                                    params={"ip": zebra_ip, "puerto": zebra_port},
-                                    content=zpl_code,
-                                    headers={"Content-Type": "text/plain"},
-                                    timeout=15.0
-                                )
-                                if response.status_code == 200:
-                                    st.success(f"✅ Enviado a Zebra: {pallet.get('package_name')}")
-                                else:
-                                    st.error(f"❌ Error: {response.json().get('detail', 'Error desconocido')}")
-                            except Exception as e:
-                                st.error(f"❌ Error conectando: {str(e)}")
+                    if st.button("🖨️ Imprimir", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
+                        # Generar HTML con auto-print (abre diálogo de impresión del navegador)
+                        html_print = generar_etiqueta_html(datos_etiqueta)
+                        # Agregar script de auto-impresión
+                        html_con_print = html_print.replace('</body>', '''
+                        <script>
+                            window.onload = function() {
+                                setTimeout(function() {
+                                    window.print();
+                                }, 500);
+                            };
+                        </script>
+                        </body>''')
+                        st.components.v1.html(html_con_print, height=600, scrolling=True)
                 
                 with col3:
                     if st.button("👁️ Vista", key=f"etiq_preview_{pallet.get('package_id')}", use_container_width=True):
