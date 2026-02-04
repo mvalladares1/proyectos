@@ -40,7 +40,7 @@ def transform_sankey_to_sigma(sankey_data: Dict) -> Dict:
             "source": source,
             "target": target,
             "label": f"{value} unidades",
-            "size": max(1, min(10, value / 100)),  # Grosor proporcional
+            "size": 2,  # Grosor estándar para todos los edges
             "color": "#cccccc"
         })
     
