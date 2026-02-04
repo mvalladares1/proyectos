@@ -377,19 +377,19 @@ class MonitorProduccionService:
     
     def _filtrar_por_planta(self, procesos: List[Dict], planta: str) -> List[Dict]:
         """
-        Filtra procesos por planta basándose en el NOMBRE de la OF y/o la SALA.
-        - VILKUN: nombre empieza con 'VLK/' o sala contiene 'VILKUN' o 'VLK'
-        - SAN JOSE: sala contiene 'SAN JOSE' o 'SALA SAN JOSE'
+        Filtra procesos por planta basándose en la SALA de proceso.
+        - VILKUN: sala es exactamente 'Sala - Vilkun' o 'Tunel - Estatico VLK'
+        - SAN JOSE: sala contiene 'SAN JOSE'
         - RIO FUTURO: todo lo demás
         """
         resultado = []
         for p in procesos:
-            nombre = str(p.get('name', '') or '').upper()
-            sala = str(p.get('x_studio_sala_de_proceso', '') or '').upper()
+            sala = str(p.get('x_studio_sala_de_proceso', '') or '')
+            sala_upper = sala.upper()
             
-            # Determinar planta del proceso
-            es_vilkun = nombre.startswith('VLK/') or '/VLK/' in nombre or 'VILKUN' in sala or 'VLK' in sala
-            es_san_jose = 'SAN JOSE' in sala or 'SAN JOSÉ' in sala
+            # Determinar planta del proceso por sala
+            es_vilkun = sala == 'Sala - Vilkun' or sala == 'Tunel - Estatico VLK'
+            es_san_jose = 'SAN JOSE' in sala_upper or 'SAN JOSÉ' in sala_upper
             
             if planta == "VILKUN":
                 if es_vilkun:

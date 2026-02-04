@@ -131,11 +131,11 @@ def descargar_reporte_pdf(data: dict):
 
 def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
     """Renderiza KPIs de resumen."""
-    cols = st.columns(5)
+    cols = st.columns(4)
     
     with cols[0]:
         st.metric(
-            "🔄 Procesos Activos",
+            "📋 Procesos Pendientes",
             stats_activos.get('total_procesos', 0),
             help="Procesos ni cerrados ni cancelados"
         )
@@ -160,18 +160,10 @@ def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
             f"{stats_cerrados.get('kg_producidos', 0):,.0f}",
             help="Kilos producidos en el período"
         )
-    
-    with cols[4]:
-        avance = stats_activos.get('avance_porcentaje', 0)
-        st.metric(
-            "📈 % Avance",
-            f"{avance:.1f}%",
-            help="Avance general de producción"
-        )
 
 
 def render_grafico_evolucion(evolucion: list):
-    """Renderiza gráfico de evolución creados vs cerrados."""
+    """Renderiza gráfico de evolución: barras apiladas con líneas conectoras."""
     if not evolucion:
         st.info("No hay datos de evolución para mostrar")
         return
@@ -179,22 +171,21 @@ def render_grafico_evolucion(evolucion: list):
     fechas = [e['fecha_display'] for e in evolucion]
     creados = [e['procesos_creados'] for e in evolucion]
     cerrados = [e['procesos_cerrados'] for e in evolucion]
-    kg_producidos = [e['kg_producidos'] for e in evolucion]
     
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     
     options = {
         "title": {
-            "text": "📊 Evolución de Procesos (Creados vs Cerrados)",
+            "text": "📊 Evolución de Procesos por Día",
             "textStyle": {"color": label_color, "fontSize": 14}
         },
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "cross"}
+            "axisPointer": {"type": "shadow"}
         },
         "legend": {
-            "data": ["Creados", "Cerrados", "KG Producidos"],
+            "data": ["Creados (barra)", "Cerrados (barra)", "Creados (línea)", "Cerrados (línea)"],
             "top": 30,
             "textStyle": {"color": label_color}
         },
@@ -203,46 +194,51 @@ def render_grafico_evolucion(evolucion: list):
             "data": fechas,
             "axisLabel": {"color": "#8892b0", "rotate": 45}
         },
-        "yAxis": [
-            {
-                "type": "value",
-                "name": "Procesos",
-                "position": "left",
-                "axisLabel": {"color": "#8892b0"}
-            },
-            {
-                "type": "value",
-                "name": "KG",
-                "position": "right",
-                "axisLabel": {"color": "#8892b0", "formatter": "{value} kg"}
-            }
-        ],
+        "yAxis": {
+            "type": "value",
+            "name": "Procesos",
+            "axisLabel": {"color": "#8892b0"}
+        },
         "series": [
             {
-                "name": "Creados",
+                "name": "Creados (barra)",
                 "type": "bar",
+                "stack": "total",
                 "data": creados,
                 "itemStyle": {"color": "#3498db"},
-                "barGap": "10%"
+                "emphasis": {"focus": "series"}
             },
             {
-                "name": "Cerrados",
+                "name": "Cerrados (barra)",
                 "type": "bar",
+                "stack": "total",
                 "data": cerrados,
-                "itemStyle": {"color": "#2ecc71"}
+                "itemStyle": {"color": "#2ecc71"},
+                "emphasis": {"focus": "series"}
             },
             {
-                "name": "KG Producidos",
+                "name": "Creados (línea)",
                 "type": "line",
-                "yAxisIndex": 1,
-                "data": kg_producidos,
-                "smooth": True,
-                "itemStyle": {"color": "#e67e22"},
-                "lineStyle": {"width": 3}
+                "data": creados,
+                "smooth": False,
+                "symbol": "circle",
+                "symbolSize": 8,
+                "itemStyle": {"color": "#2980b9"},
+                "lineStyle": {"width": 2, "type": "solid"}
+            },
+            {
+                "name": "Cerrados (línea)",
+                "type": "line",
+                "data": cerrados,
+                "smooth": False,
+                "symbol": "circle",
+                "symbolSize": 8,
+                "itemStyle": {"color": "#27ae60"},
+                "lineStyle": {"width": 2, "type": "solid"}
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "8%", "right": "8%", "bottom": "20%", "containLabel": True}
+        "grid": {"left": "8%", "right": "5%", "bottom": "20%", "containLabel": True}
     }
     
     st_echarts(options=options, height="400px", theme=theme_echarts)
@@ -519,32 +515,35 @@ def render(username: str, password: str):
     
     # === DESCARGAR PDF ===
     if btn_pdf:
-        try:
-            activos = st.session_state.get("monitor_activos", {})
-            cerrados = st.session_state.get("monitor_cerrados", {})
-            evolucion = st.session_state.get("monitor_evolucion", {})
-            
-            pdf_data = {
-                "fecha_inicio": fecha_inicio.isoformat(),
-                "fecha_fin": fecha_fin.isoformat(),
-                "planta": planta_sel,
-                "sala": sala_sel,
-                "procesos_pendientes": activos.get("procesos", []),
-                "procesos_cerrados": cerrados.get("procesos", []),
-                "evolucion": evolucion.get("evolucion", []),
-                "totales": evolucion.get("totales", {})
-            }
-            
-            pdf_bytes = descargar_reporte_pdf(pdf_data)
-            
-            st.download_button(
-                label="⬇️ Descargar Reporte PDF",
-                data=pdf_bytes,
-                file_name=f"Monitor_Produccion_{fecha_fin.isoformat()}.pdf",
-                mime="application/pdf"
-            )
-        except Exception as e:
-            st.error(f"Error al generar PDF: {str(e)}")
+        if not st.session_state.get("monitor_data_loaded", False):
+            st.warning("⚠️ Primero debes cargar los datos con el botón 'Buscar'")
+        else:
+            try:
+                activos = st.session_state.get("monitor_activos", {})
+                cerrados = st.session_state.get("monitor_cerrados", {})
+                evolucion = st.session_state.get("monitor_evolucion", {})
+                
+                pdf_data = {
+                    "fecha_inicio": fecha_inicio.isoformat(),
+                    "fecha_fin": fecha_fin.isoformat(),
+                    "planta": planta_sel,
+                    "sala": sala_sel,
+                    "procesos_pendientes": activos.get("procesos", []),
+                    "procesos_cerrados": cerrados.get("procesos", []),
+                    "evolucion": evolucion.get("evolucion", []),
+                    "totales": evolucion.get("totales", {})
+                }
+                
+                pdf_bytes = descargar_reporte_pdf(pdf_data)
+                
+                st.download_button(
+                    label="⬇️ Descargar Reporte PDF",
+                    data=pdf_bytes,
+                    file_name=f"Monitor_Produccion_{fecha_fin.isoformat()}.pdf",
+                    mime="application/pdf"
+                )
+            except Exception as e:
+                st.error(f"Error al generar PDF: {str(e)}")
     
     # === MOSTRAR DATOS ===
     activos = st.session_state.get("monitor_activos", {})
@@ -573,40 +572,13 @@ def render(username: str, password: str):
     
     st.markdown("---")
     
-    # === VISTAS DE PROCESOS ===
-    vista_tabs = st.tabs(["📋 Vista Tabla", "📊 Vista Kanban"])
+    # === TABLAS DE PROCESOS ===
+    sub_tabs = st.tabs(["📋 Procesos Pendientes", "✅ Cerrados"])
     
-    with vista_tabs[0]:
-        # Tabs internos para activos/cerrados
-        sub_tabs = st.tabs(["🔄 Procesos Activos", "✅ Cerrados"])
-        
-        with sub_tabs[0]:
-            st.markdown(f"**{activos.get('estadisticas', {}).get('total_procesos', 0)} procesos activos**")
-            render_tabla_compacta(activos.get("procesos", []), "activos")
-        
-        with sub_tabs[1]:
-            st.markdown(f"**{cerrados.get('estadisticas', {}).get('total_procesos', 0)} procesos cerrados en el período**")
-            render_tabla_compacta(cerrados.get("procesos", []), "cerrados")
+    with sub_tabs[0]:
+        st.markdown(f"**{activos.get('estadisticas', {}).get('total_procesos', 0)} procesos pendientes**")
+        render_tabla_compacta(activos.get("procesos", []), "pendientes")
     
-    with vista_tabs[1]:
-        st.markdown("##### Procesos Activos por Sala")
-        render_kanban_por_sala(
-            activos.get("procesos", []),
-            activos.get("estadisticas", {}).get("por_sala", {})
-        )
-    
-    # === TOTALES DEL PERÍODO ===
-    st.markdown("---")
-    st.markdown("##### 📊 Totales del Período")
-    
-    totales = evolucion.get("totales", {})
-    tot_cols = st.columns(4)
-    
-    with tot_cols[0]:
-        st.metric("Total Creados", totales.get("total_creados", 0))
-    with tot_cols[1]:
-        st.metric("Total Cerrados", totales.get("total_cerrados", 0))
-    with tot_cols[2]:
-        st.metric("KG Programados", f"{totales.get('total_kg_programados', 0):,.0f}")
-    with tot_cols[3]:
-        st.metric("KG Producidos", f"{totales.get('total_kg_producidos', 0):,.0f}")
+    with sub_tabs[1]:
+        st.markdown(f"**{cerrados.get('estadisticas', {}).get('total_procesos', 0)} procesos cerrados en el período**")
+        render_tabla_compacta(cerrados.get("procesos", []), "cerrados")
