@@ -19,6 +19,7 @@ from produccion import shared
 from produccion import tab_reporteria
 from produccion import tab_detalle
 from produccion import tab_clasificacion
+from produccion import tab_etiquetas
 
 # Configuración de página
 st.set_page_config(page_title="Producción", page_icon="🏭", layout="wide")
@@ -65,6 +66,10 @@ if _perm_clasificacion:
     tabs_nombres.append("📦 Clasificación")
     tabs_disponibles.append("clasificacion")
 
+# Etiquetas siempre disponible para usuarios de producción
+tabs_nombres.append("🏷️ Etiquetas")
+tabs_disponibles.append("etiquetas")
+
 if not tabs_disponibles:
     st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Producción.")
     st.info("💡 Contacta al administrador para solicitar acceso.")
@@ -86,4 +91,9 @@ if "detalle" in tabs_disponibles:
 if "clasificacion" in tabs_disponibles:
     with tabs_ui[tab_index]:
         tab_clasificacion.render(username, password)
+    tab_index += 1
+
+if "etiquetas" in tabs_disponibles:
+    with tabs_ui[tab_index]:
+        tab_etiquetas.render(username, password)
     tab_index += 1
