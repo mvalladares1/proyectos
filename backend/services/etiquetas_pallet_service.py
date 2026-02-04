@@ -168,22 +168,20 @@ class EtiquetasPalletService:
                 orden = ordenes[0]
                 fecha_proceso = orden.get('date_finished')
                 
-                # Obtener los stock.move de productos terminados
-                finished_move_ids = orden.get('move_finished_ids', [])
-                
-                if finished_move_ids:
-                    logger.info(f"Orden producción {orden_name}: {len(finished_move_ids)} moves terminados")
-                    move_ids = finished_move_ids
-                else:
-                    # Fallback: buscar por production_id
-                    moves = self.odoo.search_read(
-                        'stock.move',
-                        [('production_id', '=', orden['id'])],
-                        ['id'],
-                        limit=500
-                    )
-                    move_ids = [m['id'] for m in moves]
-                    logger.info(f"Orden producción {orden_name}: {len(move_ids)} moves por production_id")
+                # Buscar TODOS los stock.move asociados a esta orden (no solo finished)
+                # Los pallets pueden estar en raw_material_production_id o production_id
+                moves = self.odoo.search_read(
+                    'stock.move',
+                    [
+                        '|',
+                        ('production_id', '=', orden['id']),
+                        ('raw_material_production_id', '=', orden['id'])
+                    ],
+                    ['id'],
+                    limit=500
+                )
+                move_ids = [m['id'] for m in moves]
+                logger.info(f"Orden producción {orden_name}: {len(move_ids)} moves encontrados")
             else:
                 # Buscar como stock.picking
                 pickings = self.odoo.search_read(
