@@ -217,65 +217,64 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
                     width: 100mm;
                     height: 100mm;
                     margin: 0;
-                    padding: 5mm;
+                    padding: 3mm;
                 }}
             }}
             body {{
                 font-family: Arial, sans-serif;
-                padding: 5mm;
+                padding: 3mm;
                 margin: 0;
-                width: 90mm;
-                height: 90mm;
+                width: 94mm;
+                height: 94mm;
                 font-size: 11px;
             }}
             .titulo {{
-                font-size: 16px;
+                font-size: 15px;
                 font-weight: bold;
                 text-align: center;
-                margin-bottom: 8px;
+                margin-bottom: 5px;
                 text-transform: uppercase;
+                line-height: 1.2;
             }}
-            .datos {{
-                padding: 5px 0;
+            .recuadro {{
+                padding: 5px 0px;
+                margin-top: 3px;
             }}
             .linea {{
-                margin: 3px 0;
-            }}
-            .fijo {{
-                font-size: 10px;
+                margin: 2px 0;
             }}
             .md-box {{
-                margin-top: 10px;
+                margin-top: 5px;
                 display: flex;
                 align-items: center;
                 gap: 5px;
             }}
             .checkbox {{
-                width: 18px;
-                height: 18px;
-                border: 2px solid black;
+                width: 20px;
+                height: 20px;
+                border: 1px solid black;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 14px;
+                font-size: 16px;
             }}
         </style>
     </head>
     <body>
         <div class="titulo">{datos.get('nombre_producto', '')}</div>
         
-        <div class="datos">
+        <div class="recuadro">
             <div class="linea">Fecha de elaboración: {datos.get('fecha_elaboracion', '')}</div>
             <div class="linea">Fecha de vencimiento: {datos.get('fecha_vencimiento', '')}</div>
             <div class="linea">Lote: {datos.get('lote_produccion', '')}</div>
             <div class="linea">Pallet: {datos.get('numero_pallet', '')}</div>
             <div class="linea">Peso Neto: {datos.get('peso_caja_kg', 10)} kg</div>
             <div class="linea">PRODUCTO CONGELADO</div>
-            <div class="linea fijo">Planta Cocule: Rio Futuro Procesos Spa</div>
-            <div class="linea fijo">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
-            <div class="linea fijo">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
-            <div class="linea fijo">XIV Región, N° 2214585504 del 30-11-2022</div>
-            <div class="linea fijo">Código SAG Planta: 105721</div>
+            <div class="linea">Planta Cocule: Rio Futuro Procesos Spa</div>
+            <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+            <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+            <div class="linea">XIV Región, N° 2214585504 del 30-11-2022</div>
+            <div class="linea">Código SAG Planta: 105721</div>
         </div>
         
         <div class="md-box">
