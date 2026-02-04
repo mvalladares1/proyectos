@@ -144,6 +144,8 @@ def render(username: str, password: str):
         st.session_state.etiq_cliente_nombre = ""
     if "etiq_ordenes_encontradas" not in st.session_state:
         st.session_state.etiq_ordenes_encontradas = []
+    if "etiq_cargando_pallets" not in st.session_state:
+        st.session_state.etiq_cargando_pallets = False
     
     # ==================== PASO 1: SELECCIONAR CLIENTE ====================
     st.subheader("1️⃣ Cliente")
@@ -220,18 +222,25 @@ def render(username: str, password: str):
             with col3:
                 if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
                     st.session_state.etiq_orden_seleccionada = orden
-                    # Auto-cargar pallets al seleccionar
-                    with st.spinner("Cargando pallets..."):
-                        try:
-                            pallets = obtener_pallets_orden(username, password, orden.get('name'))
-                            st.session_state.etiq_pallets_cargados = pallets
-                            if pallets:
-                                st.success(f"✅ Se cargaron {len(pallets)} pallets")
-                            else:
-                                st.warning("⚠️ No se encontraron pallets")
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
+                    st.session_state.etiq_cargando_pallets = True
                     st.rerun()
+    
+    # Auto-cargar pallets si se acaba de seleccionar una orden
+    if st.session_state.etiq_cargando_pallets and st.session_state.etiq_orden_seleccionada:
+        with st.spinner(f"🔄 Cargando pallets de {st.session_state.etiq_orden_seleccionada.get('name')}..."):
+            try:
+                pallets = obtener_pallets_orden(username, password, st.session_state.etiq_orden_seleccionada.get('name'))
+                st.session_state.etiq_pallets_cargados = pallets
+                st.session_state.etiq_cargando_pallets = False
+                
+                if pallets:
+                    st.success(f"✅ Se cargaron {len(pallets)} pallets")
+                else:
+                    st.warning("⚠️ No se encontraron pallets para esta orden")
+                    
+            except Exception as e:
+                st.error(f"❌ Error al cargar pallets: {e}")
+                st.session_state.etiq_cargando_pallets = False
     
     # ==================== PASO 3: ORDEN SELECCIONADA ====================
     if st.session_state.etiq_orden_seleccionada:
