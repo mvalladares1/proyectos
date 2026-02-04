@@ -41,7 +41,6 @@ class MonitorProduccionService:
             Dict con procesos activos, estadísticas y metadata
         """
         # Construir dominio base: TODOS los procesos no cerrados ni cancelados
-        # Sin filtro de fecha - queremos ver TODO lo pendiente actualmente
         domain = [
             ['state', 'not in', ['done', 'cancel']]
         ]
