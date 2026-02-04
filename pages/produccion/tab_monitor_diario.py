@@ -244,37 +244,21 @@ def render_grafico_evolucion(evolucion: list):
     st_echarts(options=options, height="400px", theme=theme_echarts)
 
 
-def render_grafico_cerrados_por_dia(procesos_cerrados: list):
-    """Renderiza gráfico de barras con procesos cerrados por día."""
-    if not procesos_cerrados:
-        st.info("No hay procesos cerrados para mostrar")
+def render_grafico_cerrados_por_dia(evolucion: list):
+    """Renderiza gráfico de barras con procesos cerrados por día usando datos de evolución."""
+    if not evolucion:
+        st.info("No hay datos de procesos cerrados para mostrar")
         return
     
-    # Agrupar procesos por fecha de cierre (date_finished)
-    cerrados_por_dia = {}
-    for p in procesos_cerrados:
-        fecha_cierre = p.get('date_finished')
-        if fecha_cierre:
-            # Extraer solo la fecha (sin hora)
-            if 'T' in str(fecha_cierre):
-                fecha_dia = str(fecha_cierre).split('T')[0]
-            else:
-                fecha_dia = str(fecha_cierre)[:10]
-            
-            if fecha_dia not in cerrados_por_dia:
-                cerrados_por_dia[fecha_dia] = {'cantidad': 0, 'kg': 0}
-            cerrados_por_dia[fecha_dia]['cantidad'] += 1
-            cerrados_por_dia[fecha_dia]['kg'] += p.get('qty_produced', 0) or 0
+    # Usar directamente los datos de evolución para mantener consistencia
+    fechas_display = [e['fecha_display'] for e in evolucion]
+    cantidades = [e['procesos_cerrados'] for e in evolucion]
+    kilos = [e['kg_producidos'] for e in evolucion]
     
-    if not cerrados_por_dia:
-        st.info("No hay fechas de cierre disponibles")
+    # Verificar que hay al menos un cierre
+    if sum(cantidades) == 0:
+        st.info("No hay procesos cerrados en el período seleccionado")
         return
-    
-    # Ordenar por fecha
-    fechas_ordenadas = sorted(cerrados_por_dia.keys())
-    fechas_display = [f"{f[8:10]}/{f[5:7]}" for f in fechas_ordenadas]  # DD/MM
-    cantidades = [cerrados_por_dia[f]['cantidad'] for f in fechas_ordenadas]
-    kilos = [cerrados_por_dia[f]['kg'] for f in fechas_ordenadas]
     
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
@@ -286,8 +270,7 @@ def render_grafico_cerrados_por_dia(procesos_cerrados: list):
         },
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "formatter": "{b}<br/>Procesos: {c0}<br/>KG: {c1}"
+            "axisPointer": {"type": "shadow"}
         },
         "legend": {
             "data": ["Cantidad Procesos", "KG Producidos"],
@@ -674,8 +657,8 @@ def render(username: str, password: str):
     
     st.markdown("---")
     
-    # Gráfico de procesos cerrados por día
-    render_grafico_cerrados_por_dia(cerrados.get("procesos", []))
+    # Gráfico de procesos cerrados por día (usa mismos datos de evolución para consistencia)
+    render_grafico_cerrados_por_dia(evolucion.get("evolucion", []))
     
     st.markdown("---")
     
