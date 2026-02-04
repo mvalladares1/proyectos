@@ -177,7 +177,12 @@ class TraceabilityCache:
     
     async def _load_from_odoo(self):
         """Carga completa desde Odoo."""
-        odoo = OdooClient()
+        try:
+            odoo = OdooClient()
+        except Exception as e:
+            logger.error(f"No se pudo conectar a Odoo: {e}")
+            logger.warning("Caché de trazabilidad NO disponible. Usando método legacy.")
+            return
         
         # 1. Move lines (el más pesado)
         logger.info("Cargando move_lines...")
