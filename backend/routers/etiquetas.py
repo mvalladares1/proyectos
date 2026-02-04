@@ -8,6 +8,22 @@ from typing import List, Dict, Optional
 router = APIRouter(prefix="/etiquetas", tags=["Etiquetas Pallet"])
 
 
+@router.get("/clientes")
+async def obtener_clientes(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene la lista de clientes desde res.partner.
+    """
+    try:
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+        return service.obtener_clientes()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/buscar_ordenes")
 async def buscar_ordenes(
     termino: str = Query(..., description="Término de búsqueda"),

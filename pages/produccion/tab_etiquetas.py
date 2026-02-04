@@ -8,6 +8,21 @@ from typing import List, Dict
 from produccion.shared import API_URL
 
 
+def obtener_clientes(username: str, password: str):
+    """Obtiene lista de clientes desde Odoo."""
+    params = {
+        "username": username,
+        "password": password
+    }
+    response = httpx.get(
+        f"{API_URL}/api/v1/etiquetas/clientes",
+        params=params,
+        timeout=30.0
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def buscar_ordenes(username: str, password: str, termino: str):
     """Busca órdenes de producción."""
     params = {
@@ -131,16 +146,28 @@ def render(username: str, password: str):
     # ==================== PASO 1: SELECCIONAR CLIENTE ====================
     st.subheader("1️⃣ Cliente")
     
-    cliente_input = st.text_input(
-        "Nombre del Cliente",
-        value=st.session_state.etiq_cliente_nombre,
-        placeholder="Ingresa el nombre del cliente (texto libre)",
-        help="Este nombre aparecerá en todas las etiquetas",
-        key="etiq_cliente_input_manual",
-        max_chars=100
+    # Cargar clientes
+    if "etiq_clientes_list" not in st.session_state:
+        with st.spinner("Cargando clientes..."):
+            try:
+                clientes = obtener_clientes(username, password)
+                st.session_state.etiq_clientes_list = clientes
+            except Exception as e:
+                st.error(f"Error cargando clientes: {e}")
+                st.session_state.etiq_clientes_list = []
+    
+    clientes_options = [""] + [c.get('name', '') for c in st.session_state.etiq_clientes_list]
+    
+    cliente_seleccionado = st.selectbox(
+        "Seleccionar Cliente",
+        options=clientes_options,
+        index=0,
+        help="Selecciona el cliente para las etiquetas",
+        key="etiq_cliente_selectbox"
     )
-    if cliente_input:
-        st.session_state.etiq_cliente_nombre = cliente_input
+    
+    if cliente_seleccionado:
+        st.session_state.etiq_cliente_nombre = cliente_seleccionado
     
     # ==================== PASO 2: BUSCAR ORDEN ====================
     st.subheader("2️⃣ Buscar Orden de Producción")

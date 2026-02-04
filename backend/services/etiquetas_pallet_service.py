@@ -21,6 +21,30 @@ class EtiquetasPalletService:
     def __init__(self, username: str, password: str):
         self.odoo = OdooClient(username=username, password=password)
     
+    def obtener_clientes(self) -> List[Dict]:
+        """
+        Obtiene la lista de clientes desde res.partner.
+        """
+        try:
+            domain = [
+                '|',
+                ('customer_rank', '>', 0),
+                ('is_company', '=', True)
+            ]
+            
+            clientes = self.odoo.search_read(
+                'res.partner',
+                domain,
+                ['name', 'vat', 'city', 'country_id'],
+                limit=500,
+                order='name asc'
+            )
+            
+            return [clean_record(c) for c in clientes]
+        except Exception as e:
+            logger.error(f"Error obteniendo clientes: {e}")
+            return []
+    
     def _extraer_kg_por_caja(self, nombre_producto: str) -> Optional[float]:
         """
         Extrae los kg por caja del nombre del producto.
