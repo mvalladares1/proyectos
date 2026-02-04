@@ -190,11 +190,37 @@ def render(username: str, password: str):
     # ==================== CONFIGURACIÓN IMPRESORA ZEBRA ====================
     with st.expander("🖨️ Configuración Impresora Zebra", expanded=False):
         st.markdown("""
-        **Instrucciones de conexión:**
-        1. Asegúrate de que la impresora Zebra esté encendida y conectada por USB o Red
-        2. Si usas USB, el navegador pedirá permiso para conectarse
-        3. La impresora quedará guardada para reconexión automática
+        **Conexión por RED (recomendado):**
+        - Ingresa la IP de tu impresora Zebra
+        - Puerto por defecto: 9100
+        
+        **Conexión por USB:**
+        - Requiere instalar driver WinUSB con Zadig
+        - Si ves "Access denied", usa conexión por RED
         """)
+        
+        # Configuración de IP para conexión por red
+        col_ip1, col_ip2 = st.columns([3, 1])
+        with col_ip1:
+            zebra_ip = st.text_input(
+                "IP de Impresora Zebra",
+                value=st.session_state.get('zebra_ip', ''),
+                placeholder="Ej: 192.168.1.100",
+                key="zebra_ip_input"
+            )
+        with col_ip2:
+            zebra_port = st.number_input(
+                "Puerto",
+                value=st.session_state.get('zebra_port', 9100),
+                min_value=1,
+                max_value=65535,
+                key="zebra_port_input"
+            )
+        
+        if zebra_ip:
+            st.session_state['zebra_ip'] = zebra_ip
+            st.session_state['zebra_port'] = zebra_port
+            st.success(f"✅ Configurado: {zebra_ip}:{zebra_port}")
         
         # Componente JavaScript para manejar la impresora Zebra
         zebra_js = """
@@ -509,28 +535,29 @@ def render(username: str, password: str):
                 
                 with col2:
                     if st.button("🖨️ Zebra", key=f"etiq_zebra_{pallet.get('package_id')}", use_container_width=True):
-                        # Generar ZPL y enviar a Zebra
-                        zpl_code = generar_zpl_etiqueta(datos_etiqueta)
-                        st.session_state[f'zpl_to_print_{pallet.get("package_id")}'] = zpl_code
+                        # Verificar que hay IP configurada
+                        zebra_ip = st.session_state.get('zebra_ip', '')
+                        zebra_port = st.session_state.get('zebra_port', 9100)
                         
-                        # JavaScript para enviar a Zebra
-                        zebra_print_js = f"""
-                        <script>
-                        (async function() {{
-                            const zpl = `{zpl_code}`;
-                            if (window.sendToZebra) {{
-                                const result = await window.sendToZebra(zpl);
-                                if (result) {{
-                                    console.log('Etiqueta enviada a Zebra');
-                                }}
-                            }} else {{
-                                alert('Conecta primero la impresora Zebra en la sección de configuración');
-                            }}
-                        }})();
-                        </script>
-                        """
-                        st.components.v1.html(zebra_print_js, height=0)
-                        st.success(f"✅ Enviado a Zebra: {pallet.get('package_name')}")
+                        if not zebra_ip:
+                            st.error("⚠️ Configura la IP de la impresora Zebra arriba")
+                        else:
+                            # Generar ZPL y enviar por API
+                            zpl_code = generar_zpl_etiqueta(datos_etiqueta)
+                            try:
+                                response = httpx.post(
+                                    f"{API_URL}/api/v1/etiquetas/imprimir_zebra",
+                                    params={"ip": zebra_ip, "puerto": zebra_port},
+                                    content=zpl_code,
+                                    headers={"Content-Type": "text/plain"},
+                                    timeout=15.0
+                                )
+                                if response.status_code == 200:
+                                    st.success(f"✅ Enviado a Zebra: {pallet.get('package_name')}")
+                                else:
+                                    st.error(f"❌ Error: {response.json().get('detail', 'Error desconocido')}")
+                            except Exception as e:
+                                st.error(f"❌ Error conectando: {str(e)}")
                 
                 with col3:
                     if st.button("👁️ Vista", key=f"etiq_preview_{pallet.get('package_id')}", use_container_width=True):
