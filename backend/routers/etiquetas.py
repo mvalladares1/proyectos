@@ -125,3 +125,33 @@ async def generar_etiquetas_multiples_pdf(lista_datos: List[Dict]):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/imprimir_zebra")
+async def imprimir_zebra(
+    zpl: str,
+    ip: str = Query(..., description="IP de la impresora Zebra"),
+    puerto: int = Query(9100, description="Puerto de la impresora")
+):
+    """
+    Envía código ZPL a una impresora Zebra por TCP/IP.
+    """
+    import socket
+    
+    try:
+        # Crear socket y conectar
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)  # 10 segundos timeout
+        sock.connect((ip, puerto))
+        
+        # Enviar ZPL
+        sock.sendall(zpl.encode('utf-8'))
+        sock.close()
+        
+        return {"success": True, "message": f"Etiqueta enviada a {ip}:{puerto}"}
+    except socket.timeout:
+        raise HTTPException(status_code=408, detail=f"Timeout conectando a {ip}:{puerto}")
+    except socket.error as e:
+        raise HTTPException(status_code=500, detail=f"Error de conexión: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
