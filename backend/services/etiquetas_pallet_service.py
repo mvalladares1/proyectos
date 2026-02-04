@@ -150,82 +150,80 @@ class EtiquetasPalletService:
     def obtener_pallets_orden(self, orden_name: str) -> List[Dict]:
         """
         Obtiene todos los pallets (result_package_id) de una orden/picking.
-        Busca en stock.move.line filtrando por reference o picking_id.
         """
         try:
-            # Intentar buscar primero como stock.picking
-            pickings = self.odoo.search_read(
-                'stock.picking',
-                [('name', '=', orden_name)],
-                ['id', 'name', 'date_done', 'move_ids_without_package'],
-                limit=1
-            )
-            
             fecha_proceso = None
             move_ids = []
             
-            if pickings:
-                # Es un picking/transfer
-                picking = pickings[0]
-                fecha_proceso = picking.get('date_done')
-                move_ids = picking.get('move_ids_without_package', [])
-                logger.info(f"Encontrado picking {orden_name} con {len(move_ids)} moves")
-            else:
-                # Buscar como mrp.production
-                ordenes = self.odoo.search_read(
-                    'mrp.production',
-                    [('name', '=', orden_name)],
-                    ['id', 'name', 'date_finished'],
-                    limit=1
-                )
+            # Intentar buscar como mrp.production primero
+            ordenes = self.odoo.search_read(
+                'mrp.production',
+                [('name', '=', orden_name)],
+                ['id', 'name', 'date_finished', 'move_finished_ids'],
+                limit=1
+            )
+            
+            if ordenes:
+                # Es una orden de producción
+                orden = ordenes[0]
+                fecha_proceso = orden.get('date_finished')
                 
-                if ordenes:
-                    orden = ordenes[0]
-                    fecha_proceso = orden.get('date_finished')
-                    
-                    # Buscar stock.move relacionados
+                # Obtener los stock.move de productos terminados
+                finished_move_ids = orden.get('move_finished_ids', [])
+                
+                if finished_move_ids:
+                    logger.info(f"Orden producción {orden_name}: {len(finished_move_ids)} moves terminados")
+                    move_ids = finished_move_ids
+                else:
+                    # Fallback: buscar por production_id
                     moves = self.odoo.search_read(
                         'stock.move',
-                        [('raw_material_production_id', '=', orden['id'])],
+                        [('production_id', '=', orden['id'])],
                         ['id'],
                         limit=500
                     )
                     move_ids = [m['id'] for m in moves]
-                    logger.info(f"Encontrada orden producción {orden_name} con {len(move_ids)} moves")
+                    logger.info(f"Orden producción {orden_name}: {len(move_ids)} moves por production_id")
+            else:
+                # Buscar como stock.picking
+                pickings = self.odoo.search_read(
+                    'stock.picking',
+                    [('name', '=', orden_name)],
+                    ['id', 'name', 'date_done', 'move_ids_without_package'],
+                    limit=1
+                )
+                
+                if pickings:
+                    picking = pickings[0]
+                    fecha_proceso = picking.get('date_done')
+                    move_ids = picking.get('move_ids_without_package', [])
+                    logger.info(f"Picking {orden_name}: {len(move_ids)} moves")
                 else:
                     logger.warning(f"No se encontró orden/picking {orden_name}")
                     return []
             
-            # Buscar stock.move.line con result_package_id
-            if move_ids:
-                domain = [
-                    ('result_package_id', '!=', False),
-                    ('move_id', 'in', move_ids)
-                ]
-            else:
-                # Fallback: buscar por reference
-                domain = [
-                    ('result_package_id', '!=', False),
-                    '|',
-                    ('reference', 'ilike', orden_name),
-                    ('picking_id.name', '=', orden_name)
-                ]
+            if not move_ids:
+                logger.warning(f"No hay moves para {orden_name}")
+                return []
             
+            # Buscar stock.move.line con result_package_id de estos moves
             move_lines = self.odoo.search_read(
                 'stock.move.line',
-                domain,
+                [
+                    ('move_id', 'in', move_ids),
+                    ('result_package_id', '!=', False)
+                ],
                 [
                     'result_package_id',
                     'product_id',
                     'qty_done',
                     'lot_id',
-                    'date',
-                    'reference'
+                    'date'
                 ],
                 limit=500
             )
             
-            logger.info(f"Encontrados {len(move_lines)} move_lines con pallets")
+            logger.info(f"Encontrados {len(move_lines)} move_lines con pallets para {orden_name}")
             
             # Agrupar por result_package_id
             pallets_dict = {}
