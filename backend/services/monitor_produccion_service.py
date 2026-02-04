@@ -60,8 +60,8 @@ class MonitorProduccionService:
              'date_start', 'date_finished', 'date_planned_start', 'user_id',
              'x_studio_sala_de_proceso', 'x_studio_inicio_de_proceso',
              'x_studio_termino_de_proceso', 'x_studio_dotacin'],
-            limit=500,
-            order='date_planned_start asc'
+            limit=1000,
+            order='x_studio_inicio_de_proceso desc'
         )
         
         procesos = [clean_record(o) for o in ordenes]
@@ -102,11 +102,16 @@ class MonitorProduccionService:
         # Usar fecha_fin si se proporciona, sino usar fecha
         fecha_hasta = fecha_fin or fecha
         
-        # Procesos cerrados: estado done y fecha_finished en el rango
+        # Procesos cerrados: estado done y x_studio_termino_de_proceso en el rango
+        # Si x_studio_termino_de_proceso no existe, usa date_finished
         domain = [
             ['state', '=', 'done'],
-            ['date_finished', '>=', fecha],
-            ['date_finished', '<=', fecha_hasta + ' 23:59:59']
+            '|',
+            '&', ['x_studio_termino_de_proceso', '>=', fecha],
+                 ['x_studio_termino_de_proceso', '<=', fecha_hasta + ' 23:59:59'],
+            '&', ['x_studio_termino_de_proceso', '=', False],
+            '&', ['date_finished', '>=', fecha],
+                 ['date_finished', '<=', fecha_hasta + ' 23:59:59']
         ]
         
         if sala and sala != "Todas":
@@ -153,10 +158,15 @@ class MonitorProduccionService:
         """
         evolucion = []
         
-        # Obtener todos los procesos creados en el rango
+        # Obtener todos los procesos creados en el rango (usando x_studio_inicio_de_proceso)
         domain_creados = [
-            ['date_planned_start', '>=', fecha_inicio],
-            ['date_planned_start', '<=', fecha_fin + ' 23:59:59']
+            ['state', '!=', 'cancel'],
+            '|',
+            '&', ['x_studio_inicio_de_proceso', '>=', fecha_inicio],
+                 ['x_studio_inicio_de_proceso', '<=', fecha_fin + ' 23:59:59'],
+            '&', ['x_studio_inicio_de_proceso', '=', False],
+            '&', ['date_planned_start', '>=', fecha_inicio],
+                 ['date_planned_start', '<=', fecha_fin + ' 23:59:59']
         ]
         
         if sala and sala != "Todas":
@@ -166,9 +176,10 @@ class MonitorProduccionService:
             'mrp.production',
             domain_creados,
             ['name', 'product_id', 'product_qty', 'qty_produced', 'state',
-             'date_planned_start', 'date_finished', 'x_studio_sala_de_proceso'],
+             'date_planned_start', 'date_finished', 'x_studio_sala_de_proceso',
+             'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso'],
             limit=2000,
-            order='date_planned_start asc'
+            order='x_studio_inicio_de_proceso asc'
         )
         
         procesos_creados = [clean_record(o) for o in procesos_creados]
@@ -176,11 +187,15 @@ class MonitorProduccionService:
         if planta and planta != "Todas":
             procesos_creados = self._filtrar_por_planta(procesos_creados, planta)
         
-        # Obtener procesos cerrados en el rango
+        # Obtener procesos cerrados en el rango (usando x_studio_termino_de_proceso)
         domain_cerrados = [
             ['state', '=', 'done'],
-            ['date_finished', '>=', fecha_inicio],
-            ['date_finished', '<=', fecha_fin + ' 23:59:59']
+            '|',
+            '&', ['x_studio_termino_de_proceso', '>=', fecha_inicio],
+                 ['x_studio_termino_de_proceso', '<=', fecha_fin + ' 23:59:59'],
+            '&', ['x_studio_termino_de_proceso', '=', False],
+            '&', ['date_finished', '>=', fecha_inicio],
+                 ['date_finished', '<=', fecha_fin + ' 23:59:59']
         ]
         
         if sala and sala != "Todas":
@@ -190,9 +205,10 @@ class MonitorProduccionService:
             'mrp.production',
             domain_cerrados,
             ['name', 'product_id', 'product_qty', 'qty_produced', 'state',
-             'date_finished', 'x_studio_sala_de_proceso'],
+             'date_finished', 'x_studio_sala_de_proceso',
+             'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso'],
             limit=2000,
-            order='date_finished asc'
+            order='x_studio_termino_de_proceso asc'
         )
         
         procesos_cerrados = [clean_record(o) for o in procesos_cerrados]
@@ -207,13 +223,13 @@ class MonitorProduccionService:
         while fecha_actual <= fecha_final:
             fecha_str = fecha_actual.strftime('%Y-%m-%d')
             
-            # Contar creados del día
+            # Contar creados del día (usar x_studio_inicio_de_proceso o date_planned_start)
             creados_dia = [p for p in procesos_creados 
-                          if p.get('date_planned_start', '').startswith(fecha_str)]
+                          if (p.get('x_studio_inicio_de_proceso', '') or p.get('date_planned_start', '') or '').startswith(fecha_str)]
             
-            # Contar cerrados del día
+            # Contar cerrados del día (usar x_studio_termino_de_proceso o date_finished)
             cerrados_dia = [p for p in procesos_cerrados 
-                           if p.get('date_finished', '').startswith(fecha_str)]
+                           if (p.get('x_studio_termino_de_proceso', '') or p.get('date_finished', '') or '').startswith(fecha_str)]
             
             # Calcular kg
             kg_creados = sum(p.get('product_qty', 0) or 0 for p in creados_dia)
@@ -363,14 +379,26 @@ class MonitorProduccionService:
             return []
     
     def _filtrar_por_planta(self, procesos: List[Dict], planta: str) -> List[Dict]:
-        """Filtra procesos por planta basándose en el nombre de la OF."""
+        """
+        Filtra procesos por planta basándose en la SALA de proceso.
+        - VILKUN: si sala contiene 'VILKUN' o 'VLK'
+        - SAN JOSE: si sala contiene 'SAN JOSE'
+        - RIO FUTURO: todo lo demás
+        """
         resultado = []
         for p in procesos:
-            nombre = p.get('name', '')
-            if planta == "VILKUN" and str(nombre).upper().startswith("VLK"):
-                resultado.append(p)
-            elif planta == "RIO FUTURO" and not str(nombre).upper().startswith("VLK"):
-                resultado.append(p)
+            sala = str(p.get('x_studio_sala_de_proceso', '') or '').upper()
+            
+            if planta == "VILKUN":
+                if 'VILKUN' in sala or 'VLK' in sala:
+                    resultado.append(p)
+            elif planta == "SAN JOSE":
+                if 'SAN JOSE' in sala or 'SAN JOSÉ' in sala:
+                    resultado.append(p)
+            elif planta == "RIO FUTURO":
+                # Ni VILKUN ni SAN JOSE
+                if not ('VILKUN' in sala or 'VLK' in sala or 'SAN JOSE' in sala or 'SAN JOSÉ' in sala):
+                    resultado.append(p)
         return resultado
     
     def _calcular_estadisticas(self, procesos: List[Dict]) -> Dict[str, Any]:

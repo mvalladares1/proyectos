@@ -401,7 +401,7 @@ def render(username: str, password: str):
     with col3:
         planta_sel = st.selectbox(
             "Planta",
-            options=["Todas", "RIO FUTURO", "VILKUN"],
+            options=["Todas", "RIO FUTURO", "VILKUN", "SAN JOSE"],
             index=0,
             key="monitor_planta"
         )
