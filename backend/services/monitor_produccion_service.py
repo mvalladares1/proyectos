@@ -446,25 +446,10 @@ class MonitorProduccionService:
             return []
     
     def get_productos_disponibles(self) -> List[str]:
-        """Obtiene la lista de productos de fabricación disponibles."""
+        """Obtiene la lista de productos de fabricación disponibles (solo los permitidos)."""
         try:
-            procesos = self.odoo.search_read(
-                'mrp.production',
-                [],
-                ['product_id'],
-                limit=500
-            )
-            
-            productos = set()
-            for p in procesos:
-                prod = p.get('product_id')
-                if prod:
-                    if isinstance(prod, (list, tuple)):
-                        productos.add(prod[1])  # (id, name)
-                    elif isinstance(prod, dict):
-                        productos.add(prod.get('name', ''))
-            
-            return sorted(list(productos))
+            # Retornar directamente la lista de productos permitidos
+            return sorted(self.PRODUCTOS_PERMITIDOS)
         except Exception:
             return []
     
