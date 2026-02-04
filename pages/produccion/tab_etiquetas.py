@@ -1,6 +1,6 @@
 """
-Tab de Etiquetas de Pallets
-Permite buscar órdenes de producción y generar etiquetas para cada pallet
+Tab de Etiquetas (Pallets y Cajas)
+Permite buscar órdenes de producción y generar etiquetas para cada pallet o caja
 Cliente se obtiene automáticamente desde x_studio_clientes de la orden
 """
 import streamlit as st
@@ -142,9 +142,39 @@ def generar_etiqueta_html(datos: Dict) -> str:
 
 
 def render(username: str, password: str):
-    """Renderiza el tab de etiquetas de pallets."""
+    """Renderiza el tab de etiquetas (pallets y cajas)."""
     
-    st.header("🏷️ Generación de Etiquetas de Pallets")
+    st.header("🏷️ Generación de Etiquetas")
+    
+    # Selector de tipo de etiqueta
+    tipo_etiqueta = st.radio(
+        "Tipo de etiqueta",
+        ["📦 ETIQUETAS POR PALLET", "🎁 ETIQUETAS POR CAJA"],
+        horizontal=True,
+        key="etiq_tipo"
+    )
+    
+    st.divider()
+    
+    if tipo_etiqueta == "📦 ETIQUETAS POR PALLET":
+        render_etiquetas_pallet(username, password)
+    else:
+        render_etiquetas_caja(username, password)
+
+
+def render_etiquetas_caja(username: str, password: str):
+    """Renderiza la sección de etiquetas por caja."""
+    st.info("🚧 **Etiquetas por Caja** - En desarrollo. Envía el diseño del primer cliente para comenzar.")
+    
+    # Placeholder para cuando se defina el diseño
+    st.write("Para cada cliente se configurará:")
+    st.write("- Tamaño de etiqueta")
+    st.write("- Campos a mostrar (peso, producto, lote, fecha, etc.)")
+    st.write("- Diseño personalizado")
+
+
+def render_etiquetas_pallet(username: str, password: str):
+    """Renderiza la sección de etiquetas por pallet."""
     
     # Inicializar estado
     if "etiq_orden_seleccionada" not in st.session_state:
