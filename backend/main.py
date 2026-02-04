@@ -167,24 +167,24 @@ async def cache_refresh():
 
 
 # ============ Legacy Cache Management Endpoints ============
-from backend.cache import get_cache as get_legacy_cache
+from backend.cache import get_cache
 
 
 @app.get("/api/v1/cache/stats")
-async def legacy_cache_stats():
+async def cache_stats():
     """
-    Obtiene estadísticas del caché legacy.
+    Obtiene estadísticas del caché legacy (OdooCache).
     Retorna: hits, misses, hit_rate (%), entries activas
     """
-    return get_legacy_cache().get_stats()
+    return get_cache().get_stats()
 
 
 @app.post("/api/v1/cache/clear")
-async def legacy_cache_clear():
+async def cache_clear():
     """
-    Limpia todo el caché legacy. Usar con precaución.
+    Limpia todo el caché legacy (OdooCache). Usar con precaución.
     """
-    get_legacy_cache().clear()
+    get_cache().clear()
     return {"status": "ok", "message": "Cache cleared"}
 
 
