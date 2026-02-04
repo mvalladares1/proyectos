@@ -1,0 +1,720 @@
+{
+  "timestamp": "2026-02-03T20:04:11.735401",
+  "fecha": "2026-02-03",
+  "planta": "Todas",
+  "procesos_activos": {
+    "total_procesos": 14,
+    "kg_programados": 32.0,
+    "kg_producidos": 0,
+    "kg_pendientes": 32.0,
+    "avance_porcentaje": 0.0,
+    "por_estado": {
+      "progress": 3,
+      "confirmed": 8,
+      "to_close": 2,
+      "draft": 1
+    },
+    "por_sala": {
+      "Sala 3 - Línea Granel": {
+        "cantidad": 7,
+        "kg": 7.0
+      },
+      "Sala - Vilkun": {
+        "cantidad": 2,
+        "kg": 2.0
+      },
+      "Sala 2 - Línea Granel": {
+        "cantidad": 2,
+        "kg": 20.0
+      },
+      "Sala 1 - Línea Retail": {
+        "cantidad": 3,
+        "kg": 3.0
+      }
+    }
+  },
+  "procesos_cerrados": {
+    "total_procesos": 16,
+    "kg_programados": 113440.63,
+    "kg_producidos": 113440.63,
+    "kg_pendientes": 0.0,
+    "avance_porcentaje": 100.0,
+    "por_estado": {
+      "done": 16
+    },
+    "por_sala": {
+      "Sala 1 - Línea Retail": {
+        "cantidad": 2,
+        "kg": 11420.68
+      },
+      "Sala 3 - Línea Granel": {
+        "cantidad": 2,
+        "kg": 23564.2
+      },
+      "Tunel - Estatico 1": {
+        "cantidad": 2,
+        "kg": 744.1
+      },
+      "Sala 2 - Línea Granel": {
+        "cantidad": 2,
+        "kg": 26026.76
+      },
+      "Tunel - Estatico VLK": {
+        "cantidad": 5,
+        "kg": 12899.5
+      },
+      "Sala - Vilkun": {
+        "cantidad": 3,
+        "kg": 38785.39000000001
+      }
+    }
+  },
+  "detalle_activos": [
+    {
+      "id": 6225,
+      "name": "WH/Transf/00953",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "progress",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 11:05:57",
+      "user_id": {
+        "id": 280,
+        "name": "JAVIERA ALEJANDRA VENEGAS RIVAS"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-02-03 11:00:00",
+      "x_studio_termino_de_proceso": "2026-02-03 19:00:00",
+      "x_studio_dotacin": 1
+    },
+    {
+      "id": 6226,
+      "name": "VLK/MO/00048",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 11:32:27",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala - Vilkun",
+      "x_studio_inicio_de_proceso": "2026-02-03 11:30:00",
+      "x_studio_termino_de_proceso": "2026-02-03 20:00:00",
+      "x_studio_dotacin": 12
+    },
+    {
+      "id": 6227,
+      "name": "WH/Transf/00954",
+      "product_id": {
+        "id": 15990,
+        "name": "[2.2] PROCESO PTT"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "progress",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 11:34:54",
+      "user_id": {
+        "id": 273,
+        "name": "JORDANA ALVAREZ"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-02-03 11:00:00",
+      "x_studio_termino_de_proceso": "2026-02-03 19:00:00",
+      "x_studio_dotacin": 24
+    },
+    {
+      "id": 6229,
+      "name": "WH/Transf/00955",
+      "product_id": {
+        "id": 15987,
+        "name": "[1.4] PROCESO CONGELADO TÚNEL CONTÍNUO"
+      },
+      "product_qty": 10.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 11:44:18",
+      "user_id": {
+        "id": 231,
+        "name": "FRANCISCA BARRIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala 2 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-02-03 11:00:00",
+      "x_studio_termino_de_proceso": "2026-02-03 19:00:00",
+      "x_studio_dotacin": 20
+    },
+    {
+      "id": 6230,
+      "name": "WH/Transf/00956",
+      "product_id": {
+        "id": 15990,
+        "name": "[2.2] PROCESO PTT"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "to_close",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 12:20:51",
+      "user_id": {
+        "id": 222,
+        "name": "JULIANA DELGADO"
+      },
+      "x_studio_sala_de_proceso": "Sala 1 - Línea Retail",
+      "x_studio_inicio_de_proceso": "2026-02-03 11:00:00",
+      "x_studio_termino_de_proceso": "2026-02-03 14:00:00",
+      "x_studio_dotacin": 14
+    },
+    {
+      "id": 6231,
+      "name": "VLK/MO/00049",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 12:32:49",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala - Vilkun",
+      "x_studio_inicio_de_proceso": "2026-02-03 12:30:00",
+      "x_studio_termino_de_proceso": "2026-02-03 19:00:00",
+      "x_studio_dotacin": 8
+    },
+    {
+      "id": 6232,
+      "name": "WH/Transf/00957",
+      "product_id": {
+        "id": 15990,
+        "name": "[2.2] PROCESO PTT"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "to_close",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 13:41:15",
+      "user_id": {
+        "id": 222,
+        "name": "JULIANA DELGADO"
+      },
+      "x_studio_sala_de_proceso": "Sala 1 - Línea Retail",
+      "x_studio_inicio_de_proceso": "2026-02-03 14:00:00",
+      "x_studio_termino_de_proceso": "2026-02-03 19:00:00",
+      "x_studio_dotacin": 14
+    },
+    {
+      "id": 6239,
+      "name": "VLK/MO/00050",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "draft",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 19:49:05",
+      "user_id": {
+        "id": 280,
+        "name": "JAVIERA ALEJANDRA VENEGAS RIVAS"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-02-03 19:30:00",
+      "x_studio_termino_de_proceso": "2026-02-04 03:30:00",
+      "x_studio_dotacin": 1
+    },
+    {
+      "id": 6240,
+      "name": "VLK/MO/00051",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 19:51:21",
+      "user_id": {
+        "id": 283,
+        "name": "BELEN MONTES"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-02-03 19:30:00",
+      "x_studio_termino_de_proceso": "2026-02-04 03:30:00",
+      "x_studio_dotacin": 1
+    },
+    {
+      "id": 6242,
+      "name": "WH/Transf/00958",
+      "product_id": {
+        "id": 15990,
+        "name": "[2.2] PROCESO PTT"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "progress",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 20:15:21",
+      "user_id": {
+        "id": 221,
+        "name": "JUAN MARTINEZ"
+      },
+      "x_studio_sala_de_proceso": "Sala 1 - Línea Retail",
+      "x_studio_inicio_de_proceso": "2026-02-03 19:30:00",
+      "x_studio_termino_de_proceso": "2026-02-04 03:30:00",
+      "x_studio_dotacin": 14
+    },
+    {
+      "id": 6243,
+      "name": "VLK/MO/00053",
+      "product_id": {
+        "id": 15990,
+        "name": "[2.2] PROCESO PTT"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 20:16:47",
+      "user_id": {
+        "id": 277,
+        "name": "IGNACIA VALENTINA AGUILAR COSSIO"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2024-01-01 00:00:00",
+      "x_studio_termino_de_proceso": "2024-01-01 00:00:01",
+      "x_studio_dotacin": 1
+    },
+    {
+      "id": 6244,
+      "name": "VLK/MO/00054",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 21:07:23",
+      "user_id": {
+        "id": 283,
+        "name": "BELEN MONTES"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-02-03 21:00:00",
+      "x_studio_termino_de_proceso": "2026-02-04 03:30:00",
+      "x_studio_dotacin": 1
+    },
+    {
+      "id": 6245,
+      "name": "VLK/MO/00055",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 1.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 21:28:30",
+      "user_id": {
+        "id": 283,
+        "name": "BELEN MONTES"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2024-01-01 00:00:00",
+      "x_studio_termino_de_proceso": "2024-01-01 00:00:01",
+      "x_studio_dotacin": 1
+    },
+    {
+      "id": 6246,
+      "name": "VLK/MO/00056",
+      "product_id": {
+        "id": 15987,
+        "name": "[1.4] PROCESO CONGELADO TÚNEL CONTÍNUO"
+      },
+      "product_qty": 10.0,
+      "qty_produced": 0.0,
+      "state": "confirmed",
+      "date_start": false,
+      "date_finished": false,
+      "date_planned_start": "2026-02-03 22:18:57",
+      "user_id": {
+        "id": 272,
+        "name": "NICOLE MONTES"
+      },
+      "x_studio_sala_de_proceso": "Sala 2 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2024-01-01 00:00:00",
+      "x_studio_termino_de_proceso": "2024-01-01 00:00:01",
+      "x_studio_dotacin": 1
+    }
+  ],
+  "detalle_cerrados": [
+    {
+      "id": 5441,
+      "name": "WH/RF/MOV/RETAIL/00807",
+      "product_id": {
+        "id": 15234,
+        "name": "[4] Proceso Retail"
+      },
+      "product_qty": 5959.07,
+      "qty_produced": 5959.07,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 03:23:47",
+      "date_planned_start": "2025-12-31 11:17:56",
+      "user_id": {
+        "id": 222,
+        "name": "JULIANA DELGADO"
+      },
+      "x_studio_sala_de_proceso": "Sala 1 - Línea Retail",
+      "x_studio_inicio_de_proceso": "2025-12-31 11:00:00",
+      "x_studio_termino_de_proceso": "2025-12-31 20:30:00"
+    },
+    {
+      "id": 5417,
+      "name": "WH/RF/MOV/RETAIL/00806",
+      "product_id": {
+        "id": 15234,
+        "name": "[4] Proceso Retail"
+      },
+      "product_qty": 5461.61,
+      "qty_produced": 5461.61,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 03:27:55",
+      "date_planned_start": "2025-12-30 11:18:34",
+      "user_id": {
+        "id": 222,
+        "name": "JULIANA DELGADO"
+      },
+      "x_studio_sala_de_proceso": "Sala 1 - Línea Retail",
+      "x_studio_inicio_de_proceso": "2025-12-30 11:00:00",
+      "x_studio_termino_de_proceso": "2025-12-30 20:30:00"
+    },
+    {
+      "id": 5448,
+      "name": "WH/RF/MO/00808",
+      "product_id": {
+        "id": 15233,
+        "name": "[3] Proceso de Vaciado"
+      },
+      "product_qty": 18160.2,
+      "qty_produced": 18160.2,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 03:28:58",
+      "date_planned_start": "2025-12-31 12:40:09",
+      "user_id": {
+        "id": 273,
+        "name": "JORDANA ALVAREZ"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2025-12-31 11:00:00",
+      "x_studio_termino_de_proceso": "2025-12-31 20:30:00"
+    },
+    {
+      "id": 6224,
+      "name": "RF/MO/CongTE1/00249",
+      "product_id": {
+        "id": 15984,
+        "name": "[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1"
+      },
+      "product_qty": 283.1,
+      "qty_produced": 283.1,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 03:34:41",
+      "date_planned_start": "2026-02-03 03:34:40",
+      "user_id": {
+        "id": 214,
+        "name": "MARCELO JARAMILLO CADEGAN"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico 1",
+      "x_studio_inicio_de_proceso": "2025-12-29 03:00:00",
+      "x_studio_termino_de_proceso": "2025-12-29 11:00:00"
+    },
+    {
+      "id": 5423,
+      "name": "WH/RF/MO/00806",
+      "product_id": {
+        "id": 15233,
+        "name": "[3] Proceso de Vaciado"
+      },
+      "product_qty": 9204.8,
+      "qty_produced": 9204.8,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 03:35:35",
+      "date_planned_start": "2025-12-30 13:39:14",
+      "user_id": {
+        "id": 231,
+        "name": "FRANCISCA BARRIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala 2 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2025-12-30 14:00:00",
+      "x_studio_termino_de_proceso": "2025-12-30 20:30:00"
+    },
+    {
+      "id": 6233,
+      "name": "RF/MO/CongTE1/00250",
+      "product_id": {
+        "id": 15984,
+        "name": "[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1"
+      },
+      "product_qty": 461.0,
+      "qty_produced": 461.0,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 14:50:18",
+      "date_planned_start": "2026-02-03 14:50:17",
+      "user_id": {
+        "id": 214,
+        "name": "MARCELO JARAMILLO CADEGAN"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico 1",
+      "x_studio_inicio_de_proceso": "2026-01-02 03:00:00",
+      "x_studio_termino_de_proceso": "2026-01-02 11:00:10"
+    },
+    {
+      "id": 6234,
+      "name": "VLK/CongTE254",
+      "product_id": {
+        "id": 16446,
+        "name": "[1.1.1] PROCESO CONGELADO TÚNEL ESTÁTICO VLK"
+      },
+      "product_qty": 4414.98,
+      "qty_produced": 4414.98,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 15:01:23",
+      "date_planned_start": "2026-02-03 14:52:03",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico VLK",
+      "x_studio_inicio_de_proceso": "2026-01-31 13:50:00",
+      "x_studio_termino_de_proceso": "2026-01-31 19:50:10"
+    },
+    {
+      "id": 6235,
+      "name": "VLK/CongTE255",
+      "product_id": {
+        "id": 16446,
+        "name": "[1.1.1] PROCESO CONGELADO TÚNEL ESTÁTICO VLK"
+      },
+      "product_qty": 2347.3,
+      "qty_produced": 2347.3,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 15:08:27",
+      "date_planned_start": "2026-02-03 15:02:49",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico VLK",
+      "x_studio_inicio_de_proceso": "2026-01-31 20:15:45",
+      "x_studio_termino_de_proceso": "2026-01-31 23:15:50"
+    },
+    {
+      "id": 5464,
+      "name": "WH/Transf/00764",
+      "product_id": {
+        "id": 15987,
+        "name": "[1.4] PROCESO CONGELADO TÚNEL CONTÍNUO"
+      },
+      "product_qty": 16821.96,
+      "qty_produced": 16821.96,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 15:09:12",
+      "date_planned_start": "2026-01-03 11:20:43",
+      "user_id": {
+        "id": 273,
+        "name": "JORDANA ALVAREZ"
+      },
+      "x_studio_sala_de_proceso": "Sala 2 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-01-03 11:00:00",
+      "x_studio_termino_de_proceso": "2026-01-03 19:30:00"
+    },
+    {
+      "id": 6236,
+      "name": "VLK/CongTE256",
+      "product_id": {
+        "id": 16446,
+        "name": "[1.1.1] PROCESO CONGELADO TÚNEL ESTÁTICO VLK"
+      },
+      "product_qty": 589.68,
+      "qty_produced": 589.68,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 17:19:53",
+      "date_planned_start": "2025-12-25 03:00:00",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico VLK",
+      "x_studio_inicio_de_proceso": "2025-12-25 03:00:00",
+      "x_studio_termino_de_proceso": "2026-02-03 08:00:00"
+    },
+    {
+      "id": 5322,
+      "name": "WH/Transf/00739",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 14754.44,
+      "qty_produced": 14754.44,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 17:56:56",
+      "date_planned_start": "2025-12-26 11:56:15",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala - Vilkun",
+      "x_studio_inicio_de_proceso": "2025-12-26 11:00:00",
+      "x_studio_termino_de_proceso": "2025-12-26 20:00:01"
+    },
+    {
+      "id": 6237,
+      "name": "VLK/CongTE257",
+      "product_id": {
+        "id": 16446,
+        "name": "[1.1.1] PROCESO CONGELADO TÚNEL ESTÁTICO VLK"
+      },
+      "product_qty": 2702.43,
+      "qty_produced": 2702.43,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 18:12:54",
+      "date_planned_start": "2026-02-03 18:03:51",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico VLK",
+      "x_studio_inicio_de_proceso": "2026-02-02 12:03:51",
+      "x_studio_termino_de_proceso": "2026-02-02 15:03:51"
+    },
+    {
+      "id": 5604,
+      "name": "WH/RF/MO/00828",
+      "product_id": {
+        "id": 15233,
+        "name": "[3] Proceso de Vaciado"
+      },
+      "product_qty": 5404.0,
+      "qty_produced": 5404.0,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 18:36:33",
+      "date_planned_start": "2026-01-08 01:13:56",
+      "user_id": {
+        "id": 272,
+        "name": "NICOLE MONTES"
+      },
+      "x_studio_sala_de_proceso": "Sala 3 - Línea Granel",
+      "x_studio_inicio_de_proceso": "2026-01-08 01:25:00",
+      "x_studio_termino_de_proceso": "2026-01-08 03:30:00"
+    },
+    {
+      "id": 5502,
+      "name": "VLK/MO/00011",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 16428.65,
+      "qty_produced": 16428.65,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 19:01:57",
+      "date_planned_start": "2026-01-05 18:33:28",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala - Vilkun",
+      "x_studio_inicio_de_proceso": "2025-12-22 11:00:00",
+      "x_studio_termino_de_proceso": "2025-12-22 20:00:00"
+    },
+    {
+      "id": 5776,
+      "name": "VLK/MO/00028",
+      "product_id": {
+        "id": 15989,
+        "name": "[2.1] PROCESO PSP"
+      },
+      "product_qty": 7602.3,
+      "qty_produced": 7602.3,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 19:05:11",
+      "date_planned_start": "2026-01-14 16:19:40",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Sala - Vilkun",
+      "x_studio_inicio_de_proceso": "2026-01-14 16:00:00",
+      "x_studio_termino_de_proceso": "2026-01-14 20:00:00"
+    },
+    {
+      "id": 6238,
+      "name": "VLK/CongTE258",
+      "product_id": {
+        "id": 16446,
+        "name": "[1.1.1] PROCESO CONGELADO TÚNEL ESTÁTICO VLK"
+      },
+      "product_qty": 2845.11,
+      "qty_produced": 2845.11,
+      "state": "done",
+      "date_start": false,
+      "date_finished": "2026-02-03 19:16:23",
+      "date_planned_start": "2026-02-03 19:09:13",
+      "user_id": {
+        "id": 269,
+        "name": "DANIELA ZUÑIGA"
+      },
+      "x_studio_sala_de_proceso": "Tunel - Estatico VLK",
+      "x_studio_inicio_de_proceso": "2026-01-29 15:10:10",
+      "x_studio_termino_de_proceso": "2026-01-29 18:16:13"
+    }
+  ]
+}

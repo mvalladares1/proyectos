@@ -380,24 +380,28 @@ class MonitorProduccionService:
     
     def _filtrar_por_planta(self, procesos: List[Dict], planta: str) -> List[Dict]:
         """
-        Filtra procesos por planta basándose en la SALA de proceso.
-        - VILKUN: si sala contiene 'VILKUN' o 'VLK'
-        - SAN JOSE: si sala contiene 'SAN JOSE'
-        - RIO FUTURO: todo lo demás
+        Filtra procesos por planta basándose en el NOMBRE de la OF.
+        - VILKUN: si nombre empieza con 'VLK/' o contiene '/VLK/'
+        - SAN JOSE: si nombre empieza con 'SJ/' o contiene '/SJ/'
+        - RIO FUTURO: todo lo demás (WH/, MOCS/, MOL, RF/, etc.)
         """
         resultado = []
         for p in procesos:
-            sala = str(p.get('x_studio_sala_de_proceso', '') or '').upper()
+            nombre = str(p.get('name', '') or '').upper()
             
             if planta == "VILKUN":
-                if 'VILKUN' in sala or 'VLK' in sala:
+                # Procesos de VILKUN: VLK/...
+                if nombre.startswith('VLK/') or '/VLK/' in nombre:
                     resultado.append(p)
             elif planta == "SAN JOSE":
-                if 'SAN JOSE' in sala or 'SAN JOSÉ' in sala:
+                # Procesos de SAN JOSE: SJ/...
+                if nombre.startswith('SJ/') or '/SJ/' in nombre:
                     resultado.append(p)
             elif planta == "RIO FUTURO":
-                # Ni VILKUN ni SAN JOSE
-                if not ('VILKUN' in sala or 'VLK' in sala or 'SAN JOSE' in sala or 'SAN JOSÉ' in sala):
+                # Todo lo que NO es VILKUN ni SAN JOSE
+                es_vilkun = nombre.startswith('VLK/') or '/VLK/' in nombre
+                es_san_jose = nombre.startswith('SJ/') or '/SJ/' in nombre
+                if not es_vilkun and not es_san_jose:
                     resultado.append(p)
         return resultado
     
