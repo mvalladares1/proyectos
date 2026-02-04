@@ -49,6 +49,8 @@ class TraceabilityCache:
         
         # Disk cache - usar path absoluto para compatibilidad con Docker
         cache_dir = os.environ.get('CACHE_DIR', '/app/cache/traceability')
+        # Crear directorio si no existe
+        os.makedirs(cache_dir, exist_ok=True)
         self.disk_cache = Cache(cache_dir)
         
         # Datos en memoria
