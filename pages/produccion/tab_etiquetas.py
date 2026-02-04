@@ -131,7 +131,8 @@ def generar_etiqueta_html(datos: Dict) -> str:
                 height: 60,
                 displayValue: true,
                 fontSize: 14,
-                margin: 10
+                margin: 10,
+                background: "transparent"
             }});
         </script>
     </body>
