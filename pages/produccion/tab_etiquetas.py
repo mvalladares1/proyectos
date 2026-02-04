@@ -162,15 +162,265 @@ def render(username: str, password: str):
         render_etiquetas_caja(username, password)
 
 
+# ==================== DISEÑOS DE ETIQUETAS POR CLIENTE ====================
+
+def generar_etiqueta_caja_tronador(datos: Dict) -> str:
+    """
+    Genera HTML de etiqueta de caja para cliente TRONADOR SAC.
+    Tamaño: 100mm x 100mm
+    Solo para productos IQF A
+    """
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 100mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 100mm;
+                    margin: 0;
+                    padding: 5mm;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 5mm;
+                margin: 0;
+                width: 90mm;
+                height: 90mm;
+                font-size: 11px;
+            }}
+            .titulo {{
+                font-size: 16px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+            }}
+            .datos {{
+                padding: 5px 0;
+            }}
+            .linea {{
+                margin: 3px 0;
+            }}
+            .fijo {{
+                font-size: 10px;
+            }}
+            .md-box {{
+                margin-top: 10px;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }}
+            .checkbox {{
+                width: 18px;
+                height: 18px;
+                border: 2px solid black;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="titulo">{datos.get('nombre_producto', '')}</div>
+        
+        <div class="datos">
+            <div class="linea">Fecha de elaboración: {datos.get('fecha_elaboracion', '')}</div>
+            <div class="linea">Fecha de vencimiento: {datos.get('fecha_vencimiento', '')}</div>
+            <div class="linea">Lote: {datos.get('lote_produccion', '')}</div>
+            <div class="linea">Pallet: {datos.get('numero_pallet', '')}</div>
+            <div class="linea">Peso Neto: {datos.get('peso_caja_kg', 10)} kg</div>
+            <div class="linea">PRODUCTO CONGELADO</div>
+            <div class="linea fijo">Planta Cocule: Rio Futuro Procesos Spa</div>
+            <div class="linea fijo">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+            <div class="linea fijo">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+            <div class="linea fijo">XIV Región, N° 2214585504 del 30-11-2022</div>
+            <div class="linea fijo">Código SAG Planta: 105721</div>
+        </div>
+        
+        <div class="md-box">
+            <span>MD</span>
+            <div class="checkbox">✓</div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+# Mapeo de clientes a sus funciones de diseño
+DISEÑOS_ETIQUETAS_CAJA = {
+    "TRONADOR": generar_etiqueta_caja_tronador,
+    "TRONADOR SAC": generar_etiqueta_caja_tronador,
+}
+
+
 def render_etiquetas_caja(username: str, password: str):
     """Renderiza la sección de etiquetas por caja."""
-    st.info("🚧 **Etiquetas por Caja** - En desarrollo. Envía el diseño del primer cliente para comenzar.")
     
-    # Placeholder para cuando se defina el diseño
-    st.write("Para cada cliente se configurará:")
-    st.write("- Tamaño de etiqueta")
-    st.write("- Campos a mostrar (peso, producto, lote, fecha, etc.)")
-    st.write("- Diseño personalizado")
+    # Inicializar estado
+    if "etiq_caja_orden_seleccionada" not in st.session_state:
+        st.session_state.etiq_caja_orden_seleccionada = None
+    if "etiq_caja_pallets_cargados" not in st.session_state:
+        st.session_state.etiq_caja_pallets_cargados = []
+    if "etiq_caja_ordenes_encontradas" not in st.session_state:
+        st.session_state.etiq_caja_ordenes_encontradas = []
+    
+    # ==================== PASO 1: BUSCAR ORDEN ====================
+    st.subheader("1️⃣ Buscar Orden de Producción")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        termino_busqueda = st.text_input(
+            "Buscar orden",
+            placeholder="Ej: WH/MO/12345",
+            help="Ingresa el nombre o referencia de la orden",
+            key="etiq_caja_termino_busqueda"
+        )
+    
+    with col2:
+        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="etiq_caja_btn_buscar")
+    
+    if btn_buscar and termino_busqueda:
+        with st.spinner("Buscando órdenes..."):
+            try:
+                ordenes = buscar_ordenes(username, password, termino_busqueda)
+                st.session_state.etiq_caja_ordenes_encontradas = ordenes
+                
+                if ordenes:
+                    st.success(f"✅ Se encontraron {len(ordenes)} órdenes")
+                else:
+                    st.warning("⚠️ No se encontraron órdenes")
+                    
+            except Exception as e:
+                st.error(f"❌ Error al buscar órdenes: {e}")
+                st.session_state.etiq_caja_ordenes_encontradas = []
+    
+    # Mostrar órdenes encontradas
+    if st.session_state.etiq_caja_ordenes_encontradas:
+        st.write("**Órdenes encontradas:**")
+        
+        for orden in st.session_state.etiq_caja_ordenes_encontradas:
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.write(f"**{orden.get('name', '')}**")
+            with col2:
+                st.write(f"📦 {orden.get('product_name', '')[:40]}...")
+            with col3:
+                if st.button("Seleccionar", key=f"etiq_caja_sel_{orden.get('id')}"):
+                    st.session_state.etiq_caja_orden_seleccionada = orden
+                    st.session_state.etiq_caja_pallets_cargados = []
+                    st.rerun()
+    
+    # ==================== PASO 2: CARGAR PALLETS ====================
+    if st.session_state.etiq_caja_orden_seleccionada:
+        orden = st.session_state.etiq_caja_orden_seleccionada
+        
+        st.divider()
+        st.subheader("2️⃣ Orden Seleccionada")
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.info(f"**{orden.get('name')}** - {orden.get('product_name', '')}")
+            cliente_nombre = orden.get('cliente_nombre', 'No especificado')
+            st.write(f"👤 **Cliente:** {cliente_nombre}")
+            
+            # Verificar si hay diseño para este cliente
+            cliente_key = None
+            for key in DISEÑOS_ETIQUETAS_CAJA.keys():
+                if key.upper() in cliente_nombre.upper():
+                    cliente_key = key
+                    break
+            
+            if cliente_key:
+                st.success(f"✅ Diseño de etiqueta disponible para: {cliente_key}")
+            else:
+                st.warning(f"⚠️ No hay diseño configurado para el cliente: {cliente_nombre}")
+        
+        with col2:
+            if st.button("📥 Cargar Pallets", type="primary", use_container_width=True, key="etiq_caja_cargar"):
+                with st.spinner("Cargando pallets..."):
+                    try:
+                        pallets = obtener_pallets_orden(username, password, orden.get('name'))
+                        st.session_state.etiq_caja_pallets_cargados = pallets
+                        if pallets:
+                            st.success(f"✅ {len(pallets)} pallets cargados")
+                        else:
+                            st.warning("⚠️ No se encontraron pallets")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+    
+    # ==================== PASO 3: GENERAR ETIQUETAS ====================
+    if st.session_state.etiq_caja_pallets_cargados:
+        st.divider()
+        st.subheader("3️⃣ Generar Etiquetas de Cajas")
+        
+        pallets = st.session_state.etiq_caja_pallets_cargados
+        orden = st.session_state.etiq_caja_orden_seleccionada
+        cliente_nombre = orden.get('cliente_nombre', '')
+        
+        # Buscar diseño del cliente
+        cliente_key = None
+        for key in DISEÑOS_ETIQUETAS_CAJA.keys():
+            if key.upper() in cliente_nombre.upper():
+                cliente_key = key
+                break
+        
+        if not cliente_key:
+            st.error(f"❌ No hay diseño de etiqueta configurado para el cliente: {cliente_nombre}")
+            st.info("Clientes con diseño disponible: " + ", ".join(DISEÑOS_ETIQUETAS_CAJA.keys()))
+            return
+        
+        funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
+        
+        # Input para peso de caja
+        peso_caja = st.number_input("Peso por caja (kg)", min_value=1, max_value=50, value=10, key="etiq_caja_peso")
+        
+        st.write(f"**{len(pallets)} pallets disponibles** - Genera etiquetas para las cajas de cada pallet")
+        
+        for pallet in pallets:
+            with st.expander(f"📦 {pallet.get('package_name', '')} - {pallet.get('cantidad_cajas', 0)} cajas"):
+                codigo_prod, desc_prod = extraer_codigo_descripcion(pallet.get('producto_nombre', ''))
+                lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
+                
+                datos_etiqueta = {
+                    'nombre_producto': desc_prod,
+                    'codigo_producto': codigo_prod,
+                    'peso_caja_kg': peso_caja,
+                    'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
+                    'fecha_vencimiento': pallet.get('fecha_vencimiento', ''),
+                    'lote_produccion': lot_name,
+                    'numero_pallet': pallet.get('package_name', ''),
+                }
+                
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    if st.button("🖨️ Imprimir", key=f"etiq_caja_print_{pallet.get('package_id')}", use_container_width=True):
+                        html_print = funcion_diseño(datos_etiqueta)
+                        html_con_print = html_print.replace('</body>', '''
+                        <script>
+                            window.onload = function() {
+                                setTimeout(function() {
+                                    window.print();
+                                }, 500);
+                            };
+                        </script>
+                        </body>''')
+                        st.components.v1.html(html_con_print, height=450, scrolling=True)
+                
+                with col2:
+                    if st.button("👁️ Vista", key=f"etiq_caja_preview_{pallet.get('package_id')}", use_container_width=True):
+                        html_etiqueta = funcion_diseño(datos_etiqueta)
+                        st.components.v1.html(html_etiqueta, height=450, scrolling=True)
 
 
 def render_etiquetas_pallet(username: str, password: str):
