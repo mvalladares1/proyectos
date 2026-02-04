@@ -77,16 +77,16 @@ def generar_etiqueta_html(datos: Dict) -> str:
                     width: 100mm;
                     height: 150mm;
                     margin: 0;
-                    padding: 5mm;
+                    padding: 8mm;
                 }}
             }}
             body {{
                 font-family: Arial, sans-serif;
-                padding: 5mm;
+                padding: 8mm;
                 margin: 0;
                 background: white;
-                width: 90mm;
-                height: 140mm;
+                width: 84mm;
+                height: 134mm;
             }}
             .etiqueta {{
                 width: 100%;
@@ -426,9 +426,13 @@ def render(username: str, password: str):
         
         st.write(f"**Total de pallets:** {len(st.session_state.etiq_pallets_cargados)}")
         
-        # Botón para generar todas las etiquetas
-        if st.button("📥 Descargar Todas las Etiquetas (PDF)", type="primary", key="etiq_btn_descargar_todas"):
-            st.info("🚧 Generación de PDF múltiple - Próximamente")
+        # Opción de vista: último pallet o todos
+        vista_opcion = st.radio(
+            "Mostrar:",
+            ["🆕 Solo último pallet", "📋 Todos los pallets"],
+            horizontal=True,
+            key="etiq_vista_opcion"
+        )
         
         st.divider()
         
@@ -452,10 +456,20 @@ def render(username: str, password: str):
                     }
                 pallets_por_producto[product_key]['pallets'].append(pallet)
         
+        # Si es "Solo último pallet", filtrar para mostrar solo el último de cada producto
+        if vista_opcion == "🆕 Solo último pallet":
+            for product_key in pallets_por_producto:
+                # Tomar solo el último pallet (el más reciente)
+                pallets_por_producto[product_key]['pallets'] = [pallets_por_producto[product_key]['pallets'][-1]]
+        
         # Mostrar pallets agrupados por producto
         for product_key, producto_data in pallets_por_producto.items():
             st.markdown(f"### 📦 {producto_data['descripcion']}")
-            st.caption(f"{len(producto_data['pallets'])} pallets")
+            cantidad_mostrados = len(producto_data['pallets'])
+            if vista_opcion == "🆕 Solo último pallet":
+                st.caption(f"Último pallet ingresado")
+            else:
+                st.caption(f"{cantidad_mostrados} pallets")
             
             # Crear tabla de pallets
             for pallet in producto_data['pallets']:
