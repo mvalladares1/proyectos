@@ -38,37 +38,14 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Gestiona el ciclo de vida de la aplicación.
-    Carga el caché al iniciar, ejecuta refresh periódico.
     """
     # Startup
     logger.info("Iniciando aplicación...")
-    
-    # Importar y cargar caché
-    from backend.services.traceability.cache import get_cache
-    
-    cache = get_cache()
-    
-    # Cargar caché en background
-    asyncio.create_task(cache.load_all())
-    
-    # Task para refresh periódico (cada 5 minutos)
-    async def periodic_refresh():
-        while True:
-            await asyncio.sleep(300)  # 5 minutos
-            try:
-                await cache.refresh_incremental()
-            except Exception as e:
-                logger.error(f"Error en refresh periódico: {e}")
-    
-    refresh_task = asyncio.create_task(periodic_refresh())
-    
-    logger.info("Caché de trazabilidad iniciado en background")
     
     yield
     
     # Shutdown
     logger.info("Cerrando aplicación...")
-    refresh_task.cancel()
 
 
 # Crear aplicación
