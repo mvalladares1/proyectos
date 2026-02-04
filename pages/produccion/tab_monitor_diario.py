@@ -149,16 +149,16 @@ def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
     
     with cols[2]:
         st.metric(
-            "✅ Cerrados Hoy",
+            "✅ Cerrados",
             stats_cerrados.get('total_procesos', 0),
-            help="Procesos cerrados en la fecha"
+            help="Procesos cerrados en el período"
         )
     
     with cols[3]:
         st.metric(
             "📦 KG Producidos",
             f"{stats_cerrados.get('kg_producidos', 0):,.0f}",
-            help="Kilos producidos hoy"
+            help="Kilos producidos en el período"
         )
     
     with cols[4]:
@@ -575,14 +575,14 @@ def render(username: str, password: str):
     
     with vista_tabs[0]:
         # Tabs internos para activos/cerrados
-        sub_tabs = st.tabs(["🔄 Procesos Activos", "✅ Cerrados Hoy"])
+        sub_tabs = st.tabs(["🔄 Procesos Activos", "✅ Cerrados"])
         
         with sub_tabs[0]:
             st.markdown(f"**{activos.get('estadisticas', {}).get('total_procesos', 0)} procesos activos**")
             render_tabla_compacta(activos.get("procesos", []), "activos")
         
         with sub_tabs[1]:
-            st.markdown(f"**{cerrados.get('estadisticas', {}).get('total_procesos', 0)} procesos cerrados hoy**")
+            st.markdown(f"**{cerrados.get('estadisticas', {}).get('total_procesos', 0)} procesos cerrados en el período**")
             render_tabla_compacta(cerrados.get("procesos", []), "cerrados")
     
     with vista_tabs[1]:
