@@ -247,11 +247,15 @@ class EtiquetasPalletService:
                 package_key = package_id[0] if isinstance(package_id, (list, tuple)) else package_id
                 
                 if package_key not in pallets_dict:
+                    lot_id = line.get('lot_id')
+                    lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and len(lot_id) > 1 else ''
+                    
                     pallets_dict[package_key] = {
                         'package_id': package_id[0] if isinstance(package_id, (list, tuple)) else package_id,
                         'package_name': package_id[1] if isinstance(package_id, (list, tuple)) else str(package_id),
                         'product_id': line.get('product_id'),
-                        'lot_id': line.get('lot_id'),
+                        'lot_id': lot_id,
+                        'lot_name': lot_name,
                         'fecha_elaboracion': line.get('date') or fecha_proceso,
                         'qty_total': 0,
                         'move_lines': []
@@ -299,6 +303,9 @@ class EtiquetasPalletService:
                 fecha_elab = pallet_info.get('fecha_elaboracion')
                 product_id = pallet_info.get('product_id')
                 product_name = product_id[1] if isinstance(product_id, (list, tuple)) else str(product_id)
+                
+                # Guardar nombre del producto para el frontend
+                pallet_info['producto_nombre'] = product_name
                 
                 # Calcular cantidad de cajas basándose en el peso y nombre del producto
                 peso_kg = pallet_info.get('peso_pallet_kg', 0)
