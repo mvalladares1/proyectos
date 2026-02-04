@@ -511,7 +511,7 @@ def render(username: str, password: str):
             productos_options = ["Todos"]
         
         producto_sel = st.selectbox(
-            "Producto",
+            "Tipo Proceso",
             options=productos_options,
             index=0,
             key="monitor_producto"
