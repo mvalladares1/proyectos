@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from typing import List, Dict, Optional
 
-router = APIRouter(prefix="/etiquetas", tags=["Etiquetas Pallet"])
+router = APIRouter(prefix="/api/v1/etiquetas", tags=["Etiquetas Pallet"])
 
 
 @router.get("/clientes")
