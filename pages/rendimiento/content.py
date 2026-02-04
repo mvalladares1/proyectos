@@ -25,6 +25,16 @@ from .shared import (
     get_sankey_producers
 )
 
+# Importar componente G6 Graph
+try:
+    from components.g6_graph import g6_graph
+    from components.g6_graph.transformer import transform_sankey_to_g6
+    G6_AVAILABLE = True
+except ImportError:
+    G6_AVAILABLE = False
+    g6_graph = None
+    transform_sankey_to_g6 = None
+
 # Importar componente Timeline Flow
 try:
     from components.timeline_flow import render_timeline_flow, render_simple_flow
@@ -998,7 +1008,10 @@ def _render_sankey(username: str, password: str):
         data_type = st.session_state.diagram_data_type
         
         if data_type == "sankey":
-            _render_sankey_plotly(data)
+            if G6_AVAILABLE:
+                _render_g6_sankey(data)
+            else:
+                _render_sankey_plotly(data)
             _render_sankey_stats(data)
         elif data_type == "nivo_sankey" and NIVO_AVAILABLE:
             _render_nivo_sankey(data)
@@ -1073,10 +1086,59 @@ def _render_sankey_plotly(sankey_data: dict):
         "scrollZoom": True,  # Habilitar zoom con scroll
     }
     
-    st.markdown("### 📊 Diagrama Sankey")
+    st.markdown("### 📊 Diagrama Sankey (Plotly)")
     st.caption("🖱️ Arrastra para mover | 🔍 Scroll para zoom | 📷 Botones superiores para más opciones")
     
     st.plotly_chart(fig, use_container_width=True, config=config)
+
+
+def _render_g6_sankey(sankey_data: dict):
+    """Renderiza el diagrama Sankey usando G6 con layout dagre."""
+    st.markdown("### 📊 Diagrama de Flujo (G6)")
+    st.caption("🖱️ Arrastra canvas | 🔍 Scroll para zoom | 🎯 Arrastra nodos | Click en nodos/edges para detalles")
+    
+    # Transformar datos de Plotly Sankey a formato G6
+    g6_data = transform_sankey_to_g6(sankey_data)
+    
+    # Calcular altura dinámica
+    num_nodes = len(g6_data.get("nodes", []))
+    min_height = 600
+    max_height = 1400
+    dynamic_height = min(max_height, max(min_height, num_nodes * 12))
+    
+    # Controles de dirección
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        direction = st.selectbox(
+            "Dirección",
+            ["LR", "RL", "TB", "BT"],
+            index=0,
+            format_func=lambda x: {
+                "LR": "⬅️ Izquierda a Derecha",
+                "RL": "➡️ Derecha a Izquierda",
+                "TB": "⬆️ Arriba a Abajo",
+                "BT": "⬇️ Abajo a Arriba"
+            }[x]
+        )
+    
+    # Renderizar G6
+    event = g6_graph(
+        nodes=g6_data["nodes"],
+        edges=g6_data["edges"],
+        layout="dagre",
+        direction=direction,
+        height=dynamic_height,
+        key="trazabilidad_g6"
+    )
+    
+    # Mostrar info de click
+    if event:
+        if event.get("type") == "node_click":
+            node = event.get("node", {})
+            st.info(f"**Nodo:** {node.get('label', '')}  \n**Detalle:** {node.get('detail', 'N/A')}")
+        elif event.get("type") == "edge_click":
+            edge = event.get("edge", {})
+            st.info(f"**Conexión:** {edge.get('label', '')} unidades")
 
 
 def _render_nivo_sankey(sankey_data: dict):
