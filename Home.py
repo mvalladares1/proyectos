@@ -10,7 +10,12 @@ import streamlit as st
 from shared.auth import guardar_permisos_state
 
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+# Determinar API_URL basado en ENV
+ENV = os.getenv("ENV", "production")
+if ENV == "development":
+    API_URL = os.getenv("API_URL", "http://rio-api-dev:8000")
+else:
+    API_URL = os.getenv("API_URL", "http://rio-api-prod:8000")
 
 
 def fetch_permissions(username: str) -> dict | None:

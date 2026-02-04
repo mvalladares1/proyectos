@@ -38,10 +38,15 @@ from .flujo_caja import (
     ENTERPRISE_CSS,
     ENTERPRISE_JS,
     SVG_ICONS,
+    MODAL_CSS,
+    MODAL_HTML,
     generate_sparkline,
     get_heatmap_class,
     fmt_monto_html,
-    nombre_mes_corto
+    nombre_mes_corto,
+    es_vista_semanal,
+    agrupar_semanas_por_mes,
+    nombre_semana_corto
 )
 
 
@@ -289,17 +294,69 @@ def render(username: str, password: str):
             st.info("🚧 Gráfico de cascada interactivo en desarrollo...")
             st.dataframe(pd.DataFrame(waterfall_data))
         
+        # ========== RECOLECTAR DATOS DE FACTURAS PARA MODAL ==========
+        facturas_data = {}
+        for act_data in actividades.values():
+            for concepto in act_data.get("conceptos", []):
+                for cuenta in concepto.get("cuentas", []):
+                    if cuenta.get("es_cuenta_cxc"):
+                        cuenta_codigo = cuenta.get("codigo", "")
+                        for etiqueta in cuenta.get("etiquetas", []):
+                            et_nombre = etiqueta.get("nombre", "")
+                            facturas = etiqueta.get("facturas", [])
+                            if facturas:
+                                key = f"{et_nombre}_{cuenta_codigo}"
+                                facturas_data[key] = facturas
+        
+        # Serializar facturas para JavaScript
+        facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
+        
+        # ========== DETECTAR VISTA SEMANAL ==========
+        vista_semanal = es_vista_semanal(meses_lista)
+        semanas_por_mes = {}
+        meses_ordenados = []
+        
+        if vista_semanal:
+            # Pasar fechas de filtro para excluir semanas fuera del rango
+            semanas_por_mes = agrupar_semanas_por_mes(meses_lista, fecha_inicio_str, fecha_fin_str)
+            meses_ordenados = list(semanas_por_mes.keys())
+        
         # ========== GENERAR TABLA HTML ==========
-        html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
+        html_parts = [ENTERPRISE_CSS, MODAL_CSS, '<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
         
         # HEADER
-        html_parts.append('<thead><tr>')
-        html_parts.append('<th class="frozen">CONCEPTO</th>')
-        for mes in meses_lista:
-            html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
-        html_parts.append('<th><strong>TOTAL</strong></th>')
-        html_parts.append('</tr></thead>')
+        if vista_semanal and semanas_por_mes:
+            # Vista semanal: Header de dos filas
+            # Fila 1: Meses con colspan
+            html_parts.append('<thead>')
+            html_parts.append('<tr class="header-meses">')
+            html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
+            
+            for mes in meses_ordenados:
+                num_semanas = len(semanas_por_mes[mes])
+                html_parts.append(f'<th colspan="{num_semanas}" class="mes-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center; font-size: 14px; font-weight: 700; border-bottom: none;">{mes}</th>')
+            
+            html_parts.append('<th rowspan="2"><strong>TOTAL</strong></th>')
+            html_parts.append('</tr>')
+            
+            # Fila 2: Semanas (número real de semana del año)
+            html_parts.append('<tr class="header-semanas">')
+            for mes in meses_ordenados:
+                for semana in semanas_por_mes[mes]:
+                    # Extraer número de semana del formato 2026-W05
+                    num_semana = semana.split('-W')[1] if '-W' in semana else semana
+                    html_parts.append(f'<th style="font-size: 11px; background: #2d3748; padding: 4px 8px;">S{int(num_semana)}</th>')
+            html_parts.append('</tr>')
+            html_parts.append('</thead>')
+        else:
+            # Vista mensual: Header simple
+            html_parts.append('<thead><tr>')
+            html_parts.append('<th class="frozen">CONCEPTO</th>')
+            for mes in meses_lista:
+                html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
+            html_parts.append('<th><strong>TOTAL</strong></th>')
+            html_parts.append('</tr></thead>')
         
         # BODY
         html_parts.append('<tbody>')
@@ -430,21 +487,52 @@ def render(username: str, password: str):
                         html_parts.append('</tr>')
                         
                         # NIVEL 3: Etiquetas (sub-detalle de cada cuenta)
+                        # Detectar si es cuenta CxC para habilitar modal
+                        es_cuenta_cxc = cuenta.get("es_cuenta_cxc", False)
+                        
+                        # Mapeo de iconos por estado de pago
+                        ESTADO_ICONS = {
+                            'Facturas Pagadas': '✅',
+                            'Facturas Parcialmente Pagadas': '⏳',
+                            'En Proceso de Pago': '🔄',
+                            'Facturas No Pagadas': '❌',
+                            'Facturas Revertidas': '↩️'
+                        }
+                        
                         if has_etiquetas:
                             for etiqueta in etiquetas[:10]:  # Top 10 etiquetas
                                 et_nombre = etiqueta.get("nombre", "")[:50]
                                 et_monto = etiqueta.get("monto", 0)
                                 et_montos_mes = etiqueta.get("montos_por_mes", {})
+                                tiene_facturas = "facturas" in etiqueta and len(etiqueta.get("facturas", [])) > 0
+                                total_facturas = etiqueta.get("total_facturas", 0)
                                 
                                 # Fondo sólido oscuro para evitar transparencia al deslizar
                                 # Indentación aumentada a 100px con borde izquierdo para indicar jerarquía
                                 html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">🏷️ {et_nombre}</td>')
                                 
-                                # Montos por mes de la etiqueta
+                                # Obtener icono según estado de pago (si es CxC) o icono genérico
+                                icono = ESTADO_ICONS.get(et_nombre, '🏷️') if es_cuenta_cxc else '🏷️'
+                                
+                                # Nombre de etiqueta con indicador de facturas si es CxC
+                                if es_cuenta_cxc and tiene_facturas:
+                                    nombre_display = f'{icono} {et_nombre} <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                else:
+                                    nombre_display = f'{icono} {et_nombre}'
+                                
+                                html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
+                                
+                                # Montos por mes de la etiqueta - clickeables si es CxC con facturas
                                 for mes in meses_lista:
                                     et_mes_monto = et_montos_mes.get(mes, 0)
-                                    html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                    
+                                    if es_cuenta_cxc and tiene_facturas and et_mes_monto != 0:
+                                        # Celda clickeable para mostrar modal
+                                        et_nombre_js = et_nombre.replace("'", "\\'")
+                                        onclick = f"showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                        html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e;" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(et_mes_monto)}</td>')
+                                    else:
+                                        html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
                                 
                                 html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
                                 html_parts.append('</tr>')
@@ -492,8 +580,19 @@ def render(username: str, password: str):
         
         html_parts.append('</div>')
         
-        # Agregar JavaScript
+        # Agregar HTML del Modal de Facturas
+        html_parts.append(MODAL_HTML)
+        
+        # Agregar JavaScript principal
         html_parts.append(ENTERPRISE_JS)
+        
+        # Agregar script para inicializar datos de facturas
+        html_parts.append(f'''
+<script>
+// Inicializar datos de facturas para el modal
+setFacturasData({facturas_json});
+</script>
+''')
         
         # Renderizar con components.html con altura dinámica
         full_html = "".join(html_parts)

@@ -1,0 +1,6 @@
+﻿OC,Fecha,Transportista,Ruta,Kms,Kilos,Costo,Tipo Camión,$/km,Estado
+PO00123,2026-01-15,TRANSPORTES RODRIGUEZ LIMITADA,San José - La Granja,450,12500,225000,🚛 Camión 12-14 Ton,500.0,✅ Completo
+PO00145,2026-01-20,TRANSPORTES PEREZ SPA,Temuco - La Granja,680,18000,340000,N/A,500.0,⚠️ Incompleto
+PO00167,2026-01-28,TRANSPORTES GOMEZ Y CIA,Curicó - La Granja,0,9000,0,🚚 Camión 8 Ton,0.0,⚠️ Incompleto
+PO00189,2026-01-30,TRANSPORTES RODRIGUEZ LIMITADA,San José - La Granja,450,12500,225000,🚛 Camión 12-14 Ton,500.0,✅ Completo
+PO00201,2026-02-01,TRANSPORTES PEREZ SPA,,320,0,160000,N/A,500.0,⚠️ Incompleto

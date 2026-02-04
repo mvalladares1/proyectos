@@ -27,7 +27,8 @@ from backend.routers import (
     flujo_caja,
     reconciliacion,
     odf_reconciliation,
-    aprobaciones_fletes
+    aprobaciones_fletes,
+    etiquetas
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ app.include_router(flujo_caja.router)
 app.include_router(reconciliacion.router)
 app.include_router(odf_reconciliation.router)
 app.include_router(aprobaciones_fletes.router)
+app.include_router(etiquetas.router)
 
 
 @app.get("/")

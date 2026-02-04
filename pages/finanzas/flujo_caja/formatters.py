@@ -68,3 +68,109 @@ def nombre_mes_corto(mes_str: str) -> str:
     if len(parts) == 2:
         return f"{meses_nombres.get(parts[1], parts[1])} {parts[0][2:]}"
     return mes_str
+
+
+def es_vista_semanal(periodos: list) -> bool:
+    """Detecta si los períodos son semanas (contienen 'W' o formato semanal)."""
+    if not periodos:
+        return False
+    # Formato semanal típico: "2025-W01" o "W01 2025" o contiene "W"
+    first_period = str(periodos[0])
+    return 'W' in first_period or '-W' in first_period
+
+
+def agrupar_semanas_por_mes(semanas: list, fecha_inicio: str = None, fecha_fin: str = None) -> dict:
+    """
+    Agrupa semanas por mes, filtrando por el rango de fechas.
+    Input: ['2025-W01', '2025-W02', ..., '2025-W05', '2025-W06', ...]
+    Output: {
+        'Ene 25': ['2025-W01', '2025-W02', '2025-W03', '2025-W04'],
+        'Feb 25': ['2025-W05', '2025-W06', '2025-W07', '2025-W08'],
+        ...
+    }
+    
+    Si fecha_inicio y fecha_fin se proporcionan, solo incluye semanas
+    que tengan al menos un día dentro del rango.
+    """
+    from datetime import datetime, timedelta
+    
+    meses_nombres = {
+        1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr",
+        5: "May", 6: "Jun", 7: "Jul", 8: "Ago",
+        9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"
+    }
+    
+    # Parsear fechas de filtro si se proporcionan
+    filtro_inicio = None
+    filtro_fin = None
+    if fecha_inicio:
+        try:
+            filtro_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+        except:
+            pass
+    if fecha_fin:
+        try:
+            filtro_fin = datetime.strptime(fecha_fin, '%Y-%m-%d')
+        except:
+            pass
+    
+    resultado = {}
+    
+    for semana in semanas:
+        try:
+            # Parsear semana ISO: "2025-W01" o "2025W01"
+            semana_str = str(semana).replace('-W', 'W')  # Normalizar
+            
+            if 'W' in semana_str:
+                # Formato ISO: 2025W01
+                year = int(semana_str.split('W')[0].replace('-', ''))
+                week = int(semana_str.split('W')[1])
+                
+                # Obtener fecha del primer día de esa semana (lunes)
+                fecha_lunes = datetime.strptime(f'{year}-W{week:02d}-1', '%G-W%V-%u')
+                # Obtener fecha del último día de esa semana (domingo)
+                fecha_domingo = fecha_lunes + timedelta(days=6)
+                
+                # Si hay filtro de fechas, verificar que la semana tenga
+                # al menos un día dentro del rango
+                if filtro_inicio and filtro_fin:
+                    # La semana está dentro del rango si:
+                    # - El domingo >= inicio del filtro Y
+                    # - El lunes <= fin del filtro
+                    if fecha_domingo < filtro_inicio or fecha_lunes > filtro_fin:
+                        continue  # Semana fuera del rango, saltar
+                
+                # Usar el mes donde cae la mayoría de la semana (jueves)
+                fecha_jueves = fecha_lunes + timedelta(days=3)
+                mes = fecha_jueves.month
+                year_short = str(fecha_jueves.year)[2:]
+                mes_key = f"{meses_nombres[mes]} {year_short}"
+                
+                if mes_key not in resultado:
+                    resultado[mes_key] = []
+                resultado[mes_key].append(semana)
+        except Exception as e:
+            # Si no se puede parsear, ponerlo en "Otros"
+            if "Otros" not in resultado:
+                resultado["Otros"] = []
+            resultado["Otros"].append(semana)
+    
+    return resultado
+
+
+def nombre_semana_corto(semana_str: str) -> str:
+    """Convierte '2025-W01' a 'S1'."""
+    try:
+        semana = str(semana_str).replace('-W', 'W')
+        if 'W' in semana:
+            week_num = int(semana.split('W')[1])
+            # Calcular semana del mes (1-4/5)
+            year = int(semana.split('W')[0].replace('-', ''))
+            from datetime import datetime
+            fecha = datetime.strptime(f'{year}-W{week_num:02d}-1', '%G-W%V-%u')
+            # Semana del mes: ((día - 1) // 7) + 1
+            week_of_month = ((fecha.day - 1) // 7) + 1
+            return f"S{week_of_month}"
+        return semana_str
+    except:
+        return semana_str

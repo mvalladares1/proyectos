@@ -4,28 +4,40 @@ Estilos CSS para el Estado de Flujo de Efectivo
 
 ENTERPRISE_CSS = """
 <style>
-/* ============ CUSTOM SCROLLBAR ============ */
-.excel-container::-webkit-scrollbar {
+/* ============ CUSTOM SCROLLBAR (Global - Celeste Unificado) ============ */
+/* Scrollbar Horizontal y Vertical para todo el documento */
+::-webkit-scrollbar {
+    width: 14px;
     height: 14px;
     background: #0a0e1a;
 }
 
-.excel-container::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
     background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
     border-radius: 8px;
     border: 1px solid #1e293b;
 }
 
-.excel-container::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     border-radius: 8px;
     border: 2px solid #1e293b;
     box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
 }
 
-.excel-container::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
     box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+    background: #0a0e1a;
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #3b82f6 #0f172a;
 }
 
 /* ============ CONTAINER & TABLE BASE ============ */
@@ -147,6 +159,35 @@ ENTERPRISE_CSS = """
     letter-spacing: 1.5px;
     padding: 18px 24px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Vista Semanal: Header de Meses (fila superior) */
+.excel-table thead tr.header-meses th {
+    position: sticky;
+    top: 0;
+    z-index: 51;
+}
+
+.excel-table thead tr.header-meses th.mes-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-bottom: 2px solid #764ba2;
+    font-size: 14px !important;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: none;
+}
+
+/* Vista Semanal: Header de Semanas (fila inferior) */
+.excel-table thead tr.header-semanas th {
+    position: sticky;
+    top: 52px;  /* Altura de la fila de meses */
+    z-index: 50;
+    background: linear-gradient(180deg, #2d3748 0%, #1e293b 100%) !important;
+    font-size: 11px !important;
+    padding: 8px 12px !important;
+    border-bottom: 3px solid #3b82f6;
+    font-weight: 600;
+    letter-spacing: 0;
 }
 
 .excel-table thead th.frozen {

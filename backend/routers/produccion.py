@@ -134,3 +134,163 @@ async def download_report_clasificacion(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================== MONITOR DIARIO DE PRODUCCIÓN =====================
+
+@router.get("/monitor/activos")
+async def get_procesos_activos(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha: str = Query(..., description="Fecha (YYYY-MM-DD)"),
+    planta: Optional[str] = Query(None, description="Filtrar por planta"),
+    sala: Optional[str] = Query(None, description="Filtrar por sala"),
+    producto: Optional[str] = Query(None, description="Filtrar por producto")
+):
+    """
+    Obtiene procesos activos (no done ni cancel) para una fecha.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.get_procesos_activos(fecha, planta, sala, producto)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/monitor/cerrados")
+async def get_procesos_cerrados_dia(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    planta: Optional[str] = Query(None, description="Filtrar por planta"),
+    sala: Optional[str] = Query(None, description="Filtrar por sala"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)")
+):
+    """
+    Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.get_procesos_cerrados_dia(fecha, planta, sala, fecha_fin)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/monitor/evolucion")
+async def get_evolucion_procesos(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    planta: Optional[str] = Query(None, description="Filtrar por planta"),
+    sala: Optional[str] = Query(None, description="Filtrar por sala")
+):
+    """
+    Obtiene la evolución de procesos creados vs cerrados en un rango de fechas.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.get_evolucion_rango(fecha_inicio, fecha_fin, planta, sala)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/monitor/snapshot")
+async def guardar_snapshot(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha: str = Query(..., description="Fecha del snapshot (YYYY-MM-DD)"),
+    planta: Optional[str] = Query(None, description="Planta específica")
+):
+    """
+    Guarda un snapshot del estado actual de procesos.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.guardar_snapshot(fecha, planta)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/monitor/snapshots")
+async def obtener_snapshots(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha: Optional[str] = Query(None, description="Filtrar por fecha"),
+    limit: int = Query(50, description="Límite de resultados")
+):
+    """
+    Obtiene snapshots guardados.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.obtener_snapshots(fecha, limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/monitor/salas")
+async def get_salas_disponibles(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene la lista de salas de proceso disponibles.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.get_salas_disponibles()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/monitor/productos")
+async def get_productos_disponibles(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene la lista de productos de fabricación disponibles.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.get_productos_disponibles()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/monitor/report_pdf")
+async def download_monitor_report_pdf(data: dict):
+    """
+    Genera y descarga el reporte PDF del monitor de producción.
+    """
+    try:
+        from backend.services.monitor_report_service import generate_monitor_report_pdf
+        from fastapi.responses import StreamingResponse
+        import io
+
+        pdf_bytes = generate_monitor_report_pdf(
+            fecha_inicio=data.get('fecha_inicio', ''),
+            fecha_fin=data.get('fecha_fin', ''),
+            planta=data.get('planta', 'Todas'),
+            sala=data.get('sala', 'Todas'),
+            procesos_pendientes=data.get('procesos_pendientes', []),
+            procesos_cerrados=data.get('procesos_cerrados', []),
+            evolucion=data.get('evolucion', []),
+            totales=data.get('totales', {})
+        )
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=Monitor_Produccion_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

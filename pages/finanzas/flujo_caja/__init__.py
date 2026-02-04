@@ -8,22 +8,28 @@ Estructura modular:
 - render.py: Lógica principal de renderizado
 """
 from .styles import ENTERPRISE_CSS
-from .components import ENTERPRISE_JS, SVG_ICONS
+from .components import ENTERPRISE_JS, SVG_ICONS, MODAL_CSS, MODAL_HTML
 from .formatters import (
     generate_sparkline,
     get_heatmap_class,
     fmt_monto_html,
-    nombre_mes_corto
+    nombre_mes_corto,
+    es_vista_semanal,
+    agrupar_semanas_por_mes,
+    nombre_semana_corto
 )
 
 __all__ = [
     'ENTERPRISE_CSS',
     'ENTERPRISE_JS',
     'SVG_ICONS',
+    'MODAL_CSS',
+    'MODAL_HTML',
     'generate_sparkline',
     'get_heatmap_class',
     'fmt_monto_html',
-    'nombre_mes_corto'
+    'nombre_mes_corto',
+    'es_vista_semanal',
+    'agrupar_semanas_por_mes',
+    'nombre_semana_corto'
 ]
-
-__all__ = ['render']

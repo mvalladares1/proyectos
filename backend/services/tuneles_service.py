@@ -142,7 +142,9 @@ class TunelesService:
                 quant_info = pallet.get('quant_info', {})
                 kg = quant_info.get('quantity', pallet['kg'])
                 lote_id = quant_info.get('lot_id', [None])[0] if quant_info.get('lot_id') else None
-                ubicacion_id = quant_info.get('location_id', [None])[0] if quant_info.get('location_id') else config['ubicacion_origen_id']
+                # FIX: Asegurar que ubicacion_id nunca sea None
+                ubicacion_id_raw = quant_info.get('location_id', [None])[0] if quant_info.get('location_id') else None
+                ubicacion_id = ubicacion_id_raw or config['ubicacion_origen_id']
                 
                 # Buscar el package_id
                 package = self.odoo.search_read(
@@ -717,13 +719,19 @@ class TunelesService:
                 })
                 continue
             
+            # FIX: Verificar que el pallet tenga producto_id válido
+            producto_id_validado = validacion.get('producto_id')
+            if not producto_id_validado:
+                errores.append(f"{pallet['codigo']}: Stock encontrado pero sin producto_id en Odoo")
+                continue
+            
             pallets_validados.append({
                 'codigo': pallet['codigo'],
                 'kg': kg,
                 'lote_id': validacion.get('lote_id'),
                 'lote_nombre': validacion.get('lote_nombre'),  # Nombre del lote original
-                'producto_id': validacion.get('producto_id'),
-                'ubicacion_id': validacion.get('ubicacion_id', config['ubicacion_origen_id']),
+                'producto_id': producto_id_validado,  # Usar variable validada
+                'ubicacion_id': validacion.get('ubicacion_id') or config['ubicacion_origen_id'],  # FIX: usar 'or' para manejar None explícito
                 'package_id': validacion.get('package_id'),  # ID del paquete origen
                 'manual': False
             })
@@ -745,6 +753,14 @@ class TunelesService:
         productos_totales = {}
         for pallet in pallets_validados:
             prod_id = pallet['producto_id']
+            
+            # FIX CRÍTICO: Filtrar pallets sin producto_id
+            if not prod_id or prod_id is None:
+                msg = f"{pallet['codigo']}: Pallet sin producto_id identificado (producto_id={prod_id})"
+                errores.append(msg)
+                print(f"ERROR validación: {msg}")
+                continue
+            
             if prod_id not in productos_totales:
                 productos_totales[prod_id] = {
                     'kg': 0,
@@ -753,7 +769,15 @@ class TunelesService:
             productos_totales[prod_id]['kg'] += pallet['kg']
             productos_totales[prod_id]['pallets'].append(pallet)
         
-        total_kg = sum(p['kg'] for p in pallets_validados)
+        # Verificar si hay errores después de filtrar
+        if errores:
+            return {
+                'success': False,
+                'errores': errores,
+                'advertencias': advertencias
+            }
+        
+        total_kg = sum(p['kg'] for p in pallets_validados if p.get('producto_id'))
         
         # 3. Crear la orden de fabricación
         try:
@@ -1046,19 +1070,27 @@ class TunelesService:
         ubicacion_virtual = UBICACION_VIRTUAL_CONGELADO_ID if config['sucursal'] == 'RF' else UBICACION_VIRTUAL_PROCESOS_ID
         
         for producto_id, data in productos_totales.items():
+            # DEBUG: Imprimir todos los valores para detectar None
+            print(f"DEBUG componente: producto_id={producto_id}, kg={data['kg']}, ubicacion_origen={config['ubicacion_origen_id']}, ubicacion_virtual={ubicacion_virtual}")
+            
             # Crear stock.move principal
             move_data = {
                 'name': mo_name,
-                'product_id': producto_id,
-                'product_uom_qty': data['kg'],
+                'product_id': int(producto_id) if producto_id else None,  # Asegurar int
+                'product_uom_qty': float(data['kg']) if data['kg'] else 0.0,
                 'product_uom': 12,  # kg
-                'location_id': config['ubicacion_origen_id'],
-                'location_dest_id': ubicacion_virtual,
+                'location_id': int(config['ubicacion_origen_id']),
+                'location_dest_id': int(ubicacion_virtual),
                 'state': 'draft',
-                'raw_material_production_id': mo_id,  # Relación con MO
+                'raw_material_production_id': int(mo_id),  # Relación con MO
                 'company_id': 1,
                 'reference': mo_name
             }
+            
+            # DEBUG: Verificar si hay None antes de enviar a Odoo
+            for key, val in move_data.items():
+                if val is None:
+                    print(f"ERROR: move_data['{key}'] es None!")
             
             move_id = self.odoo.execute('stock.move', 'create', move_data)
             
@@ -1094,47 +1126,57 @@ class TunelesService:
                             })
                     
                     move_line_data = {
-                        'move_id': move_id,
-                        'product_id': producto_id,
+                        'move_id': int(move_id),
+                        'product_id': int(producto_id),
                         'qty_done': 0.0,  # PENDIENTE: qty en 0 hasta que se confirme recepción
                         'reserved_uom_qty': 0.0,  # Sin reserva
                         'product_uom_id': 12,  # kg
-                        'location_id': pallet.get('ubicacion_id', config['ubicacion_origen_id']),
-                        'location_dest_id': ubicacion_virtual,
+                        'location_id': int(pallet.get('ubicacion_id') or config['ubicacion_origen_id']),  # FIX: usar 'or' para manejar None
+                        'location_dest_id': int(ubicacion_virtual),
                         'state': 'draft',
                         'reference': f"{mo_name} [PENDIENTE: {pallet.get('kg', 0)} kg]",
                         'company_id': 1
                     }
                     
+                    # DEBUG: Verificar None en move_line_data
+                    for key, val in move_line_data.items():
+                        if val is None:
+                            print(f"ERROR: move_line_data (pendiente)['{key}'] es None!")
+                    
                     if lote_id:
-                        move_line_data['lot_id'] = lote_id
+                        move_line_data['lot_id'] = int(lote_id)
                     if package_id:
-                        move_line_data['package_id'] = package_id
+                        move_line_data['package_id'] = int(package_id)
                     
                     self.odoo.execute('stock.move.line', 'create', move_line_data)
                     continue  # Siguiente pallet
 
                 # Flujo normal para pallets con stock
                 move_line_data = {
-                    'move_id': move_id,
-                    'product_id': producto_id,
-                    'qty_done': pallet['kg'],
-                    'reserved_uom_qty': pallet['kg'],
+                    'move_id': int(move_id),
+                    'product_id': int(producto_id),
+                    'qty_done': float(pallet['kg']) if pallet.get('kg') else 0.0,
+                    'reserved_uom_qty': float(pallet['kg']) if pallet.get('kg') else 0.0,
                     'product_uom_id': 12,  # kg
-                    'location_id': pallet.get('ubicacion_id', config['ubicacion_origen_id']),
-                    'location_dest_id': ubicacion_virtual,
+                    'location_id': int(pallet.get('ubicacion_id') or config['ubicacion_origen_id']),  # FIX: usar 'or' para manejar None
+                    'location_dest_id': int(ubicacion_virtual),
                     'state': 'draft',
                     'reference': mo_name,
                     'company_id': 1
                 }
                 
+                # DEBUG: Verificar None en move_line_data
+                for key, val in move_line_data.items():
+                    if val is None:
+                        print(f"ERROR: move_line_data (normal)['{key}'] es None!")
+                
                 # Agregar lote si existe
                 if lote_id:
-                    move_line_data['lot_id'] = lote_id
+                    move_line_data['lot_id'] = int(lote_id)
                 
                 # Agregar package de origen si existe
                 if package_id:
-                    move_line_data['package_id'] = package_id
+                    move_line_data['package_id'] = int(package_id)
                 
                 self.odoo.execute('stock.move.line', 'create', move_line_data)
             

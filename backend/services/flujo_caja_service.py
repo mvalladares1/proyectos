@@ -303,7 +303,14 @@ class FlujoCajaService:
         return nombres.get(key, key)
     
     def _parse_odoo_month(self, odoo_month: str) -> str:
-        """Parsea el formato de mes de Odoo ('Enero 2026') a 'YYYY-MM'."""
+        """Parsea el formato de mes de Odoo ('Enero 2026' o '2026-01') a 'YYYY-MM'."""
+        if not odoo_month:
+            return None
+            
+        # Si ya está en formato YYYY-MM, devolverlo directamente
+        if len(odoo_month) == 7 and odoo_month[4] == '-':
+            return odoo_month
+            
         meses_es = {
             "enero": "01", "febrero": "02", "marzo": "03", "abril": "04",
             "mayo": "05", "junio": "06", "julio": "07", "agosto": "08",
@@ -434,28 +441,68 @@ class FlujoCajaService:
         )
         
         # 6. Obtener y procesar contrapartidas
+        # ESTRATEGIA HÍBRIDA para evitar DUPLICACIÓN:
+        # A) Cuentas generales: flujo de efectivo estándar (contrapartidas)
+        # B) Cuentas monitoreadas (CxC 11030101): usa x_studio_fecha_de_pago como criterio
+        #    SOLO entran por Query B, NUNCA por Query A
+        
         groupby_key = 'date:week' if agrupacion == 'semanal' else 'date:month'
         parse_fn = self._parse_odoo_week if agrupacion == 'semanal' else self._parse_odoo_month
         
+        # IMPORTANTE: Solo cuentas CxC (11030xxx) se procesan como monitoreadas con fecha_de_pago
+        # Las cuentas de FINANCIAMIENTO (21xxx, 22xxx) se procesan normalmente en Query A
+        todas_cuentas_contrapartida = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
+        
+        # Filtrar: solo CxC para Query B (cuentas que empiezan con 1103)
+        cuentas_cxc_monitoreadas = [c for c in todas_cuentas_contrapartida if c.startswith('1103')]
+        
+        # Obtener IDs de cuentas CxC monitoreadas PRIMERO (antes de Query A)
+        cxc_ids = []
+        if cuentas_cxc_monitoreadas:
+            try:
+                accs = self.odoo_manager.odoo.search_read(
+                    'account.account', 
+                    [['code', 'in', cuentas_cxc_monitoreadas]], 
+                    ['id', 'code']
+                )
+                cxc_ids = [a['id'] for a in accs]
+                print(f"[FlujoCaja] Cuentas CxC monitoreadas: {[a['code'] for a in accs]} -> IDs: {cxc_ids}")
+            except Exception as e:
+                print(f"[FlujoCaja] Error buscando cuentas CxC: {e}")
+
+        # Query A: Flujo de efectivo para cuentas NO CxC
+        # CRÍTICO: Excluir efectivo Y CxC monitoreadas para evitar duplicación
+        # Las cuentas de FINANCIAMIENTO (21xxx, 22xxx) se procesan aquí normalmente
+        ids_excluir = list(set(cuentas_efectivo_ids + cxc_ids))
+        print(f"[FlujoCaja] Query A: Excluyendo {len(ids_excluir)} cuentas (efectivo + CxC)")
+        
         grupos = self.odoo_manager.get_contrapartidas_agrupadas_mensual(
-            asientos_ids, cuentas_efectivo_ids, agrupacion
+            asientos_ids, ids_excluir, agrupacion
         )
+        agregador.procesar_grupos_contrapartida(grupos, None, parse_fn)
         
-        cuentas_monitoreadas = self.cuentas_monitoreadas.get("cuentas_contrapartida", {}).get("codigos", [])
+        # Query B: Solo cuentas CxC usando x_studio_fecha_de_pago
+        # SOLO estas cuentas usan la fecha de pago acordada como criterio
+        if cuentas_cxc_monitoreadas:
+            print(f"[FlujoCaja] Query B: Procesando cuentas CxC {cuentas_cxc_monitoreadas} por fecha_de_pago")
+            lineas_monitoreadas = self.odoo_manager.get_lineas_cuenta_periodo(
+                cuentas_cxc_monitoreadas, fecha_inicio, fecha_fin
+            )
+            print(f"[FlujoCaja] Query B: Encontradas {len(lineas_monitoreadas)} líneas CxC")
+            # Procesar con inversión de signo para CxC
+            agregador.procesar_lineas_cxc(lineas_monitoreadas, self._clasificar_cuenta, agrupacion)
         
-        agregador.procesar_grupos_contrapartida(grupos, cuentas_monitoreadas or None, parse_fn)
-        
-        # 7. Procesar etiquetas
+        # 7. Procesar etiquetas (EXCLUYENDO cuentas CxC que ya se procesaron en Query B)
         try:
-            account_ids_to_query = set()
-            
-            etiquetas = self.odoo_manager.get_etiquetas_por_mes(asientos_ids, list(cuentas_efectivo_ids) + list(cuentas_monitoreadas), agrupacion)
-            agregador.procesar_etiquetas(etiquetas)
+            # Obtener account_ids de las cuentas ya procesadas
             _, cuentas_por_concepto = agregador.obtener_resultados()
+            account_ids_to_query = set()
             for concepto_id, cuentas in cuentas_por_concepto.items():
                 for codigo, cuenta_data in cuentas.items():
-                    if cuenta_data.get('account_id'):
-                        account_ids_to_query.add(cuenta_data['account_id'])
+                    acc_id = cuenta_data.get('account_id')
+                    # EXCLUIR cuentas CxC monitoreadas (ya tienen etiquetas de Query B)
+                    if acc_id and acc_id not in cxc_ids:
+                        account_ids_to_query.add(acc_id)
             
             if account_ids_to_query:
                 grupos_etiquetas = self.odoo_manager.get_etiquetas_por_mes(
@@ -465,9 +512,11 @@ class FlujoCajaService:
         except Exception as e:
             print(f"[FlujoCaja] Error procesando etiquetas: {e}")
         
-        # 8. Procesar cuentas parametrizadas
+        # 8. Procesar cuentas parametrizadas (EXCLUYENDO las CxC monitoreadas que ya se procesaron en Query B)
         try:
             cuentas_parametrizadas = list(self.mapeo_cuentas.get("mapeo_cuentas", {}).keys())
+            # Excluir solo cuentas CxC monitoreadas para evitar duplicación
+            cuentas_parametrizadas = [c for c in cuentas_parametrizadas if c not in cuentas_cxc_monitoreadas]
             if cuentas_parametrizadas:
                 lineas = self.odoo_manager.get_lineas_cuentas_parametrizadas(
                     cuentas_parametrizadas, fecha_inicio, fecha_fin, asientos_ids
@@ -476,35 +525,10 @@ class FlujoCajaService:
         except Exception as e:
             print(f"[FlujoCaja] Error procesando cuentas parametrizadas: {e}")
         
-        # 9. Procesar facturas draft
-        try:
-            facturas_draft = self.odoo_manager.get_facturas_draft(fecha_inicio, fecha_fin, company_id)
-            if facturas_draft:
-                all_line_ids = []
-                factura_por_linea = {}
-                for factura in facturas_draft:
-                    for lid in factura.get('line_ids', []):
-                        all_line_ids.append(lid)
-                        factura_por_linea[lid] = factura
-                
-                lineas = self.odoo_manager.get_lineas_facturas(all_line_ids)
-                
-                # Agrupar por move_id
-                lines_by_move = {}
-                for l in lineas:
-                    mid = l['move_id'][0] if isinstance(l.get('move_id'), (list, tuple)) else l.get('move_id')
-                    lines_by_move.setdefault(mid, []).append(l)
-                
-                # Obtener info de cuentas
-                account_ids = list(set(
-                    l['account_id'][0] if isinstance(l.get('account_id'), (list, tuple)) else l.get('account_id')
-                    for l in lineas if l.get('account_id')
-                ))
-                cuentas_info = self.odoo_manager.get_account_info_batch(account_ids)
-                
-                agregador.procesar_facturas_draft(facturas_draft, lines_by_move, self._clasificar_cuenta, cuentas_info, agrupacion)
-        except Exception as e:
-            print(f"[FlujoCaja] Error procesando facturas draft: {e}")
+        # 9. Procesar facturas draft - DESHABILITADO
+        # La proyección ahora se maneja en Query B usando payment_state
+        # (not_paid, in_payment, partial) en lugar de state='draft'
+        # Esto evita duplicación y el problema de "CXC - Cuentas por Cobrar Proyectadas"
         
         # 10. Construir resultado
         conceptos_por_actividad, subtotales_por_actividad = agregador.construir_conceptos_por_actividad()

@@ -1,6 +1,7 @@
 """
 Tab: Detalle de OF
 Búsqueda y detalle de órdenes de fabricación individuales.
+Incluye sub-tab de Monitor Diario de Producción.
 """
 import streamlit as st
 import pandas as pd
@@ -14,11 +15,27 @@ from .shared import (
     fetch_ordenes, fetch_of_detail, fetch_kpis, render_component_tab, render_metrics_row,
     detectar_planta
 )
+from . import tab_monitor_diario
 
 
 @st.fragment
 def render(username: str, password: str):
-    """Renderiza el contenido del tab Detalle de OF."""
+    """Renderiza el contenido del tab Detalle de OF con sub-tabs."""
+    
+    # Sub-tabs: Monitor Diario y Búsqueda de OF
+    sub_tabs = st.tabs(["📊 Monitor Diario", "🔍 Búsqueda de OF"])
+    
+    # === SUB-TAB: MONITOR DIARIO ===
+    with sub_tabs[0]:
+        tab_monitor_diario.render(username, password)
+    
+    # === SUB-TAB: BÚSQUEDA DE OF ===
+    with sub_tabs[1]:
+        _render_busqueda_of(username, password)
+
+
+def _render_busqueda_of(username: str, password: str):
+    """Renderiza la búsqueda y detalle de órdenes de fabricación."""
     # 1. Estados iniciales y Filtros rápidos (AL TOP)
     if "production_ofs" not in st.session_state:
         st.session_state["production_ofs"] = []

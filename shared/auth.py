@@ -8,7 +8,12 @@ import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+# Determinar API_URL basado en ENV
+ENV = os.getenv("ENV", "production")
+if ENV == "development":
+    API_URL = os.getenv("API_URL", "http://rio-api-dev:8000")
+else:
+    API_URL = os.getenv("API_URL", "http://rio-api-prod:8000")
 
 # Clave para el token en session_state y cookies
 TOKEN_KEY = "session_token"
