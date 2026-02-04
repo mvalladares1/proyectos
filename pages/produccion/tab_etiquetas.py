@@ -55,7 +55,7 @@ def obtener_pallets_orden(username: str, password: str, orden_name: str):
 
 def generar_etiqueta_html(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta con el formato especificado (fondo blanco, sin bordes).
+    Genera HTML de etiqueta sin fondo (el color lo da la etiqueta física).
     Usa JsBarcode para generar código de barras real.
     Tamaño: 100mm x 150mm
     """
@@ -84,13 +84,11 @@ def generar_etiqueta_html(datos: Dict) -> str:
                 font-family: Arial, sans-serif;
                 padding: 8mm;
                 margin: 0;
-                background: white;
                 width: 84mm;
                 height: 134mm;
             }}
             .etiqueta {{
                 width: 100%;
-                background: white;
             }}
             .titulo {{
                 font-size: 14px;
