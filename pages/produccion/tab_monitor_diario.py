@@ -131,7 +131,7 @@ def descargar_reporte_pdf(data: dict):
 
 def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
     """Renderiza KPIs de resumen."""
-    cols = st.columns(5)
+    cols = st.columns(4)
     
     with cols[0]:
         st.metric(
@@ -141,32 +141,20 @@ def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
         )
     
     with cols[1]:
-        kg_avanzados = stats_activos.get('kg_producidos', 0)
-        kg_programados = stats_activos.get('kg_programados', 0)
-        pct = (kg_avanzados / kg_programados * 100) if kg_programados > 0 else 0
-        st.metric(
-            "🔄 KG Avanzados",
-            f"{kg_avanzados:,.0f}",
-            delta=f"{pct:.1f}% del total",
-            delta_color="off",
-            help="Kilos ya producidos en procesos pendientes"
-        )
-    
-    with cols[2]:
         st.metric(
             "⏳ KG Pendientes",
             f"{stats_activos.get('kg_pendientes', 0):,.0f}",
             help="Kilos que faltan por producir"
         )
     
-    with cols[3]:
+    with cols[2]:
         st.metric(
             "✅ Cerrados",
             stats_cerrados.get('total_procesos', 0),
             help="Procesos cerrados en el período"
         )
     
-    with cols[4]:
+    with cols[3]:
         st.metric(
             "📦 KG Cerrados",
             f"{stats_cerrados.get('kg_producidos', 0):,.0f}",
@@ -254,6 +242,108 @@ def render_grafico_evolucion(evolucion: list):
     }
     
     st_echarts(options=options, height="400px", theme=theme_echarts)
+
+
+def render_grafico_cerrados_por_dia(procesos_cerrados: list):
+    """Renderiza gráfico de barras con procesos cerrados por día."""
+    if not procesos_cerrados:
+        st.info("No hay procesos cerrados para mostrar")
+        return
+    
+    # Agrupar procesos por fecha de cierre (date_finished)
+    cerrados_por_dia = {}
+    for p in procesos_cerrados:
+        fecha_cierre = p.get('date_finished')
+        if fecha_cierre:
+            # Extraer solo la fecha (sin hora)
+            if 'T' in str(fecha_cierre):
+                fecha_dia = str(fecha_cierre).split('T')[0]
+            else:
+                fecha_dia = str(fecha_cierre)[:10]
+            
+            if fecha_dia not in cerrados_por_dia:
+                cerrados_por_dia[fecha_dia] = {'cantidad': 0, 'kg': 0}
+            cerrados_por_dia[fecha_dia]['cantidad'] += 1
+            cerrados_por_dia[fecha_dia]['kg'] += p.get('qty_produced', 0) or 0
+    
+    if not cerrados_por_dia:
+        st.info("No hay fechas de cierre disponibles")
+        return
+    
+    # Ordenar por fecha
+    fechas_ordenadas = sorted(cerrados_por_dia.keys())
+    fechas_display = [f"{f[8:10]}/{f[5:7]}" for f in fechas_ordenadas]  # DD/MM
+    cantidades = [cerrados_por_dia[f]['cantidad'] for f in fechas_ordenadas]
+    kilos = [cerrados_por_dia[f]['kg'] for f in fechas_ordenadas]
+    
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    
+    options = {
+        "title": {
+            "text": "✅ Procesos Cerrados por Día",
+            "textStyle": {"color": label_color, "fontSize": 14}
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
+            "formatter": "{b}<br/>Procesos: {c0}<br/>KG: {c1}"
+        },
+        "legend": {
+            "data": ["Cantidad Procesos", "KG Producidos"],
+            "top": 30,
+            "textStyle": {"color": label_color}
+        },
+        "xAxis": {
+            "type": "category",
+            "data": fechas_display,
+            "axisLabel": {"color": "#8892b0", "rotate": 45}
+        },
+        "yAxis": [
+            {
+                "type": "value",
+                "name": "Procesos",
+                "position": "left",
+                "axisLabel": {"color": "#8892b0"}
+            },
+            {
+                "type": "value",
+                "name": "KG",
+                "position": "right",
+                "axisLabel": {"color": "#8892b0", "formatter": "{value}"}
+            }
+        ],
+        "series": [
+            {
+                "name": "Cantidad Procesos",
+                "type": "bar",
+                "data": cantidades,
+                "itemStyle": {"color": "#2ecc71"},
+                "emphasis": {"focus": "series"},
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": label_color,
+                    "fontSize": 11
+                }
+            },
+            {
+                "name": "KG Producidos",
+                "type": "line",
+                "yAxisIndex": 1,
+                "data": kilos,
+                "smooth": True,
+                "symbol": "circle",
+                "symbolSize": 8,
+                "itemStyle": {"color": "#3498db"},
+                "lineStyle": {"width": 2}
+            }
+        ],
+        "backgroundColor": "rgba(0,0,0,0)",
+        "grid": {"left": "10%", "right": "10%", "bottom": "20%", "containLabel": True}
+    }
+    
+    st_echarts(options=options, height="350px", theme=theme_echarts)
 
 
 def render_tabla_compacta(procesos: list, tipo: str = "activos"):
@@ -581,6 +671,11 @@ def render(username: str, password: str):
     
     # Gráfico de evolución
     render_grafico_evolucion(evolucion.get("evolucion", []))
+    
+    st.markdown("---")
+    
+    # Gráfico de procesos cerrados por día
+    render_grafico_cerrados_por_dia(cerrados.get("procesos", []))
     
     st.markdown("---")
     
