@@ -99,55 +99,117 @@ class EtiquetasPalletService:
     
     def buscar_ordenes(self, termino_busqueda: str) -> List[Dict]:
         """
-        Busca órdenes de producción por nombre/referencia.
+        Busca órdenes de producción Y transfers/pickings por nombre/referencia.
         """
         try:
-            domain = [
+            resultados = []
+            
+            # Buscar en mrp.production (órdenes de fabricación)
+            domain_prod = [
                 '|',
                 ('name', 'ilike', termino_busqueda),
                 ('origin', 'ilike', termino_busqueda)
             ]
             
-            ordenes = self.odoo.search_read(
+            ordenes_prod = self.odoo.search_read(
                 'mrp.production',
-                domain,
+                domain_prod,
                 ['name', 'product_id', 'origin', 'state', 'date_finished', 'lot_producing_id'],
-                limit=50
+                limit=25
             )
             
-            return [clean_record(o) for o in ordenes]
+            for o in ordenes_prod:
+                o['_modelo'] = 'mrp.production'
+                resultados.append(clean_record(o))
+            
+            # Buscar en stock.picking (transfers)
+            domain_picking = [
+                '|',
+                ('name', 'ilike', termino_busqueda),
+                ('origin', 'ilike', termino_busqueda)
+            ]
+            
+            pickings = self.odoo.search_read(
+                'stock.picking',
+                domain_picking,
+                ['name', 'origin', 'state', 'date_done', 'picking_type_id'],
+                limit=25
+            )
+            
+            for p in pickings:
+                p['_modelo'] = 'stock.picking'
+                # Ajustar formato para compatibilidad
+                p['product_id'] = ['', p.get('picking_type_id', ['', ''])[1] if isinstance(p.get('picking_type_id'), list) else '']
+                resultados.append(clean_record(p))
+            
+            return resultados
         except Exception as e:
             logger.error(f"Error buscando órdenes: {e}")
             return []
     
     def obtener_pallets_orden(self, orden_name: str) -> List[Dict]:
         """
-        Obtiene todos los pallets (result_package_id) de una orden de producción.
-        Busca en stock.move.line filtrando por referencia a la orden.
+        Obtiene todos los pallets (result_package_id) de una orden/picking.
+        Busca en stock.move.line filtrando por reference o picking_id.
         """
         try:
-            # Buscar la orden primero para obtener su ID
-            ordenes = self.odoo.search_read(
-                'mrp.production',
+            # Intentar buscar primero como stock.picking
+            pickings = self.odoo.search_read(
+                'stock.picking',
                 [('name', '=', orden_name)],
-                ['id', 'name', 'product_id', 'lot_producing_id', 'date_finished', 'date_planned_start'],
+                ['id', 'name', 'date_done', 'move_ids_without_package'],
                 limit=1
             )
             
-            if not ordenes:
-                logger.warning(f"No se encontró la orden {orden_name}")
-                return []
+            fecha_proceso = None
+            move_ids = []
             
-            orden = ordenes[0]
+            if pickings:
+                # Es un picking/transfer
+                picking = pickings[0]
+                fecha_proceso = picking.get('date_done')
+                move_ids = picking.get('move_ids_without_package', [])
+                logger.info(f"Encontrado picking {orden_name} con {len(move_ids)} moves")
+            else:
+                # Buscar como mrp.production
+                ordenes = self.odoo.search_read(
+                    'mrp.production',
+                    [('name', '=', orden_name)],
+                    ['id', 'name', 'date_finished'],
+                    limit=1
+                )
+                
+                if ordenes:
+                    orden = ordenes[0]
+                    fecha_proceso = orden.get('date_finished')
+                    
+                    # Buscar stock.move relacionados
+                    moves = self.odoo.search_read(
+                        'stock.move',
+                        [('raw_material_production_id', '=', orden['id'])],
+                        ['id'],
+                        limit=500
+                    )
+                    move_ids = [m['id'] for m in moves]
+                    logger.info(f"Encontrada orden producción {orden_name} con {len(move_ids)} moves")
+                else:
+                    logger.warning(f"No se encontró orden/picking {orden_name}")
+                    return []
             
-            # Buscar stock.move.line con result_package_id que tengan referencia a esta orden
-            # Primero buscar los moves relacionados a la producción
-            domain = [
-                ('result_package_id', '!=', False),
-                '|',
-                ('reference', 'ilike', orden_name),
-                ('origin', 'ilike', orden_name)
-            ]
+            # Buscar stock.move.line con result_package_id
+            if move_ids:
+                domain = [
+                    ('result_package_id', '!=', False),
+                    ('move_id', 'in', move_ids)
+                ]
+            else:
+                # Fallback: buscar por reference
+                domain = [
+                    ('result_package_id', '!=', False),
+                    '|',
+                    ('reference', 'ilike', orden_name),
+                    ('picking_id.name', '=', orden_name)
+                ]
             
             move_lines = self.odoo.search_read(
                 'stock.move.line',
@@ -158,13 +220,12 @@ class EtiquetasPalletService:
                     'qty_done',
                     'lot_id',
                     'date',
-                    'reference',
-                    'origin',
-                    'package_id',
-                    'location_dest_id'
+                    'reference'
                 ],
                 limit=500
             )
+            
+            logger.info(f"Encontrados {len(move_lines)} move_lines con pallets")
             
             # Agrupar por result_package_id
             pallets_dict = {}
@@ -173,7 +234,6 @@ class EtiquetasPalletService:
                 if not package_id:
                     continue
                 
-                # package_id es (id, name)
                 package_key = package_id[0] if isinstance(package_id, (list, tuple)) else package_id
                 
                 if package_key not in pallets_dict:
@@ -182,7 +242,7 @@ class EtiquetasPalletService:
                         'package_name': package_id[1] if isinstance(package_id, (list, tuple)) else str(package_id),
                         'product_id': line.get('product_id'),
                         'lot_id': line.get('lot_id'),
-                        'fecha_elaboracion': line.get('date') or orden.get('date_finished'),
+                        'fecha_elaboracion': line.get('date') or fecha_proceso,
                         'qty_total': 0,
                         'move_lines': []
                     }
