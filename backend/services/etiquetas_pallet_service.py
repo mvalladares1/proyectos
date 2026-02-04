@@ -250,18 +250,21 @@ class EtiquetasPalletService:
             # Obtener información adicional de cada package
             pallets_resultado = []
             for pallet_info in pallets_dict.values():
-                # Obtener detalles del package
+                # Obtener detalles del package (incluir barcode/qr)
                 try:
                     package_details = self.odoo.search_read(
                         'stock.quant.package',
                         [('id', '=', pallet_info['package_id'])],
-                        ['name', 'packaging_id', 'location_id', 'quant_ids'],
+                        ['name', 'packaging_id', 'location_id', 'quant_ids', 'barcode'],
                         limit=1
                     )
                     
                     if package_details:
                         pkg = package_details[0]
                         pallet_info['package_details'] = clean_record(pkg)
+                        
+                        # Guardar el barcode/QR de Odoo
+                        pallet_info['barcode'] = pkg.get('barcode') or pkg.get('name', '')
                         
                         # Obtener peso del pallet desde stock.quant
                         if pkg.get('quant_ids'):
@@ -277,6 +280,7 @@ class EtiquetasPalletService:
                 except Exception as e:
                     logger.warning(f"Error obteniendo detalles de package {pallet_info['package_id']}: {e}")
                     pallet_info['peso_pallet_kg'] = pallet_info['qty_total']  # Fallback
+                    pallet_info['barcode'] = pallet_info.get('package_name', '')
                 
                 # Calcular cantidad de cajas y fechas del proceso
                 fecha_elab = pallet_info.get('fecha_elaboracion')

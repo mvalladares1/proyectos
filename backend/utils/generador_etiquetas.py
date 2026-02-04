@@ -88,13 +88,13 @@ class GeneradorEtiquetasPDF:
         c.drawString(margin_left, y, f"NUMERO DE PALLET: {datos.get('numero_pallet', '')}")
         y -= 1.2 * cm
         
-        # Código de barras
-        numero_pallet = datos.get('numero_pallet', '')
-        if numero_pallet:
+        # Código de barras (usar barcode de Odoo si existe)
+        barcode_value = datos.get('barcode', datos.get('numero_pallet', ''))
+        if barcode_value:
             try:
                 # Crear código de barras Code128
                 barcode = code128.Code128(
-                    numero_pallet,
+                    barcode_value,
                     barWidth=0.4 * cm,
                     barHeight=1.5 * cm,
                     humanReadable=True
@@ -106,7 +106,7 @@ class GeneradorEtiquetasPDF:
             except Exception as e:
                 # Si falla el código de barras, mostrar texto
                 c.setFont("Helvetica", 8)
-                c.drawString(margin_left, y, numero_pallet)
+                c.drawString(margin_left, y, barcode_value)
         
         # Finalizar página
         c.showPage()

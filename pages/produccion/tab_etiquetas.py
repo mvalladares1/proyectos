@@ -127,8 +127,8 @@ def generar_etiqueta_html(datos: Dict) -> str:
             <div class="campo">NUMERO DE PALLET: {datos.get('numero_pallet', '')}</div>
             
             <div class="barcode-container">
-                <div class="barcode">*{datos.get('numero_pallet', '')}*</div>
-                <div class="barcode-text">{datos.get('numero_pallet', '')}</div>
+                <div class="barcode">*{datos.get('barcode', datos.get('numero_pallet', ''))}*</div>
+                <div class="barcode-text">{datos.get('barcode', datos.get('numero_pallet', ''))}</div>
             </div>
         </div>
     </body>
@@ -321,6 +321,9 @@ def render(username: str, password: str):
                     lot_id = pallet.get('lot_id')
                     lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else 'Sin lote'
                     
+                    # Usar el barcode de Odoo para el código de barras
+                    barcode_odoo = pallet.get('barcode', pallet.get('package_name', ''))
+                    
                     datos_etiqueta = {
                         'cliente': st.session_state.etiq_cliente_nombre,
                         'nombre_producto': descripcion_prod,
@@ -330,7 +333,8 @@ def render(username: str, password: str):
                         'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
                         'fecha_vencimiento': pallet.get('fecha_vencimiento', ''),
                         'lote_produccion': lot_name,
-                        'numero_pallet': pallet.get('package_name', '')
+                        'numero_pallet': pallet.get('package_name', ''),
+                        'barcode': barcode_odoo
                     }
                     
                     if st.button("🖨️ Imprimir", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
