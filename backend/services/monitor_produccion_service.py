@@ -23,6 +23,9 @@ class MonitorProduccionService:
     
     SNAPSHOTS_DIR = Path(__file__).parent.parent / "data" / "monitor_snapshots"
     
+    # Lista negra de procesos a excluir (no existen en Odoo o son inválidos)
+    PROCESOS_EXCLUIDOS = ['MOCS/L01007']
+    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         # Crear directorio de snapshots si no existe
@@ -68,6 +71,9 @@ class MonitorProduccionService:
         )
         
         procesos = [clean_record(o) for o in ordenes]
+        
+        # Excluir procesos de la lista negra
+        procesos = [p for p in procesos if p.get('name') not in self.PROCESOS_EXCLUIDOS]
         
         # Aplicar filtro de planta
         if planta and planta != "Todas":
@@ -159,6 +165,9 @@ class MonitorProduccionService:
         
         logger.info(f"[CERRADOS] Procesos filtrados: {len(procesos)}")
         
+        # Excluir procesos de la lista negra
+        procesos = [p for p in procesos if p.get('name') not in self.PROCESOS_EXCLUIDOS]
+        
         if planta and planta != "Todas":
             procesos = self._filtrar_por_planta(procesos, planta)
         
@@ -213,6 +222,9 @@ class MonitorProduccionService:
         
         procesos_creados = [clean_record(o) for o in procesos_creados]
         
+        # Excluir procesos de la lista negra
+        procesos_creados = [p for p in procesos_creados if p.get('name') not in self.PROCESOS_EXCLUIDOS]
+        
         if planta and planta != "Todas":
             procesos_creados = self._filtrar_por_planta(procesos_creados, planta)
         
@@ -261,6 +273,9 @@ class MonitorProduccionService:
                         procesos_cerrados.append(p)
                 except:
                     pass
+        
+        # Excluir procesos de la lista negra
+        procesos_cerrados = [p for p in procesos_cerrados if p.get('name') not in self.PROCESOS_EXCLUIDOS]
         
         if planta and planta != "Todas":
             procesos_cerrados = self._filtrar_por_planta(procesos_cerrados, planta)
