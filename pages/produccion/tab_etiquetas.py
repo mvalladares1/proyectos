@@ -1,6 +1,7 @@
 """
 Tab de Etiquetas de Pallets
 Permite buscar órdenes de producción y generar etiquetas para cada pallet
+Cliente se obtiene automáticamente desde x_studio_clientes de la orden
 """
 import streamlit as st
 import httpx
@@ -18,21 +19,6 @@ def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
     if match:
         return match.group(1), match.group(2)
     return '', nombre_producto
-
-
-def obtener_clientes(username: str, password: str):
-    """Obtiene lista de clientes desde Odoo."""
-    params = {
-        "username": username,
-        "password": password
-    }
-    response = httpx.get(
-        f"{API_URL}/api/v1/etiquetas/clientes",
-        params=params,
-        timeout=30.0
-    )
-    response.raise_for_status()
-    return response.json()
 
 
 def buscar_ordenes(username: str, password: str, termino: str):
@@ -347,34 +333,8 @@ def render(username: str, password: str):
         """
         st.components.v1.html(zebra_js, height=150)
     
-    # ==================== PASO 1: SELECCIONAR CLIENTE ====================
-    st.subheader("1️⃣ Cliente")
-    
-    # Cargar clientes
-    if "etiq_clientes_list" not in st.session_state:
-        with st.spinner("Cargando clientes..."):
-            try:
-                clientes = obtener_clientes(username, password)
-                st.session_state.etiq_clientes_list = clientes
-            except Exception as e:
-                st.error(f"Error cargando clientes: {e}")
-                st.session_state.etiq_clientes_list = []
-    
-    clientes_options = [""] + [c.get('name', '') for c in st.session_state.etiq_clientes_list]
-    
-    cliente_seleccionado = st.selectbox(
-        "Seleccionar Cliente",
-        options=clientes_options,
-        index=0,
-        help="Selecciona el cliente para las etiquetas",
-        key="etiq_cliente_selectbox"
-    )
-    
-    if cliente_seleccionado:
-        st.session_state.etiq_cliente_nombre = cliente_seleccionado
-    
-    # ==================== PASO 2: BUSCAR ORDEN ====================
-    st.subheader("2️⃣ Buscar Orden de Producción")
+    # ==================== PASO 1: BUSCAR ORDEN ====================
+    st.subheader("1️⃣ Buscar Orden de Producción")
     
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -416,8 +376,9 @@ def render(username: str, password: str):
             
             with col2:
                 st.write(f"Estado: {orden.get('state', '')}")
-                if orden.get('origin'):
-                    st.caption(f"Origen: {orden.get('origin')}")
+                cliente_auto = orden.get('cliente_nombre', '')
+                if cliente_auto:
+                    st.caption(f"👤 Cliente: {cliente_auto}")
             
             with col3:
                 if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
@@ -442,13 +403,16 @@ def render(username: str, password: str):
                 st.error(f"❌ Error al cargar pallets: {e}")
                 st.session_state.etiq_cargando_pallets = False
     
-    # ==================== PASO 3: ORDEN SELECCIONADA ====================
+    # ==================== PASO 2: ORDEN SELECCIONADA ====================
     if st.session_state.etiq_orden_seleccionada:
         orden = st.session_state.etiq_orden_seleccionada
+        cliente_orden = orden.get('cliente_nombre', '')
         
         st.divider()
-        st.subheader("3️⃣ Orden Seleccionada")
+        st.subheader("2️⃣ Orden Seleccionada")
         st.info(f"📦 **{orden.get('name')}** - {orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else ''}")
+        if cliente_orden:
+            st.success(f"👤 Cliente: **{cliente_orden}**")
         
         if st.button("❌ Cambiar Orden", use_container_width=False, key="etiq_btn_cambiar"):
             st.session_state.etiq_orden_seleccionada = None
@@ -456,12 +420,9 @@ def render(username: str, password: str):
             st.session_state.etiq_ordenes_encontradas = []
             st.rerun()
     
-    # ==================== PASO 4: MOSTRAR PALLETS Y GENERAR ETIQUETAS ====================
+    # ==================== PASO 3: MOSTRAR PALLETS Y GENERAR ETIQUETAS ====================
     if st.session_state.etiq_pallets_cargados:
-        st.subheader("4️⃣ Etiquetas Disponibles")
-        
-        if not st.session_state.etiq_cliente_nombre:
-            st.warning("⚠️ Por favor selecciona el cliente arriba")
+        st.subheader("3️⃣ Etiquetas Disponibles")
         
         st.write(f"**Total de pallets:** {len(st.session_state.etiq_pallets_cargados)}")
         
@@ -516,8 +477,11 @@ def render(username: str, password: str):
                 # Usar el barcode de Odoo para el código de barras
                 barcode_odoo = pallet.get('barcode', pallet.get('package_name', ''))
                 
+                # Usar el cliente del pallet (automático de x_studio_clientes)
+                cliente_pallet = pallet.get('cliente_nombre', '')
+                
                 datos_etiqueta = {
-                    'cliente': st.session_state.etiq_cliente_nombre,
+                    'cliente': cliente_pallet,
                     'nombre_producto': descripcion_prod,
                     'codigo_producto': codigo_prod,
                     'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),

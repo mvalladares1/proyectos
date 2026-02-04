@@ -112,12 +112,18 @@ class EtiquetasPalletService:
             ordenes_prod = self.odoo.search_read(
                 'mrp.production',
                 domain_prod,
-                ['name', 'product_id', 'origin', 'state', 'date_finished', 'lot_producing_id'],
+                ['name', 'product_id', 'origin', 'state', 'date_finished', 'lot_producing_id', 'x_studio_clientes'],
                 limit=25
             )
             
             for o in ordenes_prod:
                 o['_modelo'] = 'mrp.production'
+                # Extraer nombre del cliente si existe
+                cliente = o.get('x_studio_clientes')
+                if cliente and isinstance(cliente, (list, tuple)):
+                    o['cliente_nombre'] = cliente[1] if len(cliente) > 1 else ''
+                else:
+                    o['cliente_nombre'] = ''
                 resultados.append(clean_record(o))
             
             # Buscar en stock.picking (transfers)
@@ -157,14 +163,21 @@ class EtiquetasPalletService:
             ordenes = self.odoo.search_read(
                 'mrp.production',
                 [('name', '=', orden_name)],
-                ['id', 'name', 'date_finished', 'move_finished_ids'],
+                ['id', 'name', 'date_finished', 'move_finished_ids', 'x_studio_clientes'],
                 limit=1
             )
+            
+            cliente_nombre = ''
             
             if ordenes:
                 # Es una orden de producción
                 orden = ordenes[0]
                 fecha_proceso = orden.get('date_finished')
+                
+                # Extraer cliente
+                cliente = orden.get('x_studio_clientes')
+                if cliente and isinstance(cliente, (list, tuple)):
+                    cliente_nombre = cliente[1] if len(cliente) > 1 else ''
                 
                 # Buscar TODOS los stock.move asociados a esta orden (no solo finished)
                 # Los pallets pueden estar en raw_material_production_id o production_id
@@ -290,6 +303,9 @@ class EtiquetasPalletService:
                 # Calcular cantidad de cajas basándose en el peso y nombre del producto
                 peso_kg = pallet_info.get('peso_pallet_kg', 0)
                 pallet_info['cantidad_cajas'] = self._calcular_cantidad_cajas(peso_kg, product_name)
+                
+                # Agregar cliente de la orden
+                pallet_info['cliente_nombre'] = cliente_nombre
                 
                 # Usar la fecha del proceso para elaboración y vencimiento (ambas iguales)
                 if fecha_elab:
