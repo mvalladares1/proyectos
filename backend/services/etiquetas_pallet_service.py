@@ -23,13 +23,11 @@ class EtiquetasPalletService:
     
     def obtener_clientes(self) -> List[Dict]:
         """
-        Obtiene la lista de clientes desde res.partner.
+        Obtiene la lista de clientes desde res.partner (módulo VENTAS).
         """
         try:
             domain = [
-                '|',
-                ('customer_rank', '>', 0),
-                ('is_company', '=', True)
+                ('customer_rank', '>', 0)
             ]
             
             clientes = self.odoo.search_read(
