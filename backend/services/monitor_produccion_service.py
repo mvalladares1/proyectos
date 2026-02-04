@@ -134,14 +134,15 @@ class MonitorProduccionService:
         for p in ordenes_raw[:5]:
             logger.info(f"  - {p.get('name')}: termino={p.get('x_studio_termino_de_proceso')}, finished={p.get('date_finished')}")
         
-        # Filtrar en Python: usar x_studio_termino_de_proceso (fecha real de término de fabricación),
-        # fallback a date_finished solo si x_studio_termino_de_proceso está vacío
+        # Filtrar en Python: usar date_finished (cuándo se cerró en Odoo)
         fecha_hasta_dt = datetime.strptime(fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
         fecha_desde_dt = datetime.strptime(fecha, '%Y-%m-%d')
         procesos = []
         for p in ordenes_raw:
-            # PRIORIDAD: x_studio_termino_de_proceso (fecha real que el usuario registra)
-            fecha_termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            # Usar date_finished para reflejar cuándo se cerró el proceso en el sistema
+            fecha_termino = p.get('date_finished')
+            if not fecha_termino:
+                continue
             if fecha_termino:
                 try:
                     if 'T' in str(fecha_termino):
@@ -239,13 +240,14 @@ class MonitorProduccionService:
         
         procesos_cerrados_raw = [clean_record(o) for o in procesos_cerrados_raw]
         
-        # Filtrar en Python: usar x_studio_termino_de_proceso (fecha real de término),
-        # fallback a date_finished solo si x_studio_termino_de_proceso está vacío
+        # Filtrar en Python: usar date_finished (cuándo se cerró en Odoo)
         fecha_fin_dt = datetime.strptime(fecha_fin + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
         procesos_cerrados = []
         for p in procesos_cerrados_raw:
-            # PRIORIDAD: x_studio_termino_de_proceso (fecha que registra el usuario)
-            fecha_termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            # Usar date_finished para reflejar cuándo se cerró el proceso
+            fecha_termino = p.get('date_finished')
+            if not fecha_termino:
+                continue
             if fecha_termino:
                 # Parsear fecha
                 try:
@@ -274,9 +276,9 @@ class MonitorProduccionService:
             creados_dia = [p for p in procesos_creados 
                           if (p.get('x_studio_inicio_de_proceso', '') or p.get('date_planned_start', '') or '').startswith(fecha_str)]
             
-            # Contar cerrados del día (usar x_studio_termino_de_proceso primero, fallback a date_finished)
+            # Contar cerrados del día (usar date_finished - cuándo se cerró en Odoo)
             cerrados_dia = [p for p in procesos_cerrados 
-                           if (p.get('x_studio_termino_de_proceso', '') or p.get('date_finished', '') or '').startswith(fecha_str)]
+                           if (p.get('date_finished', '') or '').startswith(fecha_str)]
             
             # Calcular kg
             kg_creados = sum(p.get('product_qty', 0) or 0 for p in creados_dia)
