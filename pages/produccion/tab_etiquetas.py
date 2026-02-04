@@ -70,12 +70,16 @@ def obtener_pallets_orden(username: str, password: str, orden_name: str):
 def generar_etiqueta_html(datos: Dict) -> str:
     """
     Genera HTML de etiqueta con el formato especificado (fondo blanco, sin bordes).
+    Usa JsBarcode para generar código de barras real.
     """
+    barcode_value = datos.get('barcode', datos.get('numero_pallet', ''))
+    
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
         <style>
             @page {{
                 size: 10cm 15cm;
@@ -104,13 +108,8 @@ def generar_etiqueta_html(datos: Dict) -> str:
             .barcode-container {{
                 margin-top: 20px;
             }}
-            .barcode {{
-                font-family: 'Libre Barcode 128', cursive;
-                font-size: 48px;
-                margin: 10px 0;
-            }}
-            .barcode-text {{
-                font-size: 12px;
+            #barcode {{
+                width: 100%;
             }}
         </style>
     </head>
@@ -127,10 +126,19 @@ def generar_etiqueta_html(datos: Dict) -> str:
             <div class="campo">NUMERO DE PALLET: {datos.get('numero_pallet', '')}</div>
             
             <div class="barcode-container">
-                <div class="barcode">*{datos.get('barcode', datos.get('numero_pallet', ''))}*</div>
-                <div class="barcode-text">{datos.get('barcode', datos.get('numero_pallet', ''))}</div>
+                <svg id="barcode"></svg>
             </div>
         </div>
+        <script>
+            JsBarcode("#barcode", "{barcode_value}", {{
+                format: "CODE128",
+                width: 2,
+                height: 60,
+                displayValue: true,
+                fontSize: 14,
+                margin: 10
+            }});
+        </script>
     </body>
     </html>
     """
