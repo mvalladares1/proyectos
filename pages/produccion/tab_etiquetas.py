@@ -57,7 +57,7 @@ def obtener_pallets_orden(username: str, password: str, orden_name: str):
 
 def generar_etiqueta_html(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta con el formato especificado.
+    Genera HTML de etiqueta con el formato especificado (fondo blanco, sin bordes).
     """
     html = f"""
     <!DOCTYPE html>
@@ -67,32 +67,29 @@ def generar_etiqueta_html(datos: Dict) -> str:
         <style>
             @page {{
                 size: 10cm 15cm;
-                margin: 0.5cm;
+                margin: 0;
             }}
             body {{
                 font-family: Arial, sans-serif;
-                padding: 10px;
+                padding: 20px;
                 margin: 0;
+                background: white;
             }}
             .etiqueta {{
-                border: 2px solid black;
-                padding: 15px;
-                width: 9cm;
-                min-height: 13cm;
+                width: 100%;
+                background: white;
             }}
             .titulo {{
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
-                margin-bottom: 15px;
-                text-align: center;
+                margin-bottom: 10px;
             }}
             .campo {{
                 font-size: 14px;
                 font-weight: bold;
-                margin: 10px 0;
+                margin: 8px 0;
             }}
             .barcode-container {{
-                text-align: center;
                 margin-top: 20px;
             }}
             .barcode {{
@@ -102,13 +99,11 @@ def generar_etiqueta_html(datos: Dict) -> str:
             }}
             .barcode-text {{
                 font-size: 12px;
-                text-align: center;
             }}
         </style>
     </head>
     <body>
         <div class="etiqueta">
-            <div class="titulo">{datos.get('cliente', '')}</div>
             <div class="titulo">{datos.get('nombre_producto', '')}</div>
             
             <div class="campo">CODIGO PRODUCTO: {datos.get('codigo_producto', '')}</div>

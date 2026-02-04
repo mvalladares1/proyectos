@@ -28,11 +28,10 @@ class GeneradorEtiquetasPDF:
     
     def generar_etiqueta(self, datos: Dict) -> bytes:
         """
-        Genera una etiqueta individual.
+        Genera una etiqueta individual con fondo blanco sin bordes.
         
         Args:
             datos: Dict con campos:
-                - cliente: str
                 - nombre_producto: str
                 - codigo_producto: str
                 - peso_pallet_kg: int
@@ -49,75 +48,45 @@ class GeneradorEtiquetasPDF:
         c = canvas.Canvas(self.buffer, pagesize=(self.PAGE_WIDTH, self.PAGE_HEIGHT))
         
         # Posición inicial
-        y = self.PAGE_HEIGHT - 1 * cm
+        y = self.PAGE_HEIGHT - 1.5 * cm
         margin_left = 0.5 * cm
         
-        # Cliente (centrado, negrita)
+        # Nombre producto (negrita)
         c.setFont("Helvetica-Bold", 11)
-        cliente_text = datos.get('cliente', '')
-        text_width = c.stringWidth(cliente_text, "Helvetica-Bold", 11)
-        c.drawString((self.PAGE_WIDTH - text_width) / 2, y, cliente_text)
-        y -= 0.6 * cm
-        
-        # Nombre producto (centrado, negrita)
-        c.setFont("Helvetica-Bold", 10)
         producto_text = datos.get('nombre_producto', '')
-        # Dividir en múltiples líneas si es muy largo
-        max_width = self.PAGE_WIDTH - 1 * cm
-        if c.stringWidth(producto_text, "Helvetica-Bold", 10) > max_width:
-            # Dividir en palabras
-            palabras = producto_text.split()
-            linea_actual = ""
-            for palabra in palabras:
-                test_linea = linea_actual + (" " if linea_actual else "") + palabra
-                if c.stringWidth(test_linea, "Helvetica-Bold", 10) <= max_width:
-                    linea_actual = test_linea
-                else:
-                    # Dibujar línea actual
-                    text_width = c.stringWidth(linea_actual, "Helvetica-Bold", 10)
-                    c.drawString((self.PAGE_WIDTH - text_width) / 2, y, linea_actual)
-                    y -= 0.5 * cm
-                    linea_actual = palabra
-            # Última línea
-            if linea_actual:
-                text_width = c.stringWidth(linea_actual, "Helvetica-Bold", 10)
-                c.drawString((self.PAGE_WIDTH - text_width) / 2, y, linea_actual)
-                y -= 0.7 * cm
-        else:
-            text_width = c.stringWidth(producto_text, "Helvetica-Bold", 10)
-            c.drawString((self.PAGE_WIDTH - text_width) / 2, y, producto_text)
-            y -= 0.7 * cm
+        c.drawString(margin_left, y, producto_text)
+        y -= 0.8 * cm
         
         # Campos de información (negrita)
-        c.setFont("Helvetica-Bold", 9)
+        c.setFont("Helvetica-Bold", 10)
         
         # CODIGO PRODUCTO
         c.drawString(margin_left, y, f"CODIGO PRODUCTO: {datos.get('codigo_producto', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
         # PESO PALLET
         c.drawString(margin_left, y, f"PESO PALLET: {datos.get('peso_pallet_kg', 0)} KG")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
         # CANTIDAD CAJAS
         c.drawString(margin_left, y, f"CANTIDAD CAJAS: {datos.get('cantidad_cajas', 0)}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
         # FECHA ELABORACION
         c.drawString(margin_left, y, f"FECHA ELABORACION: {datos.get('fecha_elaboracion', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
         # FECHA VENCIMIENTO
         c.drawString(margin_left, y, f"FECHA VENCIMIENTO: {datos.get('fecha_vencimiento', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
         # LOTE PRODUCCION
         c.drawString(margin_left, y, f"LOTE PRODUCCION: {datos.get('lote_produccion', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
         # NUMERO DE PALLET
         c.drawString(margin_left, y, f"NUMERO DE PALLET: {datos.get('numero_pallet', '')}")
-        y -= 1 * cm
+        y -= 1.2 * cm
         
         # Código de barras
         numero_pallet = datos.get('numero_pallet', '')
@@ -131,17 +100,13 @@ class GeneradorEtiquetasPDF:
                     humanReadable=True
                 )
                 
-                # Centrar código de barras
-                barcode_width = barcode.width
-                barcode_x = (self.PAGE_WIDTH - barcode_width) / 2
-                barcode.drawOn(c, barcode_x, y - 1.5 * cm)
+                # Dibujar código de barras
+                barcode.drawOn(c, margin_left, y - 1.5 * cm)
                 
             except Exception as e:
                 # Si falla el código de barras, mostrar texto
                 c.setFont("Helvetica", 8)
-                text = numero_pallet
-                text_width = c.stringWidth(text, "Helvetica", 8)
-                c.drawString((self.PAGE_WIDTH - text_width) / 2, y, text)
+                c.drawString(margin_left, y, numero_pallet)
         
         # Finalizar página
         c.showPage()
@@ -177,67 +142,47 @@ class GeneradorEtiquetasPDF:
         return pdf_bytes
     
     def _dibujar_etiqueta_en_canvas(self, c: canvas.Canvas, datos: Dict):
-        """Dibuja una etiqueta en el canvas actual."""
+        """Dibuja una etiqueta en el canvas actual (fondo blanco sin bordes)."""
         # Posición inicial
-        y = self.PAGE_HEIGHT - 1 * cm
+        y = self.PAGE_HEIGHT - 1.5 * cm
         margin_left = 0.5 * cm
         
-        # Cliente (centrado, negrita)
+        # Nombre producto (negrita)
         c.setFont("Helvetica-Bold", 11)
-        cliente_text = datos.get('cliente', '')
-        text_width = c.stringWidth(cliente_text, "Helvetica-Bold", 11)
-        c.drawString((self.PAGE_WIDTH - text_width) / 2, y, cliente_text)
-        y -= 0.6 * cm
-        
-        # Nombre producto (centrado, negrita)
-        c.setFont("Helvetica-Bold", 10)
         producto_text = datos.get('nombre_producto', '')
-        max_width = self.PAGE_WIDTH - 1 * cm
+        c.drawString(margin_left, y, producto_text)
+        y -= 0.8 * cm
         
-        if c.stringWidth(producto_text, "Helvetica-Bold", 10) > max_width:
-            palabras = producto_text.split()
-            linea_actual = ""
-            for palabra in palabras:
-                test_linea = linea_actual + (" " if linea_actual else "") + palabra
-                if c.stringWidth(test_linea, "Helvetica-Bold", 10) <= max_width:
-                    linea_actual = test_linea
-                else:
-                    text_width = c.stringWidth(linea_actual, "Helvetica-Bold", 10)
-                    c.drawString((self.PAGE_WIDTH - text_width) / 2, y, linea_actual)
-                    y -= 0.5 * cm
-                    linea_actual = palabra
-            if linea_actual:
-                text_width = c.stringWidth(linea_actual, "Helvetica-Bold", 10)
-                c.drawString((self.PAGE_WIDTH - text_width) / 2, y, linea_actual)
-                y -= 0.7 * cm
-        else:
-            text_width = c.stringWidth(producto_text, "Helvetica-Bold", 10)
-            c.drawString((self.PAGE_WIDTH - text_width) / 2, y, producto_text)
-            y -= 0.7 * cm
+        # Campos de información (negrita)
+        c.setFont("Helvetica-Bold", 10)
         
-        # Campos de información
-        c.setFont("Helvetica-Bold", 9)
-        
+        # CODIGO PRODUCTO
         c.drawString(margin_left, y, f"CODIGO PRODUCTO: {datos.get('codigo_producto', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
+        # PESO PALLET
         c.drawString(margin_left, y, f"PESO PALLET: {datos.get('peso_pallet_kg', 0)} KG")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
+        # CANTIDAD CAJAS
         c.drawString(margin_left, y, f"CANTIDAD CAJAS: {datos.get('cantidad_cajas', 0)}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
+        # FECHA ELABORACION
         c.drawString(margin_left, y, f"FECHA ELABORACION: {datos.get('fecha_elaboracion', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
+        # FECHA VENCIMIENTO
         c.drawString(margin_left, y, f"FECHA VENCIMIENTO: {datos.get('fecha_vencimiento', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
+        # LOTE PRODUCCION
         c.drawString(margin_left, y, f"LOTE PRODUCCION: {datos.get('lote_produccion', '')}")
-        y -= 0.6 * cm
+        y -= 0.7 * cm
         
+        # NUMERO DE PALLET
         c.drawString(margin_left, y, f"NUMERO DE PALLET: {datos.get('numero_pallet', '')}")
-        y -= 1 * cm
+        y -= 1.2 * cm
         
         # Código de barras
         numero_pallet = datos.get('numero_pallet', '')
@@ -249,11 +194,9 @@ class GeneradorEtiquetasPDF:
                     barHeight=1.5 * cm,
                     humanReadable=True
                 )
-                barcode_width = barcode.width
-                barcode_x = (self.PAGE_WIDTH - barcode_width) / 2
-                barcode.drawOn(c, barcode_x, y - 1.5 * cm)
-            except Exception:
+                barcode.drawOn(c, margin_left, y - 1.5 * cm)
+            except Exception as e:
                 c.setFont("Helvetica", 8)
-                text = numero_pallet
+                c.drawString(margin_left, y, numero_pallet)
                 text_width = c.stringWidth(text, "Helvetica", 8)
                 c.drawString((self.PAGE_WIDTH - text_width) / 2, y, text)

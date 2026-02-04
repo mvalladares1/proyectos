@@ -221,11 +221,14 @@ class EtiquetasPalletService:
             
             logger.info(f"Encontrados {len(move_lines)} move_lines con pallets para {orden_name}")
             
-            # Agrupar por result_package_id
+            # Agrupar por result_package_id (solo los que tengan kg > 0)
             pallets_dict = {}
             for line in move_lines:
                 package_id = line.get('result_package_id')
-                if not package_id:
+                qty_done = line.get('qty_done', 0)
+                
+                # Solo incluir si tiene kg ingresados
+                if not package_id or qty_done <= 0:
                     continue
                 
                 package_key = package_id[0] if isinstance(package_id, (list, tuple)) else package_id
@@ -241,7 +244,7 @@ class EtiquetasPalletService:
                         'move_lines': []
                     }
                 
-                pallets_dict[package_key]['qty_total'] += line.get('qty_done', 0)
+                pallets_dict[package_key]['qty_total'] += qty_done
                 pallets_dict[package_key]['move_lines'].append(clean_record(line))
             
             # Obtener información adicional de cada package
