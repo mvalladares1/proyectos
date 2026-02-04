@@ -26,6 +26,20 @@ class MonitorProduccionService:
     # Lista negra de procesos a excluir (no existen en Odoo o son inválidos)
     PROCESOS_EXCLUIDOS = ['MOCS/L01007']
     
+    # Lista de productos permitidos en el monitor
+    PRODUCTOS_PERMITIDOS = [
+        '[1.4] PROCESO CONGELADO TÚNEL CONTÍNUO',
+        '[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1',
+        '[1.2] PROCESO CONGELADO TÚNEL ESTÁTICO 2',
+        '[1.3] PROCESO CONGELADO TÚNEL ESTÁTICO 3',
+        '[1.5] PROCESO CONGELADO CÁMARA -20°C',
+        '[2.1] PROCESO PSP',
+        '[2.2] PROCESO PTT',
+        '[3] Proceso de Vaciado',
+        '[4] Proceso Retail',
+        '[1.1.1] PROCESO CONGELADO TÚNEL ESTÁTICO VLK'
+    ]
+    
     def __init__(self, username: str = None, password: str = None):
         self.odoo = OdooClient(username=username, password=password)
         # Crear directorio de snapshots si no existe
@@ -74,6 +88,9 @@ class MonitorProduccionService:
         
         # Excluir procesos de la lista negra
         procesos = [p for p in procesos if p.get('name') not in self.PROCESOS_EXCLUIDOS]
+        
+        # Filtrar solo productos permitidos
+        procesos = [p for p in procesos if self._es_producto_permitido(p)]
         
         # Aplicar filtro de planta
         if planta and planta != "Todas":
@@ -168,6 +185,9 @@ class MonitorProduccionService:
         # Excluir procesos de la lista negra
         procesos = [p for p in procesos if p.get('name') not in self.PROCESOS_EXCLUIDOS]
         
+        # Filtrar solo productos permitidos
+        procesos = [p for p in procesos if self._es_producto_permitido(p)]
+        
         if planta and planta != "Todas":
             procesos = self._filtrar_por_planta(procesos, planta)
         
@@ -225,6 +245,9 @@ class MonitorProduccionService:
         # Excluir procesos de la lista negra
         procesos_creados = [p for p in procesos_creados if p.get('name') not in self.PROCESOS_EXCLUIDOS]
         
+        # Filtrar solo productos permitidos
+        procesos_creados = [p for p in procesos_creados if self._es_producto_permitido(p)]
+        
         if planta and planta != "Todas":
             procesos_creados = self._filtrar_por_planta(procesos_creados, planta)
         
@@ -276,6 +299,9 @@ class MonitorProduccionService:
         
         # Excluir procesos de la lista negra
         procesos_cerrados = [p for p in procesos_cerrados if p.get('name') not in self.PROCESOS_EXCLUIDOS]
+        
+        # Filtrar solo productos permitidos
+        procesos_cerrados = [p for p in procesos_cerrados if self._es_producto_permitido(p)]
         
         if planta and planta != "Todas":
             procesos_cerrados = self._filtrar_por_planta(procesos_cerrados, planta)
@@ -501,3 +527,22 @@ class MonitorProduccionService:
             "por_estado": estados,
             "por_sala": salas
         }
+    
+    def _es_producto_permitido(self, proceso: Dict) -> bool:
+        """Verifica si el proceso tiene un producto permitido."""
+        producto = proceso.get('product_id')
+        if not producto:
+            return False
+        
+        # Obtener el nombre del producto
+        nombre_producto = None
+        if isinstance(producto, (list, tuple)) and len(producto) > 1:
+            nombre_producto = producto[1]
+        elif isinstance(producto, dict):
+            nombre_producto = producto.get('name', '')
+        
+        if not nombre_producto:
+            return False
+        
+        # Verificar si está en la lista de permitidos
+        return nombre_producto in self.PRODUCTOS_PERMITIDOS
