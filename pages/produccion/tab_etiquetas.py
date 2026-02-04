@@ -199,7 +199,7 @@ def render(username: str, password: str):
 def generar_etiqueta_caja_tronador(datos: Dict) -> str:
     """
     Genera HTML de etiqueta de caja para cliente TRONADOR SAC.
-    Tamaño: 100cm x 100cm (1000mm x 1000mm)
+    Tamaño: 100mm x 100mm
     Solo para productos IQF A
     """
     html = f"""
@@ -209,55 +209,54 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 1000mm 1000mm;
+                size: 100mm 100mm;
                 margin: 0;
             }}
             @media print {{
                 body {{
-                    width: 1000mm;
-                    height: 1000mm;
+                    width: 100mm;
+                    height: 100mm;
                     margin: 0;
-                    padding: 30mm;
+                    padding: 3mm;
                 }}
             }}
             body {{
                 font-family: Arial, sans-serif;
-                padding: 30mm;
+                padding: 3mm;
                 margin: 0;
-                width: 940mm;
-                height: 940mm;
-                font-size: 48px;
+                width: 94mm;
+                height: 94mm;
+                font-size: 11px;
             }}
             .titulo {{
-                font-size: 72px;
+                font-size: 15px;
                 font-weight: bold;
                 text-align: center;
-                margin-bottom: 40px;
+                margin-bottom: 5px;
                 text-transform: uppercase;
                 line-height: 1.2;
             }}
             .recuadro {{
-                padding: 30px 0px;
-                margin-top: 20px;
+                padding: 5px 0px;
+                margin-top: 3px;
             }}
             .linea {{
-                margin: 15px 0;
+                margin: 2px 0;
             }}
             .md-box {{
-                margin-top: 50px;
+                margin-top: 5px;
                 display: flex;
                 align-items: center;
-                gap: 20px;
-                font-size: 60px;
+                gap: 5px;
             }}
             .checkbox {{
-                width: 80px;
-                height: 80px;
-                border: 4px solid black;
+                width: 20px;
+                height: 20px;
+                border: 1px solid black;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 60px;
+                font-size: 16px;
             }}
         </style>
     </head>
