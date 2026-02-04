@@ -3,6 +3,7 @@ Caché de trazabilidad con grafo en memoria.
 Mantiene stock.move.line y modelos relacionados para consultas instantáneas.
 """
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
@@ -46,8 +47,9 @@ class TraceabilityCache:
         self._loading = False
         self._last_refresh = None
         
-        # Disk cache
-        self.disk_cache = Cache('./cache/traceability')
+        # Disk cache - usar path absoluto para compatibilidad con Docker
+        cache_dir = os.environ.get('CACHE_DIR', '/app/cache/traceability')
+        self.disk_cache = Cache(cache_dir)
         
         # Datos en memoria
         self.move_lines: Dict[int, dict] = {}
