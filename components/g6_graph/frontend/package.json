@@ -1,6 +1,7 @@
 {
   "name": "g6_graph",
   "version": "1.0.0",
+  "homepage": ".",
   "private": true,
   "dependencies": {
     "@antv/g6": "^4.8.24",
