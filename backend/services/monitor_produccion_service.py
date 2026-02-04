@@ -4,12 +4,15 @@ Almacena y gestiona snapshots de procesos para tracking de avance
 """
 import json
 import os
+import logging
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 from shared.odoo_client import OdooClient
 from backend.utils import clean_record
+
+logger = logging.getLogger(__name__)
 
 
 class MonitorProduccionService:
@@ -127,12 +130,18 @@ class MonitorProduccionService:
         
         ordenes_raw = [clean_record(o) for o in ordenes_raw]
         
-        # Filtrar en Python: usar x_studio_termino_de_proceso, si vacío usar date_finished
+        logger.info(f"[CERRADOS] Fecha: {fecha} a {fecha_hasta}, Procesos raw de Odoo: {len(ordenes_raw)}")
+        for p in ordenes_raw[:5]:
+            logger.info(f"  - {p.get('name')}: termino={p.get('x_studio_termino_de_proceso')}, finished={p.get('date_finished')}")
+        
+        # Filtrar en Python: usar date_finished primero (se actualiza automáticamente),
+        # fallback a x_studio_termino_de_proceso solo si date_finished está vacío
         fecha_hasta_dt = datetime.strptime(fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
         fecha_desde_dt = datetime.strptime(fecha, '%Y-%m-%d')
         procesos = []
         for p in ordenes_raw:
-            fecha_termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            # PRIORIDAD: date_finished (fecha real de cierre en Odoo)
+            fecha_termino = p.get('date_finished') or p.get('x_studio_termino_de_proceso')
             if fecha_termino:
                 try:
                     if 'T' in str(fecha_termino):
@@ -142,8 +151,12 @@ class MonitorProduccionService:
                     
                     if fecha_desde_dt <= ft <= fecha_hasta_dt:
                         procesos.append(p)
-                except:
-                    pass
+                    else:
+                        logger.debug(f"  Descartado {p.get('name')}: ft={ft} fuera de rango {fecha_desde_dt} - {fecha_hasta_dt}")
+                except Exception as e:
+                    logger.warning(f"  Error parseando fecha para {p.get('name')}: {fecha_termino} - {e}")
+        
+        logger.info(f"[CERRADOS] Procesos filtrados: {len(procesos)}")
         
         if planta and planta != "Todas":
             procesos = self._filtrar_por_planta(procesos, planta)
@@ -226,11 +239,13 @@ class MonitorProduccionService:
         
         procesos_cerrados_raw = [clean_record(o) for o in procesos_cerrados_raw]
         
-        # Filtrar en Python: usar x_studio_termino_de_proceso, si está vacío usar date_finished
+        # Filtrar en Python: usar date_finished primero (se actualiza automáticamente al cerrar),
+        # fallback a x_studio_termino_de_proceso solo si date_finished está vacío
         fecha_fin_dt = datetime.strptime(fecha_fin + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
         procesos_cerrados = []
         for p in procesos_cerrados_raw:
-            fecha_termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            # PRIORIDAD: date_finished (se actualiza al cerrar el proceso)
+            fecha_termino = p.get('date_finished') or p.get('x_studio_termino_de_proceso')
             if fecha_termino:
                 # Parsear fecha
                 try:
@@ -259,9 +274,9 @@ class MonitorProduccionService:
             creados_dia = [p for p in procesos_creados 
                           if (p.get('x_studio_inicio_de_proceso', '') or p.get('date_planned_start', '') or '').startswith(fecha_str)]
             
-            # Contar cerrados del día (usar x_studio_termino_de_proceso o date_finished)
+            # Contar cerrados del día (usar date_finished primero, fallback a x_studio_termino_de_proceso)
             cerrados_dia = [p for p in procesos_cerrados 
-                           if (p.get('x_studio_termino_de_proceso', '') or p.get('date_finished', '') or '').startswith(fecha_str)]
+                           if (p.get('date_finished', '') or p.get('x_studio_termino_de_proceso', '') or '').startswith(fecha_str)]
             
             # Calcular kg
             kg_creados = sum(p.get('product_qty', 0) or 0 for p in creados_dia)
