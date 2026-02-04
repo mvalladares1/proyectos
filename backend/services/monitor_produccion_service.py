@@ -89,6 +89,7 @@ class MonitorProduccionService:
                                    fecha_fin: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
+        Usa date_finished como campo principal (momento real de cierre en Odoo).
         
         Args:
             fecha: Fecha inicio en formato YYYY-MM-DD
@@ -102,16 +103,12 @@ class MonitorProduccionService:
         # Usar fecha_fin si se proporciona, sino usar fecha
         fecha_hasta = fecha_fin or fecha
         
-        # Procesos cerrados: estado done y x_studio_termino_de_proceso en el rango
-        # Si x_studio_termino_de_proceso no existe, usa date_finished
+        # Procesos cerrados: estado done y date_finished en el rango
+        # date_finished es el campo real que indica cuándo se cerró el proceso
         domain = [
             ['state', '=', 'done'],
-            '|',
-            '&', ['x_studio_termino_de_proceso', '>=', fecha],
-                 ['x_studio_termino_de_proceso', '<=', fecha_hasta + ' 23:59:59'],
-            '&', ['x_studio_termino_de_proceso', '=', False],
-            '&', ['date_finished', '>=', fecha],
-                 ['date_finished', '<=', fecha_hasta + ' 23:59:59']
+            ['date_finished', '>=', fecha],
+            ['date_finished', '<=', fecha_hasta + ' 23:59:59']
         ]
         
         if sala and sala != "Todas":
