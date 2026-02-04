@@ -89,7 +89,7 @@ class MonitorProduccionService:
                                    fecha_fin: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
-        Usa date_finished como campo principal (momento real de cierre en Odoo).
+        Usa x_studio_termino_de_proceso como campo principal, fallback a date_finished.
         
         Args:
             fecha: Fecha inicio en formato YYYY-MM-DD
@@ -103,18 +103,18 @@ class MonitorProduccionService:
         # Usar fecha_fin si se proporciona, sino usar fecha
         fecha_hasta = fecha_fin or fecha
         
-        # Procesos cerrados: estado done y date_finished en el rango
-        # date_finished es el campo real que indica cuándo se cerró el proceso
+        # Buscar procesos done y filtrar por fecha en Python
         domain = [
             ['state', '=', 'done'],
-            ['date_finished', '>=', fecha],
-            ['date_finished', '<=', fecha_hasta + ' 23:59:59']
+            '|',
+            ['x_studio_termino_de_proceso', '>=', fecha],
+            ['date_finished', '>=', fecha]
         ]
         
         if sala and sala != "Todas":
             domain.append(['x_studio_sala_de_proceso', 'ilike', sala])
         
-        ordenes = self.odoo.search_read(
+        ordenes_raw = self.odoo.search_read(
             'mrp.production',
             domain,
             ['name', 'product_id', 'product_qty', 'qty_produced', 'state', 
@@ -122,10 +122,28 @@ class MonitorProduccionService:
              'x_studio_sala_de_proceso', 'x_studio_inicio_de_proceso',
              'x_studio_termino_de_proceso'],
             limit=500,
-            order='date_finished asc'
+            order='x_studio_termino_de_proceso asc'
         )
         
-        procesos = [clean_record(o) for o in ordenes]
+        ordenes_raw = [clean_record(o) for o in ordenes_raw]
+        
+        # Filtrar en Python: usar x_studio_termino_de_proceso, si vacío usar date_finished
+        fecha_hasta_dt = datetime.strptime(fecha_hasta + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
+        fecha_desde_dt = datetime.strptime(fecha, '%Y-%m-%d')
+        procesos = []
+        for p in ordenes_raw:
+            fecha_termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            if fecha_termino:
+                try:
+                    if 'T' in str(fecha_termino):
+                        ft = datetime.fromisoformat(str(fecha_termino).replace('Z', '+00:00').split('+')[0])
+                    else:
+                        ft = datetime.strptime(str(fecha_termino)[:19], '%Y-%m-%d %H:%M:%S')
+                    
+                    if fecha_desde_dt <= ft <= fecha_hasta_dt:
+                        procesos.append(p)
+                except:
+                    pass
         
         if planta and planta != "Todas":
             procesos = self._filtrar_por_planta(procesos, planta)
@@ -184,21 +202,19 @@ class MonitorProduccionService:
         if planta and planta != "Todas":
             procesos_creados = self._filtrar_por_planta(procesos_creados, planta)
         
-        # Obtener procesos cerrados en el rango (usando x_studio_termino_de_proceso)
+        # Obtener procesos cerrados en el rango
+        # Buscar todos los done y filtrar en Python por fecha de término
         domain_cerrados = [
             ['state', '=', 'done'],
             '|',
-            '&', ['x_studio_termino_de_proceso', '>=', fecha_inicio],
-                 ['x_studio_termino_de_proceso', '<=', fecha_fin + ' 23:59:59'],
-            '&', ['x_studio_termino_de_proceso', '=', False],
-            '&', ['date_finished', '>=', fecha_inicio],
-                 ['date_finished', '<=', fecha_fin + ' 23:59:59']
+            ['x_studio_termino_de_proceso', '>=', fecha_inicio],
+            ['date_finished', '>=', fecha_inicio]
         ]
         
         if sala and sala != "Todas":
             domain_cerrados.append(['x_studio_sala_de_proceso', 'ilike', sala])
         
-        procesos_cerrados = self.odoo.search_read(
+        procesos_cerrados_raw = self.odoo.search_read(
             'mrp.production',
             domain_cerrados,
             ['name', 'product_id', 'product_qty', 'qty_produced', 'state',
@@ -208,7 +224,26 @@ class MonitorProduccionService:
             order='x_studio_termino_de_proceso asc'
         )
         
-        procesos_cerrados = [clean_record(o) for o in procesos_cerrados]
+        procesos_cerrados_raw = [clean_record(o) for o in procesos_cerrados_raw]
+        
+        # Filtrar en Python: usar x_studio_termino_de_proceso, si está vacío usar date_finished
+        fecha_fin_dt = datetime.strptime(fecha_fin + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
+        procesos_cerrados = []
+        for p in procesos_cerrados_raw:
+            fecha_termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            if fecha_termino:
+                # Parsear fecha
+                try:
+                    if 'T' in str(fecha_termino):
+                        ft = datetime.fromisoformat(str(fecha_termino).replace('Z', '+00:00').split('+')[0])
+                    else:
+                        ft = datetime.strptime(str(fecha_termino)[:19], '%Y-%m-%d %H:%M:%S')
+                    
+                    fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+                    if fecha_inicio_dt <= ft <= fecha_fin_dt:
+                        procesos_cerrados.append(p)
+                except:
+                    pass
         
         if planta and planta != "Todas":
             procesos_cerrados = self._filtrar_por_planta(procesos_cerrados, planta)
