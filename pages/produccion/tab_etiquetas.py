@@ -21,6 +21,38 @@ def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
     return '', nombre_producto
 
 
+def extraer_peso_de_descripcion(descripcion: str) -> int:
+    """
+    Extrae el peso en kg de la descripción del producto.
+    Ejemplo: "FB MK Conv. IQF A 10 kg en Caja" -> 10
+    """
+    match = re.search(r'(\d+)\s*kg', descripcion, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return 10  # Por defecto 10 kg
+
+
+def calcular_fecha_vencimiento(fecha_elaboracion: str, años: int = 2) -> str:
+    """
+    Calcula la fecha de vencimiento sumando años a la fecha de elaboración.
+    Formato entrada/salida: DD.MM.YYYY
+    """
+    from datetime import datetime, timedelta
+    try:
+        # Intentar varios formatos
+        for fmt in ['%d.%m.%Y', '%d/%m/%Y', '%Y-%m-%d']:
+            try:
+                fecha = datetime.strptime(fecha_elaboracion, fmt)
+                # Sumar años
+                fecha_venc = fecha.replace(year=fecha.year + años)
+                return fecha_venc.strftime('%d.%m.%Y')
+            except ValueError:
+                continue
+        return fecha_elaboracion  # Si no se puede parsear, devolver la misma
+    except Exception:
+        return fecha_elaboracion
+
+
 def buscar_ordenes(username: str, password: str, termino: str):
     """Busca órdenes de producción."""
     params = {
@@ -381,9 +413,6 @@ def render_etiquetas_caja(username: str, password: str):
         
         funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
         
-        # Input para peso de caja
-        peso_caja = st.number_input("Peso por caja (kg)", min_value=1, max_value=50, value=10, key="etiq_caja_peso")
-        
         st.write(f"**{len(pallets)} pallets disponibles** - Genera etiquetas para las cajas de cada pallet")
         
         for pallet in pallets:
@@ -391,12 +420,19 @@ def render_etiquetas_caja(username: str, password: str):
                 codigo_prod, desc_prod = extraer_codigo_descripcion(pallet.get('producto_nombre', ''))
                 lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
                 
+                # Extraer peso de la descripción del producto
+                peso_caja = extraer_peso_de_descripcion(desc_prod)
+                
+                # Calcular fecha de vencimiento (2 años después de elaboración)
+                fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+                fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
+                
                 datos_etiqueta = {
                     'nombre_producto': desc_prod,
                     'codigo_producto': codigo_prod,
                     'peso_caja_kg': peso_caja,
-                    'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
-                    'fecha_vencimiento': pallet.get('fecha_vencimiento', ''),
+                    'fecha_elaboracion': fecha_elab,
+                    'fecha_vencimiento': fecha_venc,
                     'lote_produccion': lot_name,
                     'numero_pallet': pallet.get('package_name', ''),
                 }
