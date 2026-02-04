@@ -261,7 +261,7 @@ def render(username: str, password: str):
         st.subheader("4️⃣ Etiquetas Disponibles")
         
         if not st.session_state.etiq_cliente_nombre:
-            st.warning("⚠️ Por favor ingresa el nombre del cliente arriba")
+            st.warning("⚠️ Por favor selecciona el cliente arriba")
         
         st.write(f"**Total de pallets:** {len(st.session_state.etiq_pallets_cargados)}")
         
@@ -271,31 +271,34 @@ def render(username: str, password: str):
         
         st.divider()
         
-        # Mostrar cada pallet
-        for idx, pallet in enumerate(st.session_state.etiq_pallets_cargados, 1):
-            with st.expander(f"**Pallet {idx}: {pallet.get('package_name', 'Sin nombre')}**", expanded=False):
-                col1, col2, col3 = st.columns(3)
+        # Agrupar pallets por producto
+        pallets_por_producto = {}
+        for pallet in st.session_state.etiq_pallets_cargados:
+            product_id = pallet.get('product_id')
+            if product_id:
+                product_key = product_id[0] if isinstance(product_id, list) else product_id
+                product_name = product_id[1] if isinstance(product_id, list) else str(product_id)
+                
+                if product_key not in pallets_por_producto:
+                    pallets_por_producto[product_key] = {
+                        'nombre': product_name,
+                        'pallets': []
+                    }
+                pallets_por_producto[product_key]['pallets'].append(pallet)
+        
+        # Mostrar pallets agrupados por producto
+        for product_key, producto_data in pallets_por_producto.items():
+            st.markdown(f"### 📦 {producto_data['nombre']}")
+            st.caption(f"{len(producto_data['pallets'])} pallets")
+            
+            # Crear tabla de pallets
+            for pallet in producto_data['pallets']:
+                col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    st.write(f"**Número Pallet:** {pallet.get('package_name', '')}")
-                    product_id = pallet.get('product_id')
-                    if product_id:
-                        product_name = product_id[1] if isinstance(product_id, list) else str(product_id)
-                        st.write(f"**Producto:** {product_name}")
+                    st.write(f"**{pallet.get('package_name', 'Sin nombre')}**")
                 
                 with col2:
-                    st.write(f"**Peso Total:** {pallet.get('peso_pallet_kg', 0)} KG")
-                    st.write(f"**Cantidad Cajas:** {pallet.get('cantidad_cajas', 0)}")
-                
-                with col3:
-                    lot_id = pallet.get('lot_id')
-                    if lot_id:
-                        lot_name = lot_id[1] if isinstance(lot_id, list) else str(lot_id)
-                        st.write(f"**Lote:** {lot_name}")
-                    st.write(f"**Fecha:** {pallet.get('fecha_elaboracion_fmt', '')}")
-                
-                # Botón para vista previa de etiqueta individual
-                if st.button(f"👁️ Vista Previa Etiqueta", key=f"etiq_prev_{idx}"):
                     # Preparar datos para la etiqueta
                     product_id = pallet.get('product_id')
                     product_name = product_id[1] if isinstance(product_id, (list, tuple)) else 'Producto desconocido'
@@ -315,11 +318,14 @@ def render(username: str, password: str):
                         'numero_pallet': pallet.get('package_name', '')
                     }
                     
-                    # Generar HTML
-                    html_etiqueta = generar_etiqueta_html(datos_etiqueta)
-                    
-                    # Mostrar vista previa
-                    st.components.v1.html(html_etiqueta, height=600, scrolling=True)
+                    if st.button("🖨️ Imprimir", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
+                        # Generar HTML
+                        html_etiqueta = generar_etiqueta_html(datos_etiqueta)
+                        
+                        # Mostrar vista previa
+                        st.components.v1.html(html_etiqueta, height=600, scrolling=True)
+            
+            st.divider()
     
     else:
         if st.session_state.etiq_orden_seleccionada:
