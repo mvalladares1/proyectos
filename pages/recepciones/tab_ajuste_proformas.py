@@ -282,6 +282,40 @@ def render(username: str, password: str):
                 _render_detalle_factura(factura, username, password)
                 
                 # =========================================================================
+                # BOTONES DE ACCIÓN
+                # =========================================================================
+                st.markdown("---")
+                st.markdown("#### 🚀 Acciones")
+                
+                col_action1, col_action2, col_action3 = st.columns(3)
+                
+                with col_action1:
+                    # Botón para descargar PDF
+                    pdf_bytes = _generar_pdf_proforma(factura, username, password)
+                    st.download_button(
+                        label="📄 Descargar PDF",
+                        data=pdf_bytes,
+                        file_name=f"Proforma_{factura['nombre']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        key=f"download_pdf_detalle_{factura['id']}",
+                        use_container_width=True
+                    )
+                
+                with col_action2:
+                    # Exportar a Excel
+                    if st.button("📅 Descargar Excel", key=f"export_excel_detalle_{factura['id']}", use_container_width=True):
+                        _exportar_excel(factura)
+                
+                with col_action3:
+                    # URL correcta de Odoo con formato web#id=
+                    odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={factura['id']}&cids=1&menu_id=411&action=234&model=account.move&view_type=form"
+                    st.link_button(
+                        "🔗 Ver en Odoo",
+                        odoo_url,
+                        use_container_width=True
+                    )
+                
+                # =========================================================================
                 # SECCIÓN 4: PREVIEW COMPARATIVO
                 # =========================================================================
                 st.markdown("---")
@@ -510,7 +544,11 @@ def _agregar_estado_envio(facturas: list, username: str, password: str) -> list:
     
     # Conectar a Odoo para revisar chatter
     try:
-        from backend.config.odoo_config import ODOO_URL, ODOO_DB
+        from shared.odoo_client import OdooClient
+        
+        client = OdooClient(username=username, password=password)
+        ODOO_URL = client.url
+        ODOO_DB = client.db
         
         common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
         uid = common.authenticate(ODOO_DB, username, password, {})
