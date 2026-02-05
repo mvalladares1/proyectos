@@ -9,12 +9,14 @@ from .odoo_queries import OdooQueryManager
 from .validador import ValidadorFlujo
 from .agregador import AgregadorFlujo
 from .proyeccion import ProyeccionFlujo
+from .real_proyectado import RealProyectadoCalculator
 
 __all__ = [
     'ClasificadorCuentas',
     'OdooQueryManager', 
     'ValidadorFlujo',
     'AgregadorFlujo',
-    'ProyeccionFlujo'
+    'ProyeccionFlujo',
+    'RealProyectadoCalculator'
 ]
 

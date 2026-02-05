@@ -41,6 +41,7 @@ from .flujo_caja.helpers import (
 from .flujo_caja.odoo_queries import OdooQueryManager
 from .flujo_caja.agregador import AgregadorFlujo
 from .flujo_caja.proyeccion import ProyeccionFlujo
+from .flujo_caja.real_proyectado import RealProyectadoCalculator
 
 
 class FlujoCajaService:
@@ -51,6 +52,7 @@ class FlujoCajaService:
         self.password = password
         self._odoo = None
         self._odoo_manager = None
+        self._real_proyectado_calc = None
         self.catalogo = self._cargar_catalogo()
         self.mapeo_cuentas = self._cargar_mapeo()
         self.cuentas_monitoreadas = self._cargar_cuentas_monitoreadas()
@@ -71,6 +73,13 @@ class FlujoCajaService:
         if self._odoo_manager is None:
             self._odoo_manager = OdooQueryManager(self.odoo)
         return self._odoo_manager
+    
+    @property
+    def real_proyectado_calc(self) -> RealProyectadoCalculator:
+        """Lazy initialization de RealProyectadoCalculator."""
+        if self._real_proyectado_calc is None:
+            self._real_proyectado_calc = RealProyectadoCalculator(self.odoo)
+        return self._real_proyectado_calc
     
     # ==================== CARGA DE CONFIGURACIÓN ====================
     
@@ -530,8 +539,25 @@ class FlujoCajaService:
         # (not_paid, in_payment, partial) en lugar de state='draft'
         # Esto evita duplicación y el problema de "CXC - Cuentas por Cobrar Proyectadas"
         
-        # 10. Construir resultado
+        # 10. Calcular REAL/PROYECTADO/PPTO para conceptos especiales
+        print(f"[FlujoCaja] Calculando REAL/PROYECTADO para conceptos especiales...")
+        try:
+            real_proyectado_data = self.real_proyectado_calc.calcular_todos(fecha_inicio, fecha_fin)
+        except Exception as e:
+            print(f"[FlujoCaja] Error calculando REAL/PROYECTADO: {e}")
+            real_proyectado_data = {}
+        
+        # 11. Construir resultado
         conceptos_por_actividad, subtotales_por_actividad = agregador.construir_conceptos_por_actividad()
+        
+        # Enriquecer conceptos con REAL/PROYECTADO
+        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            conceptos = conceptos_por_actividad.get(act_key, [])
+            for concepto in conceptos:
+                concepto_id = concepto.get('id', '')
+                self.real_proyectado_calc.enriquecer_concepto(
+                    concepto, real_proyectado_data, concepto_id
+                )
         
         for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
             subtotal_mes = subtotales_por_actividad[act_key]

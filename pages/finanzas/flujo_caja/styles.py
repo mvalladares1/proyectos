@@ -219,6 +219,45 @@ ENTERPRISE_CSS = """
     font-size: 1rem;
 }
 
+/* ============ COLUMNAS REAL/PROYECTADO/PPTO ============ */
+.excel-table td.real-col,
+.excel-table td.proyectado-col,
+.excel-table td.ppto-col {
+    font-weight: 600;
+    min-width: 100px;
+}
+
+.excel-table td.real-col {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.08) 100%);
+    color: #4ade80;
+}
+
+.excel-table td.proyectado-col {
+    background: linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(234, 179, 8, 0.08) 100%);
+    color: #facc15;
+}
+
+.excel-table td.ppto-col {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(79, 70, 229, 0.08) 100%);
+    color: #a5b4fc;
+}
+
+/* Estilos para headers de columnas REAL/PROYECTADO/PPTO */
+.excel-table thead th.col-real {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+    color: white !important;
+}
+
+.excel-table thead th.col-proyectado {
+    background: linear-gradient(135deg, #facc15 0%, #eab308 100%) !important;
+    color: #1f2937 !important;
+}
+
+.excel-table thead th.col-ppto {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+    color: white !important;
+}
+
 .excel-table tr.subtotal-interno td.frozen {
     background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.3) 100%) !important;
     color: #dbeafe !important;
