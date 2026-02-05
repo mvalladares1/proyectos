@@ -603,9 +603,11 @@ def _render_preview_clp(factura: dict, username: str, password: str):
             _exportar_excel(factura)
     
     with col_action4:
+        # URL correcta de Odoo con formato web#id=
+        odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={factura['id']}&cids=1&menu_id=411&action=234&model=account.move&view_type=form"
         st.link_button(
             "🔗 Ver en Odoo",
-            f"https://riofuturo.server98c6e.oerpondemand.net/odoo/account.move/{factura['id']}",
+            odoo_url,
             use_container_width=True
         )
     
