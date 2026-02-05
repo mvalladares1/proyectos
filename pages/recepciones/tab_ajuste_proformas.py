@@ -91,23 +91,104 @@ def render(username: str, password: str):
             opciones_envio.append(f"{f['nombre']} | {f['proveedor_nombre'][:30]} | {email_proveedor}")
         
         facturas_seleccionadas = st.multiselect(
-            "Seleccionar facturas para envío masivo",
+            "Seleccionar facturas para envío masivo (pueden ser de diferentes proveedores)",
             opciones_envio,
             key="proformas_seleccionadas",
-            help="Selecciona una o más proformas para enviar por correo a los proveedores"
+            help="Selecciona una o más proformas para analizar y enviar por correo a los proveedores"
         )
         
-        # Mostrar resumen de selección
+        # =========================================================================
+        # ANÁLISIS DE PROFORMAS SELECCIONADAS
+        # =========================================================================
         if facturas_seleccionadas:
-            st.info(f"📧 **{len(facturas_seleccionadas)}** proformas seleccionadas para envío")
+            st.markdown("---")
+            st.markdown("#### 📊 Análisis de Proformas Seleccionadas")
             
+            # Mapear seleccionadas a facturas
+            facturas_sel = []
+            for sel in facturas_seleccionadas:
+                nombre_factura = sel.split(" | ")[0]
+                for f in facturas:
+                    if f['nombre'] == nombre_factura:
+                        facturas_sel.append(f)
+                        break
+            
+            # Métricas generales
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            
+            total_usd = sum(f['total_usd'] for f in facturas_sel)
+            total_clp = sum(f['total_clp'] for f in facturas_sel)
+            num_proveedores = len(set(f['proveedor_id'] for f in facturas_sel))
+            con_email = len([f for f in facturas_sel if f.get('proveedor_email')])
+            
+            with col_m1:
+                st.metric("📄 Proformas", len(facturas_sel))
+            with col_m2:
+                st.metric("🏢 Proveedores", num_proveedores)
+            with col_m3:
+                st.metric("💵 Total USD", f"${total_usd:,.2f}")
+            with col_m4:
+                st.metric("💰 Total CLP", f"${total_clp:,.0f}")
+            
+            # Agrupar por proveedor
+            st.markdown("##### 📦 Detalle por Proveedor")
+            
+            proveedores_agrupados = {}
+            for f in facturas_sel:
+                prov_id = f['proveedor_id']
+                if prov_id not in proveedores_agrupados:
+                    proveedores_agrupados[prov_id] = {
+                        'nombre': f['proveedor_nombre'],
+                        'email': f.get('proveedor_email', 'Sin email'),
+                        'facturas': [],
+                        'total_usd': 0,
+                        'total_clp': 0
+                    }
+                proveedores_agrupados[prov_id]['facturas'].append(f['nombre'])
+                proveedores_agrupados[prov_id]['total_usd'] += f['total_usd']
+                proveedores_agrupados[prov_id]['total_clp'] += f['total_clp']
+            
+            # Tabla de análisis por proveedor
+            df_analisis = pd.DataFrame([
+                {
+                    'Proveedor': p['nombre'][:40],
+                    'Email': p['email'] if p['email'] else '❌ Sin email',
+                    'N° Facturas': len(p['facturas']),
+                    'Total USD': p['total_usd'],
+                    'Total CLP': p['total_clp'],
+                    'Facturas': ', '.join(p['facturas'][:3]) + ('...' if len(p['facturas']) > 3 else '')
+                }
+                for p in proveedores_agrupados.values()
+            ])
+            
+            # Formatear
+            df_analisis['Total USD'] = df_analisis['Total USD'].apply(lambda x: f"${x:,.2f}")
+            df_analisis['Total CLP'] = df_analisis['Total CLP'].apply(lambda x: f"${x:,.0f}")
+            
+            st.dataframe(df_analisis, use_container_width=True, hide_index=True)
+            
+            # Advertencias
+            sin_email = [f for f in facturas_sel if not f.get("proveedor_email")]
+            if sin_email:
+                st.warning(f"⚠️ **{len(sin_email)} proformas** de proveedores sin email configurado no se enviarán:")
+                for f in sin_email[:5]:
+                    st.caption(f"  - {f['nombre']} - {f['proveedor_nombre']}")
+                if len(sin_email) > 5:
+                    st.caption(f"  ... y {len(sin_email) - 5} más")
+            
+            # Botón de envío
+            st.markdown("---")
             col_envio1, col_envio2 = st.columns([1, 2])
+            
             with col_envio1:
-                if st.button("📤 ENVIAR PROFORMAS POR CORREO", type="primary", key="btn_enviar_masivo"):
+                if st.button("📤 ENVIAR PROFORMAS SELECCIONADAS", type="primary", key="btn_enviar_masivo"):
                     _enviar_proformas_masivo(facturas, facturas_seleccionadas, username, password)
             
             with col_envio2:
-                st.caption("Se enviará un correo a cada proveedor con su proforma en PDF adjunta")
+                if con_email > 0:
+                    st.info(f"✉️ Se enviarán **{con_email}** proformas a **{num_proveedores}** proveedores")
+                else:
+                    st.error("❌ Ninguna proforma tiene proveedor con email configurado")
         
         st.markdown("---")
         
