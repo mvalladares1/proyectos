@@ -379,7 +379,7 @@ def enviar_proforma_email(
         attachment_id = client.execute(
             "ir.attachment",
             "create",
-            {
+            [{
                 "name": f"Proforma_{nombre_factura}.pdf",
                 "type": "binary",
                 "datas": pdf_base64,
@@ -387,8 +387,11 @@ def enviar_proforma_email(
                 "res_id": factura_id,
                 "mimetype": "application/pdf",
                 "description": f"Proforma enviada por correo"
-            }
+            }]
         )
+        
+        if not attachment_id:
+            raise Exception("No se pudo crear el adjunto en Odoo")
         
         # Crear y enviar correo
         asunto = f"Proforma {nombre_factura} - Rio Futuro"
@@ -420,15 +423,18 @@ def enviar_proforma_email(
         mail_id = client.execute(
             "mail.mail",
             "create",
-            {
+            [{
                 "subject": asunto,
                 "body_html": cuerpo_html,
                 "email_to": email_destino,
                 "email_from": "notificaciones-rfp@riofuturo.cl",  # Servidor configurado en Odoo
                 "attachment_ids": [(6, 0, [attachment_id])],
                 "auto_delete": True
-            }
+            }]
         )
+        
+        if not mail_id:
+            raise Exception("No se pudo crear el correo en Odoo")
         
         # Enviar el correo
         client.execute("mail.mail", "send", [mail_id])
