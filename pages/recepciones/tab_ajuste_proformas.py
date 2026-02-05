@@ -422,6 +422,7 @@ def _render_preview_clp(factura: dict, username: str, password: str):
                 "Descripción": l["nombre"][:40] if l["nombre"] else "-",
                 "Cant.": l["cantidad"],
                 "P.Unit USD": l["precio_usd"],
+                "TC": l["tc_implicito"],
                 "P.Unit CLP": l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0,
                 "Subtotal USD": l["subtotal_usd"],
                 "Subtotal CLP": l["subtotal_clp"],
@@ -432,6 +433,7 @@ def _render_preview_clp(factura: dict, username: str, password: str):
         # Formatear columnas
         df_preview["Cant."] = df_preview["Cant."].apply(lambda x: f"{x:,.2f}")
         df_preview["P.Unit USD"] = df_preview["P.Unit USD"].apply(lambda x: f"${x:,.2f}")
+        df_preview["TC"] = df_preview["TC"].apply(lambda x: f"{x:,.2f}")
         df_preview["P.Unit CLP"] = df_preview["P.Unit CLP"].apply(lambda x: f"${x:,.0f}")
         df_preview["Subtotal USD"] = df_preview["Subtotal USD"].apply(lambda x: f"${x:,.2f}")
         df_preview["Subtotal CLP"] = df_preview["Subtotal CLP"].apply(lambda x: f"${x:,.0f}")
@@ -644,7 +646,8 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
     info_data = [
         ["Factura:", factura['nombre'], "", "Fecha:", factura.get('fecha_factura', '-')],
         ["Proveedor:", factura['proveedor_nombre'][:50], "", "Moneda:", "USD / CLP"],
-        ["Referencia:", factura.get('ref', '-') or '-', "", "TC:", f"{factura['tipo_cambio']:,.2f}"],
+        ["Referencia:", factura.get('ref', '-') or '-', "", "TC Promedio:", f"{factura['tipo_cambio']:,.2f}"],
+        ["", "", "", "", "(*Cada línea tiene su TC específico)"],
     ]
     
     info_table = Table(info_data, colWidths=[1*inch, 3*inch, 0.5*inch, 1*inch, 1.5*inch])
@@ -658,13 +661,14 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
     elements.append(info_table)
     elements.append(Spacer(1, 20))
     
-    # Tabla de líneas con todas las columnas
-    table_data = [["Descripción", "Cantidad", "P.Unit\nUSD", "P.Unit\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
+    # Tabla de líneas con todas las columnas incluyendo TC
+    table_data = [["Descripción", "Cant.", "P.Unit\nUSD", "TC", "P.Unit\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
     
     for linea in factura['lineas']:
-        desc = linea['nombre'][:45] if linea['nombre'] else "-"
+        desc = linea['nombre'][:40] if linea['nombre'] else "-"
         cant = linea['cantidad']
         p_unit_usd = linea['precio_usd']
+        tc_linea = linea['tc_implicito']
         p_unit_clp = linea['subtotal_clp'] / cant if cant else 0
         subtotal_usd = linea['subtotal_usd']
         subtotal_clp = linea['subtotal_clp']
@@ -673,33 +677,34 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
             desc,
             f"{cant:,.2f}",
             f"${p_unit_usd:,.2f}",
+            f"{tc_linea:,.2f}",
             f"${p_unit_clp:,.0f}",
             f"${subtotal_usd:,.2f}",
             f"${subtotal_clp:,.0f}"
         ])
     
     # Línea en blanco antes de totales
-    table_data.append(["", "", "", "", "", ""])
+    table_data.append(["", "", "", "", "", "", ""])
     
     # Totales - 3 filas
     table_data.append([
-        "", "", "", "Base Imponible:",
+        "", "", "", "", "Base Imponible:",
         f"${factura['base_usd']:,.2f}",
         f"${factura['base_clp']:,.0f}"
     ])
     table_data.append([
-        "", "", "", "IVA 19%:",
+        "", "", "", "", "IVA 19%:",
         f"${factura['iva_usd']:,.2f}",
         f"${factura['iva_clp']:,.0f}"
     ])
     table_data.append([
-        "", "", "", "TOTAL:",
+        "", "", "", "", "TOTAL:",
         f"${factura['total_usd']:,.2f}",
         f"${factura['total_clp']:,.0f}"
     ])
     
-    # Anchos de columna ajustados para landscape
-    main_table = Table(table_data, colWidths=[3.5*inch, 0.8*inch, 0.9*inch, 0.9*inch, 1.0*inch, 1.0*inch])
+    # Anchos de columna ajustados para landscape con columna TC
+    main_table = Table(table_data, colWidths=[2.8*inch, 0.7*inch, 0.8*inch, 0.6*inch, 0.8*inch, 0.9*inch, 1.0*inch])
     main_table.setStyle(TableStyle([
         # Header
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),
@@ -720,10 +725,10 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
         ('RIGHTPADDING', (0, 0), (-1, -1), 5),
         
         # Totales - negritas
-        ('FONTNAME', (3, -3), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (3, -1), (-1, -1), 10),
-        ('LINEABOVE', (3, -3), (-1, -3), 1.5, colors.black),
-        ('BACKGROUND', (3, -3), (-1, -1), colors.HexColor('#f5f5f5')),
+        ('FONTNAME', (4, -3), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (4, -1), (-1, -1), 10),
+        ('LINEABOVE', (4, -3), (-1, -3), 1.5, colors.black),
+        ('BACKGROUND', (4, -3), (-1, -1), colors.HexColor('#f5f5f5')),
     ]))
     elements.append(main_table)
     
