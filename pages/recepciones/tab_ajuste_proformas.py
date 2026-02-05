@@ -507,25 +507,24 @@ def _render_preview_clp(factura: dict, username: str, password: str):
     
     st.markdown("#### 📄 Preview: Proforma en CLP")
     
-    # Contenedor estilizado con mejor diseño
+    # Contenedor estilizado con mejor contraste
     st.markdown(f"""
-    <div style="border: 2px solid #4CAF50; border-radius: 10px; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); margin-bottom: 20px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <div style="border: 3px solid #1B4F72; border-radius: 12px; padding: 25px; background: #ffffff; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #E8F4F8;">
             <div>
-                <h3 style="margin: 0; color: #2E7D32;">📄 PROFORMA DE PROVEEDOR</h3>
-                <p style="color: #666; margin: 5px 0; font-size: 1.1em;"><strong>{factura['nombre']}</strong></p>
+                <h3 style="margin: 0; color: #1B4F72; font-size: 1.5em;">📄 PROFORMA DE PROVEEDOR</h3>
+                <p style="color: #333; margin: 8px 0 0 0; font-size: 1.2em;"><strong>{factura['nombre']}</strong></p>
             </div>
-            <div style="text-align: right; background: #fff; padding: 10px 15px; border-radius: 8px;">
-                <p style="margin: 0; font-size: 0.9em;">📅 <strong>Fecha:</strong> {factura['fecha_factura'] or 'Sin fecha'}</p>
-                <p style="margin: 5px 0 0 0; font-size: 1.2em; color: #4CAF50;">💰 <strong>CLP</strong></p>
+            <div style="text-align: right; background: #E8F4F8; padding: 15px 20px; border-radius: 8px; border-left: 4px solid #2E86AB;">
+                <p style="margin: 0; font-size: 0.95em; color: #333;">📅 <strong>Fecha:</strong> {factura['fecha_factura'] or 'Sin fecha'}</p>
+                <p style="margin: 8px 0 0 0; font-size: 1.3em; color: #1B4F72; font-weight: bold;">💰 CLP</p>
             </div>
         </div>
-        <hr style="border: 1px solid #ccc; margin: 15px 0;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <p style="margin: 5px 0;">🏢 <strong>Proveedor:</strong> {factura['proveedor_nombre']}</p>
-            <p style="margin: 5px 0;">🔖 <strong>Referencia:</strong> {factura['ref'] or '-'}</p>
-            <p style="margin: 5px 0;">📋 <strong>OCs Origen:</strong> {factura['origin'] or '-'}</p>
-            <p style="margin: 5px 0;">💱 <strong>TC Aplicado:</strong> {factura['tipo_cambio']:,.2f}</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="margin: 8px 0; color: #333; font-size: 0.95em;">🏢 <strong style="color: #1B4F72;">Proveedor:</strong> {factura['proveedor_nombre']}</p>
+            <p style="margin: 8px 0; color: #333; font-size: 0.95em;">🔖 <strong style="color: #1B4F72;">Referencia:</strong> {factura['ref'] or '-'}</p>
+            <p style="margin: 8px 0; color: #333; font-size: 0.95em;">📋 <strong style="color: #1B4F72;">OCs Origen:</strong> {factura['origin'] or '-'}</p>
+            <p style="margin: 8px 0; color: #333; font-size: 0.95em;">💱 <strong style="color: #1B4F72;">TC Aplicado:</strong> {factura['tipo_cambio']:,.2f}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
