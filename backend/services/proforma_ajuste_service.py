@@ -428,7 +428,7 @@ def enviar_proforma_email(
                 "body_html": cuerpo_html,
                 "email_to": email_destino,
                 "email_from": "notificaciones-rfp@riofuturo.cl",  # Servidor configurado en Odoo
-                "attachment_ids": [[6, 0, [attachment_id]]],  # Doble array para many2many
+                "attachment_ids": [(6, 0, [int(attachment_id)])],  # Tupla para many2many
                 "auto_delete": True
             }]
         )
@@ -458,7 +458,7 @@ def enviar_proforma_email(
                 "body": mensaje_chatter,
                 "message_type": "comment",
                 "subtype_xmlid": "mail.mt_note",
-                "attachment_ids": [[6, 0, [attachment_id]]]  # Doble array para many2many
+                "attachment_ids": [(6, 0, [int(attachment_id)])]  # Tupla para many2many
             }
         )
         
