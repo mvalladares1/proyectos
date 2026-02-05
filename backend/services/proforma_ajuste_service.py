@@ -223,69 +223,108 @@ def cambiar_moneda_factura(
     Returns:
         Resultado de la operación
     """
+    # Obtener datos de la factura primero
+    facturas = get_facturas_borrador(username, password)
+    factura = None
+    for f in facturas:
+        if f["id"] == factura_id:
+            factura = f
+            break
+    
+    if not factura:
+        return {"success": False, "error": "Factura no encontrada"}
+    
+    return aplicar_conversion_clp(username, password, factura_id, factura.get("lineas", []))
+
+
+def aplicar_conversion_clp(
+    username: str,
+    password: str,
+    factura_id: int,
+    lineas: List[Dict]
+) -> Dict[str, Any]:
+    """
+    Aplica la conversión USD → CLP actualizando:
+    1. La moneda de la factura a CLP
+    2. Los precios unitarios de cada línea al valor CLP
+    
+    Args:
+        username: Usuario Odoo
+        password: Contraseña Odoo
+        factura_id: ID de la factura
+        lineas: Lista de líneas con subtotal_clp y cantidad
+    
+    Returns:
+        Resultado de la operación
+    """
     client = OdooClient(username=username, password=password)
     
     try:
-        # Obtener ID de la moneda CLP
-        moneda = client.search_read(
+        # 1. Obtener ID de moneda CLP
+        moneda_clp = client.search_read(
             "res.currency",
-            [("name", "=", nueva_moneda)],
-            ["id", "name"],
+            [("name", "=", "CLP")],
+            ["id"],
             limit=1
         )
         
-        if not moneda:
-            return {"success": False, "error": f"Moneda {nueva_moneda} no encontrada"}
+        if not moneda_clp:
+            return {"success": False, "error": "Moneda CLP no encontrada en Odoo"}
         
-        moneda_id = moneda[0]["id"]
+        clp_id = moneda_clp[0]["id"]
         
-        # Obtener factura actual para tener los valores
+        # 2. Verificar que la factura está en borrador
         factura = client.read(
             "account.move",
             [factura_id],
-            ["id", "name", "invoice_line_ids", "currency_id"]
+            ["id", "name", "state", "move_type"]
         )
         
         if not factura:
             return {"success": False, "error": "Factura no encontrada"}
         
-        fac = factura[0]
+        if factura[0].get("state") != "draft":
+            return {"success": False, "error": "Solo se pueden modificar facturas en estado borrador"}
         
-        # Obtener líneas con valores CLP
-        lineas_ids = fac.get("invoice_line_ids", [])
-        lineas = client.read(
-            "account.move.line",
-            lineas_ids,
-            ["id", "debit", "display_type", "name"]
-        )
+        # 3. Actualizar precio unitario de cada línea
+        lineas_actualizadas = 0
+        errores_lineas = []
         
-        # Preparar actualizaciones de líneas
-        # Cada línea debe actualizarse con price_unit = debit (valor en CLP)
-        lineas_update = []
-        for line in lineas:
-            if line.get("display_type") in ["line_section", "line_note", "payment_term"]:
-                continue
-            
-            clp_value = line.get("debit", 0)
-            if clp_value > 0:
-                lineas_update.append({
-                    "id": line["id"],
-                    "price_unit": clp_value / 1  # Esto se ajustará según cantidad
-                })
+        for linea in lineas:
+            try:
+                linea_id = linea.get("id")
+                cantidad = linea.get("cantidad", 1)
+                subtotal_clp = linea.get("subtotal_clp", 0)
+                
+                if not linea_id or cantidad == 0:
+                    continue
+                
+                # Calcular precio unitario en CLP
+                precio_unit_clp = subtotal_clp / cantidad if cantidad else 0
+                
+                # Actualizar la línea
+                client.write(
+                    "account.move.line",
+                    [linea_id],
+                    {"price_unit": precio_unit_clp}
+                )
+                lineas_actualizadas += 1
+                
+            except Exception as e:
+                errores_lineas.append(f"Línea {linea_id}: {str(e)}")
         
-        # Cambiar moneda de la factura
-        # NOTA: Esto es una operación delicada, verificar antes en staging
-        result = client.write(
+        # 4. Cambiar la moneda de la factura
+        client.write(
             "account.move",
             [factura_id],
-            {"currency_id": moneda_id}
+            {"currency_id": clp_id}
         )
         
         return {
             "success": True,
             "factura_id": factura_id,
-            "nueva_moneda": nueva_moneda,
-            "lineas_actualizadas": len(lineas_update)
+            "lineas_actualizadas": lineas_actualizadas,
+            "errores_lineas": errores_lineas if errores_lineas else None
         }
         
     except Exception as e:

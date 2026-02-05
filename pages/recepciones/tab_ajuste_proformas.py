@@ -143,7 +143,7 @@ def render(username: str, password: str):
                 # SECCIÓN 5: PREVIEW DE PROFORMA EN CLP
                 # =========================================================================
                 st.markdown("---")
-                _render_preview_clp(factura)
+                _render_preview_clp(factura, username, password)
 
 
 def _get_proveedores(username: str, password: str) -> list:
@@ -272,31 +272,33 @@ def _render_comparativo(factura: dict):
         st.metric("TC Aplicado", f"{factura['tipo_cambio']:,.4f}")
 
 
-def _render_preview_clp(factura: dict):
+def _render_preview_clp(factura: dict, username: str, password: str):
     """Renderiza preview de la proforma en CLP."""
     
     st.markdown("#### 📄 Preview: Proforma en CLP")
     
-    # Contenedor estilizado
-    with st.container():
-        st.markdown(f"""
-        <div style="border: 2px solid #ddd; border-radius: 10px; padding: 20px; background-color: #fafafa;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                <div>
-                    <h4 style="margin: 0;">PROFORMA DE PROVEEDOR</h4>
-                    <p style="color: #666; margin: 5px 0;">Factura: {factura['nombre']}</p>
-                </div>
-                <div style="text-align: right;">
-                    <p style="margin: 0;"><strong>Fecha:</strong> {factura['fecha_factura'] or 'Sin fecha'}</p>
-                    <p style="margin: 0;"><strong>Moneda:</strong> CLP</p>
-                </div>
+    # Contenedor estilizado con mejor diseño
+    st.markdown(f"""
+    <div style="border: 2px solid #4CAF50; border-radius: 10px; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <h3 style="margin: 0; color: #2E7D32;">📄 PROFORMA DE PROVEEDOR</h3>
+                <p style="color: #666; margin: 5px 0; font-size: 1.1em;"><strong>{factura['nombre']}</strong></p>
             </div>
-            <hr style="border: 1px solid #ddd;">
-            <p><strong>Proveedor:</strong> {factura['proveedor_nombre']}</p>
-            <p><strong>Referencia:</strong> {factura['ref'] or '-'}</p>
-            <p><strong>OCs Origen:</strong> {factura['origin'] or '-'}</p>
+            <div style="text-align: right; background: #fff; padding: 10px 15px; border-radius: 8px;">
+                <p style="margin: 0; font-size: 0.9em;">📅 <strong>Fecha:</strong> {factura['fecha_factura'] or 'Sin fecha'}</p>
+                <p style="margin: 5px 0 0 0; font-size: 1.2em; color: #4CAF50;">💰 <strong>CLP</strong></p>
+            </div>
         </div>
-        """, unsafe_allow_html=True)
+        <hr style="border: 1px solid #ccc; margin: 15px 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <p style="margin: 5px 0;">🏢 <strong>Proveedor:</strong> {factura['proveedor_nombre']}</p>
+            <p style="margin: 5px 0;">🔖 <strong>Referencia:</strong> {factura['ref'] or '-'}</p>
+            <p style="margin: 5px 0;">📋 <strong>OCs Origen:</strong> {factura['origin'] or '-'}</p>
+            <p style="margin: 5px 0;">💱 <strong>TC Aplicado:</strong> {factura['tipo_cambio']:,.2f}</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Tabla de líneas en CLP
     if factura["lineas"]:
@@ -322,18 +324,75 @@ def _render_preview_clp(factura: dict):
         st.markdown(f"${factura['iva_clp']:,.0f}")
         st.markdown(f"**${factura['total_clp']:,.0f}**")
     
-    # Botón de exportar (futuro)
+    # Botones de acción
     st.markdown("---")
-    col_exp1, col_exp2, col_exp3 = st.columns([1, 1, 2])
+    st.markdown("#### 🚀 Acciones")
     
-    with col_exp1:
+    col_action1, col_action2, col_action3 = st.columns([1.5, 1, 1.5])
+    
+    with col_action1:
+        # Botón principal: Aplicar cambio en Odoo
+        st.warning("⚠️ **Aplicar cambio modificará la factura en Odoo**")
+        if st.button("✅ APLICAR CAMBIO A CLP EN ODOO", key=f"aplicar_cambio_{factura['id']}", type="primary"):
+            _aplicar_cambio_odoo(factura, username, password)
+    
+    with col_action2:
         # Exportar a Excel
         if st.button("📥 Exportar Excel", key=f"export_excel_{factura['id']}"):
             _exportar_excel(factura)
     
-    with col_exp2:
-        # Generar PDF (placeholder)
-        st.button("📄 Generar PDF", key=f"export_pdf_{factura['id']}", disabled=True)
+    with col_action3:
+        st.caption("Después de aplicar el cambio, podrás generar el PDF desde Odoo.")
+        st.link_button(
+            "🔗 Abrir Factura en Odoo",
+            f"https://riofuturo.server98c6e.oerpondemand.net/odoo/account.move/{factura['id']}",
+            use_container_width=True
+        )
+
+
+def _aplicar_cambio_odoo(factura: dict, username: str, password: str):
+    """Aplica el cambio de moneda USD → CLP en Odoo."""
+    
+    with st.spinner("🔄 Aplicando cambio en Odoo..."):
+        try:
+            # Intentar vía API
+            response = requests.post(
+                f"{API_URL}/api/v1/proformas/cambiar_moneda/{factura['id']}",
+                params={
+                    "username": username,
+                    "password": password,
+                    "moneda_destino": "CLP"
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+            else:
+                # Fallback: llamar directamente al servicio
+                from backend.services.proforma_ajuste_service import aplicar_conversion_clp
+                result = aplicar_conversion_clp(username, password, factura['id'], factura['lineas'])
+            
+            if result.get("success"):
+                st.success(f"""
+                ✅ **¡Cambio aplicado exitosamente!**
+                
+                - Factura: **{factura['nombre']}**
+                - Líneas actualizadas: **{result.get('lineas_actualizadas', 0)}**
+                - Nueva moneda: **CLP**
+                
+                👉 Ahora puedes ir a Odoo para generar el PDF.
+                """)
+                st.balloons()
+                
+                # Limpiar cache para que se refresque la lista
+                if "ajuste_proformas_data" in st.session_state:
+                    del st.session_state.ajuste_proformas_data
+            else:
+                st.error(f"❌ Error al aplicar cambio: {result.get('error', 'Error desconocido')}")
+                
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
 
 
 def _exportar_excel(factura: dict):
