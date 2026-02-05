@@ -50,6 +50,8 @@
       "mvalladares@riofuturo.cl"
     ],
     "recepciones.pallets_recepcion": [],
+    "recepciones.proforma_fletes": [],
+    "recepciones.ajuste_proformas": [],
     "produccion.reporteria_general": [],
     "produccion.detalle_of": [],
     "produccion.clasificacion": [],
