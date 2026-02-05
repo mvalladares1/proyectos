@@ -9,6 +9,16 @@ from .shared import fmt_numero, fmt_dinero, API_URL
 import requests
 
 
+def fmt_chileno(num, decimales=2):
+    """Formatea número a formato chileno (puntos como miles, comas como decimales)."""
+    if decimales == 0:
+        formatted = f"{num:,.0f}"
+    else:
+        formatted = f"{num:,.{decimales}f}"
+    # Intercambiar comas y puntos
+    return formatted.replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+
+
 def render(username: str, password: str):
     """
     Renderiza el tab de Ajuste de Proformas.
@@ -126,9 +136,9 @@ def render(username: str, password: str):
             with col_m2:
                 st.metric("🏢 Proveedores", num_proveedores)
             with col_m3:
-                st.metric("💵 Total USD", f"${total_usd:,.2f}")
+                st.metric("💵 Total USD", f"${fmt_chileno(total_usd, 2)}")
             with col_m4:
-                st.metric("💰 Total CLP", f"${total_clp:,.0f}")
+                st.metric("💰 Total CLP", f"${fmt_chileno(total_clp, 0)}")
             
             # Agrupar por proveedor
             st.markdown("##### 📦 Detalle por Proveedor")
@@ -161,9 +171,9 @@ def render(username: str, password: str):
                 for p in proveedores_agrupados.values()
             ])
             
-            # Formatear
-            df_analisis['Total USD'] = df_analisis['Total USD'].apply(lambda x: f"${x:,.2f}")
-            df_analisis['Total CLP'] = df_analisis['Total CLP'].apply(lambda x: f"${x:,.0f}")
+            # Formatear con formato chileno
+            df_analisis['Total USD'] = df_analisis['Total USD'].apply(lambda x: f"${fmt_chileno(x, 2)}")
+            df_analisis['Total CLP'] = df_analisis['Total CLP'].apply(lambda x: f"${fmt_chileno(x, 0)}")
             
             st.dataframe(df_analisis, use_container_width=True, hide_index=True)
             
@@ -214,11 +224,11 @@ def render(username: str, password: str):
             for f in facturas
         ])
         
-        # Formatear columnas
+        # Formatear columnas con formato chileno
         df_display = df_facturas.copy()
-        df_display["Total USD"] = df_display["Total USD"].apply(lambda x: f"${x:,.2f}")
-        df_display["Total CLP"] = df_display["Total CLP"].apply(lambda x: f"${x:,.0f}")
-        df_display["TC"] = df_display["TC"].apply(lambda x: f"{x:,.2f}")
+        df_display["Total USD"] = df_display["Total USD"].apply(lambda x: f"${fmt_chileno(x, 2)}")
+        df_display["Total CLP"] = df_display["Total CLP"].apply(lambda x: f"${fmt_chileno(x, 0)}")
+        df_display["TC"] = df_display["TC"].apply(lambda x: fmt_chileno(x, 2))
         
         # Seleccionar factura
         st.dataframe(
@@ -480,7 +490,7 @@ def _render_detalle_factura(factura: dict):
         st.caption(f"Fecha: {factura['fecha_factura'] or 'Sin fecha'}")
     
     with col3:
-        st.metric("💱 Tipo de Cambio", f"{factura['tipo_cambio']:,.2f}")
+        st.metric("💱 Tipo de Cambio", fmt_chileno(factura['tipo_cambio'], 2))
         st.caption(f"Moneda: {factura['moneda']}")
     
     # Tabla de líneas con información completa (igual que el PDF)
@@ -550,9 +560,9 @@ def _render_comparativo(factura: dict):
         st.markdown(f"""
         | Concepto | Monto |
         |----------|-------|
-        | Base imponible | **${factura['base_usd']:,.2f}** |
-        | IVA 19% | ${factura['iva_usd']:,.2f} |
-        | **TOTAL** | **${factura['total_usd']:,.2f}** |
+        | Base imponible | **${fmt_chileno(factura['base_usd'], 2)}** |
+        | IVA 19% | ${fmt_chileno(factura['iva_usd'], 2)} |
+        | **TOTAL** | **${fmt_chileno(factura['total_usd'], 2)}** |
         """)
     
     with col2:
@@ -560,9 +570,9 @@ def _render_comparativo(factura: dict):
         st.markdown(f"""
         | Concepto | Monto |
         |----------|-------|
-        | Base imponible | **${factura['base_clp']:,.0f}** |
-        | IVA 19% | ${factura['iva_clp']:,.0f} |
-        | **TOTAL** | **${factura['total_clp']:,.0f}** |
+        | Base imponible | **${fmt_chileno(factura['base_clp'], 0)}** |
+        | IVA 19% | ${fmt_chileno(factura['iva_clp'], 0)} |
+        | **TOTAL** | **${fmt_chileno(factura['total_clp'], 0)}** |
         """)
     
     with col3:
@@ -570,11 +580,11 @@ def _render_comparativo(factura: dict):
         diff = abs(factura['base_clp'] - factura['base_clp_signed'])
         if diff < 100:
             st.success(f"✅ Cuadra con Odoo")
-            st.caption(f"Diferencia: ${diff:,.0f}")
+            st.caption(f"Diferencia: ${fmt_chileno(diff, 0)}")
         else:
-            st.warning(f"⚠️ Diferencia: ${diff:,.0f}")
+            st.warning(f"⚠️ Diferencia: ${fmt_chileno(diff, 0)}")
         
-        st.metric("TC Aplicado", f"{factura['tipo_cambio']:,.4f}")
+        st.metric("TC Aplicado", fmt_chileno(factura['tipo_cambio'], 4))
 
 
 def _render_preview_clp(factura: dict, username: str, password: str):
