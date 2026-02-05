@@ -376,20 +376,22 @@ def enviar_proforma_email(
         pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
         
         # Crear adjunto vinculado a la factura (quedará en Odoo)
-        attachment_id = client.execute(
-            "ir.attachment",
-            "create",
-            [{
-                "name": f"Proforma_{nombre_factura}.pdf",
-                "type": "binary",
-                "datas": pdf_base64,
-                "res_model": "account.move",
-                "res_id": factura_id,
-                "mimetype": "application/pdf",
-                "description": f"Proforma enviada por correo"
-            }]
-        )
+        attachment_data = {
+            "name": f"Proforma_{nombre_factura}.pdf",
+            "type": "binary",
+            "datas": pdf_base64,
+            "res_model": "account.move",
+            "res_id": factura_id,
+            "mimetype": "application/pdf",
+            "description": f"Proforma enviada por correo"
+        }
         
+        attachment_id = client.execute("ir.attachment", "create", [attachment_data])
+        
+        # Si retorna lista, extraer primer elemento
+        if isinstance(attachment_id, list):
+            attachment_id = attachment_id[0] if attachment_id else None
+            
         if not attachment_id:
             raise Exception("No se pudo crear el adjunto en Odoo")
         
@@ -420,24 +422,31 @@ def enviar_proforma_email(
         """
         
         # Crear mensaje de correo usando el servidor configurado en Odoo
-        mail_id = client.execute(
-            "mail.mail",
-            "create",
-            [{
-                "subject": asunto,
-                "body_html": cuerpo_html,
-                "email_to": email_destino,
-                "email_from": "notificaciones-rfp@riofuturo.cl",  # Servidor configurado en Odoo
-                "attachment_ids": [(6, 0, [int(attachment_id)])],  # Tupla para many2many
-                "auto_delete": True
-            }]
-        )
+        mail_data = {
+            "subject": asunto,
+            "body_html": cuerpo_html,
+            "email_to": email_destino,
+            "email_from": "notificaciones-rfp@riofuturo.cl",  # Servidor configurado en Odoo
+            "attachment_ids": [(6, 0, [attachment_id])],  # Tupla para many2many
+            "auto_delete": True
+        }
+        
+        mail_id = client.execute("mail.mail", "create", [mail_data])
+        
+        # Si retorna lista, extraer primer elemento
+        if isinstance(mail_id, list):
+            mail_id = mail_id[0] if mail_id else None
         
         if not mail_id:
             raise Exception("No se pudo crear el correo en Odoo")
         
-        # Enviar el correo
-        client.execute("mail.mail", "send", [mail_id])
+        # Enviar el correo (send no retorna valor útil, solo ejecutar)
+        try:
+            client.execute("mail.mail", "send", [mail_id])
+        except Exception as e:
+            # Si el error es por marshal None, ignorarlo (send fue exitoso)
+            if "cannot marshal None" not in str(e):
+                raise
         
         # Registrar el mensaje en el chatter de la factura para historial
         mensaje_chatter = f"""
@@ -450,17 +459,20 @@ def enviar_proforma_email(
         <p><em>Enviado automáticamente desde el Dashboard de Recepciones</em></p>
         """
         
-        client.execute(
-            "account.move",
-            "message_post",
-            [factura_id],
-            {
-                "body": mensaje_chatter,
-                "message_type": "comment",
-                "subtype_xmlid": "mail.mt_note",
-                "attachment_ids": [(6, 0, [int(attachment_id)])]  # Tupla para many2many
-            }
-        )
+        # message_post sin adjuntos (el adjunto ya está vinculado a la factura)
+        try:
+            client.execute(
+                "account.move",
+                "message_post",
+                factura_id,
+                body=mensaje_chatter,
+                message_type="comment",
+                subtype_xmlid="mail.mt_note"
+            )
+        except Exception as e:
+            # Si el error es por marshal None, ignorarlo (message_post fue exitoso)
+            if "cannot marshal None" not in str(e):
+                raise
         
         return {
             "success": True,
