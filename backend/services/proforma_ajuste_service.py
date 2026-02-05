@@ -406,7 +406,7 @@ def enviar_proforma_email(
             <p>Por favor revise el documento adjunto y no dude en contactarnos si tiene alguna consulta.</p>
             <br>
             <p>Saludos cordiales,</p>
-            <p><strong>Rio Futuro</strong></p>
+            <p><strong>Rio Futuro Procesos</strong></p>
             <hr style="border: 1px solid #ddd; margin-top: 20px;">
             <p style="font-size: 11px; color: #888;">
                 Este correo fue enviado automáticamente desde el sistema de gestión de Rio Futuro.
@@ -414,14 +414,14 @@ def enviar_proforma_email(
         </div>
         """
         
-        # Crear mensaje de correo
+        # Crear mensaje de correo usando el servidor configurado en Odoo
         mail_id = client.create(
             "mail.mail",
             {
                 "subject": asunto,
                 "body_html": cuerpo_html,
                 "email_to": email_destino,
-                "email_from": "notificaciones@riofuturo.cl",
+                "email_from": "notificaciones-rfp@riofuturo.cl",  # Servidor configurado en Odoo
                 "attachment_ids": [(6, 0, [attachment_id])],
                 "auto_delete": True
             }

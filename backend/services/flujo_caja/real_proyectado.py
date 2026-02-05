@@ -195,6 +195,12 @@ class RealProyectadoCalculator:
                         'payment_state': payment_state
                     })
             
+            # Calcular montos_por_mes como suma de real + proyectado por mes
+            # Esto es lo que se mostrará en las columnas mensuales del concepto principal
+            montos_por_mes_total = defaultdict(float)
+            for mes in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
+                montos_por_mes_total[mes] = real_por_mes.get(mes, 0) + proyectado_por_mes.get(mes, 0)
+            
             # Convertir defaultdicts a dicts normales y ordenar
             cuentas_resultado = []
             for estado_label, estado_data in sorted(estados.items(), key=lambda x: x[1]['orden']):
@@ -231,6 +237,8 @@ class RealProyectadoCalculator:
                 'ppto': 0.0,
                 'real_por_mes': dict(real_por_mes),
                 'proyectado_por_mes': dict(proyectado_por_mes),
+                'montos_por_mes': dict(montos_por_mes_total),  # Sumatoria para columnas mensuales
+                'total': real_total + proyectado_total,
                 'cuentas': cuentas_resultado,  # Estructura jerárquica
                 'facturas_count': len(facturas)
             }
@@ -245,6 +253,7 @@ class RealProyectadoCalculator:
                 'ppto': 0.0,
                 'real_por_mes': {},
                 'proyectado_por_mes': {},
+                'montos_por_mes': {},
                 'cuentas': [],
                 'error': str(e)
             }
@@ -330,7 +339,14 @@ class RealProyectadoCalculator:
             
             # Construir estructura de cuentas (por mes de devolución)
             cuentas_resultado = []
+            
+            # Acumular montos por mes para el concepto principal
+            total_por_mes = defaultdict(float)
+            
             for mes, data in sorted(devoluciones_por_mes.items()):
+                # Acumular para el total del concepto
+                total_por_mes[mes] += data['monto']
+                
                 # Formatear nombre del mes
                 try:
                     fecha_mes = datetime.strptime(f"{mes}-01", '%Y-%m-%d')
@@ -368,6 +384,8 @@ class RealProyectadoCalculator:
                 'ppto': 0.0,
                 'real_por_mes': dict(real_por_mes),
                 'proyectado_por_mes': {},
+                'montos_por_mes': dict(total_por_mes),  # Sumatoria para columnas mensuales
+                'total': real_total,
                 'cuentas': cuentas_resultado,
                 'movimientos_count': len(movimientos)
             }
