@@ -453,25 +453,39 @@ def enviar_proforma_email(
         asunto = f"Proforma {nombre_factura} - Rio Futuro"
         
         cuerpo_html = f"""
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2 style="color: #2E7D32;">Proforma de Proveedor</h2>
-            <p>Estimado(a) <strong>{proveedor_nombre}</strong>,</p>
-            <p>Adjunto encontrará la proforma correspondiente a la factura <strong>{nombre_factura}</strong>.</p>
-            <br>
-            <p>Detalle:</p>
-            <ul>
-                <li><strong>Factura:</strong> {nombre_factura}</li>
-                <li><strong>Moneda:</strong> CLP (Pesos Chilenos)</li>
-            </ul>
-            <br>
-            <p>Por favor revise el documento adjunto y no dude en contactarnos si tiene alguna consulta.</p>
-            <br>
-            <p>Saludos cordiales,</p>
-            <p><strong>Rio Futuro Procesos</strong></p>
-            <hr style="border: 1px solid #ddd; margin-top: 20px;">
-            <p style="font-size: 11px; color: #888;">
-                Este correo fue enviado automáticamente desde el sistema de gestión de Rio Futuro.
-            </p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #1B4F72; padding: 20px; text-align: center;">
+                <h2 style="color: #FFFFFF; margin: 0; font-size: 24px;">Proforma de Proveedor</h2>
+            </div>
+            
+            <div style="padding: 30px; background-color: #f9f9f9;">
+                <p style="color: #333; font-size: 15px;">Estimado(a) <strong>{proveedor_nombre}</strong>,</p>
+                
+                <p style="color: #555; line-height: 1.6;">
+                    Adjunto encontrará la proforma correspondiente a la factura <strong style="color: #1B4F72;">{nombre_factura}</strong>.
+                </p>
+                
+                <div style="background-color: #E8F4F8; border-left: 4px solid #2E86AB; padding: 15px; margin: 20px 0;">
+                    <p style="margin: 0; color: #333;"><strong>Detalle:</strong></p>
+                    <ul style="color: #555; margin: 10px 0;">
+                        <li><strong>Factura:</strong> {nombre_factura}</li>
+                        <li><strong>Moneda:</strong> CLP (Pesos Chilenos)</li>
+                    </ul>
+                </div>
+                
+                <p style="color: #555; line-height: 1.6;">
+                    Por favor revise el documento adjunto y no dude en contactarnos si tiene alguna consulta.
+                </p>
+                
+                <p style="color: #333; margin-top: 30px;">Saludos cordiales,</p>
+                <p style="color: #1B4F72; font-weight: bold; font-size: 16px; margin: 5px 0;">Rio Futuro Procesos</p>
+            </div>
+            
+            <div style="background-color: #1B4F72; padding: 15px; text-align: center;">
+                <p style="font-size: 11px; color: #FFFFFF; margin: 0;">
+                    Este correo fue enviado automáticamente desde el sistema de gestión de Rio Futuro.
+                </p>
+            </div>
         </div>
         """
         

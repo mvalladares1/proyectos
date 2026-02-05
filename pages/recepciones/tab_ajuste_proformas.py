@@ -259,6 +259,93 @@ def render(username: str, password: str):
                 _render_preview_clp(factura, username, password)
 
 
+def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str):
+    """Envía múltiples proformas de forma masiva."""
+    
+    # Mapear seleccionadas a facturas completas
+    facturas_enviar = []
+    for sel in facturas_seleccionadas:
+        nombre_factura = sel.split(" | ")[0]
+        for f in facturas_todas:
+            if f['nombre'] == nombre_factura and f.get('proveedor_email'):
+                facturas_enviar.append(f)
+                break
+    
+    if not facturas_enviar:
+        st.error("❌ No hay proformas válidas para enviar (todos los proveedores sin email)")
+        return
+    
+    st.markdown("---")
+    st.markdown("### 📤 Enviando Proformas...")
+    
+    progress_bar = st.progress(0)
+    status_container = st.container()
+    
+    total = len(facturas_enviar)
+    enviadas = 0
+    errores = []
+    
+    for idx, factura in enumerate(facturas_enviar):
+        progress = (idx + 1) / total
+        progress_bar.progress(progress)
+        
+        with status_container:
+            st.info(f"📧 Enviando {idx + 1}/{total}: {factura['nombre']} → {factura['proveedor_email']}")
+        
+        try:
+            # Generar PDF
+            pdf_bytes = _generar_pdf_proforma(factura)
+            
+            # Enviar email
+            from backend.services.proforma_ajuste_service import enviar_proforma_email
+            
+            resultado = enviar_proforma_email(
+                username=username,
+                password=password,
+                factura_id=factura['id'],
+                email_destino=factura['proveedor_email'],
+                pdf_bytes=pdf_bytes,
+                nombre_factura=factura['nombre'],
+                proveedor_nombre=factura['proveedor_nombre']
+            )
+            
+            if resultado.get("success"):
+                enviadas += 1
+                with status_container:
+                    st.success(f"✅ {factura['nombre']} enviada correctamente")
+            else:
+                errores.append(f"{factura['nombre']}: {resultado.get('error', 'Error desconocido')}")
+                with status_container:
+                    st.error(f"❌ Error enviando {factura['nombre']}")
+        
+        except Exception as e:
+            errores.append(f"{factura['nombre']}: {str(e)}")
+            with status_container:
+                st.error(f"❌ Error enviando {factura['nombre']}: {str(e)}")
+    
+    progress_bar.progress(1.0)
+    
+    # Resumen final
+    st.markdown("---")
+    st.markdown("### 📊 Resumen de Envío")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("✅ Enviadas", enviadas)
+    with col2:
+        st.metric("❌ Errores", len(errores))
+    with col3:
+        st.metric("📊 Total", total)
+    
+    if errores:
+        st.error("**Errores encontrados:**")
+        for error in errores:
+            st.caption(f"  • {error}")
+    else:
+        st.success("🎉 ¡Todas las proformas fueron enviadas correctamente!")
+        st.balloons()
+
+
 def _get_proveedores(username: str, password: str) -> list:
     """Obtiene proveedores con facturas en borrador."""
     try:
@@ -619,38 +706,57 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
     from reportlab.lib.units import inch
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
     import io
+    import os
+    
+    # Función para formato chileno (puntos como separador de miles, coma para decimales)
+    def fmt_cl(num, decimales=2):
+        """Formatea número a formato chileno."""
+        if decimales == 0:
+            formatted = f"{num:,.0f}"
+        else:
+            formatted = f"{num:,.{decimales}f}"
+        # Intercambiar comas y puntos
+        formatted = formatted.replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+        return formatted
     
     buffer = io.BytesIO()
     # Usar landscape para tener más espacio horizontal
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
-                          topMargin=0.5*inch, bottomMargin=0.5*inch,
-                          leftMargin=0.5*inch, rightMargin=0.5*inch)
+                          topMargin=0.5*inch, bottomMargin=0.7*inch,
+                          leftMargin=0.6*inch, rightMargin=0.6*inch)
     
     styles = getSampleStyleSheet()
+    # Colores: azul corporativo de Rio Futuro
+    color_azul = colors.HexColor('#1B4F72')  # Azul oscuro del logo
+    color_azul_claro = colors.HexColor('#2E86AB')  # Azul medio
+    
     title_style = ParagraphStyle('CustomTitle', 
                                 parent=styles['Heading1'], 
                                 fontSize=18, 
                                 alignment=TA_CENTER,
-                                textColor=colors.HexColor('#2E7D32'),
+                                textColor=color_azul,
                                 spaceAfter=20)
     
     elements = []
     
-    # Título
+    # Título centrado (el logo se sobrepone después)
     elements.append(Paragraph("PROFORMA DE PROVEEDOR", title_style))
     elements.append(Spacer(1, 12))
     
+    # Fecha de envío (hoy)
+    from datetime import datetime
+    fecha_envio = datetime.now().strftime("%d-%m-%Y")
+    
     # Información del documento en 2 columnas
     info_data = [
-        ["Factura:", factura['nombre'], "", "Fecha:", factura.get('fecha_factura', '-')],
+        ["Factura:", factura['nombre'], "", "Fecha Envío:", fecha_envio],
         ["Proveedor:", factura['proveedor_nombre'][:50], "", "Moneda:", "USD / CLP"],
-        ["Referencia:", factura.get('ref', '-') or '-', "", "TC Promedio:", f"{factura['tipo_cambio']:,.2f}"],
-        ["", "", "", "", "(*Cada línea tiene su TC específico)"],
+        ["Referencia:", factura.get('ref', '-') or '-', "", "", ""],
     ]
     
-    info_table = Table(info_data, colWidths=[1*inch, 3*inch, 0.5*inch, 1*inch, 1.5*inch])
+    info_table = Table(info_data, colWidths=[1*inch, 3*inch, 0.5*inch, 1.2*inch, 1.3*inch])
     info_table.setStyle(TableStyle([
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
@@ -661,11 +767,15 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
     elements.append(info_table)
     elements.append(Spacer(1, 20))
     
-    # Tabla de líneas con todas las columnas incluyendo TC
-    table_data = [["Descripción", "Cant.", "P.Unit\nUSD", "TC", "P.Unit\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
+    # Tabla de líneas con fecha de OC
+    table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nUSD", "Tipo\nCambio", "P. Unitario\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
+    
+    # Necesitamos obtener las fechas de las OCs
+    from shared.odoo_client import OdooClient
+    client = OdooClient(username=st.session_state.get('username'), password=st.session_state.get('password'))
     
     for linea in factura['lineas']:
-        desc = linea['nombre'][:40] if linea['nombre'] else "-"
+        desc = linea['nombre'][:35] if linea['nombre'] else "-"
         cant = linea['cantidad']
         p_unit_usd = linea['precio_usd']
         tc_linea = linea['tc_implicito']
@@ -673,79 +783,155 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
         subtotal_usd = linea['subtotal_usd']
         subtotal_clp = linea['subtotal_clp']
         
+        # Extraer fecha de OC
+        fecha_oc = "-"
+        if ":" in desc:
+            oc_nombre = desc.split(":")[0].strip()
+            try:
+                ocs = client.search_read(
+                    "purchase.order",
+                    [("name", "=", oc_nombre)],
+                    ["date_order"],
+                    limit=1
+                )
+                if ocs and ocs[0].get("date_order"):
+                    fecha_oc = ocs[0]["date_order"][:10]  # YYYY-MM-DD
+            except:
+                pass
+        
         table_data.append([
             desc,
-            f"{cant:,.2f}",
-            f"${p_unit_usd:,.2f}",
-            f"{tc_linea:,.2f}",
-            f"${p_unit_clp:,.0f}",
-            f"${subtotal_usd:,.2f}",
-            f"${subtotal_clp:,.0f}"
+            fecha_oc,
+            fmt_cl(cant, 2),
+            f"${fmt_cl(p_unit_usd, 2)}",
+            fmt_cl(tc_linea, 2),
+            f"${fmt_cl(p_unit_clp, 0)}",
+            f"${fmt_cl(subtotal_usd, 2)}",
+            f"${fmt_cl(subtotal_clp, 0)}"
         ])
     
     # Línea en blanco antes de totales
-    table_data.append(["", "", "", "", "", "", ""])
+    table_data.append(["", "", "", "", "", "", "", ""])
     
     # Totales - 3 filas
     table_data.append([
-        "", "", "", "", "Base Imponible:",
-        f"${factura['base_usd']:,.2f}",
-        f"${factura['base_clp']:,.0f}"
+        "", "", "", "", "", "Base Imponible:",
+        f"${fmt_cl(factura['base_usd'], 2)}",
+        f"${fmt_cl(factura['base_clp'], 0)}"
     ])
     table_data.append([
-        "", "", "", "", "IVA 19%:",
-        f"${factura['iva_usd']:,.2f}",
-        f"${factura['iva_clp']:,.0f}"
+        "", "", "", "", "", "IVA 19%:",
+        f"${fmt_cl(factura['iva_usd'], 2)}",
+        f"${fmt_cl(factura['iva_clp'], 0)}"
     ])
     table_data.append([
-        "", "", "", "", "TOTAL:",
-        f"${factura['total_usd']:,.2f}",
-        f"${factura['total_clp']:,.0f}"
+        "", "", "", "", "", "TOTAL:",
+        f"${fmt_cl(factura['total_usd'], 2)}",
+        f"${fmt_cl(factura['total_clp'], 0)} *"
     ])
     
-    # Anchos de columna ajustados para landscape con columna TC
-    main_table = Table(table_data, colWidths=[2.8*inch, 0.7*inch, 0.8*inch, 0.6*inch, 0.8*inch, 0.9*inch, 1.0*inch])
+    # Anchos de columna ajustados para landscape con fecha OC - más anchos para ver nombres completos
+    main_table = Table(table_data, colWidths=[2.0*inch, 0.8*inch, 0.65*inch, 0.8*inch, 0.6*inch, 0.9*inch, 0.9*inch, 1.05*inch])
     main_table.setStyle(TableStyle([
-        # Header
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),
+        # Header - azul corporativo con texto más grande y visible
+        ('BACKGROUND', (0, 0), (-1, 0), color_azul),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),  # Header más grande
+        ('FONTSIZE', (0, 1), (-1, -1), 7),  # Datos más pequeños
         ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
         
         # Grid para líneas de productos
         ('GRID', (0, 0), (-1, len(factura['lineas'])), 0.5, colors.grey),
-        ('LINEBELOW', (0, len(factura['lineas'])), (-1, len(factura['lineas'])), 1, colors.grey),
+        ('LINEBELOW', (0, len(factura['lineas'])), (-1, len(factura['lineas'])), 1, colors.black),
         
         # Padding
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         
-        # Totales - negritas
-        ('FONTNAME', (4, -3), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (4, -1), (-1, -1), 10),
-        ('LINEABOVE', (4, -3), (-1, -3), 1.5, colors.black),
-        ('BACKGROUND', (4, -3), (-1, -1), colors.HexColor('#f5f5f5')),
+        # Totales - negritas con fondo azul claro
+        ('FONTNAME', (5, -3), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (5, -1), (-1, -1), 9),
+        ('LINEABOVE', (5, -3), (-1, -3), 1.5, colors.black),
+        ('BACKGROUND', (5, -3), (-1, -1), colors.HexColor('#E8F4F8')),
     ]))
     elements.append(main_table)
     
+    # Nota importante sobre el monto a facturar
+    elements.append(Spacer(1, 10))
+    nota_style = ParagraphStyle('Nota',
+                               parent=styles['Normal'],
+                               fontSize=8,
+                               textColor=color_azul,
+                               alignment=TA_LEFT,
+                               leftIndent=0.6*inch)
+    elements.append(Paragraph(
+        "<b>* Este es el monto total en CLP que se debe facturar</b>",
+        nota_style
+    ))
+    
     # Footer
-    elements.append(Spacer(1, 30))
+    from datetime import datetime
+    anio_actual = datetime.now().year
+    
+    elements.append(Spacer(1, 20))
     footer_style = ParagraphStyle('Footer', 
                                  parent=styles['Normal'],
-                                 fontSize=8,
-                                 textColor=colors.grey,
+                                 fontSize=7,
+                                 textColor=color_azul,
                                  alignment=TA_CENTER)
     elements.append(Paragraph(
-        "Rio Futuro Procesos SPA | Documento generado automáticamente desde Dashboard de Recepciones",
+        f"Rio Futuro Procesos SPA | Año {anio_actual}",
         footer_style
     ))
     
     doc.build(elements)
     buffer.seek(0)
+    
+    # Dibujar logo superpuesto en la esquina superior izquierda
+    from reportlab.pdfgen import canvas as pdf_canvas
+    from PyPDF2 import PdfReader, PdfWriter
+    
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "RFP - LOGO OFICIAL.png")
+    
+    if os.path.exists(logo_path):
+        # Leer el PDF generado
+        pdf_reader = PdfReader(buffer)
+        pdf_writer = PdfWriter()
+        
+        # Crear un canvas temporal para el logo
+        overlay_buffer = io.BytesIO()
+        c = pdf_canvas.Canvas(overlay_buffer, pagesize=landscape(letter))
+        
+        # Dibujar logo en esquina superior izquierda (muy esquinado)
+        page_width, page_height = landscape(letter)
+        logo_width = 4.2 * inch  # Aún más grande
+        logo_height = 1.4 * inch
+        x_pos = 0.02 * inch  # Muy a la izquierda - casi en el borde
+        y_pos = page_height - 0.15 * inch - logo_height  # Muy arriba - casi en el borde
+        
+        c.drawImage(logo_path, x_pos, y_pos, width=logo_width, height=logo_height, preserveAspectRatio=True, mask='auto')
+        c.save()
+        
+        # Sobreponer logo en cada página
+        overlay_buffer.seek(0)
+        overlay_pdf = PdfReader(overlay_buffer)
+        overlay_page = overlay_pdf.pages[0]
+        
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            page.merge_page(overlay_page)
+            pdf_writer.add_page(page)
+        
+        # Guardar el PDF final con logo
+        final_buffer = io.BytesIO()
+        pdf_writer.write(final_buffer)
+        final_buffer.seek(0)
+        return final_buffer.getvalue()
+    
     return buffer.getvalue()
 
 
