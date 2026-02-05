@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from .shared import fmt_numero, fmt_dinero, API_URL
 import requests
+import xmlrpc.client
 
 
 def fmt_chileno(num, decimales=2):
@@ -31,7 +32,7 @@ def render(username: str, password: str):
     # SECCIÓN 1: FILTROS DE BÚSQUEDA
     # =========================================================================
     with st.expander("🔍 Búsqueda de Facturas en Borrador", expanded=True):
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
         
         with col1:
             # Obtener proveedores con borradores
@@ -61,6 +62,14 @@ def render(username: str, password: str):
                 format="DD/MM/YYYY"
             )
         
+        with col4:
+            filtro_envio = st.selectbox(
+                "Estado Envío",
+                ["Todas", "No Enviadas", "Enviadas"],
+                key="ajuste_proforma_filtro_envio",
+                help="Filtrar por proformas ya enviadas (se detecta por registro en chatter)"
+            )
+        
         col_btn1, col_btn2 = st.columns([1, 3])
         with col_btn1:
             buscar = st.button("🔍 Buscar Facturas", type="primary", key="btn_buscar_ajuste_proformas")
@@ -79,6 +88,17 @@ def render(username: str, password: str):
                     fecha_desde=fecha_desde.strftime("%Y-%m-%d"),
                     fecha_hasta=fecha_hasta.strftime("%Y-%m-%d")
                 )
+                
+                # Obtener estado de envío para todas las facturas
+                with st.spinner("📝 Verificando estado de envío en chatter..."):
+                    facturas = _agregar_estado_envio(facturas, username, password)
+                
+                # Aplicar filtro si es necesario
+                if filtro_envio != "Todas":
+                    facturas = [f for f in facturas if 
+                               (filtro_envio == "Enviadas" and f.get("enviada")) or
+                               (filtro_envio == "No Enviadas" and not f.get("enviada"))]
+                
                 st.session_state.ajuste_proformas_data = facturas
         
         facturas = st.session_state.get("ajuste_proformas_data", [])
@@ -216,6 +236,7 @@ def render(username: str, password: str):
                 "Ref": f["ref"] or "-",
                 "Proveedor": f["proveedor_nombre"],
                 "Fecha": f["fecha_factura"] or f["fecha_creacion"][:10] if f["fecha_creacion"] else "-",
+                "Estado": "✅ Enviada" if f.get("enviada") else "🔵 No Enviada",
                 "Líneas": f["num_lineas"],
                 "Total USD": f["total_usd"],
                 "Total CLP": f["total_clp"],
@@ -258,7 +279,7 @@ def render(username: str, password: str):
             factura = factura_map.get(factura_sel)
             
             if factura:
-                _render_detalle_factura(factura)
+                _render_detalle_factura(factura, username, password)
                 
                 # =========================================================================
                 # SECCIÓN 4: PREVIEW COMPARATIVO
@@ -313,7 +334,7 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
             
             try:
                 # Generar PDF
-                pdf_bytes = _generar_pdf_proforma(factura)
+                pdf_bytes = _generar_pdf_proforma(factura, username, password)
                 
                 # Agregar al ZIP con nombre descriptivo
                 nombre_archivo = f"Proforma_{factura['nombre']}_{factura['proveedor_nombre'][:20].replace(' ', '_')}.pdf"
@@ -379,7 +400,7 @@ def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list,
         
         try:
             # Generar PDF
-            pdf_bytes = _generar_pdf_proforma(factura)
+            pdf_bytes = _generar_pdf_proforma(factura, username, password)
             
             # Enviar email
             from backend.services.proforma_ajuste_service import enviar_proforma_email
@@ -476,7 +497,69 @@ def _get_facturas_borrador(username: str, password: str, **kwargs) -> list:
         return []
 
 
-def _render_detalle_factura(factura: dict):
+def _agregar_estado_envio(facturas: list, username: str, password: str) -> list:
+    """
+    Agrega información de estado de envío a cada factura.
+    Detecta envío revisando el chatter.
+    OPTIMIZADO: Hace una sola llamada API batch.
+    
+    Args:
+        facturas: Lista de facturas
+        username: Usuario Odoo
+        password: Contraseña Odoo
+        
+    Returns:
+        Lista de facturas con campo 'enviada' agregado
+    """
+    if not facturas:
+        return facturas
+    
+    # Conectar a Odoo para revisar chatter
+    try:
+        from backend.config.odoo_config import ODOO_URL, ODOO_DB
+        
+        common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+        uid = common.authenticate(ODOO_DB, username, password, {})
+        
+        if not uid:
+            st.warning("⚠️ No se pudo verificar estado de envío")
+            for f in facturas:
+                f['enviada'] = False
+            return facturas
+        
+        models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+        
+        # OPTIMIZACIÓN: Buscar todos los mensajes en una sola llamada
+        factura_ids = [f.get('id') for f in facturas]
+        
+        mensajes = models.execute_kw(
+            ODOO_DB, uid, password,
+            'mail.message', 'search_read',
+            [[
+                ('model', '=', 'account.move'),
+                ('res_id', 'in', factura_ids),
+                ('body', 'ilike', 'Proforma enviada por correo electrónico')
+            ]],
+            {'fields': ['res_id']}
+        )
+        
+        # Crear set de IDs de facturas que tienen envío
+        facturas_con_envio = {msg['res_id'] for msg in mensajes}
+        
+        # Agregar campo 'enviada' a cada factura
+        for factura in facturas:
+            factura['enviada'] = factura.get('id') in facturas_con_envio
+        
+        return facturas
+        
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo verificar estado de envío: {e}")
+        for f in facturas:
+            f['enviada'] = False
+        return facturas
+
+
+def _render_detalle_factura(factura: dict, username: str, password: str):
     """Renderiza el detalle de una factura seleccionada."""
     
     col1, col2, col3 = st.columns(3)
@@ -497,29 +580,41 @@ def _render_detalle_factura(factura: dict):
     if factura["lineas"]:
         st.markdown("##### 📦 Líneas de Factura")
         
-        # Obtener fechas de OCs
+        # OPTIMIZACIÓN: Obtener todas las fechas de OCs en una sola llamada
         from shared.odoo_client import OdooClient
-        client = OdooClient(username=st.session_state.get('username'), password=st.session_state.get('password'))
+        client = OdooClient(username=username, password=password)
+        
+        # Extraer todos los nombres de OC únicos
+        oc_nombres = []
+        for l in factura["lineas"]:
+            desc = l["nombre"][:60] if l["nombre"] else "-"
+            if ":" in desc:
+                oc_nombre = desc.split(":")[0].strip()
+                if oc_nombre not in oc_nombres:
+                    oc_nombres.append(oc_nombre)
+        
+        # Buscar todas las OCs en una sola llamada
+        fechas_oc_map = {}
+        if oc_nombres:
+            try:
+                ocs = client.search_read(
+                    "purchase.order",
+                    [("name", "in", oc_nombres)],
+                    ["name", "date_order"]
+                )
+                fechas_oc_map = {oc["name"]: oc["date_order"][:10] for oc in ocs if oc.get("date_order")}
+            except:
+                pass
         
         lineas_completas = []
         for l in factura["lineas"]:
             desc = l["nombre"][:60] if l["nombre"] else "-"
             
-            # Extraer fecha de OC
+            # Extraer fecha de OC del mapa
             fecha_oc = "-"
             if ":" in desc:
                 oc_nombre = desc.split(":")[0].strip()
-                try:
-                    ocs = client.search_read(
-                        "purchase.order",
-                        [("name", "=", oc_nombre)],
-                        ["date_order"],
-                        limit=1
-                    )
-                    if ocs and ocs[0].get("date_order"):
-                        fecha_oc = ocs[0]["date_order"][:10]  # YYYY-MM-DD
-                except:
-                    pass
+                fecha_oc = fechas_oc_map.get(oc_nombre, "-")
             
             # Calcular precio unitario CLP
             p_unit_clp = l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0
@@ -668,7 +763,7 @@ def _render_preview_clp(factura: dict, username: str, password: str):
     
     with col_action1:
         # Botón para descargar PDF
-        pdf_bytes = _generar_pdf_proforma(factura)
+        pdf_bytes = _generar_pdf_proforma(factura, username, password)
         st.download_button(
             label="📄 Descargar PDF",
             data=pdf_bytes,
@@ -815,7 +910,7 @@ def _exportar_excel(factura: dict):
     )
 
 
-def _generar_pdf_proforma(factura: dict) -> bytes:
+def _generar_pdf_proforma(factura: dict, username: str = None, password: str = None) -> bytes:
     """Genera un PDF de la proforma usando reportlab."""
     from reportlab.lib.pagesizes import letter, landscape
     from reportlab.lib import colors
@@ -886,9 +981,32 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
     # Tabla de líneas con fecha de OC
     table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nUSD", "Tipo\nCambio", "P. Unitario\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
     
-    # Necesitamos obtener las fechas de las OCs
+    # OPTIMIZACIÓN: Obtener todas las fechas de OCs en una sola llamada
     from shared.odoo_client import OdooClient
-    client = OdooClient(username=st.session_state.get('username'), password=st.session_state.get('password'))
+    client = OdooClient(username=username, password=password) if username and password else None
+    
+    # Extraer todos los nombres de OC únicos
+    oc_nombres = []
+    if client:
+        for linea in factura['lineas']:
+            desc = linea['nombre'][:35] if linea['nombre'] else "-"
+            if ":" in desc:
+                oc_nombre = desc.split(":")[0].strip()
+                if oc_nombre not in oc_nombres:
+                    oc_nombres.append(oc_nombre)
+    
+    # Buscar todas las OCs en una sola llamada
+    fechas_oc_map = {}
+    if client and oc_nombres:
+        try:
+            ocs = client.search_read(
+                "purchase.order",
+                [("name", "in", oc_nombres)],
+                ["name", "date_order"]
+            )
+            fechas_oc_map = {oc["name"]: oc["date_order"][:10] for oc in ocs if oc.get("date_order")}
+        except:
+            pass
     
     for linea in factura['lineas']:
         desc = linea['nombre'][:35] if linea['nombre'] else "-"
@@ -899,21 +1017,11 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
         subtotal_usd = linea['subtotal_usd']
         subtotal_clp = linea['subtotal_clp']
         
-        # Extraer fecha de OC
+        # Extraer fecha de OC del mapa
         fecha_oc = "-"
         if ":" in desc:
             oc_nombre = desc.split(":")[0].strip()
-            try:
-                ocs = client.search_read(
-                    "purchase.order",
-                    [("name", "=", oc_nombre)],
-                    ["date_order"],
-                    limit=1
-                )
-                if ocs and ocs[0].get("date_order"):
-                    fecha_oc = ocs[0]["date_order"][:10]  # YYYY-MM-DD
-            except:
-                pass
+            fecha_oc = fechas_oc_map.get(oc_nombre, "-")
         
         table_data.append([
             desc,
@@ -1063,7 +1171,7 @@ def _enviar_proforma_individual(factura: dict, username: str, password: str):
     with st.spinner(f"📤 Enviando proforma a {email_destino}..."):
         try:
             # Generar PDF
-            pdf_bytes = _generar_pdf_proforma(factura)
+            pdf_bytes = _generar_pdf_proforma(factura, username, password)
             
             # Enviar correo via servicio
             from backend.services.proforma_ajuste_service import enviar_proforma_email
@@ -1129,7 +1237,7 @@ def _enviar_proformas_masivo(facturas: list, seleccionadas: list, username: str,
         
         try:
             # Generar PDF
-            pdf_bytes = _generar_pdf_proforma(factura)
+            pdf_bytes = _generar_pdf_proforma(factura, username, password)
             
             # Enviar
             from backend.services.proforma_ajuste_service import enviar_proforma_email
