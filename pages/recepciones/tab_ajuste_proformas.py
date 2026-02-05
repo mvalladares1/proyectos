@@ -332,47 +332,78 @@ def _render_preview_clp(factura: dict, username: str, password: str):
     </div>
     """, unsafe_allow_html=True)
     
-    # Tabla de líneas en CLP
+    # Tabla de líneas con detalle completo
     if factura["lineas"]:
+        st.markdown("##### 📦 Detalle de Líneas")
+        
         df_preview = pd.DataFrame([
             {
-                "Descripción": l["nombre"][:50] if l["nombre"] else "-",
-                "Cantidad": f"{l['cantidad']:,.2f}",
-                "Subtotal CLP": f"${l['subtotal_clp']:,.0f}"
+                "Descripción": l["nombre"][:40] if l["nombre"] else "-",
+                "Cant.": l["cantidad"],
+                "P.Unit USD": l["precio_usd"],
+                "P.Unit CLP": l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0,
+                "Subtotal USD": l["subtotal_usd"],
+                "Subtotal CLP": l["subtotal_clp"],
             }
             for l in factura["lineas"]
         ])
         
+        # Formatear columnas
+        df_preview["Cant."] = df_preview["Cant."].apply(lambda x: f"{x:,.2f}")
+        df_preview["P.Unit USD"] = df_preview["P.Unit USD"].apply(lambda x: f"${x:,.2f}")
+        df_preview["P.Unit CLP"] = df_preview["P.Unit CLP"].apply(lambda x: f"${x:,.0f}")
+        df_preview["Subtotal USD"] = df_preview["Subtotal USD"].apply(lambda x: f"${x:,.2f}")
+        df_preview["Subtotal CLP"] = df_preview["Subtotal CLP"].apply(lambda x: f"${x:,.0f}")
+        
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
     
-    # Totales
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col2:
-        st.markdown("**Base imponible:**")
-        st.markdown("**IVA 19%:**")
-        st.markdown("**TOTAL:**")
-    with col3:
-        st.markdown(f"**${factura['base_clp']:,.0f}**")
-        st.markdown(f"${factura['iva_clp']:,.0f}")
-        st.markdown(f"**${factura['total_clp']:,.0f}**")
+    # Totales mejorados
+    st.markdown("---")
+    col_tot1, col_tot2, col_tot3 = st.columns([2, 1, 1])
+    
+    with col_tot1:
+        st.markdown("")
+    
+    with col_tot2:
+        st.markdown("##### 💵 USD")
+        st.markdown(f"Base: **${factura['base_usd']:,.2f}**")
+        st.markdown(f"IVA 19%: ${factura['iva_usd']:,.2f}")
+        st.markdown(f"**TOTAL: ${factura['total_usd']:,.2f}**")
+    
+    with col_tot3:
+        st.markdown("##### 💰 CLP")
+        st.markdown(f"Base: **${factura['base_clp']:,.0f}**")
+        st.markdown(f"IVA 19%: ${factura['iva_clp']:,.0f}")
+        st.markdown(f"**TOTAL: ${factura['total_clp']:,.0f}**")
     
     # Botones de acción
     st.markdown("---")
     st.markdown("#### 🚀 Acciones")
     
-    col_action1, col_action2, col_action3 = st.columns([1.5, 1, 1.5])
+    col_action1, col_action2, col_action3, col_action4 = st.columns(4)
     
     with col_action1:
-        # Botón para enviar esta proforma individual
-        if st.button("📤 Enviar esta Proforma", key=f"enviar_individual_{factura['id']}"):
-            _enviar_proforma_individual(factura, username, password)
+        # Botón para descargar PDF
+        pdf_bytes = _generar_pdf_proforma(factura)
+        st.download_button(
+            label="📄 Descargar PDF",
+            data=pdf_bytes,
+            file_name=f"Proforma_{factura['nombre']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            key=f"download_pdf_{factura['id']}"
+        )
     
     with col_action2:
+        # Botón para enviar esta proforma individual
+        if st.button("📤 Enviar por Email", key=f"enviar_individual_{factura['id']}"):
+            _enviar_proforma_individual(factura, username, password)
+    
+    with col_action3:
         # Exportar a Excel
         if st.button("📥 Exportar Excel", key=f"export_excel_{factura['id']}"):
             _exportar_excel(factura)
     
-    with col_action3:
+    with col_action4:
         st.link_button(
             "🔗 Ver en Odoo",
             f"https://riofuturo.server98c6e.oerpondemand.net/odoo/account.move/{factura['id']}",
@@ -500,19 +531,27 @@ def _exportar_excel(factura: dict):
 
 def _generar_pdf_proforma(factura: dict) -> bytes:
     """Genera un PDF de la proforma usando reportlab."""
-    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.pagesizes import letter, landscape
     from reportlab.lib import colors
     from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     import io
     
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    # Usar landscape para tener más espacio horizontal
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                          topMargin=0.5*inch, bottomMargin=0.5*inch,
+                          leftMargin=0.5*inch, rightMargin=0.5*inch)
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1)
-    normal_style = styles['Normal']
+    title_style = ParagraphStyle('CustomTitle', 
+                                parent=styles['Heading1'], 
+                                fontSize=18, 
+                                alignment=TA_CENTER,
+                                textColor=colors.HexColor('#2E7D32'),
+                                spaceAfter=20)
     
     elements = []
     
@@ -520,54 +559,104 @@ def _generar_pdf_proforma(factura: dict) -> bytes:
     elements.append(Paragraph("PROFORMA DE PROVEEDOR", title_style))
     elements.append(Spacer(1, 12))
     
-    # Información del documento
+    # Información del documento en 2 columnas
     info_data = [
-        ["Factura:", factura['nombre'], "Fecha:", factura.get('fecha_factura', '-')],
-        ["Proveedor:", factura['proveedor_nombre'][:40], "Moneda:", "CLP"],
-        ["Referencia:", factura.get('ref', '-') or '-', "TC:", f"{factura['tipo_cambio']:,.2f}"],
+        ["Factura:", factura['nombre'], "", "Fecha:", factura.get('fecha_factura', '-')],
+        ["Proveedor:", factura['proveedor_nombre'][:50], "", "Moneda:", "USD / CLP"],
+        ["Referencia:", factura.get('ref', '-') or '-', "", "TC:", f"{factura['tipo_cambio']:,.2f}"],
     ]
     
-    info_table = Table(info_data, colWidths=[1.2*inch, 2.5*inch, 1*inch, 1.5*inch])
+    info_table = Table(info_data, colWidths=[1*inch, 3*inch, 0.5*inch, 1*inch, 1.5*inch])
     info_table.setStyle(TableStyle([
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('FONTNAME', (3, 0), (3, -1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
     ]))
     elements.append(info_table)
     elements.append(Spacer(1, 20))
     
-    # Tabla de líneas
-    table_data = [["Descripción", "Cantidad", "Subtotal CLP"]]
+    # Tabla de líneas con todas las columnas
+    table_data = [["Descripción", "Cantidad", "P.Unit\nUSD", "P.Unit\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
     
     for linea in factura['lineas']:
-        desc = linea['nombre'][:50] if linea['nombre'] else "-"
-        cant = f"{linea['cantidad']:,.2f}"
-        subtotal = f"${linea['subtotal_clp']:,.0f}"
-        table_data.append([desc, cant, subtotal])
+        desc = linea['nombre'][:45] if linea['nombre'] else "-"
+        cant = linea['cantidad']
+        p_unit_usd = linea['precio_usd']
+        p_unit_clp = linea['subtotal_clp'] / cant if cant else 0
+        subtotal_usd = linea['subtotal_usd']
+        subtotal_clp = linea['subtotal_clp']
+        
+        table_data.append([
+            desc,
+            f"{cant:,.2f}",
+            f"${p_unit_usd:,.2f}",
+            f"${p_unit_clp:,.0f}",
+            f"${subtotal_usd:,.2f}",
+            f"${subtotal_clp:,.0f}"
+        ])
     
-    # Totales
-    table_data.append(["", "", ""])
-    table_data.append(["", "Base Imponible:", f"${factura['base_clp']:,.0f}"])
-    table_data.append(["", "IVA 19%:", f"${factura['iva_clp']:,.0f}"])
-    table_data.append(["", "TOTAL:", f"${factura['total_clp']:,.0f}"])
+    # Línea en blanco antes de totales
+    table_data.append(["", "", "", "", "", ""])
     
-    main_table = Table(table_data, colWidths=[4*inch, 1.3*inch, 1.5*inch])
+    # Totales - 3 filas
+    table_data.append([
+        "", "", "", "Base Imponible:",
+        f"${factura['base_usd']:,.2f}",
+        f"${factura['base_clp']:,.0f}"
+    ])
+    table_data.append([
+        "", "", "", "IVA 19%:",
+        f"${factura['iva_usd']:,.2f}",
+        f"${factura['iva_clp']:,.0f}"
+    ])
+    table_data.append([
+        "", "", "", "TOTAL:",
+        f"${factura['total_usd']:,.2f}",
+        f"${factura['total_clp']:,.0f}"
+    ])
+    
+    # Anchos de columna ajustados para landscape
+    main_table = Table(table_data, colWidths=[3.5*inch, 0.8*inch, 0.9*inch, 0.9*inch, 1.0*inch, 1.0*inch])
     main_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4CAF50')),
+        # Header
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        
+        # Grid para líneas de productos
         ('GRID', (0, 0), (-1, len(factura['lineas'])), 0.5, colors.grey),
+        ('LINEBELOW', (0, len(factura['lineas'])), (-1, len(factura['lineas'])), 1, colors.grey),
+        
+        # Padding
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
-        # Estilo para totales
-        ('FONTNAME', (1, -3), (1, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, -1), (2, -1), 'Helvetica-Bold'),
-        ('LINEABOVE', (1, -3), (-1, -3), 1, colors.black),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        
+        # Totales - negritas
+        ('FONTNAME', (3, -3), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (3, -1), (-1, -1), 10),
+        ('LINEABOVE', (3, -3), (-1, -3), 1.5, colors.black),
+        ('BACKGROUND', (3, -3), (-1, -1), colors.HexColor('#f5f5f5')),
     ]))
     elements.append(main_table)
+    
+    # Footer
+    elements.append(Spacer(1, 30))
+    footer_style = ParagraphStyle('Footer', 
+                                 parent=styles['Normal'],
+                                 fontSize=8,
+                                 textColor=colors.grey,
+                                 alignment=TA_CENTER)
+    elements.append(Paragraph(
+        "Rio Futuro Procesos SPA | Documento generado automáticamente desde Dashboard de Recepciones",
+        footer_style
+    ))
     
     doc.build(elements)
     buffer.seek(0)
