@@ -376,8 +376,9 @@ def enviar_proforma_email(
         pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
         
         # Crear adjunto vinculado a la factura (quedará en Odoo)
-        attachment_id = client.create(
+        attachment_id = client.execute(
             "ir.attachment",
+            "create",
             {
                 "name": f"Proforma_{nombre_factura}.pdf",
                 "type": "binary",
@@ -385,7 +386,7 @@ def enviar_proforma_email(
                 "res_model": "account.move",
                 "res_id": factura_id,
                 "mimetype": "application/pdf",
-                "description": f"Proforma enviada por correo el {client.execute('ir.fields', 'get_datetime_utc')}"
+                "description": f"Proforma enviada por correo"
             }
         )
         
@@ -416,8 +417,9 @@ def enviar_proforma_email(
         """
         
         # Crear mensaje de correo usando el servidor configurado en Odoo
-        mail_id = client.create(
+        mail_id = client.execute(
             "mail.mail",
+            "create",
             {
                 "subject": asunto,
                 "body_html": cuerpo_html,
