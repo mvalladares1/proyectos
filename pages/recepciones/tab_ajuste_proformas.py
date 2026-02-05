@@ -176,15 +176,19 @@ def render(username: str, password: str):
                 if len(sin_email) > 5:
                     st.caption(f"  ... y {len(sin_email) - 5} más")
             
-            # Botón de envío
+            # Botones de acción
             st.markdown("---")
-            col_envio1, col_envio2 = st.columns([1, 2])
+            col_envio1, col_envio2, col_envio3 = st.columns([1, 1, 2])
             
             with col_envio1:
-                if st.button("📤 ENVIAR PROFORMAS SELECCIONADAS", type="primary", key="btn_enviar_masivo"):
+                if st.button("📤 ENVIAR PROFORMAS", type="primary", key="btn_enviar_masivo"):
                     _enviar_proformas_masivo(facturas, facturas_seleccionadas, username, password)
             
             with col_envio2:
+                if st.button("📥 DESCARGAR PDFs", type="secondary", key="btn_descargar_masivo"):
+                    _descargar_pdfs_masivo(facturas, facturas_seleccionadas, username, password)
+            
+            with col_envio3:
                 if con_email > 0:
                     st.info(f"✉️ Se enviarán **{con_email}** proformas a **{num_proveedores}** proveedores")
                 else:
@@ -257,6 +261,77 @@ def render(username: str, password: str):
                 # =========================================================================
                 st.markdown("---")
                 _render_preview_clp(factura, username, password)
+
+
+def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str):
+    """Descarga todos los PDFs de las proformas seleccionadas en un ZIP."""
+    import zipfile
+    import io
+    from datetime import datetime
+    
+    # Mapear seleccionadas a facturas completas
+    facturas_descargar = []
+    for sel in facturas_seleccionadas:
+        nombre_factura = sel.split(" | ")[0]
+        for f in facturas_todas:
+            if f['nombre'] == nombre_factura:
+                facturas_descargar.append(f)
+                break
+    
+    if not facturas_descargar:
+        st.error("❌ No hay proformas seleccionadas")
+        return
+    
+    st.markdown("---")
+    st.markdown("### 📥 Generando PDFs...")
+    
+    progress_bar = st.progress(0)
+    status_container = st.container()
+    
+    # Crear ZIP en memoria
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        total = len(facturas_descargar)
+        
+        for idx, factura in enumerate(facturas_descargar):
+            progress = (idx + 1) / total
+            progress_bar.progress(progress)
+            
+            with status_container:
+                st.info(f"📄 Generando {idx + 1}/{total}: {factura['nombre']}")
+            
+            try:
+                # Generar PDF
+                pdf_bytes = _generar_pdf_proforma(factura)
+                
+                # Agregar al ZIP con nombre descriptivo
+                nombre_archivo = f"Proforma_{factura['nombre']}_{factura['proveedor_nombre'][:20].replace(' ', '_')}.pdf"
+                zip_file.writestr(nombre_archivo, pdf_bytes)
+                
+                with status_container:
+                    st.success(f"✅ {factura['nombre']} generado")
+            
+            except Exception as e:
+                with status_container:
+                    st.error(f"❌ Error generando {factura['nombre']}: {str(e)}")
+    
+    progress_bar.progress(1.0)
+    
+    # Preparar descarga
+    zip_buffer.seek(0)
+    
+    st.markdown("---")
+    st.success(f"✅ {total} PDFs generados correctamente")
+    
+    # Botón de descarga
+    st.download_button(
+        label=f"⬇️ Descargar {total} Proformas (ZIP)",
+        data=zip_buffer,
+        file_name=f"Proformas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+        mime="application/zip",
+        type="primary"
+    )
 
 
 def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str):
