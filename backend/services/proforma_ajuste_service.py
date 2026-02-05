@@ -375,7 +375,7 @@ def enviar_proforma_email(
         # Codificar PDF en base64
         pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
         
-        # Crear adjunto
+        # Crear adjunto vinculado a la factura (quedará en Odoo)
         attachment_id = client.create(
             "ir.attachment",
             {
@@ -384,7 +384,8 @@ def enviar_proforma_email(
                 "datas": pdf_base64,
                 "res_model": "account.move",
                 "res_id": factura_id,
-                "mimetype": "application/pdf"
+                "mimetype": "application/pdf",
+                "description": f"Proforma enviada por correo el {client.execute('ir.fields', 'get_datetime_utc')}"
             }
         )
         
@@ -430,9 +431,33 @@ def enviar_proforma_email(
         # Enviar el correo
         client.execute("mail.mail", "send", [mail_id])
         
+        # Registrar el mensaje en el chatter de la factura para historial
+        mensaje_chatter = f"""
+        <p>📧 <strong>Proforma enviada por correo electrónico</strong></p>
+        <ul>
+            <li><strong>Destinatario:</strong> {email_destino}</li>
+            <li><strong>Asunto:</strong> {asunto}</li>
+            <li><strong>Archivo adjunto:</strong> Proforma_{nombre_factura}.pdf</li>
+        </ul>
+        <p><em>Enviado automáticamente desde el Dashboard de Recepciones</em></p>
+        """
+        
+        client.execute(
+            "account.move",
+            "message_post",
+            [factura_id],
+            {
+                "body": mensaje_chatter,
+                "message_type": "comment",
+                "subtype_xmlid": "mail.mt_note",
+                "attachment_ids": [(6, 0, [attachment_id])]
+            }
+        )
+        
         return {
             "success": True,
             "mail_id": mail_id,
+            "attachment_id": attachment_id,
             "email_destino": email_destino,
             "factura": nombre_factura
         }
