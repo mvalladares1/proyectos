@@ -32,14 +32,14 @@ def render(username: str, password: str):
             proveedor_sel = st.selectbox(
                 "Proveedor",
                 proveedor_options,
-                key="proforma_proveedor"
+                key="ajuste_proforma_proveedor"
             )
         
         with col2:
             fecha_desde = st.date_input(
                 "Desde",
                 datetime.now() - timedelta(days=30),
-                key="proforma_fecha_desde",
+                key="ajuste_proforma_fecha_desde",
                 format="DD/MM/YYYY"
             )
         
@@ -47,18 +47,18 @@ def render(username: str, password: str):
             fecha_hasta = st.date_input(
                 "Hasta",
                 datetime.now(),
-                key="proforma_fecha_hasta",
+                key="ajuste_proforma_fecha_hasta",
                 format="DD/MM/YYYY"
             )
         
         col_btn1, col_btn2 = st.columns([1, 3])
         with col_btn1:
-            buscar = st.button("🔍 Buscar Facturas", type="primary", key="btn_buscar_proformas")
+            buscar = st.button("🔍 Buscar Facturas", type="primary", key="btn_buscar_ajuste_proformas")
     
     # =========================================================================
     # SECCIÓN 2: RESULTADOS DE BÚSQUEDA
     # =========================================================================
-    if buscar or st.session_state.get("proformas_data"):
+    if buscar or st.session_state.get("ajuste_proformas_data"):
         if buscar:
             proveedor_id = proveedor_map.get(proveedor_sel) if proveedor_sel != "Todos" else None
             
@@ -69,9 +69,9 @@ def render(username: str, password: str):
                     fecha_desde=fecha_desde.strftime("%Y-%m-%d"),
                     fecha_hasta=fecha_hasta.strftime("%Y-%m-%d")
                 )
-                st.session_state.proformas_data = facturas
+                st.session_state.ajuste_proformas_data = facturas
         
-        facturas = st.session_state.get("proformas_data", [])
+        facturas = st.session_state.get("ajuste_proformas_data", [])
         
         if not facturas:
             st.info("📭 No se encontraron facturas en borrador en USD para el período seleccionado.")
@@ -124,7 +124,7 @@ def render(username: str, password: str):
             factura_sel = st.selectbox(
                 "Seleccionar factura para ver detalle",
                 factura_options,
-                key="proforma_factura_sel"
+                key="ajuste_proforma_factura_sel"
             )
         
         if factura_sel:
