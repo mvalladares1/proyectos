@@ -416,7 +416,7 @@ class RealProyectadoCalculator:
         Enriquece un concepto con datos de REAL/PROYECTADO y estructura jerárquica.
         
         Para conceptos especiales (1.2.1, 1.2.6), reemplaza las cuentas existentes
-        con la estructura calculada por este módulo.
+        con la estructura calculada por este módulo y actualiza montos_por_mes.
         
         Args:
             concepto: Dict del concepto existente
@@ -433,6 +433,23 @@ class RealProyectadoCalculator:
             concepto['ppto'] = data.get('ppto', 0)
             concepto['real_por_mes'] = data.get('real_por_mes', {})
             concepto['proyectado_por_mes'] = data.get('proyectado_por_mes', {})
+            
+            # ACTUALIZAR montos_por_mes con la suma de real + proyectado por mes
+            real_por_mes = data.get('real_por_mes', {})
+            proyectado_por_mes = data.get('proyectado_por_mes', {})
+            
+            # Combinar todos los meses
+            todos_meses = set(real_por_mes.keys()) | set(proyectado_por_mes.keys())
+            nuevos_montos = {}
+            for mes in todos_meses:
+                real_mes = real_por_mes.get(mes, 0)
+                proy_mes = proyectado_por_mes.get(mes, 0)
+                nuevos_montos[mes] = real_mes + proy_mes
+            
+            # Reemplazar montos_por_mes solo si tenemos datos
+            if nuevos_montos:
+                concepto['montos_por_mes'] = nuevos_montos
+                concepto['total'] = sum(nuevos_montos.values())
             
             # Si hay estructura de cuentas, reemplazar/agregar
             if 'cuentas' in data and data['cuentas']:
