@@ -408,27 +408,57 @@ def _render_detalle_factura(factura: dict):
         st.metric("💱 Tipo de Cambio", f"{factura['tipo_cambio']:,.2f}")
         st.caption(f"Moneda: {factura['moneda']}")
     
-    # Tabla de líneas
+    # Tabla de líneas con información completa (igual que el PDF)
     if factura["lineas"]:
         st.markdown("##### 📦 Líneas de Factura")
         
-        df_lineas = pd.DataFrame([
-            {
-                "Descripción": l["nombre"][:60] if l["nombre"] else "-",
-                "Cantidad": l["cantidad"],
-                "P.Unit USD": l["precio_usd"],
-                "Subtotal USD": l["subtotal_usd"],
-                "Subtotal CLP": l["subtotal_clp"],
-                "TC": l["tc_implicito"]
-            }
-            for l in factura["lineas"]
-        ])
+        # Obtener fechas de OCs
+        from shared.odoo_client import OdooClient
+        client = OdooClient(username=st.session_state.get('username'), password=st.session_state.get('password'))
         
-        # Formatear
-        df_lineas["P.Unit USD"] = df_lineas["P.Unit USD"].apply(lambda x: f"${x:,.2f}")
-        df_lineas["Subtotal USD"] = df_lineas["Subtotal USD"].apply(lambda x: f"${x:,.2f}")
-        df_lineas["Subtotal CLP"] = df_lineas["Subtotal CLP"].apply(lambda x: f"${x:,.0f}")
-        df_lineas["TC"] = df_lineas["TC"].apply(lambda x: f"{x:,.2f}")
+        lineas_completas = []
+        for l in factura["lineas"]:
+            desc = l["nombre"][:60] if l["nombre"] else "-"
+            
+            # Extraer fecha de OC
+            fecha_oc = "-"
+            if ":" in desc:
+                oc_nombre = desc.split(":")[0].strip()
+                try:
+                    ocs = client.search_read(
+                        "purchase.order",
+                        [("name", "=", oc_nombre)],
+                        ["date_order"],
+                        limit=1
+                    )
+                    if ocs and ocs[0].get("date_order"):
+                        fecha_oc = ocs[0]["date_order"][:10]  # YYYY-MM-DD
+                except:
+                    pass
+            
+            # Calcular precio unitario CLP
+            p_unit_clp = l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0
+            
+            lineas_completas.append({
+                "Descripción": desc,
+                "Fecha OC": fecha_oc,
+                "Cant. KG": l["cantidad"],
+                "P. Unitario USD": l["precio_usd"],
+                "Tipo Cambio": l["tc_implicito"],
+                "P. Unitario CLP": p_unit_clp,
+                "Subtotal USD": l["subtotal_usd"],
+                "Subtotal CLP": l["subtotal_clp"]
+            })
+        
+        df_lineas = pd.DataFrame(lineas_completas)
+        
+        # Formatear con formato chileno
+        df_lineas["Cant. KG"] = df_lineas["Cant. KG"].apply(lambda x: f"{x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+        df_lineas["P. Unitario USD"] = df_lineas["P. Unitario USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+        df_lineas["Tipo Cambio"] = df_lineas["Tipo Cambio"].apply(lambda x: f"{x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+        df_lineas["P. Unitario CLP"] = df_lineas["P. Unitario CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
+        df_lineas["Subtotal USD"] = df_lineas["Subtotal USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+        df_lineas["Subtotal CLP"] = df_lineas["Subtotal CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
         
         st.dataframe(df_lineas, use_container_width=True, hide_index=True)
 
