@@ -79,8 +79,40 @@ def render(username: str, password: str):
         
         st.success(f"✅ Se encontraron **{len(facturas)}** facturas en borrador en USD")
         
+        # =========================================================================
+        # SECCIÓN 2.1: SELECCIÓN MÚLTIPLE PARA ENVÍO MASIVO
+        # =========================================================================
+        st.markdown("#### 📋 Seleccionar Proformas para Envío")
+        
+        # Crear opciones para multiselect agrupadas por proveedor
+        opciones_envio = []
+        for f in facturas:
+            email_proveedor = f.get("proveedor_email", "Sin email")
+            opciones_envio.append(f"{f['nombre']} | {f['proveedor_nombre'][:30]} | {email_proveedor}")
+        
+        facturas_seleccionadas = st.multiselect(
+            "Seleccionar facturas para envío masivo",
+            opciones_envio,
+            key="proformas_seleccionadas",
+            help="Selecciona una o más proformas para enviar por correo a los proveedores"
+        )
+        
+        # Mostrar resumen de selección
+        if facturas_seleccionadas:
+            st.info(f"📧 **{len(facturas_seleccionadas)}** proformas seleccionadas para envío")
+            
+            col_envio1, col_envio2 = st.columns([1, 2])
+            with col_envio1:
+                if st.button("📤 ENVIAR PROFORMAS POR CORREO", type="primary", key="btn_enviar_masivo"):
+                    _enviar_proformas_masivo(facturas, facturas_seleccionadas, username, password)
+            
+            with col_envio2:
+                st.caption("Se enviará un correo a cada proveedor con su proforma en PDF adjunta")
+        
+        st.markdown("---")
+        
         # Tabla resumen de facturas
-        st.markdown("#### 📋 Facturas Encontradas")
+        st.markdown("#### 📊 Detalle de Facturas")
         
         df_facturas = pd.DataFrame([
             {
@@ -331,10 +363,9 @@ def _render_preview_clp(factura: dict, username: str, password: str):
     col_action1, col_action2, col_action3 = st.columns([1.5, 1, 1.5])
     
     with col_action1:
-        # Botón principal: Aplicar cambio en Odoo
-        st.warning("⚠️ **Aplicar cambio modificará la factura en Odoo**")
-        if st.button("✅ APLICAR CAMBIO A CLP EN ODOO", key=f"aplicar_cambio_{factura['id']}", type="primary"):
-            _aplicar_cambio_odoo(factura, username, password)
+        # Botón para enviar esta proforma individual
+        if st.button("📤 Enviar esta Proforma", key=f"enviar_individual_{factura['id']}"):
+            _enviar_proforma_individual(factura, username, password)
     
     with col_action2:
         # Exportar a Excel
@@ -342,11 +373,20 @@ def _render_preview_clp(factura: dict, username: str, password: str):
             _exportar_excel(factura)
     
     with col_action3:
-        st.caption("Después de aplicar el cambio, podrás generar el PDF desde Odoo.")
         st.link_button(
-            "🔗 Abrir Factura en Odoo",
+            "🔗 Ver en Odoo",
             f"https://riofuturo.server98c6e.oerpondemand.net/odoo/account.move/{factura['id']}",
             use_container_width=True
+        )
+    
+    # Botón deshabilitado temporalmente
+    with st.expander("⚙️ Opciones Avanzadas (Deshabilitado)", expanded=False):
+        st.warning("⚠️ La función de cambiar moneda en Odoo está temporalmente deshabilitada")
+        st.button(
+            "✅ APLICAR CAMBIO A CLP EN ODOO", 
+            key=f"aplicar_cambio_{factura['id']}", 
+            disabled=True,
+            help="Esta función está temporalmente deshabilitada"
         )
 
 
@@ -456,3 +496,194 @@ def _exportar_excel(factura: dict):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key=f"download_{factura['id']}"
     )
+
+
+def _generar_pdf_proforma(factura: dict) -> bytes:
+    """Genera un PDF de la proforma usando reportlab."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    import io
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1)
+    normal_style = styles['Normal']
+    
+    elements = []
+    
+    # Título
+    elements.append(Paragraph("PROFORMA DE PROVEEDOR", title_style))
+    elements.append(Spacer(1, 12))
+    
+    # Información del documento
+    info_data = [
+        ["Factura:", factura['nombre'], "Fecha:", factura.get('fecha_factura', '-')],
+        ["Proveedor:", factura['proveedor_nombre'][:40], "Moneda:", "CLP"],
+        ["Referencia:", factura.get('ref', '-') or '-', "TC:", f"{factura['tipo_cambio']:,.2f}"],
+    ]
+    
+    info_table = Table(info_data, colWidths=[1.2*inch, 2.5*inch, 1*inch, 1.5*inch])
+    info_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 20))
+    
+    # Tabla de líneas
+    table_data = [["Descripción", "Cantidad", "Subtotal CLP"]]
+    
+    for linea in factura['lineas']:
+        desc = linea['nombre'][:50] if linea['nombre'] else "-"
+        cant = f"{linea['cantidad']:,.2f}"
+        subtotal = f"${linea['subtotal_clp']:,.0f}"
+        table_data.append([desc, cant, subtotal])
+    
+    # Totales
+    table_data.append(["", "", ""])
+    table_data.append(["", "Base Imponible:", f"${factura['base_clp']:,.0f}"])
+    table_data.append(["", "IVA 19%:", f"${factura['iva_clp']:,.0f}"])
+    table_data.append(["", "TOTAL:", f"${factura['total_clp']:,.0f}"])
+    
+    main_table = Table(table_data, colWidths=[4*inch, 1.3*inch, 1.5*inch])
+    main_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4CAF50')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, len(factura['lineas'])), 0.5, colors.grey),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        # Estilo para totales
+        ('FONTNAME', (1, -3), (1, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, -1), (2, -1), 'Helvetica-Bold'),
+        ('LINEABOVE', (1, -3), (-1, -3), 1, colors.black),
+    ]))
+    elements.append(main_table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _enviar_proforma_individual(factura: dict, username: str, password: str):
+    """Envía una proforma individual por correo."""
+    
+    email_destino = factura.get("proveedor_email", "")
+    
+    if not email_destino:
+        st.error(f"❌ El proveedor {factura['proveedor_nombre']} no tiene email configurado en Odoo")
+        return
+    
+    with st.spinner(f"📤 Enviando proforma a {email_destino}..."):
+        try:
+            # Generar PDF
+            pdf_bytes = _generar_pdf_proforma(factura)
+            
+            # Enviar correo via servicio
+            from backend.services.proforma_ajuste_service import enviar_proforma_email
+            
+            resultado = enviar_proforma_email(
+                username=username,
+                password=password,
+                factura_id=factura['id'],
+                email_destino=email_destino,
+                pdf_bytes=pdf_bytes,
+                nombre_factura=factura['nombre'],
+                proveedor_nombre=factura['proveedor_nombre']
+            )
+            
+            if resultado.get("success"):
+                st.success(f"✅ Proforma enviada exitosamente a **{email_destino}**")
+            else:
+                st.error(f"❌ Error al enviar: {resultado.get('error', 'Error desconocido')}")
+                
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+
+
+def _enviar_proformas_masivo(facturas: list, seleccionadas: list, username: str, password: str):
+    """Envía múltiples proformas por correo."""
+    
+    # Mapear seleccionadas a facturas
+    facturas_a_enviar = []
+    for sel in seleccionadas:
+        nombre_factura = sel.split(" | ")[0]
+        for f in facturas:
+            if f['nombre'] == nombre_factura:
+                facturas_a_enviar.append(f)
+                break
+    
+    if not facturas_a_enviar:
+        st.error("No se encontraron facturas para enviar")
+        return
+    
+    # Verificar emails
+    sin_email = [f for f in facturas_a_enviar if not f.get("proveedor_email")]
+    con_email = [f for f in facturas_a_enviar if f.get("proveedor_email")]
+    
+    if sin_email:
+        st.warning(f"⚠️ {len(sin_email)} proveedores sin email configurado:")
+        for f in sin_email:
+            st.caption(f"  - {f['nombre']} - {f['proveedor_nombre']}")
+    
+    if not con_email:
+        st.error("❌ Ninguna factura tiene proveedor con email configurado")
+        return
+    
+    # Progreso
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    enviados = 0
+    errores = []
+    
+    for i, factura in enumerate(con_email):
+        status_text.text(f"📤 Enviando {i+1}/{len(con_email)}: {factura['nombre']}...")
+        progress_bar.progress((i + 1) / len(con_email))
+        
+        try:
+            # Generar PDF
+            pdf_bytes = _generar_pdf_proforma(factura)
+            
+            # Enviar
+            from backend.services.proforma_ajuste_service import enviar_proforma_email
+            
+            resultado = enviar_proforma_email(
+                username=username,
+                password=password,
+                factura_id=factura['id'],
+                email_destino=factura['proveedor_email'],
+                pdf_bytes=pdf_bytes,
+                nombre_factura=factura['nombre'],
+                proveedor_nombre=factura['proveedor_nombre']
+            )
+            
+            if resultado.get("success"):
+                enviados += 1
+            else:
+                errores.append(f"{factura['nombre']}: {resultado.get('error', 'Error')}")
+                
+        except Exception as e:
+            errores.append(f"{factura['nombre']}: {str(e)}")
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Resumen
+    if enviados > 0:
+        st.success(f"✅ **{enviados}** proformas enviadas exitosamente")
+        st.balloons()
+    
+    if errores:
+        st.error(f"❌ **{len(errores)}** proformas con error:")
+        for err in errores:
+            st.caption(f"  - {err}")

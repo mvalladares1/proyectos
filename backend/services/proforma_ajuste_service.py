@@ -116,12 +116,24 @@ def get_facturas_borrador(
         partner = fac.get("partner_id", [None, "Sin proveedor"])
         currency = fac.get("currency_id", [None, "USD"])
         
+        # Obtener email del proveedor
+        proveedor_email = ""
+        partner_id = partner[0] if isinstance(partner, list) else None
+        if partner_id:
+            try:
+                partner_data = client.read("res.partner", [partner_id], ["email"])
+                if partner_data:
+                    proveedor_email = partner_data[0].get("email", "") or ""
+            except:
+                pass
+        
         resultado.append({
             "id": fac["id"],
             "nombre": fac.get("name", ""),
             "ref": fac.get("ref", ""),
             "proveedor_id": partner[0] if isinstance(partner, list) else None,
             "proveedor_nombre": partner[1] if isinstance(partner, list) else str(partner),
+            "proveedor_email": proveedor_email,
             "fecha_factura": fac.get("invoice_date", ""),
             "fecha_creacion": fac.get("create_date", ""),
             "moneda": currency[1] if isinstance(currency, list) else str(currency),
@@ -325,6 +337,104 @@ def aplicar_conversion_clp(
             "factura_id": factura_id,
             "lineas_actualizadas": lineas_actualizadas,
             "errores_lineas": errores_lineas if errores_lineas else None
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def enviar_proforma_email(
+    username: str,
+    password: str,
+    factura_id: int,
+    email_destino: str,
+    pdf_bytes: bytes,
+    nombre_factura: str,
+    proveedor_nombre: str
+) -> Dict[str, Any]:
+    """
+    Envía una proforma por correo electrónico usando Odoo mail.
+    
+    Args:
+        username: Usuario Odoo
+        password: Contraseña Odoo
+        factura_id: ID de la factura
+        email_destino: Email del destinatario
+        pdf_bytes: Contenido del PDF en bytes
+        nombre_factura: Nombre de la factura para el asunto
+        proveedor_nombre: Nombre del proveedor
+    
+    Returns:
+        Resultado de la operación
+    """
+    import base64
+    
+    client = OdooClient(username=username, password=password)
+    
+    try:
+        # Codificar PDF en base64
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        
+        # Crear adjunto
+        attachment_id = client.create(
+            "ir.attachment",
+            {
+                "name": f"Proforma_{nombre_factura}.pdf",
+                "type": "binary",
+                "datas": pdf_base64,
+                "res_model": "account.move",
+                "res_id": factura_id,
+                "mimetype": "application/pdf"
+            }
+        )
+        
+        # Crear y enviar correo
+        asunto = f"Proforma {nombre_factura} - Rio Futuro"
+        
+        cuerpo_html = f"""
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #2E7D32;">Proforma de Proveedor</h2>
+            <p>Estimado(a) <strong>{proveedor_nombre}</strong>,</p>
+            <p>Adjunto encontrará la proforma correspondiente a la factura <strong>{nombre_factura}</strong>.</p>
+            <br>
+            <p>Detalle:</p>
+            <ul>
+                <li><strong>Factura:</strong> {nombre_factura}</li>
+                <li><strong>Moneda:</strong> CLP (Pesos Chilenos)</li>
+            </ul>
+            <br>
+            <p>Por favor revise el documento adjunto y no dude en contactarnos si tiene alguna consulta.</p>
+            <br>
+            <p>Saludos cordiales,</p>
+            <p><strong>Rio Futuro</strong></p>
+            <hr style="border: 1px solid #ddd; margin-top: 20px;">
+            <p style="font-size: 11px; color: #888;">
+                Este correo fue enviado automáticamente desde el sistema de gestión de Rio Futuro.
+            </p>
+        </div>
+        """
+        
+        # Crear mensaje de correo
+        mail_id = client.create(
+            "mail.mail",
+            {
+                "subject": asunto,
+                "body_html": cuerpo_html,
+                "email_to": email_destino,
+                "email_from": "notificaciones@riofuturo.cl",
+                "attachment_ids": [(6, 0, [attachment_id])],
+                "auto_delete": True
+            }
+        )
+        
+        # Enviar el correo
+        client.execute("mail.mail", "send", [mail_id])
+        
+        return {
+            "success": True,
+            "mail_id": mail_id,
+            "email_destino": email_destino,
+            "factura": nombre_factura
         }
         
     except Exception as e:
