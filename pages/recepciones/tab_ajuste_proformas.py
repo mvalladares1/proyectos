@@ -286,12 +286,6 @@ def render(username: str, password: str):
                 # =========================================================================
                 st.markdown("---")
                 _render_comparativo(factura)
-                
-                # =========================================================================
-                # SECCIÓN 5: PREVIEW DE PROFORMA EN CLP
-                # =========================================================================
-                st.markdown("---")
-                _render_preview_clp(factura, username, password)
 
 
 def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str):
