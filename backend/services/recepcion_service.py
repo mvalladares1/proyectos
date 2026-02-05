@@ -504,15 +504,28 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         fecha = rec.get("scheduled_date", "")
         
         # Procesar movimientos de este picking (recepción)
+        # IMPORTANTE: Solo sumar movimientos en KG, no unidades (bandejas, etc)
         rec_moves = moves_by_picking.get(picking_id, [])
-        kg_total_recepcion = sum(m.get("quantity_done", 0) or 0 for m in rec_moves)
+        kg_total_recepcion = 0
+        for m in rec_moves:
+            uom = m.get("product_uom")
+            uom_name = uom[1].lower() if isinstance(uom, (list, tuple)) and len(uom) > 1 else "kg"
+            # Solo sumar si es kg
+            if uom_name == "kg":
+                kg_total_recepcion += m.get("quantity_done", 0) or 0
         
         # Calcular kg devueltos (si existen devoluciones)
+        # IMPORTANTE: Solo sumar movimientos en KG, no unidades
         kg_total_devuelto = 0
         if albaran in devoluciones_por_recepcion:
             for dev_id in devoluciones_por_recepcion[albaran]:
                 dev_moves = moves_by_picking.get(dev_id, [])
-                kg_total_devuelto += sum(m.get("quantity_done", 0) or 0 for m in dev_moves)
+                for dm in dev_moves:
+                    duom = dm.get("product_uom")
+                    duom_name = duom[1].lower() if isinstance(duom, (list, tuple)) and len(duom) > 1 else "kg"
+                    # Solo sumar si es kg
+                    if duom_name == "kg":
+                        kg_total_devuelto += dm.get("quantity_done", 0) or 0
             
             if kg_total_devuelto > 0:
                 print(f"[INFO] {albaran}: {kg_total_recepcion:.2f} kg recibidos - {kg_total_devuelto:.2f} kg devueltos = {kg_total_recepcion - kg_total_devuelto:.2f} kg netos")
