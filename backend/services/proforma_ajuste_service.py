@@ -64,8 +64,52 @@ def get_facturas_borrador(
     
     resultado = []
     
+    # Obtener TC histórico desde res.currency.rate para USD
+    def get_tc_historico(client, fecha: str) -> float:
+        """Obtiene el TC histórico de USD para una fecha específica."""
+        try:
+            # Buscar rate de USD para esa fecha
+            rates = client.search_read(
+                "res.currency.rate",
+                [
+                    ("currency_id.name", "=", "USD"),
+                    ("name", "<=", fecha)
+                ],
+                ["rate"],
+                limit=1,
+                order="name desc"
+            )
+            
+            if rates and rates[0].get("rate", 0) > 0:
+                return 1 / rates[0]["rate"]
+            return 0
+        except:
+            return 0
+    
+    # Obtener fecha de OC desde el nombre de la línea
+    def get_fecha_oc(client, nombre_linea: str) -> str:
+        """Extrae el nombre de la OC y busca su fecha."""
+        try:
+            # Extraer OC del nombre (formato: "OC12345: [producto] descripcion")
+            if ":" in nombre_linea:
+                oc_nombre = nombre_linea.split(":")[0].strip()
+                
+                # Buscar la OC
+                ocs = client.search_read(
+                    "purchase.order",
+                    [("name", "=", oc_nombre)],
+                    ["date_order"],
+                    limit=1
+                )
+                
+                if ocs and ocs[0].get("date_order"):
+                    return ocs[0]["date_order"][:10]
+        except:
+            pass
+        return ""
+    
     for fac in facturas:
-        # Obtener líneas de factura con montos en CLP (desde debit)
+        # Obtener líneas de factura
         invoice_line_ids = fac.get("invoice_line_ids", [])
         lineas = []
         
@@ -77,7 +121,7 @@ def get_facturas_borrador(
                     "id", "name", "quantity", "price_unit",
                     "price_subtotal", "price_total",
                     "debit", "credit", "amount_currency",
-                    "display_type", "product_id"
+                    "display_type", "product_id", "date"
                 ]
             )
             
@@ -86,21 +130,31 @@ def get_facturas_borrador(
                 if line.get("display_type") in ["line_section", "line_note", "payment_term"]:
                     continue
                 
-                # Calcular tipo de cambio implícito
+                # Obtener TC histórico de la OC específica de esta línea
+                nombre_linea = line.get("name", "")
+                fecha_oc = get_fecha_oc(client, nombre_linea)
+                
                 usd_subtotal = line.get("price_subtotal", 0) or 0
-                clp_debit = line.get("debit", 0) or 0
-                tc_linea = clp_debit / usd_subtotal if usd_subtotal > 0 else 0
+                
+                if fecha_oc:
+                    # Usar TC histórico de la fecha de la OC
+                    tc_linea = get_tc_historico(client, fecha_oc)
+                    clp_subtotal = usd_subtotal * tc_linea
+                else:
+                    # Fallback: usar debit actual si no se encuentra la OC
+                    clp_subtotal = line.get("debit", 0) or 0
+                    tc_linea = clp_subtotal / usd_subtotal if usd_subtotal > 0 else 0
                 
                 lineas.append({
                     "id": line["id"],
-                    "nombre": line.get("name", ""),
+                    "nombre": nombre_linea,
                     "producto_id": line.get("product_id", [None, ""])[0] if line.get("product_id") else None,
                     "producto_nombre": line.get("product_id", [None, ""])[1] if line.get("product_id") else "",
                     "cantidad": line.get("quantity", 0),
                     "precio_usd": line.get("price_unit", 0),
                     "subtotal_usd": usd_subtotal,
                     "total_usd": line.get("price_total", 0) or 0,
-                    "subtotal_clp": clp_debit,
+                    "subtotal_clp": clp_subtotal,
                     "tc_implicito": tc_linea
                 })
         
@@ -109,7 +163,7 @@ def get_facturas_borrador(
         total_iva_clp = total_base_clp * 0.19
         total_con_iva_clp = total_base_clp + total_iva_clp
         
-        # Tipo de cambio promedio
+        # TC promedio de todas las líneas
         tcs = [l["tc_implicito"] for l in lineas if l["tc_implicito"] > 0]
         tc_promedio = sum(tcs) / len(tcs) if tcs else 0
         
