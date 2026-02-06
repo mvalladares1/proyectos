@@ -298,10 +298,13 @@ def render(username: str, password: str):
                 with col_action1:
                     # Botón para descargar PDF
                     pdf_bytes = _generar_pdf_proforma(factura, username, password)
+                    # Nombre: Proforma_Proveedor_FechaCreacion.pdf
+                    _prov_name = factura['proveedor_nombre'][:30].replace(' ', '_').replace('/', '_')
+                    _fecha_crea = (factura.get('fecha_creacion') or '')[:10].replace('-', '')
                     st.download_button(
                         label="📄 Descargar PDF",
                         data=pdf_bytes,
-                        file_name=f"Proforma_{factura['nombre']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        file_name=f"Proforma_{_prov_name}_{_fecha_crea}.pdf",
                         mime="application/pdf",
                         key=f"download_pdf_detalle_{factura['id']}",
                         use_container_width=True
@@ -371,7 +374,8 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
                 
                 # Crear carpeta por proveedor y agregar PDF
                 proveedor_carpeta = factura['proveedor_nombre'][:30].replace(' ', '_').replace('/', '_')
-                nombre_pdf = f"Proforma_{factura['nombre']}.pdf"
+                fecha_crea_zip = (factura.get('fecha_creacion') or '')[:10].replace('-', '')
+                nombre_pdf = f"Proforma_{proveedor_carpeta}_{fecha_crea_zip}.pdf"
                 ruta_en_zip = f"{proveedor_carpeta}/{nombre_pdf}"
                 
                 zip_file.writestr(ruta_en_zip, pdf_bytes)
@@ -914,10 +918,12 @@ def _render_preview_clp(factura: dict, username: str, password: str):
     with col_action1:
         # Botón para descargar PDF
         pdf_bytes = _generar_pdf_proforma(factura, username, password)
+        _prov_pdf = factura['proveedor_nombre'][:30].replace(' ', '_').replace('/', '_')
+        _fc_pdf = (factura.get('fecha_creacion') or '')[:10].replace('-', '')
         st.download_button(
             label="📄 Descargar PDF",
             data=pdf_bytes,
-            file_name=f"Proforma_{factura['nombre']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+            file_name=f"Proforma_{_prov_pdf}_{_fc_pdf}.pdf",
             mime="application/pdf",
             key=f"download_pdf_{factura['id']}"
         )
@@ -1054,7 +1060,7 @@ def _exportar_excel(factura: dict):
     st.download_button(
         label="⬇️ Descargar Excel",
         data=buffer,
-        file_name=f"proforma_{factura['nombre']}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        file_name=f"Proforma_{factura['proveedor_nombre'][:30].replace(' ', '_').replace('/', '_')}_{(factura.get('fecha_creacion') or '')[:10].replace('-', '')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key=f"download_{factura['id']}"
     )
@@ -1102,19 +1108,28 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
     
     elements = []
     
-    # Título centrado (el logo se sobrepone después)
-    elements.append(Paragraph("PROFORMA DE PROVEEDOR", title_style))
+    # Título centrado con proveedor y fecha (el logo se sobrepone después)
+    from datetime import datetime
+    fecha_creacion_raw = factura.get('fecha_creacion', '') or ''
+    fecha_creacion_fmt = ''
+    if fecha_creacion_raw:
+        try:
+            fecha_creacion_fmt = datetime.strptime(fecha_creacion_raw[:10], '%Y-%m-%d').strftime('%d-%m-%Y')
+        except:
+            fecha_creacion_fmt = fecha_creacion_raw[:10]
+    
+    titulo_pdf = f"Proforma {factura['proveedor_nombre'][:40]} {fecha_creacion_fmt}"
+    elements.append(Paragraph(titulo_pdf, title_style))
     elements.append(Spacer(1, 12))
     
     # Fecha de envío (hoy)
-    from datetime import datetime
     fecha_envio = datetime.now().strftime("%d-%m-%Y")
     
     # Información del documento en 2 columnas
     info_data = [
-        ["Factura:", factura['nombre'], "", "Fecha Envío:", fecha_envio],
-        ["Proveedor:", factura['proveedor_nombre'][:50], "", "Moneda:", "USD / CLP"],
-        ["Referencia:", factura.get('ref', '-') or '-', "", "", ""],
+        ["Factura:", factura['nombre'], "", "Fecha Creación:", fecha_creacion_fmt or '-'],
+        ["Proveedor:", factura['proveedor_nombre'][:50], "", "Fecha Envío:", fecha_envio],
+        ["Referencia:", factura.get('ref', '-') or '-', "", "Moneda:", "USD / CLP"],
     ]
     
     info_table = Table(info_data, colWidths=[1*inch, 3*inch, 0.5*inch, 1.2*inch, 1.3*inch])

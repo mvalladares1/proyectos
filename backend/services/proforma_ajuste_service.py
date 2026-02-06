@@ -633,9 +633,10 @@ def enviar_proforma_email(
         # Codificar PDF en base64
         pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
         
-        # Crear adjunto vinculado a la factura (quedará en Odoo)
+        # Nombre con proveedor y fecha
+        prov_clean = proveedor_nombre[:30].replace(' ', '_').replace('/', '_') if proveedor_nombre else 'proveedor'
         attachment_data = {
-            "name": f"Proforma_{nombre_factura}.pdf",
+            "name": f"Proforma_{prov_clean}.pdf",
             "type": "binary",
             "datas": pdf_base64,
             "res_model": "account.move",
@@ -812,7 +813,7 @@ def enviar_proforma_email(
         <ul>
             <li><strong>Destinatario:</strong> {email_destino}</li>
             <li><strong>Asunto:</strong> {asunto}</li>
-            <li><strong>Archivo adjunto:</strong> Proforma_{nombre_factura}.pdf</li>
+            <li><strong>Archivo adjunto:</strong> Proforma_{proveedor_nombre}.pdf</li>
         </ul>
         <p><em>Enviado automáticamente desde el Dashboard de Recepciones</em></p>
         """
