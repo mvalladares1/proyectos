@@ -119,7 +119,9 @@ def render(username: str, password: str):
         opciones_envio = []
         for f in facturas:
             email_proveedor = f.get("proveedor_email", "Sin email")
-            opciones_envio.append(f"{f['nombre']} | {f['proveedor_nombre'][:30]} | {email_proveedor}")
+            # Limpiar nombre de proveedor (remover / inicial si existe)
+            nombre_proveedor = f['proveedor_nombre'].lstrip('/ ').strip()
+            opciones_envio.append(f"{f['nombre']} | {nombre_proveedor[:40]} | {email_proveedor}")
         
         facturas_seleccionadas = st.multiselect(
             "Seleccionar facturas para envío masivo (pueden ser de diferentes proveedores)",
