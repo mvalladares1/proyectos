@@ -5,17 +5,29 @@ Permite consultar, comparar y ajustar moneda USD → CLP
 from typing import List, Dict, Any, Optional
 from shared.odoo_client import OdooClient
 
-# Categorías que NO son productos de fruta (excluir)
-CATEGORIAS_EXCLUIDAS = [
-    "INVENTARIABLES", "BANDEJAS", "ACTIVO", "SERVICIOS",
-    "EQUIPOS", "MUEBLES", "EJEMPLODS", "OTROS", "ALL1",
-    "BANCO"  # Excluir facturas de bancos
+# Categorías que SÍ son productos de fruta (incluir solo estas)
+CATEGORIAS_PRODUCTOS = ["PRODUCTOS", "FRUTA", "PRODUCTO"]
+
+# Keywords de productos que indican que es fruta
+KEYWORDS_FRUTA = [
+    "ARANDANO", "ARÁNDANO", "BLUEBERRY",
+    "FRAMBUESA", "RASPBERRY", 
+    "FRUTILLA", "STRAWBERRY",
+    "MORA", "BLACKBERRY",
+    "CEREZA", "CHERRY",
+    "AR ", " AR", "AR-", "AR_",
+    "FB ", " FB", "FB-", "FB_",
+    "FR ", " FR", "FR-", "FR_",
+    "MO ", " MO", "MO-", "MO_",
+    "CE ", " CE", "CE-", "CE_",
+    "IQF", "BLOCK"
 ]
 
 
 def tiene_productos_fruta(client: OdooClient, invoice_line_ids: List[int]) -> bool:
     """
     Verifica si una factura contiene productos de fruta.
+    Usa la misma lógica que recepciones para detectar fruta.
     
     Args:
         client: Cliente Odoo
@@ -32,7 +44,7 @@ def tiene_productos_fruta(client: OdooClient, invoice_line_ids: List[int]) -> bo
         lines_data = client.read(
             "account.move.line",
             invoice_line_ids,
-            ["product_id", "display_type"]
+            ["product_id", "display_type", "name"]
         )
         
         # Obtener IDs de productos únicos (excluir líneas de sección/notas)
@@ -48,27 +60,35 @@ def tiene_productos_fruta(client: OdooClient, invoice_line_ids: List[int]) -> bo
         if not product_ids:
             return False
         
-        # Leer productos con su categoría
+        # Leer productos con su categoría y nombre
         products = client.read(
             "product.product",
             product_ids,
-            ["categ_id"]
+            ["categ_id", "name", "default_code"]
         )
         
         # Verificar si algún producto es de fruta
         for prod in products:
+            # Obtener nombre de categoría
+            categ_name = ""
             if prod.get("categ_id"):
                 categ_name = prod["categ_id"][1] if isinstance(prod["categ_id"], list) else str(prod["categ_id"])
-                categ_upper = categ_name.upper()
-                
-                # Si NO está en categorías excluidas, es fruta
-                if not any(excl in categ_upper for excl in CATEGORIAS_EXCLUIDAS):
+            categ_upper = categ_name.upper()
+            
+            # Obtener nombre del producto
+            prod_name = (prod.get("name") or "").upper()
+            prod_code = (prod.get("default_code") or "").upper()
+            
+            # Verificar si está en categorías de productos
+            if any(cat in categ_upper for cat in CATEGORIAS_PRODUCTOS):
+                # Verificar keywords de fruta en nombre o código
+                if any(kw in prod_name or kw in prod_code for kw in KEYWORDS_FRUTA):
                     return True
         
         return False
         
     except Exception:
-        # En caso de error, asumir que NO es fruta (mejor prevenir)
+        # En caso de error, asumir que NO es fruta
         return False
 
 
