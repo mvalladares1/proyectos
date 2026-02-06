@@ -165,7 +165,8 @@ async def get_procesos_cerrados_dia(
     fecha: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     planta: Optional[str] = Query(None, description="Filtrar por planta"),
     sala: Optional[str] = Query(None, description="Filtrar por sala"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)")
+    fecha_fin: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    producto: Optional[str] = Query(None, description="Filtrar por producto")
 ):
     """
     Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
@@ -173,7 +174,7 @@ async def get_procesos_cerrados_dia(
     try:
         from backend.services.monitor_produccion_service import MonitorProduccionService
         service = MonitorProduccionService(username=username, password=password)
-        return service.get_procesos_cerrados_dia(fecha, planta, sala, fecha_fin)
+        return service.get_procesos_cerrados_dia(fecha, planta, sala, fecha_fin, producto)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -185,7 +186,8 @@ async def get_evolucion_procesos(
     fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     planta: Optional[str] = Query(None, description="Filtrar por planta"),
-    sala: Optional[str] = Query(None, description="Filtrar por sala")
+    sala: Optional[str] = Query(None, description="Filtrar por sala"),
+    producto: Optional[str] = Query(None, description="Filtrar por producto")
 ):
     """
     Obtiene la evolución de procesos creados vs cerrados en un rango de fechas.
@@ -193,7 +195,7 @@ async def get_evolucion_procesos(
     try:
         from backend.services.monitor_produccion_service import MonitorProduccionService
         service = MonitorProduccionService(username=username, password=password)
-        return service.get_evolucion_rango(fecha_inicio, fecha_fin, planta, sala)
+        return service.get_evolucion_rango(fecha_inicio, fecha_fin, planta, sala, producto)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

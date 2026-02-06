@@ -112,7 +112,8 @@ class MonitorProduccionService:
     
     def get_procesos_cerrados_dia(self, fecha: str, planta: Optional[str] = None,
                                    sala: Optional[str] = None,
-                                   fecha_fin: Optional[str] = None) -> Dict[str, Any]:
+                                   fecha_fin: Optional[str] = None,
+                                   producto: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
         Usa x_studio_termino_de_proceso como campo principal, fallback a date_finished.
@@ -122,6 +123,7 @@ class MonitorProduccionService:
             planta: Filtrar por planta
             sala: Filtrar por sala
             fecha_fin: Fecha fin en formato YYYY-MM-DD (opcional, si no se da usa fecha)
+            producto: Filtrar por nombre de producto
         
         Returns:
             Dict con procesos cerrados y estadísticas
@@ -139,6 +141,10 @@ class MonitorProduccionService:
         
         if sala and sala != "Todas":
             domain.append(['x_studio_sala_de_proceso', 'ilike', sala])
+        
+        # Filtro por producto
+        if producto and producto != "Todos":
+            domain.append(['product_id', 'ilike', producto])
         
         ordenes_raw = self.odoo.search_read(
             'mrp.production',
@@ -201,7 +207,8 @@ class MonitorProduccionService:
     
     def get_evolucion_rango(self, fecha_inicio: str, fecha_fin: str,
                             planta: Optional[str] = None,
-                            sala: Optional[str] = None) -> Dict[str, Any]:
+                            sala: Optional[str] = None,
+                            producto: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene la evolución de procesos creados vs cerrados en un rango de fechas.
         
@@ -210,6 +217,7 @@ class MonitorProduccionService:
             fecha_fin: Fecha fin YYYY-MM-DD
             planta: Filtrar por planta
             sala: Filtrar por sala
+            producto: Filtrar por nombre de producto
         
         Returns:
             Dict con datos de evolución por día
@@ -229,6 +237,10 @@ class MonitorProduccionService:
         
         if sala and sala != "Todas":
             domain_creados.append(['x_studio_sala_de_proceso', 'ilike', sala])
+        
+        # Filtro por producto
+        if producto and producto != "Todos":
+            domain_creados.append(['product_id', 'ilike', producto])
         
         procesos_creados = self.odoo.search_read(
             'mrp.production',
@@ -262,6 +274,10 @@ class MonitorProduccionService:
         
         if sala and sala != "Todas":
             domain_cerrados.append(['x_studio_sala_de_proceso', 'ilike', sala])
+        
+        # Filtro por producto en cerrados también
+        if producto and producto != "Todos":
+            domain_cerrados.append(['product_id', 'ilike', producto])
         
         procesos_cerrados_raw = self.odoo.search_read(
             'mrp.production',
