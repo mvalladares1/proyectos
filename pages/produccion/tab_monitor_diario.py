@@ -329,6 +329,156 @@ def render_grafico_cerrados_por_dia(evolucion: list):
     st_echarts(options=options, height="350px", theme=theme_echarts)
 
 
+def render_grafico_pendientes_por_dia(evolucion: list):
+    """Renderiza gráfico de barras con procesos pendientes por día."""
+    if not evolucion:
+        st.info("No hay datos de procesos pendientes para mostrar")
+        return
+    
+    fechas_display = [e['fecha_display'] for e in evolucion]
+    pendientes = [e.get('procesos_pendientes', e.get('procesos_creados', 0) - e.get('procesos_cerrados', 0)) for e in evolucion]
+    kg_pendientes = [e.get('kg_pendientes', 0) for e in evolucion]
+    
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    
+    options = {
+        "title": {
+            "text": "⏳ Procesos Pendientes por Día",
+            "textStyle": {"color": label_color, "fontSize": 14}
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"}
+        },
+        "legend": {
+            "data": ["Procesos Pendientes", "KG Pendientes"],
+            "top": 30,
+            "textStyle": {"color": label_color}
+        },
+        "xAxis": {
+            "type": "category",
+            "data": fechas_display,
+            "axisLabel": {"color": "#8892b0", "rotate": 45}
+        },
+        "yAxis": [
+            {
+                "type": "value",
+                "name": "Procesos",
+                "position": "left",
+                "axisLabel": {"color": "#8892b0"}
+            },
+            {
+                "type": "value",
+                "name": "KG",
+                "position": "right",
+                "axisLabel": {"color": "#8892b0", "formatter": "{value}"}
+            }
+        ],
+        "series": [
+            {
+                "name": "Procesos Pendientes",
+                "type": "bar",
+                "data": pendientes,
+                "itemStyle": {"color": "#e74c3c"},
+                "emphasis": {"focus": "series"},
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": label_color,
+                    "fontSize": 11
+                }
+            },
+            {
+                "name": "KG Pendientes",
+                "type": "line",
+                "yAxisIndex": 1,
+                "data": kg_pendientes,
+                "smooth": True,
+                "symbol": "circle",
+                "symbolSize": 8,
+                "itemStyle": {"color": "#f39c12"},
+                "lineStyle": {"width": 2}
+            }
+        ],
+        "backgroundColor": "rgba(0,0,0,0)",
+        "grid": {"left": "10%", "right": "10%", "bottom": "20%", "containLabel": True}
+    }
+    
+    st_echarts(options=options, height="350px", theme=theme_echarts)
+
+
+def render_tabla_pendientes_por_proceso_planta(procesos: list):
+    """Renderiza tabla de procesos pendientes agrupados por tipo de proceso y planta."""
+    if not procesos:
+        st.info("No hay procesos pendientes para mostrar")
+        return
+    
+    # Agrupar por tipo de proceso y planta
+    resumen = {}
+    for p in procesos:
+        producto = p.get('product_id', {})
+        if isinstance(producto, dict):
+            tipo_proceso = producto.get('name', 'Sin Producto')
+        else:
+            tipo_proceso = str(producto) if producto else 'Sin Producto'
+        
+        # Extraer solo el nombre del proceso (sin código)
+        if ']' in tipo_proceso:
+            tipo_proceso = tipo_proceso.split(']')[-1].strip()
+        
+        # Detectar planta
+        sala = p.get('x_studio_sala_de_proceso', '') or ''
+        name = p.get('name', '') or ''
+        
+        if 'RIO' in sala.upper() or 'RIO' in name.upper() or 'RF' in name.upper():
+            planta = 'RIO FUTURO'
+        elif 'VILKUN' in sala.upper() or 'VLK' in name.upper():
+            planta = 'VILKUN'
+        elif 'SAN JOSE' in sala.upper() or 'SJ' in name.upper():
+            planta = 'SAN JOSE'
+        else:
+            planta = 'Sin Planta'
+        
+        key = (tipo_proceso, planta)
+        if key not in resumen:
+            resumen[key] = {'cantidad': 0, 'kg_pendientes': 0}
+        
+        resumen[key]['cantidad'] += 1
+        kg_prog = p.get('product_qty', 0) or 0
+        kg_prod = p.get('qty_produced', 0) or 0
+        resumen[key]['kg_pendientes'] += (kg_prog - kg_prod)
+    
+    # Convertir a lista para DataFrame
+    data = []
+    for (tipo, planta), stats in sorted(resumen.items(), key=lambda x: -x[1]['cantidad']):
+        data.append({
+            "Tipo de Proceso": tipo[:50],
+            "Planta": planta,
+            "Cant. Pendientes": stats['cantidad'],
+            "KG Pendientes": f"{stats['kg_pendientes']:,.0f}"
+        })
+    
+    if not data:
+        st.info("No hay datos para mostrar")
+        return
+    
+    df = pd.DataFrame(data)
+    
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=min(400, 50 + len(data) * 35),
+        hide_index=True,
+        column_config={
+            "Tipo de Proceso": st.column_config.TextColumn("Tipo de Proceso", width="large"),
+            "Planta": st.column_config.TextColumn("Planta", width="medium"),
+            "Cant. Pendientes": st.column_config.NumberColumn("Cant. Pendientes", width="small"),
+            "KG Pendientes": st.column_config.TextColumn("KG Pendientes", width="small"),
+        }
+    )
+
+
 def render_tabla_compacta(procesos: list, tipo: str = "activos"):
     """Renderiza tabla compacta de procesos."""
     if not procesos:
@@ -659,6 +809,17 @@ def render(username: str, password: str):
     
     # Gráfico de procesos cerrados por día (usa mismos datos de evolución para consistencia)
     render_grafico_cerrados_por_dia(evolucion.get("evolucion", []))
+    
+    st.markdown("---")
+    
+    # Gráfico de procesos pendientes por día
+    render_grafico_pendientes_por_dia(evolucion.get("evolucion", []))
+    
+    st.markdown("---")
+    
+    # Tabla de pendientes por proceso y planta
+    st.markdown("##### 📊 Resumen de Procesos Pendientes por Tipo y Planta")
+    render_tabla_pendientes_por_proceso_planta(activos.get("procesos", []))
     
     st.markdown("---")
     
