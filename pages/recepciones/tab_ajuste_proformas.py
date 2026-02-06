@@ -265,15 +265,17 @@ def render(username: str, password: str):
         st.markdown("---")
         st.markdown("#### 🔎 Detalle de Factura")
         
-        factura_options = [f"{f['nombre']} - {f['proveedor_nombre']}" for f in facturas]
-        factura_map = {f"{f['nombre']} - {f['proveedor_nombre']}": f for f in facturas}
+        # Usar formato más legible para el selectbox
+        factura_options = [f"{f['nombre']} | {f['proveedor_nombre'][:50]}" for f in facturas]
+        factura_map = {f"{f['nombre']} | {f['proveedor_nombre'][:50]}": f for f in facturas}
         
         col_sel1, col_sel2 = st.columns([3, 1])
         with col_sel1:
             factura_sel = st.selectbox(
                 "Seleccionar factura para ver detalle",
                 factura_options,
-                key="ajuste_proforma_factura_sel"
+                key="ajuste_proforma_factura_sel",
+                format_func=lambda x: x  # Mostrar exactamente lo que está en options
             )
         
         if factura_sel:
