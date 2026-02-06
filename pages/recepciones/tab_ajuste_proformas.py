@@ -749,28 +749,36 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                             )
                             
                             if response.status_code == 200:
-                                st.success("✅ Línea eliminada correctamente")
-                                # Recargar solo la factura afectada
+                                # Actualizar los datos en memoria sin recargar todo
                                 if "ajuste_proformas_data" in st.session_state:
                                     facturas_actuales = st.session_state["ajuste_proformas_data"]
-                                    # Buscar y actualizar la factura específica
                                     factura_id = factura.get("id")
-                                    try:
-                                        # Obtener datos actualizados de esta factura
-                                        updated_facturas = _get_facturas_borrador(
-                                            username, password,
-                                            factura_ids=[factura_id]
-                                        )
-                                        if updated_facturas:
-                                            # Reemplazar la factura en la lista
-                                            for i, f in enumerate(facturas_actuales):
-                                                if f.get("id") == factura_id:
-                                                    facturas_actuales[i] = updated_facturas[0]
-                                                    break
-                                            st.session_state["ajuste_proformas_data"] = facturas_actuales
-                                    except:
-                                        pass
-                                time.sleep(0.5)
+                                    
+                                    # Encontrar y actualizar la factura específica
+                                    for i, f in enumerate(facturas_actuales):
+                                        if f.get("id") == factura_id:
+                                            # Eliminar la línea de la factura en memoria
+                                            f["lineas"] = [l for l in f.get("lineas", []) if l.get("id") != linea_id]
+                                            
+                                            # Recalcular totales
+                                            total_usd = sum(l.get("subtotal_usd", 0) for l in f["lineas"])
+                                            total_clp = sum(l.get("subtotal_clp", 0) for l in f["lineas"])
+                                            
+                                            f["total_usd"] = total_usd
+                                            f["base_usd"] = total_usd
+                                            f["iva_usd"] = total_usd * 0.19
+                                            
+                                            f["total_clp"] = total_clp
+                                            f["base_clp"] = total_clp
+                                            f["iva_clp"] = total_clp * 0.19
+                                            
+                                            facturas_actuales[i] = f
+                                            break
+                                    
+                                    st.session_state["ajuste_proformas_data"] = facturas_actuales
+                                
+                                st.success("✅ Línea eliminada correctamente")
+                                time.sleep(0.3)
                                 st.rerun()
                             else:
                                 error_detail = response.json().get("detail", "Error desconocido")
