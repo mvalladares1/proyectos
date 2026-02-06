@@ -345,7 +345,6 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
     st.markdown("### 📥 Generando PDFs...")
     
     progress_bar = st.progress(0)
-    status_container = st.container()
     
     # Crear ZIP en memoria
     zip_buffer = io.BytesIO()
@@ -357,9 +356,6 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
             progress = (idx + 1) / total
             progress_bar.progress(progress)
             
-            with status_container:
-                st.info(f"📄 Generando {idx + 1}/{total}: {factura['nombre']}")
-            
             try:
                 # Generar PDF
                 pdf_bytes = _generar_pdf_proforma(factura, username, password)
@@ -367,13 +363,9 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
                 # Agregar al ZIP con nombre descriptivo
                 nombre_archivo = f"Proforma_{factura['nombre']}_{factura['proveedor_nombre'][:20].replace(' ', '_')}.pdf"
                 zip_file.writestr(nombre_archivo, pdf_bytes)
-                
-                with status_container:
-                    st.success(f"✅ {factura['nombre']} generado")
             
             except Exception as e:
-                with status_container:
-                    st.error(f"❌ Error generando {factura['nombre']}: {str(e)}")
+                st.error(f"❌ Error generando {factura['nombre']}: {str(e)}")
     
     progress_bar.progress(1.0)
     
@@ -381,7 +373,6 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
     zip_buffer.seek(0)
     
     st.markdown("---")
-    st.success(f"✅ {total} PDFs generados correctamente")
     
     # Botón de descarga
     st.download_button(
