@@ -538,6 +538,63 @@ def enviar_proforma_email(
         if not attachment_id:
             raise Exception("No se pudo crear el adjunto en Odoo")
         
+        # Obtener datos de la factura para construir el email
+        factura_data = client.search_read(
+            "account.move",
+            [("id", "=", factura_id)],
+            ["invoice_line_ids", "amount_total_signed"]
+        )
+        
+        if not factura_data:
+            raise Exception(f"No se encontró la factura {factura_id}")
+        
+        factura_record = factura_data[0]
+        invoice_line_ids = factura_record.get("invoice_line_ids", [])
+        
+        # Obtener líneas de factura para calcular KG y productos
+        lineas = client.search_read(
+            "account.move.line",
+            [("id", "in", invoice_line_ids)],
+            ["name", "quantity", "price_subtotal"]
+        )
+        
+        # Calcular total KG
+        total_kg = sum(linea.get("quantity", 0) for linea in lineas)
+        
+        # Agrupar productos por descripción base (extraer nombre del producto sin OC)
+        from collections import defaultdict
+        productos_agrupados = defaultdict(lambda: {"kg": 0, "clp": 0})
+        
+        for linea in lineas:
+            nombre_completo = linea.get("name", "")
+            # Extraer solo la parte del producto después de ":"
+            if ":" in nombre_completo:
+                partes = nombre_completo.split(":", 1)
+                if len(partes) > 1:
+                    producto = partes[1].strip()
+                else:
+                    producto = nombre_completo
+            else:
+                producto = nombre_completo
+            
+            # Limpiar el nombre del producto
+            producto = producto.replace("[", "").replace("]", "").strip()
+            
+            productos_agrupados[producto]["kg"] += linea.get("quantity", 0)
+            productos_agrupados[producto]["clp"] += linea.get("price_subtotal", 0)
+        
+        # Generar HTML de productos
+        productos_html = ""
+        for producto, datos in productos_agrupados.items():
+            kg_fmt = f"{datos['kg']:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+            clp_fmt = f"${datos['clp']:,.0f}".replace(',', '.')
+            productos_html += f'<li style="margin-bottom: 8px;"><strong>{producto}:</strong> {kg_fmt} KG - {clp_fmt}</li>\n'
+        
+        # Formatear total KG y CLP para el email
+        total_kg_fmt = f"{total_kg:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+        total_clp = factura_record.get("amount_total_signed", 0)
+        total_clp_fmt = f"${total_clp:,.0f}".replace(',', '.')
+        
         # Crear y enviar correo
         asunto = f"Proforma {nombre_factura} - Rio Futuro"
         
@@ -551,15 +608,18 @@ def enviar_proforma_email(
                 <p style="color: #333; font-size: 15px;">Estimado(a) <strong>{proveedor_nombre}</strong>,</p>
                 
                 <p style="color: #555; line-height: 1.6;">
-                    Adjunto encontrará la proforma correspondiente a la factura <strong style="color: #1B4F72;">{nombre_factura}</strong>.
+                    Adjunto encontrará la proforma correspondiente a <strong style="color: #1B4F72;">{total_kg_fmt} KG</strong>, Detalle:
                 </p>
                 
                 <div style="background-color: #E8F4F8; border-left: 4px solid #2E86AB; padding: 15px; margin: 20px 0;">
-                    <p style="margin: 0; color: #333;"><strong>Detalle:</strong></p>
-                    <ul style="color: #555; margin: 10px 0;">
-                        <li><strong>Factura:</strong> {nombre_factura}</li>
-                        <li><strong>Moneda:</strong> CLP (Pesos Chilenos)</li>
+                    <p style="margin: 0 0 10px 0; color: #333; font-size: 14px;"><strong>Productos:</strong></p>
+                    <ul style="color: #555; margin: 10px 0; padding-left: 20px; list-style-type: disc;">
+                        {productos_html}
                     </ul>
+                    <hr style="border: none; border-top: 1px solid #ccc; margin: 15px 0;">
+                    <p style="margin: 10px 0 0 0; color: #1B4F72; font-size: 16px; font-weight: bold;">
+                        Total: {total_clp_fmt} CLP
+                    </p>
                 </div>
                 
                 <p style="color: #555; line-height: 1.6;">
