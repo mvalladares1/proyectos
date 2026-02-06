@@ -7,7 +7,8 @@ from backend.services.proforma_ajuste_service import (
     get_facturas_borrador,
     get_proveedores_con_borradores,
     get_detalle_factura,
-    cambiar_moneda_factura
+    cambiar_moneda_factura,
+    eliminar_linea_factura
 )
 
 router = APIRouter(prefix="/proformas", tags=["proformas"])
@@ -88,3 +89,26 @@ async def ejecutar_cambio_moneda(
         return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/linea/{linea_id}")
+async def eliminar_linea(
+    linea_id: int,
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="Contraseña Odoo")
+):
+    """
+    Elimina una línea de factura en Odoo.
+    
+    ⚠️ OPERACIÓN DE ESCRITURA - Elimina permanentemente la línea.
+    """
+    try:
+        resultado = eliminar_linea_factura(username, password, linea_id)
+        if not resultado.get("success"):
+            raise HTTPException(status_code=400, detail=resultado.get("error"))
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

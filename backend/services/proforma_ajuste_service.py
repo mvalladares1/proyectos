@@ -346,6 +346,59 @@ def get_proveedores_con_borradores(username: str, password: str) -> List[Dict[st
     ]
 
 
+def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[str, Any]:
+    """
+    Elimina una línea de factura en Odoo.
+    
+    Args:
+        username: Usuario de Odoo
+        password: Contraseña de Odoo
+        linea_id: ID de la línea a eliminar
+    
+    Returns:
+        Resultado de la operación
+    """
+    client = OdooClient(username=username, password=password)
+    
+    try:
+        # Verificar que la línea existe y está en una factura borrador
+        linea = client.read(
+            "account.move.line",
+            [linea_id],
+            ["move_id"]
+        )
+        
+        if not linea:
+            return {"success": False, "error": "Línea no encontrada"}
+        
+        move_id = linea[0].get("move_id")[0] if linea[0].get("move_id") else None
+        
+        if move_id:
+            factura = client.read(
+                "account.move",
+                [move_id],
+                ["state"]
+            )
+            
+            if factura and factura[0].get("state") != "draft":
+                return {"success": False, "error": "Solo se pueden eliminar líneas de facturas en borrador"}
+        
+        # Eliminar la línea
+        client.unlink("account.move.line", [linea_id])
+        
+        return {
+            "success": True,
+            "linea_id": linea_id,
+            "message": "Línea eliminada correctamente"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Error al eliminar línea: {str(e)}"
+        }
+
+
 def get_detalle_factura(username: str, password: str, factura_id: int) -> Dict[str, Any]:
     """
     Obtiene el detalle completo de una factura específica.
@@ -558,8 +611,8 @@ def enviar_proforma_email(
             ["name", "quantity", "price_subtotal"]
         )
         
-        # Calcular total KG
-        total_kg = sum(linea.get("quantity", 0) for linea in lineas)
+        # Calcular total KG (usar abs para evitar negativos)
+        total_kg = sum(abs(linea.get("quantity", 0)) for linea in lineas)
         
         # Agrupar productos por descripción base (extraer nombre del producto sin OC)
         from collections import defaultdict
@@ -580,19 +633,19 @@ def enviar_proforma_email(
             # Limpiar el nombre del producto
             producto = producto.replace("[", "").replace("]", "").strip()
             
-            productos_agrupados[producto]["kg"] += linea.get("quantity", 0)
+            productos_agrupados[producto]["kg"] += abs(linea.get("quantity", 0))
             productos_agrupados[producto]["clp"] += linea.get("price_subtotal", 0)
         
         # Generar HTML de productos
         productos_html = ""
         for producto, datos in productos_agrupados.items():
-            kg_fmt = f"{datos['kg']:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+            kg_fmt = f"{abs(datos['kg']):,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
             clp_fmt = f"${datos['clp']:,.0f}".replace(',', '.')
             productos_html += f'<li style="margin-bottom: 8px;"><strong>{producto}:</strong> {kg_fmt} KG - {clp_fmt}</li>\n'
         
         # Formatear total KG y CLP para el email
-        total_kg_fmt = f"{total_kg:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
-        total_clp = factura_record.get("amount_total_signed", 0)
+        total_kg_fmt = f"{abs(total_kg):,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.')
+        total_clp = abs(factura_record.get("amount_total_signed", 0))
         total_clp_fmt = f"${total_clp:,.0f}".replace(',', '.')
         
         # Crear y enviar correo

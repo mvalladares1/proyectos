@@ -4,6 +4,7 @@ Permite buscar facturas en borrador, previsualizar conversión y ajustar moneda.
 """
 import streamlit as st
 import pandas as pd
+import time
 from datetime import datetime, timedelta
 from .shared import fmt_numero, fmt_dinero, API_URL
 import requests
@@ -632,8 +633,17 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             except:
                 pass
         
+        # Ordenar líneas por fecha OC (las que tienen fecha primero, luego por orden original)
+        lineas_ordenadas = sorted(
+            factura["lineas"],
+            key=lambda x: (
+                fechas_oc_map.get(x["nombre"].split(":")[0].strip(), "9999-99-99") if ":" in (x["nombre"] or "") else "9999-99-99",
+                factura["lineas"].index(x)
+            )
+        )
+        
         lineas_completas = []
-        for l in factura["lineas"]:
+        for idx, l in enumerate(lineas_ordenadas):
             desc = l["nombre"][:60] if l["nombre"] else "-"
             
             # Extraer fecha de OC del mapa
@@ -646,6 +656,8 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             p_unit_clp = l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0
             
             lineas_completas.append({
+                "_idx": idx,
+                "_linea_id": l.get("id", idx),
                 "Descripción": desc,
                 "Fecha OC": fecha_oc,
                 "Cant. KG": l["cantidad"],
@@ -666,7 +678,50 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
         df_lineas["Subtotal USD"] = df_lineas["Subtotal USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
         df_lineas["Subtotal CLP"] = df_lineas["Subtotal CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
         
-        st.dataframe(df_lineas, use_container_width=True, hide_index=True)
+        # Mostrar tabla con botones de eliminar
+        for idx, row in df_lineas.iterrows():
+            cols = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
+            
+            linea_id = row['_linea_id']
+            
+            with cols[0]:
+                st.write(f"**{idx+1}**")
+            
+            with cols[1]:
+                st.write(row["Descripción"])
+            with cols[2]:
+                st.write(row["Fecha OC"])
+            with cols[3]:
+                st.write(row["Cant. KG"])
+            with cols[4]:
+                st.write(row["P. Unitario USD"])
+            with cols[5]:
+                st.write(row["Tipo Cambio"])
+            with cols[6]:
+                st.write(row["P. Unitario CLP"])
+            with cols[7]:
+                st.write(row["Subtotal USD"])
+            with cols[8]:
+                st.write(row["Subtotal CLP"])
+            with cols[9]:
+                if st.button("🗑️", key=f"eliminar_{linea_id}", help="Eliminar línea de la factura en Odoo"):
+                    with st.spinner("Eliminando línea..."):
+                        try:
+                            response = requests.delete(
+                                f"{API_URL}/proformas/linea/{linea_id}",
+                                params={"username": username, "password": password}
+                            )
+                            
+                            if response.status_code == 200:
+                                st.success("✅ Línea eliminada correctamente")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                error_detail = response.json().get("detail", "Error desconocido")
+                                st.error(f"❌ Error al eliminar: {error_detail}")
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+
 
 
 def _render_comparativo(factura: dict):
@@ -1031,7 +1086,18 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
             pass
     
     for linea in factura['lineas']:
-        desc = linea['nombre'][:35] if linea['nombre'] else "-"
+        # Usar Paragraph para descripción con wrapping automático
+        desc_completa = linea['nombre'] if linea['nombre'] else "-"
+        
+        # Estilo para la descripción con wrapping
+        desc_style = ParagraphStyle('DescStyle',
+                                   parent=styles['Normal'],
+                                   fontSize=7,
+                                   leading=9,  # Espaciado entre líneas
+                                   alignment=TA_LEFT)
+        
+        desc_paragraph = Paragraph(desc_completa, desc_style)
+        
         cant = linea['cantidad']
         p_unit_usd = linea['precio_usd']
         tc_linea = linea['tc_implicito']
@@ -1041,12 +1107,12 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         
         # Extraer fecha de OC del mapa
         fecha_oc = "-"
-        if ":" in desc:
-            oc_nombre = desc.split(":")[0].strip()
+        if ":" in desc_completa:
+            oc_nombre = desc_completa.split(":")[0].strip()
             fecha_oc = fechas_oc_map.get(oc_nombre, "-")
         
         table_data.append([
-            desc,
+            desc_paragraph,  # Usar Paragraph en lugar de texto truncado
             fecha_oc,
             fmt_cl(cant, 2),
             f"${fmt_cl(p_unit_usd, 2)}",
@@ -1076,8 +1142,8 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         f"${fmt_cl(factura['total_clp'], 0)} *"
     ])
     
-    # Anchos de columna ajustados para landscape con fecha OC - más anchos para ver nombres completos
-    main_table = Table(table_data, colWidths=[2.0*inch, 0.8*inch, 0.65*inch, 0.8*inch, 0.6*inch, 0.9*inch, 0.9*inch, 1.05*inch])
+    # Anchos de columna ajustados para landscape con fecha OC - más ancho para descripción
+    main_table = Table(table_data, colWidths=[2.3*inch, 0.8*inch, 0.65*inch, 0.8*inch, 0.6*inch, 0.9*inch, 0.9*inch, 1.05*inch])
     main_table.setStyle(TableStyle([
         # Header - azul corporativo con texto más grande y visible
         ('BACKGROUND', (0, 0), (-1, 0), color_azul),
@@ -1087,6 +1153,7 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         ('FONTSIZE', (0, 1), (-1, -1), 7),  # Datos más pequeños
         ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Alineación vertical superior
         
         # Grid para líneas de productos
         ('GRID', (0, 0), (-1, len(factura['lineas'])), 0.5, colors.grey),
