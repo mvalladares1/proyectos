@@ -694,9 +694,9 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
         with cols_header[3]:
             st.markdown("**Cant. KG**")
         with cols_header[4]:
-            st.markdown("**P.Unit USD**")
-        with cols_header[5]:
             st.markdown("**TC**")
+        with cols_header[5]:
+            st.markdown("**P.Unit USD**")
         with cols_header[6]:
             st.markdown("**P.Unit CLP**")
         with cols_header[7]:
@@ -724,9 +724,9 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             with cols[3]:
                 st.write(row["Cant. KG"])
             with cols[4]:
-                st.write(row["P. Unitario USD"])
-            with cols[5]:
                 st.write(row["Tipo Cambio"])
+            with cols[5]:
+                st.write(row["P. Unitario USD"])
             with cols[6]:
                 st.write(row["P. Unitario CLP"])
             with cols[7]:
