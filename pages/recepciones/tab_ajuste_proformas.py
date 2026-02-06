@@ -293,7 +293,7 @@ def render(username: str, password: str):
                 st.markdown("---")
                 st.markdown("#### 🚀 Acciones")
                 
-                col_action1, col_action2, col_action3 = st.columns(3)
+                col_action1, col_action2, col_action3, col_action4 = st.columns(4)
                 
                 with col_action1:
                     # Botón para descargar PDF
@@ -311,11 +311,18 @@ def render(username: str, password: str):
                     )
                 
                 with col_action2:
+                    # Botón para enviar individual por email
+                    email_prov = factura.get('proveedor_email', '')
+                    btn_label = f"📤 Enviar a {email_prov[:25]}" if email_prov else "📤 Sin email"
+                    if st.button(btn_label, key=f"enviar_detalle_{factura['id']}", use_container_width=True, disabled=not email_prov):
+                        _enviar_proforma_individual(factura, username, password)
+                
+                with col_action3:
                     # Exportar a Excel
                     if st.button("📅 Descargar Excel", key=f"export_excel_detalle_{factura['id']}", use_container_width=True):
                         _exportar_excel(factura)
                 
-                with col_action3:
+                with col_action4:
                     # URL correcta de Odoo con formato web#id=
                     odoo_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={factura['id']}&cids=1&menu_id=411&action=234&model=account.move&view_type=form"
                     st.link_button(
@@ -1101,14 +1108,15 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
     
     title_style = ParagraphStyle('CustomTitle', 
                                 parent=styles['Heading1'], 
-                                fontSize=18, 
-                                alignment=TA_CENTER,
+                                fontSize=14, 
+                                alignment=TA_RIGHT,
                                 textColor=color_azul,
-                                spaceAfter=20)
+                                spaceAfter=6,
+                                rightIndent=0.2*inch)
     
     elements = []
     
-    # Título centrado con proveedor y fecha (el logo se sobrepone después)
+    # Título alineado a la derecha para no solapar con el logo (esquina izquierda)
     from datetime import datetime
     fecha_creacion_raw = factura.get('fecha_creacion', '') or ''
     fecha_creacion_fmt = ''
@@ -1118,9 +1126,25 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         except:
             fecha_creacion_fmt = fecha_creacion_raw[:10]
     
-    titulo_pdf = f"Proforma {factura['proveedor_nombre'][:40]} {fecha_creacion_fmt}"
+    # Nombre de proveedor más corto para evitar solapamiento
+    prov_nombre_pdf = factura['proveedor_nombre'][:35]
+    titulo_pdf = f"Proforma {prov_nombre_pdf}"
+    subtitulo_pdf = fecha_creacion_fmt
+    
+    # Spacer para dejar espacio al logo (altura del logo ~1.4 inch)
+    elements.append(Spacer(1, 0.6*inch))
     elements.append(Paragraph(titulo_pdf, title_style))
-    elements.append(Spacer(1, 12))
+    
+    # Subtítulo con fecha debajo
+    subtitle_style = ParagraphStyle('SubTitle',
+                                   parent=styles['Normal'],
+                                   fontSize=11,
+                                   alignment=TA_RIGHT,
+                                   textColor=color_azul_claro,
+                                   spaceAfter=10,
+                                   rightIndent=0.2*inch)
+    elements.append(Paragraph(subtitulo_pdf, subtitle_style))
+    elements.append(Spacer(1, 8))
     
     # Fecha de envío (hoy)
     fecha_envio = datetime.now().strftime("%d-%m-%Y")
