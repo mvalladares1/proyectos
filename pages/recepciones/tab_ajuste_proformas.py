@@ -115,13 +115,20 @@ def render(username: str, password: str):
         # =========================================================================
         st.markdown("#### 📋 Seleccionar Proformas para Envío")
         
-        # Crear opciones para multiselect agrupadas por proveedor
+        # Crear opciones para multiselect usando ID como identificador único
         opciones_envio = []
+        factura_map_envio = {}
         for f in facturas:
             email_proveedor = f.get("proveedor_email", "Sin email")
-            # Limpiar nombre de proveedor (remover / inicial si existe)
+            # Limpiar nombre de proveedor
             nombre_proveedor = f['proveedor_nombre'].lstrip('/ ').strip()
-            opciones_envio.append(f"{f['nombre']} | {nombre_proveedor[:40]} | {email_proveedor}")
+            # Usar nombre de factura o "Borrador" + fecha si es "/"
+            display_nombre = f['nombre'] if f['nombre'] != '/' else f"Borrador {f.get('fecha_creacion', '')[:10]}"
+            # Usar ID como key único
+            key_unica = f"ID_{f['id']}"
+            opcion = f"{display_nombre} | {nombre_proveedor[:40]} | {email_proveedor}"
+            opciones_envio.append(opcion)
+            factura_map_envio[opcion] = f
         
         facturas_seleccionadas = st.multiselect(
             "Seleccionar facturas para envío masivo (pueden ser de diferentes proveedores)",
@@ -137,14 +144,8 @@ def render(username: str, password: str):
             st.markdown("---")
             st.markdown("#### 📊 Análisis de Proformas Seleccionadas")
             
-            # Mapear seleccionadas a facturas
-            facturas_sel = []
-            for sel in facturas_seleccionadas:
-                nombre_factura = sel.split(" | ")[0]
-                for f in facturas:
-                    if f['nombre'] == nombre_factura:
-                        facturas_sel.append(f)
-                        break
+            # Mapear seleccionadas a facturas usando el diccionario
+            facturas_sel = [factura_map_envio[sel] for sel in facturas_seleccionadas]
             
             # Métricas generales
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
