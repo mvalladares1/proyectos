@@ -309,17 +309,13 @@ def render_grafico_cerrados_por_dia(evolucion: list):
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     
     options = {
-        "title": {
-            "text": "✅ Procesos Cerrados por Día",
-            "textStyle": {"color": label_color, "fontSize": 14}
-        },
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"}
         },
         "legend": {
             "data": ["Cantidad Procesos", "KG Producidos"],
-            "top": 30,
+            "top": 10,
             "textStyle": {"color": label_color}
         },
         "xAxis": {
@@ -428,18 +424,13 @@ def render_grafico_pendientes_por_planta(procesos: list):
     }
     
     options = {
-        "title": {
-            "text": "📊 Procesos Pendientes por Planta",
-            "textStyle": {"color": label_color, "fontSize": 16, "fontWeight": "bold"},
-            "left": "center"
-        },
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"}
         },
         "legend": {
             "data": ["Procesos", "KG Pendientes"],
-            "top": 35,
+            "top": 10,
             "textStyle": {"color": label_color}
         },
         "xAxis": {
@@ -488,10 +479,10 @@ def render_grafico_pendientes_por_planta(procesos: list):
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "12%", "bottom": "15%", "top": "80px", "containLabel": True}
+        "grid": {"left": "10%", "right": "12%", "bottom": "15%", "top": "50px", "containLabel": True}
     }
     
-    st_echarts(options=options, height="320px", theme=theme_echarts)
+    st_echarts(options=options, height="300px", theme=theme_echarts)
 
 
 def render_grafico_pendientes_por_dia(procesos_pendientes: list):
@@ -562,11 +553,6 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     
     options = {
-        "title": {
-            "text": "⏳ Procesos Pendientes por Día",
-            "textStyle": {"color": label_color, "fontSize": 16, "fontWeight": "bold"},
-            "left": "center"
-        },
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"}
@@ -584,7 +570,7 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
         },
         "legend": {
             "data": ["RIO FUTURO", "VILKUN"],
-            "top": 35,
+            "top": 10,
             "textStyle": {"color": label_color}
         },
         "series": [
@@ -620,10 +606,10 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "5%", "bottom": "20%", "top": "80px", "containLabel": True}
+        "grid": {"left": "10%", "right": "5%", "bottom": "20%", "top": "50px", "containLabel": True}
     }
     
-    st_echarts(options=options, height="320px", theme=theme_echarts)
+    st_echarts(options=options, height="300px", theme=theme_echarts)
 
 
 def render_tabla_pendientes_por_proceso_planta(procesos: list):
@@ -1020,31 +1006,31 @@ def render(username: str, password: str):
     
     st.markdown("---")
     
-    # === SECCIÓN 1: GRÁFICOS PRINCIPALES EN 2 COLUMNAS ===
-    col_graf1, col_graf2 = st.columns(2)
-    
-    with col_graf1:
-        # Gráfico de procesos pendientes por planta
-        render_grafico_pendientes_por_planta(activos.get("procesos", []))
-    
-    with col_graf2:
-        # Gráfico de procesos cerrados por día
-        render_grafico_cerrados_por_dia(evolucion.get("evolucion", []))
+    # === GRÁFICO 1: PROCESOS PENDIENTES POR PLANTA ===
+    st.markdown("### 📊 Procesos Pendientes por Planta")
+    render_grafico_pendientes_por_planta(activos.get("procesos", []))
     
     st.markdown("---")
     
-    # === SECCIÓN 2: GRÁFICO DE PENDIENTES POR DÍA ===
+    # === GRÁFICO 2: PROCESOS PENDIENTES POR DÍA ===
+    st.markdown("### ⏳ Procesos Pendientes por Día de Creación")
     render_grafico_pendientes_por_dia(activos.get("procesos", []))
     
     st.markdown("---")
     
-    # === SECCIÓN 3: TABLA RESUMEN ===
+    # === GRÁFICO 3: PROCESOS CERRADOS POR DÍA ===
+    st.markdown("### ✅ Procesos Cerrados por Día")
+    render_grafico_cerrados_por_dia(evolucion.get("evolucion", []))
+    
+    st.markdown("---")
+    
+    # === TABLA RESUMEN ===
     st.markdown("### 📋 Detalle de Procesos Pendientes por Tipo y Planta")
     render_tabla_pendientes_por_proceso_planta(activos.get("procesos", []))
     
     st.markdown("---")
     
-    # === SECCIÓN 4: TABLAS DETALLADAS (colapsables) ===
+    # === TABLAS DETALLADAS (colapsables) ===
     with st.expander("📊 Ver Evolución de Procesos", expanded=False):
         render_grafico_evolucion(evolucion.get("evolucion", []))
     
