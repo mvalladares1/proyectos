@@ -489,23 +489,69 @@ def render_grafico_pendientes_por_planta(procesos: list):
     st_echarts(options=options, height="320px", theme=theme_echarts)
 
 
-def render_grafico_pendientes_por_dia(evolucion: list):
-    """Renderiza gráfico de procesos pendientes acumulados por día."""
-    if not evolucion:
-        st.info("No hay datos de evolución para mostrar")
+def render_grafico_pendientes_por_dia(procesos_pendientes: list):
+    """Renderiza gráfico de procesos pendientes agrupados por fecha de creación."""
+    if not procesos_pendientes:
+        st.info("No hay procesos pendientes para mostrar")
         return
     
-    fechas_display = [e['fecha_display'] for e in evolucion]
+    from collections import defaultdict
+    from datetime import datetime
     
-    # Calcular pendientes acumulados: creados - cerrados (acumulado)
-    pendientes_acumulados = []
-    acumulado = 0
-    for e in evolucion:
-        creados = e.get('procesos_creados', 0)
-        cerrados = e.get('procesos_cerrados', 0)
-        # Pendientes del día = lo que se creó y no se cerró
-        pendientes_dia = max(0, creados - cerrados)
-        pendientes_acumulados.append(pendientes_dia)
+    # Agrupar procesos pendientes por fecha de creación
+    pendientes_por_fecha = defaultdict(lambda: {"RIO FUTURO": 0, "VILKUN": 0})
+    
+    for p in procesos_pendientes:
+        # Obtener fecha de creación
+        fecha_str = p.get('create_date', '') or p.get('date_start', '') or p.get('date_planned_start', '')
+        if not fecha_str:
+            continue
+        
+        # Extraer solo la fecha (sin hora)
+        try:
+            if isinstance(fecha_str, str):
+                fecha = fecha_str.split('T')[0] if 'T' in fecha_str else fecha_str.split(' ')[0]
+            else:
+                fecha = str(fecha_str)[:10]
+        except:
+            continue
+        
+        # Detectar planta
+        sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
+        name = (p.get('name', '') or '').upper()
+        origin = (p.get('origin', '') or '').upper()
+        texto_busqueda = f"{sala} {name} {origin}"
+        
+        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
+            planta = 'VILKUN'
+        else:
+            planta = 'RIO FUTURO'
+        
+        pendientes_por_fecha[fecha][planta] += 1
+    
+    if not pendientes_por_fecha:
+        st.info("No hay procesos pendientes con fecha válida")
+        return
+    
+    # Ordenar por fecha
+    fechas_ordenadas = sorted(pendientes_por_fecha.keys())
+    
+    # Preparar datos para el gráfico
+    fechas_display = []
+    datos_rio = []
+    datos_vlk = []
+    
+    for fecha in fechas_ordenadas:
+        # Formatear fecha para mostrar (dd/mm)
+        try:
+            fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
+            fecha_display = fecha_obj.strftime('%d/%m')
+        except:
+            fecha_display = fecha
+        
+        fechas_display.append(fecha_display)
+        datos_rio.append(pendientes_por_fecha[fecha]["RIO FUTURO"])
+        datos_vlk.append(pendientes_por_fecha[fecha]["VILKUN"])
     
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
@@ -531,23 +577,45 @@ def render_grafico_pendientes_por_dia(evolucion: list):
             "axisLabel": {"color": "#8892b0"},
             "min": 0
         },
+        "legend": {
+            "data": ["RIO FUTURO", "VILKUN"],
+            "top": 35,
+            "textStyle": {"color": label_color}
+        },
         "series": [
             {
-                "name": "Pendientes",
+                "name": "RIO FUTURO",
                 "type": "bar",
-                "data": pendientes_acumulados,
+                "stack": "total",
+                "data": datos_rio,
+                "itemStyle": {"color": "#3498db"},
+                "label": {
+                    "show": True,
+                    "position": "inside",
+                    "color": "#ffffff",
+                    "fontSize": 11,
+                    "fontWeight": "bold",
+                    "formatter": lambda p: str(p['value']) if p['value'] > 0 else ""
+                }
+            },
+            {
+                "name": "VILKUN",
+                "type": "bar",
+                "stack": "total",
+                "data": datos_vlk,
                 "itemStyle": {"color": "#e74c3c"},
                 "label": {
                     "show": True,
-                    "position": "top",
-                    "color": label_color,
-                    "fontSize": 12,
-                    "fontWeight": "bold"
+                    "position": "inside",
+                    "color": "#ffffff",
+                    "fontSize": 11,
+                    "fontWeight": "bold",
+                    "formatter": lambda p: str(p['value']) if p['value'] > 0 else ""
                 }
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "5%", "bottom": "20%", "top": "70px", "containLabel": True}
+        "grid": {"left": "10%", "right": "5%", "bottom": "20%", "top": "80px", "containLabel": True}
     }
     
     st_echarts(options=options, height="320px", theme=theme_echarts)
@@ -959,7 +1027,7 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # === SECCIÓN 2: GRÁFICO DE PENDIENTES POR DÍA ===
-    render_grafico_pendientes_por_dia(evolucion.get("evolucion", []))
+    render_grafico_pendientes_por_dia(activos.get("procesos", []))
     
     st.markdown("---")
     
