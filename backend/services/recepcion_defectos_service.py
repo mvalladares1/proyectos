@@ -315,6 +315,9 @@ def generar_reporte_defectos_excel(
                     dano_insecto, deformes, fruta_verde, herida_partida, materias_extranas,
                     campos_template_usar
                 )
+    
+    # Generar y retornar el Excel
+    return _generar_excel_desde_datos(datos_excel, fecha_inicio, fecha_fin)
 
 
 def _agregar_registros_excel(
