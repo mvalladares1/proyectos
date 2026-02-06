@@ -210,7 +210,8 @@ def get_facturas_borrador(
                     "id", "name", "quantity", "price_unit",
                     "price_subtotal", "price_total",
                     "debit", "credit", "amount_currency",
-                    "display_type", "product_id", "date"
+                    "display_type", "product_id", "date",
+                    "purchase_line_id"
                 ]
             )
             
@@ -234,6 +235,17 @@ def get_facturas_borrador(
                     clp_subtotal = line.get("debit", 0) or 0
                     tc_linea = clp_subtotal / usd_subtotal if usd_subtotal > 0 else 0
                 
+                # Obtener purchase_order_id desde purchase_line_id
+                purchase_order_id = None
+                if line.get("purchase_line_id"):
+                    try:
+                        pl_id = line["purchase_line_id"][0] if isinstance(line["purchase_line_id"], list) else line["purchase_line_id"]
+                        pl_data = client.read("purchase.order.line", [pl_id], ["order_id"])
+                        if pl_data and pl_data[0].get("order_id"):
+                            purchase_order_id = pl_data[0]["order_id"][0] if isinstance(pl_data[0]["order_id"], list) else pl_data[0]["order_id"]
+                    except:
+                        pass
+                
                 lineas.append({
                     "id": line["id"],
                     "nombre": nombre_linea,
@@ -244,7 +256,8 @@ def get_facturas_borrador(
                     "subtotal_usd": usd_subtotal,
                     "total_usd": line.get("price_total", 0) or 0,
                     "subtotal_clp": clp_subtotal,
-                    "tc_implicito": tc_linea
+                    "tc_implicito": tc_linea,
+                    "purchase_order_id": purchase_order_id
                 })
         
         # Calcular totales

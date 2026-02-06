@@ -663,6 +663,7 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             lineas_completas.append({
                 "_idx": idx,
                 "_linea_id": l.get("id", idx),
+                "_purchase_order_id": l.get("purchase_order_id"),
                 "Descripción": desc,
                 "Fecha OC": fecha_oc,
                 "Cant. KG": l["cantidad"],
@@ -718,7 +719,12 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                 st.write(f"**{idx+1}**")
             
             with cols[1]:
-                st.write(row["Descripción"])
+                # Crear link a OC si está disponible
+                if row.get("_purchase_order_id"):
+                    oc_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={row['_purchase_order_id']}&model=purchase.order&view_type=form&cids=1"
+                    st.markdown(f'<a href="{oc_url}" target="_blank" style="color: #1E88E5; text-decoration: none;">{row["Descripción"]}</a>', unsafe_allow_html=True)
+                else:
+                    st.write(row["Descripción"])
             with cols[2]:
                 st.write(row["Fecha OC"])
             with cols[3]:
@@ -744,9 +750,26 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                             
                             if response.status_code == 200:
                                 st.success("✅ Línea eliminada correctamente")
-                                # Limpiar datos en cache para forzar recarga
+                                # Recargar solo la factura afectada
                                 if "ajuste_proformas_data" in st.session_state:
-                                    del st.session_state["ajuste_proformas_data"]
+                                    facturas_actuales = st.session_state["ajuste_proformas_data"]
+                                    # Buscar y actualizar la factura específica
+                                    factura_id = factura.get("id")
+                                    try:
+                                        # Obtener datos actualizados de esta factura
+                                        updated_facturas = _get_facturas_borrador(
+                                            username, password,
+                                            factura_ids=[factura_id]
+                                        )
+                                        if updated_facturas:
+                                            # Reemplazar la factura en la lista
+                                            for i, f in enumerate(facturas_actuales):
+                                                if f.get("id") == factura_id:
+                                                    facturas_actuales[i] = updated_facturas[0]
+                                                    break
+                                            st.session_state["ajuste_proformas_data"] = facturas_actuales
+                                    except:
+                                        pass
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
