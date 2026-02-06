@@ -595,7 +595,7 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
                     "color": "#ffffff",
                     "fontSize": 11,
                     "fontWeight": "bold",
-                    "formatter": lambda p: str(p['value']) if p['value'] > 0 else ""
+                    "formatter": "{c}"
                 }
             },
             {
@@ -610,7 +610,7 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
                     "color": "#ffffff",
                     "fontSize": 11,
                     "fontWeight": "bold",
-                    "formatter": lambda p: str(p['value']) if p['value'] > 0 else ""
+                    "formatter": "{c}"
                 }
             }
         ],
