@@ -375,27 +375,34 @@ def render_grafico_pendientes_por_planta(procesos: list):
         st.info("No hay datos de procesos pendientes para mostrar")
         return
     
-    # Contar por planta
-    conteo_planta = {"RIO FUTURO": 0, "VILKUN": 0, "SAN JOSE": 0, "OTROS": 0}
-    kg_planta = {"RIO FUTURO": 0, "VILKUN": 0, "SAN JOSE": 0, "OTROS": 0}
+    # Contar por planta - mejorar detección
+    conteo_planta = {"RIO FUTURO": 0, "VILKUN": 0}
+    kg_planta = {"RIO FUTURO": 0, "VILKUN": 0}
     
     for p in procesos:
-        sala = p.get('x_studio_sala_de_proceso', '') or ''
-        name = p.get('name', '') or ''
-        
-        if 'RIO' in sala.upper() or 'RIO' in name.upper() or 'RF' in name.upper():
-            planta = 'RIO FUTURO'
-        elif 'VILKUN' in sala.upper() or 'VLK' in name.upper():
-            planta = 'VILKUN'
-        elif 'SAN JOSE' in sala.upper() or 'SJ' in name.upper():
-            planta = 'SAN JOSE'
+        sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
+        name = (p.get('name', '') or '').upper()
+        origin = (p.get('origin', '') or '').upper()
+        workcenter = (p.get('workcenter_id', '') or '')
+        if isinstance(workcenter, (list, tuple)):
+            workcenter = str(workcenter[1] if len(workcenter) > 1 else workcenter[0]).upper()
         else:
-            planta = 'OTROS'
+            workcenter = str(workcenter).upper()
+        
+        # Combinar todos los campos para búsqueda
+        texto_busqueda = f"{sala} {name} {origin} {workcenter}"
+        
+        # Detectar planta - priorizar VILKUN porque tiene menos procesos
+        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
+            planta = 'VILKUN'
+        else:
+            # Por defecto es RIO FUTURO (la planta principal)
+            planta = 'RIO FUTURO'
         
         conteo_planta[planta] += 1
         kg_prog = p.get('product_qty', 0) or 0
         kg_prod = p.get('qty_produced', 0) or 0
-        kg_planta[planta] += max(0, kg_prog - kg_prod)  # Sin negativos
+        kg_planta[planta] += max(0, kg_prog - kg_prod)
     
     # Filtrar plantas con datos
     plantas = [p for p in conteo_planta.keys() if conteo_planta[p] > 0]
@@ -412,9 +419,7 @@ def render_grafico_pendientes_por_planta(procesos: list):
     # Colores por planta
     colores = {
         "RIO FUTURO": "#3498db",
-        "VILKUN": "#9b59b6", 
-        "SAN JOSE": "#1abc9c",
-        "OTROS": "#95a5a6"
+        "VILKUN": "#9b59b6"
     }
     
     options = {
@@ -425,8 +430,7 @@ def render_grafico_pendientes_por_planta(procesos: list):
         },
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "formatter": "{b}<br/>Procesos: {c0}<br/>KG: {c1}"
+            "axisPointer": {"type": "shadow"}
         },
         "legend": {
             "data": ["Procesos", "KG Pendientes"],
@@ -485,6 +489,70 @@ def render_grafico_pendientes_por_planta(procesos: list):
     st_echarts(options=options, height="320px", theme=theme_echarts)
 
 
+def render_grafico_pendientes_por_dia(evolucion: list):
+    """Renderiza gráfico de procesos pendientes acumulados por día."""
+    if not evolucion:
+        st.info("No hay datos de evolución para mostrar")
+        return
+    
+    fechas_display = [e['fecha_display'] for e in evolucion]
+    
+    # Calcular pendientes acumulados: creados - cerrados (acumulado)
+    pendientes_acumulados = []
+    acumulado = 0
+    for e in evolucion:
+        creados = e.get('procesos_creados', 0)
+        cerrados = e.get('procesos_cerrados', 0)
+        # Pendientes del día = lo que se creó y no se cerró
+        pendientes_dia = max(0, creados - cerrados)
+        pendientes_acumulados.append(pendientes_dia)
+    
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    
+    options = {
+        "title": {
+            "text": "⏳ Procesos Pendientes por Día",
+            "textStyle": {"color": label_color, "fontSize": 16, "fontWeight": "bold"},
+            "left": "center"
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"}
+        },
+        "xAxis": {
+            "type": "category",
+            "data": fechas_display,
+            "axisLabel": {"color": "#8892b0", "rotate": 45}
+        },
+        "yAxis": {
+            "type": "value",
+            "name": "Procesos",
+            "axisLabel": {"color": "#8892b0"},
+            "min": 0
+        },
+        "series": [
+            {
+                "name": "Pendientes",
+                "type": "bar",
+                "data": pendientes_acumulados,
+                "itemStyle": {"color": "#e74c3c"},
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": label_color,
+                    "fontSize": 12,
+                    "fontWeight": "bold"
+                }
+            }
+        ],
+        "backgroundColor": "rgba(0,0,0,0)",
+        "grid": {"left": "10%", "right": "5%", "bottom": "20%", "top": "70px", "containLabel": True}
+    }
+    
+    st_echarts(options=options, height="320px", theme=theme_echarts)
+
+
 def render_tabla_pendientes_por_proceso_planta(procesos: list):
     """Renderiza tabla de procesos pendientes agrupados por tipo de proceso y planta."""
     if not procesos:
@@ -504,16 +572,16 @@ def render_tabla_pendientes_por_proceso_planta(procesos: list):
         if ']' in tipo_proceso:
             tipo_proceso = tipo_proceso.split(']')[-1].strip()
         
-        # Detectar planta
-        sala = p.get('x_studio_sala_de_proceso', '') or ''
-        name = p.get('name', '') or ''
+        # Detectar planta - mejorado
+        sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
+        name = (p.get('name', '') or '').upper()
+        origin = (p.get('origin', '') or '').upper()
+        texto_busqueda = f"{sala} {name} {origin}"
         
-        if 'RIO' in sala.upper() or 'RIO' in name.upper() or 'RF' in name.upper():
-            planta = 'RIO FUTURO'
-        elif 'VILKUN' in sala.upper() or 'VLK' in name.upper():
+        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
             planta = 'VILKUN'
-        elif 'SAN JOSE' in sala.upper() or 'SJ' in name.upper():
-            planta = 'SAN JOSE'
+        else:
+            planta = 'RIO FUTURO'
         else:
             planta = 'Sin Planta'
         
@@ -892,13 +960,18 @@ def render(username: str, password: str):
     
     st.markdown("---")
     
-    # === SECCIÓN 2: TABLA RESUMEN ===
+    # === SECCIÓN 2: GRÁFICO DE PENDIENTES POR DÍA ===
+    render_grafico_pendientes_por_dia(evolucion.get("evolucion", []))
+    
+    st.markdown("---")
+    
+    # === SECCIÓN 3: TABLA RESUMEN ===
     st.markdown("### 📋 Detalle de Procesos Pendientes por Tipo y Planta")
     render_tabla_pendientes_por_proceso_planta(activos.get("procesos", []))
     
     st.markdown("---")
     
-    # === SECCIÓN 3: TABLAS DETALLADAS (colapsables) ===
+    # === SECCIÓN 4: TABLAS DETALLADAS (colapsables) ===
     with st.expander("📊 Ver Evolución de Procesos", expanded=False):
         render_grafico_evolucion(evolucion.get("evolucion", []))
     
