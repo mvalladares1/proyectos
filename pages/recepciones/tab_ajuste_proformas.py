@@ -744,7 +744,10 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                             
                             if response.status_code == 200:
                                 st.success("✅ Línea eliminada correctamente")
-                                time.sleep(1)
+                                # Limpiar datos en cache para forzar recarga
+                                if "ajuste_proformas_data" in st.session_state:
+                                    del st.session_state["ajuste_proformas_data"]
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 error_detail = response.json().get("detail", "Error desconocido")
