@@ -292,18 +292,20 @@ def render_grafico_evolucion(evolucion: list):
 def render_grafico_cerrados_por_dia(evolucion: list):
     """Renderiza gráfico de barras con procesos cerrados por día usando datos de evolución."""
     if not evolucion:
-        st.info("No hay datos de procesos cerrados para mostrar")
+        st.info("🔍 No hay datos de procesos cerrados para mostrar")
         return
     
-    # Usar directamente los datos de evolución para mantener consistencia
     fechas_display = [e['fecha_display'] for e in evolucion]
     cantidades = [e['procesos_cerrados'] for e in evolucion]
-    kilos = [e['kg_producidos'] for e in evolucion]
+    kilos = [round(e['kg_producidos'], 0) for e in evolucion]
     
-    # Verificar que hay al menos un cierre
     if sum(cantidades) == 0:
-        st.info("No hay procesos cerrados en el período seleccionado")
+        st.info("📭 No hay procesos cerrados en el período seleccionado")
         return
+    
+    # Totales para mostrar en leyenda
+    total_procesos = sum(cantidades)
+    total_kg = sum(kilos)
     
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
@@ -311,69 +313,96 @@ def render_grafico_cerrados_por_dia(evolucion: list):
     options = {
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"}
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(50,50,50,0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff"}
         },
         "legend": {
-            "data": ["Cantidad Procesos", "KG Producidos"],
-            "top": 10,
-            "textStyle": {"color": label_color}
+            "data": [f"✅ Procesos Cerrados ({total_procesos})", f"📦 KG Producidos ({total_kg:,.0f})"],
+            "top": 5,
+            "textStyle": {"color": label_color, "fontSize": 12}
         },
         "xAxis": {
             "type": "category",
             "data": fechas_display,
-            "axisLabel": {"color": "#8892b0", "rotate": 45}
+            "axisLabel": {"color": label_color, "rotate": 0, "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#666"}}
         },
         "yAxis": [
             {
                 "type": "value",
                 "name": "Procesos",
+                "nameTextStyle": {"color": "#00E676", "fontSize": 11},
                 "position": "left",
-                "axisLabel": {"color": "#8892b0"}
+                "axisLabel": {"color": "#00E676", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.1)"}}
             },
             {
                 "type": "value",
-                "name": "KG",
+                "name": "Kilos",
+                "nameTextStyle": {"color": "#64B5F6", "fontSize": 11},
                 "position": "right",
-                "axisLabel": {"color": "#8892b0", "formatter": "{value}"}
+                "axisLabel": {"color": "#64B5F6", "fontSize": 11},
+                "splitLine": {"show": False}
             }
         ],
         "series": [
             {
-                "name": "Cantidad Procesos",
+                "name": f"✅ Procesos Cerrados ({total_procesos})",
                 "type": "bar",
                 "data": cantidades,
-                "itemStyle": {"color": "#2ecc71"},
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#00E676"},
+                            {"offset": 1, "color": "#00C853"}
+                        ]
+                    },
+                    "borderRadius": [6, 6, 0, 0]
+                },
                 "emphasis": {"focus": "series"},
                 "label": {
                     "show": True,
                     "position": "top",
                     "color": label_color,
-                    "fontSize": 11
+                    "fontSize": 12,
+                    "fontWeight": "bold"
                 }
             },
             {
-                "name": "KG Producidos",
+                "name": f"📦 KG Producidos ({total_kg:,.0f})",
                 "type": "line",
                 "yAxisIndex": 1,
                 "data": kilos,
                 "smooth": True,
                 "symbol": "circle",
-                "symbolSize": 8,
-                "itemStyle": {"color": "#3498db"},
-                "lineStyle": {"width": 2}
+                "symbolSize": 10,
+                "itemStyle": {"color": "#64B5F6", "borderWidth": 2, "borderColor": "#fff"},
+                "lineStyle": {"width": 3, "color": "#64B5F6"},
+                "areaStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "rgba(100,181,246,0.3)"},
+                            {"offset": 1, "color": "rgba(100,181,246,0.05)"}
+                        ]
+                    }
+                }
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "10%", "bottom": "20%", "containLabel": True}
+        "grid": {"left": "10%", "right": "10%", "bottom": "12%", "top": "55px", "containLabel": True}
     }
     
-    st_echarts(options=options, height="350px", theme=theme_echarts)
+    st_echarts(options=options, height="320px", theme=theme_echarts)
 
 
 def render_grafico_pendientes_por_planta(procesos: list):
     """Renderiza gráfico de barras con procesos pendientes agrupados por planta."""
     if not procesos:
-        st.info("No hay datos de procesos pendientes para mostrar")
+        st.info("🔍 No hay procesos pendientes para mostrar")
         return
     
     # Contar por planta - mejorar detección
@@ -390,14 +419,11 @@ def render_grafico_pendientes_por_planta(procesos: list):
         else:
             workcenter = str(workcenter).upper()
         
-        # Combinar todos los campos para búsqueda
         texto_busqueda = f"{sala} {name} {origin} {workcenter}"
         
-        # Detectar planta - priorizar VILKUN porque tiene menos procesos
         if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
             planta = 'VILKUN'
         else:
-            # Por defecto es RIO FUTURO (la planta principal)
             planta = 'RIO FUTURO'
         
         conteo_planta[planta] += 1
@@ -405,84 +431,110 @@ def render_grafico_pendientes_por_planta(procesos: list):
         kg_prod = p.get('qty_produced', 0) or 0
         kg_planta[planta] += max(0, kg_prog - kg_prod)
     
-    # Filtrar plantas con datos
     plantas = [p for p in conteo_planta.keys() if conteo_planta[p] > 0]
     cantidades = [conteo_planta[p] for p in plantas]
-    kilos = [kg_planta[p] for p in plantas]
+    kilos = [round(kg_planta[p], 0) for p in plantas]
     
     if not plantas:
-        st.info("No hay procesos pendientes")
+        st.info("🔍 No hay procesos pendientes")
         return
     
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     
-    # Colores por planta
+    # Colores más vivos
     colores = {
-        "RIO FUTURO": "#3498db",
-        "VILKUN": "#9b59b6"
+        "RIO FUTURO": "#00D4FF",  # Cyan brillante
+        "VILKUN": "#FF6B9D"       # Rosa vibrante
     }
     
     options = {
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"}
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(50,50,50,0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff"},
+            "formatter": "{b}<br/>📦 <b>{c0}</b> procesos<br/>⚖️ <b>{c1}</b> kg pendientes"
         },
         "legend": {
-            "data": ["Procesos", "KG Pendientes"],
-            "top": 10,
-            "textStyle": {"color": label_color}
+            "data": ["📦 Procesos Pendientes", "⚖️ KG por Producir"],
+            "top": 5,
+            "textStyle": {"color": label_color, "fontSize": 12}
         },
         "xAxis": {
             "type": "category",
             "data": plantas,
-            "axisLabel": {"color": label_color, "fontSize": 12, "fontWeight": "bold"}
+            "axisLabel": {"color": label_color, "fontSize": 14, "fontWeight": "bold"},
+            "axisLine": {"lineStyle": {"color": "#666"}}
         },
         "yAxis": [
             {
                 "type": "value",
                 "name": "Procesos",
+                "nameTextStyle": {"color": "#00D4FF", "fontSize": 11},
                 "position": "left",
-                "axisLabel": {"color": "#8892b0"}
+                "axisLabel": {"color": "#00D4FF", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.1)"}}
             },
             {
                 "type": "value",
-                "name": "KG",
+                "name": "Kilos",
+                "nameTextStyle": {"color": "#FFB347", "fontSize": 11},
                 "position": "right",
-                "axisLabel": {"color": "#8892b0"}
+                "axisLabel": {"color": "#FFB347", "fontSize": 11},
+                "splitLine": {"show": False}
             }
         ],
         "series": [
             {
-                "name": "Procesos",
+                "name": "📦 Procesos Pendientes",
                 "type": "bar",
-                "data": [{"value": cantidades[i], "itemStyle": {"color": colores.get(plantas[i], "#95a5a6")}} for i in range(len(plantas))],
-                "barWidth": "50%",
+                "data": [{"value": cantidades[i], "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": colores.get(plantas[i], "#95a5a6")},
+                            {"offset": 1, "color": colores.get(plantas[i], "#95a5a6").replace("FF", "99")}
+                        ]
+                    },
+                    "borderRadius": [8, 8, 0, 0]
+                }} for i in range(len(plantas))],
+                "barWidth": "45%",
                 "label": {
                     "show": True,
                     "position": "top",
                     "color": label_color,
-                    "fontSize": 14,
-                    "fontWeight": "bold"
+                    "fontSize": 18,
+                    "fontWeight": "bold",
+                    "formatter": "{c}"
                 }
             },
             {
-                "name": "KG Pendientes",
+                "name": "⚖️ KG por Producir",
                 "type": "line",
                 "yAxisIndex": 1,
                 "data": kilos,
                 "smooth": True,
                 "symbol": "circle",
-                "symbolSize": 10,
-                "itemStyle": {"color": "#f39c12"},
-                "lineStyle": {"width": 3}
+                "symbolSize": 12,
+                "itemStyle": {"color": "#FFB347", "borderWidth": 2, "borderColor": "#fff"},
+                "lineStyle": {"width": 3, "color": "#FFB347"},
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": "#FFB347",
+                    "fontSize": 11,
+                    "fontWeight": "bold",
+                    "formatter": "{c} kg"
+                }
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "12%", "bottom": "15%", "top": "50px", "containLabel": True}
+        "grid": {"left": "12%", "right": "12%", "bottom": "10%", "top": "60px", "containLabel": True}
     }
     
-    st_echarts(options=options, height="300px", theme=theme_echarts)
+    st_echarts(options=options, height="320px", theme=theme_echarts)
 
 
 def render_grafico_pendientes_por_dia(procesos_pendientes: list):
@@ -552,64 +604,92 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     
+    # Totales para mostrar
+    total_rio = sum(datos_rio)
+    total_vlk = sum(datos_vlk)
+    
     options = {
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"}
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(50,50,50,0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff"}
         },
         "xAxis": {
             "type": "category",
             "data": fechas_display,
-            "axisLabel": {"color": "#8892b0", "rotate": 45}
+            "axisLabel": {"color": label_color, "rotate": 0, "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#666"}}
         },
         "yAxis": {
             "type": "value",
-            "name": "Procesos",
-            "axisLabel": {"color": "#8892b0"},
+            "name": "Cantidad",
+            "nameTextStyle": {"color": label_color, "fontSize": 11},
+            "axisLabel": {"color": label_color, "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.1)"}},
             "min": 0
         },
         "legend": {
-            "data": ["RIO FUTURO", "VILKUN"],
-            "top": 10,
-            "textStyle": {"color": label_color}
+            "data": [f"🔵 RIO FUTURO ({total_rio})", f"🟣 VILKUN ({total_vlk})"],
+            "top": 5,
+            "textStyle": {"color": label_color, "fontSize": 12}
         },
         "series": [
             {
-                "name": "RIO FUTURO",
+                "name": f"🔵 RIO FUTURO ({total_rio})",
                 "type": "bar",
                 "stack": "total",
                 "data": datos_rio,
-                "itemStyle": {"color": "#3498db"},
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#00D4FF"},
+                            {"offset": 1, "color": "#0099CC"}
+                        ]
+                    },
+                    "borderRadius": [0, 0, 0, 0]
+                },
                 "label": {
                     "show": True,
                     "position": "inside",
                     "color": "#ffffff",
-                    "fontSize": 11,
+                    "fontSize": 10,
                     "fontWeight": "bold",
                     "formatter": "{c}"
                 }
             },
             {
-                "name": "VILKUN",
+                "name": f"🟣 VILKUN ({total_vlk})",
                 "type": "bar",
                 "stack": "total",
                 "data": datos_vlk,
-                "itemStyle": {"color": "#e74c3c"},
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#FF6B9D"},
+                            {"offset": 1, "color": "#CC5580"}
+                        ]
+                    },
+                    "borderRadius": [4, 4, 0, 0]
+                },
                 "label": {
                     "show": True,
                     "position": "inside",
                     "color": "#ffffff",
-                    "fontSize": 11,
+                    "fontSize": 10,
                     "fontWeight": "bold",
                     "formatter": "{c}"
                 }
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "5%", "bottom": "20%", "top": "50px", "containLabel": True}
+        "grid": {"left": "8%", "right": "5%", "bottom": "15%", "top": "55px", "containLabel": True}
     }
     
-    st_echarts(options=options, height="300px", theme=theme_echarts)
+    st_echarts(options=options, height="320px", theme=theme_echarts)
 
 
 def render_tabla_pendientes_por_proceso_planta(procesos: list):
@@ -1007,19 +1087,22 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # === GRÁFICO 1: PROCESOS PENDIENTES POR PLANTA ===
-    st.markdown("### 📊 Procesos Pendientes por Planta")
+    st.markdown("### 🏭 ¿Cuántos procesos están pendientes en cada planta?")
+    st.caption("Compara la cantidad de procesos y kilos pendientes entre **RIO FUTURO** y **VILKUN**")
     render_grafico_pendientes_por_planta(activos.get("procesos", []))
     
     st.markdown("---")
     
     # === GRÁFICO 2: PROCESOS PENDIENTES POR DÍA ===
-    st.markdown("### ⏳ Procesos Pendientes por Día de Creación")
+    st.markdown("### 📅 ¿Cuándo se crearon los procesos pendientes?")
+    st.caption("Muestra cuántos procesos se acumularon por día de creación, separados por planta")
     render_grafico_pendientes_por_dia(activos.get("procesos", []))
     
     st.markdown("---")
     
     # === GRÁFICO 3: PROCESOS CERRADOS POR DÍA ===
-    st.markdown("### ✅ Procesos Cerrados por Día")
+    st.markdown("### 🎉 ¿Cuántos procesos se completaron por día?")
+    st.caption("Cantidad de procesos cerrados y kilos producidos cada día del período seleccionado")
     render_grafico_cerrados_por_dia(evolucion.get("evolucion", []))
     
     st.markdown("---")
