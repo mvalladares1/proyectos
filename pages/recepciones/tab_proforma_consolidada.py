@@ -568,34 +568,59 @@ def get_email_template_transportista(transportista: str, data: Dict, fecha_desde
     rutas_agrupadas = defaultdict(lambda: {"ocs": [], "kms": 0, "kilos": 0, "costo": 0})
     
     for oc_data in data['ocs']:
-        ruta = oc_data['ruta'] if oc_data['ruta'] else 'Sin ruta'
+        ruta = oc_data['ruta'] if oc_data['ruta'] and oc_data['ruta'] != 'Sin ruta' else 'Sin ruta'
         rutas_agrupadas[ruta]["ocs"].append(oc_data['oc_name'])
         rutas_agrupadas[ruta]["kms"] += oc_data['kms']
         rutas_agrupadas[ruta]["kilos"] += oc_data['kilos']
         rutas_agrupadas[ruta]["costo"] += oc_data['costo']
     
-    # Generar HTML de rutas (limitado a primeras 10 para no saturar email)
+    # Generar HTML de rutas o de OCs individuales (si no hay rutas con datos)
     rutas_html = ""
-    for idx, (ruta, datos_ruta) in enumerate(list(rutas_agrupadas.items())[:10]):
-        kms_fmt = formato_numero_chileno(datos_ruta['kms'], 0)
-        kilos_fmt = formato_numero_chileno(datos_ruta['kilos'], 1)
-        costo_fmt = f"${formato_numero_chileno(datos_ruta['costo'], 0)}"
-        ocs_str = ', '.join(datos_ruta['ocs'][:3])  # Primeras 3 OCs
-        if len(datos_ruta['ocs']) > 3:
-            ocs_str += f" (+{len(datos_ruta['ocs']) - 3} más)"
-        
-        rutas_html += f'''<li style="margin-bottom: 10px;">
-            <strong>{ruta}:</strong> {kms_fmt} km, {kilos_fmt} kg - {costo_fmt}<br>
-            <span style="color: #666; font-size: 12px;">OCs: {ocs_str}</span>
-        </li>\n'''
+    tiene_datos_ruta = any(datos['kms'] > 0 for datos in rutas_agrupadas.values())
     
-    if len(rutas_agrupadas) > 10:
+    if tiene_datos_ruta:
+        # Mostrar agrupado por ruta con datos completos
+        for idx, (ruta, datos_ruta) in enumerate(list(rutas_agrupadas.items())[:10]):
+            if datos_ruta['kms'] == 0 and datos_ruta['kilos'] == 0:
+                continue  # Saltar rutas sin datos
+            
+            kms_fmt = formato_numero_chileno(datos_ruta['kms'], 0)
+            kilos_fmt = formato_numero_chileno(datos_ruta['kilos'], 1)
+            costo_fmt = f"${formato_numero_chileno(datos_ruta['costo'], 0)}"
+            ocs_str = ', '.join(datos_ruta['ocs'][:3])
+            if len(datos_ruta['ocs']) > 3:
+                ocs_str += f" (+{len(datos_ruta['ocs']) - 3} más)"
+            
+            rutas_html += f'''<li style="margin-bottom: 10px;">
+                <strong>{ruta}:</strong> {kms_fmt} km, {kilos_fmt} kg - {costo_fmt}<br>
+                <span style="color: #666; font-size: 12px;">OCs: {ocs_str}</span>
+            </li>\n'''
+    else:
+        # Mostrar OCs individuales sin agrupar (cuando no hay datos de ruta)
+        for oc_data in data['ocs'][:10]:
+            costo_fmt = f"${formato_numero_chileno(oc_data['costo'], 0)}"
+            fecha_oc = oc_data['fecha']
+            
+            rutas_html += f'''<li style="margin-bottom: 10px;">
+                <strong>{oc_data['oc_name']}</strong> ({fecha_oc}): {costo_fmt}
+            </li>\n'''
+    
+    if len(data['ocs']) > 10:
+        rutas_html += f'<li style="color: #666;"><em>...y {len(data["ocs"]) - 10} OCs más</em></li>'
+    elif len(rutas_agrupadas) > 10 and tiene_datos_ruta:
         rutas_html += f'<li style="color: #666;"><em>...y {len(rutas_agrupadas) - 10} rutas más</em></li>'
     
     # Formatear totales
-    total_kms_fmt = formato_numero_chileno(total_kms, 0)
-    total_kilos_fmt = formato_numero_chileno(total_kilos, 1)
     total_costo_fmt = f"${formato_numero_chileno(total_costo, 0)}"
+    
+    # Generar sección de totales condicional
+    totales_extras = ""
+    if total_kms > 0:
+        total_kms_fmt = formato_numero_chileno(total_kms, 0)
+        totales_extras += f"                    • Kilómetros: {total_kms_fmt} km<br>\n"
+    if total_kilos > 0:
+        total_kilos_fmt = formato_numero_chileno(total_kilos, 1)
+        totales_extras += f"                    • Kilos transportados: {total_kilos_fmt} kg<br>\n"
     
     asunto = f"Proforma de Fletes {fecha_desde} al {fecha_hasta} - Rio Futuro"
     
@@ -614,15 +639,13 @@ def get_email_template_transportista(transportista: str, data: Dict, fecha_desde
             </p>
             
             <div style="background-color: #E8F4F8; border-left: 4px solid #2E86AB; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0 0 10px 0; color: #333; font-size: 14px;"><strong>Resumen de Servicios:</strong></p>
+                <p style="margin: 0 0 10px 0; color: #333; font-size: 14px;"><strong>{'Ordenes de Compra:' if not tiene_datos_ruta else 'Resumen de Servicios:'}</strong></p>
                 <ul style="color: #555; margin: 10px 0; padding-left: 20px; list-style-type: disc;">
                     {rutas_html}
                 </ul>
                 <hr style="border: none; border-top: 1px solid #ccc; margin: 15px 0;">
                 <p style="margin: 0; color: #333; font-size: 13px;">
-                    <strong>Totales:</strong><br>
-                    • Kilómetros: {total_kms_fmt} km<br>
-                    • Kilos transportados: {total_kilos_fmt} kg<br>
+                    {f'<strong>Totales:</strong><br>{totales_extras}' if totales_extras else ''}
                 </p>
                 <p style="margin: 10px 0 0 0; color: #1B4F72; font-size: 18px; font-weight: bold;">
                     Total a Facturar: {total_costo_fmt} CLP
