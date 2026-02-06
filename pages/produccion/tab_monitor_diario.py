@@ -582,8 +582,6 @@ def render_tabla_pendientes_por_proceso_planta(procesos: list):
             planta = 'VILKUN'
         else:
             planta = 'RIO FUTURO'
-        else:
-            planta = 'Sin Planta'
         
         key = (tipo_proceso, planta)
         if key not in resumen:
