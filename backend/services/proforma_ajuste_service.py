@@ -653,8 +653,12 @@ def enviar_proforma_email(
         
         cuerpo_html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background-color: #1B4F72; padding: 20px; text-align: center;">
-                <h2 style="color: #FFFFFF; margin: 0; font-size: 24px;">Proforma de Proveedor</h2>
+            <div style="background-color: #1B4F72; padding: 20px; text-align: center; position: relative;">
+                <div style="display: inline-block; background: linear-gradient(135deg, #2E86AB 0%, #1B4F72 100%); width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #FFFFFF;">
+                    <div style="color: #FFFFFF; font-size: 24px; font-weight: bold; line-height: 54px; font-family: 'Arial Black', sans-serif;">RF</div>
+                </div>
+                <h2 style="color: #FFFFFF; margin: 10px 0 0 0; font-size: 22px;">Rio Futuro Procesos</h2>
+                <p style="color: #E8F4F8; margin: 5px 0 0 0; font-size: 14px; font-weight: normal;">Proforma de Proveedor</p>
             </div>
             
             <div style="padding: 30px; background-color: #f9f9f9;">
