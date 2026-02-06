@@ -51,7 +51,10 @@
     ],
     "recepciones.pallets_recepcion": [],
     "recepciones.proforma_fletes": [],
-    "recepciones.ajuste_proformas": [],
+    "recepciones.ajuste_proformas": [
+      "jvidaurre@riofuturo.cl",
+      "mvalladares@riofuturo.cl"
+    ],
     "produccion.reporteria_general": [],
     "produccion.detalle_of": [],
     "produccion.clasificacion": [],
