@@ -407,7 +407,8 @@ def get_proveedores_con_borradores(username: str, password: str) -> List[Dict[st
 def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[str, Any]:
     """
     Elimina una línea de factura en Odoo.
-    Usa las credenciales del usuario logueado.
+    Usa credenciales del usuario para lectura y credenciales con permisos
+    de Accounting/Billing para la operación de borrado.
     
     Args:
         username: Usuario de Odoo
@@ -442,8 +443,12 @@ def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[
             if factura and factura[0].get("state") != "draft":
                 return {"success": False, "error": "Solo se pueden eliminar líneas de facturas en borrador"}
         
-        # Eliminar con las credenciales del usuario
-        client.unlink("account.move.line", [linea_id])
+        # Eliminar con credenciales que tienen permiso Accounting/Billing
+        admin_client = OdooClient(
+            username="mvalladares@riofuturo.cl",
+            password="c0766224bec30cac071ffe43a858c9ccbd521ddd"
+        )
+        admin_client.unlink("account.move.line", [linea_id])
         
         return {
             "success": True,
