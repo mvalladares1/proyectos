@@ -360,9 +360,12 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
                 # Generar PDF
                 pdf_bytes = _generar_pdf_proforma(factura, username, password)
                 
-                # Agregar al ZIP con nombre descriptivo
-                nombre_archivo = f"Proforma_{factura['nombre']}_{factura['proveedor_nombre'][:20].replace(' ', '_')}.pdf"
-                zip_file.writestr(nombre_archivo, pdf_bytes)
+                # Crear carpeta por proveedor y agregar PDF
+                proveedor_carpeta = factura['proveedor_nombre'][:30].replace(' ', '_').replace('/', '_')
+                nombre_pdf = f"Proforma_{factura['nombre']}.pdf"
+                ruta_en_zip = f"{proveedor_carpeta}/{nombre_pdf}"
+                
+                zip_file.writestr(ruta_en_zip, pdf_bytes)
             
             except Exception as e:
                 st.error(f"❌ Error generando {factura['nombre']}: {str(e)}")
