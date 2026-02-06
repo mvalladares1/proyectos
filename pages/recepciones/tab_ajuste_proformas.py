@@ -596,7 +596,7 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
         st.caption(f"Ref: {factura['ref'] or 'Sin referencia'}")
     
     with col2:
-        st.metric("🏢 Proveedor", factura["proveedor_nombre"][:30])
+        st.metric("🏢 Proveedor", factura["proveedor_nombre"])
         st.caption(f"Fecha: {factura['fecha_factura'] or 'Sin fecha'}")
     
     with col3:
@@ -677,6 +677,31 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
         df_lineas["P. Unitario CLP"] = df_lineas["P. Unitario CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
         df_lineas["Subtotal USD"] = df_lineas["Subtotal USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
         df_lineas["Subtotal CLP"] = df_lineas["Subtotal CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
+        
+        # Mostrar headers de columnas
+        cols_header = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
+        with cols_header[0]:
+            st.markdown("**#**")
+        with cols_header[1]:
+            st.markdown("**Descripción**")
+        with cols_header[2]:
+            st.markdown("**Fecha OC**")
+        with cols_header[3]:
+            st.markdown("**Cant. KG**")
+        with cols_header[4]:
+            st.markdown("**P.Unit USD**")
+        with cols_header[5]:
+            st.markdown("**TC**")
+        with cols_header[6]:
+            st.markdown("**P.Unit CLP**")
+        with cols_header[7]:
+            st.markdown("**Subtotal USD**")
+        with cols_header[8]:
+            st.markdown("**Subtotal CLP**")
+        with cols_header[9]:
+            st.markdown("**🗑️**")
+        
+        st.markdown("---")
         
         # Mostrar tabla con botones de eliminar
         for idx, row in df_lineas.iterrows():
@@ -1094,7 +1119,9 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
                                    parent=styles['Normal'],
                                    fontSize=7,
                                    leading=9,  # Espaciado entre líneas
-                                   alignment=TA_LEFT)
+                                   alignment=TA_LEFT,
+                                   wordWrap='CJK',  # Permite wrapping en cualquier punto
+                                   splitLongWords=True)  # Divide palabras largas
         
         desc_paragraph = Paragraph(desc_completa, desc_style)
         
@@ -1143,7 +1170,7 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
     ])
     
     # Anchos de columna ajustados para landscape con fecha OC - más ancho para descripción
-    main_table = Table(table_data, colWidths=[2.3*inch, 0.8*inch, 0.65*inch, 0.8*inch, 0.6*inch, 0.9*inch, 0.9*inch, 1.05*inch])
+    main_table = Table(table_data, colWidths=[2.5*inch, 0.75*inch, 0.6*inch, 0.75*inch, 0.6*inch, 0.85*inch, 0.85*inch, 1.0*inch])
     main_table.setStyle(TableStyle([
         # Header - azul corporativo con texto más grande y visible
         ('BACKGROUND', (0, 0), (-1, 0), color_azul),
