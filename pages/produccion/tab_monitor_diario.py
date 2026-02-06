@@ -1114,9 +1114,6 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # === TABLAS DETALLADAS (colapsables) ===
-    with st.expander("📊 Ver Evolución de Procesos", expanded=False):
-        render_grafico_evolucion(evolucion.get("evolucion", []))
-    
     with st.expander(f"📋 Ver Lista de Procesos Pendientes ({activos.get('estadisticas', {}).get('total_procesos', 0)})", expanded=False):
         render_tabla_compacta(activos.get("procesos", []), "pendientes")
     
