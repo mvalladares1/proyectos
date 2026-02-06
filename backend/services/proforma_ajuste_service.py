@@ -5,6 +5,72 @@ Permite consultar, comparar y ajustar moneda USD → CLP
 from typing import List, Dict, Any, Optional
 from shared.odoo_client import OdooClient
 
+# Categorías que NO son productos de fruta (excluir)
+CATEGORIAS_EXCLUIDAS = [
+    "INVENTARIABLES", "BANDEJAS", "ACTIVO", "SERVICIOS",
+    "EQUIPOS", "MUEBLES", "EJEMPLODS", "OTROS", "ALL1",
+    "BANCO"  # Excluir facturas de bancos
+]
+
+
+def tiene_productos_fruta(client: OdooClient, invoice_line_ids: List[int]) -> bool:
+    """
+    Verifica si una factura contiene productos de fruta.
+    
+    Args:
+        client: Cliente Odoo
+        invoice_line_ids: IDs de líneas de factura
+        
+    Returns:
+        True si tiene al menos un producto de fruta
+    """
+    if not invoice_line_ids:
+        return False
+    
+    try:
+        # Leer líneas con información del producto
+        lines_data = client.read(
+            "account.move.line",
+            invoice_line_ids,
+            ["product_id", "display_type"]
+        )
+        
+        # Obtener IDs de productos únicos (excluir líneas de sección/notas)
+        product_ids = []
+        for line in lines_data:
+            if line.get("display_type") in ["line_section", "line_note", "payment_term"]:
+                continue
+            if line.get("product_id"):
+                prod_id = line["product_id"][0] if isinstance(line["product_id"], list) else line["product_id"]
+                if prod_id and prod_id not in product_ids:
+                    product_ids.append(prod_id)
+        
+        if not product_ids:
+            return False
+        
+        # Leer productos con su categoría
+        products = client.read(
+            "product.product",
+            product_ids,
+            ["categ_id"]
+        )
+        
+        # Verificar si algún producto es de fruta
+        for prod in products:
+            if prod.get("categ_id"):
+                categ_name = prod["categ_id"][1] if isinstance(prod["categ_id"], list) else str(prod["categ_id"])
+                categ_upper = categ_name.upper()
+                
+                # Si NO está en categorías excluidas, es fruta
+                if not any(excl in categ_upper for excl in CATEGORIAS_EXCLUIDAS):
+                    return True
+        
+        return False
+        
+    except Exception:
+        # En caso de error, asumir que NO es fruta (mejor prevenir)
+        return False
+
 
 def get_facturas_borrador(
     username: str, 
@@ -109,8 +175,11 @@ def get_facturas_borrador(
         return ""
     
     for fac in facturas:
-        # Obtener líneas de factura
+        # FILTRO: Solo facturas que contengan productos de fruta
         invoice_line_ids = fac.get("invoice_line_ids", [])
+        if not tiene_productos_fruta(client, invoice_line_ids):
+            continue  # Saltar facturas sin productos de fruta
+        
         lineas = []
         
         if invoice_line_ids:
