@@ -216,11 +216,11 @@ def render(username: str, password: str):
             
             with col_envio1:
                 if st.button("📤 ENVIAR PROFORMAS", type="primary", key="btn_enviar_masivo"):
-                    _enviar_proformas_masivo(facturas, facturas_seleccionadas, username, password)
+                    _enviar_proformas_masivo(facturas, facturas_seleccionadas, username, password, factura_map=factura_map_envio)
             
             with col_envio2:
                 if st.button("📥 DESCARGAR PDFs", type="secondary", key="btn_descargar_masivo"):
-                    _descargar_pdfs_masivo(facturas, facturas_seleccionadas, username, password)
+                    _descargar_pdfs_masivo(facturas, facturas_seleccionadas, username, password, factura_map=factura_map_envio)
             
             with col_envio3:
                 if con_email > 0:
@@ -328,20 +328,23 @@ def render(username: str, password: str):
                 _render_comparativo(factura)
 
 
-def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str):
+def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str, factura_map: dict = None):
     """Descarga todos los PDFs de las proformas seleccionadas en un ZIP."""
     import zipfile
     import io
     from datetime import datetime
     
-    # Mapear seleccionadas a facturas completas
+    # Mapear seleccionadas a facturas completas usando el diccionario
     facturas_descargar = []
-    for sel in facturas_seleccionadas:
-        nombre_factura = sel.split(" | ")[0]
-        for f in facturas_todas:
-            if f['nombre'] == nombre_factura:
-                facturas_descargar.append(f)
-                break
+    if factura_map:
+        facturas_descargar = [factura_map[sel] for sel in facturas_seleccionadas if sel in factura_map]
+    else:
+        # Fallback por ID
+        for sel in facturas_seleccionadas:
+            for f in facturas_todas:
+                if f.get('id') and sel and str(f['id']) in sel:
+                    facturas_descargar.append(f)
+                    break
     
     if not facturas_descargar:
         st.error("❌ No hay proformas seleccionadas")
@@ -393,17 +396,23 @@ def _descargar_pdfs_masivo(facturas_todas: list, facturas_seleccionadas: list, u
     )
 
 
-def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str):
+def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list, username: str, password: str, factura_map: dict = None):
     """Envía múltiples proformas de forma masiva."""
     
-    # Mapear seleccionadas a facturas completas
+    # Mapear seleccionadas a facturas completas usando el diccionario
     facturas_enviar = []
-    for sel in facturas_seleccionadas:
-        nombre_factura = sel.split(" | ")[0]
-        for f in facturas_todas:
-            if f['nombre'] == nombre_factura and f.get('proveedor_email'):
-                facturas_enviar.append(f)
-                break
+    if factura_map:
+        for sel in facturas_seleccionadas:
+            if sel in factura_map:
+                f = factura_map[sel]
+                if f.get('proveedor_email'):
+                    facturas_enviar.append(f)
+    else:
+        for sel in facturas_seleccionadas:
+            for f in facturas_todas:
+                if f.get('id') and sel and str(f['id']) in sel and f.get('proveedor_email'):
+                    facturas_enviar.append(f)
+                    break
     
     if not facturas_enviar:
         st.error("❌ No hay proformas válidas para enviar (todos los proveedores sin email)")
@@ -1295,14 +1304,15 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         c.drawImage(logo_path, x_pos, y_pos, width=logo_width, height=logo_height, preserveAspectRatio=True, mask='auto')
         c.save()
         
-        # Sobreponer logo en cada página
+        # Sobreponer logo SOLO en la primera página
         overlay_buffer.seek(0)
         overlay_pdf = PdfReader(overlay_buffer)
         overlay_page = overlay_pdf.pages[0]
         
         for page_num in range(len(pdf_reader.pages)):
             page = pdf_reader.pages[page_num]
-            page.merge_page(overlay_page)
+            if page_num == 0:  # Solo primera página
+                page.merge_page(overlay_page)
             pdf_writer.add_page(page)
         
         # Guardar el PDF final con logo

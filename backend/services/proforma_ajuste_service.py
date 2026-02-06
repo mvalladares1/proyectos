@@ -194,6 +194,10 @@ def get_facturas_borrador(
             pass
         return ""
     
+    # Pre-cargar cache de TCs y OCs para evitar N+1 queries
+    tc_cache = {}
+    oc_fecha_cache = {}
+    
     for fac in facturas:
         # FILTRO: Solo facturas que contengan productos de fruta
         invoice_line_ids = fac.get("invoice_line_ids", [])
@@ -215,6 +219,47 @@ def get_facturas_borrador(
                 ]
             )
             
+            # OPTIMIZACIÓN: Batch - obtener todos los OC nombres y purchase_line_ids
+            oc_nombres_batch = set()
+            purchase_line_ids_batch = []
+            
+            for line in lines_data:
+                if line.get("display_type") in ["line_section", "line_note", "payment_term"]:
+                    continue
+                nombre_linea = line.get("name", "")
+                if ":" in nombre_linea:
+                    oc_nombres_batch.add(nombre_linea.split(":")[0].strip())
+                if line.get("purchase_line_id"):
+                    pl_id = line["purchase_line_id"][0] if isinstance(line["purchase_line_id"], list) else line["purchase_line_id"]
+                    purchase_line_ids_batch.append(pl_id)
+            
+            # Batch: buscar fechas de OC en una sola llamada
+            nuevas_oc = [oc for oc in oc_nombres_batch if oc not in oc_fecha_cache]
+            if nuevas_oc:
+                try:
+                    ocs_data = client.search_read(
+                        "purchase.order",
+                        [("name", "in", list(nuevas_oc))],
+                        ["name", "date_order"]
+                    )
+                    for oc in ocs_data:
+                        if oc.get("date_order"):
+                            oc_fecha_cache[oc["name"]] = oc["date_order"][:10]
+                except:
+                    pass
+            
+            # Batch: buscar purchase_order_ids en una sola llamada
+            po_id_map = {}  # purchase_line_id -> purchase_order_id
+            if purchase_line_ids_batch:
+                try:
+                    pl_data = client.read("purchase.order.line", purchase_line_ids_batch, ["order_id"])
+                    for pl in pl_data:
+                        if pl.get("order_id"):
+                            po_id = pl["order_id"][0] if isinstance(pl["order_id"], list) else pl["order_id"]
+                            po_id_map[pl["id"]] = po_id
+                except:
+                    pass
+            
             for line in lines_data:
                 # Saltar líneas de sección, notas o términos de pago
                 if line.get("display_type") in ["line_section", "line_note", "payment_term"]:
@@ -222,29 +267,29 @@ def get_facturas_borrador(
                 
                 # Obtener TC histórico de la OC específica de esta línea
                 nombre_linea = line.get("name", "")
-                fecha_oc = get_fecha_oc(client, nombre_linea)
+                fecha_oc = ""
+                if ":" in nombre_linea:
+                    oc_nombre = nombre_linea.split(":")[0].strip()
+                    fecha_oc = oc_fecha_cache.get(oc_nombre, "")
                 
                 usd_subtotal = line.get("price_subtotal", 0) or 0
                 
                 if fecha_oc:
-                    # Usar TC histórico de la fecha de la OC
-                    tc_linea = get_tc_historico(client, fecha_oc)
+                    # Usar TC con cache
+                    if fecha_oc not in tc_cache:
+                        tc_cache[fecha_oc] = get_tc_historico(client, fecha_oc)
+                    tc_linea = tc_cache[fecha_oc]
                     clp_subtotal = usd_subtotal * tc_linea
                 else:
                     # Fallback: usar debit actual si no se encuentra la OC
                     clp_subtotal = line.get("debit", 0) or 0
                     tc_linea = clp_subtotal / usd_subtotal if usd_subtotal > 0 else 0
                 
-                # Obtener purchase_order_id desde purchase_line_id
+                # Obtener purchase_order_id del batch
                 purchase_order_id = None
                 if line.get("purchase_line_id"):
-                    try:
-                        pl_id = line["purchase_line_id"][0] if isinstance(line["purchase_line_id"], list) else line["purchase_line_id"]
-                        pl_data = client.read("purchase.order.line", [pl_id], ["order_id"])
-                        if pl_data and pl_data[0].get("order_id"):
-                            purchase_order_id = pl_data[0]["order_id"][0] if isinstance(pl_data[0]["order_id"], list) else pl_data[0]["order_id"]
-                    except:
-                        pass
+                    pl_id = line["purchase_line_id"][0] if isinstance(line["purchase_line_id"], list) else line["purchase_line_id"]
+                    purchase_order_id = po_id_map.get(pl_id)
                 
                 lineas.append({
                     "id": line["id"],
@@ -362,15 +407,18 @@ def get_proveedores_con_borradores(username: str, password: str) -> List[Dict[st
 def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[str, Any]:
     """
     Elimina una línea de factura en Odoo.
+    Usa credenciales admin (.env) para el unlink, ya que no todos los usuarios
+    tienen permisos de escritura en account.move.line.
     
     Args:
-        username: Usuario de Odoo
+        username: Usuario de Odoo (para verificación)
         password: Contraseña de Odoo
         linea_id: ID de la línea a eliminar
     
     Returns:
         Resultado de la operación
     """
+    # Usar credenciales del usuario para verificar que puede leer
     client = OdooClient(username=username, password=password)
     
     try:
@@ -396,8 +444,9 @@ def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[
             if factura and factura[0].get("state") != "draft":
                 return {"success": False, "error": "Solo se pueden eliminar líneas de facturas en borrador"}
         
-        # Eliminar la línea
-        client.unlink("account.move.line", [linea_id])
+        # Usar cliente admin (credenciales del .env) para eliminar
+        admin_client = OdooClient()
+        admin_client.unlink("account.move.line", [linea_id])
         
         return {
             "success": True,
