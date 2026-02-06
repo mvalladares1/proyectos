@@ -42,7 +42,7 @@ def fetch_procesos_activos(username: str, password: str, fecha: str,
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_procesos_cerrados(username: str, password: str, fecha: str,
                             planta: str = None, sala: str = None,
-                            fecha_fin: str = None):
+                            fecha_fin: str = None, producto: str = None):
     """Obtiene procesos cerrados para un rango de fechas."""
     params = {
         "username": username,
@@ -55,6 +55,8 @@ def fetch_procesos_cerrados(username: str, password: str, fecha: str,
         params["planta"] = planta
     if sala and sala != "Todas":
         params["sala"] = sala
+    if producto and producto != "Todos":
+        params["producto"] = producto
     
     response = httpx.get(f"{API_URL}/api/v1/produccion/monitor/cerrados",
                          params=params, timeout=60.0)
@@ -64,7 +66,8 @@ def fetch_procesos_cerrados(username: str, password: str, fecha: str,
 
 @st.cache_data(ttl=120, show_spinner=False)
 def fetch_evolucion(username: str, password: str, fecha_inicio: str, 
-                    fecha_fin: str, planta: str = None, sala: str = None):
+                    fecha_fin: str, planta: str = None, sala: str = None,
+                    producto: str = None):
     """Obtiene evolución de procesos en rango de fechas."""
     params = {
         "username": username,
@@ -76,6 +79,8 @@ def fetch_evolucion(username: str, password: str, fecha_inicio: str,
         params["planta"] = planta
     if sala and sala != "Todas":
         params["sala"] = sala
+    if producto and producto != "Todos":
+        params["producto"] = producto
     
     response = httpx.get(f"{API_URL}/api/v1/produccion/monitor/evolucion",
                          params=params, timeout=90.0)
@@ -927,7 +932,8 @@ def render(username: str, password: str):
                     username, password,
                     fecha_inicio.isoformat(),
                     planta_sel, sala_sel,
-                    fecha_fin.isoformat()
+                    fecha_fin.isoformat(),
+                    producto_sel
                 )
                 
                 # Evolución en el rango
@@ -935,7 +941,8 @@ def render(username: str, password: str):
                     username, password,
                     fecha_inicio.isoformat(),
                     fecha_fin.isoformat(),
-                    planta_sel, sala_sel
+                    planta_sel, sala_sel,
+                    producto_sel
                 )
                 
                 st.session_state["monitor_activos"] = activos_data
