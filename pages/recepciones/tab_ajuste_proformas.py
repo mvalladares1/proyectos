@@ -706,35 +706,8 @@ def _render_comparativo(factura: dict):
         st.markdown("##### ✅ Validación Odoo")
         
         # DEBUG: Mostrar valores que se están comparando
-        base_calculada = factura['base_clp']
-        base_odoo = factura['base_clp_signed']
-        diff = abs(base_calculada - base_odoo)
-        
-        with st.expander("🔍 Debug: Detalles de Comparación", expanded=False):
-            st.code(f"""
-Base CLP Calculada (suma líneas): ${fmt_chileno(base_calculada, 0)}
-Base CLP Odoo (amount_untaxed_signed): ${fmt_chileno(base_odoo, 0)}
-Diferencia: ${fmt_chileno(diff, 0)}
-
-Cálculo por línea:
-""")
-            for i, linea in enumerate(factura['lineas'], 1):
-                subtotal_clp = linea['subtotal_clp']
-                st.code(f"Línea {i}: {linea['nombre'][:40]}")
-                st.code(f"  USD: ${linea['subtotal_usd']:,.2f} × TC {linea['tc_implicito']:,.2f} = ${subtotal_clp:,.0f} CLP")
-            
-            total_lineas = sum(l['subtotal_clp'] for l in factura['lineas'])
-            st.code(f"\nSuma total líneas: ${fmt_chileno(total_lineas, 0)}")
-            st.code(f"Odoo amount_untaxed_signed: ${fmt_chileno(base_odoo, 0)}")
-            st.code(f"Diferencia: ${fmt_chileno(diff, 0)}")
-        
-        if diff < 100:
-            st.success(f"✅ Cuadra con Odoo")
-            st.caption(f"Diferencia: ${fmt_chileno(diff, 0)}")
-        else:
-            st.warning(f"⚠️ Diferencia: ${fmt_chileno(diff, 0)}")
-        
-        st.metric("TC Aplicado", fmt_chileno(factura['tipo_cambio'], 4))
+        # Mostrar tipo de cambio promedio aplicado
+        st.metric("TC Promedio Aplicado", fmt_chileno(factura['tipo_cambio'], 2))
 
 
 def _render_preview_clp(factura: dict, username: str, password: str):
