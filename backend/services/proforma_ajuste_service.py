@@ -650,25 +650,25 @@ def enviar_proforma_email(
         
         # Cargar logo y convertir a base64
         import base64
-        import os
         from pathlib import Path
         
         logo_base64 = ""
-        # Buscar el logo en múltiples ubicaciones posibles
-        possible_paths = [
-            Path("/app/data/RFP - LOGO OFICIAL.png"),  # Docker
-            Path(os.path.dirname(os.path.dirname(__file__))) / "data" / "RFP - LOGO OFICIAL.png",  # Relativo
-            Path("data/RFP - LOGO OFICIAL.png"),  # Relativo desde raíz
-        ]
+        # Ruta del logo en Docker
+        logo_path = Path("/app/data/RFP - LOGO OFICIAL.png")
         
-        for logo_path in possible_paths:
+        try:
+            with open(logo_path, "rb") as f:
+                logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+        except Exception as e:
+            # Log para debug
+            print(f"Error cargando logo desde {logo_path}: {e}")
+            # Intentar ruta alternativa
             try:
-                if logo_path.exists():
-                    with open(logo_path, "rb") as f:
-                        logo_base64 = base64.b64encode(f.read()).decode('utf-8')
-                    break
+                alt_path = Path(__file__).parent.parent / "data" / "RFP - LOGO OFICIAL.png"
+                with open(alt_path, "rb") as f:
+                    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
             except:
-                continue
+                pass
         
         # Crear y enviar correo
         asunto = f"Proforma {nombre_factura} - Rio Futuro"
