@@ -29,27 +29,27 @@ def fetch_datos_salas(username: str, password: str, fecha_inicio: str,
 
 
 def render_grafico_kg_hora(datos_salas: List[Dict]) -> None:
-    """Gráfico de barras horizontales de KG/Hora por sala."""
+    """Gráfico de barras horizontales de KG/Hora Efectiva por sala (datos de Odoo)."""
     if not datos_salas:
         st.info("No hay datos para mostrar")
         return
     
-    # Filtrar y ordenar por KG/Hora
-    datos_validos = [d for d in datos_salas if d.get('kg_por_hora', 0) > 0]
-    datos_ordenados = sorted(datos_validos, key=lambda x: x.get('kg_por_hora', 0), reverse=False)[-12:]
+    # Filtrar y ordenar por KG/Hora Efectiva (campo de Odoo: x_studio_kghora_efectiva)
+    datos_validos = [d for d in datos_salas if d.get('kg_por_hora_efectiva', 0) > 0]
+    datos_ordenados = sorted(datos_validos, key=lambda x: x.get('kg_por_hora_efectiva', 0), reverse=False)[-12:]
     
     if not datos_ordenados:
         st.info("No hay salas con producción en el período")
         return
     
     salas = [d.get('sala', 'Sin Sala')[:25] for d in datos_ordenados]
-    kg_hora = [round(d.get('kg_por_hora', 0), 1) for d in datos_ordenados]
+    kg_hora = [round(d.get('kg_por_hora_efectiva', 0), 1) for d in datos_ordenados]
     
     options = {
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"},
-            "formatter": "{b}<br/>⚡ KG/Hora: <b>{c}</b>"
+            "formatter": "{b}<br/>⚡ KG/Hora Efectiva: <b>{c}</b>"
         },
         "grid": {
             "left": "25%",
@@ -74,7 +74,7 @@ def render_grafico_kg_hora(datos_salas: List[Dict]) -> None:
             "axisLine": {"lineStyle": {"color": "#555"}}
         },
         "series": [{
-            "name": "KG/Hora",
+            "name": "KG/Hora Efectiva",
             "type": "bar",
             "data": kg_hora,
             "itemStyle": {
@@ -102,7 +102,7 @@ def render_grafico_kg_hora(datos_salas: List[Dict]) -> None:
 
 
 def render_tabla(datos_salas: List[Dict]) -> None:
-    """Tabla simple con datos por sala."""
+    """Tabla simple con datos por sala (usando campos de Odoo)."""
     if not datos_salas:
         return
     
@@ -117,14 +117,15 @@ def render_tabla(datos_salas: List[Dict]) -> None:
         rows.append({
             'Sala': d.get('sala', 'N/A'),
             'KG Producidos': f"{d.get('kg_pt', 0):,.0f}",
-            'KG/Hora': f"{d.get('kg_por_hora', 0):,.1f}",
-            'Rendimiento %': f"{d.get('rendimiento', 0):.1f}%",
-            'HH Totales': f"{d.get('hh_total', 0):,.0f}",
+            'KG/Hora Efectiva': f"{d.get('kg_por_hora_efectiva', 0):,.1f}",
+            'KG/HH Efectiva': f"{d.get('kg_por_hh_efectiva', 0):,.1f}",
+            'HH Efectiva': f"{d.get('hh_efectiva_total', 0):,.1f}",
+            'Dotación Prom': f"{d.get('dotacion_promedio', 0):,.0f}",
             'Procesos': d.get('num_mos', 0)
         })
     
     df = pd.DataFrame(rows)
-    df = df.sort_values('KG/Hora', ascending=False, 
+    df = df.sort_values('KG/Hora Efectiva', ascending=False, 
                         key=lambda x: x.str.replace(',', '').astype(float))
     
     st.dataframe(df, use_container_width=True, hide_index=True, height=400)

@@ -1037,7 +1037,9 @@ class RendimientoService:
                         'duracion_total': 0, 
                         'num_mos': 0,
                         'costo_electricidad': 0,  # Costo eléctrico acumulado
-                        'total_electricidad': 0   # Total kWh
+                        'total_electricidad': 0,  # Total kWh
+                        'kg_hora_efectiva_sum': 0,  # Suma de KG/Hora Efectiva de Odoo
+                        'kg_hh_efectiva_sum': 0     # Suma de KG/HH Efectiva de Odoo
                     }
                 
                 salas_data[sala]['kg_mp'] += kg_mp
@@ -1051,6 +1053,12 @@ class RendimientoService:
                 # HH Efectiva
                 hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
                 salas_data[sala]['hh_efectiva_total'] += hh_efectiva if isinstance(hh_efectiva, (int, float)) else 0
+                
+                # KG/Hora Efectiva y KG/HH Efectiva desde Odoo
+                kg_hora_efectiva_odoo = mo.get('x_studio_kghora_efectiva') or 0
+                kg_hh_efectiva_odoo = mo.get('x_studio_kghh_efectiva') or 0
+                salas_data[sala]['kg_hora_efectiva_sum'] += kg_hora_efectiva_odoo if isinstance(kg_hora_efectiva_odoo, (int, float)) else 0
+                salas_data[sala]['kg_hh_efectiva_sum'] += kg_hh_efectiva_odoo if isinstance(kg_hh_efectiva_odoo, (int, float)) else 0
                 
                 # Detenciones
                 detenciones = mo.get('x_studio_horas_detencion_totales') or 0
@@ -1198,9 +1206,14 @@ class RendimientoService:
             num_mos = data['num_mos']
             dotacion_prom = data['dotacion_sum'] / num_mos if num_mos > 0 else 0
             
-            # Calcular KPIs adicionales
-            kg_por_hora_efectiva = kg_pt / hh_efectiva if hh_efectiva > 0 else 0
-            kg_por_hh_efectiva = kg_pt / hh_efectiva if hh_efectiva > 0 else 0
+            # USAR PROMEDIOS DE ODOO (x_studio_kghora_efectiva, x_studio_kghh_efectiva)
+            kg_hora_efectiva_odoo = data.get('kg_hora_efectiva_sum', 0) / num_mos if num_mos > 0 else 0
+            kg_hh_efectiva_odoo = data.get('kg_hh_efectiva_sum', 0) / num_mos if num_mos > 0 else 0
+            
+            # Fallback: calcular si Odoo no tiene el dato
+            kg_por_hora_efectiva = kg_hora_efectiva_odoo if kg_hora_efectiva_odoo > 0 else (kg_pt / hh_efectiva if hh_efectiva > 0 else 0)
+            kg_por_hh_efectiva = kg_hh_efectiva_odoo if kg_hh_efectiva_odoo > 0 else (kg_pt / hh_efectiva if hh_efectiva > 0 else 0)
+            
             detenciones_promedio = detenciones / num_mos if num_mos > 0 else 0
             hh_promedio = hh / num_mos if num_mos > 0 else 0
             hh_efectiva_promedio = hh_efectiva / num_mos if num_mos > 0 else 0
@@ -1223,8 +1236,8 @@ class RendimientoService:
                 'hh_promedio': round(hh_promedio, 2),
                 'hh_efectiva_total': round(hh_efectiva, 2),
                 'hh_efectiva_promedio': round(hh_efectiva_promedio, 2),
-                'kg_por_hora_efectiva': round(kg_por_hora_efectiva, 2),
-                'kg_por_hh_efectiva': round(kg_por_hh_efectiva, 2),
+                'kg_por_hora_efectiva': round(kg_por_hora_efectiva, 2),  # Desde Odoo
+                'kg_por_hh_efectiva': round(kg_por_hh_efectiva, 2),      # Desde Odoo
                 'detenciones_total': round(detenciones, 2),
                 'detenciones_promedio': round(detenciones_promedio, 2),
                 'dotacion_promedio': round(dotacion_prom, 1),
