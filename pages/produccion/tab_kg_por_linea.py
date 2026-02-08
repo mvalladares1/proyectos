@@ -33,10 +33,16 @@ def parsear_fecha_hora(fecha_str: str) -> Optional[datetime]:
     if not fecha_str:
         return None
     try:
-        if 'T' in str(fecha_str):
-            return datetime.fromisoformat(str(fecha_str).replace('Z', ''))
-        else:
-            return datetime.strptime(str(fecha_str)[:19], '%Y-%m-%d %H:%M:%S')
+        fecha_str = str(fecha_str).strip()
+        if 'T' in fecha_str:
+            return datetime.fromisoformat(fecha_str.replace('Z', ''))
+        elif len(fecha_str) >= 19:
+            return datetime.strptime(fecha_str[:19], '%Y-%m-%d %H:%M:%S')
+        elif len(fecha_str) >= 16:
+            return datetime.strptime(fecha_str[:16], '%Y-%m-%d %H:%M')
+        elif len(fecha_str) >= 10:
+            return datetime.strptime(fecha_str[:10], '%Y-%m-%d')
+        return None
     except:
         return None
 
