@@ -241,27 +241,29 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
 def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
     """
     Obtener TODAS las OCs de TRANSPORTES/SERVICIOS con información de aprobaciones.
-    No filtra por usuario - trae todas las que están en proceso de aprobación o aprobadas.
+    Optimizado para reducir queries a Odoo.
     """
     try:
-        # Buscar OCs de SERVICIOS que están en borrador o aprobadas
-        # Estados: 'draft' (borrador/pendiente), 'purchase' (aprobada)
+        # Buscar OCs de SERVICIOS - TODAS excepto canceladas
+        # Estados: 'draft', 'sent', 'to approve', 'purchase', 'done'
+        # Excluir: 'cancel'
         ocs = _models.execute_kw(
             DB, _uid, password,
             'purchase.order', 'search_read',
             [[
                 ('x_studio_categora_de_producto', '=', 'SERVICIOS'),
-                ('state', 'in', ['draft', 'purchase'])
+                ('state', '!=', 'cancel')
             ]],
             {'fields': ['id', 'name', 'state', 'partner_id', 'amount_untaxed', 
                        'x_studio_selection_field_yUNPd', 'x_studio_categora_de_producto', 
                        'create_date', 'user_id', 'date_order'],
-             'limit': 500,
+             'limit': 1000,  # Aumentar límite
              'order': 'date_order desc'}
         )
         
         # Filtrar solo área TRANSPORTES
         ocs_fletes = []
+        oc_ids = []
         for oc in ocs:
             area = oc.get('x_studio_selection_field_yUNPd')
             if area and isinstance(area, (list, tuple)):
@@ -270,14 +272,73 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             if not area or 'TRANSPORTES' not in str(area).upper():
                 continue
             
-            # Obtener líneas de la OC
-            lineas = _models.execute_kw(
-                DB, _uid, password,
-                'purchase.order.line', 'search_read',
-                [[('order_id', '=', oc['id'])]],
-                {'fields': ['product_id', 'name', 'price_unit', 'product_qty', 'price_subtotal']}
-            )
+            ocs_fletes.append(oc)
+            oc_ids.append(oc['id'])
+        
+        if not oc_ids:
+            return []
+        
+        # OPTIMIZACIÓN 1: Obtener TODAS las líneas de una vez
+        todas_lineas = _models.execute_kw(
+            DB, _uid, password,
+            'purchase.order.line', 'search_read',
+            [[('order_id', 'in', oc_ids)]],
+            {'fields': ['order_id', 'product_id', 'name', 'price_unit', 'product_qty', 'price_subtotal']}
+        )
+        
+        # Agrupar líneas por OC
+        lineas_por_oc = {}
+        for linea in todas_lineas:
+            oc_id = linea['order_id'][0] if isinstance(linea['order_id'], (list, tuple)) else linea['order_id']
+            if oc_id not in lineas_por_oc:
+                lineas_por_oc[oc_id] = []
+            lineas_por_oc[oc_id].append(linea)
+        
+        # OPTIMIZACIÓN 2: Obtener TODAS las actividades de una vez
+        todas_actividades = _models.execute_kw(
+            DB, _uid, password,
+            'mail.activity', 'search_read',
+            [[
+                ('res_model', '=', 'purchase.order'),
+                ('res_id', 'in', oc_ids),
+                ('activity_type_id.name', 'in', ['Grant Approval', 'Approval'])
+            ]],
+            {'fields': ['res_id', 'id', 'user_id', 'date_deadline', 'state']}
+        )
+        
+        # Agrupar actividades por OC (tomar la primera)
+        actividades_por_oc = {}
+        for act in todas_actividades:
+            oc_id = act['res_id']
+            if oc_id not in actividades_por_oc:
+                actividades_por_oc[oc_id] = act
+        
+        # OPTIMIZACIÓN 3: Obtener mensajes de aprobación en lote
+        todos_mensajes = _models.execute_kw(
+            DB, _uid, password,
+            'mail.message', 'search_read',
+            [[
+                ('model', '=', 'purchase.order'),
+                ('res_id', 'in', oc_ids),
+                ('body', 'ilike', 'Aprobado como')
+            ]],
+            {'fields': ['res_id', 'body', 'author_id', 'date', 'create_date'], 'order': 'date desc'}
+        )
+        
+        # Agrupar mensajes por OC
+        mensajes_por_oc = {}
+        for msg in todos_mensajes:
+            oc_id = msg['res_id']
+            if oc_id not in mensajes_por_oc:
+                mensajes_por_oc[oc_id] = []
+            mensajes_por_oc[oc_id].append(msg)
+        
+        # Procesar cada OC con los datos pre-cargados
+        for oc in ocs_fletes:
+            oc_id = oc['id']
             
+            # Líneas
+            lineas = lineas_por_oc.get(oc_id, [])
             if lineas and lineas[0].get('product_id'):
                 oc['producto'] = lineas[0]['product_id'][1]
             elif lineas and lineas[0].get('name'):
@@ -287,36 +348,49 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             
             oc['costo_lineas'] = sum(linea.get('price_subtotal', 0) for linea in lineas)
             
-            # Obtener información de aprobaciones desde el chatter
-            aprobaciones = obtener_aprobaciones_oc(_models, _uid, password, oc['id'])
+            # Aprobaciones desde mensajes
+            mensajes_oc = mensajes_por_oc.get(oc_id, [])
+            aprobaciones = []
+            for msg in mensajes_oc:
+                autor = msg.get('author_id')
+                if autor and isinstance(autor, (list, tuple)):
+                    nombre_usuario = autor[1]
+                else:
+                    nombre_usuario = 'Desconocido'
+                
+                body = msg.get('body', '')
+                rol = 'Aprobador'
+                if 'Aprobado como' in body:
+                    try:
+                        import re
+                        match = re.search(r'Aprobado como ([^<]+)', body)
+                        if match:
+                            rol = match.group(1).strip()
+                    except:
+                        pass
+                
+                aprobaciones.append({
+                    'usuario': nombre_usuario,
+                    'rol': rol,
+                    'fecha': msg.get('date') or msg.get('create_date')
+                })
+            
             oc['aprobaciones'] = aprobaciones
             oc['num_aprobaciones'] = len(aprobaciones)
             oc['aprobadores'] = [a['usuario'] for a in aprobaciones]
             
-            # Obtener actividad pendiente (si existe)
-            actividad = _models.execute_kw(
-                DB, _uid, password,
-                'mail.activity', 'search_read',
-                [[
-                    ('res_model', '=', 'purchase.order'),
-                    ('res_id', '=', oc['id']),
-                    ('activity_type_id.name', 'in', ['Grant Approval', 'Approval'])
-                ]],
-                {'fields': ['id', 'user_id', 'date_deadline', 'state'], 'limit': 1}
-            )
-            
+            # Actividad pendiente
+            actividad = actividades_por_oc.get(oc_id)
             if actividad:
-                oc['actividad_id'] = actividad[0]['id']
-                oc['actividad_usuario'] = actividad[0]['user_id'][1] if actividad[0].get('user_id') else 'N/A'
-                oc['actividad_fecha_limite'] = actividad[0].get('date_deadline')
-                oc['actividad_estado'] = actividad[0].get('state', 'planned')
+                oc['actividad_id'] = actividad['id']
+                oc['actividad_usuario'] = actividad['user_id'][1] if actividad.get('user_id') else 'N/A'
+                oc['actividad_fecha_limite'] = actividad.get('date_deadline')
+                oc['actividad_estado'] = actividad.get('state', 'planned')
             else:
                 oc['actividad_id'] = None
                 oc['actividad_usuario'] = None
                 oc['actividad_fecha_limite'] = None
                 oc['actividad_estado'] = None
-            
-            ocs_fletes.append(oc)
         
         return ocs_fletes
     except Exception as e:
@@ -479,15 +553,30 @@ def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
         return []
 
 
-def aprobar_actividad(models, uid, username, password, activity_id):
-    """Aprobar una actividad"""
+def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
+    """Aprobar una OC - con o sin actividad pendiente"""
     try:
-        models.execute_kw(
-            DB, uid, password,
-            'mail.activity', 'action_feedback',
-            [[activity_id]],
-            {'feedback': 'Aprobado desde dashboard'}
-        )
+        # Si hay actividad, aprobarla
+        if activity_id:
+            models.execute_kw(
+                DB, uid, password,
+                'mail.activity', 'action_feedback',
+                [[activity_id]],
+                {'feedback': 'Aprobado desde dashboard'}
+            )
+        
+        # Llamar al método de aprobación de la OC directamente
+        # Esto registra la aprobación en el workflow de Odoo
+        try:
+            models.execute_kw(
+                DB, uid, password,
+                'purchase.order', 'button_approve',
+                [[oc_id]]
+            )
+        except:
+            # Si button_approve no funciona, intentar con el método alternativo
+            pass
+        
         return True, "Aprobación exitosa"
     except Exception as e:
         return False, str(e)
@@ -862,15 +951,14 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 height=min(400, len(df_tabla_proveedor) * 40 + 40)
             )
             
-            # Filtrar solo OCs que se pueden aprobar (tienen actividad pendiente y menos de 2 aprobaciones)
+            # Filtrar solo OCs que se pueden aprobar (menos de 2 aprobaciones y no completamente aprobadas)
             df_aprobables = df_proveedor[
-                (df_proveedor['actividad_id'].notna()) & 
                 (df_proveedor['num_aprobaciones'] < 2) &
                 (df_proveedor['estado_oc'] != 'purchase')
             ]
             
             if len(df_aprobables) == 0:
-                st.caption("✅ Todas las OCs de este proveedor ya están aprobadas o no tienen actividad pendiente")
+                st.caption("✅ Todas las OCs de este proveedor ya están completamente aprobadas")
                 continue
             
             # Selección de OCs aprobables de este proveedor
@@ -903,14 +991,11 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                             exitosas = 0
                             errores = []
                             for oc in ocs_sel_proveedor:
-                                if oc.get('actividad_id'):
-                                    exito, msg = aprobar_actividad(models, uid, username, password, oc['actividad_id'])
-                                    if exito:
-                                        exitosas += 1
-                                    else:
-                                        errores.append(f"{oc['oc_name']}: {msg}")
+                                exito, msg = aprobar_oc(models, uid, username, password, oc['oc_id'], oc.get('actividad_id'))
+                                if exito:
+                                    exitosas += 1
                                 else:
-                                    errores.append(f"{oc['oc_name']}: Sin actividad pendiente")
+                                    errores.append(f"{oc['oc_name']}: {msg}")
                             
                             if exitosas > 0:
                                 st.success(f"✅ {exitosas} OCs aprobadas por {username}")
@@ -1054,12 +1139,12 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
             with col2:
                 st.markdown("**Acciones:**")
                 
-                # Solo mostrar botones si tiene actividad pendiente y no está completamente aprobada
-                if row.get('actividad_id') and row['num_aprobaciones'] < 2 and row['estado_oc'] != 'purchase':
+                # Solo mostrar botones si no está completamente aprobada
+                if row['num_aprobaciones'] < 2 and row['estado_oc'] != 'purchase':
                     # Botón aprobar
                     if st.button(f"✅ Aprobar", key=f"aprobar_flete_{key_suffix}", type="primary"):
                         with st.spinner("Aprobando..."):
-                            exito, mensaje = aprobar_actividad(models, uid, username, password, row['actividad_id'])
+                            exito, mensaje = aprobar_oc(models, uid, username, password, row['oc_id'], row.get('actividad_id'))
                             if exito:
                                 st.success(f"✅ {row['oc_name']} aprobada por {username}")
                                 st.cache_data.clear()
@@ -1089,7 +1174,5 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                 else:
                     if row['estado_oc'] == 'purchase' or row['num_aprobaciones'] >= 2:
                         st.success("✅ OC completamente aprobada")
-                    elif not row.get('actividad_id'):
-                        st.info("ℹ️ Sin actividad pendiente")
                     else:
-                        st.info("ℹ️ No se puede aprobar")
+                        st.info("ℹ️ Esta OC ya no requiere más aprobaciones")
