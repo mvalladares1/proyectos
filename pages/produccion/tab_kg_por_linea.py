@@ -49,7 +49,7 @@ def formatear_hora(dt: Optional[datetime]) -> str:
 
 
 def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
-    """Renderiza gráfico de barras horizontales para una sala con detalle de cada proceso."""
+    """Renderiza tarjetas visuales detalladas para cada proceso de la sala."""
     
     if not procesos:
         return
@@ -57,158 +57,189 @@ def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
     # Ordenar por hora de inicio
     procesos_ordenados = sorted(procesos, key=lambda x: x['inicio_dt'] or datetime.min)
     
-    # Preparar datos para el gráfico
-    nombres = []
-    kg_hora_valores = []
-    colores = []
-    tooltips_data = []
-    
-    for p in procesos_ordenados:
-        # Etiqueta: Orden + horario
-        nombre_orden = p['nombre'][-10:] if len(p['nombre']) > 10 else p['nombre']
-        etiqueta = f"{p['hora_inicio']}-{p['hora_fin']} | {nombre_orden}"
-        nombres.append(etiqueta)
-        kg_hora_valores.append(p['kg_hora'])
-        
-        # Datos para tooltip
-        tooltips_data.append({
-            'orden': p['nombre'],
-            'producto': p['producto'],
-            'inicio': p['hora_inicio'],
-            'fin': p['hora_fin'],
-            'duracion': p['duracion'],
-            'dotacion': p['dotacion'],
-            'kg_producidos': p['kg_producidos'],
-            'kg_hora': p['kg_hora'],
-            'kg_hh': p['kg_hh']
-        })
-        
-        # Color según rendimiento
-        kg = p['kg_hora']
-        if kg >= 2000:
-            colores.append("#4caf50")  # Verde
-        elif kg >= 1500:
-            colores.append("#8bc34a")  # Verde claro
-        elif kg >= 1000:
-            colores.append("#ffc107")  # Amarillo
-        elif kg >= 500:
-            colores.append("#ff9800")  # Naranja
-        else:
-            colores.append("#f44336")  # Rojo
-    
-    # Crear datos de serie con colores individuales
-    data_series = []
-    for i, kg in enumerate(kg_hora_valores):
-        data_series.append({
-            "value": kg,
-            "itemStyle": {"color": colores[i]}
-        })
-    
-    # Calcular altura dinámica
-    altura = max(250, len(procesos_ordenados) * 55)
-    
-    options = {
-        "tooltip": {
-            "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(30, 40, 60, 0.95)",
-            "borderColor": "#555",
-            "textStyle": {"color": "#fff"}
-        },
-        "grid": {
-            "left": "3%",
-            "right": "18%",
-            "top": "10px",
-            "bottom": "3%",
-            "containLabel": True
-        },
-        "xAxis": {
-            "type": "value",
-            "name": "KG/Hora",
-            "nameLocation": "middle",
-            "nameGap": 30,
-            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
-            "axisLabel": {"color": "#aaa", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#333", "type": "dashed"}},
-            "axisLine": {"lineStyle": {"color": "#555"}}
-        },
-        "yAxis": {
-            "type": "category",
-            "data": nombres[::-1],
-            "axisLabel": {
-                "color": "#ddd", 
-                "fontSize": 12,
-                "width": 200,
-                "overflow": "truncate"
-            },
-            "axisLine": {"lineStyle": {"color": "#555"}}
-        },
-        "series": [{
-            "name": "KG/Hora",
-            "type": "bar",
-            "data": data_series[::-1],
-            "barWidth": "65%",
-            "label": {
-                "show": True,
-                "position": "right",
-                "formatter": "{c} kg/h",
-                "color": "#fff",
-                "fontSize": 13,
-                "fontWeight": "bold"
-            },
-            "emphasis": {
-                "itemStyle": {
-                    "shadowBlur": 10,
-                    "shadowColor": "rgba(0, 0, 0, 0.5)"
-                }
-            }
-        }]
+    # Estilos CSS para las tarjetas
+    st.markdown("""
+    <style>
+    .proceso-card {
+        background: linear-gradient(145deg, #1e2a3a 0%, #152238 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 15px 0;
+        border-left: 5px solid;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
+    .proceso-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #333;
+    }
+    .proceso-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #00d4ff;
+    }
+    .kg-hora-badge {
+        font-size: 28px;
+        font-weight: bold;
+        padding: 5px 15px;
+        border-radius: 8px;
+    }
+    .proceso-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+        margin-top: 10px;
+    }
+    .proceso-stat {
+        background: rgba(0,0,0,0.2);
+        padding: 12px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    .stat-label {
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .stat-value {
+        font-size: 20px;
+        font-weight: bold;
+        color: #fff;
+        margin-top: 4px;
+    }
+    .stat-unit {
+        font-size: 12px;
+        color: #666;
+    }
+    .producto-row {
+        background: rgba(0,212,255,0.1);
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .horario-badge {
+        background: rgba(255,255,255,0.1);
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        color: #aaa;
+    }
+    @media (max-width: 768px) {
+        .proceso-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    st_echarts(options=options, height=f"{altura}px", key=f"grafico_sala_{key_suffix}")
-    
-    # Mostrar tabla con detalles debajo del gráfico
-    st.markdown("##### 📋 Detalle de procesos:")
-    
+    # Renderizar cada proceso como tarjeta detallada
     for i, p in enumerate(procesos_ordenados):
-        # Color de fondo según rendimiento
         kg = p['kg_hora']
-        if kg >= 2000:
-            bg_color = "rgba(76, 175, 80, 0.15)"
-            border_color = "#4caf50"
-        elif kg >= 1500:
-            bg_color = "rgba(139, 195, 74, 0.15)"
-            border_color = "#8bc34a"
-        elif kg >= 1000:
-            bg_color = "rgba(255, 193, 7, 0.15)"
-            border_color = "#ffc107"
-        elif kg >= 500:
-            bg_color = "rgba(255, 152, 0, 0.15)"
-            border_color = "#ff9800"
-        else:
-            bg_color = "rgba(244, 67, 54, 0.15)"
-            border_color = "#f44336"
         
-        producto_display = p['producto'][:40] + "..." if len(p['producto']) > 40 else p['producto']
+        # Determinar color según rendimiento
+        if kg >= 2000:
+            border_color = "#4caf50"  # Verde
+            bg_badge = "rgba(76, 175, 80, 0.2)"
+        elif kg >= 1500:
+            border_color = "#8bc34a"  # Verde claro
+            bg_badge = "rgba(139, 195, 74, 0.2)"
+        elif kg >= 1000:
+            border_color = "#ffc107"  # Amarillo
+            bg_badge = "rgba(255, 193, 7, 0.2)"
+        elif kg >= 500:
+            border_color = "#ff9800"  # Naranja
+            bg_badge = "rgba(255, 152, 0, 0.2)"
+        else:
+            border_color = "#f44336"  # Rojo
+            bg_badge = "rgba(244, 67, 54, 0.2)"
+        
+        # Datos del proceso
+        producto = p.get('producto', '-')
+        if len(producto) > 50:
+            producto = producto[:47] + "..."
+        
+        # Calcular horas efectivas (duración - detenciones)
+        duracion_str = p.get('duracion', '0:00')
+        detenciones = p.get('detenciones', 0)
+        hh = p.get('hh', 0)
+        hh_efectiva = p.get('hh_efectiva', 0)
+        
+        # Formatear detenciones como horas:minutos
+        det_horas = int(detenciones)
+        det_mins = int((detenciones - det_horas) * 60)
+        detenciones_str = f"{det_horas}:{det_mins:02d}" if detenciones > 0 else "0:00"
         
         st.markdown(f"""
-        <div style="background: {bg_color}; border-left: 4px solid {border_color};
-                    padding: 12px 15px; margin: 8px 0; border-radius: 0 8px 8px 0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+        <div class="proceso-card" style="border-left-color: {border_color};">
+            <div class="proceso-header">
                 <div>
-                    <span style="font-weight: bold; color: #00d4ff; font-size: 14px;">{p['nombre']}</span>
-                    <span style="color: #888; margin-left: 10px;">🕐 {p['hora_inicio']} → {p['hora_fin']}</span>
-                    <span style="color: #aaa; margin-left: 10px;">({p['duracion']})</span>
+                    <div class="proceso-title">📋 {p['nombre']}</div>
+                    <div class="horario-badge">
+                        🕐 {p['hora_inicio']} → {p['hora_fin']} 
+                        <span style="color: #00d4ff; margin-left: 8px;">({p['duracion']} hrs)</span>
+                    </div>
                 </div>
-                <div style="font-size: 20px; font-weight: bold; color: {border_color};">
-                    ⚡ {p['kg_hora']:,.0f} kg/h
+                <div class="kg-hora-badge" style="background: {bg_badge}; color: {border_color};">
+                    ⚡ {kg:,.0f} <span style="font-size: 14px;">kg/h</span>
                 </div>
             </div>
-            <div style="margin-top: 8px; display: flex; gap: 25px; flex-wrap: wrap; color: #ccc; font-size: 13px;">
-                <span>📦 <b>{producto_display}</b></span>
-                <span>👷 Dotación: <b>{p['dotacion']}</b></span>
-                <span>⚖️ KG Producidos: <b>{p['kg_producidos']:,.0f}</b></span>
-                <span>📊 KG/HH: <b>{p['kg_hh']:,.0f}</b></span>
+            
+            <div class="producto-row">
+                <span style="color: #00d4ff;">📦</span>
+                <span style="color: #ddd; font-weight: 500;">{producto}</span>
+            </div>
+            
+            <div class="proceso-grid">
+                <div class="proceso-stat">
+                    <div class="stat-label">👷 Dotación</div>
+                    <div class="stat-value">{int(p['dotacion'])}</div>
+                    <div class="stat-unit">personas</div>
+                </div>
+                <div class="proceso-stat">
+                    <div class="stat-label">⚖️ KG Producidos</div>
+                    <div class="stat-value">{p['kg_producidos']:,.0f}</div>
+                    <div class="stat-unit">kilogramos</div>
+                </div>
+                <div class="proceso-stat">
+                    <div class="stat-label">⏱️ HH Efectiva</div>
+                    <div class="stat-value">{hh_efectiva:.1f}</div>
+                    <div class="stat-unit">horas-hombre</div>
+                </div>
+                <div class="proceso-stat">
+                    <div class="stat-label">📊 KG/HH</div>
+                    <div class="stat-value">{p['kg_hh']:,.0f}</div>
+                    <div class="stat-unit">kg por hora-hombre</div>
+                </div>
+            </div>
+            
+            <div class="proceso-grid" style="margin-top: 10px;">
+                <div class="proceso-stat" style="background: rgba(244,67,54,0.1);">
+                    <div class="stat-label">⏸️ Detenciones</div>
+                    <div class="stat-value" style="color: {'#f44336' if detenciones > 0 else '#4caf50'};">{detenciones_str}</div>
+                    <div class="stat-unit">horas</div>
+                </div>
+                <div class="proceso-stat" style="background: rgba(33,150,243,0.1);">
+                    <div class="stat-label">🕐 HH Total</div>
+                    <div class="stat-value" style="color: #2196f3;">{hh:.1f}</div>
+                    <div class="stat-unit">horas-hombre</div>
+                </div>
+                <div class="proceso-stat" style="background: rgba(156,39,176,0.1);">
+                    <div class="stat-label">📈 Rendimiento</div>
+                    <div class="stat-value" style="color: #9c27b0;">{p.get('rendimiento', 0):.1f}%</div>
+                    <div class="stat-unit">producción</div>
+                </div>
+                <div class="proceso-stat" style="background: rgba(0,150,136,0.1);">
+                    <div class="stat-label">🏭 Sala</div>
+                    <div class="stat-value" style="color: #009688; font-size: 14px;">{sala[:15]}</div>
+                    <div class="stat-unit">línea</div>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -328,6 +359,10 @@ def render(username: str = None, password: str = None):
                 'kg_hh': round(mo.get('kg_hh_efectiva', 0) or 0, 0),
                 'dotacion': mo.get('dotacion', 0) or 0,
                 'kg_producidos': round(mo.get('kg_pt', 0) or mo.get('kg_producidos', 0) or 0, 0),
+                'hh': mo.get('hh', 0) or 0,
+                'hh_efectiva': mo.get('hh_efectiva', 0) or 0,
+                'detenciones': mo.get('detenciones', 0) or 0,
+                'rendimiento': mo.get('rendimiento', 0) or 0,
             }
             
             por_dia_sala[fecha_dia][sala].append(proceso_info)

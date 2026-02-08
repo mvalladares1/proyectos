@@ -1107,6 +1107,9 @@ class RendimientoService:
                 kg_hh_efectiva = mo.get('x_studio_kghh_efectiva') or 0
                 hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
                 
+                # Detenciones de esta MO
+                detenciones_mo = mo.get('x_studio_horas_detencion_totales') or 0
+                
                 mos_resultado.append({
                     'mo_id': mo.get('id', 0),
                     'mo_name': mo.get('name', ''),
@@ -1122,6 +1125,7 @@ class RendimientoService:
                     'duracion_horas': duracion_horas,
                     'hh': hh if isinstance(hh, (int, float)) else 0,
                     'hh_efectiva': hh_efectiva if isinstance(hh_efectiva, (int, float)) else 0,
+                    'detenciones': detenciones_mo if isinstance(detenciones_mo, (int, float)) else 0,
                     'kg_por_hora': kg_hora_efectiva if isinstance(kg_hora_efectiva, (int, float)) else 0,
                     'kg_hora_efectiva': kg_hora_efectiva if isinstance(kg_hora_efectiva, (int, float)) else 0,
                     'kg_hh_efectiva': kg_hh_efectiva if isinstance(kg_hh_efectiva, (int, float)) else 0,
