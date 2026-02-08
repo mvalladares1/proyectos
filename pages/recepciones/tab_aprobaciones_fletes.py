@@ -484,7 +484,7 @@ def render_tab(username, password):
                 'estado_actividad': act.get('state', 'N/A'),
                 'fecha_limite': act.get('date_deadline', 'N/A'),
                 'fecha_creacion': oc.get('create_date', 'N/A'),
-                'fecha_orden': oc.get('date_order', 'N/A'),
+                'fecha_orden': oc.get('date_order') if oc.get('date_order') else None,
                 'tipo_actividad': act['activity_type_id'][1] if act.get('activity_type_id') else 'N/A',
                 **comparacion  # Agregar info de logística
             })
@@ -548,17 +548,26 @@ def render_tab(username, password):
     
     col4, col5 = st.columns(2)
     
+    # Calcular rango de fechas válido (excluyendo nulos)
+    df_con_fecha = df[df['fecha_orden'].notna()]
+    if not df_con_fecha.empty:
+        fecha_min = pd.to_datetime(df_con_fecha['fecha_orden']).min().date()
+        fecha_max = pd.to_datetime(df_con_fecha['fecha_orden']).max().date()
+    else:
+        fecha_min = datetime.now().date()
+        fecha_max = datetime.now().date()
+    
     with col4:
         fecha_desde = st.date_input(
             "📅 Fecha desde", 
-            value=pd.to_datetime(df['fecha_orden'].min()).date() if not df.empty else datetime.now().date(),
+            value=fecha_min,
             key="fecha_desde_fletes"
         )
     
     with col5:
         fecha_hasta = st.date_input(
             "📅 Fecha hasta", 
-            value=datetime.now().date(),
+            value=fecha_max,
             key="fecha_hasta_fletes"
         )
     
@@ -585,12 +594,19 @@ def render_tab(username, password):
     if filtro_oc:
         df_filtrado = df_filtrado[df_filtrado['oc_name'].str.contains(filtro_oc, case=False, na=False)]
     
-    # Filtro de fechas
-    df_filtrado['fecha_orden_dt'] = pd.to_datetime(df_filtrado['fecha_orden']).dt.date
-    df_filtrado = df_filtrado[
-        (df_filtrado['fecha_orden_dt'] >= fecha_desde) & 
-        (df_filtrado['fecha_orden_dt'] <= fecha_hasta)
+    # Filtro de fechas - manejar valores nulos
+    df_filtrado['fecha_orden_dt'] = pd.to_datetime(df_filtrado['fecha_orden'], errors='coerce').dt.date
+    # Solo filtrar filas que tienen fecha válida
+    df_con_fecha_valida = df_filtrado[df_filtrado['fecha_orden_dt'].notna()]
+    df_sin_fecha = df_filtrado[df_filtrado['fecha_orden_dt'].isna()]
+    
+    df_con_fecha_filtrada = df_con_fecha_valida[
+        (df_con_fecha_valida['fecha_orden_dt'] >= fecha_desde) & 
+        (df_con_fecha_valida['fecha_orden_dt'] <= fecha_hasta)
     ]
+    
+    # Incluir OCs sin fecha en el resultado (opcional: puedes quitarlo si prefieres excluirlas)
+    df_filtrado = pd.concat([df_con_fecha_filtrada, df_sin_fecha], ignore_index=True)
     
     df_filtrado = df_filtrado[(df_filtrado['monto'] >= min_monto) & (df_filtrado['monto'] <= max_monto)]
     
@@ -636,8 +652,8 @@ def render_tab(username, password):
 
 
 def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, password):
-    """Vista de tabla con selección múltiple para aprobar"""
-    st.markdown("### 📋 Tabla con Aprobación Múltiple")
+    """Vista de tabla con selección múltiple para aprobar - Agrupada por Proveedor"""
+    st.markdown("### 📋 Tabla con Aprobación Múltiple (Agrupada por Proveedor)")
     
     if df.empty:
         st.info("No hay OCs que mostrar con los filtros aplicados")
@@ -652,145 +668,127 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
         axis=1
     )
     
-    # Crear dataframe para mostrar
-    df_tabla = pd.DataFrame({
-        'OC': df_display['oc_name'],
-        'Proveedor': df_display['proveedor'].str[:30],
-        'Monto OC': df_display['monto'].apply(lambda x: f"${x:,.0f}"),
-        'Costo Calc.': df_display['costo_calculado_str'],
-        'Presupuesto': df_display['costo_presupuestado_str'],
-        '$/Kg USD': df_display['alerta_costo_kg'].fillna(df_display['cost_per_kg_usd_str']),
-        'Tipo Camión': df_display['tipo_camion_str'].str[:20],
-        'Alerta': df_display['alerta'].fillna('⚪'),
-        'Estado': df_display['estado_actividad'].apply(lambda x: '⏰' if x == 'overdue' else '🔵'),
-        'Info': df_display['info_completa'],
-        'ID': df_display['actividad_id']  # Oculto pero necesario
-    })
+    # Formatear fecha para mostrar
+    df_display['fecha_str'] = pd.to_datetime(df_display['fecha_orden'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('Sin fecha')
     
-    # Configurar paginación
-    items_por_pagina = 25
-    total_paginas = (len(df_tabla) - 1) // items_por_pagina + 1
+    # Ordenar por proveedor y luego por OC
+    df_display = df_display.sort_values(['proveedor', 'oc_name'])
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        pagina_actual = st.number_input(
-            "Página", 
-            min_value=1, 
-            max_value=max(1, total_paginas),
-            value=1,
-            key="pagina_tabla"
-        )
+    # === VISTA AGRUPADA POR PROVEEDOR ===
+    proveedores = df_display['proveedor'].unique()
     
-    inicio = (pagina_actual - 1) * items_por_pagina
-    fin = inicio + items_por_pagina
-    df_pagina = df_tabla.iloc[inicio:fin]
+    st.markdown(f"**{len(proveedores)} proveedores | {len(df_display)} OCs totales**")
     
-    st.markdown(f"**Página {pagina_actual} de {total_paginas}**")
-    
-    # Mostrar tabla
-    st.dataframe(
-        df_pagina.drop(columns=['ID']),  # No mostrar ID
-        use_container_width=True,
-        hide_index=True,
-        height=600
+    # Selector de proveedores para filtrar la vista
+    proveedores_seleccionados = st.multiselect(
+        "🏢 Filtrar por Proveedor (dejar vacío para ver todos):",
+        sorted(proveedores),
+        key="filtro_proveedores_tabla"
     )
+    
+    if proveedores_seleccionados:
+        df_vista = df_display[df_display['proveedor'].isin(proveedores_seleccionados)]
+    else:
+        df_vista = df_display
     
     st.markdown("---")
     
-    # Selección de OCs para aprobar
-    st.markdown("#### 🎯 Seleccionar OCs para Aprobar/Rechazar")
-    
-    # Crear lista de OCs disponibles en esta página
-    ocs_disponibles = []
-    for idx, row in df_pagina.iterrows():
-        oc_original = df_display[df_display['actividad_id'] == row['ID']].iloc[0]
-        ocs_disponibles.append({
-            'label': f"{row['OC']} - {row['Proveedor']} - {row['Monto OC']}",
-            'data': oc_original
-        })
-    
-    # Multiselect para elegir OCs
-    ocs_seleccionadas_labels = st.multiselect(
-        "Selecciona las OCs que deseas aprobar o rechazar:",
-        [oc['label'] for oc in ocs_disponibles],
-        key="multiselect_ocs"
-    )
-    
-    # Obtener los datos de las OCs seleccionadas
-    ocs_seleccionadas = [
-        oc['data'] for oc in ocs_disponibles 
-        if oc['label'] in ocs_seleccionadas_labels
-    ]
-    
-    st.markdown("---")
-    
-    # Botones de acción
-    if len(ocs_seleccionadas) > 0:
-        col1, col2, col3 = st.columns([2, 1, 1])
+    # Crear tabla agrupada
+    for proveedor in sorted(df_vista['proveedor'].unique()):
+        df_proveedor = df_vista[df_vista['proveedor'] == proveedor]
+        total_monto_proveedor = df_proveedor['monto'].sum()
+        n_ocs = len(df_proveedor)
+        n_vencidas = len(df_proveedor[df_proveedor['estado_actividad'] == 'overdue'])
         
-        with col1:
-            total_monto = sum(oc['monto'] for oc in ocs_seleccionadas)
-            st.info(f"**{len(ocs_seleccionadas)} OCs seleccionadas** | Monto total: ${total_monto:,.0f}")
+        # Header del proveedor con métricas
+        header_text = f"🏢 **{proveedor}** | {n_ocs} OCs | ${total_monto_proveedor:,.0f}"
+        if n_vencidas > 0:
+            header_text += f" | ⏰ {n_vencidas} vencidas"
         
-        with col2:
-            if st.button("✅ Aprobar Seleccionadas", type="primary", key="aprobar_seleccionadas"):
-                with st.spinner("Aprobando OCs seleccionadas..."):
-                    exitosas = 0
-                    fallidas = 0
-                    progress_bar = st.progress(0)
-                    
-                    for idx, oc in enumerate(ocs_seleccionadas):
-                        exito, _ = aprobar_actividad(models, uid, username, password, oc['actividad_id'])
-                        if exito:
-                            exitosas += 1
-                        else:
-                            fallidas += 1
-                        progress_bar.progress((idx + 1) / len(ocs_seleccionadas))
-                        time.sleep(0.2)
-                    
-                    progress_bar.empty()
-                    
-                    if fallidas == 0:
-                        st.success(f"✅ {exitosas} OCs aprobadas correctamente")
-                        st.balloons()
-                    else:
-                        st.warning(f"⚠️ {exitosas} OCs aprobadas, {fallidas} fallidas")
-                    
-                    st.cache_data.clear()
-                    time.sleep(2)
-                    st.rerun()
-        
-        with col3:
-            with st.expander("❌ Rechazar Seleccionadas"):
-                with st.form(key="form_rechazar_seleccionadas"):
-                    motivo = st.text_area("Motivo del rechazo:")
-                    rechazar = st.form_submit_button("Confirmar Rechazo")
-                    
-                    if rechazar:
-                        if not motivo:
-                            st.warning("⚠️ Debe ingresar un motivo")
-                        else:
-                            with st.spinner("Rechazando OCs..."):
+        with st.expander(header_text, expanded=len(proveedores_seleccionados) > 0):
+            # Crear dataframe para mostrar
+            df_tabla_proveedor = pd.DataFrame({
+                'OC': df_proveedor['oc_name'],
+                'Fecha': df_proveedor['fecha_str'],
+                'Monto': df_proveedor['monto'].apply(lambda x: f"${x:,.0f}"),
+                'Costo Calc.': df_proveedor['costo_calculado_str'],
+                'Presupuesto': df_proveedor['costo_presupuestado_str'],
+                '$/Kg USD': df_proveedor['alerta_costo_kg'].fillna(df_proveedor['cost_per_kg_usd_str']),
+                'Tipo Camión': df_proveedor['tipo_camion_str'].str[:15],
+                'Alerta': df_proveedor['alerta'].fillna('⚪'),
+                'Est.': df_proveedor['estado_actividad'].apply(lambda x: '⏰' if x == 'overdue' else '🔵'),
+                'Info': df_proveedor['info_completa'],
+                'ID': df_proveedor['actividad_id']
+            })
+            
+            # Mostrar tabla del proveedor
+            st.dataframe(
+                df_tabla_proveedor.drop(columns=['ID']),
+                use_container_width=True,
+                hide_index=True,
+                height=min(400, len(df_tabla_proveedor) * 40 + 40)
+            )
+            
+            # Selección de OCs de este proveedor
+            ocs_proveedor = []
+            for _, row in df_tabla_proveedor.iterrows():
+                oc_data = df_proveedor[df_proveedor['actividad_id'] == row['ID']].iloc[0].to_dict()
+                ocs_proveedor.append({
+                    'label': f"{row['OC']} - {row['Fecha']} - {row['Monto']}",
+                    'data': oc_data
+                })
+            
+            # Multiselect para este proveedor
+            key_proveedor = f"select_{proveedor.replace(' ', '_')[:20]}"
+            seleccionadas = st.multiselect(
+                f"Seleccionar OCs de {proveedor[:30]}:",
+                [oc['label'] for oc in ocs_proveedor],
+                key=key_proveedor
+            )
+            
+            if seleccionadas:
+                ocs_sel_proveedor = [oc['data'] for oc in ocs_proveedor if oc['label'] in seleccionadas]
+                total_sel = sum(oc['monto'] for oc in ocs_sel_proveedor)
+                
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    st.caption(f"✅ {len(seleccionadas)} seleccionadas | ${total_sel:,.0f}")
+                
+                with col2:
+                    if st.button(f"✅ Aprobar", key=f"aprobar_{key_proveedor}", type="primary"):
+                        with st.spinner("Aprobando..."):
+                            exitosas = 0
+                            for oc in ocs_sel_proveedor:
+                                exito, _ = aprobar_actividad(models, uid, username, password, oc['actividad_id'])
+                                if exito:
+                                    exitosas += 1
+                            st.success(f"✅ {exitosas} OCs aprobadas")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                
+                with col3:
+                    if st.button(f"❌ Rechazar", key=f"rechazar_{key_proveedor}"):
+                        st.session_state[f'rechazar_proveedor_{key_proveedor}'] = True
+                
+                # Modal de rechazo
+                if st.session_state.get(f'rechazar_proveedor_{key_proveedor}'):
+                    motivo = st.text_area(f"Motivo del rechazo:", key=f"motivo_{key_proveedor}")
+                    if st.button(f"Confirmar Rechazo", key=f"confirmar_rechazo_{key_proveedor}"):
+                        if motivo:
+                            with st.spinner("Rechazando..."):
                                 exitosas = 0
-                                fallidas = 0
-                                progress_bar = st.progress(0)
-                                
-                                for idx, oc in enumerate(ocs_seleccionadas):
+                                for oc in ocs_sel_proveedor:
                                     exito, _ = rechazar_actividad(models, uid, username, password, oc['actividad_id'], motivo)
                                     if exito:
                                         exitosas += 1
-                                    else:
-                                        fallidas += 1
-                                    progress_bar.progress((idx + 1) / len(ocs_seleccionadas))
-                                    time.sleep(0.2)
-                                
-                                progress_bar.empty()
                                 st.success(f"❌ {exitosas} OCs rechazadas")
+                                st.session_state[f'rechazar_proveedor_{key_proveedor}'] = False
                                 st.cache_data.clear()
-                                time.sleep(2)
+                                time.sleep(1)
                                 st.rerun()
-    else:
-        st.info("👆 Selecciona OCs para aprobar o rechazar en lote")
+                        else:
+                            st.warning("Ingresa un motivo de rechazo")
     
     st.markdown("---")
     
