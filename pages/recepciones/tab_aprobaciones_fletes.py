@@ -18,6 +18,10 @@ URL = 'https://riofuturo.server98c6e.oerpondemand.net'
 DB = 'riofuturo-master'
 API_LOGISTICA_RUTAS = 'https://riofuturoprocesos.com/api/logistica/rutas'
 API_LOGISTICA_COSTES = 'https://riofuturoprocesos.com/api/logistica/db/coste-rutas'
+API_MINDICADOR = 'https://mindicador.cl/api'
+
+# Umbral de costo por kg en USD
+UMBRAL_COSTO_KG_USD = 0.11  # 11 centavos de dólar
 
 USUARIOS = {
     'Maximo Sepúlveda': 241,
@@ -68,6 +72,22 @@ def obtener_costes_rutas():
         return []
 
 
+@st.cache_data(ttl=3600)  # Cache por 1 hora
+def obtener_tipo_cambio_usd():
+    """Obtener tipo de cambio USD/CLP desde Banco Central (mindicador.cl)"""
+    try:
+        response = requests.get(API_MINDICADOR, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            dolar = data.get('dolar', {}).get('valor')
+            if dolar:
+                return float(dolar)
+        return None
+    except Exception as e:
+        st.warning(f"No se pudo obtener tipo de cambio USD: {e}")
+        return None
+
+
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
     """Buscar ruta en sistema de logística por nombre de OC"""
     for ruta in rutas_logistica:
@@ -76,7 +96,7 @@ def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optio
     return None
 
 
-def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, ruta_info: Optional[Dict], costes_rutas: List[Dict]) -> Dict:
+def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, ruta_info: Optional[Dict], costes_rutas: List[Dict], tipo_cambio_usd: Optional[float] = None) -> Dict:
     """Calcular comparación entre monto OC y presupuesto de logística"""
     resultado = {
         'tiene_ruta': False,
@@ -91,7 +111,12 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
         'alerta': None,
         'route_name': None,
         'route_name_str': 'Sin ruta',
-        'kilometers': None
+        'kilometers': None,
+        # Nuevos campos para costo por kg
+        'cost_per_kg_clp': None,
+        'cost_per_kg_usd': None,
+        'cost_per_kg_usd_str': '⚠️ Sin dato',
+        'alerta_costo_kg': None
     }
     
     if not ruta_info:
@@ -100,6 +125,25 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
     resultado['tiene_ruta'] = True
     resultado['kilometers'] = ruta_info.get('total_distance_km', 0)
     resultado['route_name_str'] = 'Procesando...'
+    
+    # Extraer cost_per_kg de la ruta y calcular en USD
+    cost_per_kg_clp = ruta_info.get('cost_per_kg', 0)
+    if cost_per_kg_clp and cost_per_kg_clp > 0:
+        resultado['cost_per_kg_clp'] = cost_per_kg_clp
+        if tipo_cambio_usd and tipo_cambio_usd > 0:
+            cost_per_kg_usd = cost_per_kg_clp / tipo_cambio_usd
+            resultado['cost_per_kg_usd'] = cost_per_kg_usd
+            resultado['cost_per_kg_usd_str'] = f"${cost_per_kg_usd:.3f}"
+            
+            # Comparar con umbral de $0.11 USD
+            if cost_per_kg_usd > UMBRAL_COSTO_KG_USD * 1.2:  # >20% sobre umbral
+                resultado['alerta_costo_kg'] = f"🔴 ${cost_per_kg_usd:.3f} (>{UMBRAL_COSTO_KG_USD})"
+            elif cost_per_kg_usd > UMBRAL_COSTO_KG_USD:
+                resultado['alerta_costo_kg'] = f"🟡 ${cost_per_kg_usd:.3f} (>{UMBRAL_COSTO_KG_USD})"
+            else:
+                resultado['alerta_costo_kg'] = f"🟢 ${cost_per_kg_usd:.3f}"
+        else:
+            resultado['cost_per_kg_usd_str'] = '⚠️ Sin TC'
     
     # Buscar costo presupuestado - el campo 'routes' puede ser:
     # 1. Un ID numérico (int)
@@ -371,11 +415,14 @@ def render_tab(username, password):
         st.error("No se pudo conectar a Odoo")
         return
     
-    # Obtener datos de logística
+    # Obtener datos de logística y tipo de cambio
     with st.spinner("Cargando datos de logística..."):
         rutas_logistica = obtener_rutas_logistica()
         costes_rutas = obtener_costes_rutas()
-        st.caption(f"✅ {len(rutas_logistica)} rutas | {len(costes_rutas)} presupuestos cargados")
+        tipo_cambio_usd = obtener_tipo_cambio_usd()
+        
+        info_tc = f" | 💱 USD: ${tipo_cambio_usd:,.0f}" if tipo_cambio_usd else " | ⚠️ Sin TC"
+        st.caption(f"✅ {len(rutas_logistica)} rutas | {len(costes_rutas)} presupuestos{info_tc}")
     
     # Obtener actividades pendientes
     with st.spinner(f"Cargando aprobaciones de {usuario_seleccionado}..."):
@@ -421,7 +468,8 @@ def render_tab(username, password):
                 oc.get('amount_untaxed', 0), 
                 oc.get('costo_lineas', 0),
                 ruta_info, 
-                costes_rutas
+                costes_rutas,
+                tipo_cambio_usd
             )
             
             datos_completos.append({
@@ -445,7 +493,7 @@ def render_tab(username, password):
     
     # Métricas principales
     st.markdown("### 📊 Resumen")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
         st.metric("Total OCs", len(df))
@@ -465,6 +513,21 @@ def render_tab(username, password):
     with col5:
         con_alerta = len(df[df['alerta'].notna() & (df['alerta'].str.contains('🔴|🟡'))])
         st.metric("Con Alertas", con_alerta, delta=f"-{con_alerta}" if con_alerta > 0 else "0")
+    
+    with col6:
+        # Promedio de costo por kg en USD
+        df_con_costo = df[df['cost_per_kg_usd'].notna() & (df['cost_per_kg_usd'] > 0)]
+        if len(df_con_costo) > 0:
+            prom_costo_kg_usd = df_con_costo['cost_per_kg_usd'].mean()
+            delta_vs_umbral = ((prom_costo_kg_usd - UMBRAL_COSTO_KG_USD) / UMBRAL_COSTO_KG_USD) * 100
+            st.metric(
+                "Prom. $/Kg USD", 
+                f"${prom_costo_kg_usd:.3f}",
+                delta=f"{delta_vs_umbral:+.1f}% vs $0.11",
+                delta_color="inverse"  # Verde si es negativo (mejor), rojo si es positivo (peor)
+            )
+        else:
+            st.metric("Prom. $/Kg USD", "⚠️ Sin datos")
     
     st.markdown("---")
     
@@ -596,6 +659,7 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
         'Monto OC': df_display['monto'].apply(lambda x: f"${x:,.0f}"),
         'Costo Calc.': df_display['costo_calculado_str'],
         'Presupuesto': df_display['costo_presupuestado_str'],
+        '$/Kg USD': df_display['alerta_costo_kg'].fillna(df_display['cost_per_kg_usd_str']),
         'Tipo Camión': df_display['tipo_camion_str'].str[:20],
         'Alerta': df_display['alerta'].fillna('⚪'),
         'Estado': df_display['estado_actividad'].apply(lambda x: '⏰' if x == 'overdue' else '🔵'),
@@ -732,6 +796,7 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
     
     # Leyenda
     st.caption("✅ = Info Completa | ⚠️ = Info Incompleta | ⏰ = Vencida | 🔵 = En plazo")
+    st.caption(f"$/Kg USD: 🟢 = ≤${UMBRAL_COSTO_KG_USD} | 🟡 = >${UMBRAL_COSTO_KG_USD} | 🔴 = >20% sobre umbral")
 
 
 def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
