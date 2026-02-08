@@ -380,8 +380,100 @@ def render(username: str = None, password: str = None):
     
     st.markdown("---")
     
+    # === GRÁFICO EVOLUTIVO POR LÍNEA ===
+    st.markdown("### 📈 Evolución de KG/Hora por Línea de Proceso")
+    st.caption("Comparativa del rendimiento diario de cada línea. Cada punto representa el promedio de KG/Hora del día.")
+    
+    # Preparar datos para el gráfico evolutivo
+    dias_ordenados = sorted(procesos_por_dia.keys())
+    todas_salas = sorted(salas_unicas)
+    
+    # Colores distintivos para cada sala
+    colores = [
+        '#00D4FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', 
+        '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA', '#FF9F43',
+        '#6C5CE7', '#00B894', '#E17055', '#0984E3', '#FDCB6E'
+    ]
+    
+    series = []
+    for idx, sala in enumerate(todas_salas):
+        datos_sala = []
+        for dia in dias_ordenados:
+            procesos_sala_dia = procesos_por_dia[dia].get(sala, [])
+            if procesos_sala_dia:
+                # Promedio de KG/Hora del día para esta sala
+                kg_horas_dia = [p['kg_hora'] for p in procesos_sala_dia if p['kg_hora'] > 0]
+                promedio = sum(kg_horas_dia) / len(kg_horas_dia) if kg_horas_dia else 0
+                datos_sala.append(round(promedio, 0))
+            else:
+                datos_sala.append(None)  # Sin datos ese día
+        
+        series.append({
+            "name": sala[:25],
+            "type": "line",
+            "data": datos_sala,
+            "smooth": True,
+            "symbol": "circle",
+            "symbolSize": 8,
+            "lineStyle": {"width": 3},
+            "itemStyle": {"color": colores[idx % len(colores)]},
+            "connectNulls": False
+        })
+    
+    # Formatear fechas para el eje X
+    fechas_formato = [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in dias_ordenados]
+    
+    options_evolucion = {
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(30, 30, 50, 0.95)",
+            "borderColor": "#555",
+            "textStyle": {"color": "#fff"},
+            "formatter": """function(params) {
+                let result = '<b>' + params[0].axisValue + '</b><br/>';
+                params.forEach(function(item) {
+                    if (item.value !== null && item.value !== undefined) {
+                        result += item.marker + ' ' + item.seriesName + ': <b>' + item.value.toLocaleString() + '</b> kg/h<br/>';
+                    }
+                });
+                return result;
+            }"""
+        },
+        "legend": {
+            "data": [s[:25] for s in todas_salas],
+            "bottom": 0,
+            "textStyle": {"color": "#ccc", "fontSize": 11},
+            "type": "scroll"
+        },
+        "grid": {
+            "left": "5%",
+            "right": "5%",
+            "bottom": "15%",
+            "top": "10%",
+            "containLabel": True
+        },
+        "xAxis": {
+            "type": "category",
+            "data": fechas_formato,
+            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#555"}}
+        },
+        "yAxis": {
+            "type": "value",
+            "name": "KG/Hora",
+            "nameTextStyle": {"color": "#aaa"},
+            "axisLabel": {"color": "#ccc", "formatter": "{value}"},
+            "splitLine": {"lineStyle": {"color": "#333"}}
+        },
+        "series": series
+    }
+    
+    st_echarts(options=options_evolucion, height="400px")
+    
+    st.markdown("---")
+    
     # === RENDERIZAR POR DÍA ===
-    dias_ordenados = sorted(procesos_por_dia.keys(), reverse=True)
+    dias_ordenados = sorted(procesos_por_dia.keys(), reverse=True)  # Ahora sí en orden descendente
     
     for dia_key in dias_ordenados:
         fecha_dt = datetime.strptime(dia_key, '%Y-%m-%d')
