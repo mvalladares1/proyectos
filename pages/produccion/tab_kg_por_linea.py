@@ -49,25 +49,39 @@ def formatear_hora(dt: Optional[datetime]) -> str:
 
 
 def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
-    """Renderiza gráfico de barras horizontales para una sala."""
+    """Renderiza gráfico de barras horizontales para una sala con detalle de cada proceso."""
     
     if not procesos:
         return
     
-    # Ordenar por KG/Hora descendente
-    procesos_ordenados = sorted(procesos, key=lambda x: x['kg_hora'], reverse=True)
+    # Ordenar por hora de inicio
+    procesos_ordenados = sorted(procesos, key=lambda x: x['inicio_dt'] or datetime.min)
     
     # Preparar datos para el gráfico
     nombres = []
     kg_hora_valores = []
     colores = []
+    tooltips_data = []
     
     for p in procesos_ordenados:
-        # Etiqueta: hora inicio - producto corto
-        producto_corto = p['producto'][:20] + "..." if len(p['producto']) > 20 else p['producto']
-        etiqueta = f"{p['hora_inicio']} - {producto_corto}"
+        # Etiqueta: Orden + horario
+        nombre_orden = p['nombre'][-10:] if len(p['nombre']) > 10 else p['nombre']
+        etiqueta = f"{p['hora_inicio']}-{p['hora_fin']} | {nombre_orden}"
         nombres.append(etiqueta)
         kg_hora_valores.append(p['kg_hora'])
+        
+        # Datos para tooltip
+        tooltips_data.append({
+            'orden': p['nombre'],
+            'producto': p['producto'],
+            'inicio': p['hora_inicio'],
+            'fin': p['hora_fin'],
+            'duracion': p['duracion'],
+            'dotacion': p['dotacion'],
+            'kg_producidos': p['kg_producidos'],
+            'kg_hora': p['kg_hora'],
+            'kg_hh': p['kg_hh']
+        })
         
         # Color según rendimiento
         kg = p['kg_hora']
@@ -91,17 +105,20 @@ def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
         })
     
     # Calcular altura dinámica
-    altura = max(200, len(procesos_ordenados) * 45)
+    altura = max(250, len(procesos_ordenados) * 55)
     
     options = {
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"}
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(30, 40, 60, 0.95)",
+            "borderColor": "#555",
+            "textStyle": {"color": "#fff"}
         },
         "grid": {
             "left": "3%",
-            "right": "15%",
-            "top": "3%",
+            "right": "18%",
+            "top": "10px",
             "bottom": "3%",
             "containLabel": True
         },
@@ -109,9 +126,9 @@ def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
             "type": "value",
             "name": "KG/Hora",
             "nameLocation": "middle",
-            "nameGap": 25,
-            "nameTextStyle": {"color": "#aaa", "fontSize": 11},
-            "axisLabel": {"color": "#aaa", "fontSize": 10},
+            "nameGap": 30,
+            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+            "axisLabel": {"color": "#aaa", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#333", "type": "dashed"}},
             "axisLine": {"lineStyle": {"color": "#555"}}
         },
@@ -120,8 +137,8 @@ def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
             "data": nombres[::-1],
             "axisLabel": {
                 "color": "#ddd", 
-                "fontSize": 11,
-                "width": 150,
+                "fontSize": 12,
+                "width": 200,
                 "overflow": "truncate"
             },
             "axisLine": {"lineStyle": {"color": "#555"}}
@@ -130,19 +147,71 @@ def render_grafico_sala(sala: str, procesos: List[Dict], key_suffix: str):
             "name": "KG/Hora",
             "type": "bar",
             "data": data_series[::-1],
-            "barWidth": "60%",
+            "barWidth": "65%",
             "label": {
                 "show": True,
                 "position": "right",
-                "formatter": "{c}",
+                "formatter": "{c} kg/h",
                 "color": "#fff",
-                "fontSize": 12,
+                "fontSize": 13,
                 "fontWeight": "bold"
+            },
+            "emphasis": {
+                "itemStyle": {
+                    "shadowBlur": 10,
+                    "shadowColor": "rgba(0, 0, 0, 0.5)"
+                }
             }
         }]
     }
     
     st_echarts(options=options, height=f"{altura}px", key=f"grafico_sala_{key_suffix}")
+    
+    # Mostrar tabla con detalles debajo del gráfico
+    st.markdown("##### 📋 Detalle de procesos:")
+    
+    for i, p in enumerate(procesos_ordenados):
+        # Color de fondo según rendimiento
+        kg = p['kg_hora']
+        if kg >= 2000:
+            bg_color = "rgba(76, 175, 80, 0.15)"
+            border_color = "#4caf50"
+        elif kg >= 1500:
+            bg_color = "rgba(139, 195, 74, 0.15)"
+            border_color = "#8bc34a"
+        elif kg >= 1000:
+            bg_color = "rgba(255, 193, 7, 0.15)"
+            border_color = "#ffc107"
+        elif kg >= 500:
+            bg_color = "rgba(255, 152, 0, 0.15)"
+            border_color = "#ff9800"
+        else:
+            bg_color = "rgba(244, 67, 54, 0.15)"
+            border_color = "#f44336"
+        
+        producto_display = p['producto'][:40] + "..." if len(p['producto']) > 40 else p['producto']
+        
+        st.markdown(f"""
+        <div style="background: {bg_color}; border-left: 4px solid {border_color};
+                    padding: 12px 15px; margin: 8px 0; border-radius: 0 8px 8px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <span style="font-weight: bold; color: #00d4ff; font-size: 14px;">{p['nombre']}</span>
+                    <span style="color: #888; margin-left: 10px;">🕐 {p['hora_inicio']} → {p['hora_fin']}</span>
+                    <span style="color: #aaa; margin-left: 10px;">({p['duracion']})</span>
+                </div>
+                <div style="font-size: 20px; font-weight: bold; color: {border_color};">
+                    ⚡ {p['kg_hora']:,.0f} kg/h
+                </div>
+            </div>
+            <div style="margin-top: 8px; display: flex; gap: 25px; flex-wrap: wrap; color: #ccc; font-size: 13px;">
+                <span>📦 <b>{producto_display}</b></span>
+                <span>👷 Dotación: <b>{p['dotacion']}</b></span>
+                <span>⚖️ KG Producidos: <b>{p['kg_producidos']:,.0f}</b></span>
+                <span>📊 KG/HH: <b>{p['kg_hh']:,.0f}</b></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def render(username: str = None, password: str = None):
