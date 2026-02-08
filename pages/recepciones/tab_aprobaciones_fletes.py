@@ -989,6 +989,9 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
         if row.get('alerta'):
             titulo_expander += f" | {row['alerta']}"
         
+        # Key único para esta OC basado en índice o actividad_id
+        key_suffix = f"{row['actividad_id']}" if pd.notna(row.get('actividad_id')) else f"oc_{row['oc_id']}_{idx}"
+        
         with st.expander(titulo_expander):
             col1, col2 = st.columns([2, 1])
             
@@ -1054,7 +1057,7 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                 # Solo mostrar botones si tiene actividad pendiente y no está completamente aprobada
                 if row.get('actividad_id') and row['num_aprobaciones'] < 2 and row['estado_oc'] != 'purchase':
                     # Botón aprobar
-                    if st.button(f"✅ Aprobar", key=f"aprobar_flete_{row['actividad_id']}", type="primary"):
+                    if st.button(f"✅ Aprobar", key=f"aprobar_flete_{key_suffix}", type="primary"):
                         with st.spinner("Aprobando..."):
                             exito, mensaje = aprobar_actividad(models, uid, username, password, row['actividad_id'])
                             if exito:
@@ -1066,8 +1069,8 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                                 st.error(f"❌ Error: {mensaje}")
                     
                     # Botón rechazar
-                    with st.form(key=f"form_rechazar_flete_{row['actividad_id']}"):
-                        motivo = st.text_area("Motivo del rechazo:", key=f"motivo_flete_{row['actividad_id']}")
+                    with st.form(key=f"form_rechazar_flete_{key_suffix}"):
+                        motivo = st.text_area("Motivo del rechazo:", key=f"motivo_flete_{key_suffix}")
                         rechazar = st.form_submit_button("❌ Rechazar")
                         
                         if rechazar:
