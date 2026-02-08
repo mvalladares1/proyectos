@@ -131,26 +131,34 @@ def render(username: str = None, password: str = None):
         por_dia_sala = defaultdict(lambda: defaultdict(list))
         
         for mo in mos:
-            # Parsear fecha de inicio
-            inicio_str = mo.get('inicio_proceso') or mo.get('fecha_inicio')
+            # Parsear fecha de inicio (campos del backend: fecha_inicio, fecha_termino)
+            inicio_str = mo.get('fecha_inicio') or mo.get('inicio_proceso')
             inicio_dt = parsear_fecha_hora(inicio_str)
             
+            # Si no tiene fecha de inicio, usar la fecha general
             if not inicio_dt:
-                continue
+                fecha_str = mo.get('fecha', '')
+                if fecha_str:
+                    try:
+                        inicio_dt = datetime.strptime(fecha_str[:10], '%Y-%m-%d')
+                    except:
+                        continue
+                else:
+                    continue
             
             fecha_dia = inicio_dt.strftime("%Y-%m-%d")
-            sala = mo.get('sala', 'Sin Sala') or 'Sin Sala'
+            sala = mo.get('sala', '') or mo.get('sala_original', '') or 'Sin Sala'
             
             # Parsear fecha fin
-            fin_str = mo.get('fin_proceso') or mo.get('fecha_fin')
+            fin_str = mo.get('fecha_termino') or mo.get('fin_proceso')
             fin_dt = parsear_fecha_hora(fin_str)
             
             # Obtener KG/Hora (campo de Odoo)
             kg_hora = mo.get('kg_hora_efectiva') or mo.get('kg_por_hora') or 0
             
             proceso_info = {
-                'nombre': mo.get('name', mo.get('mo_name', '-')),
-                'producto': mo.get('producto', mo.get('product_name', '-')),
+                'nombre': mo.get('mo_name', mo.get('name', '-')),
+                'producto': mo.get('product_name', mo.get('producto', '-')),
                 'inicio_dt': inicio_dt,
                 'fin_dt': fin_dt,
                 'hora_inicio': formatear_hora(inicio_dt),
