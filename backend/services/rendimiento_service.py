@@ -58,10 +58,16 @@ class RendimientoService:
     # ===========================================
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, solo_terminadas: bool = True) -> List[Dict]:
-        """Obtiene todas las MOs del período."""
+        """Obtiene todas las MOs del período usando fechas reales de proceso."""
+        # Usar x_studio_inicio_de_proceso (inicio real) para filtrar
+        # Si no tiene inicio real, usar date_planned_start como fallback
         domain = [
-            ['date_planned_start', '>=', f'{fecha_inicio} 00:00:00'],
-            ['date_planned_start', '<=', f'{fecha_fin} 23:59:59']
+            '|',
+            '&', ['x_studio_inicio_de_proceso', '>=', f'{fecha_inicio} 00:00:00'],
+                 ['x_studio_inicio_de_proceso', '<=', f'{fecha_fin} 23:59:59'],
+            '&', ['x_studio_inicio_de_proceso', '=', False],
+            '&', ['date_planned_start', '>=', f'{fecha_inicio} 00:00:00'],
+                 ['date_planned_start', '<=', f'{fecha_fin} 23:59:59']
         ]
         
         if solo_terminadas:
