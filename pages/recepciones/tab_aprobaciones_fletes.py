@@ -1000,7 +1000,9 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                 - **Monto OC:** ${row['monto']:,.0f}
                 - **Área:** {row['area']}
                 - **Estado OC:** {row['estado_oc']}
-                - **Estado Aprobación:** {row['estado_actividad']}
+                - **Estado Aprobación:** {row['estado_aprobacion']} ({row['estado_aprobacion_num']})
+                - **Aprobadores:** {row['aprobadores']}
+                - **Actividad Asignada:** {row.get('actividad_usuario', 'N/A')}
                 - **Fecha Límite:** {row['fecha_limite']}
                 - **Fecha Orden:** {row['fecha_orden']}
                 - **Producto/Servicio:** {row['producto'][:80]}
@@ -1049,33 +1051,42 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
             with col2:
                 st.markdown("**Acciones:**")
                 
-                # Botón aprobar
-                if st.button(f"✅ Aprobar", key=f"aprobar_flete_{row['actividad_id']}", type="primary"):
-                    with st.spinner("Aprobando..."):
-                        exito, mensaje = aprobar_actividad(models, uid, username, password, row['actividad_id'])
-                        if exito:
-                            st.success(f"✅ {row['oc_name']} aprobada")
-                            st.cache_data.clear()
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Error: {mensaje}")
-                
-                # Botón rechazar
-                with st.form(key=f"form_rechazar_flete_{row['actividad_id']}"):
-                    motivo = st.text_area("Motivo del rechazo:", key=f"motivo_flete_{row['actividad_id']}")
-                    rechazar = st.form_submit_button("❌ Rechazar")
+                # Solo mostrar botones si tiene actividad pendiente y no está completamente aprobada
+                if row.get('actividad_id') and row['num_aprobaciones'] < 2 and row['estado_oc'] != 'purchase':
+                    # Botón aprobar
+                    if st.button(f"✅ Aprobar", key=f"aprobar_flete_{row['actividad_id']}", type="primary"):
+                        with st.spinner("Aprobando..."):
+                            exito, mensaje = aprobar_actividad(models, uid, username, password, row['actividad_id'])
+                            if exito:
+                                st.success(f"✅ {row['oc_name']} aprobada por {username}")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error: {mensaje}")
                     
-                    if rechazar:
-                        if not motivo:
-                            st.warning("⚠️ Debe ingresar un motivo")
-                        else:
-                            with st.spinner("Rechazando..."):
-                                exito, mensaje = rechazar_actividad(models, uid, username, password, row['actividad_id'], motivo)
-                                if exito:
-                                    st.success(f"❌ {row['oc_name']} rechazada")
-                                    st.cache_data.clear()
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ Error: {mensaje}")
+                    # Botón rechazar
+                    with st.form(key=f"form_rechazar_flete_{row['actividad_id']}"):
+                        motivo = st.text_area("Motivo del rechazo:", key=f"motivo_flete_{row['actividad_id']}")
+                        rechazar = st.form_submit_button("❌ Rechazar")
+                        
+                        if rechazar:
+                            if not motivo:
+                                st.warning("⚠️ Debe ingresar un motivo")
+                            else:
+                                with st.spinner("Rechazando..."):
+                                    exito, mensaje = rechazar_actividad(models, uid, username, password, row['actividad_id'], motivo)
+                                    if exito:
+                                        st.success(f"❌ {row['oc_name']} rechazada")
+                                        st.cache_data.clear()
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ Error: {mensaje}")
+                else:
+                    if row['estado_oc'] == 'purchase' or row['num_aprobaciones'] >= 2:
+                        st.success("✅ OC completamente aprobada")
+                    elif not row.get('actividad_id'):
+                        st.info("ℹ️ Sin actividad pendiente")
+                    else:
+                        st.info("ℹ️ No se puede aprobar")
