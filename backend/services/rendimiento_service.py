@@ -81,8 +81,8 @@ class RendimientoService:
              'x_studio_kghora_efectiva', 'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso',
              'x_studio_horas_detencion_totales', 'x_studio_kghh_efectiva',
              'move_raw_ids', 'move_finished_ids', 'move_byproduct_ids'],
-            limit=500,
-            order='date_planned_start desc'
+            limit=5000,
+            order='x_studio_inicio_de_proceso desc'
         )
         
         return mos or []
