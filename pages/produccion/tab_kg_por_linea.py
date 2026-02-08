@@ -8,8 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 from streamlit_echarts import st_echarts
-
-API_URL = "http://rio-api-dev:8000"
+from .shared import API_URL
 
 
 def fetch_datos_salas(username: str, password: str, fecha_inicio: str, 
