@@ -1,13 +1,13 @@
 """
-Tab KG por Línea: Productividad por sala de proceso.
-Muestra KG/Hora de cada orden de forma visual y clara.
+Tab KG por Línea: Rendimiento por sala de proceso, agrupado por día.
+Muestra cada proceso individual con todos sus datos.
 """
 import streamlit as st
 import httpx
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
-from streamlit_echarts import st_echarts
+from collections import defaultdict
 from .shared import API_URL
 
 
@@ -28,266 +28,35 @@ def fetch_datos_produccion(username: str, password: str, fecha_inicio: str,
     return response.json()
 
 
-def render_tarjeta_orden(mo: Dict, idx: int) -> None:
-    """Renderiza una tarjeta visual para una orden de producción."""
-    
-    sala = mo.get('sala', 'Sin Sala')
-    producto = mo.get('producto', 'Sin Producto')
-    kg_hora = mo.get('kg_por_hora', 0) or 0
-    dotacion = mo.get('dotacion', 0) or 0
-    hh_efectiva = mo.get('hh_efectiva', 0) or 0
-    kg_pt = mo.get('kg_pt', 0) or 0
-    nombre = mo.get('nombre', '')
-    
-    # Horario
-    inicio = mo.get('fecha_inicio', '')
-    fin = mo.get('fecha_fin', '')
-    
-    hora_inicio = ""
-    hora_fin = ""
-    fecha_str = ""
-    if inicio:
-        try:
-            dt_inicio = datetime.fromisoformat(str(inicio).replace('Z', ''))
-            hora_inicio = dt_inicio.strftime('%H:%M')
-            fecha_str = dt_inicio.strftime('%d/%m')
-        except:
-            pass
-    if fin:
-        try:
-            dt_fin = datetime.fromisoformat(str(fin).replace('Z', ''))
-            hora_fin = dt_fin.strftime('%H:%M')
-        except:
-            pass
-    
-    horario = f"{hora_inicio} - {hora_fin}" if hora_inicio and hora_fin else "Sin horario"
-    
-    # Color según KG/Hora
-    if kg_hora >= 800:
-        color_kg = "#00D26A"  # Verde - Excelente
-        emoji_kg = "🟢"
-    elif kg_hora >= 500:
-        color_kg = "#FFD93D"  # Amarillo - Bueno
-        emoji_kg = "🟡"
-    elif kg_hora > 0:
-        color_kg = "#FF6B6B"  # Rojo - Bajo
-        emoji_kg = "🔴"
-    else:
-        color_kg = "#666"  # Gris - Sin datos
-        emoji_kg = "⚪"
-    
-    # Tarjeta con estilo
-    st.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 16px;
-        padding: 20px;
-        margin-bottom: 15px;
-        border-left: 5px solid {color_kg};
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    ">
-        <!-- Header: Sala y Fecha -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 24px;">🏭</span>
-                <span style="color: #00D9FF; font-size: 18px; font-weight: bold;">{sala}</span>
-            </div>
-            <div style="color: #888; font-size: 14px;">
-                📅 {fecha_str} &nbsp; ⏰ {horario}
-            </div>
-        </div>
-        
-        <!-- Producto -->
-        <div style="color: #ccc; font-size: 13px; margin-bottom: 15px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 8px;">
-            📦 {producto[:50]}{'...' if len(producto) > 50 else ''}
-        </div>
-        
-        <!-- KPIs en fila -->
-        <div style="display: flex; justify-content: space-around; text-align: center;">
-            <!-- KG/HORA - Principal -->
-            <div style="flex: 1.5;">
-                <div style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">KG/Hora</div>
-                <div style="color: {color_kg}; font-size: 42px; font-weight: bold; line-height: 1.2;">
-                    {kg_hora:,.0f}
-                </div>
-                <div style="font-size: 18px;">{emoji_kg}</div>
-            </div>
-            
-            <!-- Separador -->
-            <div style="width: 1px; background: #333; margin: 0 15px;"></div>
-            
-            <!-- Dotación -->
-            <div style="flex: 1;">
-                <div style="color: #888; font-size: 11px; text-transform: uppercase;">Dotación</div>
-                <div style="color: #FFD93D; font-size: 28px; font-weight: bold;">
-                    {dotacion}
-                </div>
-                <div style="color: #666; font-size: 11px;">personas</div>
-            </div>
-            
-            <!-- Separador -->
-            <div style="width: 1px; background: #333; margin: 0 15px;"></div>
-            
-            <!-- Horas Efectivas -->
-            <div style="flex: 1;">
-                <div style="color: #888; font-size: 11px; text-transform: uppercase;">HH Efectivas</div>
-                <div style="color: #00D9FF; font-size: 28px; font-weight: bold;">
-                    {hh_efectiva:.1f}
-                </div>
-                <div style="color: #666; font-size: 11px;">horas</div>
-            </div>
-            
-            <!-- Separador -->
-            <div style="width: 1px; background: #333; margin: 0 15px;"></div>
-            
-            <!-- KG Producidos -->
-            <div style="flex: 1;">
-                <div style="color: #888; font-size: 11px; text-transform: uppercase;">KG Producidos</div>
-                <div style="color: #00D26A; font-size: 28px; font-weight: bold;">
-                    {kg_pt:,.0f}
-                </div>
-                <div style="color: #666; font-size: 11px;">kilos</div>
-            </div>
-        </div>
-        
-        <!-- Orden ID pequeño -->
-        <div style="color: #555; font-size: 10px; text-align: right; margin-top: 10px;">
-            {nombre}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_grafico_barras_kg_hora(mos: List[Dict]) -> None:
-    """Gráfico de barras mostrando KG/Hora de cada orden."""
-    if not mos:
-        return
-    
-    # Filtrar y preparar datos
-    datos = []
-    for mo in mos:
-        kg_hora = mo.get('kg_por_hora', 0) or 0
-        if kg_hora > 0:
-            sala = mo.get('sala', 'Sin Sala')[:20]
-            fecha = ""
-            inicio = mo.get('fecha_inicio', '')
-            if inicio:
-                try:
-                    dt = datetime.fromisoformat(str(inicio).replace('Z', ''))
-                    fecha = dt.strftime('%d/%m %H:%M')
-                except:
-                    pass
-            
-            label = f"{sala} ({fecha})"
-            datos.append({
-                'label': label,
-                'kg_hora': kg_hora,
-                'sala': sala
-            })
-    
-    if not datos:
-        st.info("No hay órdenes con KG/Hora registrado")
-        return
-    
-    # Ordenar por KG/Hora descendente y tomar top 15
-    datos = sorted(datos, key=lambda x: x['kg_hora'], reverse=True)[:15]
-    datos = datos[::-1]  # Invertir para que el mayor quede arriba
-    
-    labels = [d['label'] for d in datos]
-    valores = [d['kg_hora'] for d in datos]
-    
-    # Colores según valor
-    colores = []
-    for v in valores:
-        if v >= 800:
-            colores.append('#00D26A')
-        elif v >= 500:
-            colores.append('#FFD93D')
+def parsear_fecha_hora(fecha_str: str) -> Optional[datetime]:
+    """Parsea fecha/hora de diferentes formatos."""
+    if not fecha_str:
+        return None
+    try:
+        if 'T' in str(fecha_str):
+            return datetime.fromisoformat(str(fecha_str).replace('Z', ''))
         else:
-            colores.append('#FF6B6B')
-    
-    options = {
-        "tooltip": {
-            "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "formatter": "{b}<br/>⚡ <b>{c}</b> KG/Hora"
-        },
-        "grid": {
-            "left": "3%",
-            "right": "15%",
-            "bottom": "3%",
-            "top": "3%",
-            "containLabel": True
-        },
-        "xAxis": {
-            "type": "value",
-            "name": "KG/Hora",
-            "nameLocation": "middle",
-            "nameGap": 30,
-            "axisLabel": {"color": "#888"},
-            "splitLine": {"lineStyle": {"color": "#333"}}
-        },
-        "yAxis": {
-            "type": "category",
-            "data": labels,
-            "axisLabel": {"color": "#ccc", "fontSize": 11},
-            "axisLine": {"lineStyle": {"color": "#555"}}
-        },
-        "series": [{
-            "type": "bar",
-            "data": [{"value": v, "itemStyle": {"color": c}} for v, c in zip(valores, colores)],
-            "barWidth": "60%",
-            "label": {
-                "show": True,
-                "position": "right",
-                "formatter": "{c}",
-                "color": "#fff",
-                "fontWeight": "bold",
-                "fontSize": 14
-            }
-        }]
-    }
-    
-    st_echarts(options=options, height="500px")
+            return datetime.strptime(str(fecha_str)[:19], '%Y-%m-%d %H:%M:%S')
+    except:
+        return None
 
 
-def render_resumen_por_sala(mos: List[Dict]) -> None:
-    """Resumen consolidado por sala."""
-    if not mos:
-        return
-    
-    # Agrupar por sala
-    salas = {}
-    for mo in mos:
-        sala = mo.get('sala', 'Sin Sala')
-        kg_hora = mo.get('kg_por_hora', 0) or 0
-        kg_pt = mo.get('kg_pt', 0) or 0
-        
-        if sala not in salas:
-            salas[sala] = {'ordenes': 0, 'kg_total': 0, 'kg_hora_sum': 0, 'kg_hora_count': 0}
-        
-        salas[sala]['ordenes'] += 1
-        salas[sala]['kg_total'] += kg_pt
-        if kg_hora > 0:
-            salas[sala]['kg_hora_sum'] += kg_hora
-            salas[sala]['kg_hora_count'] += 1
-    
-    # Crear tabla
-    filas = []
-    for sala, data in salas.items():
-        kg_hora_prom = data['kg_hora_sum'] / data['kg_hora_count'] if data['kg_hora_count'] > 0 else 0
-        filas.append({
-            'Sala': sala,
-            'Órdenes': data['ordenes'],
-            'KG Producidos': f"{data['kg_total']:,.0f}",
-            'KG/Hora Promedio': f"{kg_hora_prom:,.0f}"
-        })
-    
-    # Ordenar por KG/Hora
-    filas = sorted(filas, key=lambda x: float(x['KG/Hora Promedio'].replace(',', '')), reverse=True)
-    
-    df = pd.DataFrame(filas)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+def formatear_hora(dt: Optional[datetime]) -> str:
+    """Formatea datetime a HH:MM."""
+    if not dt:
+        return "-"
+    return dt.strftime("%H:%M")
+
+
+def formatear_duracion(inicio: Optional[datetime], fin: Optional[datetime]) -> str:
+    """Calcula y formatea duración."""
+    if not inicio or not fin:
+        return "-"
+    duracion = fin - inicio
+    horas = duracion.total_seconds() / 3600
+    h = int(horas)
+    m = int((horas - h) * 60)
+    return f"{h}h {m}m"
 
 
 def render(username: str = None, password: str = None):
@@ -295,9 +64,9 @@ def render(username: str = None, password: str = None):
     
     # Obtener credenciales
     if not username:
-        username = st.session_state.get("username", "")
+        username = st.session_state.get("odoo_username", "")
     if not password:
-        password = st.session_state.get("password", "")
+        password = st.session_state.get("odoo_api_key", "")
     
     if not username or not password:
         st.warning("⚠️ Debes iniciar sesión para ver este módulo")
@@ -305,32 +74,18 @@ def render(username: str = None, password: str = None):
     
     # === HEADER ===
     st.markdown("""
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: #00D9FF; margin-bottom: 5px;">⚡ Productividad por Línea</h2>
-        <p style="color: #888;">Visualiza los KG/Hora de cada orden de producción por sala</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # === LEYENDA DE COLORES ===
-    st.markdown("""
-    <div style="display: flex; justify-content: center; gap: 30px; margin-bottom: 20px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 10px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: #00D26A; font-size: 20px;">●</span>
-            <span style="color: #aaa;">Excelente (≥800 kg/h)</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: #FFD93D; font-size: 20px;">●</span>
-            <span style="color: #aaa;">Bueno (500-799 kg/h)</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: #FF6B6B; font-size: 20px;">●</span>
-            <span style="color: #aaa;">Bajo (&lt;500 kg/h)</span>
-        </div>
+    <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+                padding: 25px; border-radius: 15px; margin-bottom: 25px;
+                border-left: 5px solid #00d4ff;">
+        <h2 style="margin:0; color:#00d4ff;">📊 Rendimiento por Línea de Proceso</h2>
+        <p style="margin:5px 0 0 0; color:#aaa; font-size:14px;">
+            Visualiza el KG/Hora de cada sala, desglosado por día y por orden de producción
+        </p>
     </div>
     """, unsafe_allow_html=True)
     
     # === FILTROS ===
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
     
     with col1:
         fecha_inicio = st.date_input(
@@ -347,96 +102,285 @@ def render(username: str = None, password: str = None):
         )
     
     with col3:
-        filtro_sala = st.text_input(
-            "🔍 Filtrar Sala",
-            placeholder="Ej: Sala 3, Tunel...",
-            key="kg_linea_filtro_sala"
-        )
-    
-    with col4:
         st.markdown("<br>", unsafe_allow_html=True)
         btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True)
     
-    st.markdown("---")
-    
     # === CARGAR DATOS ===
-    if btn_buscar or st.session_state.get("kg_linea_datos"):
+    if btn_buscar or st.session_state.get("kg_linea_data"):
         if btn_buscar:
-            try:
-                with st.spinner("Cargando datos de producción..."):
-                    datos = fetch_datos_produccion(
+            with st.spinner("Cargando datos de producción..."):
+                try:
+                    data = fetch_datos_produccion(
                         username, password,
                         fecha_inicio.isoformat(),
                         fecha_fin.isoformat()
                     )
-                    st.session_state["kg_linea_datos"] = datos
-            except Exception as e:
-                st.error(f"Error al cargar datos: {str(e)}")
-                return
+                    st.session_state["kg_linea_data"] = data
+                except Exception as e:
+                    st.error(f"Error al cargar datos: {e}")
+                    return
         
-        datos = st.session_state.get("kg_linea_datos", {})
-        mos = datos.get("mos", [])
+        data = st.session_state.get("kg_linea_data", {})
+        mos = data.get("mos", [])
         
         if not mos:
-            st.warning("No se encontraron órdenes de producción en el período seleccionado")
+            st.info("No hay órdenes de producción en el rango seleccionado")
             return
         
-        # Aplicar filtro de sala si existe
-        if filtro_sala:
-            mos = [mo for mo in mos if filtro_sala.lower() in (mo.get('sala', '') or '').lower()]
+        # === PROCESAR Y AGRUPAR POR DÍA Y SALA ===
+        por_dia_sala = defaultdict(lambda: defaultdict(list))
+        
+        for mo in mos:
+            # Parsear fecha de inicio
+            inicio_str = mo.get('inicio_proceso') or mo.get('fecha_inicio')
+            inicio_dt = parsear_fecha_hora(inicio_str)
+            
+            if not inicio_dt:
+                continue
+            
+            fecha_dia = inicio_dt.strftime("%Y-%m-%d")
+            sala = mo.get('sala', 'Sin Sala') or 'Sin Sala'
+            
+            # Parsear fecha fin
+            fin_str = mo.get('fin_proceso') or mo.get('fecha_fin')
+            fin_dt = parsear_fecha_hora(fin_str)
+            
+            # Obtener KG/Hora (campo de Odoo)
+            kg_hora = mo.get('kg_hora_efectiva') or mo.get('kg_por_hora') or 0
+            
+            proceso_info = {
+                'nombre': mo.get('name', mo.get('mo_name', '-')),
+                'producto': mo.get('producto', mo.get('product_name', '-')),
+                'inicio_dt': inicio_dt,
+                'fin_dt': fin_dt,
+                'hora_inicio': formatear_hora(inicio_dt),
+                'hora_fin': formatear_hora(fin_dt),
+                'duracion': formatear_duracion(inicio_dt, fin_dt),
+                'kg_hora': round(kg_hora, 1) if kg_hora else 0,
+                'kg_hh': round(mo.get('kg_hh_efectiva', 0) or 0, 1),
+                'dotacion': mo.get('dotacion', 0) or 0,
+                'hh_efectiva': round(mo.get('hh_efectiva', 0) or 0, 2),
+                'kg_producidos': round(mo.get('kg_pt', 0) or mo.get('kg_producidos', 0) or 0, 1),
+                'estado': mo.get('state', '-')
+            }
+            
+            por_dia_sala[fecha_dia][sala].append(proceso_info)
+        
+        # Ordenar días de más reciente a más antiguo
+        dias_ordenados = sorted(por_dia_sala.keys(), reverse=True)
         
         # === KPIs GENERALES ===
-        total_ordenes = len(mos)
-        total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos)
-        kg_hora_values = [mo.get('kg_por_hora', 0) or 0 for mo in mos if (mo.get('kg_por_hora', 0) or 0) > 0]
-        kg_hora_prom = sum(kg_hora_values) / len(kg_hora_values) if kg_hora_values else 0
-        salas_unicas = len(set(mo.get('sala', '') for mo in mos if mo.get('sala')))
+        total_procesos = sum(len(p) for sala in por_dia_sala.values() for p in sala.values())
+        total_kg = sum(p['kg_producidos'] for sala in por_dia_sala.values() for procs in sala.values() for p in procs)
+        kg_horas_validos = [p['kg_hora'] for sala in por_dia_sala.values() for procs in sala.values() for p in procs if p['kg_hora'] > 0]
+        promedio_kg_hora = sum(kg_horas_validos) / len(kg_horas_validos) if kg_horas_validos else 0
+        salas_unicas = set(sala for dia in por_dia_sala.values() for sala in dia.keys())
+        
+        st.markdown("---")
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("📋 Órdenes", f"{total_ordenes:,}")
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        padding: 20px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: white;">{total_procesos}</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 12px;">ÓRDENES DE PRODUCCIÓN</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         with col2:
-            st.metric("📦 KG Producidos", f"{total_kg:,.0f}")
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                        padding: 20px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: white;">{total_kg:,.0f}</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 12px;">KG PRODUCIDOS</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         with col3:
-            st.metric("⚡ KG/Hora Promedio", f"{kg_hora_prom:,.0f}")
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                        padding: 20px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: white;">{promedio_kg_hora:,.0f}</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 12px;">KG/HORA PROMEDIO</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         with col4:
-            st.metric("🏭 Líneas Activas", f"{salas_unicas}")
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                        padding: 20px; border-radius: 12px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: white;">{len(salas_unicas)}</div>
+                <div style="color: rgba(255,255,255,0.8); font-size: 12px;">LÍNEAS ACTIVAS</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
-        # === GRÁFICO DE BARRAS ===
-        st.markdown("### 📊 Ranking de KG/Hora por Orden")
-        st.caption("Las barras más largas indican mayor productividad. Cada barra es una orden de producción.")
-        render_grafico_barras_kg_hora(mos)
-        
-        st.markdown("---")
-        
-        # === RESUMEN POR SALA ===
-        st.markdown("### 🏭 Resumen por Sala")
-        render_resumen_por_sala(mos)
-        
-        st.markdown("---")
-        
-        # === TARJETAS INDIVIDUALES ===
-        st.markdown("### 📋 Detalle de Cada Orden")
-        st.caption("Cada tarjeta muestra los datos completos de una orden de producción")
-        
-        # Ordenar por fecha de inicio descendente
-        mos_ordenadas = sorted(mos, key=lambda x: x.get('fecha_inicio', '') or '', reverse=True)
-        
-        # Mostrar en grid de 2 columnas
-        for i in range(0, len(mos_ordenadas), 2):
-            col1, col2 = st.columns(2)
+        # === MOSTRAR POR CADA DÍA ===
+        for fecha_dia in dias_ordenados:
+            salas_del_dia = por_dia_sala[fecha_dia]
             
-            with col1:
-                if i < len(mos_ordenadas):
-                    render_tarjeta_orden(mos_ordenadas[i], i)
+            # Formatear fecha legible
+            fecha_dt = datetime.strptime(fecha_dia, "%Y-%m-%d")
+            dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+            meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+            dia_semana = dias_semana[fecha_dt.weekday()]
+            mes = meses[fecha_dt.month - 1]
+            fecha_display = f"{dia_semana} {fecha_dt.day} de {mes}, {fecha_dt.year}"
             
-            with col2:
-                if i + 1 < len(mos_ordenadas):
-                    render_tarjeta_orden(mos_ordenadas[i + 1], i + 1)
-    
-    else:
-        # Estado inicial
-        st.info("👆 Selecciona el rango de fechas y presiona **Buscar** para ver la productividad por línea")
+            # Calcular totales del día
+            procesos_dia = sum(len(procs) for procs in salas_del_dia.values())
+            kg_dia = sum(p['kg_producidos'] for procs in salas_del_dia.values() for p in procs)
+            
+            # Header del día
+            st.markdown(f"""
+            <div style="background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+                        padding: 15px 20px; border-radius: 10px; margin: 20px 0 15px 0;
+                        display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 22px; font-weight: bold; color: white;">📅 {fecha_display}</span>
+                </div>
+                <div style="text-align: right;">
+                    <span style="color: #90caf9; font-size: 14px; margin-right: 20px;">
+                        📦 {procesos_dia} órdenes
+                    </span>
+                    <span style="color: #a5d6a7; font-size: 14px;">
+                        ⚖️ {kg_dia:,.0f} KG
+                    </span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Ordenar salas por total de KG/Hora
+            salas_ordenadas = sorted(
+                salas_del_dia.items(),
+                key=lambda x: sum(p['kg_hora'] for p in x[1]) / len(x[1]) if x[1] else 0,
+                reverse=True
+            )
+            
+            # === POR CADA SALA DEL DÍA ===
+            for sala, procesos in salas_ordenadas:
+                # Ordenar procesos por hora de inicio
+                procesos_ordenados = sorted(procesos, key=lambda x: x['inicio_dt'] or datetime.min)
+                
+                # Calcular promedio de la sala en el día
+                kg_horas_sala = [p['kg_hora'] for p in procesos_ordenados if p['kg_hora'] > 0]
+                promedio_sala = sum(kg_horas_sala) / len(kg_horas_sala) if kg_horas_sala else 0
+                
+                # Color según rendimiento
+                if promedio_sala >= 2000:
+                    color_sala = "#4caf50"  # Verde - Excelente
+                    emoji = "🟢"
+                elif promedio_sala >= 1500:
+                    color_sala = "#8bc34a"  # Verde claro - Bueno
+                    emoji = "🟡"
+                elif promedio_sala >= 1000:
+                    color_sala = "#ff9800"  # Naranja - Regular
+                    emoji = "🟠"
+                else:
+                    color_sala = "#f44336"  # Rojo - Bajo
+                    emoji = "🔴"
+                
+                with st.expander(f"{emoji} **{sala}** — Promedio: **{promedio_sala:,.0f} KG/Hora** — {len(procesos_ordenados)} procesos", expanded=True):
+                    
+                    # Crear tabla de procesos
+                    tabla_html = """
+                    <style>
+                        .tabla-procesos {
+                            width: 100%;
+                            border-collapse: collapse;
+                            font-size: 13px;
+                            margin: 10px 0;
+                        }
+                        .tabla-procesos th {
+                            background: #2d3748;
+                            color: #90cdf4;
+                            padding: 12px 8px;
+                            text-align: center;
+                            font-weight: 600;
+                            border-bottom: 2px solid #4a5568;
+                        }
+                        .tabla-procesos td {
+                            padding: 10px 8px;
+                            text-align: center;
+                            border-bottom: 1px solid #4a5568;
+                            color: #e2e8f0;
+                        }
+                        .tabla-procesos tr:hover {
+                            background: rgba(66, 153, 225, 0.1);
+                        }
+                        .kg-hora-cell {
+                            font-weight: bold;
+                            font-size: 15px;
+                        }
+                        .kg-alto { color: #48bb78; }
+                        .kg-medio { color: #ecc94b; }
+                        .kg-bajo { color: #fc8181; }
+                    </style>
+                    <table class="tabla-procesos">
+                        <thead>
+                            <tr>
+                                <th>🏭 Proceso</th>
+                                <th>📦 Producto</th>
+                                <th>🕐 Inicio</th>
+                                <th>🕕 Fin</th>
+                                <th>⏱️ Duración</th>
+                                <th>👷 Dotación</th>
+                                <th>⚡ KG/Hora</th>
+                                <th>📊 KG/HH</th>
+                                <th>⚖️ KG Prod.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    """
+                    
+                    for proc in procesos_ordenados:
+                        # Clase de color según KG/Hora
+                        if proc['kg_hora'] >= 2000:
+                            kg_class = "kg-alto"
+                        elif proc['kg_hora'] >= 1000:
+                            kg_class = "kg-medio"
+                        else:
+                            kg_class = "kg-bajo"
+                        
+                        # Truncar producto si es muy largo
+                        producto_display = proc['producto'][:35] + "..." if len(proc['producto']) > 35 else proc['producto']
+                        
+                        tabla_html += f"""
+                        <tr>
+                            <td style="text-align: left; color: #63b3ed;">{proc['nombre']}</td>
+                            <td style="text-align: left;">{producto_display}</td>
+                            <td>{proc['hora_inicio']}</td>
+                            <td>{proc['hora_fin']}</td>
+                            <td>{proc['duracion']}</td>
+                            <td>{proc['dotacion']}</td>
+                            <td class="kg-hora-cell {kg_class}">{proc['kg_hora']:,.0f}</td>
+                            <td>{proc['kg_hh']:,.0f}</td>
+                            <td>{proc['kg_producidos']:,.0f}</td>
+                        </tr>
+                        """
+                    
+                    tabla_html += """
+                        </tbody>
+                    </table>
+                    """
+                    
+                    st.markdown(tabla_html, unsafe_allow_html=True)
+                    
+                    # Mini resumen de la sala
+                    total_kg_sala = sum(p['kg_producidos'] for p in procesos_ordenados)
+                    dotacion_prom = sum(p['dotacion'] for p in procesos_ordenados) / len(procesos_ordenados) if procesos_ordenados else 0
+                    
+                    st.markdown(f"""
+                    <div style="background: #2d3748; padding: 10px 15px; border-radius: 8px; 
+                                margin-top: 10px; display: flex; justify-content: space-around;">
+                        <span style="color: #a0aec0;">📊 Total KG: <b style="color: #68d391;">{total_kg_sala:,.0f}</b></span>
+                        <span style="color: #a0aec0;">👷 Dotación Prom: <b style="color: #63b3ed;">{dotacion_prom:.0f}</b></span>
+                        <span style="color: #a0aec0;">⚡ KG/Hora Prom: <b style="color: {color_sala};">{promedio_sala:,.0f}</b></span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
