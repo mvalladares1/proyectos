@@ -58,3 +58,4 @@ Thumbs.db
 # Stock Picking specific
 stock-picking/frontend/dist/
 stock-picking/backend/*.db
+cache/
