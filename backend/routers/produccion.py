@@ -136,6 +136,27 @@ async def download_report_clasificacion(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ===================== KG POR LÍNEA =====================
+
+@router.get("/kg-por-linea")
+async def get_kg_por_linea(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    planta: Optional[str] = Query(None, description="Filtrar por planta")
+):
+    """
+    Obtiene los KG/Hora por cada línea/sala de proceso en un rango de fechas.
+    """
+    try:
+        from backend.services.monitor_produccion_service import MonitorProduccionService
+        service = MonitorProduccionService(username=username, password=password)
+        return service.get_kg_por_linea(fecha_inicio, fecha_fin, planta)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ===================== MONITOR DIARIO DE PRODUCCIÓN =====================
 
 @router.get("/monitor/activos")

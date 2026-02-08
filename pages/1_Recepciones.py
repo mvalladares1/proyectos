@@ -24,6 +24,7 @@ from recepciones import tab_pallets
 from recepciones import tab_aprobaciones_fletes
 from recepciones import tab_proforma_consolidada
 from recepciones import tab_ajuste_proformas
+from recepciones import tab_kg_linea
 
 # Configuración de página
 st.set_page_config(page_title="Recepciones", page_icon="📥", layout="wide")
@@ -54,6 +55,7 @@ _perm_pallets = tiene_acceso_pagina("recepciones", "pallets_recepcion") # Permis
 _perm_aprobaciones_fletes = tiene_acceso_pagina("recepciones", "aprobaciones_fletes")  # Nuevo permiso
 _perm_proforma_fletes = tiene_acceso_pagina("recepciones", "proforma_fletes")  # Proforma consolidada
 _perm_ajuste_proformas = tiene_acceso_pagina("recepciones", "ajuste_proformas")  # Ajuste USD → CLP
+_perm_kg_linea = tiene_acceso_pagina("recepciones", "kg_linea")  # KG por Línea
 
 # === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
 tabs_disponibles = []
@@ -90,6 +92,10 @@ if _perm_proforma_fletes:
 if _perm_ajuste_proformas:
     tabs_nombres.append("💱 Ajuste Proformas")
     tabs_disponibles.append("ajuste_proformas")
+
+if _perm_kg_linea or _perm_gestion:
+    tabs_nombres.append("⚡ KG por Línea")
+    tabs_disponibles.append("kg_linea")
 
 # Si no tiene acceso a ningún tab, mostrar mensaje
 if not tabs_disponibles:
@@ -162,4 +168,12 @@ if "ajuste_proformas" in tabs_disponibles:
         def _frag_ajuste_proformas():
             tab_ajuste_proformas.render(username, password)
         _frag_ajuste_proformas()
+    tab_index += 1
+
+if "kg_linea" in tabs_disponibles:
+    with tabs_ui[tab_index]:
+        @st.fragment
+        def _frag_kg_linea():
+            tab_kg_linea.render(username, password)
+        _frag_kg_linea()
     tab_index += 1
