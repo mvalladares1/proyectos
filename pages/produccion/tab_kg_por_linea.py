@@ -294,101 +294,53 @@ def render(username: str = None, password: str = None):
                 
                 with st.expander(f"{emoji} **{sala}** — Promedio: **{promedio_sala:,.0f} KG/Hora** — {len(procesos_ordenados)} procesos", expanded=True):
                     
-                    # Crear tabla de procesos
-                    tabla_html = """
-                    <style>
-                        .tabla-procesos {
-                            width: 100%;
-                            border-collapse: collapse;
-                            font-size: 13px;
-                            margin: 10px 0;
-                        }
-                        .tabla-procesos th {
-                            background: #2d3748;
-                            color: #90cdf4;
-                            padding: 12px 8px;
-                            text-align: center;
-                            font-weight: 600;
-                            border-bottom: 2px solid #4a5568;
-                        }
-                        .tabla-procesos td {
-                            padding: 10px 8px;
-                            text-align: center;
-                            border-bottom: 1px solid #4a5568;
-                            color: #e2e8f0;
-                        }
-                        .tabla-procesos tr:hover {
-                            background: rgba(66, 153, 225, 0.1);
-                        }
-                        .kg-hora-cell {
-                            font-weight: bold;
-                            font-size: 15px;
-                        }
-                        .kg-alto { color: #48bb78; }
-                        .kg-medio { color: #ecc94b; }
-                        .kg-bajo { color: #fc8181; }
-                    </style>
-                    <table class="tabla-procesos">
-                        <thead>
-                            <tr>
-                                <th>🏭 Proceso</th>
-                                <th>📦 Producto</th>
-                                <th>🕐 Inicio</th>
-                                <th>🕕 Fin</th>
-                                <th>⏱️ Duración</th>
-                                <th>👷 Dotación</th>
-                                <th>⚡ KG/Hora</th>
-                                <th>📊 KG/HH</th>
-                                <th>⚖️ KG Prod.</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                    """
-                    
+                    # Usar DataFrame de pandas para mejor visualización
+                    datos_tabla = []
                     for proc in procesos_ordenados:
-                        # Clase de color según KG/Hora
-                        if proc['kg_hora'] >= 2000:
-                            kg_class = "kg-alto"
-                        elif proc['kg_hora'] >= 1000:
-                            kg_class = "kg-medio"
-                        else:
-                            kg_class = "kg-bajo"
-                        
-                        # Truncar producto si es muy largo
-                        producto_display = proc['producto'][:35] + "..." if len(proc['producto']) > 35 else proc['producto']
-                        
-                        tabla_html += f"""
-                        <tr>
-                            <td style="text-align: left; color: #63b3ed;">{proc['nombre']}</td>
-                            <td style="text-align: left;">{producto_display}</td>
-                            <td>{proc['hora_inicio']}</td>
-                            <td>{proc['hora_fin']}</td>
-                            <td>{proc['duracion']}</td>
-                            <td>{proc['dotacion']}</td>
-                            <td class="kg-hora-cell {kg_class}">{proc['kg_hora']:,.0f}</td>
-                            <td>{proc['kg_hh']:,.0f}</td>
-                            <td>{proc['kg_producidos']:,.0f}</td>
-                        </tr>
-                        """
+                        datos_tabla.append({
+                            "🏭 Proceso": proc['nombre'],
+                            "📦 Producto": proc['producto'][:40] if len(proc['producto']) > 40 else proc['producto'],
+                            "🕐 Inicio": proc['hora_inicio'],
+                            "🕕 Fin": proc['hora_fin'],
+                            "⏱️ Duración": proc['duracion'],
+                            "👷 Dotación": int(proc['dotacion']),
+                            "⚡ KG/Hora": int(proc['kg_hora']),
+                            "📊 KG/HH": int(proc['kg_hh']),
+                            "⚖️ KG Prod.": int(proc['kg_producidos'])
+                        })
                     
-                    tabla_html += """
-                        </tbody>
-                    </table>
-                    """
-                    
-                    st.markdown(tabla_html, unsafe_allow_html=True)
+                    if datos_tabla:
+                        df = pd.DataFrame(datos_tabla)
+                        
+                        # Estilo del dataframe
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "⚡ KG/Hora": st.column_config.NumberColumn(
+                                    "⚡ KG/Hora",
+                                    help="Kilogramos por hora efectiva",
+                                    format="%d"
+                                ),
+                                "⚖️ KG Prod.": st.column_config.NumberColumn(
+                                    "⚖️ KG Prod.",
+                                    help="Kilogramos producidos",
+                                    format="%d"
+                                ),
+                            }
+                        )
                     
                     # Mini resumen de la sala
                     total_kg_sala = sum(p['kg_producidos'] for p in procesos_ordenados)
                     dotacion_prom = sum(p['dotacion'] for p in procesos_ordenados) / len(procesos_ordenados) if procesos_ordenados else 0
                     
-                    st.markdown(f"""
-                    <div style="background: #2d3748; padding: 10px 15px; border-radius: 8px; 
-                                margin-top: 10px; display: flex; justify-content: space-around;">
-                        <span style="color: #a0aec0;">📊 Total KG: <b style="color: #68d391;">{total_kg_sala:,.0f}</b></span>
-                        <span style="color: #a0aec0;">👷 Dotación Prom: <b style="color: #63b3ed;">{dotacion_prom:.0f}</b></span>
-                        <span style="color: #a0aec0;">⚡ KG/Hora Prom: <b style="color: {color_sala};">{promedio_sala:,.0f}</b></span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    col_r1, col_r2, col_r3 = st.columns(3)
+                    with col_r1:
+                        st.metric("📊 Total KG", f"{total_kg_sala:,.0f}")
+                    with col_r2:
+                        st.metric("👷 Dotación Prom", f"{dotacion_prom:.0f}")
+                    with col_r3:
+                        st.metric("⚡ KG/Hora Prom", f"{promedio_sala:,.0f}")
             
             st.markdown("<br>", unsafe_allow_html=True)
