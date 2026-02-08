@@ -275,20 +275,18 @@ def render(username: str = None, password: str = None):
     # === CARGAR DATOS ===
     if btn_buscar:
         st.session_state['kg_linea_data_loaded'] = True
-        st.session_state['kg_linea_fecha_ini'] = fecha_inicio.isoformat()
-        st.session_state['kg_linea_fecha_fin'] = fecha_fin.isoformat()
     
     if not st.session_state.get('kg_linea_data_loaded'):
         st.info("👆 Selecciona el rango de fechas y presiona **Buscar**")
         return
     
-    # Cargar datos
+    # Cargar datos usando las fechas actuales de los widgets
     try:
         with st.spinner("Cargando datos de producción..."):
             data = fetch_datos_produccion(
                 username, password,
-                st.session_state['kg_linea_fecha_ini'],
-                st.session_state['kg_linea_fecha_fin']
+                fecha_inicio.isoformat(),
+                fecha_fin.isoformat()
             )
     except Exception as e:
         st.error(f"Error al cargar datos: {str(e)}")
