@@ -54,6 +54,259 @@ def formatear_hora(dt: Optional[datetime]) -> str:
     return dt.strftime("%H:%M")
 
 
+def render_linea_proceso_sala(sala: str, procesos: List[Dict]):
+    """
+    Renderiza una línea de proceso visual para una sala.
+    Muestra cada proceso como un bloque en una línea de tiempo.
+    """
+    if not procesos:
+        return
+    
+    # Ordenar procesos por hora de inicio
+    procesos_ordenados = sorted(procesos, key=lambda x: x.get('inicio_dt') or datetime.min)
+    
+    # Calcular totales de la sala
+    total_kg = sum(p.get('kg_producidos', 0) for p in procesos)
+    total_dotacion = sum(p.get('dotacion', 0) for p in procesos)
+    kg_horas = [p.get('kg_hora', 0) for p in procesos if p.get('kg_hora', 0) > 0]
+    promedio_kg_hora = sum(kg_horas) / len(kg_horas) if kg_horas else 0
+    total_detenciones = sum(p.get('detenciones', 0) for p in procesos)
+    
+    # CSS para la línea de proceso
+    st.markdown("""
+    <style>
+    .linea-proceso-container {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 15px;
+        padding: 20px;
+        margin: 15px 0;
+        border-left: 5px solid #00d4ff;
+    }
+    .linea-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .linea-title {
+        font-size: 1.4em;
+        font-weight: bold;
+        color: #00d4ff;
+    }
+    .linea-stats {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+    .linea-stat {
+        background: rgba(255,255,255,0.1);
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-size: 0.9em;
+    }
+    .linea-stat-value {
+        font-weight: bold;
+        color: #fff;
+    }
+    .proceso-timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+    .proceso-timeline::before {
+        content: '';
+        position: absolute;
+        left: 20px;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: linear-gradient(180deg, #00d4ff, #0099cc);
+        border-radius: 2px;
+    }
+    .proceso-item {
+        position: relative;
+        margin-left: 50px;
+        margin-bottom: 20px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(255,255,255,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .proceso-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 5px 20px rgba(0,212,255,0.2);
+    }
+    .proceso-item::before {
+        content: '';
+        position: absolute;
+        left: -38px;
+        top: 20px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid #00d4ff;
+        background: #1a1a2e;
+    }
+    .proceso-item.excelente::before { background: #4caf50; border-color: #4caf50; }
+    .proceso-item.bueno::before { background: #8bc34a; border-color: #8bc34a; }
+    .proceso-item.regular::before { background: #ffc107; border-color: #ffc107; }
+    .proceso-item.bajo::before { background: #f44336; border-color: #f44336; }
+    
+    .proceso-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .proceso-nombre {
+        font-weight: bold;
+        color: #00d4ff;
+        font-size: 1.1em;
+    }
+    .proceso-horario {
+        background: rgba(0,212,255,0.2);
+        padding: 5px 12px;
+        border-radius: 15px;
+        font-size: 0.9em;
+        color: #00d4ff;
+    }
+    .proceso-producto {
+        color: #aaa;
+        font-size: 0.9em;
+        margin-bottom: 10px;
+    }
+    .proceso-metricas {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 10px;
+    }
+    .metrica {
+        background: rgba(255,255,255,0.05);
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    .metrica-valor {
+        font-size: 1.3em;
+        font-weight: bold;
+        color: #fff;
+    }
+    .metrica-label {
+        font-size: 0.75em;
+        color: #888;
+        margin-top: 3px;
+    }
+    .metrica.destacado {
+        background: linear-gradient(135deg, rgba(0,212,255,0.3), rgba(0,153,204,0.2));
+        border: 1px solid rgba(0,212,255,0.5);
+    }
+    .metrica.destacado .metrica-valor {
+        color: #00d4ff;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Construir HTML de la línea de proceso
+    html = f"""
+    <div class="linea-proceso-container">
+        <div class="linea-header">
+            <div class="linea-title">🏭 {sala}</div>
+            <div class="linea-stats">
+                <div class="linea-stat">📋 <span class="linea-stat-value">{len(procesos)}</span> procesos</div>
+                <div class="linea-stat">⚖️ <span class="linea-stat-value">{total_kg:,.0f}</span> KG</div>
+                <div class="linea-stat">⚡ <span class="linea-stat-value">{promedio_kg_hora:,.0f}</span> KG/Hora prom</div>
+                <div class="linea-stat">👷 <span class="linea-stat-value">{total_dotacion}</span> personas total</div>
+            </div>
+        </div>
+        
+        <div class="proceso-timeline">
+    """
+    
+    for p in procesos_ordenados:
+        kg_hora = p.get('kg_hora', 0)
+        
+        # Clase de rendimiento
+        if kg_hora >= 2000:
+            clase = "excelente"
+        elif kg_hora >= 1500:
+            clase = "bueno"
+        elif kg_hora >= 1000:
+            clase = "regular"
+        else:
+            clase = "bajo"
+        
+        nombre = p.get('nombre', 'N/A')
+        producto = p.get('producto', '-')
+        if len(str(producto)) > 50:
+            producto = str(producto)[:47] + "..."
+        
+        hora_inicio = p.get('hora_inicio', '-')
+        hora_fin = p.get('hora_fin', '-')
+        duracion = p.get('duracion', '-')
+        dotacion = int(p.get('dotacion', 0))
+        kg_producidos = p.get('kg_producidos', 0)
+        hh_efectiva = p.get('hh_efectiva', 0)
+        kg_hh = p.get('kg_hh', 0)
+        detenciones = p.get('detenciones', 0)
+        rendimiento = p.get('rendimiento', 0)
+        
+        # Formatear detenciones
+        det_h = int(detenciones)
+        det_m = int((detenciones - det_h) * 60) if detenciones > 0 else 0
+        det_str = f"{det_h}:{det_m:02d}" if detenciones > 0 else "0:00"
+        
+        html += f"""
+            <div class="proceso-item {clase}">
+                <div class="proceso-header">
+                    <div class="proceso-nombre">📋 {nombre}</div>
+                    <div class="proceso-horario">🕐 {hora_inicio} → {hora_fin} ({duracion}h)</div>
+                </div>
+                <div class="proceso-producto">📦 {producto}</div>
+                <div class="proceso-metricas">
+                    <div class="metrica destacado">
+                        <div class="metrica-valor">{kg_hora:,.0f}</div>
+                        <div class="metrica-label">⚡ KG/HORA</div>
+                    </div>
+                    <div class="metrica">
+                        <div class="metrica-valor">{kg_producidos:,.0f}</div>
+                        <div class="metrica-label">⚖️ KG TOTAL</div>
+                    </div>
+                    <div class="metrica">
+                        <div class="metrica-valor">{dotacion}</div>
+                        <div class="metrica-label">👷 DOTACIÓN</div>
+                    </div>
+                    <div class="metrica">
+                        <div class="metrica-valor">{hh_efectiva:.1f}</div>
+                        <div class="metrica-label">⏱️ HH EFECT</div>
+                    </div>
+                    <div class="metrica">
+                        <div class="metrica-valor">{kg_hh:,.0f}</div>
+                        <div class="metrica-label">📊 KG/HH</div>
+                    </div>
+                    <div class="metrica">
+                        <div class="metrica-valor">{det_str}</div>
+                        <div class="metrica-label">⏸️ DETENC.</div>
+                    </div>
+                    <div class="metrica">
+                        <div class="metrica-valor">{rendimiento:.1f}%</div>
+                        <div class="metrica-label">📈 REND.</div>
+                    </div>
+                </div>
+            </div>
+        """
+    
+    html += """
+        </div>
+    </div>
+    """
+    
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render_proceso_card(p: Dict, idx: int):
     """Renderiza una tarjeta de proceso con componentes nativos de Streamlit."""
     
@@ -505,32 +758,10 @@ def render(username: str = None, password: str = None):
         st.markdown("#### 📊 Comparativa KG/Hora por Sala")
         render_grafico_comparativo_dia(procesos_dia, dia_key)
         
-        # Expander por cada sala
+        # Línea de proceso por cada sala
+        st.markdown("#### 🏭 Detalle por Línea de Proceso")
+        
         for sala, procesos in sorted(procesos_dia.items(), key=lambda x: -sum(p['kg_hora'] for p in x[1])):
-            kg_promedio = sum(p['kg_hora'] for p in procesos if p['kg_hora'] > 0)
-            if procesos:
-                kg_promedio = kg_promedio / len([p for p in procesos if p['kg_hora'] > 0]) if any(p['kg_hora'] > 0 for p in procesos) else 0
-            
-            total_kg_sala = sum(p['kg_producidos'] for p in procesos)
-            
-            # Emoji según rendimiento
-            if kg_promedio >= 1500:
-                emoji = "🟢"
-            elif kg_promedio >= 1000:
-                emoji = "🟡"
-            elif kg_promedio > 0:
-                emoji = "🔴"
-            else:
-                emoji = "⚫"
-            
-            with st.expander(
-                f"{emoji} **{sala}** — Promedio: **{kg_promedio:,.0f} KG/Hora** — {len(procesos)} proceso(s) — {total_kg_sala:,.0f} KG",
-                expanded=False
-            ):
-                # Ordenar procesos por hora de inicio
-                procesos_ordenados = sorted(procesos, key=lambda x: x['inicio_dt'] or datetime.min)
-                
-                for idx, p in enumerate(procesos_ordenados):
-                    render_proceso_card(p, idx)
+            render_linea_proceso_sala(sala, procesos)
         
         st.markdown("---")
