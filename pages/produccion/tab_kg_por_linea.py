@@ -359,7 +359,7 @@ def render_tabla_ordenes(mos: List[Dict], sala_filtro: str = None) -> None:
     """, unsafe_allow_html=True)
 
 
-def render() -> None:
+def render(username: str = None, password: str = None) -> None:
     """Renderiza el tab de KG por Línea."""
     
     # Header con explicación
@@ -378,9 +378,11 @@ def render() -> None:
     </div>
     """, unsafe_allow_html=True)
     
-    # Credenciales
-    username = st.session_state.get("username", "")
-    password = st.session_state.get("password", "")
+    # Credenciales - usar parámetros o session_state
+    if not username:
+        username = st.session_state.get("username", "")
+    if not password:
+        password = st.session_state.get("password", "")
     
     if not username or not password:
         st.warning("⚠️ Debes iniciar sesión para ver este dashboard")
