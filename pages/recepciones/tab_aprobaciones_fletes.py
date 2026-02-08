@@ -23,12 +23,6 @@ API_MINDICADOR = 'https://mindicador.cl/api'
 # Umbral de costo por kg en USD
 UMBRAL_COSTO_KG_USD = 0.11  # 11 centavos de dólar
 
-USUARIOS = {
-    'Maximo Sepúlveda': 241,
-    'Felipe Horst': 17,
-    'Francisco Luttecke': 258
-}
-
 
 def get_odoo_connection(username, password):
     """Conexión a Odoo"""
@@ -244,6 +238,143 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
 
 
 @st.cache_data(ttl=60)
+def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
+    """
+    Obtener TODAS las OCs de TRANSPORTES/SERVICIOS con información de aprobaciones.
+    No filtra por usuario - trae todas las que están en proceso de aprobación o aprobadas.
+    """
+    try:
+        # Buscar OCs de SERVICIOS que están en borrador o aprobadas
+        # Estados: 'draft' (borrador/pendiente), 'purchase' (aprobada)
+        ocs = _models.execute_kw(
+            DB, _uid, password,
+            'purchase.order', 'search_read',
+            [[
+                ('x_studio_categora_de_producto', '=', 'SERVICIOS'),
+                ('state', 'in', ['draft', 'purchase'])
+            ]],
+            {'fields': ['id', 'name', 'state', 'partner_id', 'amount_untaxed', 
+                       'x_studio_selection_field_yUNPd', 'x_studio_categora_de_producto', 
+                       'create_date', 'user_id', 'date_order'],
+             'limit': 500,
+             'order': 'date_order desc'}
+        )
+        
+        # Filtrar solo área TRANSPORTES
+        ocs_fletes = []
+        for oc in ocs:
+            area = oc.get('x_studio_selection_field_yUNPd')
+            if area and isinstance(area, (list, tuple)):
+                area = area[1]
+            
+            if not area or 'TRANSPORTES' not in str(area).upper():
+                continue
+            
+            # Obtener líneas de la OC
+            lineas = _models.execute_kw(
+                DB, _uid, password,
+                'purchase.order.line', 'search_read',
+                [[('order_id', '=', oc['id'])]],
+                {'fields': ['product_id', 'name', 'price_unit', 'product_qty', 'price_subtotal']}
+            )
+            
+            if lineas and lineas[0].get('product_id'):
+                oc['producto'] = lineas[0]['product_id'][1]
+            elif lineas and lineas[0].get('name'):
+                oc['producto'] = lineas[0]['name']
+            else:
+                oc['producto'] = 'N/A'
+            
+            oc['costo_lineas'] = sum(linea.get('price_subtotal', 0) for linea in lineas)
+            
+            # Obtener información de aprobaciones desde el chatter
+            aprobaciones = obtener_aprobaciones_oc(_models, _uid, password, oc['id'])
+            oc['aprobaciones'] = aprobaciones
+            oc['num_aprobaciones'] = len(aprobaciones)
+            oc['aprobadores'] = [a['usuario'] for a in aprobaciones]
+            
+            # Obtener actividad pendiente (si existe)
+            actividad = _models.execute_kw(
+                DB, _uid, password,
+                'mail.activity', 'search_read',
+                [[
+                    ('res_model', '=', 'purchase.order'),
+                    ('res_id', '=', oc['id']),
+                    ('activity_type_id.name', 'in', ['Grant Approval', 'Approval'])
+                ]],
+                {'fields': ['id', 'user_id', 'date_deadline', 'state'], 'limit': 1}
+            )
+            
+            if actividad:
+                oc['actividad_id'] = actividad[0]['id']
+                oc['actividad_usuario'] = actividad[0]['user_id'][1] if actividad[0].get('user_id') else 'N/A'
+                oc['actividad_fecha_limite'] = actividad[0].get('date_deadline')
+                oc['actividad_estado'] = actividad[0].get('state', 'planned')
+            else:
+                oc['actividad_id'] = None
+                oc['actividad_usuario'] = None
+                oc['actividad_fecha_limite'] = None
+                oc['actividad_estado'] = None
+            
+            ocs_fletes.append(oc)
+        
+        return ocs_fletes
+    except Exception as e:
+        st.error(f"Error al obtener OCs de fletes: {e}")
+        return []
+
+
+def obtener_aprobaciones_oc(_models, _uid, password, oc_id):
+    """
+    Obtener las aprobaciones de una OC leyendo el chatter (mail.message).
+    Busca mensajes que contengan "Aprobado como" para detectar aprobaciones.
+    """
+    try:
+        # Buscar mensajes en el chatter de la OC
+        mensajes = _models.execute_kw(
+            DB, _uid, password,
+            'mail.message', 'search_read',
+            [[
+                ('model', '=', 'purchase.order'),
+                ('res_id', '=', oc_id),
+                ('body', 'ilike', 'Aprobado como')
+            ]],
+            {'fields': ['body', 'author_id', 'date', 'create_date'], 'order': 'date desc'}
+        )
+        
+        aprobaciones = []
+        for msg in mensajes:
+            autor = msg.get('author_id')
+            if autor and isinstance(autor, (list, tuple)):
+                nombre_usuario = autor[1]
+            else:
+                nombre_usuario = 'Desconocido'
+            
+            # Extraer el rol de aprobación del body (ej: "Aprobado como Aprobaciones / Finanzas")
+            body = msg.get('body', '')
+            rol = 'Aprobador'
+            if 'Aprobado como' in body:
+                try:
+                    # El formato típico es: "Aprobado como Rol / SubRol"
+                    import re
+                    match = re.search(r'Aprobado como ([^<]+)', body)
+                    if match:
+                        rol = match.group(1).strip()
+                except:
+                    pass
+            
+            aprobaciones.append({
+                'usuario': nombre_usuario,
+                'rol': rol,
+                'fecha': msg.get('date') or msg.get('create_date')
+            })
+        
+        return aprobaciones
+    except Exception as e:
+        return []
+
+
+@st.cache_data(ttl=60)
 def obtener_actividades_usuario(_models, _uid, username, password, user_id):
     """Obtener todas las actividades pendientes de un usuario"""
     try:
@@ -380,34 +511,27 @@ def render_tab(username, password):
     """Renderiza el tab de aprobaciones de fletes"""
     
     st.header("🚚 Aprobaciones de Fletes y Transportes")
-    st.info("📦 Área: **TRANSPORTES** | Categoría: **SERVICIOS** | Integración: Sistema de Logística")
+    st.info("📦 Área: **TRANSPORTES** | Categoría: **SERVICIOS** | Requiere 2 aprobaciones")
     
     # Inicializar estado de sesión
     if 'datos_cargados_fletes' not in st.session_state:
         st.session_state.datos_cargados_fletes = False
     
-    # Selector de usuario
-    col1, col2 = st.columns([2, 1])
+    # Botón para cargar datos
+    col1, col2 = st.columns([3, 1])
     with col1:
-        usuario_seleccionado = st.selectbox(
-            "Seleccionar Usuario:",
-            list(USUARIOS.keys()),
-            index=0,
-            key="usuario_fletes"
-        )
+        st.caption(f"👤 Usuario conectado: **{username}**")
     
     with col2:
-        if st.button("📥 Cargar Datos", key="cargar_fletes", type="primary"):
+        if st.button("📥 Cargar/Actualizar Datos", key="cargar_fletes", type="primary"):
             st.session_state.datos_cargados_fletes = True
             st.cache_data.clear()
             st.rerun()
     
     # Si no se han cargado datos, mostrar mensaje y salir
     if not st.session_state.datos_cargados_fletes:
-        st.info("👆 Presiona 'Cargar Datos' para ver las aprobaciones pendientes")
+        st.info("👆 Presiona 'Cargar/Actualizar Datos' para ver las OCs de fletes")
         return
-    
-    user_id = USUARIOS[usuario_seleccionado]
     
     # Obtener conexión
     models, uid = get_odoo_connection(username, password)
@@ -424,70 +548,70 @@ def render_tab(username, password):
         info_tc = f" | 💱 USD: ${tipo_cambio_usd:,.0f}" if tipo_cambio_usd else " | ⚠️ Sin TC"
         st.caption(f"✅ {len(rutas_logistica)} rutas | {len(costes_rutas)} presupuestos{info_tc}")
     
-    # Obtener actividades pendientes
-    with st.spinner(f"Cargando aprobaciones de {usuario_seleccionado}..."):
-        actividades = obtener_actividades_usuario(models, uid, username, password, user_id)
+    # Obtener todas las OCs de fletes con información de aprobaciones
+    with st.spinner("Cargando OCs de fletes..."):
+        ocs_fletes = obtener_ocs_fletes_con_aprobaciones(models, uid, username, password)
         
-        if not actividades:
-            st.success(f"✅ No hay aprobaciones de FLETES pendientes para {usuario_seleccionado}")
-            st.balloons()
-            return
-        
-        # Obtener detalles de OCs (filtradas por área TRANSPORTES + categoría SERVICIOS)
-        oc_ids = [act['res_id'] for act in actividades]
-        ocs_detalles, ocs_filtradas = obtener_detalles_oc_fletes(models, uid, username, password, oc_ids)
-        
-        # Mostrar información de filtrado
-        if ocs_filtradas:
-            with st.expander(f"ℹ️ {len(ocs_filtradas)} OCs excluidas (no son TRANSPORTES/SERVICIOS)"):
-                for filtro in ocs_filtradas:
-                    st.caption(f"• {filtro['oc']}: {filtro['razon']}")
-        
-        if not ocs_detalles:
-            st.success(f"✅ No hay aprobaciones de FLETES pendientes para {usuario_seleccionado}")
-            st.info("ℹ️ Todas las actividades pendientes fueron filtradas (no son TRANSPORTES/SERVICIOS)")
-            st.balloons()
+        if not ocs_fletes:
+            st.success("✅ No hay OCs de FLETES en proceso de aprobación")
             return
     
-    # Crear diccionario de OCs por ID
-    ocs_dict = {oc['id']: oc for oc in ocs_detalles}
-    
-    # Combinar datos y enriquecer con info de logística
+    # Enriquecer con info de logística y crear DataFrame
     datos_completos = []
-    for act in actividades:
-        oc = ocs_dict.get(act['res_id'])
-        if oc:
-            proveedor = oc['partner_id'][1] if oc.get('partner_id') and isinstance(oc['partner_id'], (list, tuple)) else 'N/A'
-            area = oc.get('x_studio_selection_field_yUNPd')
-            if area and isinstance(area, (list, tuple)):
-                area = area[1]
-            
-            # Buscar en logística
-            ruta_info = buscar_ruta_en_logistica(oc['name'], rutas_logistica)
-            comparacion = calcular_comparacion_presupuesto(
-                oc.get('amount_untaxed', 0), 
-                oc.get('costo_lineas', 0),
-                ruta_info, 
-                costes_rutas,
-                tipo_cambio_usd
-            )
-            
-            datos_completos.append({
-                'actividad_id': act['id'],
-                'oc_id': oc['id'],
-                'oc_name': oc['name'],
-                'proveedor': proveedor,
-                'monto': oc.get('amount_untaxed', 0),
-                'area': str(area) if area else 'N/A',
-                'producto': oc.get('producto', 'N/A'),
-                'estado_oc': oc['state'],
-                'estado_actividad': act.get('state', 'N/A'),
-                'fecha_limite': act.get('date_deadline', 'N/A'),
-                'fecha_creacion': oc.get('create_date', 'N/A'),
-                'fecha_orden': oc.get('date_order') if oc.get('date_order') else None,
-                'tipo_actividad': act['activity_type_id'][1] if act.get('activity_type_id') else 'N/A',
-                **comparacion  # Agregar info de logística
-            })
+    for oc in ocs_fletes:
+        proveedor = oc['partner_id'][1] if oc.get('partner_id') and isinstance(oc['partner_id'], (list, tuple)) else 'N/A'
+        area = oc.get('x_studio_selection_field_yUNPd')
+        if area and isinstance(area, (list, tuple)):
+            area = area[1]
+        
+        # Buscar en logística
+        ruta_info = buscar_ruta_en_logistica(oc['name'], rutas_logistica)
+        comparacion = calcular_comparacion_presupuesto(
+            oc.get('amount_untaxed', 0), 
+            oc.get('costo_lineas', 0),
+            ruta_info, 
+            costes_rutas,
+            tipo_cambio_usd
+        )
+        
+        # Determinar estado de aprobación
+        num_aprob = oc.get('num_aprobaciones', 0)
+        if oc['state'] == 'purchase':
+            estado_aprobacion = '🟢 Aprobada'
+            estado_aprobacion_num = '2/2'
+        elif num_aprob >= 2:
+            estado_aprobacion = '🟢 2/2'
+            estado_aprobacion_num = '2/2'
+        elif num_aprob == 1:
+            estado_aprobacion = '🟡 1/2'
+            estado_aprobacion_num = '1/2'
+        else:
+            estado_aprobacion = '🔴 0/2'
+            estado_aprobacion_num = '0/2'
+        
+        # Formatear aprobadores
+        aprobadores_str = ', '.join(oc.get('aprobadores', [])) if oc.get('aprobadores') else 'Sin aprobaciones'
+        
+        datos_completos.append({
+            'actividad_id': oc.get('actividad_id'),
+            'oc_id': oc['id'],
+            'oc_name': oc['name'],
+            'proveedor': proveedor,
+            'monto': oc.get('amount_untaxed', 0),
+            'area': str(area) if area else 'N/A',
+            'producto': oc.get('producto', 'N/A'),
+            'estado_oc': oc['state'],
+            'estado_aprobacion': estado_aprobacion,
+            'estado_aprobacion_num': estado_aprobacion_num,
+            'num_aprobaciones': num_aprob,
+            'aprobadores': aprobadores_str,
+            'actividad_usuario': oc.get('actividad_usuario'),
+            'actividad_estado': oc.get('actividad_estado'),
+            'fecha_limite': oc.get('actividad_fecha_limite', 'N/A'),
+            'fecha_creacion': oc.get('create_date', 'N/A'),
+            'fecha_orden': oc.get('date_order') if oc.get('date_order') else None,
+            **comparacion  # Agregar info de logística
+        })
     
     df = pd.DataFrame(datos_completos)
     
@@ -503,16 +627,16 @@ def render_tab(username, password):
         st.metric("Monto Total", f"${total_monto:,.0f}")
     
     with col3:
-        vencidas = len(df[df['estado_actividad'] == 'overdue'])
-        st.metric("Vencidas", vencidas, delta=f"-{vencidas}" if vencidas > 0 else "0")
+        pendientes = len(df[df['num_aprobaciones'] < 2])
+        st.metric("Pendientes", pendientes, delta=f"-{pendientes}" if pendientes > 0 else "0")
     
     with col4:
-        con_ruta = len(df[df['tiene_ruta'] == True])
-        st.metric("Con Ruta Logística", con_ruta)
+        con_1_aprob = len(df[df['num_aprobaciones'] == 1])
+        st.metric("Con 1 Aprob.", con_1_aprob)
     
     with col5:
-        con_alerta = len(df[df['alerta'].notna() & (df['alerta'].str.contains('🔴|🟡'))])
-        st.metric("Con Alertas", con_alerta, delta=f"-{con_alerta}" if con_alerta > 0 else "0")
+        aprobadas = len(df[(df['num_aprobaciones'] >= 2) | (df['estado_oc'] == 'purchase')])
+        st.metric("Aprobadas (2/2)", aprobadas)
     
     with col6:
         # Promedio de costo por kg en USD
@@ -536,8 +660,11 @@ def render_tab(username, password):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        estados_disponibles = ['Todos'] + sorted(df['estado_actividad'].unique().tolist())
-        filtro_estado = st.selectbox("Estado Actividad", estados_disponibles, key="filtro_estado_fletes")
+        filtro_aprobacion = st.selectbox(
+            "Estado Aprobación", 
+            ['Todas', 'Pendientes (0/2 y 1/2)', 'Sin aprobar (0/2)', 'Con 1 aprob. (1/2)', 'Aprobadas (2/2)'],
+            key="filtro_aprobacion_fletes"
+        )
     
     with col2:
         proveedores_disponibles = ['Todos'] + sorted(df['proveedor'].unique().tolist())
@@ -585,8 +712,15 @@ def render_tab(username, password):
     # Aplicar filtros
     df_filtrado = df.copy()
     
-    if filtro_estado != 'Todos':
-        df_filtrado = df_filtrado[df_filtrado['estado_actividad'] == filtro_estado]
+    # Filtro de estado de aprobación
+    if filtro_aprobacion == 'Pendientes (0/2 y 1/2)':
+        df_filtrado = df_filtrado[df_filtrado['num_aprobaciones'] < 2]
+    elif filtro_aprobacion == 'Sin aprobar (0/2)':
+        df_filtrado = df_filtrado[df_filtrado['num_aprobaciones'] == 0]
+    elif filtro_aprobacion == 'Con 1 aprob. (1/2)':
+        df_filtrado = df_filtrado[df_filtrado['num_aprobaciones'] == 1]
+    elif filtro_aprobacion == 'Aprobadas (2/2)':
+        df_filtrado = df_filtrado[(df_filtrado['num_aprobaciones'] >= 2) | (df_filtrado['estado_oc'] == 'purchase')]
     
     if filtro_proveedor != 'Todos':
         df_filtrado = df_filtrado[df_filtrado['proveedor'] == filtro_proveedor]
@@ -698,12 +832,12 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
         df_proveedor = df_vista[df_vista['proveedor'] == proveedor]
         total_monto_proveedor = df_proveedor['monto'].sum()
         n_ocs = len(df_proveedor)
-        n_vencidas = len(df_proveedor[df_proveedor['estado_actividad'] == 'overdue'])
+        n_pendientes = len(df_proveedor[df_proveedor['num_aprobaciones'] < 2])
         
         # Header del proveedor con métricas
         header_text = f"🏢 **{proveedor}** | {n_ocs} OCs | ${total_monto_proveedor:,.0f}"
-        if n_vencidas > 0:
-            header_text += f" | ⏰ {n_vencidas} vencidas"
+        if n_pendientes > 0:
+            header_text += f" | ⏳ {n_pendientes} pendientes"
         
         with st.expander(header_text, expanded=len(proveedores_seleccionados) > 0):
             # Crear dataframe para mostrar
@@ -711,37 +845,46 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 'OC': df_proveedor['oc_name'],
                 'Fecha': df_proveedor['fecha_str'],
                 'Monto': df_proveedor['monto'].apply(lambda x: f"${x:,.0f}"),
-                'Costo Calc.': df_proveedor['costo_calculado_str'],
-                'Presupuesto': df_proveedor['costo_presupuestado_str'],
+                'Aprob.': df_proveedor['estado_aprobacion'],
+                'Aprobadores': df_proveedor['aprobadores'].str[:40],
                 '$/Kg USD': df_proveedor['alerta_costo_kg'].fillna(df_proveedor['cost_per_kg_usd_str']),
                 'Tipo Camión': df_proveedor['tipo_camion_str'].str[:15],
-                'Alerta': df_proveedor['alerta'].fillna('⚪'),
-                'Est.': df_proveedor['estado_actividad'].apply(lambda x: '⏰' if x == 'overdue' else '🔵'),
                 'Info': df_proveedor['info_completa'],
-                'ID': df_proveedor['actividad_id']
+                'ID': df_proveedor['actividad_id'],
+                'OC_ID': df_proveedor['oc_id']
             })
             
             # Mostrar tabla del proveedor
             st.dataframe(
-                df_tabla_proveedor.drop(columns=['ID']),
+                df_tabla_proveedor.drop(columns=['ID', 'OC_ID']),
                 use_container_width=True,
                 hide_index=True,
                 height=min(400, len(df_tabla_proveedor) * 40 + 40)
             )
             
-            # Selección de OCs de este proveedor
+            # Filtrar solo OCs que se pueden aprobar (tienen actividad pendiente y menos de 2 aprobaciones)
+            df_aprobables = df_proveedor[
+                (df_proveedor['actividad_id'].notna()) & 
+                (df_proveedor['num_aprobaciones'] < 2) &
+                (df_proveedor['estado_oc'] != 'purchase')
+            ]
+            
+            if len(df_aprobables) == 0:
+                st.caption("✅ Todas las OCs de este proveedor ya están aprobadas o no tienen actividad pendiente")
+                continue
+            
+            # Selección de OCs aprobables de este proveedor
             ocs_proveedor = []
-            for _, row in df_tabla_proveedor.iterrows():
-                oc_data = df_proveedor[df_proveedor['actividad_id'] == row['ID']].iloc[0].to_dict()
+            for _, row in df_aprobables.iterrows():
                 ocs_proveedor.append({
-                    'label': f"{row['OC']} - {row['Fecha']} - {row['Monto']}",
-                    'data': oc_data
+                    'label': f"{row['oc_name']} - {row['estado_aprobacion']} - ${row['monto']:,.0f}",
+                    'data': row.to_dict()
                 })
             
             # Multiselect para este proveedor
             key_proveedor = f"select_{proveedor.replace(' ', '_')[:20]}"
             seleccionadas = st.multiselect(
-                f"Seleccionar OCs de {proveedor[:30]}:",
+                f"Seleccionar OCs para aprobar ({len(ocs_proveedor)} disponibles):",
                 [oc['label'] for oc in ocs_proveedor],
                 key=key_proveedor
             )
@@ -758,11 +901,21 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                     if st.button(f"✅ Aprobar", key=f"aprobar_{key_proveedor}", type="primary"):
                         with st.spinner("Aprobando..."):
                             exitosas = 0
+                            errores = []
                             for oc in ocs_sel_proveedor:
-                                exito, _ = aprobar_actividad(models, uid, username, password, oc['actividad_id'])
-                                if exito:
-                                    exitosas += 1
-                            st.success(f"✅ {exitosas} OCs aprobadas")
+                                if oc.get('actividad_id'):
+                                    exito, msg = aprobar_actividad(models, uid, username, password, oc['actividad_id'])
+                                    if exito:
+                                        exitosas += 1
+                                    else:
+                                        errores.append(f"{oc['oc_name']}: {msg}")
+                                else:
+                                    errores.append(f"{oc['oc_name']}: Sin actividad pendiente")
+                            
+                            if exitosas > 0:
+                                st.success(f"✅ {exitosas} OCs aprobadas por {username}")
+                            if errores:
+                                st.warning(f"⚠️ Errores: {', '.join(errores)}")
                             st.cache_data.clear()
                             time.sleep(1)
                             st.rerun()
@@ -779,9 +932,10 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                             with st.spinner("Rechazando..."):
                                 exitosas = 0
                                 for oc in ocs_sel_proveedor:
-                                    exito, _ = rechazar_actividad(models, uid, username, password, oc['actividad_id'], motivo)
-                                    if exito:
-                                        exitosas += 1
+                                    if oc.get('actividad_id'):
+                                        exito, _ = rechazar_actividad(models, uid, username, password, oc['actividad_id'], motivo)
+                                        if exito:
+                                            exitosas += 1
                                 st.success(f"❌ {exitosas} OCs rechazadas")
                                 st.session_state[f'rechazar_proveedor_{key_proveedor}'] = False
                                 st.cache_data.clear()
@@ -793,7 +947,7 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
     st.markdown("---")
     
     # Leyenda
-    st.caption("✅ = Info Completa | ⚠️ = Info Incompleta | ⏰ = Vencida | 🔵 = En plazo")
+    st.caption("🔴 0/2 = Sin aprobaciones | 🟡 1/2 = Una aprobación | 🟢 2/2 = Completamente aprobada")
     st.caption(f"$/Kg USD: 🟢 = ≤${UMBRAL_COSTO_KG_USD} | 🟡 = >${UMBRAL_COSTO_KG_USD} | 🔴 = >20% sobre umbral")
 
 
