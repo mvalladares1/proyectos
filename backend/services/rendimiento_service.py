@@ -1098,9 +1098,14 @@ class RendimientoService:
                 salas_data[sala]['num_mos'] += 1
                 
                 # MO resultado
-                fecha_raw = mo.get('date_planned_start', '') or ''
-                fecha = str(fecha_raw)[:10] if fecha_raw else ''
-                kg_por_hora = mo.get('x_studio_kghora_efectiva') or 0
+                fecha_inicio_raw = mo.get('x_studio_inicio_de_proceso', '') or mo.get('date_planned_start', '') or ''
+                fecha_termino_raw = mo.get('x_studio_termino_de_proceso', '') or mo.get('date_finished', '') or ''
+                fecha = str(fecha_inicio_raw)[:10] if fecha_inicio_raw else ''
+                
+                # Campos de Odoo directos
+                kg_hora_efectiva = mo.get('x_studio_kghora_efectiva') or 0
+                kg_hh_efectiva = mo.get('x_studio_kghh_efectiva') or 0
+                hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
                 
                 mos_resultado.append({
                     'mo_id': mo.get('id', 0),
@@ -1110,18 +1115,23 @@ class RendimientoService:
                     'manejo': manejo,
                     'kg_mp': round(kg_mp, 2),
                     'kg_pt': round(kg_pt, 2),
-                    'kg_merma': round(kg_merma, 2),  # Nueva: Merma real identificada por categ_id
+                    'kg_merma': round(kg_merma, 2),
                     'rendimiento': round(rendimiento, 2),
-                    'merma_pct': round((kg_merma / kg_mp * 100) if kg_mp > 0 else 0, 2),  # % de merma
+                    'merma_pct': round((kg_merma / kg_mp * 100) if kg_mp > 0 else 0, 2),
                     'costo_electricidad': costo_elec,
                     'duracion_horas': duracion_horas,
                     'hh': hh if isinstance(hh, (int, float)) else 0,
-                    'kg_por_hora': kg_por_hora if isinstance(kg_por_hora, (int, float)) else 0,
+                    'hh_efectiva': hh_efectiva if isinstance(hh_efectiva, (int, float)) else 0,
+                    'kg_por_hora': kg_hora_efectiva if isinstance(kg_hora_efectiva, (int, float)) else 0,
+                    'kg_hora_efectiva': kg_hora_efectiva if isinstance(kg_hora_efectiva, (int, float)) else 0,
+                    'kg_hh_efectiva': kg_hh_efectiva if isinstance(kg_hh_efectiva, (int, float)) else 0,
                     'dotacion': dotacion if isinstance(dotacion, (int, float)) else 0,
                     'sala': sala,
                     'sala_original': mo.get('x_studio_sala_de_proceso', '') or '',
                     'sala_tipo': sala_tipo,
-                    'fecha': fecha
+                    'fecha': fecha,
+                    'fecha_inicio': str(fecha_inicio_raw)[:16] if fecha_inicio_raw else '',
+                    'fecha_termino': str(fecha_termino_raw)[:16] if fecha_termino_raw else ''
                 })
                 
             except Exception:
