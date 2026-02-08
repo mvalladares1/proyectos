@@ -19,7 +19,7 @@ def fetch_datos_salas(username: str, password: str, fecha_inicio: str,
         "password": password,
         "fecha_inicio": fecha_inicio,
         "fecha_fin": fecha_fin,
-        "solo_terminadas": True
+        "solo_terminadas": False
     }
     
     response = httpx.get(f"{API_URL}/api/v1/rendimiento/dashboard",

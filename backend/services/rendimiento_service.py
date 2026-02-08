@@ -72,6 +72,9 @@ class RendimientoService:
         
         if solo_terminadas:
             domain.append(['state', '=', 'done'])
+        else:
+            # Excluir solo los cancelados
+            domain.append(['state', '!=', 'cancel'])
         
         mos = self.odoo.search_read(
             'mrp.production',
