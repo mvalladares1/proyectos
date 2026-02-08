@@ -16,22 +16,23 @@ from .shared import (
     detectar_planta
 )
 from . import tab_monitor_diario
+from . import tab_kg_por_linea
 
 
 @st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Detalle de OF con sub-tabs."""
     
-    # Sub-tabs: Monitor Diario y Búsqueda de OF
-    sub_tabs = st.tabs(["📊 Monitor Diario", "🔍 Búsqueda de OF"])
+    # Sub-tabs: Monitor Diario y KG por Línea
+    sub_tabs = st.tabs(["📊 Monitor Diario", "📈 KG por Línea"])
     
     # === SUB-TAB: MONITOR DIARIO ===
     with sub_tabs[0]:
         tab_monitor_diario.render(username, password)
     
-    # === SUB-TAB: BÚSQUEDA DE OF ===
+    # === SUB-TAB: KG POR LÍNEA ===
     with sub_tabs[1]:
-        _render_busqueda_of(username, password)
+        tab_kg_por_linea.render(username, password)
 
 
 def _render_busqueda_of(username: str, password: str):

@@ -45,7 +45,6 @@ def render_grafico_kg_hora(datos_salas: List[Dict]) -> None:
     
     salas = [d.get('sala', 'Sin Sala')[:25] for d in datos_ordenados]
     kg_hora = [round(d.get('kg_por_hora', 0), 1) for d in datos_ordenados]
-    kg_totales = [round(d.get('kg_pt', 0), 0) for d in datos_ordenados]
     
     options = {
         "tooltip": {
@@ -145,25 +144,25 @@ def render(username: str, password: str):
         fecha_inicio = st.date_input(
             "Desde",
             value=datetime.now().date() - timedelta(days=7),
-            key="kg_linea_fecha_inicio"
+            key="kg_linea_prod_fecha_inicio"
         )
     
     with col2:
         fecha_fin = st.date_input(
             "Hasta",
             value=datetime.now().date(),
-            key="kg_linea_fecha_fin"
+            key="kg_linea_prod_fecha_fin"
         )
     
     with col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        btn_buscar = st.button("🔍 Buscar", type="primary", key="kg_linea_buscar", 
+        btn_buscar = st.button("🔍 Buscar", type="primary", key="kg_linea_prod_buscar", 
                                use_container_width=True)
     
     st.markdown("---")
     
     # Cargar datos
-    if btn_buscar or st.session_state.get("kg_linea_data_loaded", False):
+    if btn_buscar or st.session_state.get("kg_linea_prod_data_loaded", False):
         if btn_buscar:
             try:
                 with st.spinner("Cargando datos..."):
@@ -172,13 +171,13 @@ def render(username: str, password: str):
                         fecha_inicio.isoformat(),
                         fecha_fin.isoformat()
                     )
-                    st.session_state["kg_linea_data"] = datos
-                    st.session_state["kg_linea_data_loaded"] = True
+                    st.session_state["kg_linea_prod_data"] = datos
+                    st.session_state["kg_linea_prod_data_loaded"] = True
             except Exception as e:
                 st.error(f"Error: {str(e)}")
                 return
         
-        datos = st.session_state.get("kg_linea_data", {})
+        datos = st.session_state.get("kg_linea_prod_data", {})
         
         if not datos:
             st.warning("No se encontraron datos")
