@@ -556,12 +556,12 @@ def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
 def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
     """Aprobar una OC - con o sin actividad pendiente"""
     try:
-        # Si hay actividad, aprobarla
-        if activity_id:
+        # Si hay actividad válida, aprobarla
+        if activity_id is not None and pd.notna(activity_id):
             models.execute_kw(
                 DB, uid, password,
                 'mail.activity', 'action_feedback',
-                [[activity_id]],
+                [[int(activity_id)]],
                 {'feedback': 'Aprobado desde dashboard'}
             )
         
