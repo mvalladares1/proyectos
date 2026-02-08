@@ -58,14 +58,23 @@ class RendimientoService:
     # ===========================================
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, solo_terminadas: bool = True) -> List[Dict]:
-        """Obtiene todas las MOs del período."""
+        """Obtiene todas las MOs del período usando fechas reales de proceso."""
+        # Usar x_studio_inicio_de_proceso (inicio real) para filtrar
+        # Si no tiene inicio real, usar date_planned_start como fallback
         domain = [
-            ['date_planned_start', '>=', f'{fecha_inicio} 00:00:00'],
-            ['date_planned_start', '<=', f'{fecha_fin} 23:59:59']
+            '|',
+            '&', ['x_studio_inicio_de_proceso', '>=', f'{fecha_inicio} 00:00:00'],
+                 ['x_studio_inicio_de_proceso', '<=', f'{fecha_fin} 23:59:59'],
+            '&', ['x_studio_inicio_de_proceso', '=', False],
+            '&', ['date_planned_start', '>=', f'{fecha_inicio} 00:00:00'],
+                 ['date_planned_start', '<=', f'{fecha_fin} 23:59:59']
         ]
         
         if solo_terminadas:
             domain.append(['state', '=', 'done'])
+        else:
+            # Excluir solo los cancelados
+            domain.append(['state', '!=', 'cancel'])
         
         mos = self.odoo.search_read(
             'mrp.production',
@@ -75,8 +84,8 @@ class RendimientoService:
              'x_studio_kghora_efectiva', 'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso',
              'x_studio_horas_detencion_totales', 'x_studio_kghh_efectiva',
              'move_raw_ids', 'move_finished_ids', 'move_byproduct_ids'],
-            limit=500,
-            order='date_planned_start desc'
+            limit=5000,
+            order='x_studio_inicio_de_proceso desc'
         )
         
         return mos or []
@@ -1037,7 +1046,9 @@ class RendimientoService:
                         'duracion_total': 0, 
                         'num_mos': 0,
                         'costo_electricidad': 0,  # Costo eléctrico acumulado
-                        'total_electricidad': 0   # Total kWh
+                        'total_electricidad': 0,  # Total kWh
+                        'kg_hora_efectiva_sum': 0,  # Suma de KG/Hora Efectiva de Odoo
+                        'kg_hh_efectiva_sum': 0     # Suma de KG/HH Efectiva de Odoo
                     }
                 
                 salas_data[sala]['kg_mp'] += kg_mp
@@ -1051,6 +1062,12 @@ class RendimientoService:
                 # HH Efectiva
                 hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
                 salas_data[sala]['hh_efectiva_total'] += hh_efectiva if isinstance(hh_efectiva, (int, float)) else 0
+                
+                # KG/Hora Efectiva y KG/HH Efectiva desde Odoo
+                kg_hora_efectiva_odoo = mo.get('x_studio_kghora_efectiva') or 0
+                kg_hh_efectiva_odoo = mo.get('x_studio_kghh_efectiva') or 0
+                salas_data[sala]['kg_hora_efectiva_sum'] += kg_hora_efectiva_odoo if isinstance(kg_hora_efectiva_odoo, (int, float)) else 0
+                salas_data[sala]['kg_hh_efectiva_sum'] += kg_hh_efectiva_odoo if isinstance(kg_hh_efectiva_odoo, (int, float)) else 0
                 
                 # Detenciones
                 detenciones = mo.get('x_studio_horas_detencion_totales') or 0
@@ -1081,9 +1098,17 @@ class RendimientoService:
                 salas_data[sala]['num_mos'] += 1
                 
                 # MO resultado
-                fecha_raw = mo.get('date_planned_start', '') or ''
-                fecha = str(fecha_raw)[:10] if fecha_raw else ''
-                kg_por_hora = mo.get('x_studio_kghora_efectiva') or 0
+                fecha_inicio_raw = mo.get('x_studio_inicio_de_proceso', '') or mo.get('date_planned_start', '') or ''
+                fecha_termino_raw = mo.get('x_studio_termino_de_proceso', '') or mo.get('date_finished', '') or ''
+                fecha = str(fecha_inicio_raw)[:10] if fecha_inicio_raw else ''
+                
+                # Campos de Odoo directos
+                kg_hora_efectiva = mo.get('x_studio_kghora_efectiva') or 0
+                kg_hh_efectiva = mo.get('x_studio_kghh_efectiva') or 0
+                hh_efectiva = mo.get('x_studio_hh_efectiva') or 0
+                
+                # Detenciones de esta MO
+                detenciones_mo = mo.get('x_studio_horas_detencion_totales') or 0
                 
                 mos_resultado.append({
                     'mo_id': mo.get('id', 0),
@@ -1093,18 +1118,24 @@ class RendimientoService:
                     'manejo': manejo,
                     'kg_mp': round(kg_mp, 2),
                     'kg_pt': round(kg_pt, 2),
-                    'kg_merma': round(kg_merma, 2),  # Nueva: Merma real identificada por categ_id
+                    'kg_merma': round(kg_merma, 2),
                     'rendimiento': round(rendimiento, 2),
-                    'merma_pct': round((kg_merma / kg_mp * 100) if kg_mp > 0 else 0, 2),  # % de merma
+                    'merma_pct': round((kg_merma / kg_mp * 100) if kg_mp > 0 else 0, 2),
                     'costo_electricidad': costo_elec,
                     'duracion_horas': duracion_horas,
                     'hh': hh if isinstance(hh, (int, float)) else 0,
-                    'kg_por_hora': kg_por_hora if isinstance(kg_por_hora, (int, float)) else 0,
+                    'hh_efectiva': hh_efectiva if isinstance(hh_efectiva, (int, float)) else 0,
+                    'detenciones': detenciones_mo if isinstance(detenciones_mo, (int, float)) else 0,
+                    'kg_por_hora': kg_hora_efectiva if isinstance(kg_hora_efectiva, (int, float)) else 0,
+                    'kg_hora_efectiva': kg_hora_efectiva if isinstance(kg_hora_efectiva, (int, float)) else 0,
+                    'kg_hh_efectiva': kg_hh_efectiva if isinstance(kg_hh_efectiva, (int, float)) else 0,
                     'dotacion': dotacion if isinstance(dotacion, (int, float)) else 0,
                     'sala': sala,
                     'sala_original': mo.get('x_studio_sala_de_proceso', '') or '',
                     'sala_tipo': sala_tipo,
-                    'fecha': fecha
+                    'fecha': fecha,
+                    'fecha_inicio': str(fecha_inicio_raw)[:16] if fecha_inicio_raw else '',
+                    'fecha_termino': str(fecha_termino_raw)[:16] if fecha_termino_raw else ''
                 })
                 
             except Exception:
@@ -1198,9 +1229,14 @@ class RendimientoService:
             num_mos = data['num_mos']
             dotacion_prom = data['dotacion_sum'] / num_mos if num_mos > 0 else 0
             
-            # Calcular KPIs adicionales
-            kg_por_hora_efectiva = kg_pt / hh_efectiva if hh_efectiva > 0 else 0
-            kg_por_hh_efectiva = kg_pt / hh_efectiva if hh_efectiva > 0 else 0
+            # USAR PROMEDIOS DE ODOO (x_studio_kghora_efectiva, x_studio_kghh_efectiva)
+            kg_hora_efectiva_odoo = data.get('kg_hora_efectiva_sum', 0) / num_mos if num_mos > 0 else 0
+            kg_hh_efectiva_odoo = data.get('kg_hh_efectiva_sum', 0) / num_mos if num_mos > 0 else 0
+            
+            # Fallback: calcular si Odoo no tiene el dato
+            kg_por_hora_efectiva = kg_hora_efectiva_odoo if kg_hora_efectiva_odoo > 0 else (kg_pt / hh_efectiva if hh_efectiva > 0 else 0)
+            kg_por_hh_efectiva = kg_hh_efectiva_odoo if kg_hh_efectiva_odoo > 0 else (kg_pt / hh_efectiva if hh_efectiva > 0 else 0)
+            
             detenciones_promedio = detenciones / num_mos if num_mos > 0 else 0
             hh_promedio = hh / num_mos if num_mos > 0 else 0
             hh_efectiva_promedio = hh_efectiva / num_mos if num_mos > 0 else 0
@@ -1223,8 +1259,8 @@ class RendimientoService:
                 'hh_promedio': round(hh_promedio, 2),
                 'hh_efectiva_total': round(hh_efectiva, 2),
                 'hh_efectiva_promedio': round(hh_efectiva_promedio, 2),
-                'kg_por_hora_efectiva': round(kg_por_hora_efectiva, 2),
-                'kg_por_hh_efectiva': round(kg_por_hh_efectiva, 2),
+                'kg_por_hora_efectiva': round(kg_por_hora_efectiva, 2),  # Desde Odoo
+                'kg_por_hh_efectiva': round(kg_por_hh_efectiva, 2),      # Desde Odoo
                 'detenciones_total': round(detenciones, 2),
                 'detenciones_promedio': round(detenciones_promedio, 2),
                 'dotacion_promedio': round(dotacion_prom, 1),

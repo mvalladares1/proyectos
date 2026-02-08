@@ -1,0 +1,473 @@
+"""
+Módulo de cálculo de REAL/PROYECTADO/PPTO para Flujo de Caja.
+
+Calcula los valores para las columnas especiales:
+- REAL: Valores efectivamente realizados (pagados/cobrados)
+- PROYECTADO: Valores pendientes (adeudado)
+- PPTO: Presupuesto (vacío por ahora, se alimentará después)
+
+Conceptos soportados:
+- 1.2.1: Pagos a proveedores (diario Facturas de Proveedores)
+- 1.2.6: IVA Exportador (cuenta 11060108 con partner Tesorería)
+
+ESTRUCTURA JERÁRQUICA (igual que 1.1.1):
+- Nivel 1: Concepto (ej: 1.2.1 - Pagos a proveedores)
+- Nivel 2: Cuenta/Estado de pago (Facturas Pagadas, Parcialmente Pagadas, etc.)
+- Nivel 3: Etiquetas/Proveedores individuales
+"""
+from typing import Dict, List, Tuple
+from collections import defaultdict
+from datetime import datetime
+
+
+class RealProyectadoCalculator:
+    """Calculadora de valores REAL/PROYECTADO/PPTO."""
+    
+    # IDs conocidos de Odoo
+    CUENTA_IVA_EXPORTADOR_CODE = '11060108'
+    PARTNER_TESORERIA_ID = 10
+    
+    # Mapeo de payment_state a etiqueta amigable
+    ESTADO_LABELS = {
+        'paid': 'Facturas Pagadas',
+        'partial': 'Facturas Parcialmente Pagadas',
+        'in_payment': 'En Proceso de Pago',
+        'not_paid': 'Facturas No Pagadas',
+        'reversed': 'Facturas Revertidas'
+    }
+    
+    # Iconos por estado
+    ESTADO_ICONS = {
+        'paid': '✅',
+        'partial': '⏳',
+        'in_payment': '🔄',
+        'not_paid': '❌',
+        'reversed': '↩️'
+    }
+    
+    def __init__(self, odoo_client):
+        """
+        Args:
+            odoo_client: Instancia de OdooClient
+        """
+        self.odoo = odoo_client
+        self._cuenta_iva_id = None
+    
+    def _get_cuenta_iva_id(self) -> int:
+        """Obtiene el ID de la cuenta IVA Exportador."""
+        if self._cuenta_iva_id is None:
+            try:
+                cuentas = self.odoo.search_read(
+                    'account.account',
+                    [['code', '=', self.CUENTA_IVA_EXPORTADOR_CODE]],
+                    ['id'],
+                    limit=1
+                )
+                self._cuenta_iva_id = cuentas[0]['id'] if cuentas else None
+            except Exception as e:
+                print(f"[RealProyectado] Error buscando cuenta IVA: {e}")
+                self._cuenta_iva_id = None
+        return self._cuenta_iva_id
+    
+    def calcular_pagos_proveedores(self, fecha_inicio: str, fecha_fin: str, meses_lista: List[str] = None) -> Dict:
+        """
+        Calcula REAL y PROYECTADO para 1.2.1 - Pagos a proveedores.
+        
+        ESTRUCTURA JERÁRQUICA (como 1.1.1):
+        - Nivel 2: Por estado de pago (Pagadas, Parciales, No Pagadas)
+        - Nivel 3: Por proveedor
+        
+        LÓGICA:
+        - REAL = Monto efectivamente pagado (amount_total - amount_residual)
+        - PROYECTADO = Monto pendiente de pago (amount_residual)
+        """
+        try:
+            # Buscar facturas de proveedor con info del partner
+            facturas = self.odoo.search_read(
+                'account.move',
+                [
+                    ['move_type', 'in', ['in_invoice', 'in_refund']],
+                    ['date', '>=', fecha_inicio],
+                    ['date', '<=', fecha_fin],
+                    ['state', '=', 'posted']
+                ],
+                ['id', 'name', 'move_type', 'date', 'amount_total', 
+                 'amount_residual', 'payment_state', 'partner_id'],
+                limit=5000
+            )
+            
+            real_total = 0.0
+            proyectado_total = 0.0
+            real_por_mes = defaultdict(float)
+            proyectado_por_mes = defaultdict(float)
+            
+            # Estructura jerárquica: {estado: {proveedor: {datos}}}
+            estados = {}
+            
+            for f in facturas:
+                fecha = f.get('date', '')
+                if not fecha:
+                    continue
+                    
+                mes = fecha[:7]
+                
+                amount_total = f.get('amount_total', 0) or 0
+                amount_residual = f.get('amount_residual', 0) or 0
+                move_type = f.get('move_type', '')
+                payment_state = f.get('payment_state', 'not_paid')
+                partner_data = f.get('partner_id', [0, 'Sin proveedor'])
+                partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
+                
+                # Nota de crédito invierte el signo
+                signo = -1 if move_type == 'in_refund' else 1
+                
+                # REAL = lo efectivamente pagado (negativo porque es salida)
+                pagado = -(amount_total - amount_residual) * signo
+                
+                # PROYECTADO = lo que falta por pagar (negativo porque es salida)
+                pendiente = -amount_residual * signo
+                
+                real_total += pagado
+                proyectado_total += pendiente
+                
+                real_por_mes[mes] += pagado
+                proyectado_por_mes[mes] += pendiente
+                
+                # Agrupar por estado de pago (Nivel 2)
+                estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
+                estado_icon = self.ESTADO_ICONS.get(payment_state, '📄')
+                
+                if estado_label not in estados:
+                    estados[estado_label] = {
+                        'codigo': f'estado_{payment_state}',
+                        'nombre': estado_label,
+                        'icon': estado_icon,
+                        'monto': 0.0,
+                        'real': 0.0,
+                        'proyectado': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'real_por_mes': defaultdict(float),
+                        'proyectado_por_mes': defaultdict(float),
+                        'etiquetas': {},  # Proveedores
+                        'es_cuenta_cxp': True,
+                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state) if payment_state in self.ESTADO_LABELS else 99
+                    }
+                
+                estado = estados[estado_label]
+                estado['monto'] += pagado + pendiente
+                estado['real'] += pagado
+                estado['proyectado'] += pendiente
+                estado['montos_por_mes'][mes] += pagado + pendiente
+                estado['real_por_mes'][mes] += pagado
+                estado['proyectado_por_mes'][mes] += pendiente
+                
+                # Agrupar por proveedor (Nivel 3)
+                if partner_name not in estado['etiquetas']:
+                    estado['etiquetas'][partner_name] = {
+                        'nombre': partner_name[:50],
+                        'monto': 0.0,
+                        'real': 0.0,
+                        'proyectado': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'real_por_mes': defaultdict(float),
+                        'proyectado_por_mes': defaultdict(float),
+                        'facturas': []
+                    }
+                
+                proveedor = estado['etiquetas'][partner_name]
+                proveedor['monto'] += pagado + pendiente
+                proveedor['real'] += pagado
+                proveedor['proyectado'] += pendiente
+                proveedor['montos_por_mes'][mes] += pagado + pendiente
+                proveedor['real_por_mes'][mes] += pagado
+                proveedor['proyectado_por_mes'][mes] += pendiente
+                
+                # Guardar factura para drill-down
+                if len(proveedor['facturas']) < 50:
+                    proveedor['facturas'].append({
+                        'name': f['name'],
+                        'move_id': f['id'],
+                        'tipo': move_type,
+                        'total': amount_total,
+                        'pagado': -pagado,  # Mostrar positivo en detalle
+                        'pendiente': -pendiente,  # Mostrar positivo en detalle
+                        'fecha': fecha,
+                        'payment_state': payment_state
+                    })
+            
+            # Calcular montos_por_mes como suma de real + proyectado por mes
+            # Esto es lo que se mostrará en las columnas mensuales del concepto principal
+            montos_por_mes_total = defaultdict(float)
+            for mes in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
+                montos_por_mes_total[mes] = real_por_mes.get(mes, 0) + proyectado_por_mes.get(mes, 0)
+            
+            # Convertir defaultdicts a dicts normales y ordenar
+            cuentas_resultado = []
+            for estado_label, estado_data in sorted(estados.items(), key=lambda x: x[1]['orden']):
+                etiquetas_list = []
+                for prov_name, prov_data in sorted(estado_data['etiquetas'].items(), key=lambda x: x[1]['monto']):
+                    etiquetas_list.append({
+                        'nombre': prov_data['nombre'],
+                        'monto': prov_data['monto'],
+                        'real': prov_data['real'],
+                        'proyectado': prov_data['proyectado'],
+                        'montos_por_mes': dict(prov_data['montos_por_mes']),
+                        'real_por_mes': dict(prov_data['real_por_mes']),
+                        'proyectado_por_mes': dict(prov_data['proyectado_por_mes']),
+                        'facturas': prov_data['facturas'],
+                        'total_facturas': len(prov_data['facturas'])
+                    })
+                
+                cuentas_resultado.append({
+                    'codigo': estado_data['codigo'],
+                    'nombre': f"{estado_data['icon']} {estado_data['nombre']}",
+                    'monto': estado_data['monto'],
+                    'real': estado_data['real'],
+                    'proyectado': estado_data['proyectado'],
+                    'montos_por_mes': dict(estado_data['montos_por_mes']),
+                    'real_por_mes': dict(estado_data['real_por_mes']),
+                    'proyectado_por_mes': dict(estado_data['proyectado_por_mes']),
+                    'etiquetas': etiquetas_list,
+                    'es_cuenta_cxp': True
+                })
+            
+            return {
+                'real': real_total,
+                'proyectado': proyectado_total,
+                'ppto': 0.0,
+                'real_por_mes': dict(real_por_mes),
+                'proyectado_por_mes': dict(proyectado_por_mes),
+                'montos_por_mes': dict(montos_por_mes_total),  # Sumatoria para columnas mensuales
+                'total': real_total + proyectado_total,
+                'cuentas': cuentas_resultado,  # Estructura jerárquica
+                'facturas_count': len(facturas)
+            }
+            
+        except Exception as e:
+            print(f"[RealProyectado] Error calculando pagos proveedores: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'real': 0.0,
+                'proyectado': 0.0,
+                'ppto': 0.0,
+                'real_por_mes': {},
+                'proyectado_por_mes': {},
+                'montos_por_mes': {},
+                'cuentas': [],
+                'error': str(e)
+            }
+    
+    def calcular_iva_exportador(self, fecha_inicio: str, fecha_fin: str, meses_lista: List[str] = None) -> Dict:
+        """
+        Calcula REAL y PROYECTADO para 1.2.6 - IVA Exportador.
+        
+        ESTRUCTURA JERÁRQUICA:
+        - Nivel 2: Tipo de movimiento (Devoluciones recibidas por mes)
+        - Nivel 3: Por documento/fecha
+        
+        LÓGICA:
+        - REAL = Devoluciones de IVA recibidas (créditos en cuenta 11060108)
+        - Solo cuando el partner es "Tesorería General de la República"
+        - PROYECTADO = 0 por ahora (podría ser solicitudes pendientes)
+        """
+        cuenta_iva_id = self._get_cuenta_iva_id()
+        
+        if not cuenta_iva_id:
+            return {
+                'real': 0.0,
+                'proyectado': 0.0,
+                'ppto': 0.0,
+                'real_por_mes': {},
+                'proyectado_por_mes': {},
+                'cuentas': [],
+                'error': 'Cuenta IVA Exportador no encontrada'
+            }
+        
+        try:
+            # Buscar movimientos de la cuenta con el partner específico
+            movimientos = self.odoo.search_read(
+                'account.move.line',
+                [
+                    ['account_id', '=', cuenta_iva_id],
+                    ['partner_id', '=', self.PARTNER_TESORERIA_ID],
+                    ['parent_state', '=', 'posted'],
+                    ['date', '>=', fecha_inicio],
+                    ['date', '<=', fecha_fin]
+                ],
+                ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'ref'],
+                limit=500
+            )
+            
+            real_total = 0.0
+            real_por_mes = defaultdict(float)
+            
+            # Estructura jerárquica para devoluciones
+            devoluciones_por_mes = defaultdict(lambda: {
+                'monto': 0.0,
+                'documentos': []
+            })
+            
+            for m in movimientos:
+                fecha = m.get('date', '')
+                if not fecha:
+                    continue
+                    
+                mes = fecha[:7]
+                
+                # Para IVA Exportador, los CRÉDITOS son devoluciones recibidas
+                credit = m.get('credit', 0) or 0
+                
+                if credit <= 0:
+                    continue
+                
+                real_total += credit
+                real_por_mes[mes] += credit
+                
+                # Obtener nombre del documento
+                move_data = m.get('move_id', [0, ''])
+                move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
+                ref = m.get('ref', '')
+                
+                devoluciones_por_mes[mes]['monto'] += credit
+                devoluciones_por_mes[mes]['documentos'].append({
+                    'name': move_name,
+                    'ref': ref,
+                    'credit': credit,
+                    'fecha': fecha
+                })
+            
+            # Construir estructura de cuentas (por mes de devolución)
+            cuentas_resultado = []
+            
+            # Acumular montos por mes para el concepto principal
+            total_por_mes = defaultdict(float)
+            
+            for mes, data in sorted(devoluciones_por_mes.items()):
+                # Acumular para el total del concepto
+                total_por_mes[mes] += data['monto']
+                
+                # Formatear nombre del mes
+                try:
+                    fecha_mes = datetime.strptime(f"{mes}-01", '%Y-%m-%d')
+                    nombre_mes = fecha_mes.strftime('%B %Y').title()
+                except:
+                    nombre_mes = mes
+                
+                etiquetas_list = []
+                for doc in data['documentos']:
+                    etiquetas_list.append({
+                        'nombre': f"📄 {doc['name']} ({doc['fecha']})",
+                        'monto': doc['credit'],
+                        'real': doc['credit'],
+                        'proyectado': 0,
+                        'montos_por_mes': {mes: doc['credit']},
+                        'ref': doc['ref']
+                    })
+                
+                cuentas_resultado.append({
+                    'codigo': f'iva_{mes}',
+                    'nombre': f"💰 Devoluciones {nombre_mes}",
+                    'monto': data['monto'],
+                    'real': data['monto'],
+                    'proyectado': 0,
+                    'montos_por_mes': {mes: data['monto']},
+                    'real_por_mes': {mes: data['monto']},
+                    'proyectado_por_mes': {},
+                    'etiquetas': etiquetas_list,
+                    'es_cuenta_iva': True
+                })
+            
+            return {
+                'real': real_total,  # Positivo porque es entrada
+                'proyectado': 0.0,  # Por ahora vacío
+                'ppto': 0.0,
+                'real_por_mes': dict(real_por_mes),
+                'proyectado_por_mes': {},
+                'montos_por_mes': dict(total_por_mes),  # Sumatoria para columnas mensuales
+                'total': real_total,
+                'cuentas': cuentas_resultado,
+                'movimientos_count': len(movimientos)
+            }
+            
+        except Exception as e:
+            print(f"[RealProyectado] Error calculando IVA exportador: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'real': 0.0,
+                'proyectado': 0.0,
+                'ppto': 0.0,
+                'real_por_mes': {},
+                'proyectado_por_mes': {},
+                'cuentas': [],
+                'error': str(e)
+            }
+    
+    def calcular_todos(self, fecha_inicio: str, fecha_fin: str) -> Dict[str, Dict]:
+        """
+        Calcula REAL/PROYECTADO para todos los conceptos configurados.
+        
+        Args:
+            fecha_inicio: Fecha inicio
+            fecha_fin: Fecha fin
+            
+        Returns:
+            Dict {concepto_id: {real, proyectado, ppto, ...}}
+        """
+        resultados = {}
+        
+        # 1.2.1 - Pagos a proveedores
+        print(f"[RealProyectado] Calculando 1.2.1 - Pagos a proveedores...")
+        resultados['1.2.1'] = self.calcular_pagos_proveedores(fecha_inicio, fecha_fin)
+        
+        # 1.2.6 - IVA Exportador
+        print(f"[RealProyectado] Calculando 1.2.6 - IVA Exportador...")
+        resultados['1.2.6'] = self.calcular_iva_exportador(fecha_inicio, fecha_fin)
+        
+        return resultados
+    
+    def enriquecer_concepto(self, concepto: Dict, 
+                           real_proyectado_data: Dict,
+                           concepto_id: str) -> Dict:
+        """
+        Enriquece un concepto con datos de REAL/PROYECTADO y estructura jerárquica.
+        
+        Para conceptos especiales (1.2.1, 1.2.6), reemplaza las cuentas existentes
+        con la estructura calculada por este módulo y actualiza montos_por_mes.
+        
+        Args:
+            concepto: Dict del concepto existente
+            real_proyectado_data: Resultado de calcular_todos()
+            concepto_id: ID del concepto (ej: '1.2.1')
+            
+        Returns:
+            Concepto enriquecido con campos real, proyectado, ppto y cuentas
+        """
+        if concepto_id in real_proyectado_data:
+            data = real_proyectado_data[concepto_id]
+            concepto['real'] = data.get('real', 0)
+            concepto['proyectado'] = data.get('proyectado', 0)
+            concepto['ppto'] = data.get('ppto', 0)
+            concepto['real_por_mes'] = data.get('real_por_mes', {})
+            concepto['proyectado_por_mes'] = data.get('proyectado_por_mes', {})
+            
+            # ACTUALIZAR montos_por_mes - usar directamente el calculado si existe
+            montos_por_mes = data.get('montos_por_mes', {})
+            if montos_por_mes:
+                concepto['montos_por_mes'] = montos_por_mes
+                concepto['total'] = data.get('total', sum(montos_por_mes.values()))
+            
+            # Si hay estructura de cuentas, reemplazar/agregar
+            if 'cuentas' in data and data['cuentas']:
+                concepto['cuentas'] = data['cuentas']
+                concepto['tiene_estructura_especial'] = True
+        else:
+            # Concepto sin datos especiales - usar el total existente como REAL
+            concepto['real'] = concepto.get('total', 0)
+            concepto['proyectado'] = 0
+            concepto['ppto'] = 0
+            concepto['real_por_mes'] = concepto.get('montos_por_mes', {})
+            concepto['proyectado_por_mes'] = {}
+        
+        return concepto

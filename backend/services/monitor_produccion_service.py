@@ -112,7 +112,8 @@ class MonitorProduccionService:
     
     def get_procesos_cerrados_dia(self, fecha: str, planta: Optional[str] = None,
                                    sala: Optional[str] = None,
-                                   fecha_fin: Optional[str] = None) -> Dict[str, Any]:
+                                   fecha_fin: Optional[str] = None,
+                                   producto: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene procesos que se cerraron (pasaron a done) en un rango de fechas.
         Usa x_studio_termino_de_proceso como campo principal, fallback a date_finished.
@@ -122,6 +123,7 @@ class MonitorProduccionService:
             planta: Filtrar por planta
             sala: Filtrar por sala
             fecha_fin: Fecha fin en formato YYYY-MM-DD (opcional, si no se da usa fecha)
+            producto: Filtrar por nombre de producto
         
         Returns:
             Dict con procesos cerrados y estadísticas
@@ -139,6 +141,10 @@ class MonitorProduccionService:
         
         if sala and sala != "Todas":
             domain.append(['x_studio_sala_de_proceso', 'ilike', sala])
+        
+        # Filtro por producto
+        if producto and producto != "Todos":
+            domain.append(['product_id', 'ilike', producto])
         
         ordenes_raw = self.odoo.search_read(
             'mrp.production',
@@ -201,7 +207,8 @@ class MonitorProduccionService:
     
     def get_evolucion_rango(self, fecha_inicio: str, fecha_fin: str,
                             planta: Optional[str] = None,
-                            sala: Optional[str] = None) -> Dict[str, Any]:
+                            sala: Optional[str] = None,
+                            producto: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene la evolución de procesos creados vs cerrados en un rango de fechas.
         
@@ -210,6 +217,7 @@ class MonitorProduccionService:
             fecha_fin: Fecha fin YYYY-MM-DD
             planta: Filtrar por planta
             sala: Filtrar por sala
+            producto: Filtrar por nombre de producto
         
         Returns:
             Dict con datos de evolución por día
@@ -229,6 +237,10 @@ class MonitorProduccionService:
         
         if sala and sala != "Todas":
             domain_creados.append(['x_studio_sala_de_proceso', 'ilike', sala])
+        
+        # Filtro por producto
+        if producto and producto != "Todos":
+            domain_creados.append(['product_id', 'ilike', producto])
         
         procesos_creados = self.odoo.search_read(
             'mrp.production',
@@ -262,6 +274,10 @@ class MonitorProduccionService:
         
         if sala and sala != "Todas":
             domain_cerrados.append(['x_studio_sala_de_proceso', 'ilike', sala])
+        
+        # Filtro por producto en cerrados también
+        if producto and producto != "Todos":
+            domain_cerrados.append(['product_id', 'ilike', producto])
         
         procesos_cerrados_raw = self.odoo.search_read(
             'mrp.production',
@@ -531,3 +547,151 @@ class MonitorProduccionService:
         
         # Verificar si está en la lista de permitidos
         return nombre_producto in self.PRODUCTOS_PERMITIDOS
+
+    def get_kg_por_linea(self, fecha_inicio: str, fecha_fin: str,
+                         planta: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Obtiene KG/Hora por cada línea/sala de proceso en un rango de fechas.
+        
+        Args:
+            fecha_inicio: Fecha inicio YYYY-MM-DD
+            fecha_fin: Fecha fin YYYY-MM-DD
+            planta: Filtrar por planta (VILKUN, RIO FUTURO, Todas)
+        
+        Returns:
+            Dict con datos por línea y resumen general
+        """
+        # Buscar procesos terminados en el rango
+        domain = [
+            ['state', '=', 'done'],
+            '|',
+            ['x_studio_termino_de_proceso', '>=', fecha_inicio],
+            ['date_finished', '>=', fecha_inicio]
+        ]
+        
+        procesos_raw = self.odoo.search_read(
+            'mrp.production',
+            domain,
+            ['name', 'product_id', 'product_qty', 'qty_produced', 'state',
+             'date_start', 'date_finished', 'x_studio_sala_de_proceso',
+             'x_studio_inicio_de_proceso', 'x_studio_termino_de_proceso'],
+            limit=2000,
+            order='x_studio_termino_de_proceso desc'
+        )
+        
+        procesos_raw = [clean_record(o) for o in procesos_raw]
+        
+        # Filtrar por fecha fin
+        fecha_fin_dt = datetime.strptime(fecha_fin + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
+        fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+        
+        procesos = []
+        for p in procesos_raw:
+            fecha_termino = p.get('date_finished') or p.get('x_studio_termino_de_proceso')
+            if not fecha_termino:
+                continue
+            try:
+                if 'T' in str(fecha_termino):
+                    ft = datetime.fromisoformat(str(fecha_termino).replace('Z', '+00:00').split('+')[0])
+                else:
+                    ft = datetime.strptime(str(fecha_termino)[:19], '%Y-%m-%d %H:%M:%S')
+                
+                if fecha_inicio_dt <= ft <= fecha_fin_dt:
+                    procesos.append(p)
+            except:
+                pass
+        
+        # Excluir procesos de la lista negra
+        procesos = [p for p in procesos if p.get('name') not in self.PROCESOS_EXCLUIDOS]
+        
+        # Filtrar solo productos permitidos
+        procesos = [p for p in procesos if self._es_producto_permitido(p)]
+        
+        # Filtrar por planta
+        if planta and planta != "Todas":
+            procesos = self._filtrar_por_planta(procesos, planta)
+        
+        # Agrupar por sala y calcular KG/Hora
+        salas_data = {}
+        
+        for p in procesos:
+            sala = p.get('x_studio_sala_de_proceso') or 'Sin Sala'
+            
+            if sala not in salas_data:
+                salas_data[sala] = {
+                    "sala": sala,
+                    "total_kg": 0,
+                    "horas_totales": 0,
+                    "procesos": 0
+                }
+            
+            # Sumar KG producidos
+            kg = p.get('qty_produced', 0) or p.get('product_qty', 0) or 0
+            salas_data[sala]["total_kg"] += kg
+            salas_data[sala]["procesos"] += 1
+            
+            # Calcular horas del proceso
+            inicio = p.get('x_studio_inicio_de_proceso') or p.get('date_start')
+            termino = p.get('x_studio_termino_de_proceso') or p.get('date_finished')
+            
+            if inicio and termino:
+                try:
+                    # Parsear fechas
+                    if 'T' in str(inicio):
+                        inicio_dt = datetime.fromisoformat(str(inicio).replace('Z', '+00:00').split('+')[0])
+                    else:
+                        inicio_dt = datetime.strptime(str(inicio)[:19], '%Y-%m-%d %H:%M:%S')
+                    
+                    if 'T' in str(termino):
+                        termino_dt = datetime.fromisoformat(str(termino).replace('Z', '+00:00').split('+')[0])
+                    else:
+                        termino_dt = datetime.strptime(str(termino)[:19], '%Y-%m-%d %H:%M:%S')
+                    
+                    # Calcular horas
+                    horas = (termino_dt - inicio_dt).total_seconds() / 3600
+                    if horas > 0 and horas < 72:  # Máximo 72 horas para evitar outliers
+                        salas_data[sala]["horas_totales"] += horas
+                except:
+                    pass
+        
+        # Calcular KG/Hora por sala
+        lineas = []
+        total_kg_global = 0
+        total_horas_global = 0
+        
+        for sala, data in salas_data.items():
+            kg_hora = data["total_kg"] / data["horas_totales"] if data["horas_totales"] > 0 else 0
+            promedio_kg_proceso = data["total_kg"] / data["procesos"] if data["procesos"] > 0 else 0
+            
+            lineas.append({
+                "sala": sala,
+                "total_kg": data["total_kg"],
+                "horas_totales": round(data["horas_totales"], 1),
+                "kg_hora": round(kg_hora, 1),
+                "procesos": data["procesos"],
+                "promedio_kg_proceso": round(promedio_kg_proceso, 0)
+            })
+            
+            total_kg_global += data["total_kg"]
+            total_horas_global += data["horas_totales"]
+        
+        # Ordenar por KG/Hora descendente
+        lineas.sort(key=lambda x: x["kg_hora"], reverse=True)
+        
+        # Calcular resumen
+        promedio_kg_hora = total_kg_global / total_horas_global if total_horas_global > 0 else 0
+        
+        return {
+            "lineas": lineas,
+            "resumen": {
+                "total_kg": total_kg_global,
+                "total_horas": round(total_horas_global, 1),
+                "promedio_kg_hora": round(promedio_kg_hora, 1),
+                "lineas_activas": len(lineas),
+                "total_procesos": sum(l["procesos"] for l in lineas)
+            },
+            "periodo": {
+                "fecha_inicio": fecha_inicio,
+                "fecha_fin": fecha_fin
+            }
+        }

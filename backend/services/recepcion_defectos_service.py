@@ -57,26 +57,83 @@ def generar_reporte_defectos_excel(
         'categoria': 'categ_id',  # Campo estándar de Odoo para categoría de producto
     }
     
-    campos_quality_usar = {
+    # Campos comunes de quality.check
+    campos_quality_comunes = {
         'tipo_fruta_qc': _determinar_campo(campos_quality, ['x_studio_tipo_de_fruta']),
         'pallet': _determinar_campo(campos_quality, ['x_studio_n_de_palet_o_paquete', 'x_studio_n_palet']),
         'clasificacion': _determinar_campo(campos_quality, ['x_studio_calific_final', 'x_studio_calificacin_final']),
-        'total_defectos': _determinar_campo(campos_quality, ['x_studio_totdefectoarandano', 'x_studio_total_def_calidad', 'x_studio_total_def_calidad_1', 'x_studio_total_de_defectos_']),
         'temperatura': _determinar_campo(campos_quality, ['x_studio_temperatura']),
         'pct_iqf': _determinar_campo(campos_quality, ['x_studio_total_iqf_', 'x_studio_total_iqf']),
         'pct_block': _determinar_campo(campos_quality, ['x_studio_total_block_', 'x_studio_total_block']),
-        'hongos': _determinar_campo(campos_quality, ['x_studio_tothongos', 'x_studio_hongos', 'x_studio_hongos_1']),
-        'inmadura': _determinar_campo(campos_quality, ['x_studio_totinmadura', 'x_studio_inmadura', 'x_studio_inmadura_1']),
-        'sobremadura': _determinar_campo(campos_quality, ['x_studio_totsobremadurez', 'x_studio_sobremadura', 'x_studio_sobremadurez_1', 'x_studio_sobre_madura']),
-        'deshidratado': _determinar_campo(campos_quality, ['x_studio_totdeshidratado', 'x_studio_deshidratado', 'x_studio_deshidratado_1']),
-        'crumble': _determinar_campo(campos_quality, ['x_studio_crumble', 'x_studio_crumble_1']),
-        'dano_mecanico': _determinar_campo(campos_quality, ['x_studio_totdaomecanico', 'x_studio_dao_mecanico', 'x_studio_dano_mecanico']),
-        'dano_insecto': _determinar_campo(campos_quality, ['x_studio_totpresenciainsecto', 'x_studio_presencia_de_insectos', 'x_studio_totdaoinsecto', 'x_studio_presencia_de_insectos_1']),
-        'deformes': _determinar_campo(campos_quality, ['x_studio_totfrutosdeformes', 'x_studio_frutos_deformes', 'x_studio_deformes', 'x_studio_frutos_deformes_1']),
-        'fruta_verde': _determinar_campo(campos_quality, ['x_studio_totfrutaverde', 'x_studio_fruta_verde', 'x_studio_fruta_verde_1']),
-        'herida_partida': _determinar_campo(campos_quality, ['x_studio_totheridapartidamolida', 'x_studio_heridapartidamolida', 'x_studio_heridapartiduramolida', 'x_studio_heridapartidamolida_1']),
-        'materias_extranas': _determinar_campo(campos_quality, ['x_studio_totmateriaextraa', 'x_studio_materias_extraas', 'x_studio_materias_extranas', 'x_studio_materias_extraas_1']),
+        'gramos_muestra': _determinar_campo(campos_quality, ['x_studio_gramos_de_la_muestra', 'x_studio_gramos_de_la_muestra_1']),
     }
+    
+    # MAPEO DE CAMPOS DE DEFECTOS POR TIPO DE FRUTA
+    # Cada tipo de fruta tiene sus propios campos en Odoo
+    campos_defectos_por_fruta = {
+        'Arándano': {
+            'total_defectos': 'x_studio_totdefectoarandano',
+            'hongos': 'x_studio_tothongos',
+            'inmadura': None,  # No existe para arándano
+            'sobremadura': 'x_studio_totsobremadurez',
+            'deshidratado': 'x_studio_totdeshidratado',
+            'dano_mecanico': None,
+            'dano_insecto': 'x_studio_totdaoinsecto',
+            'deformes': 'x_studio_totfrutosdeformes',
+            'fruta_verde': 'x_studio_totfrutaverde',
+            'herida_partida': 'x_studio_totheridapartidamolida',
+            'materias_extranas': 'x_studio_totmateriavegetal',
+            'restos_florales': 'x_studio_totrestosflorales',
+            'pedicelos': 'x_studio_totfrutospedicelos',
+            'decoloracion': 'x_studio_totfrutoscondecoloracion',
+            'cicatrices': 'x_studio_totcicatrices',
+            'presencia_insecto': 'x_studio_totpresenciainsecto_1',
+        },
+        'Frambuesa': {
+            'total_defectos': 'x_studio_totdefectofram',
+            'hongos': 'x_studio_totpudricionframb',
+            'inmadura': 'x_studio_totfrutosinmadurosframb',
+            'sobremadura': 'x_studio_totfrutossobremadurosframb',
+            'deshidratado': None,
+            'dano_mecanico': 'x_studio_totdaomecanicofram',
+            'dano_insecto': 'x_studio_totdaosinsectosframb',
+            'deformes': None,
+            'fruta_verde': None,
+            'herida_partida': None,
+            'materias_extranas': 'x_studio_totmateriaextraaframb',
+            'golpe_sol': 'x_studio_totgolpesolframb',
+            'bajo_calibre': 'x_studio_totfrutosbajocalibreframb',
+            'frutos_rotos': 'x_studio_totfrutosrotosframb',
+            'drupeolos_blancos': 'x_studio_totdrupeolosblancosframb',
+            'caliz': 'x_studio_totfutroscalizframb',
+            'roya': 'x_studio_totfutrosconroyaframb',
+            'insectos': 'x_studio_totinsectosframb',
+            'larvas': 'x_studio_totlarvasframb',
+        },
+        'Mora': {
+            'total_defectos': 'x_studio_totdefectmora',
+            'hongos': 'x_studio_totpudricion',
+            'inmadura': 'x_studio_totinmaduramora_1',
+            'sobremadura': 'x_studio_totsobremaduramora',
+            'deshidratado': 'x_studio_totdeshidratacionmora',
+            'dano_mecanico': 'x_studio_totdaomecanicomora',
+            'dano_insecto': 'x_studio_totdaoinsectomora',
+            'deformes': None,
+            'fruta_verde': None,
+            'herida_partida': None,
+            'materias_extranas': 'x_studio_totmateriaextraamora',
+            'huevos_insectos': 'x_studio_tothuevosinsectosmora',
+            'caliz': 'x_studio_totfrutoscalizmora',
+            'deterioro_rotura': 'x_studio_totdeteriororoturamora',
+        },
+    }
+    
+    # Recopilar TODOS los campos de defectos para consultar
+    todos_campos_defectos = set()
+    for tipo, campos in campos_defectos_por_fruta.items():
+        for campo in campos.values():
+            if campo:
+                todos_campos_defectos.add(campo)
     
     # Mapeo de campos en líneas de calidad (one2many)
     campos_linea_defectos = {
@@ -182,11 +239,15 @@ def generar_reporte_defectos_excel(
     )
     templates_map = {t['id']: t for t in templates}
     
-    # Obtener quality checks
+    # Obtener quality checks - incluir campos comunes + todos los campos de defectos
     quality_campos_leer = ['id', 'picking_id', 'create_date']
-    for campo in campos_quality_usar.values():
+    for campo in campos_quality_comunes.values():
         if campo:
             quality_campos_leer.append(campo)
+    # Agregar todos los campos de defectos de todas las frutas
+    quality_campos_leer.extend(list(todos_campos_defectos))
+    # Eliminar duplicados
+    quality_campos_leer = list(set(quality_campos_leer))
     
     quality_checks = odoo.search_read(
         'quality.check',
@@ -230,91 +291,63 @@ def generar_reporte_defectos_excel(
             
         # Para cada quality check (pallet)
         for qc in qcs_recepcion:
-            n_pallet = _get_field(qc, campos_quality_usar.get('pallet'))
-            calificacion = _get_field(qc, campos_quality_usar.get('clasificacion'))
-            temperatura = _get_field(qc, campos_quality_usar.get('temperatura'), 0)
-            tipo_fruta_from_qc = _get_field(qc, campos_quality_usar.get('tipo_fruta_qc'))
-            pct_iqf = _get_field(qc, campos_quality_usar.get('pct_iqf'), 0)
-            pct_block = _get_field(qc, campos_quality_usar.get('pct_block'), 0)
+            n_pallet = _get_field(qc, campos_quality_comunes.get('pallet'))
+            calificacion = _get_field(qc, campos_quality_comunes.get('clasificacion'))
+            temperatura = _get_field(qc, campos_quality_comunes.get('temperatura'), 0)
+            tipo_fruta_from_qc = _get_field(qc, campos_quality_comunes.get('tipo_fruta_qc'))
+            pct_iqf = _get_field(qc, campos_quality_comunes.get('pct_iqf'), 0)
+            pct_block = _get_field(qc, campos_quality_comunes.get('pct_block'), 0)
+            gramos_muestra = _get_field(qc, campos_quality_comunes.get('gramos_muestra'), 0)
             
-            # Intentar leer defectos de las líneas (one2many) primero
-            lineas_defectos = _leer_lineas_calidad(odoo, qc, modelos_lineas_qc, campos_linea_defectos)
+            # Obtener campos de defectos según el tipo de fruta
+            campos_defectos = campos_defectos_por_fruta.get(tipo_fruta_from_qc, {})
             
-            # Si hay líneas, usar los defectos de las líneas; si no, usar los del QC principal
-            if lineas_defectos:
-                # Procesar cada línea como un registro separado
-                for linea in lineas_defectos:
-                    # Defectos de la línea
-                    hongos = linea.get('hongos', 0)
-                    inmadura = linea.get('inmadura', 0)
-                    sobremadura = linea.get('sobremadura', 0)
-                    dano_mecanico = linea.get('dano_mecanico', 0)
-                    dano_insecto = linea.get('dano_insecto', 0)
-                    total_defectos_gramos = linea.get('total_defectos', 0)
-                    
-                    # Sobrescribir con datos de línea si existen
-                    if linea.get('pallet'):
-                        n_pallet = linea.get('pallet')
-                    if linea.get('temperatura'):
-                        temperatura = linea.get('temperatura')
-                    
-                    # Valores fijos de la línea (no aplican estos en líneas actualmente)
-                    deshidratado = linea.get('deshidratado', 0)
-                    crumble = 0
-                    deformes = 0
-                    fruta_verde = 0
-                    herida_partida = 0
-                    materias_extranas = 0
-                    golpe_sol = linea.get('golpe_sol', 0)
-                    
-                    # Calcular % defectos
-                    total_defectos_pct = 0
-                    if total_defectos_gramos > 0:
-                        total_defectos_pct = round((total_defectos_gramos / 1000) * 100, 2)
-                    
-                    # Agregar registro con defectos de la línea
-                    _agregar_registros_excel(
-                        datos_excel, movs_recepcion, productos_map, templates_map,
-                        albaran, fecha, proveedor, guia_despacho, origen, n_pallet,
-                        calificacion, temperatura, pct_iqf, pct_block, tipo_fruta_from_qc,
-                        total_defectos_gramos, total_defectos_pct,
-                        hongos, inmadura, sobremadura, deshidratado, crumble, dano_mecanico,
-                        dano_insecto, deformes, fruta_verde, herida_partida, materias_extranas,
-                        campos_template_usar
-                    )
-            else:
-                # No hay líneas, usar defectos del QC principal (comportamiento antiguo)
-                total_defectos_gramos = _get_field(qc, campos_quality_usar.get('total_defectos'), 0)
-                
-                # Defectos en gramos del QC principal
-                hongos = _get_field(qc, campos_quality_usar.get('hongos'), 0)
-                inmadura = _get_field(qc, campos_quality_usar.get('inmadura'), 0)
-                sobremadura = _get_field(qc, campos_quality_usar.get('sobremadura'), 0)
-                deshidratado = _get_field(qc, campos_quality_usar.get('deshidratado'), 0)
-                crumble = _get_field(qc, campos_quality_usar.get('crumble'), 0)
-                dano_mecanico = _get_field(qc, campos_quality_usar.get('dano_mecanico'), 0)
-                dano_insecto = _get_field(qc, campos_quality_usar.get('dano_insecto'), 0)
-                deformes = _get_field(qc, campos_quality_usar.get('deformes'), 0)
-                fruta_verde = _get_field(qc, campos_quality_usar.get('fruta_verde'), 0)
-                herida_partida = _get_field(qc, campos_quality_usar.get('herida_partida'), 0)
-                materias_extranas = _get_field(qc, campos_quality_usar.get('materias_extranas'), 0)
-                golpe_sol = 0
-                
-                # Calcular % defectos
-                total_defectos_pct = 0
-                if total_defectos_gramos > 0:
-                    total_defectos_pct = round((total_defectos_gramos / 1000) * 100, 2)
-                
-                # Agregar registros con defectos del QC principal
-                _agregar_registros_excel(
-                    datos_excel, movs_recepcion, productos_map, templates_map,
-                    albaran, fecha, proveedor, guia_despacho, origen, n_pallet,
-                    calificacion, temperatura, pct_iqf, pct_block, tipo_fruta_from_qc,
-                    total_defectos_gramos, total_defectos_pct,
-                    hongos, inmadura, sobremadura, deshidratado, crumble, dano_mecanico,
-                    dano_insecto, deformes, fruta_verde, herida_partida, materias_extranas,
-                    campos_template_usar
-                )
+            # Extraer defectos usando los campos específicos del tipo de fruta
+            total_defectos_gramos = _get_field(qc, campos_defectos.get('total_defectos'), 0)
+            hongos = _get_field(qc, campos_defectos.get('hongos'), 0)
+            inmadura = _get_field(qc, campos_defectos.get('inmadura'), 0)
+            sobremadura = _get_field(qc, campos_defectos.get('sobremadura'), 0)
+            deshidratado = _get_field(qc, campos_defectos.get('deshidratado'), 0)
+            dano_mecanico = _get_field(qc, campos_defectos.get('dano_mecanico'), 0)
+            dano_insecto = _get_field(qc, campos_defectos.get('dano_insecto'), 0)
+            deformes = _get_field(qc, campos_defectos.get('deformes'), 0)
+            fruta_verde = _get_field(qc, campos_defectos.get('fruta_verde'), 0)
+            herida_partida = _get_field(qc, campos_defectos.get('herida_partida'), 0)
+            materias_extranas = _get_field(qc, campos_defectos.get('materias_extranas'), 0)
+            
+            # Campos adicionales específicos por fruta
+            golpe_sol = _get_field(qc, campos_defectos.get('golpe_sol'), 0)
+            bajo_calibre = _get_field(qc, campos_defectos.get('bajo_calibre'), 0)
+            frutos_rotos = _get_field(qc, campos_defectos.get('frutos_rotos'), 0)
+            caliz = _get_field(qc, campos_defectos.get('caliz'), 0)
+            roya = _get_field(qc, campos_defectos.get('roya'), 0)
+            cicatrices = _get_field(qc, campos_defectos.get('cicatrices'), 0)
+            pedicelos = _get_field(qc, campos_defectos.get('pedicelos'), 0)
+            decoloracion = _get_field(qc, campos_defectos.get('decoloracion'), 0)
+            deterioro_rotura = _get_field(qc, campos_defectos.get('deterioro_rotura'), 0)
+            
+            # Calcular % defectos
+            total_defectos_pct = 0
+            if gramos_muestra and gramos_muestra > 0 and total_defectos_gramos > 0:
+                total_defectos_pct = round((total_defectos_gramos / gramos_muestra) * 100, 2)
+            elif total_defectos_gramos > 0:
+                total_defectos_pct = round((total_defectos_gramos / 1000) * 100, 2)
+            
+            # Agregar registros al Excel
+            _agregar_registros_excel_v2(
+                datos_excel, movs_recepcion, productos_map, templates_map,
+                albaran, fecha, proveedor, guia_despacho, origen, n_pallet,
+                calificacion, temperatura, pct_iqf, pct_block, tipo_fruta_from_qc,
+                gramos_muestra, total_defectos_gramos, total_defectos_pct,
+                hongos, inmadura, sobremadura, deshidratado, dano_mecanico,
+                dano_insecto, deformes, fruta_verde, herida_partida, materias_extranas,
+                golpe_sol, bajo_calibre, frutos_rotos, caliz, roya,
+                cicatrices, pedicelos, decoloracion, deterioro_rotura,
+                campos_template_usar, campos_defectos_por_fruta
+            )
+    
+    # Generar y retornar el Excel
+    return _generar_excel_desde_datos(datos_excel, fecha_inicio, fecha_fin)
 
 
 def _agregar_registros_excel(
@@ -385,6 +418,98 @@ def _agregar_registros_excel(
             'Herida/Partida (g)': herida_partida,
             'Materias Extrañas (g)': materias_extranas,
         })
+    
+
+def _agregar_registros_excel_v2(
+    datos_excel, movs_recepcion, productos_map, templates_map,
+    albaran, fecha, proveedor, guia_despacho, origen, n_pallet,
+    calificacion, temperatura, pct_iqf, pct_block, tipo_fruta_from_qc,
+    gramos_muestra, total_defectos_gramos, total_defectos_pct,
+    hongos, inmadura, sobremadura, deshidratado, dano_mecanico,
+    dano_insecto, deformes, fruta_verde, herida_partida, materias_extranas,
+    golpe_sol, bajo_calibre, frutos_rotos, caliz, roya,
+    cicatrices, pedicelos, decoloracion, deterioro_rotura,
+    campos_template_usar, campos_defectos_por_fruta
+):
+    """
+    Función auxiliar para agregar registros al Excel con campos de defectos
+    específicos por tipo de fruta.
+    """
+    for mov in movs_recepcion:
+        qty = mov.get('quantity_done', 0) or 0
+        if qty == 0:
+            continue
+        
+        prod_id = mov.get('product_id')
+        if not prod_id:
+            continue
+        prod_id = prod_id[0] if isinstance(prod_id, (list, tuple)) else prod_id
+        
+        prod_info = productos_map.get(prod_id, {})
+        producto_nombre = prod_info.get('name', '')
+        
+        tmpl_id = prod_info.get('product_tmpl_id')
+        tmpl_id = tmpl_id[0] if isinstance(tmpl_id, (list, tuple)) else tmpl_id
+        tmpl_info = templates_map.get(tmpl_id, {})
+        
+        # FILTRO: Excluir productos de categoría BANDEJAS
+        categoria = tmpl_info.get('categ_id', '')
+        categoria_nombre = categoria[1] if isinstance(categoria, (list, tuple)) and len(categoria) > 1 else ''
+        if 'BANDEJA' in categoria_nombre.upper():
+            continue
+        
+        variedad = _extract_many2one(tmpl_info.get(campos_template_usar.get('variedad'), ''))
+        manejo = _extract_many2one(tmpl_info.get(campos_template_usar.get('manejo'), ''))
+        
+        # Tipo de fruta: priorizar desde quality.check
+        tipo_fruta = tipo_fruta_from_qc or ''
+        
+        # Construir registro base
+        registro = {
+            'Fecha': fecha,
+            'Proveedor': proveedor,
+            'Guía Despacho': guia_despacho,
+            'Origen': origen,
+            'Albarán': albaran,
+            'Producto': producto_nombre,
+            'Variedad': variedad,
+            'Tipo Fruta': tipo_fruta,
+            'Manejo': manejo,
+            'Kg': qty,
+            'N° Pallet': n_pallet,
+            'Calificación': calificacion,
+            '% IQF': pct_iqf,
+            '% BLOCK': pct_block,
+            'Temperatura °C': temperatura,
+            'Gramos Muestra': gramos_muestra,
+            'Total Defectos (g)': total_defectos_gramos,
+            '% Defectos': total_defectos_pct,
+            # Defectos comunes
+            'Hongos/Pudrición (g)': hongos,
+            'Inmadura (g)': inmadura,
+            'Sobremadura (g)': sobremadura,
+            'Deshidratado (g)': deshidratado,
+            'Daño Mecánico (g)': dano_mecanico,
+            'Daño Insecto (g)': dano_insecto,
+            'Materias Extrañas (g)': materias_extranas,
+            # Defectos específicos Arándano
+            'Deformes (g)': deformes,
+            'Fruta Verde (g)': fruta_verde,
+            'Herida/Partida (g)': herida_partida,
+            'Cicatrices (g)': cicatrices,
+            'Pedicelos (g)': pedicelos,
+            'Decoloración (g)': decoloracion,
+            # Defectos específicos Frambuesa
+            'Golpe Sol (g)': golpe_sol,
+            'Bajo Calibre (g)': bajo_calibre,
+            'Frutos Rotos (g)': frutos_rotos,
+            'Cáliz (g)': caliz,
+            'Roya (g)': roya,
+            # Defectos específicos Mora
+            'Deterioro/Rotura (g)': deterioro_rotura,
+        }
+        
+        datos_excel.append(registro)
     
 
 def _generar_excel_desde_datos(datos_excel, fecha_desde, fecha_hasta):

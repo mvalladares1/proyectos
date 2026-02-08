@@ -404,6 +404,276 @@ def generar_excel_proforma(datos_consolidados: Dict, fecha_desde: str, fecha_has
     return output.getvalue()
 
 
+def generar_pdf_individual_transportista(transportista: str, data: Dict, fecha_desde: str, fecha_hasta: str) -> bytes:
+    """Genera PDF individual para un transportista (estilo similar a proformas de MP)"""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                          topMargin=0.5*inch, bottomMargin=0.7*inch,
+                          leftMargin=0.6*inch, rightMargin=0.6*inch)
+    
+    styles = getSampleStyleSheet()
+    color_azul = colors.HexColor('#1B4F72')
+    color_azul_claro = colors.HexColor('#2E86AB')
+    
+    title_style = ParagraphStyle('CustomTitle',
+                                parent=styles['Heading1'],
+                                fontSize=18,
+                                alignment=TA_CENTER,
+                                textColor=color_azul,
+                                spaceAfter=20)
+    
+    elements = []
+    
+    # Título
+    elements.append(Paragraph("PROFORMA DE FLETES", title_style))
+    elements.append(Spacer(1, 12))
+    
+    # Información del documento
+    fecha_envio = datetime.now().strftime("%d-%m-%Y")
+    
+    info_data = [
+        ["Transportista:", transportista[:50], "", "Fecha Envío:", fecha_envio],
+        ["Período:", f"{fecha_desde} al {fecha_hasta}", "", "Moneda:", "CLP"],
+        ["Total OCs:", str(len(data['ocs'])), "", "", ""],
+    ]
+    
+    info_table = Table(info_data, colWidths=[1.2*inch, 3*inch, 0.5*inch, 1.2*inch, 1.3*inch])
+    info_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (3, 0), (3, -1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 20))
+    
+    # Tabla de OCs
+    table_data = [["OC", "Fecha", "Ruta", "Kms", "Kilos", "Costo", "$/km", "Tipo Camión"]]
+    
+    for oc_data in data['ocs']:
+        table_data.append([
+            oc_data['oc_name'],
+            oc_data['fecha'],
+            oc_data['ruta'][:30] if oc_data['ruta'] else 'Sin ruta',
+            formato_numero_chileno(oc_data['kms'], 0),
+            formato_numero_chileno(oc_data['kilos'], 1),
+            f"${formato_numero_chileno(oc_data['costo'], 0)}",
+            f"${formato_numero_chileno(oc_data['costo_por_km'], 0)}",
+            oc_data['tipo_camion'][:15] if oc_data['tipo_camion'] else 'N/A'
+        ])
+    
+    # Línea en blanco
+    table_data.append(["", "", "", "", "", "", "", ""])
+    
+    # Totales
+    promedio_km = data['totales']['costo'] / data['totales']['kms'] if data['totales']['kms'] > 0 else 0
+    table_data.append([
+        "", "", "TOTAL:",
+        formato_numero_chileno(data['totales']['kms'], 0),
+        formato_numero_chileno(data['totales']['kilos'], 1),
+        f"${formato_numero_chileno(data['totales']['costo'], 0)} *",
+        f"${formato_numero_chileno(promedio_km, 0)}",
+        ""
+    ])
+    
+    main_table = Table(table_data, colWidths=[0.9*inch, 0.8*inch, 2.2*inch, 0.6*inch, 0.7*inch, 1.0*inch, 0.7*inch, 1.1*inch])
+    main_table.setStyle(TableStyle([
+        # Header
+        ('BACKGROUND', (0, 0), (-1, 0), color_azul),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        
+        # Grid
+        ('GRID', (0, 0), (-1, len(data['ocs'])), 0.5, colors.grey),
+        ('LINEBELOW', (0, len(data['ocs'])), (-1, len(data['ocs'])), 1, colors.black),
+        
+        # Padding
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        
+        # Totales
+        ('FONTNAME', (2, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (2, -1), (-1, -1), 9),
+        ('BACKGROUND', (2, -1), (-1, -1), colors.HexColor('#E8F4F8')),
+    ]))
+    elements.append(main_table)
+    
+    # Nota
+    elements.append(Spacer(1, 10))
+    nota_style = ParagraphStyle('Nota',
+                               parent=styles['Normal'],
+                               fontSize=8,
+                               textColor=color_azul,
+                               alignment=TA_LEFT)
+    elements.append(Paragraph("<b>* Este es el monto total en CLP a facturar por servicios de transporte</b>", nota_style))
+    
+    # Footer
+    elements.append(Spacer(1, 20))
+    footer_style = ParagraphStyle('Footer',
+                                 parent=styles['Normal'],
+                                 fontSize=7,
+                                 textColor=color_azul,
+                                 alignment=TA_CENTER)
+    elements.append(Paragraph(f"Rio Futuro Procesos SPA | Año {datetime.now().year}", footer_style))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def generar_zip_proformas_transportistas(datos_consolidados: Dict, fecha_desde: str, fecha_hasta: str) -> bytes:
+    """Genera ZIP con PDFs organizados por carpeta de transportista"""
+    import zipfile
+    
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for transportista, data in datos_consolidados.items():
+            # Generar PDF individual
+            pdf_bytes = generar_pdf_individual_transportista(transportista, data, fecha_desde, fecha_hasta)
+            
+            # Crear carpeta por transportista (sanitizar nombre)
+            carpeta_nombre = transportista.replace('/', '_').replace('\\', '_').replace(' ', '_')[:50]
+            nombre_pdf = f"Proforma_Fletes_{fecha_desde}_{fecha_hasta}.pdf"
+            
+            # Agregar al ZIP en carpeta del transportista
+            ruta_en_zip = f"{carpeta_nombre}/{nombre_pdf}"
+            zip_file.writestr(ruta_en_zip, pdf_bytes)
+    
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
+
+
+def get_email_template_transportista(transportista: str, data: Dict, fecha_desde: str, fecha_hasta: str) -> Dict[str, str]:
+    """Genera template de email para envío a transportista (estilo similar a proformas MP)"""
+    
+    total_kms = data['totales']['kms']
+    total_kilos = data['totales']['kilos']
+    total_costo = data['totales']['costo']
+    cant_ocs = len(data['ocs'])
+    
+    # Agrupar OCs por ruta para el desglose
+    from collections import defaultdict
+    rutas_agrupadas = defaultdict(lambda: {"ocs": [], "kms": 0, "kilos": 0, "costo": 0})
+    
+    for oc_data in data['ocs']:
+        ruta = oc_data['ruta'] if oc_data['ruta'] and oc_data['ruta'] != 'Sin ruta' else 'Sin ruta'
+        rutas_agrupadas[ruta]["ocs"].append(oc_data['oc_name'])
+        rutas_agrupadas[ruta]["kms"] += oc_data['kms']
+        rutas_agrupadas[ruta]["kilos"] += oc_data['kilos']
+        rutas_agrupadas[ruta]["costo"] += oc_data['costo']
+    
+    # Generar HTML de rutas o de OCs individuales (si no hay rutas con datos)
+    rutas_html = ""
+    tiene_datos_ruta = any(datos['kms'] > 0 for datos in rutas_agrupadas.values())
+    
+    if tiene_datos_ruta:
+        # Mostrar agrupado por ruta con datos completos
+        for idx, (ruta, datos_ruta) in enumerate(list(rutas_agrupadas.items())[:10]):
+            if datos_ruta['kms'] == 0 and datos_ruta['kilos'] == 0:
+                continue  # Saltar rutas sin datos
+            
+            kms_fmt = formato_numero_chileno(datos_ruta['kms'], 0)
+            kilos_fmt = formato_numero_chileno(datos_ruta['kilos'], 1)
+            costo_fmt = f"${formato_numero_chileno(datos_ruta['costo'], 0)}"
+            ocs_str = ', '.join(datos_ruta['ocs'][:3])
+            if len(datos_ruta['ocs']) > 3:
+                ocs_str += f" (+{len(datos_ruta['ocs']) - 3} más)"
+            
+            rutas_html += f'''<li style="margin-bottom: 10px;">
+                <strong>{ruta}:</strong> {kms_fmt} km, {kilos_fmt} kg - {costo_fmt}<br>
+                <span style="color: #666; font-size: 12px;">OCs: {ocs_str}</span>
+            </li>\n'''
+    else:
+        # Mostrar OCs individuales sin agrupar (cuando no hay datos de ruta)
+        for oc_data in data['ocs'][:10]:
+            costo_fmt = f"${formato_numero_chileno(oc_data['costo'], 0)}"
+            fecha_oc = oc_data['fecha']
+            
+            rutas_html += f'''<li style="margin-bottom: 10px;">
+                <strong>{oc_data['oc_name']}</strong> ({fecha_oc}): {costo_fmt}
+            </li>\n'''
+    
+    if len(data['ocs']) > 10:
+        rutas_html += f'<li style="color: #666;"><em>...y {len(data["ocs"]) - 10} OCs más</em></li>'
+    elif len(rutas_agrupadas) > 10 and tiene_datos_ruta:
+        rutas_html += f'<li style="color: #666;"><em>...y {len(rutas_agrupadas) - 10} rutas más</em></li>'
+    
+    # Formatear totales
+    total_costo_fmt = f"${formato_numero_chileno(total_costo, 0)}"
+    
+    # Generar sección de totales condicional
+    totales_extras = ""
+    if total_kms > 0:
+        total_kms_fmt = formato_numero_chileno(total_kms, 0)
+        totales_extras += f"                    • Kilómetros: {total_kms_fmt} km<br>\n"
+    if total_kilos > 0:
+        total_kilos_fmt = formato_numero_chileno(total_kilos, 1)
+        totales_extras += f"                    • Kilos transportados: {total_kilos_fmt} kg<br>\n"
+    
+    asunto = f"Proforma de Fletes {fecha_desde} al {fecha_hasta} - Rio Futuro"
+    
+    cuerpo_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #1B4F72; padding: 20px; text-align: center;">
+            <h2 style="color: #FFFFFF; margin: 0; font-size: 24px;">Proforma de Servicios de Transporte</h2>
+        </div>
+        
+        <div style="padding: 30px; background-color: #f9f9f9;">
+            <p style="color: #333; font-size: 15px;">Estimado(a) <strong>{transportista}</strong>,</p>
+            
+            <p style="color: #555; line-height: 1.6;">
+                Adjunto encontrará la proforma correspondiente a <strong style="color: #1B4F72;">{cant_ocs} OC(s) de transporte</strong> 
+                del período <strong>{fecha_desde} al {fecha_hasta}</strong>, Detalle:
+            </p>
+            
+            <div style="background-color: #E8F4F8; border-left: 4px solid #2E86AB; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #333; font-size: 14px;"><strong>{'Ordenes de Compra:' if not tiene_datos_ruta else 'Resumen de Servicios:'}</strong></p>
+                <ul style="color: #555; margin: 10px 0; padding-left: 20px; list-style-type: disc;">
+                    {rutas_html}
+                </ul>
+                <hr style="border: none; border-top: 1px solid #ccc; margin: 15px 0;">
+                <p style="margin: 0; color: #333; font-size: 13px;">
+                    {f'<strong>Totales:</strong><br>{totales_extras}' if totales_extras else ''}
+                </p>
+                <p style="margin: 10px 0 0 0; color: #1B4F72; font-size: 18px; font-weight: bold;">
+                    Total a Facturar: {total_costo_fmt} CLP
+                </p>
+            </div>
+            
+            <p style="color: #555; line-height: 1.6;">
+                Por favor revise el documento adjunto con el detalle completo y no dude en contactarnos si tiene alguna consulta.
+            </p>
+            
+            <p style="color: #333; margin-top: 30px;">Saludos cordiales,</p>
+            <p style="color: #1B4F72; font-weight: bold; font-size: 16px; margin: 5px 0;">Rio Futuro Procesos</p>
+        </div>
+        
+        <div style="background-color: #1B4F72; padding: 15px; text-align: center;">
+            <p style="font-size: 11px; color: #FFFFFF; margin: 0;">
+                Este correo fue enviado automáticamente desde el sistema de gestión de Rio Futuro.
+            </p>
+        </div>
+    </div>
+    """
+    
+    return {
+        "subject": asunto,
+        "body_html": cuerpo_html
+    }
+
+
 def render(username: str, password: str):
     """Renderiza el tab de Proforma Consolidada"""
     st.markdown("## 📄 Proforma Consolidada de Fletes")
@@ -672,8 +942,9 @@ def render(username: str, password: str):
         
         # Guardar el estado actualizado y sincronizar selección con df original
         st.session_state.df_proforma_display = edited_df_display.copy()
+        # BUGFIX: Asegurarse de preservar todos los datos numéricos originales
         edited_df = df.copy()
-        edited_df['Sel'] = edited_df_display['Sel']
+        edited_df['Sel'] = edited_df_display['Sel'].values
         # Guardar en session_state para uso posterior
         st.session_state.df_proforma_final = edited_df.copy()
     
@@ -827,11 +1098,12 @@ def render(username: str, password: str):
             st.warning("⚠️ **ADVERTENCIA**: Algunas OCs tienen datos incompletos. El PDF se generará con los datos disponibles, pero puede verse incompleto.")
         
         # Botones para generar y enviar proforma
-        col_pdf, col_excel, col_email = st.columns(3)
+        st.markdown("### 🚀 Acciones")
+        col_pdf, col_zip, col_excel, col_email = st.columns(4)
         
         with col_pdf:
-            if st.button("📄 Generar Proforma PDF", type="primary", use_container_width=True):
-                with st.spinner("Generando PDF..."):
+            if st.button("📄 PDF Consolidado", use_container_width=True, help="Un solo PDF con todos los transportistas"):
+                with st.spinner("Generando PDF consolidado..."):
                     # Agrupar datos por transportista
                     datos_consolidados = {}
                     
@@ -859,20 +1131,60 @@ def render(username: str, password: str):
                         datos_consolidados[transp]['totales']['kilos'] += row['Kilos']
                         datos_consolidados[transp]['totales']['costo'] += row['Costo']
                     
-                    # Generar PDF
+                    # Generar PDF consolidado
                     pdf_bytes = generar_pdf_proforma(datos_consolidados, fecha_desde_str, fecha_hasta_str)
                     
                     # Botón de descarga
                     st.download_button(
-                        label="⬇️ Descargar Proforma PDF",
+                        label="⬇️ Descargar PDF Consolidado",
                         data=pdf_bytes,
-                        file_name=f"proforma_fletes_{fecha_desde_str}_{fecha_hasta_str}.pdf",
+                        file_name=f"proforma_fletes_consolidado_{fecha_desde_str}_{fecha_hasta_str}.pdf",
                         mime="application/pdf",
-                        type="primary",
                         use_container_width=True
                     )
+        
+        with col_zip:
+            if st.button("📦 ZIP por Transportista", type="primary", use_container_width=True, help="PDFs individuales organizados en carpetas"):
+                with st.spinner("Generando PDFs individuales..."):
+                    # Agrupar datos por transportista
+                    datos_consolidados = {}
                     
-                    st.success("✅ PDF generado exitosamente")
+                    for _, row in seleccionados.iterrows():
+                        transp = row['Transportista']
+                        
+                        if transp not in datos_consolidados:
+                            datos_consolidados[transp] = {
+                                'ocs': [],
+                                'totales': {'kms': 0, 'kilos': 0, 'costo': 0}
+                            }
+                        
+                        datos_consolidados[transp]['ocs'].append({
+                            'oc_name': row['OC'],
+                            'fecha': row['Fecha'],
+                            'ruta': row['Ruta'],
+                            'kms': row['Kms'],
+                            'kilos': row['Kilos'],
+                            'costo': row['Costo'],
+                            'costo_por_km': row['$/km'],
+                            'tipo_camion': row['Tipo Camión']
+                        })
+                        
+                        datos_consolidados[transp]['totales']['kms'] += row['Kms']
+                        datos_consolidados[transp]['totales']['kilos'] += row['Kilos']
+                        datos_consolidados[transp]['totales']['costo'] += row['Costo']
+                    
+                    # Generar ZIP con PDFs por transportista
+                    zip_bytes = generar_zip_proformas_transportistas(datos_consolidados, fecha_desde_str, fecha_hasta_str)
+                    
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    st.download_button(
+                        label=f"⬇️ Descargar ZIP ({len(datos_consolidados)} transportistas)",
+                        data=zip_bytes,
+                        file_name=f"Proformas_Fletes_{timestamp}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+                    st.success(f"✅ {len(datos_consolidados)} PDFs generados")
         
         with col_excel:
             if st.button("📊 Generar Proforma Excel", use_container_width=True):
@@ -919,126 +1231,158 @@ def render(username: str, password: str):
                     st.success("✅ Excel generado exitosamente")
         
         with col_email:
-            if st.button("📧 Enviar por Correo", use_container_width=True):
-                with st.spinner("Enviando proformas por correo..."):
-                    # Agrupar datos por transportista
-                    datos_consolidados = {}
+            if st.button("📧 Enviar por Email", use_container_width=True, help="Envío individual a cada transportista"):
+                # Agrupar datos por transportista
+                datos_consolidados = {}
+                
+                for _, row in seleccionados.iterrows():
+                    transp = row['Transportista']
                     
-                    for _, row in seleccionados.iterrows():
-                        transp = row['Transportista']
-                        
-                        if transp not in datos_consolidados:
-                            datos_consolidados[transp] = {
-                                'ocs': [],
-                                'totales': {'kms': 0, 'kilos': 0, 'costo': 0}
-                            }
-                        
-                        datos_consolidados[transp]['ocs'].append({
-                            'oc_name': row['OC'],
-                            'fecha': row['Fecha'],
-                            'ruta': row['Ruta'],
-                            'kms': row['Kms'],
-                            'kilos': row['Kilos'],
-                            'costo': row['Costo'],
-                            'costo_por_km': row['$/km'],
-                            'tipo_camion': row['Tipo Camión']
-                        })
-                        
-                        datos_consolidados[transp]['totales']['kms'] += row['Kms']
-                        datos_consolidados[transp]['totales']['kilos'] += row['Kilos']
-                        datos_consolidados[transp]['totales']['costo'] += row['Costo']
+                    if transp not in datos_consolidados:
+                        datos_consolidados[transp] = {
+                            'ocs': [],
+                            'totales': {'kms': 0, 'kilos': 0, 'costo': 0}
+                        }
                     
-                    # Enviar a cada transportista
-                    enviados = 0
-                    errores = []
+                    datos_consolidados[transp]['ocs'].append({
+                        'oc_name': row['OC'],
+                        'fecha': row['Fecha'],
+                        'ruta': row['Ruta'],
+                        'kms': row['Kms'],
+                        'kilos': row['Kilos'],
+                        'costo': row['Costo'],
+                        'costo_por_km': row['$/km'],
+                        'tipo_camion': row['Tipo Camión']
+                    })
                     
-                    for transportista, data in datos_consolidados.items():
-                        try:
-                            # Generar PDF para este transportista
-                            pdf_bytes = generar_pdf_proforma({transportista: data}, fecha_desde_str, fecha_hasta_str)
-                            
-                            # Buscar partner_id y email del transportista en Odoo
-                            transportista_info = models.execute_kw(
-                                DB, uid, password,
-                                'res.partner', 'search_read',
-                                [[('name', '=', transportista)]],
-                                {'fields': ['id', 'email'], 'limit': 1}
-                            )
-                            
-                            if transportista_info and transportista_info[0].get('email'):
-                                partner_id = transportista_info[0]['id']
-                                email_destino = transportista_info[0]['email']
-                                
-                                # Codificar PDF en base64 para adjuntar
-                                import base64
-                                pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
-                                
-                                # Crear adjunto en Odoo
-                                attachment_id = models.execute_kw(
-                                    DB, uid, password,
-                                    'ir.attachment', 'create',
-                                    [{
-                                        'name': f'Proforma_Fletes_{fecha_desde_str}_{fecha_hasta_str}.pdf',
-                                        'type': 'binary',
-                                        'datas': pdf_base64,
-                                        'res_model': 'res.partner',
-                                        'res_id': partner_id,
-                                        'mimetype': 'application/pdf'
-                                    }]
-                                )
-                                
-                                # Crear y enviar correo usando mail.mail de Odoo
-                                cant_ocs = len(data['ocs'])
-                                total_costo = data['totales']['costo']
-                                total_kms = data['totales']['kms']
-                                total_kilos = data['totales']['kilos']
-                                
-                                # Generar template de email profesional
-                                email_data = get_proforma_email_template(
-                                    transportista=transportista,
-                                    fecha_desde=fecha_desde_str,
-                                    fecha_hasta=fecha_hasta_str,
-                                    cant_ocs=cant_ocs,
-                                    total_kms=total_kms,
-                                    total_kilos=total_kilos,
-                                    total_costo=total_costo,
-                                    email_remitente="finanzas@riofuturo.cl",
-                                    telefono_contacto="+56 2 2345 6789"
-                                )
-                                
-                                # Crear el correo
-                                mail_id = models.execute_kw(
-                                    DB, uid, password,
-                                    'mail.mail', 'create',
-                                    [{
-                                        'subject': email_data['subject'],
-                                        'email_to': email_destino,
-                                        'body_html': email_data['body_html'],
-                                        'attachment_ids': [(6, 0, [attachment_id])]
-                                    }]
-                                )
-                                
-                                # Enviar el correo
-                                models.execute_kw(
-                                    DB, uid, password,
-                                    'mail.mail', 'send',
-                                    [[mail_id]]
-                                )
-                                
-                                st.success(f"✅ Proforma enviada a {transportista} ({email_destino})")
-                                enviados += 1
-                            else:
-                                errores.append(f"{transportista}: Sin email configurado")
-                                st.warning(f"⚠️ {transportista} no tiene email configurado en Odoo")
+                    datos_consolidados[transp]['totales']['kms'] += row['Kms']
+                    datos_consolidados[transp]['totales']['kilos'] += row['Kilos']
+                    datos_consolidados[transp]['totales']['costo'] += row['Costo']
+                
+                # Interfaz de envío mejorada
+                st.markdown("---")
+                st.markdown(f"### 📧 Enviando a {len(datos_consolidados)} transportista(s)")
+                
+                progress_bar = st.progress(0.0)
+                status_container = st.empty()
+                
+                enviados = 0
+                errores = []
+                total = len(datos_consolidados)
+                
+                for idx, (transportista, data) in enumerate(datos_consolidados.items()):
+                    with status_container:
+                        st.info(f"📧 Enviando {idx + 1}/{total}: {transportista}")
+                    
+                    try:
+                        # Generar PDF individual
+                        pdf_bytes = generar_pdf_individual_transportista(transportista, data, fecha_desde_str, fecha_hasta_str)
                         
-                        except Exception as e:
-                            errores.append(f"{transportista}: {str(e)}")
-                            st.error(f"❌ Error enviando a {transportista}: {e}")
+                        # Buscar email del transportista
+                        transportista_info = models.execute_kw(
+                            DB, uid, password,
+                            'res.partner', 'search_read',
+                            [[('name', '=', transportista)]],
+                            {'fields': ['id', 'email'], 'limit': 1}
+                        )
+                        
+                        if not transportista_info or not transportista_info[0].get('email'):
+                            errores.append(f"{transportista}: Sin email configurado")
+                            with status_container:
+                                st.warning(f"⚠️ {transportista} no tiene email")
+                            continue
+                        
+                        partner_id = transportista_info[0]['id']
+                        email_destino = transportista_info[0]['email']
+                        
+                        # Codificar PDF
+                        import base64
+                        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                        
+                        # Crear adjunto
+                        attachment_data = {
+                            "name": f"Proforma_Fletes_{fecha_desde_str}_{fecha_hasta_str}.pdf",
+                            "type": "binary",
+                            "datas": pdf_base64,
+                            "res_model": "res.partner",
+                            "res_id": partner_id,
+                            "mimetype": "application/pdf",
+                            "description": f"Proforma de fletes enviada por correo"
+                        }
+                        
+                        attachment_id = models.execute_kw(
+                            DB, uid, password,
+                            'ir.attachment', 'create',
+                            [attachment_data]
+                        )
+                        
+                        if isinstance(attachment_id, list):
+                            attachment_id = attachment_id[0] if attachment_id else None
+                        
+                        if not attachment_id:
+                            raise Exception("No se pudo crear el adjunto")
+                        
+                        # Generar email con template mejorado
+                        email_data = get_email_template_transportista(transportista, data, fecha_desde_str, fecha_hasta_str)
+                        
+                        # Crear correo
+                        mail_data = {
+                            "subject": email_data['subject'],
+                            "body_html": email_data['body_html'],
+                            "email_to": email_destino,
+                            "email_from": "notificaciones-rfp@riofuturo.cl",
+                            "attachment_ids": [(6, 0, [attachment_id])],
+                            "auto_delete": True
+                        }
+                        
+                        mail_id = models.execute_kw(
+                            DB, uid, password,
+                            'mail.mail', 'create',
+                            [mail_data]
+                        )
+                        
+                        if isinstance(mail_id, list):
+                            mail_id = mail_id[0] if mail_id else None
+                        
+                        if not mail_id:
+                            raise Exception("No se pudo crear el correo")
+                        
+                        # Enviar
+                        models.execute_kw(
+                            DB, uid, password,
+                            'mail.mail', 'send',
+                            [[mail_id]]
+                        )
+                        
+                        enviados += 1
+                        with status_container:
+                            st.success(f"✅ {transportista} enviada correctamente")
                     
-                    # Resumen final
-                    if enviados > 0:
-                        st.success(f"✅ {enviados} proforma(s) enviada(s) exitosamente")
-                    if errores:
-                        st.error(f"❌ {len(errores)} error(es): {', '.join(errores)}")
+                    except Exception as e:
+                        errores.append(f"{transportista}: {str(e)}")
+                        with status_container:
+                            st.error(f"❌ Error enviando {transportista}: {str(e)}")
+                    
+                    progress_bar.progress((idx + 1) / total)
+                
+                # Resumen final
+                st.markdown("---")
+                st.markdown("### 📊 Resumen de Envío")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("✅ Enviadas", enviados)
+                with col2:
+                    st.metric("❌ Errores", len(errores))
+                with col3:
+                    st.metric("📊 Total", total)
+                
+                if errores:
+                    st.error("**Errores encontrados:**")
+                    for error in errores:
+                        st.caption(f"  • {error}")
+                else:
+                    st.success("🎉 ¡Todas las proformas fueron enviadas correctamente!")
+                    st.balloons()
     else:
         st.info("👆 Seleccione las OCs que desea incluir en la proforma")

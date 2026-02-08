@@ -147,6 +147,22 @@ class OdooClient:
             model, 'write', [ids, vals]
         )
     
+    def unlink(self, model: str, ids: List[int]) -> bool:
+        """
+        Elimina registros en Odoo.
+        
+        Args:
+            model: Nombre del modelo
+            ids: Lista de IDs a eliminar
+            
+        Returns:
+            True si fue exitoso
+        """
+        return self.models.execute_kw(
+            self.db, self.uid, self.password,
+            model, 'unlink', [ids]
+        )
+    
     def execute(self, model: str, method: str, *args, **kwargs) -> Any:
         """
         Ejecuta un método genérico en Odoo.

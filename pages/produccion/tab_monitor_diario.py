@@ -42,7 +42,7 @@ def fetch_procesos_activos(username: str, password: str, fecha: str,
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_procesos_cerrados(username: str, password: str, fecha: str,
                             planta: str = None, sala: str = None,
-                            fecha_fin: str = None):
+                            fecha_fin: str = None, producto: str = None):
     """Obtiene procesos cerrados para un rango de fechas."""
     params = {
         "username": username,
@@ -55,6 +55,8 @@ def fetch_procesos_cerrados(username: str, password: str, fecha: str,
         params["planta"] = planta
     if sala and sala != "Todas":
         params["sala"] = sala
+    if producto and producto != "Todos":
+        params["producto"] = producto
     
     response = httpx.get(f"{API_URL}/api/v1/produccion/monitor/cerrados",
                          params=params, timeout=60.0)
@@ -64,7 +66,8 @@ def fetch_procesos_cerrados(username: str, password: str, fecha: str,
 
 @st.cache_data(ttl=120, show_spinner=False)
 def fetch_evolucion(username: str, password: str, fecha_inicio: str, 
-                    fecha_fin: str, planta: str = None, sala: str = None):
+                    fecha_fin: str, planta: str = None, sala: str = None,
+                    producto: str = None):
     """Obtiene evolución de procesos en rango de fechas."""
     params = {
         "username": username,
@@ -76,6 +79,8 @@ def fetch_evolucion(username: str, password: str, fecha_inicio: str,
         params["planta"] = planta
     if sala and sala != "Todas":
         params["sala"] = sala
+    if producto and producto != "Todos":
+        params["producto"] = producto
     
     response = httpx.get(f"{API_URL}/api/v1/produccion/monitor/evolucion",
                          params=params, timeout=90.0)
@@ -130,36 +135,76 @@ def descargar_reporte_pdf(data: dict):
 # ===================== COMPONENTES DE VISUALIZACIÓN =====================
 
 def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
-    """Renderiza KPIs de resumen."""
+    """Renderiza KPIs de resumen con diseño mejorado."""
+    
+    # Estilos CSS para las tarjetas
+    st.markdown("""
+    <style>
+    .kpi-card {
+        background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        border-left: 4px solid;
+        margin-bottom: 10px;
+    }
+    .kpi-card.pendientes { border-color: #e74c3c; }
+    .kpi-card.kg-pend { border-color: #f39c12; }
+    .kpi-card.cerrados { border-color: #2ecc71; }
+    .kpi-card.kg-cerr { border-color: #3498db; }
+    .kpi-value {
+        font-size: 2.2em;
+        font-weight: bold;
+        color: #fff;
+        margin: 5px 0;
+    }
+    .kpi-label {
+        font-size: 0.9em;
+        color: #8892b0;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     cols = st.columns(4)
     
+    total_pendientes = stats_activos.get('total_procesos', 0)
+    kg_pendientes = stats_activos.get('kg_pendientes', 0)
+    total_cerrados = stats_cerrados.get('total_procesos', 0)
+    kg_cerrados = stats_cerrados.get('kg_producidos', 0)
+    
     with cols[0]:
-        st.metric(
-            "📋 Procesos Pendientes",
-            stats_activos.get('total_procesos', 0),
-            help="Procesos ni cerrados ni cancelados"
-        )
+        st.markdown(f"""
+        <div class="kpi-card pendientes">
+            <div class="kpi-label">📋 Procesos Pendientes</div>
+            <div class="kpi-value">{total_pendientes}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with cols[1]:
-        st.metric(
-            "⏳ KG Pendientes",
-            f"{stats_activos.get('kg_pendientes', 0):,.0f}",
-            help="Kilos que faltan por producir"
-        )
+        st.markdown(f"""
+        <div class="kpi-card kg-pend">
+            <div class="kpi-label">⏳ KG Pendientes</div>
+            <div class="kpi-value">{kg_pendientes:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with cols[2]:
-        st.metric(
-            "✅ Cerrados",
-            stats_cerrados.get('total_procesos', 0),
-            help="Procesos cerrados en el período"
-        )
+        st.markdown(f"""
+        <div class="kpi-card cerrados">
+            <div class="kpi-label">✅ Procesos Cerrados</div>
+            <div class="kpi-value">{total_cerrados}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with cols[3]:
-        st.metric(
-            "📦 KG Cerrados",
-            f"{stats_cerrados.get('kg_producidos', 0):,.0f}",
-            help="Kilos de procesos cerrados en el período"
-        )
+        st.markdown(f"""
+        <div class="kpi-card kg-cerr">
+            <div class="kpi-label">📦 KG Producidos</div>
+            <div class="kpi-value">{kg_cerrados:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def render_grafico_evolucion(evolucion: list):
@@ -247,86 +292,473 @@ def render_grafico_evolucion(evolucion: list):
 def render_grafico_cerrados_por_dia(evolucion: list):
     """Renderiza gráfico de barras con procesos cerrados por día usando datos de evolución."""
     if not evolucion:
-        st.info("No hay datos de procesos cerrados para mostrar")
+        st.info("🔍 No hay datos de procesos cerrados para mostrar")
         return
     
-    # Usar directamente los datos de evolución para mantener consistencia
     fechas_display = [e['fecha_display'] for e in evolucion]
     cantidades = [e['procesos_cerrados'] for e in evolucion]
-    kilos = [e['kg_producidos'] for e in evolucion]
+    kilos = [round(e['kg_producidos'], 0) for e in evolucion]
     
-    # Verificar que hay al menos un cierre
     if sum(cantidades) == 0:
-        st.info("No hay procesos cerrados en el período seleccionado")
+        st.info("📭 No hay procesos cerrados en el período seleccionado")
         return
+    
+    # Totales para mostrar en leyenda
+    total_procesos = sum(cantidades)
+    total_kg = sum(kilos)
     
     theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
     label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
     
     options = {
-        "title": {
-            "text": "✅ Procesos Cerrados por Día",
-            "textStyle": {"color": label_color, "fontSize": 14}
-        },
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"}
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(50,50,50,0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff"}
         },
         "legend": {
-            "data": ["Cantidad Procesos", "KG Producidos"],
-            "top": 30,
-            "textStyle": {"color": label_color}
+            "data": [f"✅ Procesos Cerrados ({total_procesos})", f"📦 KG Producidos ({total_kg:,.0f})"],
+            "top": 5,
+            "textStyle": {"color": label_color, "fontSize": 12}
         },
         "xAxis": {
             "type": "category",
             "data": fechas_display,
-            "axisLabel": {"color": "#8892b0", "rotate": 45}
+            "axisLabel": {"color": label_color, "rotate": 0, "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#666"}}
         },
         "yAxis": [
             {
                 "type": "value",
                 "name": "Procesos",
+                "nameTextStyle": {"color": "#00E676", "fontSize": 11},
                 "position": "left",
-                "axisLabel": {"color": "#8892b0"}
+                "axisLabel": {"color": "#00E676", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.1)"}}
             },
             {
                 "type": "value",
-                "name": "KG",
+                "name": "Kilos",
+                "nameTextStyle": {"color": "#64B5F6", "fontSize": 11},
                 "position": "right",
-                "axisLabel": {"color": "#8892b0", "formatter": "{value}"}
+                "axisLabel": {"color": "#64B5F6", "fontSize": 11},
+                "splitLine": {"show": False}
             }
         ],
         "series": [
             {
-                "name": "Cantidad Procesos",
+                "name": f"✅ Procesos Cerrados ({total_procesos})",
                 "type": "bar",
                 "data": cantidades,
-                "itemStyle": {"color": "#2ecc71"},
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#00E676"},
+                            {"offset": 1, "color": "#00C853"}
+                        ]
+                    },
+                    "borderRadius": [6, 6, 0, 0]
+                },
                 "emphasis": {"focus": "series"},
                 "label": {
                     "show": True,
                     "position": "top",
                     "color": label_color,
-                    "fontSize": 11
+                    "fontSize": 12,
+                    "fontWeight": "bold"
                 }
             },
             {
-                "name": "KG Producidos",
+                "name": f"📦 KG Producidos ({total_kg:,.0f})",
                 "type": "line",
                 "yAxisIndex": 1,
                 "data": kilos,
                 "smooth": True,
                 "symbol": "circle",
-                "symbolSize": 8,
-                "itemStyle": {"color": "#3498db"},
-                "lineStyle": {"width": 2}
+                "symbolSize": 10,
+                "itemStyle": {"color": "#64B5F6", "borderWidth": 2, "borderColor": "#fff"},
+                "lineStyle": {"width": 3, "color": "#64B5F6"},
+                "areaStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "rgba(100,181,246,0.3)"},
+                            {"offset": 1, "color": "rgba(100,181,246,0.05)"}
+                        ]
+                    }
+                }
             }
         ],
         "backgroundColor": "rgba(0,0,0,0)",
-        "grid": {"left": "10%", "right": "10%", "bottom": "20%", "containLabel": True}
+        "grid": {"left": "10%", "right": "10%", "bottom": "12%", "top": "55px", "containLabel": True}
     }
     
-    st_echarts(options=options, height="350px", theme=theme_echarts)
+    st_echarts(options=options, height="320px", theme=theme_echarts)
+
+
+def render_grafico_pendientes_por_planta(procesos: list):
+    """Renderiza gráfico de barras con procesos pendientes agrupados por planta."""
+    if not procesos:
+        st.info("🔍 No hay procesos pendientes para mostrar")
+        return
+    
+    # Contar por planta - mejorar detección
+    conteo_planta = {"RIO FUTURO": 0, "VILKUN": 0}
+    kg_planta = {"RIO FUTURO": 0, "VILKUN": 0}
+    
+    for p in procesos:
+        sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
+        name = (p.get('name', '') or '').upper()
+        origin = (p.get('origin', '') or '').upper()
+        workcenter = (p.get('workcenter_id', '') or '')
+        if isinstance(workcenter, (list, tuple)):
+            workcenter = str(workcenter[1] if len(workcenter) > 1 else workcenter[0]).upper()
+        else:
+            workcenter = str(workcenter).upper()
+        
+        texto_busqueda = f"{sala} {name} {origin} {workcenter}"
+        
+        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
+            planta = 'VILKUN'
+        else:
+            planta = 'RIO FUTURO'
+        
+        conteo_planta[planta] += 1
+        kg_prog = p.get('product_qty', 0) or 0
+        kg_prod = p.get('qty_produced', 0) or 0
+        kg_planta[planta] += max(0, kg_prog - kg_prod)
+    
+    plantas = [p for p in conteo_planta.keys() if conteo_planta[p] > 0]
+    cantidades = [conteo_planta[p] for p in plantas]
+    kilos = [round(kg_planta[p], 0) for p in plantas]
+    
+    if not plantas:
+        st.info("🔍 No hay procesos pendientes")
+        return
+    
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    
+    # Colores más vivos
+    colores = {
+        "RIO FUTURO": "#00D4FF",  # Cyan brillante
+        "VILKUN": "#FF6B9D"       # Rosa vibrante
+    }
+    
+    options = {
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(50,50,50,0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff"},
+            "formatter": "{b}<br/>📦 <b>{c0}</b> procesos<br/>⚖️ <b>{c1}</b> kg pendientes"
+        },
+        "legend": {
+            "data": ["📦 Procesos Pendientes", "⚖️ KG por Producir"],
+            "top": 5,
+            "textStyle": {"color": label_color, "fontSize": 12}
+        },
+        "xAxis": {
+            "type": "category",
+            "data": plantas,
+            "axisLabel": {"color": label_color, "fontSize": 14, "fontWeight": "bold"},
+            "axisLine": {"lineStyle": {"color": "#666"}}
+        },
+        "yAxis": [
+            {
+                "type": "value",
+                "name": "Procesos",
+                "nameTextStyle": {"color": "#00D4FF", "fontSize": 11},
+                "position": "left",
+                "axisLabel": {"color": "#00D4FF", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.1)"}}
+            },
+            {
+                "type": "value",
+                "name": "Kilos",
+                "nameTextStyle": {"color": "#FFB347", "fontSize": 11},
+                "position": "right",
+                "axisLabel": {"color": "#FFB347", "fontSize": 11},
+                "splitLine": {"show": False}
+            }
+        ],
+        "series": [
+            {
+                "name": "📦 Procesos Pendientes",
+                "type": "bar",
+                "data": [{"value": cantidades[i], "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": colores.get(plantas[i], "#95a5a6")},
+                            {"offset": 1, "color": colores.get(plantas[i], "#95a5a6").replace("FF", "99")}
+                        ]
+                    },
+                    "borderRadius": [8, 8, 0, 0]
+                }} for i in range(len(plantas))],
+                "barWidth": "45%",
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": label_color,
+                    "fontSize": 18,
+                    "fontWeight": "bold",
+                    "formatter": "{c}"
+                }
+            },
+            {
+                "name": "⚖️ KG por Producir",
+                "type": "line",
+                "yAxisIndex": 1,
+                "data": kilos,
+                "smooth": True,
+                "symbol": "circle",
+                "symbolSize": 12,
+                "itemStyle": {"color": "#FFB347", "borderWidth": 2, "borderColor": "#fff"},
+                "lineStyle": {"width": 3, "color": "#FFB347"},
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "color": "#FFB347",
+                    "fontSize": 11,
+                    "fontWeight": "bold",
+                    "formatter": "{c} kg"
+                }
+            }
+        ],
+        "backgroundColor": "rgba(0,0,0,0)",
+        "grid": {"left": "12%", "right": "12%", "bottom": "10%", "top": "60px", "containLabel": True}
+    }
+    
+    st_echarts(options=options, height="320px", theme=theme_echarts)
+
+
+def render_grafico_pendientes_por_dia(procesos_pendientes: list):
+    """Renderiza gráfico de procesos pendientes agrupados por fecha de creación."""
+    if not procesos_pendientes:
+        st.info("No hay procesos pendientes para mostrar")
+        return
+    
+    from collections import defaultdict
+    from datetime import datetime
+    
+    # Agrupar procesos pendientes por fecha de creación
+    pendientes_por_fecha = defaultdict(lambda: {"RIO FUTURO": 0, "VILKUN": 0})
+    
+    for p in procesos_pendientes:
+        # Obtener fecha de creación
+        fecha_str = p.get('create_date', '') or p.get('date_start', '') or p.get('date_planned_start', '')
+        if not fecha_str:
+            continue
+        
+        # Extraer solo la fecha (sin hora)
+        try:
+            if isinstance(fecha_str, str):
+                fecha = fecha_str.split('T')[0] if 'T' in fecha_str else fecha_str.split(' ')[0]
+            else:
+                fecha = str(fecha_str)[:10]
+        except:
+            continue
+        
+        # Detectar planta
+        sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
+        name = (p.get('name', '') or '').upper()
+        origin = (p.get('origin', '') or '').upper()
+        texto_busqueda = f"{sala} {name} {origin}"
+        
+        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
+            planta = 'VILKUN'
+        else:
+            planta = 'RIO FUTURO'
+        
+        pendientes_por_fecha[fecha][planta] += 1
+    
+    if not pendientes_por_fecha:
+        st.info("No hay procesos pendientes con fecha válida")
+        return
+    
+    # Ordenar por fecha
+    fechas_ordenadas = sorted(pendientes_por_fecha.keys())
+    
+    # Preparar datos para el gráfico
+    fechas_display = []
+    datos_rio = []
+    datos_vlk = []
+    
+    for fecha in fechas_ordenadas:
+        # Formatear fecha para mostrar (dd/mm)
+        try:
+            fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
+            fecha_display = fecha_obj.strftime('%d/%m')
+        except:
+            fecha_display = fecha
+        
+        fechas_display.append(fecha_display)
+        datos_rio.append(pendientes_por_fecha[fecha]["RIO FUTURO"])
+        datos_vlk.append(pendientes_por_fecha[fecha]["VILKUN"])
+    
+    theme_echarts = st.session_state.get('theme_mode', 'Dark').lower()
+    label_color = "#ffffff" if theme_echarts == "dark" else "#1a1a1a"
+    
+    # Totales para mostrar
+    total_rio = sum(datos_rio)
+    total_vlk = sum(datos_vlk)
+    
+    options = {
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(50,50,50,0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff"}
+        },
+        "xAxis": {
+            "type": "category",
+            "data": fechas_display,
+            "axisLabel": {"color": label_color, "rotate": 0, "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#666"}}
+        },
+        "yAxis": {
+            "type": "value",
+            "name": "Cantidad",
+            "nameTextStyle": {"color": label_color, "fontSize": 11},
+            "axisLabel": {"color": label_color, "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "rgba(255,255,255,0.1)"}},
+            "min": 0
+        },
+        "legend": {
+            "data": [f"🔵 RIO FUTURO ({total_rio})", f"🟣 VILKUN ({total_vlk})"],
+            "top": 5,
+            "textStyle": {"color": label_color, "fontSize": 12}
+        },
+        "series": [
+            {
+                "name": f"🔵 RIO FUTURO ({total_rio})",
+                "type": "bar",
+                "stack": "total",
+                "data": datos_rio,
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#00D4FF"},
+                            {"offset": 1, "color": "#0099CC"}
+                        ]
+                    },
+                    "borderRadius": [0, 0, 0, 0]
+                },
+                "label": {
+                    "show": True,
+                    "position": "inside",
+                    "color": "#ffffff",
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                    "formatter": "{c}"
+                }
+            },
+            {
+                "name": f"🟣 VILKUN ({total_vlk})",
+                "type": "bar",
+                "stack": "total",
+                "data": datos_vlk,
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#FF6B9D"},
+                            {"offset": 1, "color": "#CC5580"}
+                        ]
+                    },
+                    "borderRadius": [4, 4, 0, 0]
+                },
+                "label": {
+                    "show": True,
+                    "position": "inside",
+                    "color": "#ffffff",
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                    "formatter": "{c}"
+                }
+            }
+        ],
+        "backgroundColor": "rgba(0,0,0,0)",
+        "grid": {"left": "8%", "right": "5%", "bottom": "15%", "top": "55px", "containLabel": True}
+    }
+    
+    st_echarts(options=options, height="320px", theme=theme_echarts)
+
+
+def render_tabla_pendientes_por_proceso_planta(procesos: list):
+    """Renderiza tabla de procesos pendientes agrupados por tipo de proceso y planta."""
+    if not procesos:
+        st.info("No hay procesos pendientes para mostrar")
+        return
+    
+    # Agrupar por tipo de proceso y planta
+    resumen = {}
+    for p in procesos:
+        producto = p.get('product_id', {})
+        if isinstance(producto, dict):
+            tipo_proceso = producto.get('name', 'Sin Producto')
+        else:
+            tipo_proceso = str(producto) if producto else 'Sin Producto'
+        
+        # Extraer solo el nombre del proceso (sin código)
+        if ']' in tipo_proceso:
+            tipo_proceso = tipo_proceso.split(']')[-1].strip()
+        
+        # Detectar planta - mejorado
+        sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
+        name = (p.get('name', '') or '').upper()
+        origin = (p.get('origin', '') or '').upper()
+        texto_busqueda = f"{sala} {name} {origin}"
+        
+        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
+            planta = 'VILKUN'
+        else:
+            planta = 'RIO FUTURO'
+        
+        key = (tipo_proceso, planta)
+        if key not in resumen:
+            resumen[key] = {'cantidad': 0, 'kg_pendientes': 0}
+        
+        resumen[key]['cantidad'] += 1
+        kg_prog = p.get('product_qty', 0) or 0
+        kg_prod = p.get('qty_produced', 0) or 0
+        resumen[key]['kg_pendientes'] += (kg_prog - kg_prod)
+    
+    # Convertir a lista para DataFrame
+    data = []
+    for (tipo, planta), stats in sorted(resumen.items(), key=lambda x: -x[1]['cantidad']):
+        data.append({
+            "Tipo de Proceso": tipo[:50],
+            "Planta": planta,
+            "Cant. Pendientes": stats['cantidad'],
+            "KG Pendientes": f"{stats['kg_pendientes']:,.0f}"
+        })
+    
+    if not data:
+        st.info("No hay datos para mostrar")
+        return
+    
+    df = pd.DataFrame(data)
+    
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=min(400, 50 + len(data) * 35),
+        hide_index=True,
+        column_config={
+            "Tipo de Proceso": st.column_config.TextColumn("Tipo de Proceso", width="large"),
+            "Planta": st.column_config.TextColumn("Planta", width="medium"),
+            "Cant. Pendientes": st.column_config.NumberColumn("Cant. Pendientes", width="small"),
+            "KG Pendientes": st.column_config.TextColumn("KG Pendientes", width="small"),
+        }
+    )
 
 
 def render_tabla_compacta(procesos: list, tipo: str = "activos"):
@@ -566,7 +998,8 @@ def render(username: str, password: str):
                     username, password,
                     fecha_inicio.isoformat(),
                     planta_sel, sala_sel,
-                    fecha_fin.isoformat()
+                    fecha_fin.isoformat(),
+                    producto_sel
                 )
                 
                 # Evolución en el rango
@@ -574,7 +1007,8 @@ def render(username: str, password: str):
                     username, password,
                     fecha_inicio.isoformat(),
                     fecha_fin.isoformat(),
-                    planta_sel, sala_sel
+                    planta_sel, sala_sel,
+                    producto_sel
                 )
                 
                 st.session_state["monitor_activos"] = activos_data
@@ -652,23 +1086,36 @@ def render(username: str, password: str):
     
     st.markdown("---")
     
-    # Gráfico de evolución
-    render_grafico_evolucion(evolucion.get("evolucion", []))
+    # === GRÁFICO 1: PROCESOS PENDIENTES POR PLANTA ===
+    st.markdown("### 🏭 ¿Cuántos procesos están pendientes en cada planta?")
+    st.caption("Compara la cantidad de procesos y kilos pendientes entre **RIO FUTURO** y **VILKUN**")
+    render_grafico_pendientes_por_planta(activos.get("procesos", []))
     
     st.markdown("---")
     
-    # Gráfico de procesos cerrados por día (usa mismos datos de evolución para consistencia)
+    # === GRÁFICO 2: PROCESOS PENDIENTES POR DÍA ===
+    st.markdown("### 📅 ¿Cuándo se crearon los procesos pendientes?")
+    st.caption("Muestra cuántos procesos se acumularon por día de creación, separados por planta")
+    render_grafico_pendientes_por_dia(activos.get("procesos", []))
+    
+    st.markdown("---")
+    
+    # === GRÁFICO 3: PROCESOS CERRADOS POR DÍA ===
+    st.markdown("### 🎉 ¿Cuántos procesos se completaron por día?")
+    st.caption("Cantidad de procesos cerrados y kilos producidos cada día del período seleccionado")
     render_grafico_cerrados_por_dia(evolucion.get("evolucion", []))
     
     st.markdown("---")
     
-    # === TABLAS DE PROCESOS ===
-    sub_tabs = st.tabs(["📋 Procesos Pendientes", "✅ Cerrados"])
+    # === TABLA RESUMEN ===
+    st.markdown("### 📋 Detalle de Procesos Pendientes por Tipo y Planta")
+    render_tabla_pendientes_por_proceso_planta(activos.get("procesos", []))
     
-    with sub_tabs[0]:
-        st.markdown(f"**{activos.get('estadisticas', {}).get('total_procesos', 0)} procesos pendientes**")
+    st.markdown("---")
+    
+    # === TABLAS DETALLADAS (colapsables) ===
+    with st.expander(f"📋 Ver Lista de Procesos Pendientes ({activos.get('estadisticas', {}).get('total_procesos', 0)})", expanded=False):
         render_tabla_compacta(activos.get("procesos", []), "pendientes")
     
-    with sub_tabs[1]:
-        st.markdown(f"**{cerrados.get('estadisticas', {}).get('total_procesos', 0)} procesos cerrados en el período**")
+    with st.expander(f"✅ Ver Lista de Procesos Cerrados ({cerrados.get('estadisticas', {}).get('total_procesos', 0)})", expanded=False):
         render_tabla_compacta(cerrados.get("procesos", []), "cerrados")

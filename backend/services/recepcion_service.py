@@ -108,40 +108,53 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         picking_type_ids = [1, 217, 164]
     
     
-    # ============ PASO 0.5: Identificar recepciones IN con devoluciones asociadas ============
-    # Buscar devoluciones para identificar qué recepciones tienen devoluciones
+    # ============ PASO 0.5: Identificar devoluciones y calcular kg devueltos por recepción ============
+    # Buscar devoluciones para restar los kg devueltos de las recepciones originales
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas
     
+    import re
+    devoluciones_por_recepcion = {}  # {albaran_recepcion: [ids_devoluciones]}
+    
     try:
-        # Buscar devoluciones en el mismo rango de fechas
+        # Buscar devoluciones en un rango más amplio (desde 30 días antes hasta fecha_fin)
+        from datetime import datetime, timedelta
+        fecha_inicio_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00'))
+        fecha_busqueda_dev = (fecha_inicio_dt - timedelta(days=30)).strftime("%Y-%m-%d")
+        
         devoluciones_domain = [
             ("picking_type_id", "in", PICKING_TYPES_DEVOLUCION),
-            ("scheduled_date", ">=", fecha_inicio),
+            ("scheduled_date", ">=", fecha_busqueda_dev),
             ("scheduled_date", "<=", fecha_fin),
+            ("state", "=", "done"),  # Solo devoluciones completadas
         ]
         
         devoluciones = client.search_read(
             "stock.picking",
             devoluciones_domain,
-            ["id", "origin", "name"],
+            ["id", "origin", "name", "state"],
             limit=5000
         )
         
-        # Extraer los nombres/IDs de las recepciones IN que tienen devolución
-        # El campo 'origin' típicamente contiene el nombre del picking original
-        recepciones_con_devolucion = set()
+        # Mapear devoluciones a sus recepciones originales
         for dev in devoluciones:
             origin = dev.get("origin", "")
             if origin:
-                # El origin puede ser el nombre del picking original (ej: "RF/RFP/IN/01234")
-                recepciones_con_devolucion.add(origin)
+                # El origin puede contener texto como "Retorno de RF/RFP/IN/01234"
+                # o directamente "RF/RFP/IN/01234"
+                # Extraer el nombre del picking usando regex
+                match = re.search(r'(RF/[A-Z]+/IN/\d+|SNJ/INMP/\d+|Vilk/IN/\d+)', origin)
+                if match:
+                    albaran_original = match.group(1)
+                    if albaran_original not in devoluciones_por_recepcion:
+                        devoluciones_por_recepcion[albaran_original] = []
+                    devoluciones_por_recepcion[albaran_original].append(dev["id"])
         
-        print(f"[INFO] Se encontraron {len(devoluciones)} devoluciones")
-        print(f"[INFO] Recepciones con devolución a excluir: {len(recepciones_con_devolucion)}")
+        print(f"[INFO] Se encontraron {len(devoluciones)} devoluciones completadas")
+        print(f"[INFO] Recepciones con devoluciones: {len(devoluciones_por_recepcion)}")
         
     except Exception as e:
         print(f"[WARNING] Error buscando devoluciones: {e}")
-        recepciones_con_devolucion = set()
+        devoluciones_por_recepcion = {}
     
     # ============ PASO 1: Obtener todas las recepciones (EXCLUYENDO DEVOLUCIONES) ============
     # Las devoluciones tienen picking_type_id diferentes a los de recepción
@@ -164,6 +177,9 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         domain.append(("state", "in", estados))
     elif solo_hechas:
         domain.append(("state", "=", "done"))
+    
+    # SIEMPRE excluir recepciones canceladas
+    domain.append(("state", "!=", "cancel"))
         
     if productor_id:
         domain.append(("partner_id", "=", productor_id))
@@ -213,9 +229,16 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     # all_check_ids REMOVIDO: Se buscará por picking_id
     
     # ============ PASO 2: Obtener TODOS los movimientos en UNA llamada ============
+    # Incluir movimientos de recepciones Y devoluciones
+    devolucion_ids = []
+    for dev_list in devoluciones_por_recepcion.values():
+        devolucion_ids.extend(dev_list)
+    
+    all_picking_ids = picking_ids + devolucion_ids
+    
     moves = client.search_read(
         "stock.move",
-        [("picking_id", "in", picking_ids)],
+        [("picking_id", "in", all_picking_ids)],
         ["picking_id", "product_id", "quantity_done", "product_uom", "price_unit"]
     )
     
@@ -465,11 +488,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         if productor.upper().strip() == 'ADMINISTRADOR':
             continue
         
-        # EXCLUIR recepciones IN que tienen devoluciones asociadas
+        # Obtener albarán de la recepción
         albaran = rec.get("name", "")
-        if albaran in recepciones_con_devolucion:
-            print(f"[INFO] Excluyendo recepción {albaran} porque tiene devolución asociada")
-            continue
         
         # Determinar origen basado en picking_type_id
         picking_type = rec.get("picking_type_id")
@@ -483,14 +503,59 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         
         fecha = rec.get("scheduled_date", "")
         
-        # Procesar movimientos de este picking
+        # Procesar movimientos de este picking (recepción)
+        # IMPORTANTE: Solo sumar movimientos en KG, no unidades (bandejas, etc)
         rec_moves = moves_by_picking.get(picking_id, [])
-        kg_total = sum(m.get("quantity_done", 0) or 0 for m in rec_moves)
+        kg_total_recepcion = 0
+        for m in rec_moves:
+            uom = m.get("product_uom")
+            uom_name = uom[1].lower() if isinstance(uom, (list, tuple)) and len(uom) > 1 else "kg"
+            # Solo sumar si es kg
+            if uom_name == "kg":
+                kg_total_recepcion += m.get("quantity_done", 0) or 0
+        
+        # Calcular kg devueltos (si existen devoluciones)
+        # IMPORTANTE: Solo sumar movimientos en KG, no unidades
+        kg_total_devuelto = 0
+        if albaran in devoluciones_por_recepcion:
+            for dev_id in devoluciones_por_recepcion[albaran]:
+                dev_moves = moves_by_picking.get(dev_id, [])
+                for dm in dev_moves:
+                    duom = dm.get("product_uom")
+                    duom_name = duom[1].lower() if isinstance(duom, (list, tuple)) and len(duom) > 1 else "kg"
+                    # Solo sumar si es kg
+                    if duom_name == "kg":
+                        kg_total_devuelto += dm.get("quantity_done", 0) or 0
+            
+            if kg_total_devuelto > 0:
+                print(f"[INFO] {albaran}: {kg_total_recepcion:.2f} kg recibidos - {kg_total_devuelto:.2f} kg devueltos = {kg_total_recepcion - kg_total_devuelto:.2f} kg netos")
+        
+        # Kg netos = kg recibidos - kg devueltos
+        kg_total = kg_total_recepcion - kg_total_devuelto
+        
+        # Si después de la devolución no queda nada, excluir la recepción
+        if kg_total <= 0:
+            print(f"[INFO] Excluyendo {albaran}: devolución completa (0 kg netos)")
+            continue
         
         # VALIDACIÓN CRÍTICA: Verificar que product_info_map es un diccionario
         if not isinstance(product_info_map, dict):
             print(f"[ERROR CRÍTICO] product_info_map es {type(product_info_map)} en lugar de dict. Reconstruyendo...")
             product_info_map = {}
+        
+        # Calcular kg devueltos por producto
+        kg_devueltos_por_producto = {}
+        if albaran in devoluciones_por_recepcion:
+            for dev_id in devoluciones_por_recepcion[albaran]:
+                dev_moves = moves_by_picking.get(dev_id, [])
+                for dm in dev_moves:
+                    if not isinstance(dm, dict):
+                        continue
+                    dprod = dm.get("product_id")
+                    dprod_id = dprod[0] if isinstance(dprod, (list, tuple)) else dprod if dprod else None
+                    if dprod_id:
+                        kg_dev = dm.get("quantity_done", 0) or 0
+                        kg_devueltos_por_producto[dprod_id] = kg_devueltos_por_producto.get(dprod_id, 0) + kg_dev
         
         productos = []
         for m in rec_moves:
@@ -507,25 +572,30 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             default_code = prod_info.get("default_code", "")
             nombre_prod = f"[{default_code}] {nombre}" if default_code else nombre
             
-            kg_hechos = m.get("quantity_done", 0) or 0
+            kg_hechos_recepcion = m.get("quantity_done", 0) or 0
+            kg_hechos_devueltos = kg_devueltos_por_producto.get(prod_id, 0)
+            kg_hechos = kg_hechos_recepcion - kg_hechos_devueltos  # Kg netos
+            
             costo_unit = m.get("price_unit", 0) or 0
-            costo_total = kg_hechos * costo_unit
+            costo_total = kg_hechos * costo_unit  # Usar kg netos para el costo
             categoria = _normalize_categoria(prod_info.get("categ", ""))
             
             uom = m.get("product_uom")
             uom_name = uom[1] if isinstance(uom, (list, tuple)) else ""
             
-            productos.append({
-                "Producto": nombre_prod,
-                "product_id": prod_id,
-                "Kg Hechos": kg_hechos,
-                "Costo Unitario": costo_unit,
-                "Costo Total": costo_total,
-                "UOM": uom_name,
-                "Categoria": categoria,
-                "Manejo": prod_info.get("manejo", ""),
-                "TipoFruta": prod_info.get("tipo_fruta", "")
-            })
+            # Solo agregar productos con kg > 0 después de devoluciones
+            if kg_hechos > 0:
+                productos.append({
+                    "Producto": nombre_prod,
+                    "product_id": prod_id,
+                    "Kg Hechos": kg_hechos,
+                    "Costo Unitario": costo_unit,
+                    "Costo Total": costo_total,
+                    "UOM": uom_name,
+                    "Categoria": categoria,
+                    "Manejo": prod_info.get("manejo", ""),
+                    "TipoFruta": prod_info.get("tipo_fruta", "")
+                })
         
         # Procesar datos de calidad
         calidad_data = {
