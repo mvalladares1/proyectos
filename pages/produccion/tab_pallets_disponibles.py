@@ -299,8 +299,8 @@ def render_grafico_planta(por_planta: Dict):
         return
     
     plantas = list(por_planta.keys())
-    cantidades = [len(v) for v in por_planta.values()]
-    kg_totales = [sum(p['cantidad_kg'] for p in v) for v in por_planta.values()]
+    cantidades = [v['cantidad'] if isinstance(v, dict) else len(v) for v in por_planta.values()]
+    kg_totales = [v['kg'] if isinstance(v, dict) else sum(p.get('cantidad_kg', 0) for p in v) for v in por_planta.values()]
     
     colores = {
         'RIO FUTURO': '#4ecdc4',
