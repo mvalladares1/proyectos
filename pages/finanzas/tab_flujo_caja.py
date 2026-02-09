@@ -458,14 +458,16 @@ def render(username: str, password: str):
                 html_parts.append(f'<td class="proyectado-col">{fmt_monto_html(c_proyectado)}</td>')
                 html_parts.append(f'<td class="ppto-col">{fmt_monto_html(c_ppto)}</td>')
                 
-                # Valores mensuales con HEATMAP
+                # Valores mensuales con HEATMAP y click para composición
                 valores_lista = []
                 for mes in meses_lista:
                     monto_mes = montos_mes.get(mes, 0)
                     valores_lista.append(monto_mes)
                     heatmap_class = get_heatmap_class(monto_mes, max_abs)
                     cell_id = f"cell_{c_id_safe}_{mes}"
-                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
+                    # Agregar onclick para mostrar composición de cuentas
+                    onclick_comp = f"window.parent.postMessage({{type: 'show_composition', concepto: '{c_id}', mes: '{mes}'}}, '*')" if len(cuentas) > 0 else ""
+                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" onclick="{onclick_comp}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
                 
                 # Total con SPARKLINE
                 sparkline = generate_sparkline(valores_lista)
@@ -498,7 +500,15 @@ def render(username: str, password: str):
                         
                         # Agregar clase cuenta-{cuenta_id_safe} para identificar esta cuenta al colapsar
                         html_parts.append(f'<tr class="detail-row detail-{c_id_safe} cuenta-{cuenta_id_safe}" style="display:none;">')
-                        html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
+                        
+                        # Si es estructura especial (CxP, CxC, IVA), el nombre ya contiene todo formateado
+                        es_estructura_especial = cuenta.get("es_cuenta_cxp", False) or cuenta.get("es_cuenta_cxc", False) or cuenta.get("es_cuenta_iva", False)
+                        if es_estructura_especial:
+                            # Solo mostrar el nombre (ya tiene emoji e info)
+                            html_parts.append(f'<td class="frozen">{cuenta_icon}{cuenta_nombre}</td>')
+                        else:
+                            # Mostrar código + nombre normal
+                            html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
                         
                         # Columnas REAL/PROYECTADO/PPTO para filas de detalle
                         if tiene_real_proyectado:
