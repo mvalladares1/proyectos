@@ -299,14 +299,14 @@ def render(username: str, password: str):
         for act_data in actividades.values():
             for concepto in act_data.get("conceptos", []):
                 for cuenta in concepto.get("cuentas", []):
-                    if cuenta.get("es_cuenta_cxc"):
-                        cuenta_codigo = cuenta.get("codigo", "")
-                        for etiqueta in cuenta.get("etiquetas", []):
-                            et_nombre = etiqueta.get("nombre", "")
-                            facturas = etiqueta.get("facturas", [])
-                            if facturas:
-                                key = f"{et_nombre}_{cuenta_codigo}"
-                                facturas_data[key] = facturas
+                    # Procesar TODAS las cuentas con facturas, no solo CxC
+                    cuenta_codigo = cuenta.get("codigo", "")
+                    for etiqueta in cuenta.get("etiquetas", []):
+                        et_nombre = etiqueta.get("nombre", "")
+                        facturas = etiqueta.get("facturas", [])
+                        if facturas:
+                            key = f"{et_nombre}_{cuenta_codigo}"
+                            facturas_data[key] = facturas
         
         # Serializar facturas para JavaScript
         facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
