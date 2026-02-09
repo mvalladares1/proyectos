@@ -554,30 +554,57 @@ def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
 
 
 def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
-    """Aprobar una OC - con o sin actividad pendiente"""
+    """Aprobar una OC usando reglas de Studio - registra aprobación sin confirmar hasta tener todas las requeridas"""
     try:
-        # Si hay actividad válida, aprobarla
-        if activity_id is not None and pd.notna(activity_id):
-            models.execute_kw(
-                DB, uid, password,
-                'mail.activity', 'action_feedback',
-                [[int(activity_id)]],
-                {'feedback': 'Aprobado desde dashboard'}
-            )
+        # 1. Obtener el model_id de purchase.order
+        model_id = models.execute_kw(
+            DB, uid, password,
+            'ir.model', 'search',
+            [[('model', '=', 'purchase.order')]]
+        )[0]
         
-        # Llamar al método de aprobación de la OC directamente
-        # Esto registra la aprobación en el workflow de Odoo
+        # 2. Crear la entrada de aprobación en Studio
+        # Esto registra que el usuario actual ha aprobado según la regla 144
+        models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'create',
+            [{
+                'model_id': model_id,
+                'res_id': int(oc_id),
+                'rule_id': 144,  # ID de la regla de aprobación para TRANSPORTES
+                'user_id': int(uid),
+                'approved': True
+            }]
+        )
+        
+        # 3. Si hay actividad pendiente, completarla para limpieza visual
+        if activity_id is not None and pd.notna(activity_id):
+            try:
+                models.execute_kw(
+                    DB, uid, password,
+                    'mail.activity', 'action_feedback',
+                    [[int(activity_id)]],
+                    {'feedback': 'Aprobado desde dashboard'}
+                )
+            except:
+                pass
+        
+        # 4. Llamar a button_confirm
+        # Odoo verificará las reglas de Studio automáticamente
+        # Si faltan aprobaciones, NO confirmará la orden y creará actividades para los demás
+        # Si ya tiene todas las aprobaciones requeridas, confirmará la orden
         try:
             models.execute_kw(
                 DB, uid, password,
                 'purchase.order', 'button_confirm',
-                [[oc_id]]
+                [[int(oc_id)]]
             )
-        except:
-            # Si button_approve no funciona, intentar con el método alternativo
+        except Exception as e:
+            # Si falla button_confirm (ej: faltan aprobaciones), es normal
+            # El registro de aprobación ya quedó guardado
             pass
         
-        return True, "Aprobación exitosa"
+        return True, "Aprobación registrada correctamente"
     except Exception as e:
         return False, str(e)
 
@@ -929,16 +956,33 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
             header_text += f" | ⏳ {n_pendientes} pendientes"
         
         with st.expander(header_text, expanded=len(proveedores_seleccionados) > 0):
+            # Función para comparar con presupuesto
+            def comparar_presupuesto(row):
+                if pd.isna(row['costo_presupuestado']) or not row['costo_presupuestado']:
+                    return '⚠️ Sin ppto'
+                if pd.isna(row['monto']) or not row['monto']:
+                    return '-'
+                
+                dif = row['monto'] - row['costo_presupuestado']
+                dif_pct = (dif / row['costo_presupuestado']) * 100
+                
+                if dif <= 0:
+                    return f"🟢 -{abs(dif_pct):.0f}%"
+                elif dif_pct <= 10:
+                    return f"🟡 +{dif_pct:.0f}%"
+                else:
+                    return f"🔴 +{dif_pct:.0f}%"
+            
             # Crear dataframe para mostrar
             df_tabla_proveedor = pd.DataFrame({
                 'OC': df_proveedor['oc_name'],
                 'Fecha': df_proveedor['fecha_str'],
                 'Monto': df_proveedor['monto'].apply(lambda x: f"${x:,.0f}"),
+                'vs Ppto': df_proveedor.apply(comparar_presupuesto, axis=1),
                 'Aprob.': df_proveedor['estado_aprobacion'],
                 'Aprobadores': df_proveedor['aprobadores'].str[:40],
                 '$/Kg USD': df_proveedor['alerta_costo_kg'].fillna(df_proveedor['cost_per_kg_usd_str']),
                 'Tipo Camión': df_proveedor['tipo_camion_str'].str[:15],
-                'Info': df_proveedor['info_completa'],
                 'ID': df_proveedor['actividad_id'],
                 'OC_ID': df_proveedor['oc_id']
             })
