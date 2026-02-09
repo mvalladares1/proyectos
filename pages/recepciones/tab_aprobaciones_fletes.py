@@ -66,9 +66,31 @@ def obtener_costes_rutas():
         return []
 
 
-@st.cache_data(ttl=86400, show_spinner="Obteniendo tipo de cambio USD/CLP del Banco Central...")
-def obtener_tipo_cambio_usd():
-    """Obtener tipo de cambio USD/CLP desde Banco Central (mindicador.cl) con cache diario global"""
+def _get_cache_key_fecha():
+    """Genera una clave de cache que cambia cada día a las 8 AM hora chilena"""
+    from datetime import datetime, timedelta
+    import pytz
+    
+    # Timezone de Chile
+    tz_chile = pytz.timezone('America/Santiago')
+    now_chile = datetime.now(tz_chile)
+    
+    # Si es antes de las 8 AM, usar la fecha del día anterior
+    # Esto hace que el cache se renueve a las 8 AM
+    if now_chile.hour < 8:
+        fecha_cache = (now_chile - timedelta(days=1)).date()
+    else:
+        fecha_cache = now_chile.date()
+    
+    return str(fecha_cache)
+
+
+@st.cache_data(show_spinner="Obteniendo tipo de cambio USD/CLP del Banco Central...")
+def obtener_tipo_cambio_usd(_cache_key=None):
+    """
+    Obtener tipo de cambio USD/CLP desde Banco Central (mindicador.cl).
+    Cache se renueva cada día a las 8 AM hora chilena.
+    """
     try:
         # Primero intentar mindicador (Banco Central de Chile) con timeout largo
         response = requests.get(API_MINDICADOR, timeout=20)
@@ -93,9 +115,9 @@ def obtener_tipo_cambio_usd():
     return 860.0
 
 
-# Pre-cargar el tipo de cambio al inicio para que esté disponible globalmente
-# Solo el primer usuario del día esperará 20s, el resto usará el cache
-_ = obtener_tipo_cambio_usd()
+def get_tipo_cambio():
+    """Wrapper para obtener tipo de cambio con cache diario renovado a las 8 AM"""
+    return obtener_tipo_cambio_usd(_cache_key=_get_cache_key_fecha())
 
 
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
@@ -720,7 +742,7 @@ def render_tab(username, password):
     with st.spinner("Cargando datos de logística..."):
         rutas_logistica = obtener_rutas_logistica()
         costes_rutas = obtener_costes_rutas()
-        tipo_cambio_usd = obtener_tipo_cambio_usd()
+        tipo_cambio_usd = get_tipo_cambio()
         
         info_tc = f" | 💱 USD: ${tipo_cambio_usd:,.0f}" if tipo_cambio_usd else " | ⚠️ Sin TC"
         st.caption(f"✅ {len(rutas_logistica)} rutas | {len(costes_rutas)} presupuestos{info_tc}")
