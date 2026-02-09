@@ -68,24 +68,29 @@ def obtener_costes_rutas():
 
 @st.cache_data(ttl=3600)  # Cache por 1 hora
 def obtener_tipo_cambio_usd():
-    """Obtener tipo de cambio USD/CLP desde Banco Central (mindicador.cl)"""
-    # Intentar 2 veces con timeout corto
-    for intento in range(2):
-        try:
-            response = requests.get(API_MINDICADOR, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                dolar = data.get('dolar', {}).get('valor')
-                if dolar:
-                    return float(dolar)
-        except:
-            if intento == 0:  # Si falla el primer intento, esperar un poco
-                import time
-                time.sleep(0.5)
-            continue
+    """Obtener tipo de cambio USD/CLP desde API rápida"""
+    try:
+        # Usar exchangerate-api.com - más rápido que mindicador
+        response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            clp = data.get('rates', {}).get('CLP')
+            if clp:
+                return float(clp)
+        
+        # Fallback a mindicador si falla el primero
+        response = requests.get(API_MINDICADOR, timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            dolar = data.get('dolar', {}).get('valor')
+            if dolar:
+                return float(dolar)
+    except:
+        pass
     
-    # Si ambos intentos fallan, mostrar error y usar valor por defecto
-    st.error("⚠️ No se pudo obtener tipo de cambio USD desde mindicador.cl")
+    # Si todo falla, usar valor por defecto
+    st.warning("⚠️ No se pudo obtener tipo de cambio USD - Usando valor de respaldo $950")
+    return 950.0
 
 
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
@@ -1047,26 +1052,33 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
             # Key único para este proveedor
             key_proveedor = f"select_{proveedor.replace(' ', '_')[:20]}"
             
-            # Inicializar estado de selección
+            # Inicializar estado de selección si no existe
             if f'selected_{key_proveedor}' not in st.session_state:
                 st.session_state[f'selected_{key_proveedor}'] = set()
             
             # Checkbox "Seleccionar todas"
             col_check, col_info = st.columns([1, 3])
             with col_check:
+                # Calcular si todas están seleccionadas
+                todas_seleccionadas = len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables) and len(df_aprobables) > 0
+                
                 select_all = st.checkbox(
                     "Seleccionar todas",
                     key=f"select_all_{key_proveedor}",
-                    value=len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables)
+                    value=todas_seleccionadas
                 )
                 
-                if select_all:
+                # Actualizar selección según el estado del checkbox
+                if select_all and not todas_seleccionadas:
+                    # Usuario marcó "seleccionar todas"
                     st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
-                elif not select_all and len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables):
-                    # Solo desmarcar si estaban todas seleccionadas
+                    st.rerun()
+                elif not select_all and todas_seleccionadas:
+                    # Usuario desmarcó "seleccionar todas"
                     st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.rerun()
             
-            with col_info:
+            with col_info:            with col_info:
                 if st.session_state[f'selected_{key_proveedor}']:
                     st.caption(f"✅ {len(st.session_state[f'selected_{key_proveedor}'])} OCs seleccionadas")
             
