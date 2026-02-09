@@ -81,7 +81,7 @@ def transform_to_sankey(traceability_data: Dict) -> Dict:
                 "type": "SUPPLIER",
                 "id": sid,
                 "name": sname,
-                "date": scheduled_date,  # Usar scheduled_date para proveedores
+                "date": date_done or scheduled_date,  # Priorizar date_done (fecha efectiva) sobre scheduled_date
                 "date_done": date_done,
                 "albaran": albaran,
                 "guia_despacho": guia_despacho,

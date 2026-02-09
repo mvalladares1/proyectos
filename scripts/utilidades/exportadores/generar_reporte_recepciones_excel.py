@@ -155,7 +155,11 @@ todas_recepciones = []
 for origen, picking_type_id in ORIGEN_PICKING_MAP.items():
     domain = [
         ('picking_type_id', '=', picking_type_id),
+        '|',
+        ('date_done', '>=', FECHA_DESDE),
         ('scheduled_date', '>=', FECHA_DESDE),
+        '|',
+        ('date_done', '<=', FECHA_HASTA),
         ('scheduled_date', '<=', FECHA_HASTA),
         ('state', '=', 'done')
     ]
@@ -165,7 +169,7 @@ for origen, picking_type_id in ORIGEN_PICKING_MAP.items():
         domain.append((campo_categoria_prod, '=', 'MP'))
     
     # Construir lista de campos a leer
-    campos_leer = ['id', 'name', 'scheduled_date', 'partner_id']
+    campos_leer = ['id', 'name', 'scheduled_date', 'date_done', 'partner_id']
     if campo_guia:
         campos_leer.append(campo_guia)
     
@@ -276,7 +280,7 @@ datos_excel = []
 for recepcion in todas_recepciones:
     picking_id = recepcion['id']
     albaran = recepcion.get('name', '')
-    fecha = recepcion.get('scheduled_date', '')
+    fecha = recepcion.get('date_done') or recepcion.get('scheduled_date', '')
     if fecha:
         fecha = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y')
     
