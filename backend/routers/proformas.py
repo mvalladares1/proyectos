@@ -1,5 +1,5 @@
 """
-Router para Ajuste de Proformas USD → CLP
+Router para Gestión de Proformas (USD → CLP y CLP directas)
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
@@ -35,7 +35,9 @@ async def obtener_facturas_borrador(
     password: str = Query(..., description="Contraseña Odoo"),
     proveedor_id: Optional[int] = Query(None, description="ID del proveedor"),
     fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
-    fecha_hasta: Optional[str] = Query(None, description="Fecha hasta (YYYY-MM-DD)")
+    fecha_hasta: Optional[str] = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+    solo_usd: bool = Query(False, description="Si True, solo retorna facturas en USD"),
+    moneda_filtro: Optional[str] = Query(None, description="Filtrar por moneda: USD, CLP, o None para todas")
 ):
     """
     Obtiene facturas de proveedor en borrador con valores USD y CLP.
@@ -45,7 +47,9 @@ async def obtener_facturas_borrador(
             username, password,
             proveedor_id=proveedor_id,
             fecha_desde=fecha_desde,
-            fecha_hasta=fecha_hasta
+            fecha_hasta=fecha_hasta,
+            solo_usd=solo_usd,
+            moneda_filtro=moneda_filtro
         )
         return facturas
     except Exception as e:
