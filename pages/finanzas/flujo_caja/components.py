@@ -216,9 +216,14 @@ toggleEtiquetas = function(cuentaId) {
 
 // ============ MODAL FACTURAS ============
 let facturasData = {};
+let composicionData = {};
 
 function setFacturasData(data) {
     facturasData = data;
+}
+
+function setComposicionData(data) {
+    composicionData = data;
 }
 
 // Mapeo de iconos por estado de factura
@@ -360,11 +365,134 @@ function closeFacturasModal() {
     modal.style.display = 'none';
 }
 
+// ============ MODAL COMPOSICIÓN ============
+function showComposicionModal(conceptoId, mes) {
+    const cuentas = composicionData[conceptoId] || [];
+    
+    const modal = document.getElementById('composicion-modal');
+    const title = document.getElementById('composicion-modal-title');
+    const body = document.getElementById('composicion-modal-body');
+    
+    // Formatear nombre del período
+    let periodoNombre;
+    if (mes.includes('W')) {
+        const parts = mes.replace('-W', 'W').split('W');
+        const year = parts[0];
+        const week = parts[1];
+        periodoNombre = `Semana ${parseInt(week)}, ${year}`;
+    } else {
+        const [year, month] = mes.split('-');
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        periodoNombre = `${meses[parseInt(month) - 1]} de ${year}`;
+    }
+    
+    title.innerHTML = `<strong>${conceptoId}</strong> - ${periodoNombre}`;
+    
+    if (cuentas.length === 0) {
+        body.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">No hay cuentas para mostrar</p>';
+    } else {
+        // Filtrar cuentas que tienen monto en este mes
+        const cuentasMes = cuentas.filter(c => {
+            const montos = c.montos_por_mes || {};
+            const monto = montos[mes] || 0;
+            return monto !== 0;
+        });
+        
+        if (cuentasMes.length === 0) {
+            body.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">No hay movimientos en este período</p>';
+        } else {
+            // Ordenar por monto absoluto
+            cuentasMes.sort((a, b) => {
+                const montoA = Math.abs((a.montos_por_mes || {})[mes] || 0);
+                const montoB = Math.abs((b.montos_por_mes || {})[mes] || 0);
+                return montoB - montoA;
+            });
+            
+            // Calcular total
+            let totalMes = 0;
+            cuentasMes.forEach(c => {
+                totalMes += (c.montos_por_mes || {})[mes] || 0;
+            });
+            
+            let tableHTML = `
+                <table class="modal-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 120px;">Código</th>
+                            <th>Nombre</th>
+                            <th style="width: 140px; text-align: right;">Monto</th>
+                            <th style="width: 80px; text-align: right;">% Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            const divisor = Math.abs(totalMes) || 1;
+            
+            cuentasMes.forEach((cuenta, idx) => {
+                const codigo = cuenta.codigo || '';
+                const nombre = cuenta.nombre || '';
+                const monto = (cuenta.montos_por_mes || {})[mes] || 0;
+                const pct = (Math.abs(monto) / divisor * 100).toFixed(1);
+                
+                const fmtMonto = new Intl.NumberFormat('es-CL', { 
+                    style: 'currency', 
+                    currency: 'CLP', 
+                    maximumFractionDigits: 0 
+                }).format(monto);
+                
+                const rowBg = idx % 2 === 0 ? '' : 'background: rgba(45, 55, 72, 0.5);';
+                
+                tableHTML += `
+                    <tr style="${rowBg}">
+                        <td style="font-family: monospace; color: #94a3b8;">${codigo}</td>
+                        <td>${nombre}</td>
+                        <td style="text-align: right; color: ${monto >= 0 ? '#00e676' : '#ff5252'};">${fmtMonto}</td>
+                        <td style="text-align: right; color: #94a3b8;">${pct}%</td>
+                    </tr>
+                `;
+            });
+            
+            const fmtTotal = new Intl.NumberFormat('es-CL', { 
+                style: 'currency', 
+                currency: 'CLP', 
+                maximumFractionDigits: 0 
+            }).format(totalMes);
+            
+            tableHTML += `
+                    </tbody>
+                    <tfoot>
+                        <tr style="font-weight: bold; background: linear-gradient(135deg, #2d3748 0%, #1e293b 100%);">
+                            <td colspan="2">📊 Total ${cuentasMes.length} cuenta${cuentasMes.length !== 1 ? 's' : ''}</td>
+                            <td style="text-align: right; color: ${totalMes >= 0 ? '#00e676' : '#ff5252'};">${fmtTotal}</td>
+                            <td style="text-align: right;">100%</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+            body.innerHTML = tableHTML;
+        }
+    }
+    
+    modal.style.display = 'flex';
+}
+
+function closeComposicionModal() {
+    const modal = document.getElementById('composicion-modal');
+    modal.style.display = 'none';
+}
+
 // Cerrar modal al hacer clic fuera
 document.addEventListener('click', function(e) {
-    const modal = document.getElementById('facturas-modal');
-    if (e.target === modal) {
+    const modalFacturas = document.getElementById('facturas-modal');
+    const modalComposicion = document.getElementById('composicion-modal');
+    
+    if (e.target === modalFacturas) {
         closeFacturasModal();
+    }
+    if (e.target === modalComposicion) {
+        closeComposicionModal();
     }
 });
 
@@ -372,6 +500,7 @@ document.addEventListener('click', function(e) {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeFacturasModal();
+        closeComposicionModal();
     }
 });
 </script>
@@ -501,10 +630,28 @@ MODAL_CSS = """
 .cell-clickable:hover {
     background: rgba(102, 126, 234, 0.3) !important;
 }
+
+/* Modal de composición de cuentas */
+#composicion-modal {
+    display: none;
+    position: fixed;
+    z-index: 10001;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease-in;
+}
+
+#composicion-modal .modal-content {
+    max-width: 800px;
+}
 </style>
 """
 
-# HTML del modal
+# HTML de los modales
 MODAL_HTML = """
 <div id="facturas-modal">
     <div class="modal-content">
@@ -513,6 +660,18 @@ MODAL_HTML = """
             <button class="modal-close" onclick="closeFacturasModal()">&times;</button>
         </div>
         <div class="modal-body" id="modal-body">
+            <!-- Contenido dinámico -->
+        </div>
+    </div>
+</div>
+
+<div id="composicion-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="composicion-modal-title">Composición del Concepto</h3>
+            <button class="modal-close" onclick="closeComposicionModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="composicion-modal-body">
             <!-- Contenido dinámico -->
         </div>
     </div>

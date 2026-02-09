@@ -404,6 +404,187 @@ class RealProyectadoCalculator:
                 'error': str(e)
             }
     
+    def calcular_cobros_clientes(self, fecha_inicio: str, fecha_fin: str, meses_lista: List[str] = None) -> Dict:
+        """
+        Calcula REAL y PROYECTADO para 1.1.1 - Cobros procedentes de ventas.
+        
+        ESTRUCTURA JERÁRQUICA (igual que 1.2.1):
+        - Nivel 2: Por estado de pago (Pagadas, Parciales, No Pagadas)
+        - Nivel 3: Por cliente/deudor
+        
+        LÓGICA:
+        - REAL = Monto cobrado (amount_total - amount_residual)
+        - PROYECTADO = Monto pendiente de cobro (amount_residual)
+        """
+        try:
+            # Buscar facturas de cliente en el período
+            facturas = self.odoo.search_read(
+                'account.move',
+                [
+                    ['move_type', '=', 'out_invoice'],
+                    ['state', '=', 'posted'],
+                    ['invoice_date', '>=', fecha_inicio],
+                    ['invoice_date', '<=', fecha_fin]
+                ],
+                ['id', 'name', 'partner_id', 'invoice_date', 'amount_total', 'amount_residual', 'payment_state'],
+                limit=5000
+            )
+            
+            real_total = 0.0
+            proyectado_total = 0.0
+            real_por_mes = defaultdict(float)
+            proyectado_por_mes = defaultdict(float)
+            
+            # Estructura jerárquica: Estados -> Clientes
+            estados = {}
+            
+            for f in facturas:
+                # Datos básicos
+                partner_data = f.get('partner_id', [0, 'Desconocido'])
+                partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Desconocido'
+                
+                fecha = f.get('invoice_date', '')
+                if not fecha:
+                    continue
+                    
+                mes = fecha[:7]
+                amount_total = f.get('amount_total', 0) or 0
+                amount_residual = f.get('amount_residual', 0) or 0
+                payment_state = f.get('payment_state', 'not_paid')
+                move_type = f.get('move_type', 'out_invoice')
+                
+                # Calcular cobrado y pendiente (POSITIVO para ingresos)
+                cobrado = amount_total - amount_residual
+                pendiente = amount_residual
+                
+                real_total += cobrado
+                proyectado_total += pendiente
+                real_por_mes[mes] += cobrado
+                proyectado_por_mes[mes] += pendiente
+                
+                # Agrupar por estado de pago (Nivel 2)
+                estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
+                
+                if estado_label not in estados:
+                    estados[estado_label] = {
+                        'codigo': f'estado_{payment_state}',
+                        'nombre': estado_label,
+                        'icon': self.ESTADO_ICONS.get(payment_state, '📋'),
+                        'monto': 0.0,
+                        'real': 0.0,
+                        'proyectado': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'real_por_mes': defaultdict(float),
+                        'proyectado_por_mes': defaultdict(float),
+                        'etiquetas': {},  # Clientes
+                        'es_cuenta_cxc': True,
+                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state) if payment_state in self.ESTADO_LABELS else 99
+                    }
+                
+                estado = estados[estado_label]
+                estado['monto'] += cobrado + pendiente
+                estado['real'] += cobrado
+                estado['proyectado'] += pendiente
+                estado['montos_por_mes'][mes] += cobrado + pendiente
+                estado['real_por_mes'][mes] += cobrado
+                estado['proyectado_por_mes'][mes] += pendiente
+                
+                # Agrupar por cliente (Nivel 3)
+                if partner_name not in estado['etiquetas']:
+                    estado['etiquetas'][partner_name] = {
+                        'nombre': partner_name[:50],
+                        'monto': 0.0,
+                        'real': 0.0,
+                        'proyectado': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'real_por_mes': defaultdict(float),
+                        'proyectado_por_mes': defaultdict(float),
+                        'facturas': []
+                    }
+                
+                cliente = estado['etiquetas'][partner_name]
+                cliente['monto'] += cobrado + pendiente
+                cliente['real'] += cobrado
+                cliente['proyectado'] += pendiente
+                cliente['montos_por_mes'][mes] += cobrado + pendiente
+                cliente['real_por_mes'][mes] += cobrado
+                cliente['proyectado_por_mes'][mes] += pendiente
+                
+                # Guardar factura para drill-down
+                if len(cliente['facturas']) < 50:
+                    cliente['facturas'].append({
+                        'name': f['name'],
+                        'move_id': f['id'],
+                        'tipo': move_type,
+                        'total': amount_total,
+                        'cobrado': cobrado,
+                        'pendiente': pendiente,
+                        'fecha': fecha,
+                        'payment_state': payment_state
+                    })
+            
+            # Calcular montos_por_mes como suma de real + proyectado por mes
+            montos_por_mes_total = defaultdict(float)
+            for mes in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
+                montos_por_mes_total[mes] = real_por_mes.get(mes, 0) + proyectado_por_mes.get(mes, 0)
+            
+            # Convertir defaultdicts a dicts normales y ordenar
+            cuentas_resultado = []
+            for estado_label, estado_data in sorted(estados.items(), key=lambda x: x[1]['orden']):
+                etiquetas_list = []
+                for cliente_name, cliente_data in sorted(estado_data['etiquetas'].items(), key=lambda x: x[1]['monto'], reverse=True):
+                    etiquetas_list.append({
+                        'nombre': cliente_data['nombre'],
+                        'monto': cliente_data['monto'],
+                        'real': cliente_data['real'],
+                        'proyectado': cliente_data['proyectado'],
+                        'montos_por_mes': dict(cliente_data['montos_por_mes']),
+                        'real_por_mes': dict(cliente_data['real_por_mes']),
+                        'proyectado_por_mes': dict(cliente_data['proyectado_por_mes']),
+                        'facturas': cliente_data['facturas'],
+                        'total_facturas': len(cliente_data['facturas'])
+                    })
+                
+                cuentas_resultado.append({
+                    'codigo': estado_data['codigo'],
+                    'nombre': f"{estado_data['icon']} {estado_data['nombre']}",
+                    'monto': estado_data['monto'],
+                    'real': estado_data['real'],
+                    'proyectado': estado_data['proyectado'],
+                    'montos_por_mes': dict(estado_data['montos_por_mes']),
+                    'real_por_mes': dict(estado_data['real_por_mes']),
+                    'proyectado_por_mes': dict(estado_data['proyectado_por_mes']),
+                    'etiquetas': etiquetas_list,
+                    'es_cuenta_cxc': True
+                })
+            
+            return {
+                'real': real_total,
+                'proyectado': proyectado_total,
+                'ppto': 0.0,
+                'real_por_mes': dict(real_por_mes),
+                'proyectado_por_mes': dict(proyectado_por_mes),
+                'montos_por_mes': dict(montos_por_mes_total),
+                'total': real_total + proyectado_total,
+                'cuentas': cuentas_resultado,
+                'facturas_count': len(facturas)
+            }
+            
+        except Exception as e:
+            print(f"[RealProyectado] Error calculando cobros clientes: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'real': 0.0,
+                'proyectado': 0.0,
+                'ppto': 0.0,
+                'real_por_mes': {},
+                'proyectado_por_mes': {},
+                'montos_por_mes': {},
+                'cuentas': [],
+                'error': str(e)
+            }
+    
     def calcular_todos(self, fecha_inicio: str, fecha_fin: str) -> Dict[str, Dict]:
         """
         Calcula REAL/PROYECTADO para todos los conceptos configurados.
@@ -416,6 +597,10 @@ class RealProyectadoCalculator:
             Dict {concepto_id: {real, proyectado, ppto, ...}}
         """
         resultados = {}
+        
+        # 1.1.1 - Cobros procedentes de ventas
+        print(f"[RealProyectado] Calculando 1.1.1 - Cobros de clientes...")
+        resultados['1.1.1'] = self.calcular_cobros_clientes(fecha_inicio, fecha_fin)
         
         # 1.2.1 - Pagos a proveedores
         print(f"[RealProyectado] Calculando 1.2.1 - Pagos a proveedores...")

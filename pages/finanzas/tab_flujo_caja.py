@@ -311,6 +311,17 @@ def render(username: str, password: str):
         # Serializar facturas para JavaScript
         facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
         
+        # Preparar datos de composición para el modal (cuentas por concepto)
+        composicion_data = {}
+        for act_data in actividades.values():
+            for concepto in act_data.get("conceptos", []):
+                c_id = concepto.get("id") or concepto.get("codigo")
+                cuentas = concepto.get("cuentas", [])
+                if cuentas:
+                    composicion_data[c_id] = cuentas
+        
+        composicion_json = json.dumps(composicion_data, ensure_ascii=False, default=str)
+        
         # ========== DETECTAR VISTA SEMANAL ==========
         vista_semanal = es_vista_semanal(meses_lista)
         semanas_por_mes = {}
@@ -466,8 +477,9 @@ def render(username: str, password: str):
                     heatmap_class = get_heatmap_class(monto_mes, max_abs)
                     cell_id = f"cell_{c_id_safe}_{mes}"
                     # Agregar onclick para mostrar composición de cuentas
-                    onclick_comp = f"window.parent.postMessage({{type: 'show_composition', concepto: '{c_id}', mes: '{mes}'}}, '*')" if len(cuentas) > 0 else ""
-                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" onclick="{onclick_comp}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
+                    onclick_comp = f"showComposicionModal('{c_id}', '{mes}')" if len(cuentas) > 0 and monto_mes != 0 else ""
+                    cell_class = "cell-clickable" if len(cuentas) > 0 and monto_mes != 0 else ""
+                    html_parts.append(f'<td class="clickable {heatmap_class} {cell_class}" id="{cell_id}" onclick="{onclick_comp}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
                 
                 # Total con SPARKLINE
                 sparkline = generate_sparkline(valores_lista)
@@ -646,11 +658,13 @@ def render(username: str, password: str):
         # Agregar JavaScript principal
         html_parts.append(ENTERPRISE_JS)
         
-        # Agregar script para inicializar datos de facturas
+        # Agregar script para inicializar datos de facturas y composición
         html_parts.append(f'''
 <script>
 // Inicializar datos de facturas para el modal
 setFacturasData({facturas_json});
+// Inicializar datos de composición de cuentas
+setComposicionData({composicion_json});
 </script>
 ''')
         
