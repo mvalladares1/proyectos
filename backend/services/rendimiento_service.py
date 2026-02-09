@@ -59,20 +59,15 @@ class RendimientoService:
     
     def get_mos_por_periodo(self, fecha_inicio: str, fecha_fin: str, solo_terminadas: bool = True) -> List[Dict]:
         """Obtiene todas las MOs del período usando fechas reales de proceso."""
-        # Buscar por x_studio_inicio_de_proceso O por date_planned_start
-        # para capturar MOs que tengan cualquiera de las dos fechas en el rango
+        # Solo usar x_studio_inicio_de_proceso (fecha real de inicio)
         domain = [
-            '|',
             '|',
             # Opción 1: tiene x_studio_inicio_de_proceso en el rango
             '&', ['x_studio_inicio_de_proceso', '>=', f'{fecha_inicio} 00:00:00'],
                  ['x_studio_inicio_de_proceso', '<=', f'{fecha_fin} 23:59:59'],
             # Opción 2: tiene x_studio_termino_de_proceso en el rango
             '&', ['x_studio_termino_de_proceso', '>=', f'{fecha_inicio} 00:00:00'],
-                 ['x_studio_termino_de_proceso', '<=', f'{fecha_fin} 23:59:59'],
-            # Opción 3: tiene date_planned_start en el rango (fallback)
-            '&', ['date_planned_start', '>=', f'{fecha_inicio} 00:00:00'],
-                 ['date_planned_start', '<=', f'{fecha_fin} 23:59:59']
+                 ['x_studio_termino_de_proceso', '<=', f'{fecha_fin} 23:59:59']
         ]
         
         if solo_terminadas:
@@ -1102,9 +1097,9 @@ class RendimientoService:
                 salas_data[sala]['duracion_total'] += duracion_horas
                 salas_data[sala]['num_mos'] += 1
                 
-                # MO resultado
-                fecha_inicio_raw = mo.get('x_studio_inicio_de_proceso', '') or mo.get('date_planned_start', '') or ''
-                fecha_termino_raw = mo.get('x_studio_termino_de_proceso', '') or mo.get('date_finished', '') or ''
+                # MO resultado - solo usar campos reales de proceso
+                fecha_inicio_raw = mo.get('x_studio_inicio_de_proceso', '') or ''
+                fecha_termino_raw = mo.get('x_studio_termino_de_proceso', '') or ''
                 fecha = str(fecha_inicio_raw)[:10] if fecha_inicio_raw else ''
                 
                 # Campos de Odoo directos

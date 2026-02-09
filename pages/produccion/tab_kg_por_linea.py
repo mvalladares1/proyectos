@@ -322,9 +322,23 @@ def render(username: str = None, password: str = None):
         st.error(f"Error al cargar datos: {str(e)}")
         return
     
-    mos = data.get('mos', [])
+    mos_raw = data.get('mos', [])
+    
+    # Filtrar: excluir túneles estáticos (no son líneas de proceso)
+    SALAS_EXCLUIR = ['tunel', 'túnel', 'estatico', 'estático', 'congelado']
+    mos = []
+    for mo in mos_raw:
+        sala = (mo.get('sala') or mo.get('sala_original') or '').lower()
+        sala_tipo = (mo.get('sala_tipo') or '').upper()
+        # Excluir si es tipo CONGELADO o si contiene tunel/estatico
+        if sala_tipo == 'CONGELADO':
+            continue
+        if any(excl in sala for excl in SALAS_EXCLUIR):
+            continue
+        mos.append(mo)
+    
     if not mos:
-        st.warning("No hay órdenes de producción en el período seleccionado")
+        st.warning("No hay órdenes de producción (líneas de proceso) en el período seleccionado")
         return
     
     # === PROCESAR Y AGRUPAR POR DÍA ===
