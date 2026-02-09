@@ -556,20 +556,22 @@ def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
 def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
     """Aprobar una OC usando reglas de Studio - registra aprobación sin confirmar hasta tener todas las requeridas"""
     try:
+        # Contexto en español para todas las operaciones
+        contexto = {'lang': 'es_ES'}
+        
         # 1. Verificar cuántas aprobaciones tiene actualmente esta OC para la regla 144
         aprobaciones_existentes = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
             [[('res_id', '=', int(oc_id)), ('rule_id', '=', 144), ('approved', '=', True)]],
-            {'fields': ['id', 'user_id']}
+            {'fields': ['id', 'user_id'], 'context': contexto}
         )
         
         # Si el usuario actual ya aprobó, no hacer nada
         if any(aprobacion['user_id'][0] == uid for aprobacion in aprobaciones_existentes if aprobacion.get('user_id')):
             return False, "Ya aprobaste esta OC anteriormente"
         
-        # 2. Crear la entrada de aprobación en Studio
-        # Esto registra que el usuario actual ha aprobado según la regla 144
+        # 2. Crear la entrada de aprobación en Studio CON CONTEXTO EN ESPAÑOL
         models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'create',
@@ -578,7 +580,8 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                 'rule_id': 144,  # ID de la regla de aprobación para TRANSPORTES
                 'user_id': int(uid),
                 'approved': True
-            }]
+            }],
+            {'context': contexto}
         )
         
         # 3. Si hay actividad pendiente, completarla para limpieza visual
@@ -588,7 +591,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                     DB, uid, password,
                     'mail.activity', 'action_feedback',
                     [[int(activity_id)]],
-                    {'feedback': 'Aprobado desde dashboard'}
+                    {'feedback': 'Aprobado desde dashboard', 'context': contexto}
                 )
             except:
                 pass
@@ -602,7 +605,8 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                 models.execute_kw(
                     DB, uid, password,
                     'purchase.order', 'button_confirm',
-                    [[int(oc_id)]]
+                    [[int(oc_id)]],
+                    {'context': contexto}
                 )
                 return True, f"✅ Segunda aprobación - Orden confirmada"
             except Exception as e:
