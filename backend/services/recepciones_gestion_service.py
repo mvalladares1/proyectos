@@ -154,10 +154,15 @@ class RecepcionesGestionService:
             picking_type_ids = [1, 217, 164]  # Default: todos los orígenes
         
         # Dominio base para recepciones de MP
+        # Usar date_done (fecha efectiva) con fallback a scheduled_date
         domain = [
             ['picking_type_id', 'in', picking_type_ids],
             ['x_studio_categora_de_producto', '=', 'MP'],
+            '|',
+            ['date_done', '>=', fecha_inicio],
             ['scheduled_date', '>=', fecha_inicio],
+            '|',
+            ['date_done', '<=', fecha_fin + ' 23:59:59'],
             ['scheduled_date', '<=', fecha_fin + ' 23:59:59']
         ]
         
@@ -168,12 +173,12 @@ class RecepcionesGestionService:
         pickings = self.odoo.search_read(
             'stock.picking',
             domain,
-            ['id', 'name', 'partner_id', 'scheduled_date', 'state',
+            ['id', 'name', 'partner_id', 'scheduled_date', 'date_done', 'state',
              'check_ids', 'quality_check_todo', 'quality_check_fail',
              'activity_ids', 'message_ids', 'x_studio_gua_de_despacho',
              'x_studio_tiene_calidad', 'x_studio_fecha_de_qc'],
             limit=5000,
-            order='scheduled_date desc'
+            order='date_done desc, scheduled_date desc'
         )
         
         if not pickings:
@@ -274,8 +279,8 @@ class RecepcionesGestionService:
             partner = p.get('partner_id')
             partner_name = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else ''
             
-            # Fecha
-            fecha = p.get('scheduled_date') or ''
+            # Fecha - Priorizar date_done (fecha efectiva) sobre scheduled_date (fecha prevista)
+            fecha = p.get('date_done') or p.get('scheduled_date') or ''
             fecha_str = str(fecha)[:10] if fecha else ''
             
             # QC Info

@@ -168,7 +168,11 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         ("picking_type_id", "in", picking_type_ids),
         ("picking_type_id", "not in", PICKING_TYPES_DEVOLUCION),  # EXCLUIR DEVOLUCIONES
         ("x_studio_categora_de_producto", "=", "MP"),
+        "|",
+        ("date_done", ">=", fecha_inicio),
         ("scheduled_date", ">=", fecha_inicio),
+        "|",
+        ("date_done", "<=", fecha_fin),
         ("scheduled_date", "<=", fecha_fin),
     ]
     
@@ -188,7 +192,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         "stock.picking",
         domain,
         [
-            "id", "name", "scheduled_date", "partner_id", 
+            "id", "name", "scheduled_date", "date_done", "partner_id", 
             "x_studio_categora_de_producto",
             "x_studio_gua_de_despacho",
             "check_ids",
@@ -501,7 +505,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         else:
             origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
         
-        fecha = rec.get("scheduled_date", "")
+        fecha = rec.get("date_done") or rec.get("scheduled_date") or ""
         
         # Procesar movimientos de este picking (recepción)
         # IMPORTANTE: Solo sumar movimientos en KG, no unidades (bandejas, etc)
@@ -905,7 +909,11 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         ("picking_type_id", "in", picking_type_ids),
         ("picking_type_id", "not in", PICKING_TYPES_DEVOLUCION),  # EXCLUIR DEVOLUCIONES
         ("x_studio_categora_de_producto", "=", "MP"),
+        "|",
+        ("date_done", ">=", fecha_inicio),
         ("scheduled_date", ">=", fecha_inicio),
+        "|",
+        ("date_done", "<=", fecha_fin + " 23:59:59"),
         ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
         ("state", "=", "done")
     ]
@@ -913,8 +921,8 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     pickings = client.search_read(
         "stock.picking",
         domain,
-        ["id", "name", "scheduled_date", "partner_id", "x_studio_gua_de_despacho", "picking_type_id"],
-        order="scheduled_date desc",
+        ["id", "name", "scheduled_date", "date_done", "partner_id", "x_studio_gua_de_despacho", "picking_type_id"],
+        order="date_done desc, scheduled_date desc",
         limit=2000
     )
     
@@ -1036,7 +1044,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         resultado.append({
             "id": p["id"],
             "albaran": p["name"],
-            "fecha": str(p["scheduled_date"])[:10],
+            "fecha": str(p.get("date_done") or p.get("scheduled_date") or "")[:10],
             "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",
             "guia_despacho": guia,
             "cantidad_pallets": cantidad_pallets,
@@ -1139,7 +1147,11 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
         ("picking_type_id", "in", picking_type_ids),
         ("picking_type_id", "not in", PICKING_TYPES_DEVOLUCION),  # EXCLUIR DEVOLUCIONES
         ("x_studio_categora_de_producto", "=", "MP"),
+        "|",
+        ("date_done", ">=", fecha_inicio),
         ("scheduled_date", ">=", fecha_inicio),
+        "|",
+        ("date_done", "<=", fecha_fin + " 23:59:59"),
         ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
         ("state", "=", "done")
     ]
@@ -1147,8 +1159,8 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     pickings = client.search_read(
         "stock.picking",
         domain,
-        ["id", "name", "scheduled_date", "partner_id", "x_studio_gua_de_despacho", "picking_type_id"],
-        order="scheduled_date desc",
+        ["id", "name", "scheduled_date", "date_done", "partner_id", "x_studio_gua_de_despacho", "picking_type_id"],
+        order="date_done desc, scheduled_date desc",
         limit=2000
     )
     
@@ -1247,7 +1259,7 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
         pallet_name = pkg[1] if isinstance(pkg, (list, tuple)) else str(pkg) if pkg else "S/P"
 
         resultado.append({
-            "fecha": str(p["scheduled_date"])[:10],
+            "fecha": str(p.get("date_done") or p.get("scheduled_date") or "")[:10],
             "origen": origen_val,
             "albaran": p["name"],
             "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",

@@ -181,7 +181,11 @@ def generar_reporte_defectos_excel(
         
         domain = [
             ('picking_type_id', '=', picking_type_id),
+            '|',
+            ('date_done', '>=', fecha_inicio),
             ('scheduled_date', '>=', fecha_inicio),
+            '|',
+            ('date_done', '<=', fecha_fin),
             ('scheduled_date', '<=', fecha_fin),
         ]
         
@@ -191,7 +195,7 @@ def generar_reporte_defectos_excel(
         if campo_categoria_prod:
             domain.append((campo_categoria_prod, '=', 'MP'))
         
-        campos_leer = ['id', 'name', 'scheduled_date', 'partner_id']
+        campos_leer = ['id', 'name', 'scheduled_date', 'date_done', 'partner_id']
         if campo_guia:
             campos_leer.append(campo_guia)
         
@@ -272,7 +276,7 @@ def generar_reporte_defectos_excel(
     for recepcion in todas_recepciones:
         picking_id = recepcion['id']
         albaran = recepcion.get('name', '')
-        fecha = recepcion.get('scheduled_date', '')
+        fecha = recepcion.get('date_done') or recepcion.get('scheduled_date', '')
         if fecha:
             fecha = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y')
         

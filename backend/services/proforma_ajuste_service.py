@@ -768,7 +768,9 @@ def enviar_proforma_email(
                 pass
         
         # Crear y enviar correo
-        asunto = f"Proforma {nombre_factura} - Rio Futuro"
+        from datetime import datetime
+        fecha_hoy = datetime.now().strftime("%d-%m-%Y")
+        asunto = f"Proforma {proveedor_nombre} {fecha_hoy} - Rio Futuro"
         
         logo_html = f'<img src="data:image/png;base64,{logo_base64}" alt="Rio Futuro" style="height: 80px; margin-bottom: 10px;" />' if logo_base64 else '<div style="display: inline-block; background: linear-gradient(135deg, #2E86AB 0%, #1B4F72 100%); width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #FFFFFF;"><div style="color: #FFFFFF; font-size: 24px; font-weight: bold; line-height: 54px; font-family: \'Arial Black\', sans-serif;">RF</div></div>'
         
