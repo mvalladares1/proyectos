@@ -1078,7 +1078,7 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                     st.session_state[f'selected_{key_proveedor}'] = set()
                     st.rerun()
             
-            with col_info:            with col_info:
+            with col_info:
                 if st.session_state[f'selected_{key_proveedor}']:
                     st.caption(f"✅ {len(st.session_state[f'selected_{key_proveedor}'])} OCs seleccionadas")
             
