@@ -66,31 +66,36 @@ def obtener_costes_rutas():
         return []
 
 
-@st.cache_data(ttl=3600)  # Cache por 1 hora
+@st.cache_data(ttl=86400, show_spinner="Obteniendo tipo de cambio USD/CLP del Banco Central...")
 def obtener_tipo_cambio_usd():
-    """Obtener tipo de cambio USD/CLP desde API rápida"""
+    """Obtener tipo de cambio USD/CLP desde Banco Central (mindicador.cl) con cache diario global"""
     try:
-        # Usar exchangerate-api.com - más rápido que mindicador
+        # Primero intentar mindicador (Banco Central de Chile) con timeout largo
+        response = requests.get(API_MINDICADOR, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            dolar = data.get('dolar', {}).get('valor')
+            if dolar:
+                return float(dolar)
+        
+        # Fallback a exchangerate-api.com si mindicador falla
         response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
         if response.status_code == 200:
             data = response.json()
             clp = data.get('rates', {}).get('CLP')
             if clp:
                 return float(clp)
-        
-        # Fallback a mindicador si falla el primero
-        response = requests.get(API_MINDICADOR, timeout=3)
-        if response.status_code == 200:
-            data = response.json()
-            dolar = data.get('dolar', {}).get('valor')
-            if dolar:
-                return float(dolar)
     except:
         pass
     
     # Si todo falla, usar valor por defecto
-    st.warning("⚠️ No se pudo obtener tipo de cambio USD - Usando valor de respaldo $950")
-    return 950.0
+    st.warning("⚠️ No se pudo obtener tipo de cambio USD - Usando valor de respaldo $860")
+    return 860.0
+
+
+# Pre-cargar el tipo de cambio al inicio para que esté disponible globalmente
+# Solo el primer usuario del día esperará 20s, el resto usará el cache
+_ = obtener_tipo_cambio_usd()
 
 
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
