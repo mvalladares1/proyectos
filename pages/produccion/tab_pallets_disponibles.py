@@ -46,7 +46,7 @@ def render(username: str = None, password: str = None):
     """, unsafe_allow_html=True)
     
     # === FILTROS ===
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         planta_sel = st.selectbox(
             "🏭 Planta",
@@ -54,6 +54,14 @@ def render(username: str = None, password: str = None):
             key="pallets_disp_planta"
         )
     with col2:
+        # Producto se carga dinámicamente después de la primera búsqueda
+        productos_prev = st.session_state.get('pallets_disp_productos', ["Todos"])
+        producto_sel = st.selectbox(
+            "📦 Producto",
+            productos_prev,
+            key="pallets_disp_producto"
+        )
+    with col3:
         st.markdown("<br>", unsafe_allow_html=True)
         btn_buscar = st.button("🔍 Buscar Pallets", type="primary", 
                                 use_container_width=True, key="pallets_disp_buscar")
@@ -77,8 +85,26 @@ def render(username: str = None, password: str = None):
         return
     
     data = st.session_state.get('pallets_disp_data', {})
-    pallets = data.get('pallets', [])
-    stats = data.get('estadisticas', {})
+    pallets_raw = data.get('pallets', [])
+    
+    # Extraer productos únicos para el dropdown
+    productos_unicos = sorted(set(p.get('producto', '') for p in pallets_raw if p.get('producto')))
+    st.session_state['pallets_disp_productos'] = ["Todos"] + productos_unicos
+    
+    # Filtrar por producto seleccionado
+    producto_sel = st.session_state.get('pallets_disp_producto', 'Todos')
+    if producto_sel and producto_sel != "Todos":
+        pallets = [p for p in pallets_raw if p.get('producto', '') == producto_sel]
+    else:
+        pallets = pallets_raw
+    
+    # Recalcular estadísticas según filtro
+    stats = {
+        'total_pallets': len(pallets),
+        'total_kg': sum(p.get('cantidad_kg', 0) for p in pallets),
+        'congelados': len([p for p in pallets if p.get('tipo') == 'Congelado']),
+        'frescos': len([p for p in pallets if p.get('tipo') == 'Fresco']),
+    }
     
     if not pallets:
         st.warning("No se encontraron pallets disponibles con los filtros seleccionados")
@@ -105,8 +131,15 @@ def render(username: str = None, password: str = None):
         render_grafico_tipo(stats)
     
     with col_g2:
-        # Gráfico por planta
-        render_grafico_planta(data.get('por_planta', {}))
+        # Gráfico por planta (recalculado con filtro)
+        por_planta_filtrado = {}
+        for p in pallets:
+            pl = p.get('planta', 'Otro')
+            if pl not in por_planta_filtrado:
+                por_planta_filtrado[pl] = {'cantidad': 0, 'kg': 0}
+            por_planta_filtrado[pl]['cantidad'] += 1
+            por_planta_filtrado[pl]['kg'] += p.get('cantidad_kg', 0)
+        render_grafico_planta(por_planta_filtrado)
     
     st.markdown("---")
     
