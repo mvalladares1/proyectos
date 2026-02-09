@@ -514,6 +514,12 @@ def render(username: str, password: str):
                         cuenta_id_safe = f"{c_id_safe}_{cuenta_codigo.replace('.', '_')}"
                         has_etiquetas = len(etiquetas) > 0
                         
+                        # Verificar si tiene facturas en alguna etiqueta
+                        tiene_facturas_cuenta = any(
+                            "facturas" in etiq and len(etiq.get("facturas", [])) > 0 
+                            for etiq in etiquetas
+                        )
+                        
                         # Icono para expandir/contraer etiquetas
                         if has_etiquetas:
                             cuenta_icon = f'<span class="icon-expand" style="cursor:pointer;" onclick="toggleEtiquetas(\'{cuenta_id_safe}\')">{SVG_ICONS["chevron"]}</span>'
@@ -540,9 +546,18 @@ def render(username: str, password: str):
                         else:
                             html_parts.append('<td></td><td></td><td></td>')
                         
+                        # Celdas mensuales del nivel 2 - clickeables si tiene facturas
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
-                            html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
+                            
+                            # Si tiene facturas y monto != 0, hacer clickeable para mostrar modal agregado
+                            if tiene_facturas_cuenta and m_acc != 0:
+                                # Usamos el nombre de la cuenta como estado para el modal
+                                cuenta_nombre_js = cuenta_nombre.replace("'", "\\'")
+                                onclick = f"event.stopPropagation(); showFacturasModal('{cuenta_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                html_parts.append(f'<td class="cell-clickable" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(m_acc)}</td>')
+                            else:
+                                html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
                         
                         html_parts.append(f'<td>{fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
@@ -596,15 +611,17 @@ def render(username: str, password: str):
                                 else:
                                     html_parts.append('<td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td>')
                                 
-                                # Montos por mes de la etiqueta - clickeables si es CxC con facturas
+                                # Montos por mes de la etiqueta - clickeables si tiene facturas
                                 for mes in meses_lista:
                                     et_mes_monto = et_montos_mes.get(mes, 0)
                                     
-                                    if es_cuenta_cxc and tiene_facturas and et_mes_monto != 0:
+                                    # Mostrar modal de facturas si tiene facturas y monto != 0
+                                    if tiene_facturas and et_mes_monto != 0:
                                         # Celda clickeable para mostrar modal
                                         et_nombre_js = et_nombre.replace("'", "\\'")
-                                        onclick = f"showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                        html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e;" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(et_mes_monto)}</td>')
+                                        onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                        cell_class = "cell-clickable"
+                                        html_parts.append(f'<td class="{cell_class}" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
                                     else:
                                         html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
                                 
