@@ -115,6 +115,37 @@ def render(username: str = None, password: str = None):
     
     st.markdown("---")
     
+    # === BUSCAR PAQUETE EN ODOO ===
+    st.markdown("### 🔗 Buscar Paquete en Odoo")
+    
+    ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net"
+    
+    col_odoo1, col_odoo2 = st.columns([3, 1])
+    with col_odoo1:
+        buscar_paquete = st.text_input(
+            "📦 Ingresa el nombre del pallet/paquete",
+            placeholder="Ej: PACK0012345",
+            key="pallets_buscar_odoo"
+        )
+    with col_odoo2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if buscar_paquete:
+            # Buscar el pallet en los datos cargados
+            pallet_encontrado = None
+            for p in pallets:
+                if buscar_paquete.upper() in p.get('pallet', '').upper():
+                    pallet_encontrado = p
+                    break
+            
+            if pallet_encontrado:
+                pallet_id = pallet_encontrado.get('pallet_id', 0)
+                odoo_url = f"{ODOO_BASE}/web#id={pallet_id}&model=stock.quant.package&view_type=form"
+                st.link_button("🔗 Abrir en Odoo", odoo_url, use_container_width=True)
+            else:
+                st.warning("No encontrado")
+    
+    st.markdown("---")
+    
     # === TABLA DE PALLETS ===
     st.markdown("### 📋 Detalle de Pallets Disponibles")
     
@@ -139,13 +170,25 @@ def render(username: str = None, password: str = None):
                              or texto in p.get('lote', '').upper()
                              or texto in p.get('ubicacion', '').upper()]
     
-    # Crear DataFrame
+    # Crear DataFrame con link a Odoo
     if pallets_filtrados:
-        df = pd.DataFrame(pallets_filtrados)
-        df = df[['pallet', 'lote', 'producto', 'cantidad_kg', 'ubicacion', 
-                 'tipo', 'planta', 'fecha_ingreso']]
-        df.columns = ['Pallet', 'Lote', 'Producto', 'KG', 'Ubicación', 
-                       'Tipo', 'Planta', 'Fecha Ingreso']
+        df_data = []
+        for p in pallets_filtrados:
+            pid = p.get('pallet_id', 0)
+            odoo_link = f"{ODOO_BASE}/web#id={pid}&model=stock.quant.package&view_type=form"
+            df_data.append({
+                'Pallet': p.get('pallet', ''),
+                'Lote': p.get('lote', ''),
+                'Producto': p.get('producto', ''),
+                'KG': p.get('cantidad_kg', 0),
+                'Ubicación': p.get('ubicacion', ''),
+                'Tipo': p.get('tipo', ''),
+                'Planta': p.get('planta', ''),
+                'Fecha Ingreso': p.get('fecha_ingreso', ''),
+                'Ver en Odoo': odoo_link
+            })
+        
+        df = pd.DataFrame(df_data)
         df['KG'] = df['KG'].apply(lambda x: f"{x:,.1f}")
         
         st.dataframe(
@@ -162,6 +205,7 @@ def render(username: str = None, password: str = None):
                 "Tipo": st.column_config.TextColumn("🔄 Tipo", width="small"),
                 "Planta": st.column_config.TextColumn("🏭 Planta", width="small"),
                 "Fecha Ingreso": st.column_config.TextColumn("📅 Ingreso", width="small"),
+                "Ver en Odoo": st.column_config.LinkColumn("🔗 Odoo", width="small", display_text="Abrir"),
             }
         )
         
