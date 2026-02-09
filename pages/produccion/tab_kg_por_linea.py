@@ -324,16 +324,13 @@ def render(username: str = None, password: str = None):
     
     mos_raw = data.get('mos', [])
     
-    # Filtrar: excluir túneles estáticos (no son líneas de proceso)
-    SALAS_EXCLUIR = ['tunel', 'túnel', 'estatico', 'estático', 'congelado']
+    # Filtrar: solo excluir túneles ESTÁTICOS (no son líneas de proceso)
+    # Túnel Continuo SÍ se incluye
     mos = []
     for mo in mos_raw:
         sala = (mo.get('sala') or mo.get('sala_original') or '').lower()
-        sala_tipo = (mo.get('sala_tipo') or '').upper()
-        # Excluir si es tipo CONGELADO o si contiene tunel/estatico
-        if sala_tipo == 'CONGELADO':
-            continue
-        if any(excl in sala for excl in SALAS_EXCLUIR):
+        # Solo excluir si contiene "estatico" o "estático"
+        if 'estatico' in sala or 'estático' in sala:
             continue
         mos.append(mo)
     
