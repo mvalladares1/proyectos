@@ -570,7 +570,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         try:
             models.execute_kw(
                 DB, uid, password,
-                'purchase.order', 'button_approve',
+                'purchase.order', 'button_confirm',
                 [[oc_id]]
             )
         except:
