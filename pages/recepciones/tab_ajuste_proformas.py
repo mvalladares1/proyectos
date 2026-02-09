@@ -1,6 +1,6 @@
 """
-Tab: Ajuste de Proformas USD → CLP
-Permite buscar facturas en borrador, previsualizar conversión y ajustar moneda.
+Tab: Gestión de Proformas (USD → CLP y CLP)
+Permite buscar facturas en borrador, previsualizar conversión y enviar proformas.
 """
 import streamlit as st
 import pandas as pd
@@ -26,14 +26,14 @@ def render(username: str, password: str):
     Renderiza el tab de Ajuste de Proformas.
     """
     
-    st.markdown("### 💱 Ajuste de Proformas USD → CLP")
-    st.caption("Visualiza y convierte facturas de proveedor de USD a Pesos Chilenos")
+    st.markdown("### 📄 Gestión de Proformas")
+    st.caption("Visualiza, gestiona y envía proformas de proveedor (USD → CLP y CLP directas)")
     
     # =========================================================================
     # SECCIÓN 1: FILTROS DE BÚSQUEDA
     # =========================================================================
     with st.expander("🔍 Búsqueda de Facturas en Borrador", expanded=True):
-        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+        col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
         
         with col1:
             # Obtener proveedores con borradores
@@ -64,6 +64,14 @@ def render(username: str, password: str):
             )
         
         with col4:
+            moneda_sel = st.selectbox(
+                "Moneda",
+                ["Todas", "USD", "CLP"],
+                key="ajuste_proforma_moneda",
+                help="Filtrar por moneda de la factura"
+            )
+        
+        with col5:
             filtro_envio = st.selectbox(
                 "Estado Envío",
                 ["Todas", "No Enviadas", "Enviadas"],
@@ -81,13 +89,16 @@ def render(username: str, password: str):
     if buscar or st.session_state.get("ajuste_proformas_data"):
         if buscar:
             proveedor_id = proveedor_map.get(proveedor_sel) if proveedor_sel != "Todos" else None
+            moneda_filtro = moneda_sel if moneda_sel != "Todas" else None
             
             with st.spinner("Buscando facturas en borrador..."):
                 facturas = _get_facturas_borrador(
                     username, password,
                     proveedor_id=proveedor_id,
                     fecha_desde=fecha_desde.strftime("%Y-%m-%d"),
-                    fecha_hasta=fecha_hasta.strftime("%Y-%m-%d")
+                    fecha_hasta=fecha_hasta.strftime("%Y-%m-%d"),
+                    solo_usd=False,
+                    moneda_filtro=moneda_filtro
                 )
                 
                 # Obtener estado de envío para todas las facturas
@@ -105,10 +116,20 @@ def render(username: str, password: str):
         facturas = st.session_state.get("ajuste_proformas_data", [])
         
         if not facturas:
-            st.info("📭 No se encontraron facturas en borrador en USD para el período seleccionado.")
+            st.info("📭 No se encontraron facturas en borrador para el período seleccionado.")
             return
         
-        st.success(f"✅ Se encontraron **{len(facturas)}** facturas en borrador en USD")
+        # Contar por moneda
+        facturas_usd = [f for f in facturas if f.get('es_usd', f.get('moneda', '') == 'USD')]
+        facturas_clp = [f for f in facturas if not f.get('es_usd', f.get('moneda', '') == 'USD')]
+        
+        resumen_moneda = []
+        if facturas_usd:
+            resumen_moneda.append(f"{len(facturas_usd)} en USD")
+        if facturas_clp:
+            resumen_moneda.append(f"{len(facturas_clp)} en CLP")
+        
+        st.success(f"✅ Se encontraron **{len(facturas)}** facturas en borrador ({', '.join(resumen_moneda)})")
         
         # =========================================================================
         # SECCIÓN 2.1: SELECCIÓN MÚLTIPLE PARA ENVÍO MASIVO
@@ -148,21 +169,34 @@ def render(username: str, password: str):
             facturas_sel = [factura_map_envio[sel] for sel in facturas_seleccionadas]
             
             # Métricas generales
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            facturas_usd_sel = [f for f in facturas_sel if f.get('es_usd', f.get('moneda', '') == 'USD')]
+            facturas_clp_sel = [f for f in facturas_sel if not f.get('es_usd', f.get('moneda', '') == 'USD')]
             
-            total_usd = sum(f['total_usd'] for f in facturas_sel)
+            total_usd = sum(f['total_usd'] for f in facturas_usd_sel)
             total_clp = sum(f['total_clp'] for f in facturas_sel)
             num_proveedores = len(set(f['proveedor_id'] for f in facturas_sel))
             con_email = len([f for f in facturas_sel if f.get('proveedor_email')])
+            
+            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
             
             with col_m1:
                 st.metric("📄 Proformas", len(facturas_sel))
             with col_m2:
                 st.metric("🏢 Proveedores", num_proveedores)
             with col_m3:
-                st.metric("💵 Total USD", f"${fmt_chileno(total_usd, 2)}")
+                if facturas_usd_sel:
+                    st.metric("💵 Total USD", f"${fmt_chileno(total_usd, 2)}")
+                else:
+                    st.metric("💵 USD", "N/A")
             with col_m4:
                 st.metric("💰 Total CLP", f"${fmt_chileno(total_clp, 0)}")
+            with col_m5:
+                moneda_info = []
+                if facturas_usd_sel:
+                    moneda_info.append(f"{len(facturas_usd_sel)} USD")
+                if facturas_clp_sel:
+                    moneda_info.append(f"{len(facturas_clp_sel)} CLP")
+                st.metric("💱 Monedas", " | ".join(moneda_info) if moneda_info else "-")
             
             # Agrupar por proveedor
             st.markdown("##### 📦 Detalle por Proveedor")
@@ -176,11 +210,13 @@ def render(username: str, password: str):
                         'email': f.get('proveedor_email', 'Sin email'),
                         'facturas': [],
                         'total_usd': 0,
-                        'total_clp': 0
+                        'total_clp': 0,
+                        'monedas': set()
                     }
                 proveedores_agrupados[prov_id]['facturas'].append(f['nombre'])
                 proveedores_agrupados[prov_id]['total_usd'] += f['total_usd']
                 proveedores_agrupados[prov_id]['total_clp'] += f['total_clp']
+                proveedores_agrupados[prov_id]['monedas'].add(f.get('moneda', 'USD'))
             
             # Tabla de análisis por proveedor
             df_analisis = pd.DataFrame([
@@ -188,6 +224,7 @@ def render(username: str, password: str):
                     'Proveedor': p['nombre'][:40],
                     'Email': p['email'] if p['email'] else '❌ Sin email',
                     'N° Facturas': len(p['facturas']),
+                    'Moneda': ' / '.join(sorted(p['monedas'])),
                     'Total USD': p['total_usd'],
                     'Total CLP': p['total_clp'],
                     'Facturas': ', '.join(p['facturas'][:3]) + ('...' if len(p['facturas']) > 3 else '')
@@ -196,7 +233,7 @@ def render(username: str, password: str):
             ])
             
             # Formatear con formato chileno
-            df_analisis['Total USD'] = df_analisis['Total USD'].apply(lambda x: f"${fmt_chileno(x, 2)}")
+            df_analisis['Total USD'] = df_analisis['Total USD'].apply(lambda x: f"${fmt_chileno(x, 2)}" if x > 0 else "-")
             df_analisis['Total CLP'] = df_analisis['Total CLP'].apply(lambda x: f"${fmt_chileno(x, 0)}")
             
             st.dataframe(df_analisis, use_container_width=True, hide_index=True)
@@ -240,6 +277,7 @@ def render(username: str, password: str):
                 "Ref": f["ref"] or "-",
                 "Proveedor": f["proveedor_nombre"],
                 "Fecha": f["fecha_factura"] or f["fecha_creacion"][:10] if f["fecha_creacion"] else "-",
+                "Moneda": f.get("moneda", "USD"),
                 "Estado": "✅ Enviada" if f.get("enviada") else "🔵 No Enviada",
                 "Líneas": f["num_lineas"],
                 "Total USD": f["total_usd"],
@@ -251,9 +289,9 @@ def render(username: str, password: str):
         
         # Formatear columnas con formato chileno
         df_display = df_facturas.copy()
-        df_display["Total USD"] = df_display["Total USD"].apply(lambda x: f"${fmt_chileno(x, 2)}")
+        df_display["Total USD"] = df_display["Total USD"].apply(lambda x: f"${fmt_chileno(x, 2)}" if x > 0 else "-")
         df_display["Total CLP"] = df_display["Total CLP"].apply(lambda x: f"${fmt_chileno(x, 0)}")
-        df_display["TC"] = df_display["TC"].apply(lambda x: fmt_chileno(x, 2))
+        df_display["TC"] = df_display["TC"].apply(lambda x: fmt_chileno(x, 2) if x > 0 else "-")
         
         # Seleccionar factura
         st.dataframe(
@@ -525,7 +563,11 @@ def _get_proveedores(username: str, password: str) -> list:
 def _get_facturas_borrador(username: str, password: str, **kwargs) -> list:
     """Obtiene facturas en borrador."""
     try:
-        params = {"username": username, "password": password, **kwargs}
+        params = {"username": username, "password": password}
+        # Separar parámetros de API de los de servicio
+        for k, v in kwargs.items():
+            if v is not None:
+                params[k] = v
         response = requests.get(
             f"{API_URL}/api/v1/proformas/borradores",
             params=params,
@@ -614,6 +656,8 @@ def _agregar_estado_envio(facturas: list, username: str, password: str) -> list:
 def _render_detalle_factura(factura: dict, username: str, password: str):
     """Renderiza el detalle de una factura seleccionada."""
     
+    es_usd = factura.get('es_usd', factura.get('moneda', '') == 'USD')
+    
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -625,8 +669,12 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
         st.caption(f"Fecha: {factura['fecha_factura'] or 'Sin fecha'}")
     
     with col3:
-        st.metric("💱 Tipo de Cambio", fmt_chileno(factura['tipo_cambio'], 2))
-        st.caption(f"Moneda: {factura['moneda']}")
+        if es_usd:
+            st.metric("💱 Tipo de Cambio", fmt_chileno(factura['tipo_cambio'], 2))
+            st.caption(f"Moneda: {factura['moneda']} → CLP")
+        else:
+            st.metric("💰 Moneda", factura.get('moneda', 'CLP'))
+            st.caption("Factura directa en CLP")
     
     # Tabla de líneas con información completa (igual que el PDF)
     if factura["lineas"]:
@@ -680,173 +728,252 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             # Calcular precio unitario CLP
             p_unit_clp = l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0
             
-            lineas_completas.append({
+            linea_data = {
                 "_idx": idx,
                 "_linea_id": l.get("id", idx),
                 "_purchase_order_id": l.get("purchase_order_id"),
                 "Descripción": desc,
                 "Fecha OC": fecha_oc,
                 "Cant. KG": l["cantidad"],
-                "P. Unitario USD": l["precio_usd"],
-                "Tipo Cambio": l["tc_implicito"],
-                "P. Unitario CLP": p_unit_clp,
-                "Subtotal USD": l["subtotal_usd"],
                 "Subtotal CLP": l["subtotal_clp"]
-            })
+            }
+            
+            if es_usd:
+                linea_data["P. Unitario USD"] = l["precio_usd"]
+                linea_data["Tipo Cambio"] = l["tc_implicito"]
+                linea_data["P. Unitario CLP"] = p_unit_clp
+                linea_data["Subtotal USD"] = l["subtotal_usd"]
+            else:
+                linea_data["P. Unitario CLP"] = l.get("precio_clp", l.get("precio_usd", 0)) or p_unit_clp
+            
+            lineas_completas.append(linea_data)
         
         df_lineas = pd.DataFrame(lineas_completas)
         
         # Formatear con formato chileno
         df_lineas["Cant. KG"] = df_lineas["Cant. KG"].apply(lambda x: f"{x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
-        df_lineas["P. Unitario USD"] = df_lineas["P. Unitario USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
-        df_lineas["Tipo Cambio"] = df_lineas["Tipo Cambio"].apply(lambda x: f"{x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+        if es_usd:
+            df_lineas["P. Unitario USD"] = df_lineas["P. Unitario USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+            df_lineas["Tipo Cambio"] = df_lineas["Tipo Cambio"].apply(lambda x: f"{x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
+            df_lineas["Subtotal USD"] = df_lineas["Subtotal USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
         df_lineas["P. Unitario CLP"] = df_lineas["P. Unitario CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
-        df_lineas["Subtotal USD"] = df_lineas["Subtotal USD"].apply(lambda x: f"${x:,.2f}".replace(',', 'TEMP').replace('.', ',').replace('TEMP', '.'))
         df_lineas["Subtotal CLP"] = df_lineas["Subtotal CLP"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
         
-        # Mostrar headers de columnas
-        cols_header = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
-        with cols_header[0]:
-            st.markdown("**#**")
-        with cols_header[1]:
-            st.markdown("**Descripción**")
-        with cols_header[2]:
-            st.markdown("**Fecha OC**")
-        with cols_header[3]:
-            st.markdown("**Cant. KG**")
-        with cols_header[4]:
-            st.markdown("**TC**")
-        with cols_header[5]:
-            st.markdown("**P.Unit USD**")
-        with cols_header[6]:
-            st.markdown("**P.Unit CLP**")
-        with cols_header[7]:
-            st.markdown("**Subtotal USD**")
-        with cols_header[8]:
-            st.markdown("**Subtotal CLP**")
-        with cols_header[9]:
-            st.markdown("**🗑️**")
+        # Mostrar headers de columnas - condicional según moneda
+        if es_usd:
+            cols_header = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
+            with cols_header[0]:
+                st.markdown("**#**")
+            with cols_header[1]:
+                st.markdown("**Descripción**")
+            with cols_header[2]:
+                st.markdown("**Fecha OC**")
+            with cols_header[3]:
+                st.markdown("**Cant. KG**")
+            with cols_header[4]:
+                st.markdown("**TC**")
+            with cols_header[5]:
+                st.markdown("**P.Unit USD**")
+            with cols_header[6]:
+                st.markdown("**P.Unit CLP**")
+            with cols_header[7]:
+                st.markdown("**Subtotal USD**")
+            with cols_header[8]:
+                st.markdown("**Subtotal CLP**")
+            with cols_header[9]:
+                st.markdown("**🗑️**")
+        else:
+            # CLP: sin columnas USD ni TC
+            cols_header = st.columns([0.5, 2.0, 0.8, 0.8, 1.0, 1.0, 0.5])
+            with cols_header[0]:
+                st.markdown("**#**")
+            with cols_header[1]:
+                st.markdown("**Descripción**")
+            with cols_header[2]:
+                st.markdown("**Fecha OC**")
+            with cols_header[3]:
+                st.markdown("**Cant. KG**")
+            with cols_header[4]:
+                st.markdown("**P.Unit CLP**")
+            with cols_header[5]:
+                st.markdown("**Subtotal CLP**")
+            with cols_header[6]:
+                st.markdown("**🗑️**")
         
         st.markdown("---")
         
         # Mostrar tabla con botones de eliminar
         for idx, row in df_lineas.iterrows():
-            cols = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
-            
             linea_id = row['_linea_id']
             
-            with cols[0]:
-                st.write(f"**{idx+1}**")
-            
-            with cols[1]:
-                # Crear link a OC si está disponible
-                if row.get("_purchase_order_id"):
-                    oc_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={row['_purchase_order_id']}&model=purchase.order&view_type=form&cids=1"
-                    st.markdown(f'<a href="{oc_url}" target="_blank" style="color: #1E88E5; text-decoration: none;">{row["Descripción"]}</a>', unsafe_allow_html=True)
-                else:
-                    st.write(row["Descripción"])
-            with cols[2]:
-                st.write(row["Fecha OC"])
-            with cols[3]:
-                st.write(row["Cant. KG"])
-            with cols[4]:
-                st.write(row["Tipo Cambio"])
-            with cols[5]:
-                st.write(row["P. Unitario USD"])
-            with cols[6]:
-                st.write(row["P. Unitario CLP"])
-            with cols[7]:
-                st.write(row["Subtotal USD"])
-            with cols[8]:
-                st.write(row["Subtotal CLP"])
-            with cols[9]:
-                if st.button("🗑️", key=f"eliminar_{linea_id}", help="Eliminar línea de la factura en Odoo"):
-                    with st.spinner("Eliminando línea..."):
-                        try:
-                            response = requests.delete(
-                                f"{API_URL}/proformas/linea/{linea_id}",
-                                params={"username": username, "password": password}
-                            )
-                            
-                            if response.status_code == 200:
-                                # Actualizar los datos en memoria sin recargar todo
-                                if "ajuste_proformas_data" in st.session_state:
-                                    facturas_actuales = st.session_state["ajuste_proformas_data"]
-                                    factura_id = factura.get("id")
-                                    
-                                    # Encontrar y actualizar la factura específica
-                                    for i, f in enumerate(facturas_actuales):
-                                        if f.get("id") == factura_id:
-                                            # Eliminar la línea de la factura en memoria
-                                            f["lineas"] = [l for l in f.get("lineas", []) if l.get("id") != linea_id]
-                                            
-                                            # Recalcular totales
-                                            total_usd = sum(l.get("subtotal_usd", 0) for l in f["lineas"])
-                                            total_clp = sum(l.get("subtotal_clp", 0) for l in f["lineas"])
-                                            
-                                            f["total_usd"] = total_usd
-                                            f["base_usd"] = total_usd
-                                            f["iva_usd"] = total_usd * 0.19
-                                            
-                                            f["total_clp"] = total_clp
-                                            f["base_clp"] = total_clp
-                                            f["iva_clp"] = total_clp * 0.19
-                                            
-                                            facturas_actuales[i] = f
-                                            break
-                                    
-                                    st.session_state["ajuste_proformas_data"] = facturas_actuales
-                                
-                                st.success("✅ Línea eliminada correctamente")
-                                time.sleep(0.3)
-                                st.rerun()
-                            else:
-                                error_detail = response.json().get("detail", "Error desconocido")
-                                st.error(f"❌ Error al eliminar: {error_detail}")
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
+            if es_usd:
+                cols = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
+                
+                with cols[0]:
+                    st.write(f"**{idx+1}**")
+                
+                with cols[1]:
+                    # Crear link a OC si está disponible
+                    if row.get("_purchase_order_id"):
+                        oc_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={row['_purchase_order_id']}&model=purchase.order&view_type=form&cids=1"
+                        st.markdown(f'<a href="{oc_url}" target="_blank" style="color: #1E88E5; text-decoration: none;">{row["Descripción"]}</a>', unsafe_allow_html=True)
+                    else:
+                        st.write(row["Descripción"])
+                with cols[2]:
+                    st.write(row["Fecha OC"])
+                with cols[3]:
+                    st.write(row["Cant. KG"])
+                with cols[4]:
+                    st.write(row["Tipo Cambio"])
+                with cols[5]:
+                    st.write(row["P. Unitario USD"])
+                with cols[6]:
+                    st.write(row["P. Unitario CLP"])
+                with cols[7]:
+                    st.write(row["Subtotal USD"])
+                with cols[8]:
+                    st.write(row["Subtotal CLP"])
+                with cols[9]:
+                    if st.button("🗑️", key=f"eliminar_{linea_id}", help="Eliminar línea de la factura en Odoo"):
+                        _eliminar_linea(linea_id, factura, username, password)
+            else:
+                # CLP: sin columnas USD ni TC
+                cols = st.columns([0.5, 2.0, 0.8, 0.8, 1.0, 1.0, 0.5])
+                
+                with cols[0]:
+                    st.write(f"**{idx+1}**")
+                
+                with cols[1]:
+                    if row.get("_purchase_order_id"):
+                        oc_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={row['_purchase_order_id']}&model=purchase.order&view_type=form&cids=1"
+                        st.markdown(f'<a href="{oc_url}" target="_blank" style="color: #1E88E5; text-decoration: none;">{row["Descripción"]}</a>', unsafe_allow_html=True)
+                    else:
+                        st.write(row["Descripción"])
+                with cols[2]:
+                    st.write(row["Fecha OC"])
+                with cols[3]:
+                    st.write(row["Cant. KG"])
+                with cols[4]:
+                    st.write(row["P. Unitario CLP"])
+                with cols[5]:
+                    st.write(row["Subtotal CLP"])
+                with cols[6]:
+                    if st.button("🗑️", key=f"eliminar_{linea_id}", help="Eliminar línea de la factura en Odoo"):
+                        _eliminar_linea(linea_id, factura, username, password)
 
+
+
+def _eliminar_linea(linea_id: int, factura: dict, username: str, password: str):
+    """Elimina una línea de factura en Odoo y actualiza los datos en memoria."""
+    with st.spinner("Eliminando línea..."):
+        try:
+            response = requests.delete(
+                f"{API_URL}/proformas/linea/{linea_id}",
+                params={"username": username, "password": password}
+            )
+            
+            if response.status_code == 200:
+                # Actualizar los datos en memoria sin recargar todo
+                if "ajuste_proformas_data" in st.session_state:
+                    facturas_actuales = st.session_state["ajuste_proformas_data"]
+                    factura_id = factura.get("id")
+                    
+                    # Encontrar y actualizar la factura específica
+                    for i, f in enumerate(facturas_actuales):
+                        if f.get("id") == factura_id:
+                            # Eliminar la línea de la factura en memoria
+                            f["lineas"] = [l for l in f.get("lineas", []) if l.get("id") != linea_id]
+                            
+                            # Recalcular totales
+                            total_usd = sum(l.get("subtotal_usd", 0) for l in f["lineas"])
+                            total_clp = sum(l.get("subtotal_clp", 0) for l in f["lineas"])
+                            
+                            f["total_usd"] = total_usd
+                            f["base_usd"] = total_usd
+                            f["iva_usd"] = total_usd * 0.19
+                            
+                            f["total_clp"] = total_clp
+                            f["base_clp"] = total_clp
+                            f["iva_clp"] = total_clp * 0.19
+                            
+                            facturas_actuales[i] = f
+                            break
+                    
+                    st.session_state["ajuste_proformas_data"] = facturas_actuales
+                
+                st.success("✅ Línea eliminada correctamente")
+                time.sleep(0.3)
+                st.rerun()
+            else:
+                error_detail = response.json().get("detail", "Error desconocido")
+                st.error(f"❌ Error al eliminar: {error_detail}")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
 
 def _render_comparativo(factura: dict):
-    """Renderiza comparativo ANTES/DESPUÉS."""
+    """Renderiza comparativo ANTES/DESPUÉS o resumen CLP."""
     
-    st.markdown("#### 📊 Comparativo USD → CLP")
+    es_usd = factura.get('es_usd', factura.get('moneda', '') == 'USD')
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("##### 💵 ANTES (USD)")
-        st.markdown(f"""
-        | Concepto | Monto |
-        |----------|-------|
-        | Base imponible | **${fmt_chileno(factura['base_usd'], 2)}** |
-        | IVA 19% | ${fmt_chileno(factura['iva_usd'], 2)} |
-        | **TOTAL** | **${fmt_chileno(factura['total_usd'], 2)}** |
-        """)
-    
-    with col2:
-        st.markdown("##### 💰 DESPUÉS (CLP)")
-        st.markdown(f"""
-        | Concepto | Monto |
-        |----------|-------|
-        | Base imponible | **${fmt_chileno(factura['base_clp'], 0)}** |
-        | IVA 19% | ${fmt_chileno(factura['iva_clp'], 0)} |
-        | **TOTAL** | **${fmt_chileno(factura['total_clp'], 0)}** |
-        """)
-    
-    with col3:
-        st.markdown("##### ✅ Validación Odoo")
+    if es_usd:
+        st.markdown("#### 📊 Comparativo USD → CLP")
         
-        # DEBUG: Mostrar valores que se están comparando
-        # Mostrar tipo de cambio promedio aplicado
-        st.metric("TC Promedio Aplicado", fmt_chileno(factura['tipo_cambio'], 2))
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("##### 💵 ANTES (USD)")
+            st.markdown(f"""
+            | Concepto | Monto |
+            |----------|-------|
+            | Base imponible | **${fmt_chileno(factura['base_usd'], 2)}** |
+            | IVA 19% | ${fmt_chileno(factura['iva_usd'], 2)} |
+            | **TOTAL** | **${fmt_chileno(factura['total_usd'], 2)}** |
+            """)
+        
+        with col2:
+            st.markdown("##### 💰 DESPUÉS (CLP)")
+            st.markdown(f"""
+            | Concepto | Monto |
+            |----------|-------|
+            | Base imponible | **${fmt_chileno(factura['base_clp'], 0)}** |
+            | IVA 19% | ${fmt_chileno(factura['iva_clp'], 0)} |
+            | **TOTAL** | **${fmt_chileno(factura['total_clp'], 0)}** |
+            """)
+        
+        with col3:
+            st.markdown("##### ✅ Validación Odoo")
+            st.metric("TC Promedio Aplicado", fmt_chileno(factura['tipo_cambio'], 2))
+    else:
+        st.markdown("#### 📊 Resumen Proforma CLP")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("##### 💰 Montos en CLP")
+            st.markdown(f"""
+            | Concepto | Monto |
+            |----------|-------|
+            | Base imponible | **${fmt_chileno(factura['base_clp'], 0)}** |
+            | IVA 19% | ${fmt_chileno(factura['iva_clp'], 0)} |
+            | **TOTAL** | **${fmt_chileno(factura['total_clp'], 0)}** |
+            """)
+        
+        with col2:
+            st.markdown("##### ✅ Información")
+            st.info("📌 Esta proforma está directamente en CLP, no requiere conversión de moneda.")
 
 
 def _render_preview_clp(factura: dict, username: str, password: str):
-    """Renderiza preview de la proforma en CLP."""
+    """Renderiza preview de la proforma."""
     
-    st.markdown("#### 📄 Preview: Proforma en CLP")
+    es_usd = factura.get('es_usd', factura.get('moneda', '') == 'USD')
+    titulo_preview = "📄 Preview: Proforma en CLP" if es_usd else "📄 Preview: Proforma CLP"
+    
+    st.markdown(f"#### {titulo_preview}")
+    
+    # Info de moneda/TC condicional
+    moneda_info = f"💱 <strong style=\"color: #1B4F72;\">TC Aplicado:</strong> {factura['tipo_cambio']:,.2f}" if es_usd else "💰 <strong style=\"color: #1B4F72;\">Moneda:</strong> CLP (directa)"
     
     # Contenedor estilizado con mejor contraste
     st.markdown(f"""
@@ -865,7 +992,7 @@ def _render_preview_clp(factura: dict, username: str, password: str):
             <p style="margin: 8px 0; color: #333; font-size: 0.95em;">🏢 <strong style="color: #1B4F72;">Proveedor:</strong> {factura['proveedor_nombre']}</p>
             <p style="margin: 8px 0; color: #333; font-size: 0.95em;">🔖 <strong style="color: #1B4F72;">Referencia:</strong> {factura['ref'] or '-'}</p>
             <p style="margin: 8px 0; color: #333; font-size: 0.95em;">📋 <strong style="color: #1B4F72;">OCs Origen:</strong> {factura['origin'] or '-'}</p>
-            <p style="margin: 8px 0; color: #333; font-size: 0.95em;">💱 <strong style="color: #1B4F72;">TC Aplicado:</strong> {factura['tipo_cambio']:,.2f}</p>
+            <p style="margin: 8px 0; color: #333; font-size: 0.95em;">{moneda_info}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -874,47 +1001,76 @@ def _render_preview_clp(factura: dict, username: str, password: str):
     if factura["lineas"]:
         st.markdown("##### 📦 Detalle de Líneas")
         
-        df_preview = pd.DataFrame([
-            {
-                "Descripción": l["nombre"][:40] if l["nombre"] else "-",
-                "Cant.": l["cantidad"],
-                "P.Unit USD": l["precio_usd"],
-                "TC": l["tc_implicito"],
-                "P.Unit CLP": l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0,
-                "Subtotal USD": l["subtotal_usd"],
-                "Subtotal CLP": l["subtotal_clp"],
-            }
-            for l in factura["lineas"]
-        ])
-        
-        # Formatear columnas
-        df_preview["Cant."] = df_preview["Cant."].apply(lambda x: f"{x:,.2f}")
-        df_preview["P.Unit USD"] = df_preview["P.Unit USD"].apply(lambda x: f"${x:,.2f}")
-        df_preview["TC"] = df_preview["TC"].apply(lambda x: f"{x:,.2f}")
-        df_preview["P.Unit CLP"] = df_preview["P.Unit CLP"].apply(lambda x: f"${x:,.0f}")
-        df_preview["Subtotal USD"] = df_preview["Subtotal USD"].apply(lambda x: f"${x:,.2f}")
-        df_preview["Subtotal CLP"] = df_preview["Subtotal CLP"].apply(lambda x: f"${x:,.0f}")
+        if es_usd:
+            df_preview = pd.DataFrame([
+                {
+                    "Descripción": l["nombre"][:40] if l["nombre"] else "-",
+                    "Cant.": l["cantidad"],
+                    "P.Unit USD": l["precio_usd"],
+                    "TC": l["tc_implicito"],
+                    "P.Unit CLP": l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0,
+                    "Subtotal USD": l["subtotal_usd"],
+                    "Subtotal CLP": l["subtotal_clp"],
+                }
+                for l in factura["lineas"]
+            ])
+            
+            # Formatear columnas
+            df_preview["Cant."] = df_preview["Cant."].apply(lambda x: f"{x:,.2f}")
+            df_preview["P.Unit USD"] = df_preview["P.Unit USD"].apply(lambda x: f"${x:,.2f}")
+            df_preview["TC"] = df_preview["TC"].apply(lambda x: f"{x:,.2f}")
+            df_preview["P.Unit CLP"] = df_preview["P.Unit CLP"].apply(lambda x: f"${x:,.0f}")
+            df_preview["Subtotal USD"] = df_preview["Subtotal USD"].apply(lambda x: f"${x:,.2f}")
+            df_preview["Subtotal CLP"] = df_preview["Subtotal CLP"].apply(lambda x: f"${x:,.0f}")
+        else:
+            df_preview = pd.DataFrame([
+                {
+                    "Descripción": l["nombre"][:40] if l["nombre"] else "-",
+                    "Cant.": l["cantidad"],
+                    "P.Unit CLP": l.get("precio_clp", 0) or (l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0),
+                    "Subtotal CLP": l["subtotal_clp"],
+                }
+                for l in factura["lineas"]
+            ])
+            
+            # Formatear columnas
+            df_preview["Cant."] = df_preview["Cant."].apply(lambda x: f"{x:,.2f}")
+            df_preview["P.Unit CLP"] = df_preview["P.Unit CLP"].apply(lambda x: f"${x:,.0f}")
+            df_preview["Subtotal CLP"] = df_preview["Subtotal CLP"].apply(lambda x: f"${x:,.0f}")
         
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
     
     # Totales mejorados
     st.markdown("---")
-    col_tot1, col_tot2, col_tot3 = st.columns([2, 1, 1])
     
-    with col_tot1:
-        st.markdown("")
-    
-    with col_tot2:
-        st.markdown("##### 💵 USD")
-        st.markdown(f"Base: **${factura['base_usd']:,.2f}**")
-        st.markdown(f"IVA 19%: ${factura['iva_usd']:,.2f}")
-        st.markdown(f"**TOTAL: ${factura['total_usd']:,.2f}**")
-    
-    with col_tot3:
-        st.markdown("##### 💰 CLP")
-        st.markdown(f"Base: **${factura['base_clp']:,.0f}**")
-        st.markdown(f"IVA 19%: ${factura['iva_clp']:,.0f}")
-        st.markdown(f"**TOTAL: ${factura['total_clp']:,.0f}**")
+    if es_usd:
+        col_tot1, col_tot2, col_tot3 = st.columns([2, 1, 1])
+        
+        with col_tot1:
+            st.markdown("")
+        
+        with col_tot2:
+            st.markdown("##### 💵 USD")
+            st.markdown(f"Base: **${factura['base_usd']:,.2f}**")
+            st.markdown(f"IVA 19%: ${factura['iva_usd']:,.2f}")
+            st.markdown(f"**TOTAL: ${factura['total_usd']:,.2f}**")
+        
+        with col_tot3:
+            st.markdown("##### 💰 CLP")
+            st.markdown(f"Base: **${factura['base_clp']:,.0f}**")
+            st.markdown(f"IVA 19%: ${factura['iva_clp']:,.0f}")
+            st.markdown(f"**TOTAL: ${factura['total_clp']:,.0f}**")
+    else:
+        col_tot1, col_tot2 = st.columns([2, 1])
+        
+        with col_tot1:
+            st.markdown("")
+        
+        with col_tot2:
+            st.markdown("##### 💰 CLP")
+            st.markdown(f"Base: **${factura['base_clp']:,.0f}**")
+            st.markdown(f"IVA 19%: ${factura['iva_clp']:,.0f}")
+            st.markdown(f"**TOTAL: ${factura['total_clp']:,.0f}**")
     
     # Botones de acción
     st.markdown("---")
@@ -954,15 +1110,16 @@ def _render_preview_clp(factura: dict, username: str, password: str):
             use_container_width=True
         )
     
-    # Botón deshabilitado temporalmente
-    with st.expander("⚙️ Opciones Avanzadas (Deshabilitado)", expanded=False):
-        st.warning("⚠️ La función de cambiar moneda en Odoo está temporalmente deshabilitada")
-        st.button(
-            "✅ APLICAR CAMBIO A CLP EN ODOO", 
-            key=f"aplicar_cambio_{factura['id']}", 
-            disabled=True,
-            help="Esta función está temporalmente deshabilitada"
-        )
+    # Botón deshabilitado temporalmente (solo para facturas USD)
+    if es_usd:
+        with st.expander("⚙️ Opciones Avanzadas (Deshabilitado)", expanded=False):
+            st.warning("⚠️ La función de cambiar moneda en Odoo está temporalmente deshabilitada")
+            st.button(
+                "✅ APLICAR CAMBIO A CLP EN ODOO", 
+                key=f"aplicar_cambio_{factura['id']}", 
+                disabled=True,
+                help="Esta función está temporalmente deshabilitada"
+            )
 
 
 def _aplicar_cambio_odoo(factura: dict, username: str, password: str):
@@ -1014,46 +1171,81 @@ def _exportar_excel(factura: dict):
     """Exporta la proforma a Excel."""
     import io
     
-    # Crear DataFrame
-    df_lineas = pd.DataFrame([
-        {
-            "Descripción": l["nombre"],
-            "Cantidad": l["cantidad"],
-            "Precio USD": l["precio_usd"],
-            "Subtotal USD": l["subtotal_usd"],
-            "Subtotal CLP": l["subtotal_clp"],
-            "Tipo Cambio": l["tc_implicito"]
-        }
-        for l in factura["lineas"]
-    ])
+    es_usd = factura.get('es_usd', factura.get('moneda', '') == 'USD')
     
-    # Agregar fila de totales
-    df_totales = pd.DataFrame([
-        {
-            "Descripción": "BASE IMPONIBLE",
-            "Cantidad": "",
-            "Precio USD": "",
-            "Subtotal USD": factura["base_usd"],
-            "Subtotal CLP": factura["base_clp"],
-            "Tipo Cambio": factura["tipo_cambio"]
-        },
-        {
-            "Descripción": "IVA 19%",
-            "Cantidad": "",
-            "Precio USD": "",
-            "Subtotal USD": factura["iva_usd"],
-            "Subtotal CLP": factura["iva_clp"],
-            "Tipo Cambio": ""
-        },
-        {
-            "Descripción": "TOTAL",
-            "Cantidad": "",
-            "Precio USD": "",
-            "Subtotal USD": factura["total_usd"],
-            "Subtotal CLP": factura["total_clp"],
-            "Tipo Cambio": ""
-        }
-    ])
+    if es_usd:
+        # Excel con columnas USD y CLP
+        df_lineas = pd.DataFrame([
+            {
+                "Descripción": l["nombre"],
+                "Cantidad": l["cantidad"],
+                "Precio USD": l["precio_usd"],
+                "Subtotal USD": l["subtotal_usd"],
+                "Subtotal CLP": l["subtotal_clp"],
+                "Tipo Cambio": l["tc_implicito"]
+            }
+            for l in factura["lineas"]
+        ])
+        
+        # Agregar fila de totales
+        df_totales = pd.DataFrame([
+            {
+                "Descripción": "BASE IMPONIBLE",
+                "Cantidad": "",
+                "Precio USD": "",
+                "Subtotal USD": factura["base_usd"],
+                "Subtotal CLP": factura["base_clp"],
+                "Tipo Cambio": factura["tipo_cambio"]
+            },
+            {
+                "Descripción": "IVA 19%",
+                "Cantidad": "",
+                "Precio USD": "",
+                "Subtotal USD": factura["iva_usd"],
+                "Subtotal CLP": factura["iva_clp"],
+                "Tipo Cambio": ""
+            },
+            {
+                "Descripción": "TOTAL",
+                "Cantidad": "",
+                "Precio USD": "",
+                "Subtotal USD": factura["total_usd"],
+                "Subtotal CLP": factura["total_clp"],
+                "Tipo Cambio": ""
+            }
+        ])
+    else:
+        # Excel solo CLP
+        df_lineas = pd.DataFrame([
+            {
+                "Descripción": l["nombre"],
+                "Cantidad": l["cantidad"],
+                "Precio CLP": l.get("precio_clp", 0) or (l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0),
+                "Subtotal CLP": l["subtotal_clp"]
+            }
+            for l in factura["lineas"]
+        ])
+        
+        df_totales = pd.DataFrame([
+            {
+                "Descripción": "BASE IMPONIBLE",
+                "Cantidad": "",
+                "Precio CLP": "",
+                "Subtotal CLP": factura["base_clp"]
+            },
+            {
+                "Descripción": "IVA 19%",
+                "Cantidad": "",
+                "Precio CLP": "",
+                "Subtotal CLP": factura["iva_clp"]
+            },
+            {
+                "Descripción": "TOTAL",
+                "Cantidad": "",
+                "Precio CLP": "",
+                "Subtotal CLP": factura["total_clp"]
+            }
+        ])
     
     df_export = pd.concat([df_lineas, df_totales], ignore_index=True)
     
@@ -1111,7 +1303,7 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
                                 fontSize=14, 
                                 alignment=TA_RIGHT,
                                 textColor=color_azul,
-                                spaceAfter=6,
+                                spaceAfter=2,
                                 rightIndent=0.2*inch)
     
     elements = []
@@ -1126,14 +1318,24 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         except:
             fecha_creacion_fmt = fecha_creacion_raw[:10]
     
-    # Nombre de proveedor más corto para evitar solapamiento
-    prov_nombre_pdf = factura['proveedor_nombre'][:35]
-    titulo_pdf = f"Proforma {prov_nombre_pdf}"
-    subtitulo_pdf = fecha_creacion_fmt
+    # Nombre del proveedor en línea separada para evitar solapamiento con logo
+    prov_nombre_pdf = factura['proveedor_nombre']
     
     # Spacer para dejar espacio al logo (altura del logo ~1.4 inch)
     elements.append(Spacer(1, 0.6*inch))
-    elements.append(Paragraph(titulo_pdf, title_style))
+    elements.append(Paragraph("Proforma", title_style))
+    
+    # Nombre del proveedor debajo del título, con font más pequeño si es largo
+    prov_font_size = 12 if len(prov_nombre_pdf) <= 40 else 10
+    prov_style = ParagraphStyle('ProvName',
+                               parent=styles['Normal'],
+                               fontSize=prov_font_size,
+                               alignment=TA_RIGHT,
+                               textColor=color_azul,
+                               spaceAfter=2,
+                               rightIndent=0.2*inch,
+                               fontName='Helvetica-Bold')
+    elements.append(Paragraph(prov_nombre_pdf, prov_style))
     
     # Subtítulo con fecha debajo
     subtitle_style = ParagraphStyle('SubTitle',
@@ -1143,17 +1345,21 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
                                    textColor=color_azul_claro,
                                    spaceAfter=10,
                                    rightIndent=0.2*inch)
-    elements.append(Paragraph(subtitulo_pdf, subtitle_style))
+    elements.append(Paragraph(fecha_creacion_fmt, subtitle_style))
     elements.append(Spacer(1, 8))
     
     # Fecha de envío (hoy)
     fecha_envio = datetime.now().strftime("%d-%m-%Y")
     
+    # Determinar si es factura USD o CLP
+    es_usd = factura.get('es_usd', factura.get('moneda', '') == 'USD')
+    moneda_display = "USD / CLP" if es_usd else "CLP"
+    
     # Información del documento en 2 columnas
     info_data = [
         ["Factura:", factura['nombre'], "", "Fecha Creación:", fecha_creacion_fmt or '-'],
         ["Proveedor:", factura['proveedor_nombre'][:50], "", "Fecha Envío:", fecha_envio],
-        ["Referencia:", factura.get('ref', '-') or '-', "", "Moneda:", "USD / CLP"],
+        ["Referencia:", factura.get('ref', '-') or '-', "", "Moneda:", moneda_display],
     ]
     
     info_table = Table(info_data, colWidths=[1*inch, 3*inch, 0.5*inch, 1.2*inch, 1.3*inch])
@@ -1167,8 +1373,11 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
     elements.append(info_table)
     elements.append(Spacer(1, 20))
     
-    # Tabla de líneas con fecha de OC
-    table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nUSD", "Tipo\nCambio", "P. Unitario\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
+    # Tabla de líneas con fecha de OC - condicional según moneda
+    if es_usd:
+        table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nUSD", "Tipo\nCambio", "P. Unitario\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
+    else:
+        table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nCLP", "Subtotal\nCLP"]]
     
     # OPTIMIZACIÓN: Obtener todas las fechas de OCs en una sola llamada
     from shared.odoo_client import OdooClient
@@ -1213,11 +1422,8 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         desc_paragraph = Paragraph(desc_completa, desc_style)
         
         cant = linea['cantidad']
-        p_unit_usd = linea['precio_usd']
-        tc_linea = linea['tc_implicito']
-        p_unit_clp = linea['subtotal_clp'] / cant if cant else 0
-        subtotal_usd = linea['subtotal_usd']
         subtotal_clp = linea['subtotal_clp']
+        p_unit_clp = subtotal_clp / cant if cant else 0
         
         # Extraer fecha de OC del mapa
         fecha_oc = "-"
@@ -1225,39 +1431,74 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
             oc_nombre = desc_completa.split(":")[0].strip()
             fecha_oc = fechas_oc_map.get(oc_nombre, "-")
         
-        table_data.append([
-            desc_paragraph,  # Usar Paragraph en lugar de texto truncado
-            fecha_oc,
-            fmt_cl(cant, 2),
-            f"${fmt_cl(p_unit_usd, 2)}",
-            fmt_cl(tc_linea, 2),
-            f"${fmt_cl(p_unit_clp, 0)}",
-            f"${fmt_cl(subtotal_usd, 2)}",
-            f"${fmt_cl(subtotal_clp, 0)}"
-        ])
+        if es_usd:
+            p_unit_usd = linea['precio_usd']
+            tc_linea = linea['tc_implicito']
+            subtotal_usd = linea['subtotal_usd']
+            
+            table_data.append([
+                desc_paragraph,
+                fecha_oc,
+                fmt_cl(cant, 2),
+                f"${fmt_cl(p_unit_usd, 2)}",
+                fmt_cl(tc_linea, 2),
+                f"${fmt_cl(p_unit_clp, 0)}",
+                f"${fmt_cl(subtotal_usd, 2)}",
+                f"${fmt_cl(subtotal_clp, 0)}"
+            ])
+        else:
+            table_data.append([
+                desc_paragraph,
+                fecha_oc,
+                fmt_cl(cant, 2),
+                f"${fmt_cl(p_unit_clp, 0)}",
+                f"${fmt_cl(subtotal_clp, 0)}"
+            ])
     
     # Línea en blanco antes de totales
-    table_data.append(["", "", "", "", "", "", "", ""])
+    num_cols = 8 if es_usd else 5
+    table_data.append([""] * num_cols)
     
     # Totales - 3 filas
-    table_data.append([
-        "", "", "", "", "", "Base Imponible:",
-        f"${fmt_cl(factura['base_usd'], 2)}",
-        f"${fmt_cl(factura['base_clp'], 0)}"
-    ])
-    table_data.append([
-        "", "", "", "", "", "IVA 19%:",
-        f"${fmt_cl(factura['iva_usd'], 2)}",
-        f"${fmt_cl(factura['iva_clp'], 0)}"
-    ])
-    table_data.append([
-        "", "", "", "", "", "TOTAL:",
-        f"${fmt_cl(factura['total_usd'], 2)}",
-        f"${fmt_cl(factura['total_clp'], 0)} *"
-    ])
+    if es_usd:
+        table_data.append([
+            "", "", "", "", "", "Base Imponible:",
+            f"${fmt_cl(factura['base_usd'], 2)}",
+            f"${fmt_cl(factura['base_clp'], 0)}"
+        ])
+        table_data.append([
+            "", "", "", "", "", "IVA 19%:",
+            f"${fmt_cl(factura['iva_usd'], 2)}",
+            f"${fmt_cl(factura['iva_clp'], 0)}"
+        ])
+        table_data.append([
+            "", "", "", "", "", "TOTAL:",
+            f"${fmt_cl(factura['total_usd'], 2)}",
+            f"${fmt_cl(factura['total_clp'], 0)} *"
+        ])
+    else:
+        table_data.append([
+            "", "", "", "Base Imponible:",
+            f"${fmt_cl(factura['base_clp'], 0)}"
+        ])
+        table_data.append([
+            "", "", "", "IVA 19%:",
+            f"${fmt_cl(factura['iva_clp'], 0)}"
+        ])
+        table_data.append([
+            "", "", "", "TOTAL:",
+            f"${fmt_cl(factura['total_clp'], 0)} *"
+        ])
     
-    # Anchos de columna ajustados para landscape con fecha OC - más ancho para descripción
-    main_table = Table(table_data, colWidths=[2.5*inch, 0.75*inch, 0.6*inch, 0.75*inch, 0.6*inch, 0.85*inch, 0.85*inch, 1.0*inch])
+    # Anchos de columna ajustados según moneda
+    if es_usd:
+        col_widths = [2.5*inch, 0.75*inch, 0.6*inch, 0.75*inch, 0.6*inch, 0.85*inch, 0.85*inch, 1.0*inch]
+        totales_col_start = 5
+    else:
+        col_widths = [3.5*inch, 0.9*inch, 0.8*inch, 1.2*inch, 1.2*inch]
+        totales_col_start = 3
+    
+    main_table = Table(table_data, colWidths=col_widths)
     main_table.setStyle(TableStyle([
         # Header - azul corporativo con texto más grande y visible
         ('BACKGROUND', (0, 0), (-1, 0), color_azul),
@@ -1280,10 +1521,10 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         
         # Totales - negritas con fondo azul claro
-        ('FONTNAME', (5, -3), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (5, -1), (-1, -1), 9),
-        ('LINEABOVE', (5, -3), (-1, -3), 1.5, colors.black),
-        ('BACKGROUND', (5, -3), (-1, -1), colors.HexColor('#E8F4F8')),
+        ('FONTNAME', (totales_col_start, -3), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (totales_col_start, -1), (-1, -1), 9),
+        ('LINEABOVE', (totales_col_start, -3), (-1, -3), 1.5, colors.black),
+        ('BACKGROUND', (totales_col_start, -3), (-1, -1), colors.HexColor('#E8F4F8')),
     ]))
     elements.append(main_table)
     

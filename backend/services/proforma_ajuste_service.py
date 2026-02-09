@@ -1,6 +1,6 @@
 """
 Servicio para gestionar facturas de proveedor en borrador (Proformas)
-Permite consultar, comparar y ajustar moneda USD → CLP
+Permite consultar, comparar y ajustar moneda USD → CLP, y gestionar proformas CLP directas.
 """
 from typing import List, Dict, Any, Optional
 from shared.odoo_client import OdooClient
@@ -98,7 +98,8 @@ def get_facturas_borrador(
     proveedor_id: Optional[int] = None,
     fecha_desde: Optional[str] = None,
     fecha_hasta: Optional[str] = None,
-    solo_usd: bool = True
+    solo_usd: bool = False,
+    moneda_filtro: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Obtiene facturas de proveedor en estado borrador.
@@ -109,7 +110,8 @@ def get_facturas_borrador(
         proveedor_id: ID del proveedor (opcional)
         fecha_desde: Fecha inicio formato YYYY-MM-DD (opcional)
         fecha_hasta: Fecha fin formato YYYY-MM-DD (opcional)
-        solo_usd: Si True, solo retorna facturas en USD
+        solo_usd: Si True, solo retorna facturas en USD (deprecated, usar moneda_filtro)
+        moneda_filtro: Filtrar por moneda específica: "USD", "CLP", o None para todas
     
     Returns:
         Lista de facturas con sus líneas y montos en ambas monedas
@@ -122,7 +124,10 @@ def get_facturas_borrador(
         ("state", "=", "draft"),  # Solo borradores
     ]
     
-    if solo_usd:
+    # Filtro de moneda: moneda_filtro tiene prioridad sobre solo_usd
+    if moneda_filtro:
+        domain.append(("currency_id.name", "=", moneda_filtro))
+    elif solo_usd:
         domain.append(("currency_id.name", "=", "USD"))
     
     if proveedor_id:
@@ -204,6 +209,11 @@ def get_facturas_borrador(
         if not tiene_productos_fruta(client, invoice_line_ids):
             continue  # Saltar facturas sin productos de fruta
         
+        # Determinar moneda de la factura
+        currency = fac.get("currency_id", [None, ""])
+        moneda_nombre = currency[1] if isinstance(currency, list) else str(currency)
+        es_usd = moneda_nombre.upper() == "USD"
+        
         lineas = []
         
         if invoice_line_ids:
@@ -272,18 +282,28 @@ def get_facturas_borrador(
                     oc_nombre = nombre_linea.split(":")[0].strip()
                     fecha_oc = oc_fecha_cache.get(oc_nombre, "")
                 
-                usd_subtotal = line.get("price_subtotal", 0) or 0
-                
-                if fecha_oc:
-                    # Usar TC con cache
-                    if fecha_oc not in tc_cache:
-                        tc_cache[fecha_oc] = get_tc_historico(client, fecha_oc)
-                    tc_linea = tc_cache[fecha_oc]
-                    clp_subtotal = usd_subtotal * tc_linea
+                if es_usd:
+                    # === FACTURA USD: Calcular conversión a CLP ===
+                    usd_subtotal = line.get("price_subtotal", 0) or 0
+                    
+                    if fecha_oc:
+                        # Usar TC con cache
+                        if fecha_oc not in tc_cache:
+                            tc_cache[fecha_oc] = get_tc_historico(client, fecha_oc)
+                        tc_linea = tc_cache[fecha_oc]
+                        clp_subtotal = usd_subtotal * tc_linea
+                    else:
+                        # Fallback: usar debit actual si no se encuentra la OC
+                        clp_subtotal = line.get("debit", 0) or 0
+                        tc_linea = clp_subtotal / usd_subtotal if usd_subtotal > 0 else 0
+                    
+                    precio_usd = line.get("price_unit", 0)
                 else:
-                    # Fallback: usar debit actual si no se encuentra la OC
-                    clp_subtotal = line.get("debit", 0) or 0
-                    tc_linea = clp_subtotal / usd_subtotal if usd_subtotal > 0 else 0
+                    # === FACTURA CLP: Los montos ya están en CLP ===
+                    usd_subtotal = 0
+                    clp_subtotal = line.get("price_subtotal", 0) or 0
+                    tc_linea = 0
+                    precio_usd = 0
                 
                 # Obtener purchase_order_id del batch
                 purchase_order_id = None
@@ -297,9 +317,10 @@ def get_facturas_borrador(
                     "producto_id": line.get("product_id", [None, ""])[0] if line.get("product_id") else None,
                     "producto_nombre": line.get("product_id", [None, ""])[1] if line.get("product_id") else "",
                     "cantidad": line.get("quantity", 0),
-                    "precio_usd": line.get("price_unit", 0),
+                    "precio_usd": precio_usd,
+                    "precio_clp": line.get("price_unit", 0) if not es_usd else 0,
                     "subtotal_usd": usd_subtotal,
-                    "total_usd": line.get("price_total", 0) or 0,
+                    "total_usd": line.get("price_total", 0) or 0 if es_usd else 0,
                     "subtotal_clp": clp_subtotal,
                     "tc_implicito": tc_linea,
                     "purchase_order_id": purchase_order_id
@@ -310,12 +331,11 @@ def get_facturas_borrador(
         total_iva_clp = total_base_clp * 0.19
         total_con_iva_clp = total_base_clp + total_iva_clp
         
-        # TC promedio de todas las líneas
+        # TC promedio de todas las líneas (solo para USD)
         tcs = [l["tc_implicito"] for l in lineas if l["tc_implicito"] > 0]
         tc_promedio = sum(tcs) / len(tcs) if tcs else 0
         
         partner = fac.get("partner_id", [None, "Sin proveedor"])
-        currency = fac.get("currency_id", [None, "USD"])
         
         # Obtener email del proveedor
         proveedor_email = ""
@@ -328,6 +348,21 @@ def get_facturas_borrador(
             except:
                 pass
         
+        if es_usd:
+            # USD: montos originales en USD, CLP calculado con TC
+            base_usd = fac.get("amount_untaxed", 0) or 0
+            iva_usd = fac.get("amount_tax", 0) or 0
+            total_usd = fac.get("amount_total", 0) or 0
+        else:
+            # CLP: no hay montos USD
+            base_usd = 0
+            iva_usd = 0
+            total_usd = 0
+            # Para CLP, usar montos directos de Odoo
+            total_base_clp = fac.get("amount_untaxed", 0) or 0
+            total_iva_clp = fac.get("amount_tax", 0) or 0
+            total_con_iva_clp = fac.get("amount_total", 0) or 0
+        
         resultado.append({
             "id": fac["id"],
             "nombre": fac.get("name", ""),
@@ -337,20 +372,21 @@ def get_facturas_borrador(
             "proveedor_email": proveedor_email,
             "fecha_factura": fac.get("invoice_date", ""),
             "fecha_creacion": fac.get("create_date", ""),
-            "moneda": currency[1] if isinstance(currency, list) else str(currency),
+            "moneda": moneda_nombre,
+            "es_usd": es_usd,
             "origin": fac.get("invoice_origin", ""),
-            # Montos USD
-            "base_usd": fac.get("amount_untaxed", 0) or 0,
-            "iva_usd": fac.get("amount_tax", 0) or 0,
-            "total_usd": fac.get("amount_total", 0) or 0,
-            # Montos CLP (desde signed o calculados)
+            # Montos USD (0 para facturas CLP)
+            "base_usd": base_usd,
+            "iva_usd": iva_usd,
+            "total_usd": total_usd,
+            # Montos CLP
             "base_clp": total_base_clp,
             "iva_clp": total_iva_clp,
             "total_clp": total_con_iva_clp,
             # Montos signed de Odoo (para validación)
             "base_clp_signed": abs(fac.get("amount_untaxed_signed", 0) or 0),
             "total_clp_signed": abs(fac.get("amount_total_signed", 0) or 0),
-            # Tipo de cambio
+            # Tipo de cambio (0 para facturas CLP)
             "tipo_cambio": tc_promedio,
             # Líneas
             "lineas": lineas,
@@ -443,12 +479,8 @@ def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[
             if factura and factura[0].get("state") != "draft":
                 return {"success": False, "error": "Solo se pueden eliminar líneas de facturas en borrador"}
         
-        # Eliminar con credenciales que tienen permiso Accounting/Billing
-        admin_client = OdooClient(
-            username="mvalladares@riofuturo.cl",
-            password="c0766224bec30cac071ffe43a858c9ccbd521ddd"
-        )
-        admin_client.unlink("account.move.line", [linea_id])
+        # Eliminar con las credenciales del usuario
+        client.unlink("account.move.line", [linea_id])
         
         return {
             "success": True,
