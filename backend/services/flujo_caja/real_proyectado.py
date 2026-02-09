@@ -585,13 +585,14 @@ class RealProyectadoCalculator:
                 'error': str(e)
             }
     
-    def calcular_todos(self, fecha_inicio: str, fecha_fin: str) -> Dict[str, Dict]:
+    def calcular_todos(self, fecha_inicio: str, fecha_fin: str, meses_lista: List[str] = None) -> Dict[str, Dict]:
         """
         Calcula REAL/PROYECTADO para todos los conceptos configurados.
         
         Args:
             fecha_inicio: Fecha inicio
             fecha_fin: Fecha fin
+            meses_lista: Lista de períodos (meses o semanas)
             
         Returns:
             Dict {concepto_id: {real, proyectado, ppto, ...}}
@@ -600,15 +601,15 @@ class RealProyectadoCalculator:
         
         # 1.1.1 - Cobros procedentes de ventas
         print(f"[RealProyectado] Calculando 1.1.1 - Cobros de clientes...")
-        resultados['1.1.1'] = self.calcular_cobros_clientes(fecha_inicio, fecha_fin)
+        resultados['1.1.1'] = self.calcular_cobros_clientes(fecha_inicio, fecha_fin, meses_lista)
         
         # 1.2.1 - Pagos a proveedores
         print(f"[RealProyectado] Calculando 1.2.1 - Pagos a proveedores...")
-        resultados['1.2.1'] = self.calcular_pagos_proveedores(fecha_inicio, fecha_fin)
+        resultados['1.2.1'] = self.calcular_pagos_proveedores(fecha_inicio, fecha_fin, meses_lista)
         
         # 1.2.6 - IVA Exportador
         print(f"[RealProyectado] Calculando 1.2.6 - IVA Exportador...")
-        resultados['1.2.6'] = self.calcular_iva_exportador(fecha_inicio, fecha_fin)
+        resultados['1.2.6'] = self.calcular_iva_exportador(fecha_inicio, fecha_fin, meses_lista)
         
         return resultados
     
