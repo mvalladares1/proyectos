@@ -79,7 +79,7 @@ def traducir_fecha(dia_key: str) -> str:
 
 
 def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
-    """Gráfico de barras agrupadas: KG/Hora promedio por sala por día con detalle completo."""
+    """Gráfico de barras agrupadas: KG/Hora promedio por sala por día - DETALLADO."""
     dias = sorted(procesos_por_dia.keys())
     
     if not dias:
@@ -96,11 +96,24 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
     if not salas_activas:
         return
     
-    colores = [
-        '#00D4FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', 
-        '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA', '#FF9F43',
-        '#6C5CE7', '#00B894', '#E17055', '#0984E3', '#FDCB6E'
-    ]
+    # Colores MUY diferenciados y vivos - cada sala un color único
+    colores = {
+        0: '#FF3366',   # Rosa fuerte
+        1: '#00CCFF',   # Celeste brillante
+        2: '#33FF99',   # Verde neón
+        3: '#FFCC00',   # Amarillo oro
+        4: '#FF6633',   # Naranja fuego
+        5: '#CC33FF',   # Púrpura brillante
+        6: '#00FF66',   # Verde lima
+        7: '#FF3399',   # Magenta
+        8: '#3399FF',   # Azul eléctrico
+        9: '#FFFF33',   # Amarillo limón
+        10: '#FF9933',  # Naranja claro
+        11: '#66FFCC',  # Turquesa
+        12: '#FF66CC',  # Rosa chicle
+        13: '#99FF33',  # Lima brillante
+        14: '#6633FF',  # Violeta
+    }
     
     dias_nombres = {
         'Monday': 'Lun', 'Tuesday': 'Mar', 'Wednesday': 'Mié',
@@ -124,68 +137,71 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
             else:
                 datos.append(0)
         
+        color = colores.get(idx, '#FFFFFF')
+        
         series.append({
-            "name": sala[:30],
+            "name": f"🏭 {sala}",
             "type": "bar",
             "data": datos,
             "itemStyle": {
-                "color": colores[idx % len(colores)],
-                "borderRadius": [4, 4, 0, 0]
+                "color": color,
+                "borderRadius": [6, 6, 0, 0],
+                "borderWidth": 1,
+                "borderColor": color
             },
-            "barMaxWidth": 35,
+            "barMaxWidth": 40,
+            "barGap": "20%",
             "label": {
                 "show": True,
                 "position": "top",
-                "fontSize": 10,
+                "fontSize": 11,
                 "fontWeight": "bold",
-                "color": "#fff",
-                "formatter": "{c}"
+                "color": color,
+                "formatter": "{c} kg/h"
             },
             "emphasis": {
                 "itemStyle": {
-                    "shadowBlur": 10,
-                    "shadowColor": "rgba(0,0,0,0.5)"
+                    "shadowBlur": 15,
+                    "shadowColor": f"{color}88"
+                },
+                "label": {
+                    "fontSize": 14,
+                    "fontWeight": "bold"
                 }
             }
         })
     
-    # Construir tooltip detallado
-    tooltip_fmt = ""
-    for idx, sala in enumerate(salas_activas):
-        for dia_idx, dia in enumerate(dias):
-            procs = procesos_por_dia[dia].get(sala, [])
-            if procs:
-                detalle = []
-                for p in procs:
-                    detalle.append(
-                        f"  • {p.get('nombre', 'N/A')}: "
-                        f"{p.get('hora_inicio', '-')}-{p.get('hora_fin', '-')} | "
-                        f"{p.get('kg_hora', 0):,.0f} kg/h | "
-                        f"{p.get('dotacion', 0)} pers | "
-                        f"{p.get('kg_producidos', 0):,.0f} kg"
-                    )
-    
     options = {
+        "title": {
+            "text": "⚡ KG/Hora Promedio por Línea — Cada Día",
+            "subtext": "Cada barra es el promedio de KG/Hora de la sala en ese día. Pasa el mouse para ver detalles.",
+            "left": "center",
+            "textStyle": {"color": "#fff", "fontSize": 16, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#999", "fontSize": 12}
+        },
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(15, 15, 35, 0.95)",
-            "borderColor": "#555",
+            "backgroundColor": "rgba(10, 10, 30, 0.95)",
+            "borderColor": "#666",
             "borderWidth": 1,
-            "textStyle": {"color": "#fff", "fontSize": 12},
-            "extraCssText": "max-width: 450px; white-space: pre-wrap;"
+            "textStyle": {"color": "#fff", "fontSize": 13},
+            "extraCssText": "max-width: 500px; white-space: pre-wrap; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border-radius: 10px;"
         },
         "legend": {
-            "data": [s[:30] for s in salas_activas],
+            "data": [f"🏭 {s}" for s in salas_activas],
             "bottom": 0,
-            "textStyle": {"color": "#ddd", "fontSize": 11},
+            "textStyle": {"color": "#eee", "fontSize": 12, "fontWeight": "bold"},
             "type": "scroll",
-            "itemGap": 20,
-            "icon": "roundRect"
+            "itemGap": 25,
+            "itemWidth": 18,
+            "itemHeight": 14,
+            "icon": "roundRect",
+            "padding": [10, 20]
         },
         "grid": {
             "left": "3%", "right": "4%",
-            "bottom": "15%", "top": "10%",
+            "bottom": "18%", "top": "18%",
             "containLabel": True
         },
         "xAxis": {
@@ -193,19 +209,23 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
             "data": fechas_fmt,
             "axisLabel": {
                 "color": "#fff",
-                "fontSize": 12,
+                "fontSize": 13,
                 "fontWeight": "bold"
             },
-            "axisLine": {"lineStyle": {"color": "#555"}},
-            "axisTick": {"show": False}
+            "axisLine": {"lineStyle": {"color": "#666", "width": 2}},
+            "axisTick": {"show": False},
+            "name": "📅 Día",
+            "nameLocation": "middle",
+            "nameGap": 35,
+            "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"}
         },
         "yAxis": {
             "type": "value",
-            "name": "KG / Hora",
-            "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
+            "name": "⚡ KG / Hora",
+            "nameTextStyle": {"color": "#aaa", "fontSize": 14, "fontWeight": "bold"},
             "axisLabel": {
                 "color": "#ccc",
-                "fontSize": 11,
+                "fontSize": 12,
                 "formatter": "{value}"
             },
             "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
@@ -222,114 +242,153 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
         ] if len(dias) > 10 else []
     }
     
-    # Altura dinámica según cantidad de salas
-    altura = max(420, min(600, 300 + len(salas_activas) * 20))
+    # Altura dinámica
+    altura = max(480, min(650, 350 + len(salas_activas) * 25))
     st_echarts(options=options, height=f"{altura}px")
     
     # Tabla resumen debajo del gráfico
-    st.markdown("##### 📊 Resumen por Línea")
-    resumen_cols = st.columns(min(len(salas_activas), 5))
-    for idx, sala in enumerate(salas_activas[:5]):
-        todos_vals = []
-        total_kg_sala = 0
-        total_procs = 0
-        for dia in dias:
-            procs = procesos_por_dia[dia].get(sala, [])
-            for p in procs:
-                if p['kg_hora'] > 0:
-                    todos_vals.append(p['kg_hora'])
-                total_kg_sala += p['kg_producidos']
-                total_procs += 1
-        
-        prom = sum(todos_vals) / len(todos_vals) if todos_vals else 0
-        with resumen_cols[idx % 5]:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, {colores[idx % len(colores)]}22, {colores[idx % len(colores)]}11);
-                        border: 1px solid {colores[idx % len(colores)]}55; border-radius: 10px; padding: 12px; text-align: center;">
-                <div style="color: {colores[idx % len(colores)]}; font-weight: bold; font-size: 13px;">{sala[:20]}</div>
-                <div style="color: #fff; font-size: 22px; font-weight: bold;">{prom:,.0f}</div>
-                <div style="color: #999; font-size: 11px;">KG/Hora prom</div>
-                <div style="color: #aaa; font-size: 11px; margin-top: 5px;">
-                    {total_kg_sala:,.0f} KG | {total_procs} procesos
+    st.markdown("##### 📊 Resumen General por Línea")
+    # Mostrar en filas de 5
+    for fila_start in range(0, len(salas_activas), 5):
+        fila_salas = salas_activas[fila_start:fila_start + 5]
+        resumen_cols = st.columns(len(fila_salas))
+        for idx_local, sala in enumerate(fila_salas):
+            idx_global = fila_start + idx_local
+            todos_vals = []
+            total_kg_sala = 0
+            total_procs = 0
+            total_dot = []
+            for dia in dias:
+                procs = procesos_por_dia[dia].get(sala, [])
+                for p in procs:
+                    if p['kg_hora'] > 0:
+                        todos_vals.append(p['kg_hora'])
+                    total_kg_sala += p['kg_producidos']
+                    total_procs += 1
+                    if p.get('dotacion', 0) > 0:
+                        total_dot.append(p['dotacion'])
+            
+            prom = sum(todos_vals) / len(todos_vals) if todos_vals else 0
+            prom_dot = sum(total_dot) / len(total_dot) if total_dot else 0
+            c = colores.get(idx_global, '#fff')
+            with resumen_cols[idx_local]:
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, {c}22, {c}11);
+                            border: 2px solid {c}66; border-radius: 12px; padding: 14px; text-align: center;">
+                    <div style="color: {c}; font-weight: bold; font-size: 14px;">🏭 {sala[:22]}</div>
+                    <div style="color: #fff; font-size: 26px; font-weight: bold; margin: 5px 0;">{prom:,.0f}</div>
+                    <div style="color: #aaa; font-size: 12px; font-weight: bold;">⚡ KG/HORA PROMEDIO</div>
+                    <div style="color: #bbb; font-size: 11px; margin-top: 8px;">
+                        📦 {total_kg_sala:,.0f} KG | 👷 {prom_dot:.0f} pers | 📋 {total_procs} proc
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
 
 def render_barras_dia(procesos_por_sala: Dict[str, List[Dict]]):
-    """Gráfico de barras con KG/Hora promedio por sala para un día con detalle."""
-    datos = []
+    """Gráfico de barras horizontal con KG/Hora de CADA PROCESO individual."""
+    procesos_list = []
     for sala, procs in procesos_por_sala.items():
-        vals = [p['kg_hora'] for p in procs if p['kg_hora'] > 0]
-        if vals:
-            total_kg = sum(p['kg_producidos'] for p in procs)
-            total_dot = [p.get('dotacion', 0) for p in procs if p.get('dotacion', 0) > 0]
-            prom_dot = sum(total_dot) / len(total_dot) if total_dot else 0
-            datos.append({
-                'sala': sala[:25],
-                'promedio': round(sum(vals) / len(vals), 0),
-                'total_kg': total_kg,
-                'n': len(procs),
-                'dotacion': round(prom_dot)
-            })
+        for p in procs:
+            if p.get('kg_hora', 0) > 0:
+                hora_i = p.get('hora_inicio', '')
+                nombre = p.get('nombre', 'N/A')
+                dot = int(p.get('dotacion', 0))
+                kg_total = p.get('kg_producidos', 0)
+                label = f"{sala[:18]} | {nombre} ({hora_i})"
+                procesos_list.append({
+                    'label': label,
+                    'kg_hora': p['kg_hora'],
+                    'kg_total': kg_total,
+                    'dotacion': dot,
+                    'sala': sala,
+                    'nombre': nombre
+                })
     
-    if not datos:
+    if not procesos_list:
         return
     
-    datos.sort(key=lambda x: x['promedio'], reverse=True)
+    # Ordenar de menor a mayor para barras horizontales
+    procesos_list.sort(key=lambda x: x['kg_hora'])
+    # Tomar máximo 15
+    if len(procesos_list) > 15:
+        procesos_list = procesos_list[-15:]
     
-    salas = [d['sala'] for d in datos]
-    valores = [d['promedio'] for d in datos]
+    labels = [p['label'] for p in procesos_list]
+    valores = [round(p['kg_hora']) for p in procesos_list]
     colores_barras = [color_kg_hora(v) for v in valores]
     
+    data_series = []
+    for i, p in enumerate(procesos_list):
+        data_series.append({
+            "value": round(p['kg_hora']),
+            "itemStyle": {
+                "color": {
+                    "type": "linear",
+                    "x": 0, "y": 0, "x2": 1, "y2": 0,
+                    "colorStops": [
+                        {"offset": 0, "color": colores_barras[i] + "88"},
+                        {"offset": 1, "color": colores_barras[i]}
+                    ]
+                },
+                "borderRadius": [0, 8, 8, 0]
+            }
+        })
+    
     options = {
+        "title": {
+            "text": "⚡ KG/Hora por Proceso",
+            "subtext": "Cada barra es un proceso individual. Verde=Excelente | Amarillo=Bueno | Naranja=Regular | Rojo=Bajo",
+            "left": "center",
+            "textStyle": {"color": "#fff", "fontSize": 14},
+            "subtextStyle": {"color": "#888", "fontSize": 11}
+        },
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(15, 15, 35, 0.95)",
-            "borderColor": "#555",
-            "textStyle": {"color": "#fff", "fontSize": 12}
+            "backgroundColor": "rgba(10, 10, 30, 0.95)",
+            "borderColor": "#666",
+            "textStyle": {"color": "#fff", "fontSize": 13},
+            "extraCssText": "border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
         },
         "grid": {
-            "left": "3%", "right": "8%",
-            "bottom": "5%", "top": "8%",
+            "left": "3%", "right": "12%",
+            "bottom": "5%", "top": "18%",
             "containLabel": True
         },
         "xAxis": {
-            "type": "category",
-            "data": salas,
-            "axisLabel": {"color": "#ddd", "fontSize": 11, "fontWeight": "bold", "rotate": 15},
-            "axisTick": {"show": False}
+            "type": "value",
+            "name": "⚡ KG/Hora",
+            "nameLocation": "middle",
+            "nameGap": 30,
+            "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
+            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
         },
         "yAxis": {
-            "type": "value",
-            "name": "KG/Hora",
-            "nameTextStyle": {"color": "#aaa", "fontWeight": "bold"},
-            "axisLabel": {"color": "#ccc"},
-            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+            "type": "category",
+            "data": labels,
+            "axisLabel": {"color": "#eee", "fontSize": 11, "fontWeight": "bold"},
+            "axisLine": {"lineStyle": {"color": "#555"}},
+            "axisTick": {"show": False}
         },
         "series": [{
             "type": "bar",
-            "data": [{"value": v, "itemStyle": {"color": c, "borderRadius": [6, 6, 0, 0]}} for v, c in zip(valores, colores_barras)],
+            "data": data_series,
             "label": {
                 "show": True,
-                "position": "top",
+                "position": "right",
                 "color": "#fff",
                 "fontSize": 13,
                 "fontWeight": "bold",
-                "formatter": "{c}"
+                "formatter": "{c} kg/h"
             },
-            "barMaxWidth": 60
+            "barMaxWidth": 28
         }]
     }
     
-    st_echarts(options=options, height="280px")
-    
-    # Mini resumen debajo
-    cols_resumen = st.columns(len(datos))
-    for i, d in enumerate(datos):
-        with cols_resumen[i]:
-            st.caption(f"📦 {d['total_kg']:,.0f} kg | 👷 {d['dotacion']} pers | {d['n']} proc")
+    altura = max(280, 60 + len(procesos_list) * 35)
+    st_echarts(options=options, height=f"{altura}px")
 
 
 def render_detalle_sala(sala: str, procesos: List[Dict]):
