@@ -556,20 +556,12 @@ def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
 def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
     """Aprobar una OC usando reglas de Studio - registra aprobación sin confirmar hasta tener todas las requeridas"""
     try:
-        # 1. Obtener el model_id de purchase.order
-        model_id = models.execute_kw(
-            DB, uid, password,
-            'ir.model', 'search',
-            [[('model', '=', 'purchase.order')]]
-        )[0]
-        
-        # 2. Crear la entrada de aprobación en Studio
+        # 1. Crear la entrada de aprobación en Studio
         # Esto registra que el usuario actual ha aprobado según la regla 144
         models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'create',
             [{
-                'model_id': model_id,
                 'res_id': int(oc_id),
                 'rule_id': 144,  # ID de la regla de aprobación para TRANSPORTES
                 'user_id': int(uid),
