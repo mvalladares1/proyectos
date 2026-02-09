@@ -556,7 +556,19 @@ def obtener_todas_actividades_oc(models, uid, username, password, oc_id):
 def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
     """Aprobar una OC usando reglas de Studio - registra aprobación sin confirmar hasta tener todas las requeridas"""
     try:
-        # 1. Crear la entrada de aprobación en Studio
+        # 1. Verificar cuántas aprobaciones tiene actualmente esta OC para la regla 144
+        aprobaciones_existentes = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search_read',
+            [[('res_id', '=', int(oc_id)), ('rule_id', '=', 144), ('approved', '=', True)]],
+            {'fields': ['id', 'user_id']}
+        )
+        
+        # Si el usuario actual ya aprobó, no hacer nada
+        if any(aprobacion['user_id'][0] == uid for aprobacion in aprobaciones_existentes if aprobacion.get('user_id')):
+            return False, "Ya aprobaste esta OC anteriormente"
+        
+        # 2. Crear la entrada de aprobación en Studio
         # Esto registra que el usuario actual ha aprobado según la regla 144
         models.execute_kw(
             DB, uid, password,
@@ -581,22 +593,50 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             except:
                 pass
         
-        # 4. Llamar a button_confirm
-        # Odoo verificará las reglas de Studio automáticamente
-        # Si faltan aprobaciones, NO confirmará la orden y creará actividades para los demás
-        # Si ya tiene todas las aprobaciones requeridas, confirmará la orden
-        try:
-            models.execute_kw(
-                DB, uid, password,
-                'purchase.order', 'button_confirm',
-                [[int(oc_id)]]
-            )
-        except Exception as e:
-            # Si falla button_confirm (ej: faltan aprobaciones), es normal
-            # El registro de aprobación ya quedó guardado
-            pass
+        # 4. Determinar qué hacer según el número de aprobaciones
+        num_aprobaciones = len(aprobaciones_existentes) + 1
         
-        return True, "Aprobación registrada correctamente"
+        if num_aprobaciones >= 2:
+            # Ya están las 2 aprobaciones - confirmar la orden
+            try:
+                models.execute_kw(
+                    DB, uid, password,
+                    'purchase.order', 'button_confirm',
+                    [[int(oc_id)]]
+                )
+                return True, f"✅ Segunda aprobación - Orden confirmada"
+            except Exception as e:
+                return True, f"✅ Segunda aprobación registrada (error al confirmar: {str(e)[:80]})"
+        else:
+            # Primera aprobación - NO confirmar, solo notificar
+            # La actividad para el segundo aprobador debe crearse manualmente o mediante reglas de Studio
+            return True, f"✅ Primera aprobación registrada - Pendiente segunda aprobación (1/2)"
+        
+    except Exception as e:
+        return False, str(e)
+
+
+def quitar_aprobacion(models, uid, password, oc_id):
+    """Quitar la aprobación del usuario actual de una OC"""
+    try:
+        # Buscar la aprobación del usuario actual para esta OC
+        aprobaciones = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search',
+            [[('res_id', '=', int(oc_id)), ('rule_id', '=', 144), ('user_id', '=', int(uid)), ('approved', '=', True)]]
+        )
+        
+        if not aprobaciones:
+            return False, "No tienes aprobación registrada para esta OC"
+        
+        # Eliminar la aprobación
+        models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'unlink',
+            [aprobaciones]
+        )
+        
+        return True, "Aprobación eliminada correctamente"
     except Exception as e:
         return False, str(e)
 
@@ -1017,7 +1057,7 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 ocs_sel_proveedor = [oc['data'] for oc in ocs_proveedor if oc['label'] in seleccionadas]
                 total_sel = sum(oc['monto'] for oc in ocs_sel_proveedor)
                 
-                col1, col2, col3 = st.columns([2, 1, 1])
+                col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
                 with col1:
                     st.caption(f"✅ {len(seleccionadas)} seleccionadas | ${total_sel:,.0f}")
                 
@@ -1042,6 +1082,26 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                             st.rerun()
                 
                 with col3:
+                    if st.button(f"🔙 Quitar mi aprobación", key=f"quitar_{key_proveedor}"):
+                        with st.spinner("Eliminando aprobaciones..."):
+                            exitosas = 0
+                            errores = []
+                            for oc in ocs_sel_proveedor:
+                                exito, msg = quitar_aprobacion(models, uid, password, oc['oc_id'])
+                                if exito:
+                                    exitosas += 1
+                                else:
+                                    errores.append(f"{oc['oc_name']}: {msg}")
+                            
+                            if exitosas > 0:
+                                st.success(f"🔙 {exitosas} aprobaciones eliminadas")
+                            if errores:
+                                st.info(f"ℹ️ {', '.join(errores)}")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                
+                with col4:
                     if st.button(f"❌ Rechazar", key=f"rechazar_{key_proveedor}"):
                         st.session_state[f'rechazar_proveedor_{key_proveedor}'] = True
                 
