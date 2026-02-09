@@ -317,3 +317,21 @@ async def download_monitor_report_pdf(data: dict):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pallets-disponibles")
+async def get_pallets_disponibles(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    planta: Optional[str] = Query(None, description="Filtrar por planta")
+):
+    """
+    Obtiene pallets disponibles que NO están en ninguna fabricación.
+    Excluye ubicaciones de stock final y cámaras.
+    """
+    try:
+        from backend.services.pallets_disponibles_service import PalletsDisponiblesService
+        service = PalletsDisponiblesService(username=username, password=password)
+        return service.get_pallets_disponibles(planta)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

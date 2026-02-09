@@ -17,14 +17,15 @@ from .shared import (
 )
 from . import tab_monitor_diario
 from . import tab_kg_por_linea
+from . import tab_pallets_disponibles
 
 
 @st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Detalle de OF con sub-tabs."""
     
-    # Sub-tabs: Monitor Diario y KG por Línea
-    sub_tabs = st.tabs(["📊 Monitor Diario", "📈 KG por Línea"])
+    # Sub-tabs: Monitor Diario, KG por Línea y Pallets Disponibles
+    sub_tabs = st.tabs(["📊 Monitor Diario", "📈 KG por Línea", "📦 Pallets Disponibles"])
     
     # === SUB-TAB: MONITOR DIARIO ===
     with sub_tabs[0]:
@@ -33,6 +34,10 @@ def render(username: str, password: str):
     # === SUB-TAB: KG POR LÍNEA ===
     with sub_tabs[1]:
         tab_kg_por_linea.render(username, password)
+    
+    # === SUB-TAB: PALLETS DISPONIBLES ===
+    with sub_tabs[2]:
+        tab_pallets_disponibles.render(username, password)
 
 
 def _render_busqueda_of(username: str, password: str):
