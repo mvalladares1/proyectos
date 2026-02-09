@@ -183,45 +183,54 @@ class PalletsDisponiblesService:
     def _get_pallets_en_fabricacion(self) -> set:
         """
         Obtiene IDs de pallets (package_id) que están en alguna fabricación
-        como materia prima (move_raw_ids), independiente del estado de la MO.
+        como materia prima, independiente del estado de la MO (excepto cancel).
+        
+        Busca en stock.move.line los pallets usados como origen en movimientos
+        de consumo de fabricación.
         """
-        # Buscar MOs que NO estén canceladas
-        mos = self.odoo.search_read(
-            'mrp.production',
-            [('state', '!=', 'cancel')],
-            ['id', 'move_raw_ids'],
-            limit=5000,
+        # Buscar TODOS los stock.move que sean consumo de fabricación (raw_material_production_id != False)
+        # y que no estén cancelados
+        moves_consumo = self.odoo.search_read(
+            'stock.move',
+            [
+                ('raw_material_production_id', '!=', False),
+                ('raw_material_production_id.state', '!=', 'cancel'),
+            ],
+            ['id'],
+            limit=50000,
             order='id desc'
         )
         
-        if not mos:
+        if not moves_consumo:
             return set()
         
-        # Obtener todos los move_raw_ids
-        all_move_ids = []
-        for mo in mos:
-            raw_ids = mo.get('move_raw_ids', [])
-            if raw_ids:
-                all_move_ids.extend(raw_ids)
+        move_ids = [m['id'] for m in moves_consumo]
+        logger.info(f"[PALLETS] Moves de consumo de fabricación: {len(move_ids)}")
         
-        if not all_move_ids:
-            return set()
-        
-        # Buscar move lines con package_id
-        move_lines = self.odoo.search_read(
-            'stock.move.line',
-            [('move_id', 'in', all_move_ids), ('package_id', '!=', False)],
-            ['package_id'],
-            limit=50000
-        )
-        
+        # Buscar move lines con package_id (pallet de origen)
+        # Hacer en batches para no exceder límites
         package_ids = set()
-        for ml in (move_lines or []):
-            pkg = ml.get('package_id')
-            if pkg:
-                pkg_id = pkg[0] if isinstance(pkg, (list, tuple)) else pkg
-                package_ids.add(pkg_id)
+        batch_size = 5000
         
+        for i in range(0, len(move_ids), batch_size):
+            batch = move_ids[i:i + batch_size]
+            move_lines = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ('move_id', 'in', batch),
+                    ('package_id', '!=', False),
+                ],
+                ['package_id'],
+                limit=50000
+            )
+            
+            for ml in (move_lines or []):
+                pkg = ml.get('package_id')
+                if pkg:
+                    pkg_id = pkg[0] if isinstance(pkg, (list, tuple)) else pkg
+                    package_ids.add(pkg_id)
+        
+        logger.info(f"[PALLETS] Total pallets en fabricación: {len(package_ids)}")
         return package_ids
     
     def _determinar_tipo(self, product_name: str, lot_name: str, location_name: str) -> str:
