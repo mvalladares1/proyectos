@@ -513,16 +513,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         rec_moves = moves_by_picking.get(picking_id, [])
         kg_total_recepcion = 0
         for m in rec_moves:
-            # Obtener información del producto para excluir bandejas
-            prod = m.get("product_id")
-            prod_id = prod[0] if isinstance(prod, (list, tuple)) else prod if prod else None
-            prod_info = product_info_map.get(prod_id, {})
-            categoria = _normalize_categoria(prod_info.get("categ", ""))
-            
-            # Excluir bandejas del cálculo de kg totales
-            if categoria == "BANDEJAS":
-                continue
-                
             uom = m.get("product_uom")
             uom_name = uom[1].lower() if isinstance(uom, (list, tuple)) and len(uom) > 1 else "kg"
             # Solo sumar si es kg
@@ -536,16 +526,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             for dev_id in devoluciones_por_recepcion[albaran]:
                 dev_moves = moves_by_picking.get(dev_id, [])
                 for dm in dev_moves:
-                    # Obtener información del producto para excluir bandejas
-                    dprod = dm.get("product_id")
-                    dprod_id = dprod[0] if isinstance(dprod, (list, tuple)) else dprod if dprod else None
-                    dprod_info = product_info_map.get(dprod_id, {})
-                    dcategoria = _normalize_categoria(dprod_info.get("categ", ""))
-                    
-                    # Excluir bandejas del cálculo de kg devueltos
-                    if dcategoria == "BANDEJAS":
-                        continue
-                        
                     duom = dm.get("product_uom")
                     duom_name = duom[1].lower() if isinstance(duom, (list, tuple)) and len(duom) > 1 else "kg"
                     # Solo sumar si es kg
@@ -579,11 +559,6 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     dprod = dm.get("product_id")
                     dprod_id = dprod[0] if isinstance(dprod, (list, tuple)) else dprod if dprod else None
                     if dprod_id:
-                        # Excluir bandejas de las devoluciones por producto también
-                        dprod_info = product_info_map.get(dprod_id, {})
-                        dcategoria = _normalize_categoria(dprod_info.get("categ", ""))
-                        if dcategoria == "BANDEJAS":
-                            continue
                         kg_dev = dm.get("quantity_done", 0) or 0
                         kg_devueltos_por_producto[dprod_id] = kg_devueltos_por_producto.get(dprod_id, 0) + kg_dev
         
