@@ -299,14 +299,14 @@ def render(username: str, password: str):
         for act_data in actividades.values():
             for concepto in act_data.get("conceptos", []):
                 for cuenta in concepto.get("cuentas", []):
-                    if cuenta.get("es_cuenta_cxc"):
-                        cuenta_codigo = cuenta.get("codigo", "")
-                        for etiqueta in cuenta.get("etiquetas", []):
-                            et_nombre = etiqueta.get("nombre", "")
-                            facturas = etiqueta.get("facturas", [])
-                            if facturas:
-                                key = f"{et_nombre}_{cuenta_codigo}"
-                                facturas_data[key] = facturas
+                    # Procesar TODAS las cuentas con facturas, no solo CxC
+                    cuenta_codigo = cuenta.get("codigo", "")
+                    for etiqueta in cuenta.get("etiquetas", []):
+                        et_nombre = etiqueta.get("nombre", "")
+                        facturas = etiqueta.get("facturas", [])
+                        if facturas:
+                            key = f"{et_nombre}_{cuenta_codigo}"
+                            facturas_data[key] = facturas
         
         # Serializar facturas para JavaScript
         facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
@@ -343,6 +343,10 @@ def render(username: str, password: str):
             html_parts.append('<thead>')
             html_parts.append('<tr class="header-meses">')
             html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
+            # Columnas REAL/PROYECTADO/PPTO
+            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; font-weight: 700;">REAL</th>')
+            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; font-weight: 700;">PROYECTADO</th>')
+            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; font-weight: 700;">PPTO</th>')
             
             for mes in meses_ordenados:
                 num_semanas = len(semanas_por_mes[mes])

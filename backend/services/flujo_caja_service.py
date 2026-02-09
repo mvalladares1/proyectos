@@ -542,7 +542,7 @@ class FlujoCajaService:
         # 10. Calcular REAL/PROYECTADO/PPTO para conceptos especiales
         print(f"[FlujoCaja] Calculando REAL/PROYECTADO para conceptos especiales...")
         try:
-            real_proyectado_data = self.real_proyectado_calc.calcular_todos(fecha_inicio, fecha_fin)
+            real_proyectado_data = self.real_proyectado_calc.calcular_todos(fecha_inicio, fecha_fin, meses_lista)
         except Exception as e:
             print(f"[FlujoCaja] Error calculando REAL/PROYECTADO: {e}")
             real_proyectado_data = {}
