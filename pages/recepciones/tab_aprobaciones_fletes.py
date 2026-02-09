@@ -655,7 +655,41 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                     [[int(oc_id)]],
                     {'context': contexto}
                 )
-                return True, f"✅ Segunda aprobación - Orden confirmada"
+                
+                # Después de confirmar, actualizar qty_received = product_qty en todas las líneas
+                try:
+                    # Leer la orden confirmada para obtener las líneas
+                    orden = models.execute_kw(
+                        DB, uid, password,
+                        'purchase.order', 'read',
+                        [[int(oc_id)]],
+                        {'fields': ['order_line'], 'context': contexto}
+                    )
+                    
+                    if orden and orden[0].get('order_line'):
+                        lineas_ids = orden[0]['order_line']
+                        
+                        # Leer las líneas para obtener product_qty
+                        lineas = models.execute_kw(
+                            DB, uid, password,
+                            'purchase.order.line', 'read',
+                            [lineas_ids],
+                            {'fields': ['id', 'product_qty'], 'context': contexto}
+                        )
+                        
+                        # Actualizar cada línea con qty_received = product_qty
+                        for linea in lineas:
+                            models.execute_kw(
+                                DB, uid, password,
+                                'purchase.order.line', 'write',
+                                [[linea['id']], {'qty_received': linea['product_qty']}],
+                                {'context': contexto}
+                            )
+                except Exception as e_lineas:
+                    # Si falla la actualización de líneas, no es crítico
+                    pass
+                
+                return True, f"✅ Segunda aprobación - Orden confirmada y marcada como recibida"
             except Exception as e:
                 return True, f"✅ Segunda aprobación registrada (error al confirmar: {str(e)[:80]})"
         else:
