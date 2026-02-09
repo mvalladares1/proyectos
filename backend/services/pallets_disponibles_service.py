@@ -98,6 +98,10 @@ class PalletsDisponiblesService:
                 if isinstance(q.get('product_id'), (list, tuple)) and len(q['product_id']) > 1:
                     product_name = q['product_id'][1]
                 
+                # Excluir productos con código que empiece en [3 o [4
+                if product_name.startswith('[3') or product_name.startswith('[4'):
+                    continue
+                
                 lot_name = ''
                 if isinstance(q.get('lot_id'), (list, tuple)) and len(q['lot_id']) > 1:
                     lot_name = q['lot_id'][1]
@@ -234,24 +238,30 @@ class PalletsDisponiblesService:
         return package_ids
     
     def _determinar_tipo(self, product_name: str, lot_name: str, location_name: str) -> str:
-        """Determina si el pallet es Congelado o Fresco."""
+        """Determina si el pallet es Congelado o Fresco.
+        
+        Reglas:
+        - Código [1...] = Fresco
+        - Código [2...] = Congelado
+        - Lote con -C al final = Congelado
+        - IQF, FROZEN, CONGELADO en nombre = Congelado
+        """
         product_upper = product_name.upper()
         lot_upper = lot_name.upper()
-        location_upper = location_name.upper()
         
-        # Si el lote termina en -C es congelado
-        if lot_upper.endswith('-C'):
+        # Si el lote contiene -C es congelado
+        if '-C' in lot_upper:
             return 'Congelado'
         
-        # Si está en cámara de congelado
-        if 'CAMARA' in location_upper or '-25' in location_upper or 'CONGELADO' in location_upper:
+        # Si el producto empieza con código [2 = congelado
+        if product_name.startswith('[2'):
             return 'Congelado'
         
-        # Si el producto empieza con código 2 (congelado)
-        if product_upper.startswith('[2'):
-            return 'Congelado'
+        # Si el producto empieza con código [1 = fresco
+        if product_name.startswith('[1'):
+            return 'Fresco'
         
-        # Si tiene IQF, CONGELADO en el nombre
+        # Si tiene IQF, CONGELADO, FROZEN en el nombre
         if 'IQF' in product_upper or 'CONGELADO' in product_upper or 'FROZEN' in product_upper:
             return 'Congelado'
         
