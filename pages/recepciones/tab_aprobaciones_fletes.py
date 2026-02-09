@@ -69,17 +69,23 @@ def obtener_costes_rutas():
 @st.cache_data(ttl=3600)  # Cache por 1 hora
 def obtener_tipo_cambio_usd():
     """Obtener tipo de cambio USD/CLP desde Banco Central (mindicador.cl)"""
-    try:
-        response = requests.get(API_MINDICADOR, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            dolar = data.get('dolar', {}).get('valor')
-            if dolar:
-                return float(dolar)
-        return None
-    except Exception as e:
-        st.warning(f"No se pudo obtener tipo de cambio USD: {e}")
-        return None
+    # Intentar 2 veces con timeout corto
+    for intento in range(2):
+        try:
+            response = requests.get(API_MINDICADOR, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                dolar = data.get('dolar', {}).get('valor')
+                if dolar:
+                    return float(dolar)
+        except:
+            if intento == 0:  # Si falla el primer intento, esperar un poco
+                import time
+                time.sleep(0.5)
+            continue
+    
+    # Si ambos intentos fallan, mostrar error y usar valor por defecto
+    st.error("⚠️ No se pudo obtener tipo de cambio USD desde mindicador.cl")
 
 
 def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
@@ -559,32 +565,41 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         # Contexto en español para todas las operaciones
         contexto = {'lang': 'es_ES'}
         
-        # 1. Verificar cuántas aprobaciones tiene actualmente esta OC para la regla 144
+        # 1. Determinar qué regla usar según el usuario
+        if username.lower() == 'msepulveda@riofuturo.cl':
+            rule_id = 144
+        elif username.lower() == 'fhorst@riofuturo.cl':
+            rule_id = 122
+        else:
+            # Usuario no configurado, usar regla por defecto
+            rule_id = 144
+        
+        # 2. Verificar aprobaciones existentes para TODAS las reglas (144 y 122)
         aprobaciones_existentes = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
-            [[('res_id', '=', int(oc_id)), ('rule_id', '=', 144), ('approved', '=', True)]],
-            {'fields': ['id', 'user_id'], 'context': contexto}
+            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('approved', '=', True)]],
+            {'fields': ['id', 'user_id', 'rule_id'], 'context': contexto}
         )
         
         # Si el usuario actual ya aprobó, no hacer nada
         if any(aprobacion['user_id'][0] == uid for aprobacion in aprobaciones_existentes if aprobacion.get('user_id')):
             return False, "Ya aprobaste esta OC anteriormente"
         
-        # 2. Crear la entrada de aprobación en Studio CON CONTEXTO EN ESPAÑOL
+        # 3. Crear la entrada de aprobación en Studio CON LA REGLA ESPECÍFICA DEL USUARIO
         models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'create',
             [{
                 'res_id': int(oc_id),
-                'rule_id': 144,  # ID de la regla de aprobación para TRANSPORTES
+                'rule_id': rule_id,
                 'user_id': int(uid),
                 'approved': True
             }],
             {'context': contexto}
         )
         
-        # 3. Si hay actividad pendiente, completarla para limpieza visual
+        # 4. Si hay actividad pendiente, completarla para limpieza visual
         if activity_id is not None and pd.notna(activity_id):
             try:
                 models.execute_kw(
@@ -596,7 +611,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             except:
                 pass
         
-        # 4. Determinar qué hacer según el número de aprobaciones
+        # 5. Determinar qué hacer según el número de aprobaciones
         num_aprobaciones = len(aprobaciones_existentes) + 1
         
         if num_aprobaciones >= 2:
@@ -623,11 +638,11 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
 def quitar_aprobacion(models, uid, password, oc_id):
     """Quitar la aprobación del usuario actual de una OC"""
     try:
-        # Buscar la aprobación del usuario actual para esta OC
+        # Buscar la aprobación del usuario actual para esta OC (cualquier regla: 144 o 122)
         aprobaciones = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search',
-            [[('res_id', '=', int(oc_id)), ('rule_id', '=', 144), ('user_id', '=', int(uid)), ('approved', '=', True)]]
+            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('user_id', '=', int(uid)), ('approved', '=', True)]]
         )
         
         if not aprobaciones:
@@ -919,18 +934,19 @@ def render_tab(username, password):
     # Selector de vista
     modo_vista = st.radio(
         "Seleccionar Vista:",
-        ["📂 Expanders (Detallado)", "📋 Tabla con Selección Múltiple"],
+        ["� Tabla con Selección Múltiple", "📂 Expanders (Detallado)"],
         horizontal=True,
-        key="modo_vista_fletes"
+        key="modo_vista_fletes",
+        index=0  # Por defecto Tabla con Selección Múltiple
     )
     
     st.markdown("---")
     
     # Vista de tabla o expanders
-    if modo_vista == "📋 Tabla con Selección Múltiple":
-        render_vista_tabla_mejorada(df_filtrado, models, uid, username, password)
-    else:
+    if modo_vista == "� Expanders (Detallado)":
         render_vista_expanders(df_filtrado, models, uid, username, password)
+    else:
+        render_vista_tabla_mejorada(df_filtrado, models, uid, username, password)
     
     # Footer
     st.markdown("---")
@@ -992,6 +1008,68 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
             header_text += f" | ⏳ {n_pendientes} pendientes"
         
         with st.expander(header_text, expanded=len(proveedores_seleccionados) > 0):
+            # Filtrar solo OCs que se pueden aprobar (menos de 2 aprobaciones y no completamente aprobadas)
+            df_aprobables = df_proveedor[
+                (df_proveedor['num_aprobaciones'] < 2) &
+                (df_proveedor['estado_oc'] != 'purchase')
+            ]
+            
+            if len(df_aprobables) == 0:
+                st.caption("✅ Todas las OCs de este proveedor ya están completamente aprobadas")
+                
+                # Solo mostrar tabla informativa sin selección
+                def comparar_presupuesto(row):
+                    if pd.isna(row['costo_presupuestado']) or not row['costo_presupuestado']:
+                        return '⚠️ Sin ppto'
+                    if pd.isna(row['monto']) or not row['monto']:
+                        return '-'
+                    dif = row['monto'] - row['costo_presupuestado']
+                    dif_pct = (dif / row['costo_presupuestado']) * 100
+                    if dif <= 0:
+                        return f"🟢 -{abs(dif_pct):.0f}%"
+                    elif dif_pct <= 10:
+                        return f"🟡 +{dif_pct:.0f}%"
+                    else:
+                        return f"🔴 +{dif_pct:.0f}%"
+                
+                df_tabla_info = pd.DataFrame({
+                    'OC': df_proveedor['oc_name'],
+                    'Fecha': df_proveedor['fecha_str'],
+                    'Monto': df_proveedor['monto'].apply(lambda x: f"${x:,.0f}"),
+                    'vs Ppto': df_proveedor.apply(comparar_presupuesto, axis=1),
+                    'Aprob.': df_proveedor['estado_aprobacion'],
+                    'Aprobadores': df_proveedor['aprobadores'].str[:40],
+                })
+                
+                st.dataframe(df_tabla_info, use_container_width=True, hide_index=True)
+                continue
+            
+            # Key único para este proveedor
+            key_proveedor = f"select_{proveedor.replace(' ', '_')[:20]}"
+            
+            # Inicializar estado de selección
+            if f'selected_{key_proveedor}' not in st.session_state:
+                st.session_state[f'selected_{key_proveedor}'] = set()
+            
+            # Checkbox "Seleccionar todas"
+            col_check, col_info = st.columns([1, 3])
+            with col_check:
+                select_all = st.checkbox(
+                    "Seleccionar todas",
+                    key=f"select_all_{key_proveedor}",
+                    value=len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables)
+                )
+                
+                if select_all:
+                    st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
+                elif not select_all and len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables):
+                    # Solo desmarcar si estaban todas seleccionadas
+                    st.session_state[f'selected_{key_proveedor}'] = set()
+            
+            with col_info:
+                if st.session_state[f'selected_{key_proveedor}']:
+                    st.caption(f"✅ {len(st.session_state[f'selected_{key_proveedor}'])} OCs seleccionadas")
+            
             # Función para comparar con presupuesto
             def comparar_presupuesto(row):
                 if pd.isna(row['costo_presupuestado']) or not row['costo_presupuestado']:
@@ -1009,68 +1087,51 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 else:
                     return f"🔴 +{dif_pct:.0f}%"
             
-            # Crear dataframe para mostrar
-            df_tabla_proveedor = pd.DataFrame({
-                'OC': df_proveedor['oc_name'],
-                'Fecha': df_proveedor['fecha_str'],
-                'Monto': df_proveedor['monto'].apply(lambda x: f"${x:,.0f}"),
-                'vs Ppto': df_proveedor.apply(comparar_presupuesto, axis=1),
-                'Aprob.': df_proveedor['estado_aprobacion'],
-                'Aprobadores': df_proveedor['aprobadores'].str[:40],
-                '$/Kg USD': df_proveedor['alerta_costo_kg'].fillna(df_proveedor['cost_per_kg_usd_str']),
-                'Tipo Camión': df_proveedor['tipo_camion_str'].str[:15],
-                'ID': df_proveedor['actividad_id'],
-                'OC_ID': df_proveedor['oc_id']
-            })
+            # Mostrar tabla con checkboxes
+            for idx, row in df_aprobables.iterrows():
+                col_sel, col_oc, col_fecha, col_monto, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 2])
+                
+                with col_sel:
+                    is_selected = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
+                    if st.checkbox("", value=is_selected, key=f"check_{key_proveedor}_{row['oc_id']}"):
+                        st.session_state[f'selected_{key_proveedor}'].add(row['oc_id'])
+                    else:
+                        st.session_state[f'selected_{key_proveedor}'].discard(row['oc_id'])
+                
+                with col_oc:
+                    st.markdown(f"**{row['oc_name']}**")
+                
+                with col_fecha:
+                    fecha_str = pd.to_datetime(row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(row['fecha_orden']) else 'Sin fecha'
+                    st.text(fecha_str)
+                
+                with col_monto:
+                    st.text(f"${row['monto']:,.0f}")
+                
+                with col_ppto:
+                    st.text(comparar_presupuesto(row))
+                
+                with col_aprob:
+                    st.text(f"{row['estado_aprobacion']} - {row['aprobadores'][:30]}")
             
-            # Mostrar tabla del proveedor
-            st.dataframe(
-                df_tabla_proveedor.drop(columns=['ID', 'OC_ID']),
-                use_container_width=True,
-                hide_index=True,
-                height=min(400, len(df_tabla_proveedor) * 40 + 40)
-            )
-            
-            # Filtrar solo OCs que se pueden aprobar (menos de 2 aprobaciones y no completamente aprobadas)
-            df_aprobables = df_proveedor[
-                (df_proveedor['num_aprobaciones'] < 2) &
-                (df_proveedor['estado_oc'] != 'purchase')
-            ]
-            
-            if len(df_aprobables) == 0:
-                st.caption("✅ Todas las OCs de este proveedor ya están completamente aprobadas")
-                continue
-            
-            # Selección de OCs aprobables de este proveedor
-            ocs_proveedor = []
-            for _, row in df_aprobables.iterrows():
-                ocs_proveedor.append({
-                    'label': f"{row['oc_name']} - {row['estado_aprobacion']} - ${row['monto']:,.0f}",
-                    'data': row.to_dict()
-                })
-            
-            # Multiselect para este proveedor
-            key_proveedor = f"select_{proveedor.replace(' ', '_')[:20]}"
-            seleccionadas = st.multiselect(
-                f"Seleccionar OCs para aprobar ({len(ocs_proveedor)} disponibles):",
-                [oc['label'] for oc in ocs_proveedor],
-                key=key_proveedor
-            )
-            
-            if seleccionadas:
-                ocs_sel_proveedor = [oc['data'] for oc in ocs_proveedor if oc['label'] in seleccionadas]
-                total_sel = sum(oc['monto'] for oc in ocs_sel_proveedor)
+            # Botones de acción
+            if st.session_state[f'selected_{key_proveedor}']:
+                st.markdown("---")
+                
+                # Obtener datos de OCs seleccionadas
+                ocs_seleccionadas = df_aprobables[df_aprobables['oc_id'].isin(st.session_state[f'selected_{key_proveedor}'])]
+                total_sel = ocs_seleccionadas['monto'].sum()
                 
                 col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
                 with col1:
-                    st.caption(f"✅ {len(seleccionadas)} seleccionadas | ${total_sel:,.0f}")
+                    st.markdown(f"**💰 Total: ${total_sel:,.0f}**")
                 
                 with col2:
                     if st.button(f"✅ Aprobar", key=f"aprobar_{key_proveedor}", type="primary"):
                         with st.spinner("Aprobando..."):
                             exitosas = 0
                             errores = []
-                            for oc in ocs_sel_proveedor:
+                            for _, oc in ocs_seleccionadas.iterrows():
                                 exito, msg = aprobar_oc(models, uid, username, password, oc['oc_id'], oc.get('actividad_id'))
                                 if exito:
                                     exitosas += 1
@@ -1080,17 +1141,18 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                             if exitosas > 0:
                                 st.success(f"✅ {exitosas} OCs aprobadas por {username}")
                             if errores:
-                                st.warning(f"⚠️ Errores: {', '.join(errores)}")
+                                st.warning(f"⚠️ {', '.join(errores[:3])}")
+                            st.session_state[f'selected_{key_proveedor}'] = set()
                             st.cache_data.clear()
                             time.sleep(1)
                             st.rerun()
                 
                 with col3:
-                    if st.button(f"🔙 Quitar mi aprobación", key=f"quitar_{key_proveedor}"):
+                    if st.button(f"🔙 Quitar aprobación", key=f"quitar_{key_proveedor}"):
                         with st.spinner("Eliminando aprobaciones..."):
                             exitosas = 0
                             errores = []
-                            for oc in ocs_sel_proveedor:
+                            for _, oc in ocs_seleccionadas.iterrows():
                                 exito, msg = quitar_aprobacion(models, uid, password, oc['oc_id'])
                                 if exito:
                                     exitosas += 1
@@ -1100,7 +1162,8 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                             if exitosas > 0:
                                 st.success(f"🔙 {exitosas} aprobaciones eliminadas")
                             if errores:
-                                st.info(f"ℹ️ {', '.join(errores)}")
+                                st.info(f"ℹ️ {', '.join(errores[:3])}")
+                            st.session_state[f'selected_{key_proveedor}'] = set()
                             st.cache_data.clear()
                             time.sleep(1)
                             st.rerun()
@@ -1108,26 +1171,29 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 with col4:
                     if st.button(f"❌ Rechazar", key=f"rechazar_{key_proveedor}"):
                         st.session_state[f'rechazar_proveedor_{key_proveedor}'] = True
-                
-                # Modal de rechazo
-                if st.session_state.get(f'rechazar_proveedor_{key_proveedor}'):
-                    motivo = st.text_area(f"Motivo del rechazo:", key=f"motivo_{key_proveedor}")
-                    if st.button(f"Confirmar Rechazo", key=f"confirmar_rechazo_{key_proveedor}"):
-                        if motivo:
-                            with st.spinner("Rechazando..."):
-                                exitosas = 0
-                                for oc in ocs_sel_proveedor:
-                                    if oc.get('actividad_id'):
-                                        exito, _ = rechazar_actividad(models, uid, username, password, oc['actividad_id'], motivo)
-                                        if exito:
-                                            exitosas += 1
-                                st.success(f"❌ {exitosas} OCs rechazadas")
-                                st.session_state[f'rechazar_proveedor_{key_proveedor}'] = False
-                                st.cache_data.clear()
-                                time.sleep(1)
-                                st.rerun()
-                        else:
-                            st.warning("Ingresa un motivo de rechazo")
+            
+            # Modal de rechazo
+            if st.session_state.get(f'rechazar_proveedor_{key_proveedor}'):
+                st.markdown("---")
+                motivo = st.text_area(f"Motivo del rechazo:", key=f"motivo_{key_proveedor}")
+                if st.button(f"Confirmar Rechazo", key=f"confirmar_rechazo_{key_proveedor}"):
+                    if motivo:
+                        with st.spinner("Rechazando..."):
+                            ocs_seleccionadas = df_aprobables[df_aprobables['oc_id'].isin(st.session_state[f'selected_{key_proveedor}'])]
+                            exitosas = 0
+                            for _, oc in ocs_seleccionadas.iterrows():
+                                if pd.notna(oc.get('actividad_id')):
+                                    exito, _ = rechazar_actividad(models, uid, username, password, oc['actividad_id'], motivo)
+                                    if exito:
+                                        exitosas += 1
+                            st.success(f"❌ {exitosas} OCs rechazadas")
+                            st.session_state[f'rechazar_proveedor_{key_proveedor}'] = False
+                            st.session_state[f'selected_{key_proveedor}'] = set()
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                    else:
+                        st.warning("Ingresa un motivo de rechazo")
     
     st.markdown("---")
     
