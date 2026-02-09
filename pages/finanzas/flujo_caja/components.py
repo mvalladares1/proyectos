@@ -367,11 +367,21 @@ function closeFacturasModal() {
 
 // ============ MODAL COMPOSICIÓN ============
 function showComposicionModal(conceptoId, mes) {
+    console.log('[Modal] Abriendo composición:', conceptoId, mes);
+    console.log('[Modal] Datos disponibles:', Object.keys(composicionData));
+    
     const cuentas = composicionData[conceptoId] || [];
+    console.log('[Modal] Cuentas para concepto:', cuentas.length);
     
     const modal = document.getElementById('composicion-modal');
+    const overlay = document.getElementById('composicion-modal-overlay');
     const title = document.getElementById('composicion-modal-title');
     const body = document.getElementById('composicion-modal-body');
+    
+    if (!modal || !overlay || !title || !body) {
+        console.error('[Modal] Elementos no encontrados');
+        return;
+    }
     
     // Formatear nombre del período
     let periodoNombre;
@@ -475,24 +485,28 @@ function showComposicionModal(conceptoId, mes) {
         }
     }
     
-    modal.style.display = 'flex';
+    // Mostrar modal y overlay
+    overlay.classList.add('show');
+    modal.classList.add('show');
+    console.log('[Modal] Modal mostrado');
 }
 
 function closeComposicionModal() {
     const modal = document.getElementById('composicion-modal');
-    modal.style.display = 'none';
+    const overlay = document.getElementById('composicion-modal-overlay');
+    
+    if (modal) modal.classList.remove('show');
+    if (overlay) overlay.classList.remove('show');
+    
+    console.log('[Modal] Modal cerrado');
 }
 
 // Cerrar modal al hacer clic fuera
 document.addEventListener('click', function(e) {
     const modalFacturas = document.getElementById('facturas-modal');
-    const modalComposicion = document.getElementById('composicion-modal');
     
     if (e.target === modalFacturas) {
         closeFacturasModal();
-    }
-    if (e.target === modalComposicion) {
-        closeComposicionModal();
     }
 });
 
@@ -624,11 +638,19 @@ MODAL_CSS = """
 /* Celda clickeable para mostrar modal */
 .cell-clickable {
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s ease;
+    position: relative;
 }
 
 .cell-clickable:hover {
-    background: rgba(102, 126, 234, 0.3) !important;
+    background: rgba(102, 126, 234, 0.4) !important;
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+    z-index: 10;
+}
+
+.cell-clickable:active {
+    transform: scale(0.98);
 }
 
 /* Modal de composición de cuentas */
@@ -636,19 +658,32 @@ MODAL_CSS = """
     display: none;
     position: fixed;
     z-index: 10001;
-    left: 0;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+}
+
+#composicion-modal.show {
+    display: block;
+}
+
+#composicion-modal-overlay {
+    display: none;
+    position: fixed;
+    z-index: 10000;
     top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
-    animation: fadeIn 0.2s ease-in;
-    justify-content: center;
-    align-items: center;
 }
 
-#composicion-modal .modal-content {
-    max-width: 800px;
+#composicion-modal-overlay.show {
+    display: block;
 }
 </style>
 """
@@ -667,6 +702,7 @@ MODAL_HTML = """
     </div>
 </div>
 
+<div id="composicion-modal-overlay" onclick="closeComposicionModal()"></div>
 <div id="composicion-modal">
     <div class="modal-content">
         <div class="modal-header">
