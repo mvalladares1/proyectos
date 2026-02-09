@@ -54,6 +54,206 @@ def formatear_hora(dt: Optional[datetime]) -> str:
     return dt.strftime("%H:%M")
 
 
+def render_gantt_timeline(procesos_por_dia: Dict, dia_key: str):
+    """
+    Renderiza un gráfico Gantt/Timeline horizontal mostrando todos los procesos
+    del día organizados por sala.
+    """
+    from streamlit_echarts import st_echarts
+    
+    salas_procesos = procesos_por_dia.get(dia_key, {})
+    if not salas_procesos:
+        return
+    
+    # Preparar datos para el Gantt
+    salas = list(salas_procesos.keys())
+    salas.reverse()  # Para que aparezcan de arriba a abajo
+    
+    # Encontrar rango de horas del día
+    todas_horas = []
+    for sala, procesos in salas_procesos.items():
+        for p in procesos:
+            if p.get('inicio_dt'):
+                todas_horas.append(p['inicio_dt'].hour)
+            if p.get('fin_dt'):
+                todas_horas.append(p['fin_dt'].hour + 1)
+    
+    hora_min = min(todas_horas) if todas_horas else 6
+    hora_max = max(todas_horas) if todas_horas else 22
+    hora_min = max(0, hora_min - 1)
+    hora_max = min(24, hora_max + 1)
+    
+    # Crear datos de las barras
+    data = []
+    for sala in salas:
+        procesos = salas_procesos.get(sala, [])
+        for p in procesos:
+            inicio_dt = p.get('inicio_dt')
+            fin_dt = p.get('fin_dt')
+            
+            if not inicio_dt:
+                continue
+            
+            # Convertir a horas decimales
+            inicio_hora = inicio_dt.hour + inicio_dt.minute / 60
+            if fin_dt:
+                fin_hora = fin_dt.hour + fin_dt.minute / 60
+                if fin_hora <= inicio_hora:  # Cruza medianoche
+                    fin_hora = 24
+            else:
+                fin_hora = inicio_hora + 2  # Default 2 horas
+            
+            kg_hora = p.get('kg_hora', 0)
+            
+            # Color según rendimiento
+            if kg_hora >= 2000:
+                color = '#4caf50'  # Verde
+            elif kg_hora >= 1500:
+                color = '#8bc34a'  # Verde claro
+            elif kg_hora >= 1000:
+                color = '#ffc107'  # Amarillo
+            elif kg_hora > 0:
+                color = '#ff9800'  # Naranja
+            else:
+                color = '#9e9e9e'  # Gris
+            
+            data.append({
+                'name': p.get('nombre', 'N/A'),
+                'value': [
+                    salas.index(sala),  # índice de sala (eje Y)
+                    inicio_hora,
+                    fin_hora,
+                    kg_hora,
+                    p.get('kg_producidos', 0),
+                    p.get('dotacion', 0),
+                    p.get('producto', '-')
+                ],
+                'itemStyle': {'color': color}
+            })
+    
+    # Configurar el gráfico
+    options = {
+        'tooltip': {
+            'trigger': 'item',
+            'formatter': """function(params) {
+                var d = params.value;
+                var inicio = Math.floor(d[1]) + ':' + String(Math.round((d[1] % 1) * 60)).padStart(2, '0');
+                var fin = Math.floor(d[2]) + ':' + String(Math.round((d[2] % 1) * 60)).padStart(2, '0');
+                return '<b>' + params.name + '</b><br/>' +
+                       '🕐 ' + inicio + ' → ' + fin + '<br/>' +
+                       '⚡ <b>' + d[3].toLocaleString() + '</b> KG/Hora<br/>' +
+                       '⚖️ ' + d[4].toLocaleString() + ' KG Total<br/>' +
+                       '👷 ' + d[5] + ' personas<br/>' +
+                       '📦 ' + d[6];
+            }"""
+        },
+        'grid': {
+            'left': '18%',
+            'right': '5%',
+            'top': '8%',
+            'bottom': '15%'
+        },
+        'xAxis': {
+            'type': 'value',
+            'min': hora_min,
+            'max': hora_max,
+            'name': 'Hora del día',
+            'nameLocation': 'middle',
+            'nameGap': 30,
+            'nameTextStyle': {'color': '#aaa', 'fontSize': 12},
+            'axisLabel': {
+                'color': '#ccc',
+                'formatter': '{value}:00'
+            },
+            'splitLine': {'lineStyle': {'color': '#333'}},
+            'axisLine': {'lineStyle': {'color': '#555'}}
+        },
+        'yAxis': {
+            'type': 'category',
+            'data': salas,
+            'axisLabel': {
+                'color': '#fff',
+                'fontSize': 11,
+                'fontWeight': 'bold'
+            },
+            'axisLine': {'lineStyle': {'color': '#555'}},
+            'splitLine': {'show': False}
+        },
+        'series': [{
+            'type': 'custom',
+            'renderItem': """function(params, api) {
+                var categoryIndex = api.value(0);
+                var start = api.coord([api.value(1), categoryIndex]);
+                var end = api.coord([api.value(2), categoryIndex]);
+                var height = api.size([0, 1])[1] * 0.6;
+                
+                var rectShape = echarts.graphic.clipRectByRect({
+                    x: start[0],
+                    y: start[1] - height / 2,
+                    width: end[0] - start[0],
+                    height: height
+                }, {
+                    x: params.coordSys.x,
+                    y: params.coordSys.y,
+                    width: params.coordSys.width,
+                    height: params.coordSys.height
+                });
+                
+                return rectShape && {
+                    type: 'group',
+                    children: [{
+                        type: 'rect',
+                        shape: rectShape,
+                        style: api.style({
+                            fill: api.visual('color'),
+                            stroke: '#fff',
+                            lineWidth: 1
+                        }),
+                        emphasis: {
+                            style: {
+                                shadowBlur: 10,
+                                shadowColor: 'rgba(0,0,0,0.5)'
+                            }
+                        }
+                    }, {
+                        type: 'text',
+                        style: {
+                            x: rectShape.x + rectShape.width / 2,
+                            y: rectShape.y + rectShape.height / 2,
+                            text: api.value(3) > 0 ? api.value(3).toLocaleString() : '',
+                            textAlign: 'center',
+                            textVerticalAlign: 'middle',
+                            fill: '#fff',
+                            fontSize: 11,
+                            fontWeight: 'bold'
+                        }
+                    }]
+                };
+            }""",
+            'encode': {
+                'x': [1, 2],
+                'y': 0
+            },
+            'data': data
+        }]
+    }
+    
+    # Leyenda de colores
+    st.markdown("""
+    <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 10px; flex-wrap: wrap;">
+        <span style="color: #4caf50;">🟢 ≥2000 KG/h (Excelente)</span>
+        <span style="color: #8bc34a;">🟡 ≥1500 KG/h (Bueno)</span>
+        <span style="color: #ffc107;">🟠 ≥1000 KG/h (Regular)</span>
+        <span style="color: #ff9800;">🔴 <1000 KG/h (Bajo)</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Altura dinámica según cantidad de salas
+    altura = max(300, len(salas) * 60 + 100)
+    
+    st_echarts(options=options, height=f"{altura}px")
+
+
 def render_linea_proceso_sala(sala: str, procesos: List[Dict]):
     """
     Renderiza una línea de proceso visual para una sala.
@@ -750,18 +950,27 @@ def render(username: str = None, password: str = None):
             for procs in procesos_dia.values()
         )
         
-        # Header del día
-        st.markdown(f"## 📅 {dia_nombre}")
-        st.markdown(f"**{total_procesos_dia} órdenes** | **{total_kg_dia:,.0f} KG producidos**")
+        # Header del día con estilo
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%); 
+                    padding: 15px 25px; border-radius: 15px; margin: 20px 0 15px 0;
+                    border-left: 5px solid #00d4ff;">
+            <h2 style="margin: 0; color: #00d4ff;">📅 {dia_nombre}</h2>
+            <p style="margin: 5px 0 0 0; color: #aaa;">
+                <b style="color: #fff;">{total_procesos_dia}</b> órdenes &nbsp;|&nbsp; 
+                <b style="color: #4caf50;">{total_kg_dia:,.0f}</b> KG producidos
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Gráfico comparativo del día
-        st.markdown("#### 📊 Comparativa KG/Hora por Sala")
-        render_grafico_comparativo_dia(procesos_dia, dia_key)
+        # === GRÁFICO GANTT TIMELINE ===
+        st.markdown("### 🕐 Timeline de Producción")
+        st.caption("Cada barra representa un proceso. El número dentro es el KG/Hora. Pasa el mouse para ver detalles.")
+        render_gantt_timeline(procesos_por_dia, dia_key)
         
-        # Línea de proceso por cada sala
-        st.markdown("#### 🏭 Detalle por Línea de Proceso")
-        
-        for sala, procesos in sorted(procesos_dia.items(), key=lambda x: -sum(p['kg_hora'] for p in x[1])):
-            render_linea_proceso_sala(sala, procesos)
+        # === DETALLE POR SALA (colapsable) ===
+        with st.expander(f"📋 Ver detalle de cada línea ({len(procesos_dia)} salas)", expanded=False):
+            for sala, procesos in sorted(procesos_dia.items(), key=lambda x: -sum(p['kg_hora'] for p in x[1])):
+                render_linea_proceso_sala(sala, procesos)
         
         st.markdown("---")
