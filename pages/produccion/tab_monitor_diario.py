@@ -695,72 +695,75 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
 
 
 def render_tabla_pendientes_por_proceso_planta(procesos: list):
-    """Renderiza tabla de procesos pendientes agrupados por tipo de proceso y planta."""
+    """Renderiza tablas de procesos pendientes separadas por planta."""
     if not procesos:
         st.info("No hay procesos pendientes para mostrar")
         return
     
-    # Agrupar por tipo de proceso y planta
-    resumen = {}
+    # Clasificar por planta
+    vlk_procesos = []
+    rf_procesos = []
+    
     for p in procesos:
-        producto = p.get('product_id', {})
-        if isinstance(producto, dict):
-            tipo_proceso = producto.get('name', 'Sin Producto')
-        else:
-            tipo_proceso = str(producto) if producto else 'Sin Producto'
-        
-        # Extraer solo el nombre del proceso (sin código)
-        if ']' in tipo_proceso:
-            tipo_proceso = tipo_proceso.split(']')[-1].strip()
-        
-        # Detectar planta - mejorado
         sala = (p.get('x_studio_sala_de_proceso', '') or '').upper()
         name = (p.get('name', '') or '').upper()
         origin = (p.get('origin', '') or '').upper()
-        texto_busqueda = f"{sala} {name} {origin}"
+        texto = f"{sala} {name} {origin}"
         
-        if 'VILKUN' in texto_busqueda or 'VLK' in texto_busqueda or '/VLK/' in name:
-            planta = 'VILKUN'
+        if 'VILKUN' in texto or 'VLK' in texto or '/VLK/' in name:
+            vlk_procesos.append(p)
         else:
-            planta = 'RIO FUTURO'
+            rf_procesos.append(p)
+    
+    def _crear_tabla_planta(procs, nombre_planta, emoji):
+        """Crea tabla para una planta."""
+        resumen = {}
+        for p in procs:
+            producto = p.get('product_id', {})
+            if isinstance(producto, dict):
+                tipo_proceso = producto.get('name', 'Sin Producto')
+            else:
+                tipo_proceso = str(producto) if producto else 'Sin Producto'
+            
+            # Quitar código [X.X] y mostrar nombre descriptivo
+            if ']' in tipo_proceso:
+                tipo_proceso = tipo_proceso.split(']')[-1].strip()
+            
+            if tipo_proceso not in resumen:
+                resumen[tipo_proceso] = 0
+            resumen[tipo_proceso] += 1
         
-        key = (tipo_proceso, planta)
-        if key not in resumen:
-            resumen[key] = {'cantidad': 0, 'kg_pendientes': 0}
+        data = []
+        for tipo, cant in sorted(resumen.items(), key=lambda x: -x[1]):
+            data.append({
+                "Proceso": tipo[:60],
+                "Cantidad Pendiente": cant
+            })
         
-        resumen[key]['cantidad'] += 1
-        kg_prog = p.get('product_qty', 0) or 0
-        kg_prod = p.get('qty_produced', 0) or 0
-        resumen[key]['kg_pendientes'] += (kg_prog - kg_prod)
+        if not data:
+            return
+        
+        st.markdown(f"#### {emoji} {nombre_planta} — {len(procs)} procesos pendientes")
+        df = pd.DataFrame(data)
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=min(350, 50 + len(data) * 35),
+            hide_index=True,
+            column_config={
+                "Proceso": st.column_config.TextColumn("Proceso", width="large"),
+                "Cantidad Pendiente": st.column_config.NumberColumn("Cantidad Pendiente", width="small"),
+            }
+        )
     
-    # Convertir a lista para DataFrame
-    data = []
-    for (tipo, planta), stats in sorted(resumen.items(), key=lambda x: -x[1]['cantidad']):
-        data.append({
-            "Tipo de Proceso": tipo[:50],
-            "Planta": planta,
-            "Cant. Pendientes": stats['cantidad'],
-            "KG Pendientes": f"{stats['kg_pendientes']:,.0f}"
-        })
+    # Dos columnas: VILKUN | RIO FUTURO
+    col1, col2 = st.columns(2)
     
-    if not data:
-        st.info("No hay datos para mostrar")
-        return
+    with col1:
+        _crear_tabla_planta(vlk_procesos, "VILKUN", "🟢")
     
-    df = pd.DataFrame(data)
-    
-    st.dataframe(
-        df,
-        use_container_width=True,
-        height=min(400, 50 + len(data) * 35),
-        hide_index=True,
-        column_config={
-            "Tipo de Proceso": st.column_config.TextColumn("Tipo de Proceso", width="large"),
-            "Planta": st.column_config.TextColumn("Planta", width="medium"),
-            "Cant. Pendientes": st.column_config.NumberColumn("Cant. Pendientes", width="small"),
-            "KG Pendientes": st.column_config.TextColumn("KG Pendientes", width="small"),
-        }
-    )
+    with col2:
+        _crear_tabla_planta(rf_procesos, "RIO FUTURO", "🔵")
 
 
 def render_tabla_compacta(procesos: list, tipo: str = "activos"):

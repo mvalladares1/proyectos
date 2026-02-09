@@ -69,9 +69,10 @@ def _obtener_tipo_proceso(proceso):
         prod_name = str(producto.get('name', 'N/A'))
     else:
         prod_name = str(producto)
+    # Quitar código entre corchetes [2.1] y mostrar nombre descriptivo
     if ']' in prod_name:
-        return prod_name.split(']')[0] + ']'
-    return prod_name[:30]
+        prod_name = prod_name.split(']')[-1].strip()
+    return prod_name[:50] if prod_name else 'Sin Producto'
 
 
 def _crear_estilos():
@@ -243,31 +244,29 @@ def _sec_por_planta(estilos, pend, cerr):
     for p in pend:
         pl = _detectar_planta(p)
         if pl not in plantas:
-            plantas[pl] = {'pend': 0, 'kg_pend': 0, 'cerr': 0, 'kg_prod': 0}
+            plantas[pl] = {'pend': 0, 'cerr': 0, 'kg_prod': 0}
         plantas[pl]['pend'] += 1
-        plantas[pl]['kg_pend'] += max(0, (p.get('product_qty', 0) or 0) - (p.get('qty_produced', 0) or 0))
     for p in cerr:
         pl = _detectar_planta(p)
         if pl not in plantas:
-            plantas[pl] = {'pend': 0, 'kg_pend': 0, 'cerr': 0, 'kg_prod': 0}
+            plantas[pl] = {'pend': 0, 'cerr': 0, 'kg_prod': 0}
         plantas[pl]['cerr'] += 1
         plantas[pl]['kg_prod'] += p.get('qty_produced', 0) or 0
 
-    data = [['PLANTA', 'PENDIENTES', 'KG PENDIENTES', 'CERRADOS', 'KG PRODUCIDOS', '% AVANCE']]
+    data = [['PLANTA', 'PENDIENTES', 'CERRADOS', 'KG PRODUCIDOS', '% AVANCE']]
     for pl in sorted(plantas.keys()):
         d = plantas[pl]
         total = d['pend'] + d['cerr']
         avance = (d['cerr'] / total * 100) if total > 0 else 0
-        data.append([pl, str(d['pend']), f"{d['kg_pend']:,.0f} kg", str(d['cerr']), f"{d['kg_prod']:,.0f} kg", f"{avance:.0f}%"])
+        data.append([pl, str(d['pend']), str(d['cerr']), f"{d['kg_prod']:,.0f} kg", f"{avance:.0f}%"])
 
     tp = sum(v['pend'] for v in plantas.values())
-    tkp = sum(v['kg_pend'] for v in plantas.values())
     tc = sum(v['cerr'] for v in plantas.values())
     tkc = sum(v['kg_prod'] for v in plantas.values())
     ta = (tc / (tp + tc) * 100) if (tp + tc) > 0 else 0
-    data.append(['TOTAL', str(tp), f"{tkp:,.0f} kg", str(tc), f"{tkc:,.0f} kg", f"{ta:.0f}%"])
+    data.append(['TOTAL', str(tp), str(tc), f"{tkc:,.0f} kg", f"{ta:.0f}%"])
 
-    t = Table(data, colWidths=[1.8*inch, 1.3*inch, 1.6*inch, 1.3*inch, 1.6*inch, 1.2*inch])
+    t = Table(data, colWidths=[2.2*inch, 1.5*inch, 1.5*inch, 2*inch, 1.5*inch])
     t.setStyle(_tabla_estilo(AZUL_OSCURO, data))
     elements.append(t)
     elements.append(Spacer(1, 15))
@@ -285,22 +284,21 @@ def _sec_por_sala(estilos, pend, cerr):
         planta = _detectar_planta(p)
         key = f"{sala}|{planta}"
         if key not in salas:
-            salas[key] = {'sala': sala, 'planta': planta, 'pend': 0, 'kg_pend': 0, 'cerr': 0, 'kg_prod': 0}
+            salas[key] = {'sala': sala, 'planta': planta, 'pend': 0, 'cerr': 0, 'kg_prod': 0}
         salas[key]['pend'] += 1
-        salas[key]['kg_pend'] += max(0, (p.get('product_qty', 0) or 0) - (p.get('qty_produced', 0) or 0))
     for p in cerr:
         sala = _obtener_sala(p)
         planta = _detectar_planta(p)
         key = f"{sala}|{planta}"
         if key not in salas:
-            salas[key] = {'sala': sala, 'planta': planta, 'pend': 0, 'kg_pend': 0, 'cerr': 0, 'kg_prod': 0}
+            salas[key] = {'sala': sala, 'planta': planta, 'pend': 0, 'cerr': 0, 'kg_prod': 0}
         salas[key]['cerr'] += 1
         salas[key]['kg_prod'] += p.get('qty_produced', 0) or 0
 
     if not salas:
         return elements
 
-    data = [['SALA', 'PLANTA', 'PEND.', 'KG PEND.', 'CERR.', 'KG PROD.', 'TOTAL', '% AVANCE']]
+    data = [['SALA', 'PLANTA', 'PENDIENTES', 'CERRADOS', 'KG PRODUCIDOS', 'TOTAL', '% AVANCE']]
     for item in sorted(salas.values(), key=lambda x: x['pend'] + x['cerr'], reverse=True):
         total = item['pend'] + item['cerr']
         avance = (item['cerr'] / total * 100) if total > 0 else 0
@@ -308,7 +306,6 @@ def _sec_por_sala(estilos, pend, cerr):
             Paragraph(item['sala'][:22], estilos['normal']),
             item['planta'][:10],
             str(item['pend']),
-            f"{item['kg_pend']:,.0f}",
             str(item['cerr']),
             f"{item['kg_prod']:,.0f}",
             str(total),
@@ -316,59 +313,61 @@ def _sec_por_sala(estilos, pend, cerr):
         ])
 
     tp = sum(v['pend'] for v in salas.values())
-    tkp = sum(v['kg_pend'] for v in salas.values())
     tc = sum(v['cerr'] for v in salas.values())
     tkc = sum(v['kg_prod'] for v in salas.values())
     tt = tp + tc
     ta = (tc / tt * 100) if tt > 0 else 0
-    data.append(['TOTAL', '', str(tp), f"{tkp:,.0f}", str(tc), f"{tkc:,.0f}", str(tt), f"{ta:.0f}%"])
+    data.append(['TOTAL', '', str(tp), str(tc), f"{tkc:,.0f}", str(tt), f"{ta:.0f}%"])
 
-    t = Table(data, colWidths=[2*inch, 1*inch, 0.7*inch, 1.3*inch, 0.7*inch, 1.3*inch, 0.7*inch, 1*inch])
+    t = Table(data, colWidths=[2.2*inch, 1*inch, 1.1*inch, 1.1*inch, 1.5*inch, 0.9*inch, 1*inch])
     t.setStyle(_tabla_estilo(AZUL_MEDIO, data))
     elements.append(t)
     elements.append(Spacer(1, 15))
     return elements
 
 
-def _sec_por_tipo(estilos, pend, cerr):
-    elements = []
-    elements.append(Paragraph("RESUMEN POR TIPO DE PROCESO", estilos['seccion']))
-    elements.append(HRFlowable(width="100%", thickness=1, color=AZUL_CLARO, spaceAfter=10))
-
+def _crear_tabla_tipo_planta(estilos, procesos_pend, procesos_cerr, planta_nombre, color_header):
+    """Crea una tabla de tipo de proceso para una planta específica."""
     tipos = {}
-    for p in pend:
+    for p in procesos_pend:
         tipo = _obtener_tipo_proceso(p)
         if tipo not in tipos:
-            tipos[tipo] = {'pend': 0, 'kg_pend': 0, 'cerr': 0, 'kg_prod': 0}
+            tipos[tipo] = {'pend': 0, 'cerr': 0, 'kg_prod': 0}
         tipos[tipo]['pend'] += 1
-        tipos[tipo]['kg_pend'] += max(0, (p.get('product_qty', 0) or 0) - (p.get('qty_produced', 0) or 0))
-    for p in cerr:
+    for p in procesos_cerr:
         tipo = _obtener_tipo_proceso(p)
         if tipo not in tipos:
-            tipos[tipo] = {'pend': 0, 'kg_pend': 0, 'cerr': 0, 'kg_prod': 0}
+            tipos[tipo] = {'pend': 0, 'cerr': 0, 'kg_prod': 0}
         tipos[tipo]['cerr'] += 1
         tipos[tipo]['kg_prod'] += p.get('qty_produced', 0) or 0
 
     if not tipos:
-        return elements
+        return []
 
-    data = [['TIPO PROCESO', 'PEND.', 'KG PEND.', 'CERR.', 'KG PROD.', '% AVANCE']]
-    for tipo, d in sorted(tipos.items(), key=lambda x: x[1]['pend'] + x[1]['cerr'], reverse=True)[:15]:
+    elements = []
+    total_p = len(procesos_pend)
+    total_c = len(procesos_cerr)
+    elements.append(Paragraph(
+        f"{planta_nombre} - {total_p} pendientes / {total_c} cerrados",
+        estilos['seccion']
+    ))
+    elements.append(HRFlowable(width="100%", thickness=1, color=color_header, spaceAfter=8))
+
+    data = [['PROCESO', 'PENDIENTES', 'CERRADOS', 'KG PRODUCIDOS', '% AVANCE']]
+    for tipo, d in sorted(tipos.items(), key=lambda x: x[1]['pend'] + x[1]['cerr'], reverse=True)[:20]:
         total = d['pend'] + d['cerr']
         avance = (d['cerr'] / total * 100) if total > 0 else 0
         data.append([
-            Paragraph(tipo[:35], estilos['normal']),
+            Paragraph(tipo[:45], estilos['normal']),
             str(d['pend']),
-            f"{d['kg_pend']:,.0f}",
             str(d['cerr']),
             f"{d['kg_prod']:,.0f}",
             f"{avance:.0f}%"
         ])
 
-    # Sin fila total para evitar error con _tabla_estilo
-    t = Table(data, colWidths=[3*inch, 0.9*inch, 1.3*inch, 0.9*inch, 1.3*inch, 1*inch])
+    t = Table(data, colWidths=[3.5*inch, 1.2*inch, 1.2*inch, 1.5*inch, 1.2*inch])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), GRIS_OSCURO),
+        ('BACKGROUND', (0, 0), (-1, 0), color_header),
         ('TEXTCOLOR', (0, 0), (-1, 0), BLANCO),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
@@ -383,10 +382,34 @@ def _sec_por_tipo(estilos, pend, cerr):
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [BLANCO, GRIS_CLARO]),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D0D0D0')),
-        ('BOX', (0, 0), (-1, -1), 1, GRIS_OSCURO),
+        ('BOX', (0, 0), (-1, -1), 1, color_header),
     ]))
     elements.append(t)
     elements.append(Spacer(1, 15))
+    return elements
+
+
+def _sec_por_tipo(estilos, pend, cerr):
+    elements = []
+    elements.append(Paragraph("DETALLE POR TIPO DE PROCESO", estilos['seccion']))
+    elements.append(HRFlowable(width="100%", thickness=1, color=AZUL_CLARO, spaceAfter=10))
+
+    # Separar por planta
+    vlk_pend = [p for p in pend if _detectar_planta(p) == 'VILKUN']
+    vlk_cerr = [p for p in cerr if _detectar_planta(p) == 'VILKUN']
+    rf_pend = [p for p in pend if _detectar_planta(p) == 'RIO FUTURO']
+    rf_cerr = [p for p in cerr if _detectar_planta(p) == 'RIO FUTURO']
+
+    # Tabla VILKUN
+    elements.extend(_crear_tabla_tipo_planta(
+        estilos, vlk_pend, vlk_cerr, 'VILKUN', colors.HexColor('#1B5E20')
+    ))
+
+    # Tabla RIO FUTURO
+    elements.extend(_crear_tabla_tipo_planta(
+        estilos, rf_pend, rf_cerr, 'RIO FUTURO', AZUL_OSCURO
+    ))
+
     return elements
 
 
