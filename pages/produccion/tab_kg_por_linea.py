@@ -1,6 +1,6 @@
 """
-Tab KG por Línea: Rendimiento por sala de proceso.
-Muestra cada proceso individual con métricas detalladas usando componentes nativos.
+Tab KG por Línea: Productividad por sala de proceso.
+Muestra KG/Hora desglosado por día y por orden individual.
 """
 import streamlit as st
 import httpx
@@ -13,7 +13,7 @@ from .shared import API_URL
 
 def fetch_datos_produccion(username: str, password: str, fecha_inicio: str, 
                            fecha_fin: str) -> Dict[str, Any]:
-    """Obtiene datos de productividad."""
+    """Obtiene datos de producción."""
     params = {
         "username": username,
         "password": password,
@@ -21,639 +21,169 @@ def fetch_datos_produccion(username: str, password: str, fecha_inicio: str,
         "fecha_fin": fecha_fin,
         "solo_terminadas": False
     }
-    
     response = httpx.get(f"{API_URL}/api/v1/rendimiento/dashboard",
                          params=params, timeout=120.0)
     response.raise_for_status()
     return response.json()
 
 
-def parsear_fecha_hora(fecha_str: str) -> Optional[datetime]:
-    """Parsea fecha/hora de diferentes formatos."""
+def parsear_fecha(fecha_str: str) -> Optional[datetime]:
+    """Parsea fecha de diferentes formatos."""
     if not fecha_str:
         return None
     try:
-        fecha_str = str(fecha_str).strip()
-        if 'T' in fecha_str:
-            return datetime.fromisoformat(fecha_str.replace('Z', ''))
-        elif len(fecha_str) >= 19:
-            return datetime.strptime(fecha_str[:19], '%Y-%m-%d %H:%M:%S')
-        elif len(fecha_str) >= 16:
-            return datetime.strptime(fecha_str[:16], '%Y-%m-%d %H:%M')
-        elif len(fecha_str) >= 10:
-            return datetime.strptime(fecha_str[:10], '%Y-%m-%d')
-        return None
+        s = str(fecha_str).strip()
+        if 'T' in s:
+            return datetime.fromisoformat(s.replace('Z', ''))
+        elif len(s) >= 19:
+            return datetime.strptime(s[:19], '%Y-%m-%d %H:%M:%S')
+        elif len(s) >= 16:
+            return datetime.strptime(s[:16], '%Y-%m-%d %H:%M')
+        elif len(s) >= 10:
+            return datetime.strptime(s[:10], '%Y-%m-%d')
     except:
-        return None
+        pass
+    return None
 
 
-def formatear_hora(dt: Optional[datetime]) -> str:
-    """Formatea datetime a HH:MM."""
-    if not dt:
-        return "-"
-    return dt.strftime("%H:%M")
+def color_kg_hora(kg: float) -> str:
+    """Retorna color según KG/Hora."""
+    if kg >= 2000: return '#4caf50'
+    if kg >= 1500: return '#8bc34a'
+    if kg >= 1000: return '#ffc107'
+    if kg >= 500: return '#ff9800'
+    return '#f44336'
 
 
-def render_gantt_timeline(procesos_por_dia: Dict, dia_key: str):
-    """
-    Renderiza un gráfico Gantt/Timeline horizontal mostrando todos los procesos
-    del día organizados por sala.
-    """
-    from streamlit_echarts import st_echarts
+def emoji_kg_hora(kg: float) -> str:
+    """Retorna emoji según KG/Hora."""
+    if kg >= 2000: return '🟢'
+    if kg >= 1500: return '🟡'
+    if kg >= 1000: return '🟠'
+    return '🔴'
+
+
+def traducir_fecha(dia_key: str) -> str:
+    """Convierte YYYY-MM-DD a nombre legible en español."""
+    dt = datetime.strptime(dia_key, '%Y-%m-%d')
+    dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    return f"{dias[dt.weekday()]} {dt.day} de {meses[dt.month - 1]}, {dt.year}"
+
+
+def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
+    """Gráfico de evolución limpio."""
+    dias = sorted(procesos_por_dia.keys())
+    salas_activas = sorted(todas_salas)
     
-    salas_procesos = procesos_por_dia.get(dia_key, {})
-    if not salas_procesos:
+    if not salas_activas or not dias:
         return
     
-    # Preparar datos para el Gantt
-    salas = list(salas_procesos.keys())
-    salas.reverse()  # Para que aparezcan de arriba a abajo
+    colores = [
+        '#00D4FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', 
+        '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA', '#FF9F43',
+        '#6C5CE7', '#00B894', '#E17055', '#0984E3', '#FDCB6E'
+    ]
     
-    # Encontrar rango de horas del día
-    todas_horas = []
-    for sala, procesos in salas_procesos.items():
-        for p in procesos:
-            if p.get('inicio_dt'):
-                todas_horas.append(p['inicio_dt'].hour)
-            if p.get('fin_dt'):
-                todas_horas.append(p['fin_dt'].hour + 1)
+    fechas_fmt = [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in dias]
     
-    hora_min = min(todas_horas) if todas_horas else 6
-    hora_max = max(todas_horas) if todas_horas else 22
-    hora_min = max(0, hora_min - 1)
-    hora_max = min(24, hora_max + 1)
-    
-    # Crear datos de las barras
-    data = []
-    for sala in salas:
-        procesos = salas_procesos.get(sala, [])
-        for p in procesos:
-            inicio_dt = p.get('inicio_dt')
-            fin_dt = p.get('fin_dt')
-            
-            if not inicio_dt:
-                continue
-            
-            # Convertir a horas decimales
-            inicio_hora = inicio_dt.hour + inicio_dt.minute / 60
-            if fin_dt:
-                fin_hora = fin_dt.hour + fin_dt.minute / 60
-                if fin_hora <= inicio_hora:  # Cruza medianoche
-                    fin_hora = 24
+    series = []
+    for idx, sala in enumerate(salas_activas):
+        datos = []
+        for dia in dias:
+            procs = procesos_por_dia[dia].get(sala, [])
+            if procs:
+                vals = [p['kg_hora'] for p in procs if p['kg_hora'] > 0]
+                datos.append(round(sum(vals) / len(vals), 0) if vals else None)
             else:
-                fin_hora = inicio_hora + 2  # Default 2 horas
-            
-            kg_hora = p.get('kg_hora', 0)
-            
-            # Color según rendimiento
-            if kg_hora >= 2000:
-                color = '#4caf50'  # Verde
-            elif kg_hora >= 1500:
-                color = '#8bc34a'  # Verde claro
-            elif kg_hora >= 1000:
-                color = '#ffc107'  # Amarillo
-            elif kg_hora > 0:
-                color = '#ff9800'  # Naranja
-            else:
-                color = '#9e9e9e'  # Gris
-            
-            data.append({
-                'name': p.get('nombre', 'N/A'),
-                'value': [
-                    salas.index(sala),  # índice de sala (eje Y)
-                    inicio_hora,
-                    fin_hora,
-                    kg_hora,
-                    p.get('kg_producidos', 0),
-                    p.get('dotacion', 0),
-                    p.get('producto', '-')
-                ],
-                'itemStyle': {'color': color}
-            })
-    
-    # Configurar el gráfico
-    options = {
-        'tooltip': {
-            'trigger': 'item',
-            'formatter': """function(params) {
-                var d = params.value;
-                var inicio = Math.floor(d[1]) + ':' + String(Math.round((d[1] % 1) * 60)).padStart(2, '0');
-                var fin = Math.floor(d[2]) + ':' + String(Math.round((d[2] % 1) * 60)).padStart(2, '0');
-                return '<b>' + params.name + '</b><br/>' +
-                       '🕐 ' + inicio + ' → ' + fin + '<br/>' +
-                       '⚡ <b>' + d[3].toLocaleString() + '</b> KG/Hora<br/>' +
-                       '⚖️ ' + d[4].toLocaleString() + ' KG Total<br/>' +
-                       '👷 ' + d[5] + ' personas<br/>' +
-                       '📦 ' + d[6];
-            }"""
-        },
-        'grid': {
-            'left': '18%',
-            'right': '5%',
-            'top': '8%',
-            'bottom': '15%'
-        },
-        'xAxis': {
-            'type': 'value',
-            'min': hora_min,
-            'max': hora_max,
-            'name': 'Hora del día',
-            'nameLocation': 'middle',
-            'nameGap': 30,
-            'nameTextStyle': {'color': '#aaa', 'fontSize': 12},
-            'axisLabel': {
-                'color': '#ccc',
-                'formatter': '{value}:00'
-            },
-            'splitLine': {'lineStyle': {'color': '#333'}},
-            'axisLine': {'lineStyle': {'color': '#555'}}
-        },
-        'yAxis': {
-            'type': 'category',
-            'data': salas,
-            'axisLabel': {
-                'color': '#fff',
-                'fontSize': 11,
-                'fontWeight': 'bold'
-            },
-            'axisLine': {'lineStyle': {'color': '#555'}},
-            'splitLine': {'show': False}
-        },
-        'series': [{
-            'type': 'custom',
-            'renderItem': """function(params, api) {
-                var categoryIndex = api.value(0);
-                var start = api.coord([api.value(1), categoryIndex]);
-                var end = api.coord([api.value(2), categoryIndex]);
-                var height = api.size([0, 1])[1] * 0.6;
-                
-                var rectShape = echarts.graphic.clipRectByRect({
-                    x: start[0],
-                    y: start[1] - height / 2,
-                    width: end[0] - start[0],
-                    height: height
-                }, {
-                    x: params.coordSys.x,
-                    y: params.coordSys.y,
-                    width: params.coordSys.width,
-                    height: params.coordSys.height
-                });
-                
-                return rectShape && {
-                    type: 'group',
-                    children: [{
-                        type: 'rect',
-                        shape: rectShape,
-                        style: api.style({
-                            fill: api.visual('color'),
-                            stroke: '#fff',
-                            lineWidth: 1
-                        }),
-                        emphasis: {
-                            style: {
-                                shadowBlur: 10,
-                                shadowColor: 'rgba(0,0,0,0.5)'
-                            }
-                        }
-                    }, {
-                        type: 'text',
-                        style: {
-                            x: rectShape.x + rectShape.width / 2,
-                            y: rectShape.y + rectShape.height / 2,
-                            text: api.value(3) > 0 ? api.value(3).toLocaleString() : '',
-                            textAlign: 'center',
-                            textVerticalAlign: 'middle',
-                            fill: '#fff',
-                            fontSize: 11,
-                            fontWeight: 'bold'
-                        }
-                    }]
-                };
-            }""",
-            'encode': {
-                'x': [1, 2],
-                'y': 0
-            },
-            'data': data
-        }]
-    }
-    
-    # Leyenda de colores
-    st.markdown("""
-    <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 10px; flex-wrap: wrap;">
-        <span style="color: #4caf50;">🟢 ≥2000 KG/h (Excelente)</span>
-        <span style="color: #8bc34a;">🟡 ≥1500 KG/h (Bueno)</span>
-        <span style="color: #ffc107;">🟠 ≥1000 KG/h (Regular)</span>
-        <span style="color: #ff9800;">🔴 <1000 KG/h (Bajo)</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Altura dinámica según cantidad de salas
-    altura = max(300, len(salas) * 60 + 100)
-    
-    st_echarts(options=options, height=f"{altura}px")
-
-
-def render_linea_proceso_sala(sala: str, procesos: List[Dict]):
-    """
-    Renderiza una línea de proceso visual para una sala.
-    Muestra cada proceso como un bloque en una línea de tiempo.
-    """
-    if not procesos:
-        return
-    
-    # Ordenar procesos por hora de inicio
-    procesos_ordenados = sorted(procesos, key=lambda x: x.get('inicio_dt') or datetime.min)
-    
-    # Calcular totales de la sala
-    total_kg = sum(p.get('kg_producidos', 0) for p in procesos)
-    total_dotacion = sum(p.get('dotacion', 0) for p in procesos)
-    kg_horas = [p.get('kg_hora', 0) for p in procesos if p.get('kg_hora', 0) > 0]
-    promedio_kg_hora = sum(kg_horas) / len(kg_horas) if kg_horas else 0
-    total_detenciones = sum(p.get('detenciones', 0) for p in procesos)
-    
-    # CSS para la línea de proceso
-    st.markdown("""
-    <style>
-    .linea-proceso-container {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 15px;
-        padding: 20px;
-        margin: 15px 0;
-        border-left: 5px solid #00d4ff;
-    }
-    .linea-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-    .linea-title {
-        font-size: 1.4em;
-        font-weight: bold;
-        color: #00d4ff;
-    }
-    .linea-stats {
-        display: flex;
-        gap: 20px;
-        flex-wrap: wrap;
-    }
-    .linea-stat {
-        background: rgba(255,255,255,0.1);
-        padding: 8px 15px;
-        border-radius: 20px;
-        font-size: 0.9em;
-    }
-    .linea-stat-value {
-        font-weight: bold;
-        color: #fff;
-    }
-    .proceso-timeline {
-        position: relative;
-        padding: 20px 0;
-    }
-    .proceso-timeline::before {
-        content: '';
-        position: absolute;
-        left: 20px;
-        top: 0;
-        bottom: 0;
-        width: 4px;
-        background: linear-gradient(180deg, #00d4ff, #0099cc);
-        border-radius: 2px;
-    }
-    .proceso-item {
-        position: relative;
-        margin-left: 50px;
-        margin-bottom: 20px;
-        background: rgba(255,255,255,0.05);
-        border-radius: 12px;
-        padding: 15px;
-        border: 1px solid rgba(255,255,255,0.1);
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .proceso-item:hover {
-        transform: translateX(5px);
-        box-shadow: 0 5px 20px rgba(0,212,255,0.2);
-    }
-    .proceso-item::before {
-        content: '';
-        position: absolute;
-        left: -38px;
-        top: 20px;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        border: 3px solid #00d4ff;
-        background: #1a1a2e;
-    }
-    .proceso-item.excelente::before { background: #4caf50; border-color: #4caf50; }
-    .proceso-item.bueno::before { background: #8bc34a; border-color: #8bc34a; }
-    .proceso-item.regular::before { background: #ffc107; border-color: #ffc107; }
-    .proceso-item.bajo::before { background: #f44336; border-color: #f44336; }
-    
-    .proceso-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 12px;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-    .proceso-nombre {
-        font-weight: bold;
-        color: #00d4ff;
-        font-size: 1.1em;
-    }
-    .proceso-horario {
-        background: rgba(0,212,255,0.2);
-        padding: 5px 12px;
-        border-radius: 15px;
-        font-size: 0.9em;
-        color: #00d4ff;
-    }
-    .proceso-producto {
-        color: #aaa;
-        font-size: 0.9em;
-        margin-bottom: 10px;
-    }
-    .proceso-metricas {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-        gap: 10px;
-    }
-    .metrica {
-        background: rgba(255,255,255,0.05);
-        padding: 10px;
-        border-radius: 8px;
-        text-align: center;
-    }
-    .metrica-valor {
-        font-size: 1.3em;
-        font-weight: bold;
-        color: #fff;
-    }
-    .metrica-label {
-        font-size: 0.75em;
-        color: #888;
-        margin-top: 3px;
-    }
-    .metrica.destacado {
-        background: linear-gradient(135deg, rgba(0,212,255,0.3), rgba(0,153,204,0.2));
-        border: 1px solid rgba(0,212,255,0.5);
-    }
-    .metrica.destacado .metrica-valor {
-        color: #00d4ff;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Construir HTML de la línea de proceso
-    html = f"""
-    <div class="linea-proceso-container">
-        <div class="linea-header">
-            <div class="linea-title">🏭 {sala}</div>
-            <div class="linea-stats">
-                <div class="linea-stat">📋 <span class="linea-stat-value">{len(procesos)}</span> procesos</div>
-                <div class="linea-stat">⚖️ <span class="linea-stat-value">{total_kg:,.0f}</span> KG</div>
-                <div class="linea-stat">⚡ <span class="linea-stat-value">{promedio_kg_hora:,.0f}</span> KG/Hora prom</div>
-                <div class="linea-stat">👷 <span class="linea-stat-value">{total_dotacion}</span> personas total</div>
-            </div>
-        </div>
+                datos.append(None)
         
-        <div class="proceso-timeline">
-    """
-    
-    for p in procesos_ordenados:
-        kg_hora = p.get('kg_hora', 0)
-        
-        # Clase de rendimiento
-        if kg_hora >= 2000:
-            clase = "excelente"
-        elif kg_hora >= 1500:
-            clase = "bueno"
-        elif kg_hora >= 1000:
-            clase = "regular"
-        else:
-            clase = "bajo"
-        
-        nombre = p.get('nombre', 'N/A')
-        producto = p.get('producto', '-')
-        if len(str(producto)) > 50:
-            producto = str(producto)[:47] + "..."
-        
-        hora_inicio = p.get('hora_inicio', '-')
-        hora_fin = p.get('hora_fin', '-')
-        duracion = p.get('duracion', '-')
-        dotacion = int(p.get('dotacion', 0))
-        kg_producidos = p.get('kg_producidos', 0)
-        hh_efectiva = p.get('hh_efectiva', 0)
-        kg_hh = p.get('kg_hh', 0)
-        detenciones = p.get('detenciones', 0)
-        rendimiento = p.get('rendimiento', 0)
-        
-        # Formatear detenciones
-        det_h = int(detenciones)
-        det_m = int((detenciones - det_h) * 60) if detenciones > 0 else 0
-        det_str = f"{det_h}:{det_m:02d}" if detenciones > 0 else "0:00"
-        
-        html += f"""
-            <div class="proceso-item {clase}">
-                <div class="proceso-header">
-                    <div class="proceso-nombre">📋 {nombre}</div>
-                    <div class="proceso-horario">🕐 {hora_inicio} → {hora_fin} ({duracion}h)</div>
-                </div>
-                <div class="proceso-producto">📦 {producto}</div>
-                <div class="proceso-metricas">
-                    <div class="metrica destacado">
-                        <div class="metrica-valor">{kg_hora:,.0f}</div>
-                        <div class="metrica-label">⚡ KG/HORA</div>
-                    </div>
-                    <div class="metrica">
-                        <div class="metrica-valor">{kg_producidos:,.0f}</div>
-                        <div class="metrica-label">⚖️ KG TOTAL</div>
-                    </div>
-                    <div class="metrica">
-                        <div class="metrica-valor">{dotacion}</div>
-                        <div class="metrica-label">👷 DOTACIÓN</div>
-                    </div>
-                    <div class="metrica">
-                        <div class="metrica-valor">{hh_efectiva:.1f}</div>
-                        <div class="metrica-label">⏱️ HH EFECT</div>
-                    </div>
-                    <div class="metrica">
-                        <div class="metrica-valor">{kg_hh:,.0f}</div>
-                        <div class="metrica-label">📊 KG/HH</div>
-                    </div>
-                    <div class="metrica">
-                        <div class="metrica-valor">{det_str}</div>
-                        <div class="metrica-label">⏸️ DETENC.</div>
-                    </div>
-                    <div class="metrica">
-                        <div class="metrica-valor">{rendimiento:.1f}%</div>
-                        <div class="metrica-label">📈 REND.</div>
-                    </div>
-                </div>
-            </div>
-        """
-    
-    html += """
-        </div>
-    </div>
-    """
-    
-    st.markdown(html, unsafe_allow_html=True)
-
-
-def render_proceso_card(p: Dict, idx: int):
-    """Renderiza una tarjeta de proceso con componentes nativos de Streamlit."""
-    
-    kg = p.get('kg_hora', 0)
-    
-    # Determinar color y emoji según rendimiento
-    if kg >= 2000:
-        color = "🟢"
-        status = "Excelente"
-    elif kg >= 1500:
-        color = "🟡"
-        status = "Bueno"
-    elif kg >= 1000:
-        color = "🟠"
-        status = "Regular"
-    elif kg > 0:
-        color = "🔴"
-        status = "Bajo"
-    else:
-        color = "⚫"
-        status = "Sin datos"
-    
-    # Header con nombre de orden
-    st.markdown(f"### 📋 {p.get('nombre', 'N/A')}")
-    
-    # Fila 1: KG/Hora destacado + Horario + Producto
-    c1, c2, c3 = st.columns([1.5, 1.5, 2])
-    
-    with c1:
-        st.metric(
-            label=f"{color} KG/Hora",
-            value=f"{kg:,.0f}",
-            delta=status
-        )
-    
-    with c2:
-        hora_inicio = p.get('hora_inicio', '-')
-        hora_fin = p.get('hora_fin', '-')
-        duracion = p.get('duracion', '-')
-        st.metric(
-            label="🕐 Horario",
-            value=f"{hora_inicio} → {hora_fin}",
-            delta=f"{duracion} hrs"
-        )
-    
-    with c3:
-        producto = p.get('producto', '-')
-        if len(str(producto)) > 40:
-            producto = str(producto)[:37] + "..."
-        st.metric(
-            label="📦 Producto",
-            value=str(producto)
-        )
-    
-    # Fila 2: Métricas detalladas
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    
-    with m1:
-        st.metric("👷 Dotación", f"{int(p.get('dotacion', 0))}")
-    
-    with m2:
-        st.metric("⚖️ KG Total", f"{p.get('kg_producidos', 0):,.0f}")
-    
-    with m3:
-        hh_efectiva = p.get('hh_efectiva', 0)
-        st.metric("⏱️ HH Efectiva", f"{hh_efectiva:.1f}")
-    
-    with m4:
-        kg_hh = p.get('kg_hh', 0)
-        st.metric("📊 KG/HH", f"{kg_hh:,.0f}")
-    
-    with m5:
-        detenciones = p.get('detenciones', 0)
-        det_h = int(detenciones)
-        det_m = int((detenciones - det_h) * 60)
-        det_str = f"{det_h}:{det_m:02d}" if detenciones > 0 else "0:00"
-        st.metric("⏸️ Detenciones", det_str)
-    
-    with m6:
-        rend = p.get('rendimiento', 0)
-        st.metric("📈 Rendimiento", f"{rend:.1f}%")
-    
-    st.divider()
-
-
-def render_grafico_comparativo_dia(procesos_por_sala: Dict[str, List[Dict]], fecha_str: str):
-    """Renderiza gráfico comparativo de todas las salas del día."""
-    
-    # Calcular promedio por sala
-    datos_salas = []
-    for sala, procesos in procesos_por_sala.items():
-        kg_horas = [p['kg_hora'] for p in procesos if p['kg_hora'] > 0]
-        if kg_horas:
-            promedio = sum(kg_horas) / len(kg_horas)
-            total_kg = sum(p['kg_producidos'] for p in procesos)
-            datos_salas.append({
-                'sala': sala,
-                'promedio': promedio,
-                'total_kg': total_kg,
-                'procesos': len(procesos)
-            })
-    
-    if not datos_salas:
-        return
-    
-    # Ordenar por promedio
-    datos_salas.sort(key=lambda x: x['promedio'], reverse=True)
-    
-    # Preparar datos para el gráfico
-    salas = [d['sala'][:25] for d in datos_salas]
-    promedios = [round(d['promedio'], 0) for d in datos_salas]
-    
-    # Colores según rendimiento
-    colores = []
-    for p in promedios:
-        if p >= 2000:
-            colores.append('#4caf50')
-        elif p >= 1500:
-            colores.append('#8bc34a')
-        elif p >= 1000:
-            colores.append('#ffc107')
-        elif p >= 500:
-            colores.append('#ff9800')
-        else:
-            colores.append('#f44336')
+        series.append({
+            "name": sala[:30],
+            "type": "line",
+            "data": datos,
+            "smooth": True,
+            "symbol": "circle",
+            "symbolSize": 8,
+            "lineStyle": {"width": 2.5},
+            "itemStyle": {"color": colores[idx % len(colores)]},
+            "connectNulls": False
+        })
     
     options = {
         "tooltip": {
             "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "formatter": "{b}<br/>⚡ KG/Hora: <b>{c}</b>"
+            "backgroundColor": "rgba(20, 20, 40, 0.95)",
+            "borderColor": "#444",
+            "textStyle": {"color": "#fff", "fontSize": 12}
+        },
+        "legend": {
+            "data": [s[:30] for s in salas_activas],
+            "bottom": 0,
+            "textStyle": {"color": "#ccc", "fontSize": 10},
+            "type": "scroll"
         },
         "grid": {
-            "left": "3%",
-            "right": "4%",
-            "bottom": "15%",
-            "top": "10%",
+            "left": "3%", "right": "4%",
+            "bottom": "18%", "top": "8%",
+            "containLabel": True
+        },
+        "xAxis": {
+            "type": "category",
+            "data": fechas_fmt,
+            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "axisLine": {"lineStyle": {"color": "#555"}}
+        },
+        "yAxis": {
+            "type": "value",
+            "name": "KG/Hora",
+            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+            "axisLabel": {"color": "#ccc"},
+            "splitLine": {"lineStyle": {"color": "#333"}}
+        },
+        "series": series
+    }
+    
+    st_echarts(options=options, height="380px")
+
+
+def render_barras_dia(procesos_por_sala: Dict[str, List[Dict]]):
+    """Gráfico de barras con KG/Hora promedio por sala para un día."""
+    datos = []
+    for sala, procs in procesos_por_sala.items():
+        vals = [p['kg_hora'] for p in procs if p['kg_hora'] > 0]
+        if vals:
+            datos.append({
+                'sala': sala[:25],
+                'promedio': round(sum(vals) / len(vals), 0),
+                'total_kg': sum(p['kg_producidos'] for p in procs),
+                'n': len(procs)
+            })
+    
+    if not datos:
+        return
+    
+    datos.sort(key=lambda x: x['promedio'], reverse=True)
+    
+    salas = [d['sala'] for d in datos]
+    valores = [d['promedio'] for d in datos]
+    colores = [color_kg_hora(v) for v in valores]
+    
+    options = {
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"}
+        },
+        "grid": {
+            "left": "3%", "right": "8%",
+            "bottom": "5%", "top": "8%",
             "containLabel": True
         },
         "xAxis": {
             "type": "category",
             "data": salas,
-            "axisLabel": {
-                "color": "#ccc",
-                "rotate": 30,
-                "fontSize": 10
-            }
+            "axisLabel": {"color": "#ccc", "fontSize": 10, "rotate": 20}
         },
         "yAxis": {
             "type": "value",
@@ -663,30 +193,63 @@ def render_grafico_comparativo_dia(procesos_por_sala: Dict[str, List[Dict]], fec
             "splitLine": {"lineStyle": {"color": "#333"}}
         },
         "series": [{
-            "name": "KG/Hora Promedio",
             "type": "bar",
-            "data": [
-                {"value": v, "itemStyle": {"color": c}} 
-                for v, c in zip(promedios, colores)
-            ],
+            "data": [{"value": v, "itemStyle": {"color": c}} for v, c in zip(valores, colores)],
             "label": {
                 "show": True,
                 "position": "top",
                 "color": "#fff",
-                "fontSize": 11,
-                "formatter": "{c}"
+                "fontSize": 12,
+                "fontWeight": "bold"
             },
-            "barMaxWidth": 60
+            "barMaxWidth": 55
         }]
     }
     
-    st_echarts(options=options, height="300px")
+    st_echarts(options=options, height="280px")
+
+
+def render_detalle_sala(sala: str, procesos: List[Dict]):
+    """Renderiza el detalle de una sala usando componentes nativos de Streamlit."""
+    procesos_ord = sorted(procesos, key=lambda x: x.get('inicio_dt') or datetime.min)
+    
+    for p in procesos_ord:
+        kg = p.get('kg_hora', 0)
+        em = emoji_kg_hora(kg)
+        nombre = p.get('nombre', 'N/A')
+        producto = str(p.get('producto', '-'))
+        if len(producto) > 45:
+            producto = producto[:42] + "..."
+        
+        hora_i = p.get('hora_inicio', '-')
+        hora_f = p.get('hora_fin', '-')
+        dur = p.get('duracion', '-')
+        
+        st.markdown(f"**{em} {nombre}** — `{hora_i} → {hora_f}` ({dur}h) — 📦 {producto}")
+        
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        with c1:
+            st.metric("⚡ KG/Hora", f"{kg:,.0f}")
+        with c2:
+            st.metric("⚖️ KG Total", f"{p.get('kg_producidos', 0):,.0f}")
+        with c3:
+            st.metric("👷 Dotación", f"{int(p.get('dotacion', 0))}")
+        with c4:
+            st.metric("⏱️ HH Efect.", f"{p.get('hh_efectiva', 0):.1f}")
+        with c5:
+            det = p.get('detenciones', 0)
+            det_h = int(det)
+            det_m = int((det - det_h) * 60) if det > 0 else 0
+            st.metric("⏸️ Detenc.", f"{det_h}:{det_m:02d}")
+        with c6:
+            st.metric("📈 Rend.", f"{p.get('rendimiento', 0):.1f}%")
+        
+        st.divider()
 
 
 def render(username: str = None, password: str = None):
     """Render principal del tab KG por Línea."""
     
-    # Obtener credenciales
     if not username:
         username = st.session_state.get("odoo_username", "")
     if not password:
@@ -702,44 +265,36 @@ def render(username: str = None, password: str = None):
                 padding: 25px; border-radius: 15px; margin-bottom: 25px;
                 border-left: 5px solid #00d4ff;">
         <h2 style="margin:0; color:#00d4ff;">📊 Rendimiento por Línea de Proceso</h2>
-        <p style="margin:5px 0 0 0; color:#aaa; font-size:14px;">
-            Visualiza el KG/Hora de cada sala, desglosado por día y por orden de producción
+        <p style="margin:5px 0 0 0; color:#aaa;">
+            KG/Hora de cada sala, desglosado por día y por orden de producción
         </p>
     </div>
     """, unsafe_allow_html=True)
     
     # === FILTROS ===
     col1, col2, col3 = st.columns([1, 1, 1])
-    
     with col1:
-        fecha_inicio = st.date_input(
-            "📅 Desde",
+        fecha_inicio = st.date_input("📅 Desde",
             value=datetime.now().date() - timedelta(days=7),
-            key="kg_linea_fecha_inicio"
-        )
-    
+            key="kg_linea_fecha_inicio")
     with col2:
-        fecha_fin = st.date_input(
-            "📅 Hasta",
+        fecha_fin = st.date_input("📅 Hasta",
             value=datetime.now().date(),
-            key="kg_linea_fecha_fin"
-        )
-    
+            key="kg_linea_fecha_fin")
     with col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="kg_linea_buscar")
+        btn = st.button("🔍 Buscar", type="primary", use_container_width=True, key="kg_linea_buscar")
     
     st.markdown("---")
     
-    # === CARGAR DATOS ===
-    if btn_buscar:
-        st.session_state['kg_linea_data_loaded'] = True
+    if btn:
+        st.session_state['kg_linea_loaded'] = True
     
-    if not st.session_state.get('kg_linea_data_loaded'):
+    if not st.session_state.get('kg_linea_loaded'):
         st.info("👆 Selecciona el rango de fechas y presiona **Buscar**")
         return
     
-    # Cargar datos usando las fechas actuales de los widgets
+    # === CARGAR DATOS ===
     try:
         with st.spinner("Cargando datos de producción..."):
             data = fetch_datos_produccion(
@@ -752,74 +307,64 @@ def render(username: str = None, password: str = None):
         return
     
     mos = data.get('mos', [])
-    
     if not mos:
         st.warning("No hay órdenes de producción en el período seleccionado")
         return
     
     # === PROCESAR Y AGRUPAR POR DÍA ===
     procesos_por_dia = defaultdict(lambda: defaultdict(list))
+    todas_salas = set()
     
     for mo in mos:
-        # Obtener fecha de inicio
         fecha_str = mo.get('fecha_inicio') or mo.get('fecha_termino')
         if not fecha_str:
             continue
         
-        fecha_dt = parsear_fecha_hora(fecha_str)
+        fecha_dt = parsear_fecha(fecha_str)
         if not fecha_dt:
             continue
         
         dia_key = fecha_dt.strftime('%Y-%m-%d')
-        
-        # Obtener sala
         sala = mo.get('sala') or 'Sin Sala'
+        todas_salas.add(sala)
         
-        # Obtener fecha fin
-        fecha_fin_str = mo.get('fecha_termino')
-        fin_dt = parsear_fecha_hora(fecha_fin_str)
+        fin_dt = parsear_fecha(mo.get('fecha_termino'))
         
-        # Calcular duración
         duracion = 0
         if fecha_dt and fin_dt:
             duracion = (fin_dt - fecha_dt).total_seconds() / 3600
         
-        # Obtener producto
-        producto = mo.get('producto', '-')
+        producto = mo.get('product_name', '') or mo.get('producto', '-')
         if isinstance(producto, (list, tuple)) and len(producto) > 1:
             producto = producto[1]
         
-        # Crear info del proceso
-        proceso_info = {
-            'nombre': mo.get('name', 'N/A'),
+        procesos_por_dia[dia_key][sala].append({
+            'nombre': mo.get('mo_name', '') or mo.get('name', 'N/A'),
             'producto': producto,
-            'hora_inicio': formatear_hora(fecha_dt),
-            'hora_fin': formatear_hora(fin_dt),
+            'hora_inicio': fecha_dt.strftime("%H:%M") if fecha_dt else "-",
+            'hora_fin': fin_dt.strftime("%H:%M") if fin_dt else "-",
             'inicio_dt': fecha_dt,
             'fin_dt': fin_dt,
             'duracion': f"{duracion:.1f}" if duracion > 0 else "-",
             'dotacion': mo.get('dotacion', 0) or 0,
             'kg_producidos': mo.get('kg_pt', 0) or 0,
-            'kg_hora': mo.get('kg_por_hora', 0) or 0,
-            'kg_hh': mo.get('kg_hh_efectiva', 0) or mo.get('kg_por_hh', 0) or 0,
+            'kg_hora': mo.get('kg_por_hora', 0) or mo.get('kg_hora_efectiva', 0) or 0,
+            'kg_hh': mo.get('kg_hh_efectiva', 0) or 0,
             'hh': mo.get('hh', 0) or 0,
             'hh_efectiva': mo.get('hh_efectiva', 0) or 0,
             'detenciones': mo.get('detenciones', 0) or 0,
             'rendimiento': mo.get('rendimiento', 0) or 0
-        }
-        
-        procesos_por_dia[dia_key][sala].append(proceso_info)
+        })
     
     if not procesos_por_dia:
         st.warning("No se encontraron procesos con fechas válidas")
         return
     
     # === KPIs GENERALES ===
-    total_ordenes = len(mos)
-    total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos)
-    kg_horas = [mo.get('kg_por_hora', 0) or 0 for mo in mos if mo.get('kg_por_hora', 0) > 0]
-    promedio_kg_hora = sum(kg_horas) / len(kg_horas) if kg_horas else 0
-    salas_unicas = set(mo.get('sala', 'Sin Sala') for mo in mos if mo.get('sala'))
+    total_ordenes = sum(len(procs) for dia in procesos_por_dia.values() for procs in dia.values())
+    total_kg = sum(p['kg_producidos'] for dia in procesos_por_dia.values() for procs in dia.values() for p in procs)
+    kg_hrs = [p['kg_hora'] for dia in procesos_por_dia.values() for procs in dia.values() for p in procs if p['kg_hora'] > 0]
+    prom_kg = sum(kg_hrs) / len(kg_hrs) if kg_hrs else 0
     
     k1, k2, k3, k4 = st.columns(4)
     with k1:
@@ -827,150 +372,56 @@ def render(username: str = None, password: str = None):
     with k2:
         st.metric("⚖️ KG Total", f"{total_kg:,.0f}")
     with k3:
-        st.metric("⚡ KG/Hora Prom", f"{promedio_kg_hora:,.0f}")
+        st.metric("⚡ KG/Hora Prom", f"{prom_kg:,.0f}")
     with k4:
-        st.metric("🏭 Líneas", f"{len(salas_unicas)}")
+        st.metric("🏭 Líneas Activas", f"{len(todas_salas)}")
     
     st.markdown("---")
     
-    # === GRÁFICO EVOLUTIVO POR LÍNEA ===
-    st.markdown("### 📈 Evolución de KG/Hora por Línea de Proceso")
-    st.caption("Comparativa del rendimiento diario de cada línea. Cada punto representa el promedio de KG/Hora del día.")
+    # === GRÁFICO EVOLUTIVO ===
+    if len(procesos_por_dia) > 1:
+        st.markdown("### 📈 Evolución de KG/Hora por Línea")
+        st.caption("Tendencia diaria de cada sala. Solo muestra días con producción.")
+        render_evolucion(procesos_por_dia, todas_salas)
+        st.markdown("---")
     
-    # Preparar datos para el gráfico evolutivo
-    dias_ordenados = sorted(procesos_por_dia.keys())
-    todas_salas = sorted(salas_unicas)
-    
-    # Colores distintivos para cada sala
-    colores = [
-        '#00D4FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', 
-        '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA', '#FF9F43',
-        '#6C5CE7', '#00B894', '#E17055', '#0984E3', '#FDCB6E'
-    ]
-    
-    series = []
-    for idx, sala in enumerate(todas_salas):
-        datos_sala = []
-        for dia in dias_ordenados:
-            procesos_sala_dia = procesos_por_dia[dia].get(sala, [])
-            if procesos_sala_dia:
-                # Promedio de KG/Hora del día para esta sala
-                kg_horas_dia = [p['kg_hora'] for p in procesos_sala_dia if p['kg_hora'] > 0]
-                promedio = sum(kg_horas_dia) / len(kg_horas_dia) if kg_horas_dia else 0
-                datos_sala.append(round(promedio, 0))
-            else:
-                datos_sala.append(None)  # Sin datos ese día
+    # === DESGLOSE POR DÍA ===
+    for dia_key in sorted(procesos_por_dia.keys(), reverse=True):
+        dia_nombre = traducir_fecha(dia_key)
+        salas_dia = procesos_por_dia[dia_key]
         
-        series.append({
-            "name": sala[:25],
-            "type": "line",
-            "data": datos_sala,
-            "smooth": True,
-            "symbol": "circle",
-            "symbolSize": 8,
-            "lineStyle": {"width": 3},
-            "itemStyle": {"color": colores[idx % len(colores)]},
-            "connectNulls": False
-        })
-    
-    # Formatear fechas para el eje X
-    fechas_formato = [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in dias_ordenados]
-    
-    options_evolucion = {
-        "tooltip": {
-            "trigger": "axis",
-            "backgroundColor": "rgba(30, 30, 50, 0.95)",
-            "borderColor": "#555",
-            "textStyle": {"color": "#fff"},
-            "formatter": """function(params) {
-                let result = '<b>' + params[0].axisValue + '</b><br/>';
-                params.forEach(function(item) {
-                    if (item.value !== null && item.value !== undefined) {
-                        result += item.marker + ' ' + item.seriesName + ': <b>' + item.value.toLocaleString() + '</b> kg/h<br/>';
-                    }
-                });
-                return result;
-            }"""
-        },
-        "legend": {
-            "data": [s[:25] for s in todas_salas],
-            "bottom": 0,
-            "textStyle": {"color": "#ccc", "fontSize": 11},
-            "type": "scroll"
-        },
-        "grid": {
-            "left": "5%",
-            "right": "5%",
-            "bottom": "15%",
-            "top": "10%",
-            "containLabel": True
-        },
-        "xAxis": {
-            "type": "category",
-            "data": fechas_formato,
-            "axisLabel": {"color": "#ccc", "fontSize": 11},
-            "axisLine": {"lineStyle": {"color": "#555"}}
-        },
-        "yAxis": {
-            "type": "value",
-            "name": "KG/Hora",
-            "nameTextStyle": {"color": "#aaa"},
-            "axisLabel": {"color": "#ccc", "formatter": "{value}"},
-            "splitLine": {"lineStyle": {"color": "#333"}}
-        },
-        "series": series
-    }
-    
-    st_echarts(options=options_evolucion, height="400px")
-    
-    st.markdown("---")
-    
-    # === RENDERIZAR POR DÍA ===
-    dias_ordenados = sorted(procesos_por_dia.keys(), reverse=True)  # Ahora sí en orden descendente
-    
-    for dia_key in dias_ordenados:
-        fecha_dt = datetime.strptime(dia_key, '%Y-%m-%d')
-        dia_nombre = fecha_dt.strftime('%A %d de %B, %Y').title()
+        total_procs = sum(len(p) for p in salas_dia.values())
+        total_kg_dia = sum(p['kg_producidos'] for procs in salas_dia.values() for p in procs)
         
-        # Traducir día
-        traducciones = {
-            'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
-            'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo',
-            'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo', 'April': 'Abril',
-            'May': 'Mayo', 'June': 'Junio', 'July': 'Julio', 'August': 'Agosto',
-            'September': 'Septiembre', 'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
-        }
-        for en, es in traducciones.items():
-            dia_nombre = dia_nombre.replace(en, es)
-        
-        procesos_dia = procesos_por_dia[dia_key]
-        total_procesos_dia = sum(len(p) for p in procesos_dia.values())
-        total_kg_dia = sum(
-            sum(proc['kg_producidos'] for proc in procs)
-            for procs in procesos_dia.values()
-        )
-        
-        # Header del día con estilo
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%); 
-                    padding: 15px 25px; border-radius: 15px; margin: 20px 0 15px 0;
+                    padding: 15px 25px; border-radius: 15px; margin: 15px 0;
                     border-left: 5px solid #00d4ff;">
-            <h2 style="margin: 0; color: #00d4ff;">📅 {dia_nombre}</h2>
-            <p style="margin: 5px 0 0 0; color: #aaa;">
-                <b style="color: #fff;">{total_procesos_dia}</b> órdenes &nbsp;|&nbsp; 
-                <b style="color: #4caf50;">{total_kg_dia:,.0f}</b> KG producidos
+            <h3 style="margin:0; color:#00d4ff;">📅 {dia_nombre}</h3>
+            <p style="margin:5px 0 0 0; color:#aaa;">
+                <b style="color:#fff;">{total_procs}</b> órdenes &nbsp;|&nbsp;
+                <b style="color:#4caf50;">{total_kg_dia:,.0f}</b> KG producidos &nbsp;|&nbsp;
+                <b style="color:#FFE66D;">{len(salas_dia)}</b> líneas activas
             </p>
         </div>
         """, unsafe_allow_html=True)
         
-        # === GRÁFICO GANTT TIMELINE ===
-        st.markdown("### 🕐 Timeline de Producción")
-        st.caption("Cada barra representa un proceso. El número dentro es el KG/Hora. Pasa el mouse para ver detalles.")
-        render_gantt_timeline(procesos_por_dia, dia_key)
+        # Gráfico de barras comparativo del día
+        render_barras_dia(salas_dia)
         
-        # === DETALLE POR SALA (colapsable) ===
-        with st.expander(f"📋 Ver detalle de cada línea ({len(procesos_dia)} salas)", expanded=False):
-            for sala, procesos in sorted(procesos_dia.items(), key=lambda x: -sum(p['kg_hora'] for p in x[1])):
-                render_linea_proceso_sala(sala, procesos)
+        # Detalle por sala (colapsable)
+        for sala in sorted(salas_dia.keys(), 
+                          key=lambda s: -sum(p['kg_hora'] for p in salas_dia[s])):
+            procesos = salas_dia[sala]
+            kg_vals = [p['kg_hora'] for p in procesos if p['kg_hora'] > 0]
+            prom_sala = sum(kg_vals) / len(kg_vals) if kg_vals else 0
+            total_kg_sala = sum(p['kg_producidos'] for p in procesos)
+            em = emoji_kg_hora(prom_sala)
+            
+            with st.expander(
+                f"{em} {sala} — {prom_sala:,.0f} KG/Hora prom — {len(procesos)} procesos — {total_kg_sala:,.0f} KG",
+                expanded=False
+            ):
+                render_detalle_sala(sala, procesos)
         
         st.markdown("---")
