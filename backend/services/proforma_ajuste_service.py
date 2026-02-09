@@ -479,12 +479,8 @@ def eliminar_linea_factura(username: str, password: str, linea_id: int) -> Dict[
             if factura and factura[0].get("state") != "draft":
                 return {"success": False, "error": "Solo se pueden eliminar líneas de facturas en borrador"}
         
-        # Eliminar con credenciales que tienen permiso Accounting/Billing
-        admin_client = OdooClient(
-            username="mvalladares@riofuturo.cl",
-            password="c0766224bec30cac071ffe43a858c9ccbd521ddd"
-        )
-        admin_client.unlink("account.move.line", [linea_id])
+        # Eliminar con las credenciales del usuario
+        client.unlink("account.move.line", [linea_id])
         
         return {
             "success": True,

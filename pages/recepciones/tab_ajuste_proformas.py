@@ -26,7 +26,7 @@ def render(username: str, password: str):
     Renderiza el tab de Ajuste de Proformas.
     """
     
-    st.markdown("### � Gestión de Proformas")
+    st.markdown("### 📄 Gestión de Proformas")
     st.caption("Visualiza, gestiona y envía proformas de proveedor (USD → CLP y CLP directas)")
     
     # =========================================================================
@@ -1303,7 +1303,7 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
                                 fontSize=14, 
                                 alignment=TA_RIGHT,
                                 textColor=color_azul,
-                                spaceAfter=6,
+                                spaceAfter=2,
                                 rightIndent=0.2*inch)
     
     elements = []
@@ -1318,14 +1318,24 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         except:
             fecha_creacion_fmt = fecha_creacion_raw[:10]
     
-    # Nombre de proveedor más corto para evitar solapamiento
-    prov_nombre_pdf = factura['proveedor_nombre'][:35]
-    titulo_pdf = f"Proforma {prov_nombre_pdf}"
-    subtitulo_pdf = fecha_creacion_fmt
+    # Nombre del proveedor en línea separada para evitar solapamiento con logo
+    prov_nombre_pdf = factura['proveedor_nombre']
     
     # Spacer para dejar espacio al logo (altura del logo ~1.4 inch)
     elements.append(Spacer(1, 0.6*inch))
-    elements.append(Paragraph(titulo_pdf, title_style))
+    elements.append(Paragraph("Proforma", title_style))
+    
+    # Nombre del proveedor debajo del título, con font más pequeño si es largo
+    prov_font_size = 12 if len(prov_nombre_pdf) <= 40 else 10
+    prov_style = ParagraphStyle('ProvName',
+                               parent=styles['Normal'],
+                               fontSize=prov_font_size,
+                               alignment=TA_RIGHT,
+                               textColor=color_azul,
+                               spaceAfter=2,
+                               rightIndent=0.2*inch,
+                               fontName='Helvetica-Bold')
+    elements.append(Paragraph(prov_nombre_pdf, prov_style))
     
     # Subtítulo con fecha debajo
     subtitle_style = ParagraphStyle('SubTitle',
@@ -1335,7 +1345,7 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
                                    textColor=color_azul_claro,
                                    spaceAfter=10,
                                    rightIndent=0.2*inch)
-    elements.append(Paragraph(subtitulo_pdf, subtitle_style))
+    elements.append(Paragraph(fecha_creacion_fmt, subtitle_style))
     elements.append(Spacer(1, 8))
     
     # Fecha de envío (hoy)
