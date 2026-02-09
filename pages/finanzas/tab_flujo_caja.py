@@ -476,10 +476,20 @@ def render(username: str, password: str):
                     valores_lista.append(monto_mes)
                     heatmap_class = get_heatmap_class(monto_mes, max_abs)
                     cell_id = f"cell_{c_id_safe}_{mes}"
-                    # Agregar onclick para mostrar composición de cuentas
-                    onclick_comp = f"showComposicionModal('{c_id}', '{mes}')" if len(cuentas) > 0 and monto_mes != 0 else ""
-                    cell_class = "cell-clickable" if len(cuentas) > 0 and monto_mes != 0 else ""
-                    html_parts.append(f'<td class="clickable {heatmap_class} {cell_class}" id="{cell_id}" onclick="{onclick_comp}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
+                    # Agregar onclick para mostrar composición de cuentas SI tiene cuentas y monto != 0
+                    tiene_cuentas = len(cuentas) > 0
+                    tiene_monto = monto_mes != 0
+                    
+                    if tiene_cuentas and tiene_monto:
+                        onclick_comp = f"event.stopPropagation(); showComposicionModal('{c_id}', '{mes}')"
+                        cell_class = "cell-clickable"
+                        title_attr = f'title="Click para ver composición"'
+                    else:
+                        onclick_comp = ""
+                        cell_class = ""
+                        title_attr = ""
+                    
+                    html_parts.append(f'<td class="clickable {heatmap_class} {cell_class}" id="{cell_id}" onclick="{onclick_comp}" {title_attr} oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
                 
                 # Total con SPARKLINE
                 sparkline = generate_sparkline(valores_lista)
@@ -503,6 +513,12 @@ def render(username: str, password: str):
                         # ID único para esta cuenta (para expandir etiquetas)
                         cuenta_id_safe = f"{c_id_safe}_{cuenta_codigo.replace('.', '_')}"
                         has_etiquetas = len(etiquetas) > 0
+                        
+                        # Verificar si tiene facturas en alguna etiqueta
+                        tiene_facturas_cuenta = any(
+                            "facturas" in etiq and len(etiq.get("facturas", [])) > 0 
+                            for etiq in etiquetas
+                        )
                         
                         # Icono para expandir/contraer etiquetas
                         if has_etiquetas:
@@ -530,9 +546,18 @@ def render(username: str, password: str):
                         else:
                             html_parts.append('<td></td><td></td><td></td>')
                         
+                        # Celdas mensuales del nivel 2 - clickeables si tiene facturas
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
-                            html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
+                            
+                            # Si tiene facturas y monto != 0, hacer clickeable para mostrar modal agregado
+                            if tiene_facturas_cuenta and m_acc != 0:
+                                # Usamos el nombre de la cuenta como estado para el modal
+                                cuenta_nombre_js = cuenta_nombre.replace("'", "\\'")
+                                onclick = f"event.stopPropagation(); showFacturasModal('{cuenta_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                html_parts.append(f'<td class="cell-clickable" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(m_acc)}</td>')
+                            else:
+                                html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
                         
                         html_parts.append(f'<td>{fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
@@ -586,15 +611,17 @@ def render(username: str, password: str):
                                 else:
                                     html_parts.append('<td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td>')
                                 
-                                # Montos por mes de la etiqueta - clickeables si es CxC con facturas
+                                # Montos por mes de la etiqueta - clickeables si tiene facturas
                                 for mes in meses_lista:
                                     et_mes_monto = et_montos_mes.get(mes, 0)
                                     
-                                    if es_cuenta_cxc and tiene_facturas and et_mes_monto != 0:
+                                    # Mostrar modal de facturas si tiene facturas y monto != 0
+                                    if tiene_facturas and et_mes_monto != 0:
                                         # Celda clickeable para mostrar modal
                                         et_nombre_js = et_nombre.replace("'", "\\'")
-                                        onclick = f"showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                        html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e;" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(et_mes_monto)}</td>')
+                                        onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                        cell_class = "cell-clickable"
+                                        html_parts.append(f'<td class="{cell_class}" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
                                     else:
                                         html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
                                 
@@ -665,6 +692,18 @@ def render(username: str, password: str):
 setFacturasData({facturas_json});
 // Inicializar datos de composición de cuentas
 setComposicionData({composicion_json});
+
+// Debug: Mostrar conceptos con composición
+console.log('[Composición] Conceptos disponibles:', Object.keys(composicionData));
+console.log('[Composición] Total conceptos:', Object.keys(composicionData).length);
+
+// Verificar que los modales existan
+setTimeout(function() {{
+    const modal = document.getElementById('composicion-modal');
+    const overlay = document.getElementById('composicion-modal-overlay');
+    console.log('[Modal] Modal exists:', !!modal);
+    console.log('[Modal] Overlay exists:', !!overlay);
+}}, 100);
 </script>
 ''')
         
