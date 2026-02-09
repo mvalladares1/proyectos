@@ -1126,9 +1126,28 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 else:
                     return f"🔴 +{dif_pct:.0f}%"
             
+            # Cabeceras de la tabla
+            col_sel_h, col_oc_h, col_fecha_h, col_monto_h, col_kg_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
+            with col_sel_h:
+                st.markdown("**✅**")
+            with col_oc_h:
+                st.markdown("**OC**")
+            with col_fecha_h:
+                st.markdown("**Fecha**")
+            with col_monto_h:
+                st.markdown("**Monto**")
+            with col_kg_h:
+                st.markdown("**$/kg USD**")
+            with col_ppto_h:
+                st.markdown("**vs Ppto**")
+            with col_aprob_h:
+                st.markdown("**Aprobación**")
+            
+            st.markdown("---")
+            
             # Mostrar tabla con checkboxes
             for idx, row in df_aprobables.iterrows():
-                col_sel, col_oc, col_fecha, col_monto, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 2])
+                col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
                 
                 with col_sel:
                     is_selected = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
@@ -1146,6 +1165,19 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 
                 with col_monto:
                     st.text(f"${row['monto']:,.0f}")
+                
+                with col_kg:
+                    # Mostrar $/kg USD con alerta de color
+                    if row.get('cost_per_kg_usd'):
+                        costo_kg = row['cost_per_kg_usd']
+                        if costo_kg > UMBRAL_COSTO_KG_USD * 1.2:
+                            st.markdown(f"🔴 ${costo_kg:.3f}")
+                        elif costo_kg > UMBRAL_COSTO_KG_USD:
+                            st.markdown(f"🟡 ${costo_kg:.3f}")
+                        else:
+                            st.markdown(f"🟢 ${costo_kg:.3f}")
+                    else:
+                        st.text("-")
                 
                 with col_ppto:
                     st.text(comparar_presupuesto(row))
