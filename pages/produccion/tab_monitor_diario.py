@@ -538,7 +538,7 @@ def render_grafico_pendientes_por_planta(procesos: list):
 
 
 def render_grafico_pendientes_por_dia(procesos_pendientes: list):
-    """Renderiza gráfico de procesos pendientes agrupados por fecha de creación."""
+    """Renderiza gráfico de procesos pendientes agrupados por fecha de proceso."""
     if not procesos_pendientes:
         st.info("No hay procesos pendientes para mostrar")
         return
@@ -546,12 +546,14 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
     from collections import defaultdict
     from datetime import datetime
     
-    # Agrupar procesos pendientes por fecha de creación
+    # Agrupar procesos pendientes por fecha de PROCESO (no de creación)
     pendientes_por_fecha = defaultdict(lambda: {"RIO FUTURO": 0, "VILKUN": 0})
     
     for p in procesos_pendientes:
-        # Obtener fecha de creación
-        fecha_str = p.get('create_date', '') or p.get('date_start', '') or p.get('date_planned_start', '')
+        # Usar fecha de inicio de proceso real, fallback a date_planned_start
+        fecha_str = (p.get('x_studio_inicio_de_proceso', '') or 
+                     p.get('date_planned_start', '') or 
+                     p.get('date_start', ''))
         if not fecha_str:
             continue
         
@@ -1094,8 +1096,8 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # === GRÁFICO 2: PROCESOS PENDIENTES POR DÍA ===
-    st.markdown("### 📅 ¿Cuándo se crearon los procesos pendientes?")
-    st.caption("Muestra cuántos procesos se acumularon por día de creación, separados por planta")
+    st.markdown("### 📅 Procesos Pendientes por Fecha de Proceso")
+    st.caption("Muestra cuántos procesos pendientes hay en cada fecha, separados por planta")
     render_grafico_pendientes_por_dia(activos.get("procesos", []))
     
     st.markdown("---")
