@@ -28,19 +28,25 @@ def fetch_datos_produccion(username: str, password: str, fecha_inicio: str,
 
 
 def parsear_fecha(fecha_str: str) -> Optional[datetime]:
-    """Parsea fecha de diferentes formatos."""
+    """Parsea fecha de diferentes formatos y ajusta de UTC a hora Chile (UTC-3)."""
     if not fecha_str:
         return None
     try:
         s = str(fecha_str).strip()
+        dt = None
         if 'T' in s:
-            return datetime.fromisoformat(s.replace('Z', ''))
+            dt = datetime.fromisoformat(s.replace('Z', ''))
         elif len(s) >= 19:
-            return datetime.strptime(s[:19], '%Y-%m-%d %H:%M:%S')
+            dt = datetime.strptime(s[:19], '%Y-%m-%d %H:%M:%S')
         elif len(s) >= 16:
-            return datetime.strptime(s[:16], '%Y-%m-%d %H:%M')
+            dt = datetime.strptime(s[:16], '%Y-%m-%d %H:%M')
         elif len(s) >= 10:
-            return datetime.strptime(s[:10], '%Y-%m-%d')
+            dt = datetime.strptime(s[:10], '%Y-%m-%d')
+        
+        # Ajustar UTC → Chile (UTC-3)
+        if dt:
+            dt = dt - timedelta(hours=3)
+        return dt
     except:
         pass
     return None
@@ -73,11 +79,21 @@ def traducir_fecha(dia_key: str) -> str:
 
 
 def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
-    """Gráfico de evolución limpio."""
+    """Gráfico de barras agrupadas: KG/Hora promedio por sala por día."""
     dias = sorted(procesos_por_dia.keys())
-    salas_activas = sorted(todas_salas)
     
-    if not salas_activas or not dias:
+    if not dias:
+        return
+    
+    # Solo mostrar salas que tengan al menos un dato con KG/Hora > 0
+    salas_con_datos = set()
+    for dia in dias:
+        for sala, procs in procesos_por_dia[dia].items():
+            if any(p['kg_hora'] > 0 for p in procs):
+                salas_con_datos.add(sala)
+    
+    salas_activas = sorted(salas_con_datos)
+    if not salas_activas:
         return
     
     colores = [
@@ -95,25 +111,25 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
             procs = procesos_por_dia[dia].get(sala, [])
             if procs:
                 vals = [p['kg_hora'] for p in procs if p['kg_hora'] > 0]
-                datos.append(round(sum(vals) / len(vals), 0) if vals else None)
+                datos.append(round(sum(vals) / len(vals), 0) if vals else 0)
             else:
-                datos.append(None)
+                datos.append(0)
         
         series.append({
             "name": sala[:30],
-            "type": "line",
+            "type": "bar",
             "data": datos,
-            "smooth": True,
-            "symbol": "circle",
-            "symbolSize": 8,
-            "lineStyle": {"width": 2.5},
             "itemStyle": {"color": colores[idx % len(colores)]},
-            "connectNulls": False
+            "barMaxWidth": 30,
+            "label": {
+                "show": False
+            }
         })
     
     options = {
         "tooltip": {
             "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
             "backgroundColor": "rgba(20, 20, 40, 0.95)",
             "borderColor": "#444",
             "textStyle": {"color": "#fff", "fontSize": 12}
@@ -132,7 +148,7 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
         "xAxis": {
             "type": "category",
             "data": fechas_fmt,
-            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "axisLabel": {"color": "#ccc", "fontSize": 12, "fontWeight": "bold"},
             "axisLine": {"lineStyle": {"color": "#555"}}
         },
         "yAxis": {
@@ -145,7 +161,7 @@ def render_evolucion(procesos_por_dia: Dict, todas_salas: set):
         "series": series
     }
     
-    st_echarts(options=options, height="380px")
+    st_echarts(options=options, height="420px")
 
 
 def render_barras_dia(procesos_por_sala: Dict[str, List[Dict]]):
@@ -380,8 +396,8 @@ def render(username: str = None, password: str = None):
     
     # === GRÁFICO EVOLUTIVO ===
     if len(procesos_por_dia) > 1:
-        st.markdown("### 📈 Evolución de KG/Hora por Línea")
-        st.caption("Tendencia diaria de cada sala. Solo muestra días con producción.")
+        st.markdown("### � KG/Hora por Línea y por Día")
+        st.caption("Cada barra muestra el KG/Hora promedio de cada sala en ese día. Compara fácilmente el rendimiento entre líneas.")
         render_evolucion(procesos_por_dia, todas_salas)
         st.markdown("---")
     
