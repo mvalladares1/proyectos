@@ -643,6 +643,8 @@ MODAL_CSS = """
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     animation: fadeIn 0.2s ease-in;
+    justify-content: center;
+    align-items: center;
 }
 
 #composicion-modal .modal-content {
