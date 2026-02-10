@@ -147,11 +147,23 @@ def get_facturas_borrador(
             "id", "name", "partner_id", "invoice_date", "create_date",
             "currency_id", "amount_total", "amount_untaxed", "amount_tax",
             "amount_total_signed", "amount_untaxed_signed",
-            "invoice_line_ids", "invoice_origin", "ref"
+            "invoice_line_ids", "invoice_origin", "ref",
+            "create_uid"
         ],
         limit=100,
         order="create_date desc"
     )
+    
+    # Excluir facturas creadas automáticamente por Nubistalia (DTE/SII)
+    # Estas no son proformas de MP generadas por el equipo
+    USUARIOS_EXCLUIDOS = ["nubistalia", "nubistalia gateways platform"]
+    facturas = [
+        f for f in facturas
+        if not any(
+            excl in (f.get("create_uid", [0, ""])[1] if isinstance(f.get("create_uid"), (list, tuple)) else "").lower()
+            for excl in USUARIOS_EXCLUIDOS
+        )
+    ]
     
     resultado = []
     
