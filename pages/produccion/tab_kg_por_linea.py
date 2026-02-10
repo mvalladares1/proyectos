@@ -459,7 +459,7 @@ def render(username: str = None, password: str = None):
 
                 st.markdown(f"**{em_o} {mo_name}** — {estado} — 🍓 {especie_o}")
 
-                oc1, oc2, oc3, oc4, oc5 = st.columns([1.2, 1.2, 1, 2, 1])
+                oc1, oc2, oc3, oc4, oc5, oc6 = st.columns([1, 1, 0.8, 1.2, 1.2, 0.8])
                 with oc1:
                     st.metric("⚡ KG/Hora", f"{kg_h:,.0f}")
                 with oc2:
@@ -467,8 +467,10 @@ def render(username: str = None, password: str = None):
                 with oc3:
                     st.metric("👷 Dotación", f"{int(dot)}")
                 with oc4:
-                    st.metric("🕐 Período", f"{hora_ini} → {hora_fin}", delta=duracion_str if duracion_str else None, delta_color="off")
+                    st.metric("🕐 Inicio", hora_ini)
                 with oc5:
+                    st.metric("🕑 Fin", hora_fin, delta=duracion_str if duracion_str else None, delta_color="off")
+                with oc6:
                     st.metric("📈 Rend.", f"{rend:.1f}%")
 
                 if oi < len(ordenes_sorted) - 1:
