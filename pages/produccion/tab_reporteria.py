@@ -292,11 +292,13 @@ def _render_volumen_masa(mos, data, agrupacion, filtro_rfp, filtro_vilkun):
     def clasificar_tunel(sala, product_name=''):
         """Clasifica el túnel incluyendo Túnel Continuo por nombre de producto."""
         # CASO ESPECIAL: Túnel Continuo por nombre de producto
-        # Buscar tanto "CONTINUO" como "CONTÍNUO" (con tilde en la U)
         if product_name:
             product_upper = str(product_name).upper()
             if ('[1.4]' in str(product_name) and 
                 ('TÚNEL CONTINUO' in product_upper or 'TÚNEL CONTÍNUO' in product_upper)):
+                # Si tiene sala asignada, mostrar "Sala X - Túnel Continuo"
+                if sala and 'tunel' not in str(sala).lower() and 'túnel' not in str(sala).lower():
+                    return f'{sala} - Túnel Continuo'
                 return 'Túnel Continuo'
         
         if not sala:
@@ -754,14 +756,18 @@ def _render_kpis_tabs(data, mos=None, consolidado=None, salas=None, fecha_inicio
                 for mo in mos_congelado:
                     # Determinar nombre del túnel (Túnel Continuo por product_name)
                     product_name = mo.get('product_name', '')
+                    sala_mo = mo.get('sala', 'Sin Sala')
                     if product_name:
                         product_upper = str(product_name).upper()
                         if '[1.4]' in product_name and 'TÚNEL CONTÍNUO' in product_upper:
-                            sala = 'Túnel Continuo'
+                            if sala_mo and 'tunel' not in str(sala_mo).lower() and 'túnel' not in str(sala_mo).lower():
+                                sala = f'{sala_mo} - Túnel Continuo'
+                            else:
+                                sala = 'Túnel Continuo'
                         else:
-                            sala = mo.get('sala', 'Sin Sala')
+                            sala = sala_mo
                     else:
-                        sala = mo.get('sala', 'Sin Sala')
+                        sala = sala_mo
                     
                     tuneles_data[sala]['kg_mp'] += mo.get('kg_mp', 0) or 0
                     tuneles_data[sala]['kg_pt'] += mo.get('kg_pt', 0) or 0
