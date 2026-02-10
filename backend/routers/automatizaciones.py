@@ -540,9 +540,10 @@ class ProcesosValidarPalletsRequest(BaseModel):
 
 class ProcesosAgregarPalletsRequest(BaseModel):
     """Request para agregar pallets a orden."""
-    orden_id: int = Field(..., description="ID de la orden de fabricación")
+    orden_id: int = Field(..., description="ID de la orden de fabricación o picking")
     tipo: str = Field(..., description="componentes o subproductos")
     pallets: List[dict] = Field(..., description="Lista de pallets con info")
+    modelo: str = Field('mrp.production', description="Modelo: mrp.production o stock.picking")
 
 
 @router.get("/procesos/buscar-orden")
@@ -552,10 +553,10 @@ async def buscar_orden_procesos(
     password: str = Query(..., description="API Key Odoo"),
 ):
     """
-    Busca una orden de fabricación por nombre o número.
+    Busca una orden de fabricación o transferencia por nombre o número.
     
     Args:
-        orden: Nombre completo (MO/RF/00123) o solo número (00123)
+        orden: Nombre completo (MO/RF/00123, WH/Transf/00936) o solo número (00123)
     """
     try:
         odoo = get_odoo_client(username=username, password=password)
@@ -563,16 +564,14 @@ async def buscar_orden_procesos(
         domain = []
         
         if orden.isdigit():
-            # Buscar por name que contenga el número
             domain = [('name', 'ilike', orden)]
         elif '/' in orden:
-            # Nombre completo
-            domain = [('name', '=', orden)]
+            # Usar ilike para ignorar mayúsculas/minúsculas
+            domain = [('name', 'ilike', orden)]
         else:
-            # Buscar parcial
             domain = [('name', 'ilike', orden)]
         
-        # Buscar orden
+        # Primero buscar en mrp.production
         ordenes = odoo.search_read(
             'mrp.production',
             domain,
@@ -582,24 +581,51 @@ async def buscar_orden_procesos(
             order='create_date desc'
         )
         
-        if not ordenes:
-            return {'success': False, 'error': f'Orden "{orden}" no encontrada'}
-        
-        mo = ordenes[0]
-        
-        return {
-            'success': True,
-            'orden': {
-                'id': mo['id'],
-                'nombre': mo['name'],
-                'producto': mo['product_id'][1] if mo['product_id'] else 'N/A',
-                'producto_id': mo['product_id'][0] if mo['product_id'] else None,
-                'cantidad': mo['product_qty'],
-                'estado': mo['state'],
-                'componentes_count': len(mo.get('move_raw_ids', [])),
-                'subproductos_count': len(mo.get('move_finished_ids', [])),
+        if ordenes:
+            mo = ordenes[0]
+            return {
+                'success': True,
+                'orden': {
+                    'id': mo['id'],
+                    'nombre': mo['name'],
+                    'producto': mo['product_id'][1] if mo['product_id'] else 'N/A',
+                    'producto_id': mo['product_id'][0] if mo['product_id'] else None,
+                    'cantidad': mo['product_qty'],
+                    'estado': mo['state'],
+                    'componentes_count': len(mo.get('move_raw_ids', [])),
+                    'subproductos_count': len(mo.get('move_finished_ids', [])),
+                    'modelo': 'mrp.production',
+                }
             }
-        }
+        
+        # Si no se encontró en mrp.production, buscar en stock.picking
+        pickings = odoo.search_read(
+            'stock.picking',
+            domain,
+            ['name', 'state', 'location_id', 'location_dest_id',
+             'move_ids', 'picking_type_id', 'create_date'],
+            limit=1,
+            order='create_date desc'
+        )
+        
+        if pickings:
+            pk = pickings[0]
+            return {
+                'success': True,
+                'orden': {
+                    'id': pk['id'],
+                    'nombre': pk['name'],
+                    'producto': pk['picking_type_id'][1] if pk['picking_type_id'] else 'Transferencia',
+                    'producto_id': None,
+                    'cantidad': len(pk.get('move_ids', [])),
+                    'estado': pk['state'],
+                    'componentes_count': len(pk.get('move_ids', [])),
+                    'subproductos_count': 0,
+                    'modelo': 'stock.picking',
+                }
+            }
+        
+        return {'success': False, 'error': f'Orden "{orden}" no encontrada en fabricación ni transferencias'}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -710,16 +736,26 @@ async def agregar_pallets_procesos(
         
         odoo = get_odoo_client(username=username, password=password)
         
-        # Obtener info de la orden
-        ordenes = odoo.read('mrp.production', [request.orden_id], [
-            'name', 'product_id', 'state', 'location_src_id', 'location_dest_id'
-        ])
+        es_picking = request.modelo == 'stock.picking'
         
-        if not ordenes:
-            return {'success': False, 'error': f'Orden {request.orden_id} no encontrada'}
-        
-        orden = ordenes[0]
-        mo_name = orden['name']
+        if es_picking:
+            # === STOCK.PICKING (Transferencias) ===
+            ordenes = odoo.read('stock.picking', [request.orden_id], [
+                'name', 'state', 'location_id', 'location_dest_id'
+            ])
+            if not ordenes:
+                return {'success': False, 'error': f'Transferencia {request.orden_id} no encontrada'}
+            orden = ordenes[0]
+            mo_name = orden['name']
+        else:
+            # === MRP.PRODUCTION (Órdenes de Fabricación) ===
+            ordenes = odoo.read('mrp.production', [request.orden_id], [
+                'name', 'product_id', 'state', 'location_src_id', 'location_dest_id'
+            ])
+            if not ordenes:
+                return {'success': False, 'error': f'Orden {request.orden_id} no encontrada'}
+            orden = ordenes[0]
+            mo_name = orden['name']
         
         # Determinar ubicación virtual según sucursal
         if 'RF' in mo_name:
@@ -745,9 +781,121 @@ async def agregar_pallets_procesos(
                     errores.append(f"{codigo}: Sin producto_id")
                     continue
                 
-                if request.tipo == 'componentes':
+                if es_picking:
+                    # === STOCK.PICKING (Transferencias) ===
+                    
+                    # Buscar o crear lote si no existe
+                    if not lote_id and lote_nombre:
+                        lotes_existentes = odoo.search(
+                            'stock.lot',
+                            [('name', '=', lote_nombre), ('product_id', '=', producto_id)]
+                        )
+                        if lotes_existentes:
+                            lote_id = lotes_existentes[0]
+                        else:
+                            lote_id = odoo.execute('stock.lot', 'create', {
+                                'name': lote_nombre,
+                                'product_id': producto_id,
+                                'company_id': 1
+                            })
+                    
+                    # Buscar o crear package si no existe
+                    if not package_id and codigo:
+                        pkgs_existentes = odoo.search(
+                            'stock.quant.package',
+                            [('name', '=', codigo)]
+                        )
+                        if pkgs_existentes:
+                            package_id = pkgs_existentes[0]
+                        else:
+                            package_id = odoo.execute('stock.quant.package', 'create', {
+                                'name': codigo,
+                                'company_id': 1
+                            })
+                    
+                    # Buscar move existente para el producto en el picking
+                    existing_moves = odoo.search_read(
+                        'stock.move',
+                        [
+                            ('picking_id', '=', request.orden_id),
+                            ('product_id', '=', producto_id),
+                            ('state', '!=', 'cancel')
+                        ],
+                        ['id'],
+                        limit=1
+                    )
+                    
+                    if existing_moves:
+                        move_id = existing_moves[0]['id']
+                    else:
+                        move_data = {
+                            'name': mo_name,
+                            'product_id': producto_id,
+                            'product_uom_qty': kg,
+                            'product_uom': 12,
+                            'location_id': orden['location_id'][0],
+                            'location_dest_id': orden['location_dest_id'][0],
+                            'state': 'draft',
+                            'picking_id': request.orden_id,
+                            'company_id': 1,
+                            'reference': mo_name
+                        }
+                        move_id = odoo.execute('stock.move', 'create', move_data)
+                    
+                    # Crear stock.move.line
+                    move_line_data = {
+                        'move_id': move_id,
+                        'product_id': producto_id,
+                        'qty_done': kg,
+                        'reserved_uom_qty': kg,
+                        'product_uom_id': 12,
+                        'location_id': orden['location_id'][0],
+                        'location_dest_id': orden['location_dest_id'][0],
+                        'state': 'draft',
+                        'reference': mo_name,
+                        'company_id': 1
+                    }
+                    
+                    if lote_id:
+                        move_line_data['lot_id'] = lote_id
+                    if package_id:
+                        move_line_data['package_id'] = package_id
+                    
+                    odoo.execute('stock.move.line', 'create', move_line_data)
+                
+                elif request.tipo == 'componentes':
                     # === COMPONENTES (move_raw_ids) ===
-                    # Buscar move existente para el producto (para evitar duplicar)
+                    
+                    # Buscar o crear lote si no existe
+                    if not lote_id and lote_nombre:
+                        lotes_existentes = odoo.search(
+                            'stock.lot',
+                            [('name', '=', lote_nombre), ('product_id', '=', producto_id)]
+                        )
+                        if lotes_existentes:
+                            lote_id = lotes_existentes[0]
+                        else:
+                            lote_id = odoo.execute('stock.lot', 'create', {
+                                'name': lote_nombre,
+                                'product_id': producto_id,
+                                'company_id': 1
+                            })
+                    
+                    # Buscar o crear package si no existe
+                    if not package_id and codigo:
+                        pkgs_existentes = odoo.search(
+                            'stock.quant.package',
+                            [('name', '=', codigo)]
+                        )
+                        if pkgs_existentes:
+                            package_id = pkgs_existentes[0]
+                        else:
+                            package_id = odoo.execute('stock.quant.package', 'create', {
+                                'name': codigo,
+                                'company_id': 1
+                            })
+                    
+                    # Buscar move existente para el producto (para reutilizar)
                     existing_moves = odoo.search_read(
                         'stock.move',
                         [
