@@ -323,7 +323,9 @@ async def download_monitor_report_pdf(data: dict):
 async def get_pallets_disponibles(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
-    planta: Optional[str] = Query(None, description="Filtrar por planta")
+    planta: Optional[str] = Query(None, description="Filtrar por planta"),
+    producto_id: Optional[int] = Query(None, description="Filtrar por producto"),
+    proveedor_id: Optional[int] = Query(None, description="Filtrar por proveedor")
 ):
     """
     Obtiene pallets disponibles que NO están en ninguna fabricación.
@@ -332,6 +334,38 @@ async def get_pallets_disponibles(
     try:
         from backend.services.pallets_disponibles_service import PalletsDisponiblesService
         service = PalletsDisponiblesService(username=username, password=password)
-        return service.get_pallets_disponibles(planta)
+        return service.get_pallets_disponibles(planta, producto_id, proveedor_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pallets-disponibles/productos-2026")
+async def get_productos_2026(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene productos únicos del año 2026 basados en lotes existentes.
+    """
+    try:
+        from backend.services.pallets_disponibles_service import PalletsDisponiblesService
+        service = PalletsDisponiblesService(username=username, password=password)
+        return {"productos": service.get_productos_2026()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pallets-disponibles/proveedores")
+async def get_proveedores_compras(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Obtiene proveedores (productores) del módulo de compras.
+    """
+    try:
+        from backend.services.pallets_disponibles_service import PalletsDisponiblesService
+        service = PalletsDisponiblesService(username=username, password=password)
+        return {"proveedores": service.get_proveedores_compras()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

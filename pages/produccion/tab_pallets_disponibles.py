@@ -11,7 +11,9 @@ from .shared import API_URL
 
 
 def fetch_pallets_disponibles(username: str, password: str, 
-                               planta: str = None) -> Dict[str, Any]:
+                               planta: str = None,
+                               producto_id: int = None,
+                               proveedor_id: int = None) -> Dict[str, Any]:
     """Obtiene pallets disponibles del backend."""
     params = {
         "username": username,
@@ -19,11 +21,39 @@ def fetch_pallets_disponibles(username: str, password: str,
     }
     if planta and planta != "Todas":
         params["planta"] = planta
+    if producto_id:
+        params["producto_id"] = producto_id
+    if proveedor_id:
+        params["proveedor_id"] = proveedor_id
     
     response = httpx.get(f"{API_URL}/api/v1/produccion/pallets-disponibles",
                          params=params, timeout=120.0)
     response.raise_for_status()
     return response.json()
+
+
+def fetch_productos_2026(username: str, password: str) -> List[Dict]:
+    """Obtiene productos del año 2026."""
+    params = {
+        "username": username,
+        "password": password,
+    }
+    response = httpx.get(f"{API_URL}/api/v1/produccion/pallets-disponibles/productos-2026",
+                         params=params, timeout=60.0)
+    response.raise_for_status()
+    return response.json().get('productos', [])
+
+
+def fetch_proveedores_compras(username: str, password: str) -> List[Dict]:
+    """Obtiene proveedores del módulo de compras."""
+    params = {
+        "username": username,
+        "password": password,
+    }
+    response = httpx.get(f"{API_URL}/api/v1/produccion/pallets-disponibles/proveedores",
+                         params=params, timeout=60.0)
+    response.raise_for_status()
+    return response.json().get('proveedores', [])
 
 
 def render(username: str = None, password: str = None):
@@ -46,7 +76,7 @@ def render(username: str = None, password: str = None):
     """, unsafe_allow_html=True)
     
     # === FILTROS ===
-    col1, col2, col3 = st.columns([2, 2, 1])
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
     with col1:
         planta_sel = st.selectbox(
             "🏭 Planta",
@@ -54,14 +84,42 @@ def render(username: str = None, password: str = None):
             key="pallets_disp_planta"
         )
     with col2:
-        # Producto se carga dinámicamente después de la primera búsqueda
-        productos_prev = st.session_state.get('pallets_disp_productos', ["Todos"])
+        # Cargar productos 2026 si no están en session
+        if 'pallets_disp_productos_2026' not in st.session_state:
+            try:
+                with st.spinner("📅 Cargando productos 2026..."):
+                    prods_2026 = fetch_productos_2026(username, password)
+                    st.session_state['pallets_disp_productos_2026'] = prods_2026
+            except Exception as e:
+                st.error(f"Error al cargar productos: {str(e)}")
+                st.session_state['pallets_disp_productos_2026'] = []
+        
+        productos_2026 = st.session_state.get('pallets_disp_productos_2026', [])
+        opciones_producto = ["Todos"] + [p['nombre'] for p in productos_2026]
         producto_sel = st.selectbox(
-            "📦 Producto",
-            productos_prev,
+            "📦 Producto (Año 2026)",
+            opciones_producto,
             key="pallets_disp_producto"
         )
     with col3:
+        # Cargar proveedores si no están en session
+        if 'pallets_disp_proveedores' not in st.session_state:
+            try:
+                with st.spinner("👥 Cargando proveedores..."):
+                    provs = fetch_proveedores_compras(username, password)
+                    st.session_state['pallets_disp_proveedores'] = provs
+            except Exception as e:
+                st.error(f"Error al cargar proveedores: {str(e)}")
+                st.session_state['pallets_disp_proveedores'] = []
+        
+        proveedores = st.session_state.get('pallets_disp_proveedores', [])
+        opciones_proveedor = ["Todos"] + [p['nombre'] for p in proveedores]
+        proveedor_sel = st.selectbox(
+            "🥑 Productor (Frescos)",
+            opciones_proveedor,
+            key="pallets_disp_proveedor"
+        )
+    with col4:
         st.markdown("<br>", unsafe_allow_html=True)
         btn_buscar = st.button("🔍 Buscar Pallets", type="primary", 
                                 use_container_width=True, key="pallets_disp_buscar")
@@ -72,8 +130,25 @@ def render(username: str = None, password: str = None):
     if btn_buscar:
         st.cache_data.clear()
         try:
+            # Obtener IDs de producto y proveedor seleccionados
+            productos_2026 = st.session_state.get('pallets_disp_productos_2026', [])
+            producto_id = None
+            if producto_sel and producto_sel != "Todos":
+                for p in productos_2026:
+                    if p['nombre'] == producto_sel:
+                        producto_id = p['id']
+                        break
+            
+            proveedores = st.session_state.get('pallets_disp_proveedores', [])
+            proveedor_id = None
+            if proveedor_sel and proveedor_sel != "Todos":
+                for prov in proveedores:
+                    if prov['nombre'] == proveedor_sel:
+                        proveedor_id = prov['id']
+                        break
+            
             with st.spinner("Buscando pallets disponibles..."):
-                data = fetch_pallets_disponibles(username, password, planta_sel)
+                data = fetch_pallets_disponibles(username, password, planta_sel, producto_id, proveedor_id)
                 st.session_state['pallets_disp_data'] = data
                 st.session_state['pallets_disp_loaded'] = True
         except Exception as e:
@@ -85,20 +160,9 @@ def render(username: str = None, password: str = None):
         return
     
     data = st.session_state.get('pallets_disp_data', {})
-    pallets_raw = data.get('pallets', [])
+    pallets = data.get('pallets', [])
     
-    # Extraer productos únicos para el dropdown
-    productos_unicos = sorted(set(p.get('producto', '') for p in pallets_raw if p.get('producto')))
-    st.session_state['pallets_disp_productos'] = ["Todos"] + productos_unicos
-    
-    # Filtrar por producto seleccionado
-    producto_sel = st.session_state.get('pallets_disp_producto', 'Todos')
-    if producto_sel and producto_sel != "Todos":
-        pallets = [p for p in pallets_raw if p.get('producto', '') == producto_sel]
-    else:
-        pallets = pallets_raw
-    
-    # Recalcular estadísticas según filtro
+    # Recalcular estadísticas con los pallets filtrados
     stats = {
         'total_pallets': len(pallets),
         'total_kg': sum(p.get('cantidad_kg', 0) for p in pallets),
@@ -217,7 +281,9 @@ def render(username: str = None, password: str = None):
                 'Ubicación': p.get('ubicacion', ''),
                 'Tipo': p.get('tipo', ''),
                 'Planta': p.get('planta', ''),
+                'Fecha Creación': p.get('fecha_creacion', ''),
                 'Fecha Ingreso': p.get('fecha_ingreso', ''),
+                'Productor': p.get('proveedor', ''),
                 'Ver en Odoo': odoo_link
             })
         
@@ -237,7 +303,9 @@ def render(username: str = None, password: str = None):
                 "Ubicación": st.column_config.TextColumn("📍 Ubicación", width="medium"),
                 "Tipo": st.column_config.TextColumn("🔄 Tipo", width="small"),
                 "Planta": st.column_config.TextColumn("🏭 Planta", width="small"),
+                "Fecha Creación": st.column_config.TextColumn("📅 Creación", width="small"),
                 "Fecha Ingreso": st.column_config.TextColumn("📅 Ingreso", width="small"),
+                "Productor": st.column_config.TextColumn("🥑 Productor", width="medium"),
                 "Ver en Odoo": st.column_config.LinkColumn("🔗 Odoo", width="small", display_text="Abrir"),
             }
         )
