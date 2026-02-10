@@ -87,7 +87,7 @@ def render(username: str = None, password: str = None):
         # Cargar productos 2026 si no están en session
         if 'pallets_disp_productos_2026' not in st.session_state:
             try:
-                with st.spinner("📅 Cargando productos 2026..."):
+                with st.spinner("📅 Cargando productos..."):
                     prods_2026 = fetch_productos_2026(username, password)
                     st.session_state['pallets_disp_productos_2026'] = prods_2026
             except Exception as e:
@@ -97,7 +97,7 @@ def render(username: str = None, password: str = None):
         productos_2026 = st.session_state.get('pallets_disp_productos_2026', [])
         opciones_producto = ["Todos"] + [p['nombre'] for p in productos_2026]
         producto_sel = st.selectbox(
-            "📦 Producto (Año 2026)",
+            "📦 Producto",
             opciones_producto,
             key="pallets_disp_producto"
         )

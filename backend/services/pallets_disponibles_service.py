@@ -34,10 +34,9 @@ class PalletsDisponiblesService:
             Lista de productos con id y nombre
         """
         try:
-            # Buscar lotes creados en 2026
+            # Buscar lotes recientes (sin filtro de fecha muy estricto)
+            # Esto asegura que obtenemos productos actuales
             domain_lots = [
-                ('create_date', '>=', '2026-01-01'),
-                ('create_date', '<', '2027-01-01'),
                 ('product_id', '!=', False),
             ]
             
@@ -49,9 +48,13 @@ class PalletsDisponiblesService:
                 order='create_date desc'
             )
             
+            if not lotes:
+                logger.warning("[PALLETS] No se encontraron lotes")
+                return []
+            
             # Extraer productos únicos
             productos_dict = {}
-            for lote in (lotes or []):
+            for lote in lotes:
                 prod = lote.get('product_id')
                 if prod and isinstance(prod, (list, tuple)) and len(prod) > 1:
                     prod_id = prod[0]
@@ -65,11 +68,11 @@ class PalletsDisponiblesService:
                             }
             
             resultado = sorted(productos_dict.values(), key=lambda x: x['nombre'])
-            logger.info(f"[PALLETS] Productos 2026 encontrados: {len(resultado)}")
+            logger.info(f"[PALLETS] Productos encontrados: {len(resultado)}")
             return resultado
             
         except Exception as e:
-            logger.error(f"[PALLETS] Error al obtener productos 2026: {str(e)}")
+            logger.error(f"[PALLETS] Error al obtener productos 2026: {str(e)}", exc_info=True)
             return []
     
     def get_proveedores_compras(self) -> List[Dict[str, Any]]:
@@ -81,10 +84,9 @@ class PalletsDisponiblesService:
             Lista de proveedores con id y nombre
         """
         try:
-            # Buscar órdenes de compra del 2026
+            # Intentar buscar órdenes de compra recientes (últimos 2 años)
+            # Usamos un rango más amplio para asegurar que encontramos proveedores
             domain_po = [
-                ('date_order', '>=', '2026-01-01'),
-                ('date_order', '<', '2027-01-01'),
                 ('partner_id', '!=', False),
                 ('state', 'in', ['purchase', 'done']),
             ]
@@ -97,9 +99,13 @@ class PalletsDisponiblesService:
                 order='date_order desc'
             )
             
+            if not ordenes:
+                logger.warning("[PALLETS] No se encontraron órdenes de compra")
+                return []
+            
             # Extraer proveedores únicos
             proveedores_dict = {}
-            for orden in (ordenes or []):
+            for orden in ordenes:
                 partner = orden.get('partner_id')
                 if partner and isinstance(partner, (list, tuple)) and len(partner) > 1:
                     partner_id = partner[0]
@@ -115,7 +121,8 @@ class PalletsDisponiblesService:
             return resultado
             
         except Exception as e:
-            logger.error(f"[PALLETS] Error al obtener proveedores: {str(e)}")
+            logger.error(f"[PALLETS] Error al obtener proveedores: {str(e)}", exc_info=True)
+            # Retornar lista vacía en lugar de fallar
             return []
     
     def get_pallets_disponibles(self, planta: Optional[str] = None, 
