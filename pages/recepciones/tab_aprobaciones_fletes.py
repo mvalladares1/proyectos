@@ -1117,6 +1117,10 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
             if f'selected_{key_proveedor}' not in st.session_state:
                 st.session_state[f'selected_{key_proveedor}'] = set()
             
+            # Inicializar contador de versión (para forzar recreación de checkboxes)
+            if f'checkbox_version_{key_proveedor}' not in st.session_state:
+                st.session_state[f'checkbox_version_{key_proveedor}'] = 0
+            
             # Checkbox "Seleccionar todas"
             col_check, col_info = st.columns([1, 3])
             with col_check:
@@ -1133,10 +1137,12 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 if select_all and not todas_seleccionadas:
                     # Usuario marcó "seleccionar todas"
                     st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
+                    st.session_state[f'checkbox_version_{key_proveedor}'] += 1  # Incrementar versión
                     st.rerun()
                 elif not select_all and todas_seleccionadas:
                     # Usuario desmarcó "seleccionar todas"
                     st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state[f'checkbox_version_{key_proveedor}'] += 1  # Incrementar versión
                     st.rerun()
             
             with col_info:
@@ -1179,6 +1185,9 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
             
             st.markdown("---")
             
+            # Obtener versión actual de checkboxes
+            checkbox_version = st.session_state.get(f'checkbox_version_{key_proveedor}', 0)
+            
             # Mostrar tabla con checkboxes
             for idx, row in df_aprobables.iterrows():
                 col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
@@ -1186,20 +1195,15 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 with col_sel:
                     is_selected = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
                     
-                    # Callback para manejar el cambio del checkbox
-                    def toggle_selection(oc_id=row['oc_id'], key_prov=key_proveedor):
-                        if oc_id in st.session_state[f'selected_{key_prov}']:
-                            st.session_state[f'selected_{key_prov}'].discard(oc_id)
-                        else:
-                            st.session_state[f'selected_{key_prov}'].add(oc_id)
-                    
-                    st.checkbox(
+                    # Usar versión en la key para forzar recreación cuando cambia
+                    if st.checkbox(
                         "",
                         value=is_selected,
-                        key=f"check_{key_proveedor}_{row['oc_id']}",
-                        on_change=toggle_selection,
-                        args=(row['oc_id'], key_proveedor)
-                    )
+                        key=f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
+                    ):
+                        st.session_state[f'selected_{key_proveedor}'].add(row['oc_id'])
+                    else:
+                        st.session_state[f'selected_{key_proveedor}'].discard(row['oc_id'])
                 
                 with col_oc:
                     st.markdown(f"**{row['oc_name']}**")
