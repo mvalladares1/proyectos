@@ -30,6 +30,7 @@ from automatizaciones import tab_crear
 from automatizaciones import tab_monitor
 from automatizaciones import tab_movimientos
 from automatizaciones import tab_monitor_movimientos
+from automatizaciones import tab_procesos
 # from automatizaciones import tab_revertir_consumo  # OCULTO TEMPORALMENTE
 
 # Requerir autenticación
@@ -101,6 +102,7 @@ if 'last_order_result' in st.session_state and st.session_state.last_order_resul
 _perm_crear = tiene_acceso_pagina("automatizaciones", "crear_orden")
 _perm_monitor = tiene_acceso_pagina("automatizaciones", "monitor_ordenes")
 _perm_movimientos = tiene_acceso_pagina("automatizaciones", "movimientos")
+_perm_procesos = tiene_acceso_pagina("automatizaciones", "procesos")
 
 # Cargar túneles (para ambos tabs)
 tuneles = shared.get_tuneles(username, password)
@@ -125,6 +127,10 @@ if _perm_movimientos:
     tabs_disponibles.append("movimientos")
     tabs_nombres.append("📊 Monitor Mov.")
     tabs_disponibles.append("monitor_mov")
+
+if _perm_procesos:
+    tabs_nombres.append("⚙️ Automatización Procesos")
+    tabs_disponibles.append("procesos")
 
 if not tabs_disponibles:
     st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Automatizaciones.")
@@ -152,4 +158,10 @@ if "movimientos" in tabs_disponibles:
 if "monitor_mov" in tabs_disponibles:
     with tabs_ui[tab_index]:
         tab_monitor_movimientos.render(username, password)
+    tab_index += 1
+
+if "procesos" in tabs_disponibles:
+    with tabs_ui[tab_index]:
+        tab_procesos.render(username, password)
+    tab_index += 1
     tab_index += 1

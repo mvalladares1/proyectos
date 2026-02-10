@@ -776,10 +776,9 @@ def render(username: str, password: str):
                 "Albarán", "Fecha", "Productor", "Tipo Fruta", "Origen", "Guía Despacho",
                 "Bandejas", "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Calidad"
             ]
-            # Ajustar Kg Recepcionados para excluir las Bandejas (mostramos Kg fruta)
-            # Convertir a numérico, restar bandejas y formatear
+            # Convertir a numérico y formatear (NO restar bandejas, el servicio ya excluye bandejas del kg_total)
             df_mostrar["Bandejas"] = pd.to_numeric(df_mostrar["Bandejas"], errors='coerce').fillna(0.0)
-            df_mostrar["Kg Recepcionados"] = pd.to_numeric(df_mostrar["Kg Recepcionados"], errors='coerce').fillna(0.0) - df_mostrar["Bandejas"]
+            df_mostrar["Kg Recepcionados"] = pd.to_numeric(df_mostrar["Kg Recepcionados"], errors='coerce').fillna(0.0)
             # Formatear fecha a DD/MM/AAAA
             df_mostrar["Fecha"] = df_mostrar["Fecha"].apply(fmt_fecha)
             # Formatear números con formato chileno

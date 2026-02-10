@@ -53,6 +53,42 @@ class RealProyectadoCalculator:
         self.odoo = odoo_client
         self._cuenta_iva_id = None
     
+    def _fecha_a_periodo(self, fecha: str, periodos_lista: List[str] = None) -> str:
+        """
+        Convierte una fecha a período (mes o semana) según el formato de periodos_lista.
+        
+        Args:
+            fecha: Fecha en formato YYYY-MM-DD
+            periodos_lista: Lista de períodos (ej: ['2026-01', ...] o ['2026-W01', ...])
+        
+        Returns:
+            Período en formato YYYY-MM o YYYY-Www
+        """
+        if not fecha:
+            return ''
+        
+        # Por defecto, retornar mes
+        if not periodos_lista or len(periodos_lista) == 0:
+            return fecha[:7]  # YYYY-MM
+        
+        # Detectar si es vista semanal
+        primer_periodo = str(periodos_lista[0])
+        es_semanal = 'W' in primer_periodo or '-W' in primer_periodo
+        
+        if es_semanal:
+            # Convertir fecha a semana ISO
+            try:
+                fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                isocalendar = fecha_dt.isocalendar()
+                year = isocalendar[0]
+                week = isocalendar[1]
+                return f"{year}-W{week:02d}"
+            except Exception as e:
+                print(f"[RealProyectado] Error convirtiendo fecha a semana: {e}")
+                return fecha[:7]  # Fallback a mes
+        else:
+            return fecha[:7]  # YYYY-MM
+    
     def _get_cuenta_iva_id(self) -> int:
         """Obtiene el ID de la cuenta IVA Exportador."""
         if self._cuenta_iva_id is None:
@@ -109,7 +145,7 @@ class RealProyectadoCalculator:
                 if not fecha:
                     continue
                     
-                mes = fecha[:7]
+                periodo = self._fecha_a_periodo(fecha, meses_lista)
                 
                 amount_total = f.get('amount_total', 0) or 0
                 amount_residual = f.get('amount_residual', 0) or 0
@@ -130,8 +166,8 @@ class RealProyectadoCalculator:
                 real_total += pagado
                 proyectado_total += pendiente
                 
-                real_por_mes[mes] += pagado
-                proyectado_por_mes[mes] += pendiente
+                real_por_mes[periodo] += pagado
+                proyectado_por_mes[periodo] += pendiente
                 
                 # Agrupar por estado de pago (Nivel 2)
                 estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
@@ -157,9 +193,9 @@ class RealProyectadoCalculator:
                 estado['monto'] += pagado + pendiente
                 estado['real'] += pagado
                 estado['proyectado'] += pendiente
-                estado['montos_por_mes'][mes] += pagado + pendiente
-                estado['real_por_mes'][mes] += pagado
-                estado['proyectado_por_mes'][mes] += pendiente
+                estado['montos_por_mes'][periodo] += pagado + pendiente
+                estado['real_por_mes'][periodo] += pagado
+                estado['proyectado_por_mes'][periodo] += pendiente
                 
                 # Agrupar por proveedor (Nivel 3)
                 if partner_name not in estado['etiquetas']:
@@ -178,9 +214,9 @@ class RealProyectadoCalculator:
                 proveedor['monto'] += pagado + pendiente
                 proveedor['real'] += pagado
                 proveedor['proyectado'] += pendiente
-                proveedor['montos_por_mes'][mes] += pagado + pendiente
-                proveedor['real_por_mes'][mes] += pagado
-                proveedor['proyectado_por_mes'][mes] += pendiente
+                proveedor['montos_por_mes'][periodo] += pagado + pendiente
+                proveedor['real_por_mes'][periodo] += pagado
+                proveedor['proyectado_por_mes'][periodo] += pendiente
                 
                 # Guardar factura para drill-down
                 if len(proveedor['facturas']) < 50:
@@ -195,11 +231,11 @@ class RealProyectadoCalculator:
                         'payment_state': payment_state
                     })
             
-            # Calcular montos_por_mes como suma de real + proyectado por mes
-            # Esto es lo que se mostrará en las columnas mensuales del concepto principal
+            # Calcular montos_por_mes como suma de real + proyectado por período
+            # Esto es lo que se mostrará en las columnas mensuales/semanales del concepto principal
             montos_por_mes_total = defaultdict(float)
-            for mes in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
-                montos_por_mes_total[mes] = real_por_mes.get(mes, 0) + proyectado_por_mes.get(mes, 0)
+            for periodo in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
+                montos_por_mes_total[periodo] = real_por_mes.get(periodo, 0) + proyectado_por_mes.get(periodo, 0)
             
             # Convertir defaultdicts a dicts normales y ordenar
             cuentas_resultado = []
@@ -313,7 +349,7 @@ class RealProyectadoCalculator:
                 if not fecha:
                     continue
                     
-                mes = fecha[:7]
+                periodo = self._fecha_a_periodo(fecha, meses_lista)
                 
                 # Para IVA Exportador, los CRÉDITOS son devoluciones recibidas
                 credit = m.get('credit', 0) or 0
@@ -322,15 +358,15 @@ class RealProyectadoCalculator:
                     continue
                 
                 real_total += credit
-                real_por_mes[mes] += credit
+                real_por_mes[periodo] += credit
                 
                 # Obtener nombre del documento
                 move_data = m.get('move_id', [0, ''])
                 move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
                 ref = m.get('ref', '')
                 
-                devoluciones_por_mes[mes]['monto'] += credit
-                devoluciones_por_mes[mes]['documentos'].append({
+                devoluciones_por_mes[periodo]['monto'] += credit
+                devoluciones_por_mes[periodo]['documentos'].append({
                     'name': move_name,
                     'ref': ref,
                     'credit': credit,
@@ -340,19 +376,22 @@ class RealProyectadoCalculator:
             # Construir estructura de cuentas (por mes de devolución)
             cuentas_resultado = []
             
-            # Acumular montos por mes para el concepto principal
+            # Acumular montos por período para el concepto principal
             total_por_mes = defaultdict(float)
             
-            for mes, data in sorted(devoluciones_por_mes.items()):
+            for periodo, data in sorted(devoluciones_por_mes.items()):
                 # Acumular para el total del concepto
-                total_por_mes[mes] += data['monto']
+                total_por_mes[periodo] += data['monto']
                 
-                # Formatear nombre del mes
+                # Formatear nombre del período
                 try:
-                    fecha_mes = datetime.strptime(f"{mes}-01", '%Y-%m-%d')
-                    nombre_mes = fecha_mes.strftime('%B %Y').title()
+                    if 'W' in periodo:
+                        nombre_periodo = f"Semana {periodo}"
+                    else:
+                        fecha_mes = datetime.strptime(f"{periodo}-01", '%Y-%m-%d')
+                        nombre_periodo = fecha_mes.strftime('%B %Y').title()
                 except:
-                    nombre_mes = mes
+                    nombre_periodo = periodo
                 
                 etiquetas_list = []
                 for doc in data['documentos']:
@@ -361,18 +400,18 @@ class RealProyectadoCalculator:
                         'monto': doc['credit'],
                         'real': doc['credit'],
                         'proyectado': 0,
-                        'montos_por_mes': {mes: doc['credit']},
+                        'montos_por_mes': {periodo: doc['credit']},
                         'ref': doc['ref']
                     })
                 
                 cuentas_resultado.append({
-                    'codigo': f'iva_{mes}',
-                    'nombre': f"💰 Devoluciones {nombre_mes}",
+                    'codigo': f'iva_{periodo}',
+                    'nombre': f"💰 Devoluciones {nombre_periodo}",
                     'monto': data['monto'],
                     'real': data['monto'],
                     'proyectado': 0,
-                    'montos_por_mes': {mes: data['monto']},
-                    'real_por_mes': {mes: data['monto']},
+                    'montos_por_mes': {periodo: data['monto']},
+                    'real_por_mes': {periodo: data['monto']},
                     'proyectado_por_mes': {},
                     'etiquetas': etiquetas_list,
                     'es_cuenta_iva': True
@@ -447,7 +486,7 @@ class RealProyectadoCalculator:
                 if not fecha:
                     continue
                     
-                mes = fecha[:7]
+                periodo = self._fecha_a_periodo(fecha, meses_lista)
                 amount_total = f.get('amount_total', 0) or 0
                 amount_residual = f.get('amount_residual', 0) or 0
                 payment_state = f.get('payment_state', 'not_paid')
@@ -459,8 +498,8 @@ class RealProyectadoCalculator:
                 
                 real_total += cobrado
                 proyectado_total += pendiente
-                real_por_mes[mes] += cobrado
-                proyectado_por_mes[mes] += pendiente
+                real_por_mes[periodo] += cobrado
+                proyectado_por_mes[periodo] += pendiente
                 
                 # Agrupar por estado de pago (Nivel 2)
                 estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
@@ -485,9 +524,9 @@ class RealProyectadoCalculator:
                 estado['monto'] += cobrado + pendiente
                 estado['real'] += cobrado
                 estado['proyectado'] += pendiente
-                estado['montos_por_mes'][mes] += cobrado + pendiente
-                estado['real_por_mes'][mes] += cobrado
-                estado['proyectado_por_mes'][mes] += pendiente
+                estado['montos_por_mes'][periodo] += cobrado + pendiente
+                estado['real_por_mes'][periodo] += cobrado
+                estado['proyectado_por_mes'][periodo] += pendiente
                 
                 # Agrupar por cliente (Nivel 3)
                 if partner_name not in estado['etiquetas']:
@@ -506,9 +545,9 @@ class RealProyectadoCalculator:
                 cliente['monto'] += cobrado + pendiente
                 cliente['real'] += cobrado
                 cliente['proyectado'] += pendiente
-                cliente['montos_por_mes'][mes] += cobrado + pendiente
-                cliente['real_por_mes'][mes] += cobrado
-                cliente['proyectado_por_mes'][mes] += pendiente
+                cliente['montos_por_mes'][periodo] += cobrado + pendiente
+                cliente['real_por_mes'][periodo] += cobrado
+                cliente['proyectado_por_mes'][periodo] += pendiente
                 
                 # Guardar factura para drill-down
                 if len(cliente['facturas']) < 50:
@@ -523,10 +562,10 @@ class RealProyectadoCalculator:
                         'payment_state': payment_state
                     })
             
-            # Calcular montos_por_mes como suma de real + proyectado por mes
+            # Calcular montos_por_mes como suma de real + proyectado por período
             montos_por_mes_total = defaultdict(float)
-            for mes in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
-                montos_por_mes_total[mes] = real_por_mes.get(mes, 0) + proyectado_por_mes.get(mes, 0)
+            for periodo in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
+                montos_por_mes_total[periodo] = real_por_mes.get(periodo, 0) + proyectado_por_mes.get(periodo, 0)
             
             # Convertir defaultdicts a dicts normales y ordenar
             cuentas_resultado = []

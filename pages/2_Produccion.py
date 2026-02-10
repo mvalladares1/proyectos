@@ -20,6 +20,7 @@ from produccion import tab_reporteria
 from produccion import tab_detalle
 from produccion import tab_clasificacion
 from produccion import tab_etiquetas
+from produccion import tab_automatizacion_of
 
 # Configuración de página
 st.set_page_config(page_title="Producción", page_icon="🏭", layout="wide")
@@ -49,6 +50,7 @@ st.caption("Monitorea rendimientos productivos y detalle de órdenes de fabricac
 _perm_reporteria = tiene_acceso_pagina("produccion", "reporteria_general")
 _perm_detalle = tiene_acceso_pagina("produccion", "detalle_of")
 _perm_clasificacion = tiene_acceso_pagina("produccion", "clasificacion")
+_perm_automatizacion = tiene_acceso_pagina("produccion", "automatizacion_of")
 
 # === CONSTRUIR TABS DINÁMICAMENTE SEGÚN PERMISOS ===
 tabs_disponibles = []
@@ -69,6 +71,10 @@ if _perm_clasificacion:
 # Etiquetas siempre disponible para usuarios de producción
 tabs_nombres.append("🏷️ Etiquetas")
 tabs_disponibles.append("etiquetas")
+
+if _perm_automatizacion:
+    tabs_nombres.append("⚙️ Automatización OF")
+    tabs_disponibles.append("automatizacion")
 
 if not tabs_disponibles:
     st.error("🚫 **Acceso Restringido** - No tienes permisos para acceder a ninguna sección de Producción.")
@@ -96,4 +102,9 @@ if "clasificacion" in tabs_disponibles:
 if "etiquetas" in tabs_disponibles:
     with tabs_ui[tab_index]:
         tab_etiquetas.render(username, password)
+    tab_index += 1
+
+if "automatizacion" in tabs_disponibles:
+    with tabs_ui[tab_index]:
+        tab_automatizacion_of.render(username, password)
     tab_index += 1
