@@ -450,12 +450,16 @@ def render(username: str = None, password: str = None):
                 fin_dt = orden.get('_fin_dt')
                 hora_ini = inicio_dt.strftime("%d/%m %H:%M") if inicio_dt else '-'
                 hora_fin = fin_dt.strftime("%d/%m %H:%M") if fin_dt else '-'
+                duracion_str = ""
+                if inicio_dt and fin_dt:
+                    dur_h = (fin_dt - inicio_dt).total_seconds() / 3600
+                    duracion_str = f"{dur_h:.1f}h"
 
                 em_o = emoji_kg_hora(kg_h)
 
                 st.markdown(f"**{em_o} {mo_name}** — {estado} — 🍓 {especie_o}")
 
-                oc1, oc2, oc3, oc4, oc5, oc6 = st.columns(6)
+                oc1, oc2, oc3, oc4, oc5 = st.columns([1.2, 1.2, 1, 2, 1])
                 with oc1:
                     st.metric("⚡ KG/Hora", f"{kg_h:,.0f}")
                 with oc2:
@@ -463,10 +467,8 @@ def render(username: str = None, password: str = None):
                 with oc3:
                     st.metric("👷 Dotación", f"{int(dot)}")
                 with oc4:
-                    st.metric("🕐 Inicio", hora_ini)
+                    st.metric("🕐 Período", f"{hora_ini} → {hora_fin}", delta=duracion_str if duracion_str else None, delta_color="off")
                 with oc5:
-                    st.metric("🕑 Fin", hora_fin)
-                with oc6:
                     st.metric("📈 Rend.", f"{rend:.1f}%")
 
                 if oi < len(ordenes_sorted) - 1:
