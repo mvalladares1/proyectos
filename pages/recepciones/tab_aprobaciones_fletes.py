@@ -358,25 +358,47 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             if oc_id not in actividades_por_oc:
                 actividades_por_oc[oc_id] = act
         
-        # OPTIMIZACIÓN 3: Obtener mensajes de aprobación en lote
-        todos_mensajes = _models.execute_kw(
+        # OPTIMIZACIÓN 3: Obtener aprobaciones desde studio.approval.entry (fuente real)
+        todas_aprobaciones_entry = _models.execute_kw(
             DB, _uid, password,
-            'mail.message', 'search_read',
+            'studio.approval.entry', 'search_read',
             [[
-                ('model', '=', 'purchase.order'),
                 ('res_id', 'in', oc_ids),
-                ('body', 'ilike', 'Aprobado como')
+                ('rule_id', 'in', [144, 122]),
+                ('approved', '=', True)
             ]],
-            {'fields': ['res_id', 'body', 'author_id', 'date', 'create_date'], 'order': 'date desc'}
+            {'fields': ['res_id', 'user_id', 'rule_id', 'create_date']}
         )
         
-        # Agrupar mensajes por OC
-        mensajes_por_oc = {}
-        for msg in todos_mensajes:
-            oc_id = msg['res_id']
-            if oc_id not in mensajes_por_oc:
-                mensajes_por_oc[oc_id] = []
-            mensajes_por_oc[oc_id].append(msg)
+        # Obtener nombres de reglas para mostrar el rol
+        reglas_aprobacion = {}
+        try:
+            reglas = _models.execute_kw(
+                DB, _uid, password,
+                'studio.approval.rule', 'search_read',
+                [[('id', 'in', [144, 122])]],
+                {'fields': ['id', 'name']}
+            )
+            reglas_aprobacion = {r['id']: r['name'] for r in reglas}
+        except:
+            reglas_aprobacion = {144: 'Aprobador 1', 122: 'Aprobador 2'}
+        
+        # Agrupar aprobaciones por OC
+        aprobaciones_por_oc = {}
+        for entry in todas_aprobaciones_entry:
+            oc_id = entry['res_id']
+            if oc_id not in aprobaciones_por_oc:
+                aprobaciones_por_oc[oc_id] = []
+            
+            nombre_usuario = entry['user_id'][1] if entry.get('user_id') and isinstance(entry['user_id'], (list, tuple)) else 'Desconocido'
+            rule_id = entry['rule_id'][0] if isinstance(entry['rule_id'], (list, tuple)) else entry['rule_id']
+            rol = reglas_aprobacion.get(rule_id, 'Aprobador')
+            
+            aprobaciones_por_oc[oc_id].append({
+                'usuario': nombre_usuario,
+                'rol': rol,
+                'fecha': entry.get('create_date')
+            })
         
         # Procesar cada OC con los datos pre-cargados
         for oc in ocs_fletes:
@@ -393,32 +415,8 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             
             oc['costo_lineas'] = sum(linea.get('price_subtotal', 0) for linea in lineas)
             
-            # Aprobaciones desde mensajes
-            mensajes_oc = mensajes_por_oc.get(oc_id, [])
-            aprobaciones = []
-            for msg in mensajes_oc:
-                autor = msg.get('author_id')
-                if autor and isinstance(autor, (list, tuple)):
-                    nombre_usuario = autor[1]
-                else:
-                    nombre_usuario = 'Desconocido'
-                
-                body = msg.get('body', '')
-                rol = 'Aprobador'
-                if 'Aprobado como' in body:
-                    try:
-                        import re
-                        match = re.search(r'Aprobado como ([^<]+)', body)
-                        if match:
-                            rol = match.group(1).strip()
-                    except:
-                        pass
-                
-                aprobaciones.append({
-                    'usuario': nombre_usuario,
-                    'rol': rol,
-                    'fecha': msg.get('date') or msg.get('create_date')
-                })
+            # Aprobaciones desde studio.approval.entry
+            aprobaciones = aprobaciones_por_oc.get(oc_id, [])
             
             oc['aprobaciones'] = aprobaciones
             oc['num_aprobaciones'] = len(aprobaciones)
@@ -445,47 +443,45 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
 
 def obtener_aprobaciones_oc(_models, _uid, password, oc_id):
     """
-    Obtener las aprobaciones de una OC leyendo el chatter (mail.message).
-    Busca mensajes que contengan "Aprobado como" para detectar aprobaciones.
+    Obtener las aprobaciones de una OC desde studio.approval.entry.
+    Lee las entradas de aprobación reales en vez del chatter.
     """
     try:
-        # Buscar mensajes en el chatter de la OC
-        mensajes = _models.execute_kw(
+        # Buscar aprobaciones reales en studio.approval.entry
+        entries = _models.execute_kw(
             DB, _uid, password,
-            'mail.message', 'search_read',
+            'studio.approval.entry', 'search_read',
             [[
-                ('model', '=', 'purchase.order'),
-                ('res_id', '=', oc_id),
-                ('body', 'ilike', 'Aprobado como')
+                ('res_id', '=', int(oc_id)),
+                ('rule_id', 'in', [144, 122]),
+                ('approved', '=', True)
             ]],
-            {'fields': ['body', 'author_id', 'date', 'create_date'], 'order': 'date desc'}
+            {'fields': ['user_id', 'rule_id', 'create_date']}
         )
         
+        # Obtener nombres de reglas
+        reglas_aprobacion = {}
+        try:
+            reglas = _models.execute_kw(
+                DB, _uid, password,
+                'studio.approval.rule', 'search_read',
+                [[('id', 'in', [144, 122])]],
+                {'fields': ['id', 'name']}
+            )
+            reglas_aprobacion = {r['id']: r['name'] for r in reglas}
+        except:
+            reglas_aprobacion = {144: 'Aprobador 1', 122: 'Aprobador 2'}
+        
         aprobaciones = []
-        for msg in mensajes:
-            autor = msg.get('author_id')
-            if autor and isinstance(autor, (list, tuple)):
-                nombre_usuario = autor[1]
-            else:
-                nombre_usuario = 'Desconocido'
-            
-            # Extraer el rol de aprobación del body (ej: "Aprobado como Aprobaciones / Finanzas")
-            body = msg.get('body', '')
-            rol = 'Aprobador'
-            if 'Aprobado como' in body:
-                try:
-                    # El formato típico es: "Aprobado como Rol / SubRol"
-                    import re
-                    match = re.search(r'Aprobado como ([^<]+)', body)
-                    if match:
-                        rol = match.group(1).strip()
-                except:
-                    pass
+        for entry in entries:
+            nombre_usuario = entry['user_id'][1] if entry.get('user_id') and isinstance(entry['user_id'], (list, tuple)) else 'Desconocido'
+            rule_id = entry['rule_id'][0] if isinstance(entry['rule_id'], (list, tuple)) else entry['rule_id']
+            rol = reglas_aprobacion.get(rule_id, 'Aprobador')
             
             aprobaciones.append({
                 'usuario': nombre_usuario,
                 'rol': rol,
-                'fecha': msg.get('date') or msg.get('create_date')
+                'fecha': entry.get('create_date')
             })
         
         return aprobaciones
@@ -1146,22 +1142,29 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
     # Obtener versión actual de checkboxes
     checkbox_version = st.session_state.get(f'checkbox_version_{key_proveedor}', 0)
     
+    # Callback para manejar cambios de checkboxes individuales
+    def on_checkbox_change(oc_id, cb_key):
+        if st.session_state[cb_key]:
+            st.session_state[f'selected_{key_proveedor}'].add(oc_id)
+        else:
+            st.session_state[f'selected_{key_proveedor}'].discard(oc_id)
+    
     # Mostrar tabla con checkboxes
     for idx, row in df_aprobables.iterrows():
         col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
         
         with col_sel:
             is_selected = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
+            cb_key = f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
             
-            # Usar versión en la key para forzar recreación cuando cambia
-            if st.checkbox(
-                "",
+            st.checkbox(
+                f"Sel {row['oc_name']}",
                 value=is_selected,
-                key=f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
-            ):
-                st.session_state[f'selected_{key_proveedor}'].add(row['oc_id'])
-            else:
-                st.session_state[f'selected_{key_proveedor}'].discard(row['oc_id'])
+                key=cb_key,
+                label_visibility="collapsed",
+                on_change=on_checkbox_change,
+                args=(row['oc_id'], cb_key)
+            )
         
         with col_oc:
             st.markdown(f"**{row['oc_name']}**")
