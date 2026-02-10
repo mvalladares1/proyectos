@@ -2,7 +2,7 @@
 Router de API para automatizaciones de túneles estáticos.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
@@ -548,7 +548,8 @@ class ProcesosAgregarPalletsRequest(BaseModel):
 @router.get("/procesos/buscar-orden")
 async def buscar_orden_procesos(
     orden: str,
-    odoo: OdooClient = Depends(get_odoo_client),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
 ):
     """
     Busca una orden de fabricación por nombre o número.
@@ -557,6 +558,7 @@ async def buscar_orden_procesos(
         orden: Nombre completo (MO/RF/00123) o solo número (00123)
     """
     try:
+        odoo = get_odoo_client(username=username, password=password)
         # Construir dominio de búsqueda
         domain = []
         
@@ -605,13 +607,15 @@ async def buscar_orden_procesos(
 @router.post("/procesos/validar-pallets")
 async def validar_pallets_procesos(
     request: ProcesosValidarPalletsRequest,
-    odoo: OdooClient = Depends(get_odoo_client),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
 ):
     """
     Valida pallets para agregar a una orden existente.
     Extrae lote, kg, producto y ubicación de cada pallet.
     """
     try:
+        odoo = get_odoo_client(username=username, password=password)
         resultados = []
         
         for codigo in request.pallets:
@@ -689,7 +693,8 @@ async def validar_pallets_procesos(
 @router.post("/procesos/agregar-pallets")
 async def agregar_pallets_procesos(
     request: ProcesosAgregarPalletsRequest,
-    odoo: OdooClient = Depends(get_odoo_client),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
 ):
     """
     Agrega pallets a una orden existente como componentes o subproductos.
@@ -702,6 +707,8 @@ async def agregar_pallets_procesos(
             UBICACION_VIRTUAL_CONGELADO_ID,
             UBICACION_VIRTUAL_PROCESOS_ID,
         )
+        
+        odoo = get_odoo_client(username=username, password=password)
         
         # Obtener info de la orden
         ordenes = odoo.read('mrp.production', [request.orden_id], [
