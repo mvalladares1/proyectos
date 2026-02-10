@@ -364,10 +364,9 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             'studio.approval.entry', 'search_read',
             [[
                 ('res_id', 'in', oc_ids),
-                ('rule_id', 'in', [144, 122]),
-                ('approved', '=', True)
+                ('rule_id', 'in', [144, 122])
             ]],
-            {'fields': ['res_id', 'user_id', 'rule_id', 'create_date']}
+            {'fields': ['res_id', 'user_id', 'rule_id', 'create_date', 'approved']}
         )
         
         # Obtener nombres de reglas para mostrar el rol
@@ -383,22 +382,30 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
         except:
             reglas_aprobacion = {144: 'Aprobador 1', 122: 'Aprobador 2'}
         
-        # Agrupar aprobaciones por OC
+        # Agrupar aprobaciones y rechazos por OC
         aprobaciones_por_oc = {}
+        rechazos_por_oc = {}
         for entry in todas_aprobaciones_entry:
             oc_id = entry['res_id']
-            if oc_id not in aprobaciones_por_oc:
-                aprobaciones_por_oc[oc_id] = []
             
             nombre_usuario = entry['user_id'][1] if entry.get('user_id') and isinstance(entry['user_id'], (list, tuple)) else 'Desconocido'
             rule_id = entry['rule_id'][0] if isinstance(entry['rule_id'], (list, tuple)) else entry['rule_id']
             rol = reglas_aprobacion.get(rule_id, 'Aprobador')
             
-            aprobaciones_por_oc[oc_id].append({
+            info = {
                 'usuario': nombre_usuario,
                 'rol': rol,
                 'fecha': entry.get('create_date')
-            })
+            }
+            
+            if entry.get('approved'):
+                if oc_id not in aprobaciones_por_oc:
+                    aprobaciones_por_oc[oc_id] = []
+                aprobaciones_por_oc[oc_id].append(info)
+            else:
+                if oc_id not in rechazos_por_oc:
+                    rechazos_por_oc[oc_id] = []
+                rechazos_por_oc[oc_id].append(info)
         
         # Procesar cada OC con los datos pre-cargados
         for oc in ocs_fletes:
@@ -421,6 +428,8 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             oc['aprobaciones'] = aprobaciones
             oc['num_aprobaciones'] = len(aprobaciones)
             oc['aprobadores'] = [a['usuario'] for a in aprobaciones]
+            oc['rechazos'] = rechazos_por_oc.get(oc_id, [])
+            oc['rechazadores'] = [r['usuario'] for r in oc['rechazos']]
             
             # Actividad pendiente
             actividad = actividades_por_oc.get(oc_id)
@@ -938,9 +947,14 @@ def render_tab(username, password):
         
         # Determinar estado de aprobación
         num_aprob = oc.get('num_aprobaciones', 0)
+        rechazos = oc.get('rechazos', [])
         if oc['state'] == 'purchase':
             estado_aprobacion = '🟢 Aprobada'
             estado_aprobacion_num = '2/2'
+        elif rechazos:
+            rechazadores_str = ', '.join(oc.get('rechazadores', []))
+            estado_aprobacion = f'❌ Rechazada ({num_aprob}/2)'
+            estado_aprobacion_num = f'{num_aprob}/2'
         elif num_aprob >= 2:
             estado_aprobacion = '🟢 2/2'
             estado_aprobacion_num = '2/2'
@@ -951,8 +965,15 @@ def render_tab(username, password):
             estado_aprobacion = '🔴 0/2'
             estado_aprobacion_num = '0/2'
         
-        # Formatear aprobadores
-        aprobadores_str = ', '.join(oc.get('aprobadores', [])) if oc.get('aprobadores') else 'Sin aprobaciones'
+        # Formatear aprobadores y rechazadores
+        aprobadores_str = ', '.join(oc.get('aprobadores', [])) if oc.get('aprobadores') else ''
+        rechazadores_str_fmt = ', '.join([f'❌{r}' for r in oc.get('rechazadores', [])]) if oc.get('rechazadores') else ''
+        if aprobadores_str and rechazadores_str_fmt:
+            aprobadores_str = f"{aprobadores_str} | {rechazadores_str_fmt}"
+        elif rechazadores_str_fmt:
+            aprobadores_str = rechazadores_str_fmt
+        if not aprobadores_str:
+            aprobadores_str = 'Sin aprobaciones'
         
         datos_completos.append({
             'actividad_id': oc.get('actividad_id'),
