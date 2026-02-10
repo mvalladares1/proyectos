@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 
 URL = 'https://riofuturo.server98c6e.oerpondemand.net'
 DB = 'riofuturo-master'
-API_LOGISTICA_RUTAS = 'https://riofuturoprocesos.com/api/logistica/rutas'
+API_LOGISTICA_RUTAS = 'https://riofuturoprocesos.com/api/logistica/db/rutas'
 API_LOGISTICA_COSTES = 'https://riofuturoprocesos.com/api/logistica/db/coste-rutas'
 API_MINDICADOR = 'https://mindicador.cl/api'
 
