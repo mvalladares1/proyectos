@@ -9,7 +9,7 @@ import io
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
-from streamlit_echarts import st_echarts
+from streamlit_echarts import st_echarts, JsCode
 from .shared import API_URL
 
 # Ruta al logo
@@ -126,6 +126,19 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     salas_sorted = sorted(todas_salas_set)
     color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
 
+    # Calcular el máximo total por día para determinar umbral de visibilidad de labels
+    max_total_dia = 0
+    for dia in dias_sorted:
+        total_dia = sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted)
+        if total_dia > max_total_dia:
+            max_total_dia = total_dia
+    umbral_label = max_total_dia * 0.05  # Solo mostrar label si el segmento es >= 5% del máximo
+
+    # Formatter JS: mostrar valor formateado con separador de miles, ocultar si es muy pequeño
+    label_formatter = JsCode(
+        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('es-CL');}"
+    ).js_code
+
     series = []
     for sala in salas_sorted:
         data_vals = [round(dia_sala_kg[dia].get(sala, 0)) for dia in dias_sorted]
@@ -136,6 +149,16 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "stack": "total",
             "data": data_vals,
             "barMaxWidth": 50,
+            "label": {
+                "show": True,
+                "position": "inside",
+                "formatter": label_formatter,
+                "fontSize": 10,
+                "fontWeight": "bold",
+                "color": "#fff",
+                "textShadowColor": "rgba(0,0,0,0.7)",
+                "textShadowBlur": 3,
+            },
             "itemStyle": {
                 "color": {
                     "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
