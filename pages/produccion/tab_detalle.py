@@ -24,14 +24,14 @@ from . import tab_pallets_disponibles
 def render(username: str, password: str):
     """Renderiza el contenido del tab Detalle de OF con sub-tabs."""
     
-    # Sub-tabs: Monitor Diario, KG por Línea y Pallets Disponibles
-    sub_tabs = st.tabs(["📊 Monitor Diario", "📈 KG por Línea", "📦 Pallets Disponibles"])
+    # Sub-tabs: Monitor Diario, Rendimiento en Salas y Pallets Disponibles
+    sub_tabs = st.tabs(["📊 Monitor Diario", "🏭 Rendimiento en Salas", "📦 Pallets Disponibles"])
     
     # === SUB-TAB: MONITOR DIARIO ===
     with sub_tabs[0]:
         tab_monitor_diario.render(username, password)
     
-    # === SUB-TAB: KG POR LÍNEA ===
+    # === SUB-TAB: RENDIMIENTO EN SALAS ===
     with sub_tabs[1]:
         tab_kg_por_linea.render(username, password)
     
