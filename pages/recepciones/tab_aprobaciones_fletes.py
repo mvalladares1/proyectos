@@ -1149,17 +1149,22 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
         else:
             st.session_state[f'selected_{key_proveedor}'].discard(oc_id)
     
+    # Pre-inicializar keys de checkboxes ANTES de renderizar
+    # Solo se inicializan si la key no existe aún (key nueva o version nueva)
+    for idx, row in df_aprobables.iterrows():
+        cb_key = f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
+        if cb_key not in st.session_state:
+            st.session_state[cb_key] = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
+    
     # Mostrar tabla con checkboxes
     for idx, row in df_aprobables.iterrows():
         col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
         
         with col_sel:
-            is_selected = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
             cb_key = f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
             
             st.checkbox(
                 f"Sel {row['oc_name']}",
-                value=is_selected,
                 key=cb_key,
                 label_visibility="collapsed",
                 on_change=on_checkbox_change,
