@@ -67,29 +67,35 @@ def render(username: str, password: str):
     # Mostrar info de orden encontrada
     if st.session_state.of_orden_info:
         orden = st.session_state.of_orden_info
+        es_picking = orden.get('modelo') == 'stock.picking'
         with st.container(border=True):
             col1, col2, col3 = st.columns(3)
             col1.metric("📋 Orden", orden['nombre'])
-            col2.metric("📦 Producto", orden['producto'][:30] + "..." if len(orden['producto']) > 30 else orden['producto'])
+            col2.metric("📦 Tipo" if es_picking else "📦 Producto", orden['producto'][:30] + "..." if len(orden['producto']) > 30 else orden['producto'])
             col3.metric("📊 Estado", _get_estado_label(orden['estado']))
             
             col4, col5, col6 = st.columns(3)
-            col4.metric("🔵 Componentes", orden.get('componentes_count', 0))
+            col4.metric("🔵 Componentes" if not es_picking else "🔵 Movimientos", orden.get('componentes_count', 0))
             col5.metric("🟢 Subproductos", orden.get('subproductos_count', 0))
-            col6.metric("⚖️ Kg Total", f"{orden.get('cantidad', 0):,.2f}")
+            col6.metric("⚖️ Kg Total" if not es_picking else "📦 Cantidad Movs", f"{orden.get('cantidad', 0):,.2f}" if not es_picking else orden.get('cantidad', 0))
         
         st.divider()
         
         # === PASO 2: TIPO DE MOVIMIENTO ===
         st.subheader("2️⃣ Tipo de Movimiento")
         
-        tipo_mov = st.radio(
-            "¿Dónde agregar los pallets?",
-            options=["componentes", "subproductos"],
-            format_func=lambda x: "🔵 COMPONENTES (Materia Prima - Entrada)" if x == "componentes" else "🟢 SUBPRODUCTOS (Producto Terminado - Salida)",
-            horizontal=True,
-            key="of_tipo_movimiento"
-        )
+        if es_picking:
+            # Para transferencias solo se agregan movimientos directos
+            tipo_mov = "componentes"
+            st.info("📦 Transferencia interna - Los pallets se agregan como movimientos")
+        else:
+            tipo_mov = st.radio(
+                "¿Dónde agregar los pallets?",
+                options=["componentes", "subproductos"],
+                format_func=lambda x: "🔵 COMPONENTES (Materia Prima - Entrada)" if x == "componentes" else "🟢 SUBPRODUCTOS (Producto Terminado - Salida)",
+                horizontal=True,
+                key="of_tipo_movimiento"
+            )
         
         st.divider()
         
@@ -309,7 +315,8 @@ def _agregar_a_orden(username: str, password: str, orden_id: int, tipo_mov: str)
                         "package_id": p.get('package_id'),
                     }
                     for p in pallets
-                ]
+                ],
+                "modelo": st.session_state.of_orden_info.get('modelo', 'mrp.production')
             }
             
             response = requests.post(
@@ -346,6 +353,8 @@ def _get_estado_label(estado: str) -> str:
         'confirmed': '✅ Confirmado',
         'progress': '🔄 En Proceso',
         'done': '✔️ Terminado',
-        'cancel': '❌ Cancelado'
+        'cancel': '❌ Cancelado',
+        'assigned': '📦 Reservado',
+        'waiting': '⏳ Esperando',
     }
     return estados.get(estado, estado)
