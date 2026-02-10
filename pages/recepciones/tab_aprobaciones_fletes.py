@@ -1185,10 +1185,21 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
                 
                 with col_sel:
                     is_selected = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
-                    if st.checkbox("", value=is_selected, key=f"check_{key_proveedor}_{row['oc_id']}"):
-                        st.session_state[f'selected_{key_proveedor}'].add(row['oc_id'])
-                    else:
-                        st.session_state[f'selected_{key_proveedor}'].discard(row['oc_id'])
+                    
+                    # Callback para manejar el cambio del checkbox
+                    def toggle_selection(oc_id=row['oc_id'], key_prov=key_proveedor):
+                        if oc_id in st.session_state[f'selected_{key_prov}']:
+                            st.session_state[f'selected_{key_prov}'].discard(oc_id)
+                        else:
+                            st.session_state[f'selected_{key_prov}'].add(oc_id)
+                    
+                    st.checkbox(
+                        "",
+                        value=is_selected,
+                        key=f"check_{key_proveedor}_{row['oc_id']}",
+                        on_change=toggle_selection,
+                        args=(row['oc_id'], key_proveedor)
+                    )
                 
                 with col_oc:
                     st.markdown(f"**{row['oc_name']}**")
