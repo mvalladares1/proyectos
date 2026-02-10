@@ -1228,8 +1228,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
-                        st.session_state[f'selected_{key_proveedor}'] = set()
-                        st.session_state['force_rerun'] = True
+                        obtener_ocs_fletes_con_aprobaciones.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
             
@@ -1248,8 +1247,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.warning(f"{oc_name}: {msg}")
                         
-                        st.session_state[f'selected_{key_proveedor}'] = set()
-                        st.session_state['force_rerun'] = True
+                        obtener_ocs_fletes_con_aprobaciones.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
             
@@ -1269,8 +1267,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
-                        st.session_state[f'selected_{key_proveedor}'] = set()
-                        st.session_state['force_rerun'] = True
+                        obtener_ocs_fletes_con_aprobaciones.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
     
