@@ -74,6 +74,7 @@
     "automatizaciones.monitor_ordenes": [],
     "automatizaciones.movimientos": [],
     "automatizaciones.monitor_movimientos": [],
+    "automatizaciones.procesos": [],
     "rendimiento.trazabilidad_pallets": [],
     "rendimiento.diagrama_sankey": [],
     "rendimiento.trazabilidad_inventario": [],
