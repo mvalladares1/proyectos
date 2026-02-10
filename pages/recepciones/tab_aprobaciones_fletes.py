@@ -160,6 +160,13 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
     
     # Extraer cost_per_kg de la ruta y calcular en USD
     cost_per_kg_clp = ruta_info.get('cost_per_kg', 0)
+    
+    # Convertir a float si es string
+    try:
+        cost_per_kg_clp = float(cost_per_kg_clp) if cost_per_kg_clp else 0
+    except (ValueError, TypeError):
+        cost_per_kg_clp = 0
+    
     if cost_per_kg_clp and cost_per_kg_clp > 0:
         resultado['cost_per_kg_clp'] = cost_per_kg_clp
         if tipo_cambio_usd and tipo_cambio_usd > 0:
