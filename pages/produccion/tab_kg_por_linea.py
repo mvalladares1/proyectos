@@ -88,26 +88,24 @@ def estado_label(state: str) -> str:
     return estados.get(state, state)
 
 
-def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]):
-    """Gráfico de KG desglosado por día y sala."""
-    if not mos_filtradas:
-        return
+def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Producidos por Día / Sala",
+                             subtitle: str = "Kilogramos de producto terminado desglosados por día y sala") -> Optional[dict]:
+    """Construye opciones ECharts para gráfico KG por día/sala. Retorna None si no hay datos."""
+    if not mos_list:
+        return None
 
-    # --- Paleta de colores por sala ---
     colores_paleta = [
         '#00d4ff', '#e040fb', '#4caf50', '#ff9800', '#FF3366',
         '#33FF99', '#FFCC00', '#3399FF', '#FF6633', '#66FFCC',
         '#CC33FF', '#99FF33', '#6633FF', '#FF66CC', '#00FF66',
     ]
 
-    # Agrupar KG por fecha y sala
     dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
     todas_salas_set = set()
 
-    for mo in mos_filtradas:
+    for mo in mos_list:
         sala = mo.get('sala') or 'Sin Sala'
         todas_salas_set.add(sala)
-        # Usar fecha de inicio para determinar el día
         dt = mo.get('_inicio_dt')
         if not dt:
             continue
@@ -116,14 +114,12 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
         dia_sala_kg[dia_key][sala] += kg
 
     if not dia_sala_kg:
-        return
+        return None
 
-    # Ordenar días cronológicamente
     dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
     salas_sorted = sorted(todas_salas_set)
     color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
 
-    # Construir series por sala
     series = []
     for sala in salas_sorted:
         data_vals = [round(dia_sala_kg[dia].get(sala, 0)) for dia in dias_sorted]
@@ -148,14 +144,13 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
                 "itemStyle": {"shadowBlur": 10, "shadowColor": "rgba(0,0,0,0.4)"}
             }
         })
-    # Redondear bordes de la última serie (top del stack)
     if series:
         series[-1]["itemStyle"]["borderRadius"] = [8, 8, 0, 0]
 
     options = {
         "title": {
-            "text": "⚖️ KG Producidos por Día / Sala",
-            "subtext": "Kilogramos de producto terminado desglosados por día y sala",
+            "text": title,
+            "subtext": subtitle,
             "left": "center",
             "textStyle": {"color": "#fff", "fontSize": 16, "fontWeight": "bold"},
             "subtextStyle": {"color": "#999", "fontSize": 12}
@@ -207,6 +202,15 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
         ] if len(dias_sorted) > 14 else []
     }
 
+    return options, salas_sorted
+
+
+def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]):
+    """Gráfico de KG desglosado por día y sala."""
+    result = _build_chart_kg_dia_sala(mos_filtradas)
+    if not result:
+        return
+    options, salas_sorted = result
     altura = max(450, 380 + len(salas_sorted) * 8)
     st_echarts(options=options, height=f"{altura}px")
 
@@ -347,43 +351,12 @@ def render(username: str = None, password: str = None):
         return
 
     # === AGRUPAR POR SALA ===
-    salas_data: Dict[str, Dict] = {}
-    for mo in mos_filtradas:
-        sala = mo.get('sala') or 'Sin Sala'
-        if sala not in salas_data:
-            salas_data[sala] = {
-                'ordenes': [],
-                'total_kg': 0.0,
-                'kg_hora_sum': 0.0,
-                'kg_hora_count': 0,
-                'hechas': 0,
-                'no_hechas': 0,
-            }
-
-        sd = salas_data[sala]
-        sd['ordenes'].append(mo)
-        sd['total_kg'] += mo.get('kg_pt', 0) or 0
-
-        kg_hora = mo.get('kg_hora_efectiva', 0) or mo.get('kg_por_hora', 0) or 0
-        if kg_hora > 0:
-            sd['kg_hora_sum'] += kg_hora
-            sd['kg_hora_count'] += 1
-
-        fecha_termino = mo.get('fecha_termino')
-        if fecha_termino:
-            sd['hechas'] += 1
-        else:
-            sd['no_hechas'] += 1
+salas_data = _procesar_mos_a_salas(mos_filtradas)
 
     # === KPIs GENERALES ===
     total_ordenes = len(mos_filtradas)
     total_kg = sum(s['total_kg'] for s in salas_data.values())
-    all_kg_hrs = []
-    for mo in mos_filtradas:
-        kh = mo.get('kg_hora_efectiva', 0) or mo.get('kg_por_hora', 0) or 0
-        if kh > 0:
-            all_kg_hrs.append(kh)
-    prom_kg_hora = sum(all_kg_hrs) / len(all_kg_hrs) if all_kg_hrs else 0
+    prom_kg_hora = _calcular_kg_hora(mos_filtradas)
     hechas_total = sum(s['hechas'] for s in salas_data.values())
     no_hechas_total = sum(s['no_hechas'] for s in salas_data.values())
 
@@ -412,16 +385,16 @@ def render(username: str = None, password: str = None):
         '#FF9933', '#66FFCC', '#FF66CC', '#99FF33', '#6633FF',
     ]
 
-    # Ordenar salas por KG/Hora promedio descendente
+    # Ordenar salas por KG/Hora (total_kg/duracion) descendente
     salas_ordenadas = sorted(
         salas_data.items(),
-        key=lambda x: (x[1]['kg_hora_sum'] / x[1]['kg_hora_count'])
-        if x[1]['kg_hora_count'] > 0 else 0,
+        key=lambda x: (x[1]['total_kg'] / x[1]['duracion_total'])
+        if x[1]['duracion_total'] > 0 else 0,
         reverse=True
     )
 
     for idx, (sala, sd) in enumerate(salas_ordenadas):
-        prom = sd['kg_hora_sum'] / sd['kg_hora_count'] if sd['kg_hora_count'] > 0 else 0
+        prom = sd['total_kg'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         em = emoji_kg_hora(prom)
         c = colores_sala[idx % len(colores_sala)]
         total = sd['hechas'] + sd['no_hechas']
@@ -510,6 +483,13 @@ def render(username: str = None, password: str = None):
     )
 
 
+def _calcular_kg_hora(mos_list: List[Dict]) -> float:
+    """Calcula KG/Hora como total_kg / total_horas (promedio ponderado)."""
+    total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos_list)
+    total_horas = sum(mo.get('duracion_horas', 0) or 0 for mo in mos_list)
+    return round(total_kg / total_horas, 1) if total_horas > 0 else 0
+
+
 def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
     """Agrupa MOs en datos por sala (reutilizable para principal y comparación)."""
     salas: Dict[str, Dict] = {}
@@ -519,18 +499,14 @@ def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
             salas[sala] = {
                 'ordenes': [],
                 'total_kg': 0.0,
-                'kg_hora_sum': 0.0,
-                'kg_hora_count': 0,
+                'duracion_total': 0.0,
                 'hechas': 0,
                 'no_hechas': 0,
             }
         sd = salas[sala]
         sd['ordenes'].append(mo)
         sd['total_kg'] += mo.get('kg_pt', 0) or 0
-        kg_hora = mo.get('kg_hora_efectiva', 0) or mo.get('kg_por_hora', 0) or 0
-        if kg_hora > 0:
-            sd['kg_hora_sum'] += kg_hora
-            sd['kg_hora_count'] += 1
+        sd['duracion_total'] += mo.get('duracion_horas', 0) or 0
         if mo.get('fecha_termino'):
             sd['hechas'] += 1
         else:
@@ -544,7 +520,7 @@ def _render_comparacion(
     planta_sel, especie_sel, sala_sel,
     salas_principal, mos_principal
 ):
-    """Sección de Comparación: permite comparar rendimiento con otro período."""
+    """Sección de Comparación: muestra gráficos de ambos períodos y V/S."""
 
     st.markdown("""
     <div style="background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%);
@@ -552,8 +528,8 @@ def _render_comparacion(
                 border-left: 5px solid #e040fb;">
         <h2 style="margin:0; color:#e040fb;">📊 Comparación de Períodos</h2>
         <p style="margin:5px 0 0 0; color:#aaa;">
-            Compara el rendimiento del período actual con otro rango de fechas
-            (mismos filtros de Planta, Especie y Sala)
+            Selecciona otro rango de fechas para comparar contra el período principal
+            (se aplican los mismos filtros de Planta, Especie y Sala)
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -633,59 +609,100 @@ def _render_comparacion(
 
     salas_comp = _procesar_mos_a_salas(mos_comp)
 
-    # === CALCULAR TOTALES DE AMBOS PERÍODOS ===
-    def _totales(mos_list, salas_dict):
-        total_ordenes = len(mos_list)
-        total_kg = sum(s['total_kg'] for s in salas_dict.values())
-        khs = [
-            (mo.get('kg_hora_efectiva', 0) or mo.get('kg_por_hora', 0) or 0)
-            for mo in mos_list
-            if (mo.get('kg_hora_efectiva', 0) or mo.get('kg_por_hora', 0) or 0) > 0
-        ]
-        prom_kh = sum(khs) / len(khs) if khs else 0
-        hechas = sum(s['hechas'] for s in salas_dict.values())
-        return total_ordenes, total_kg, prom_kh, hechas
-
-    ord_a, kg_a, kh_a, hech_a = _totales(mos_principal, salas_principal)
-    ord_b, kg_b, kh_b, hech_b = _totales(mos_comp, salas_comp)
-
-    # Labels de período
+    # === LABELS ===
     lbl_a = f"{fecha_inicio_principal.strftime('%d/%m')} - {fecha_fin_principal.strftime('%d/%m')}"
     lbl_b = f"{comp_inicio.strftime('%d/%m')} - {comp_fin.strftime('%d/%m')}"
 
-    # === KPIs V/S ===
+    # === CALCULAR TOTALES ===
+    def _totales(mos_list):
+        total_ordenes = len(mos_list)
+        total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos_list)
+        prom_kh = _calcular_kg_hora(mos_list)
+        hechas = sum(1 for mo in mos_list if mo.get('fecha_termino'))
+        return total_ordenes, total_kg, prom_kh, hechas
+
+    ord_a, kg_a, kh_a, hech_a = _totales(mos_principal)
+    ord_b, kg_b, kh_b, hech_b = _totales(mos_comp)
+
+    # === HEADER V/S ===
     st.markdown(f"""
     <div style="text-align: center; margin: 15px 0;">
-        <span style="color: #00d4ff; font-size: 16px; font-weight: bold;">📅 {lbl_a}</span>
-        <span style="color: #888; font-size: 20px; margin: 0 15px;">VS</span>
-        <span style="color: #e040fb; font-size: 16px; font-weight: bold;">📅 {lbl_b}</span>
+        <span style="color: #00d4ff; font-size: 18px; font-weight: bold;">📅 {lbl_a}</span>
+        <span style="color: #888; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
+        <span style="color: #e040fb; font-size: 18px; font-weight: bold;">📅 {lbl_b}</span>
     </div>
     """, unsafe_allow_html=True)
 
+    # === KPIs V/S ===
     def _delta(actual, anterior):
         if anterior == 0:
             return None
-        diff = actual - anterior
-        pct = (diff / anterior) * 100
+        pct = ((actual - anterior) / anterior) * 100
         return f"{pct:+.1f}%"
 
     v1, v2, v3, v4 = st.columns(4)
     with v1:
         st.metric("📋 Órdenes", f"{ord_a}", delta=_delta(ord_a, ord_b),
-                   help=f"Actual: {ord_a} | Comparación: {ord_b}")
+                   help=f"Período actual: {ord_a} | Comparación: {ord_b}")
     with v2:
         st.metric("⚖️ KG Totales", f"{kg_a:,.0f}", delta=_delta(kg_a, kg_b),
-                   help=f"Actual: {kg_a:,.0f} | Comparación: {kg_b:,.0f}")
+                   help=f"Período actual: {kg_a:,.0f} | Comparación: {kg_b:,.0f}")
     with v3:
         st.metric("⚡ KG/Hora", f"{kh_a:,.0f}", delta=_delta(kh_a, kh_b),
-                   help=f"Actual: {kh_a:,.0f} | Comparación: {kh_b:,.0f}")
+                   help=f"Período actual: {kh_a:,.0f} | Comparación: {kh_b:,.0f}")
     with v4:
         st.metric("✅ Completadas", f"{hech_a}", delta=_delta(hech_a, hech_b),
-                   help=f"Actual: {hech_a} | Comparación: {hech_b}")
+                   help=f"Período actual: {hech_a} | Comparación: {hech_b}")
 
     st.markdown("---")
 
-    # === GRÁFICO V/S POR SALA ===
+    # === DOS GRÁFICOS: uno por cada período ===
+    chart_col_a, chart_col_b = st.columns(2)
+
+    with chart_col_a:
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 5px;">
+            <span style="color: #00d4ff; font-size: 15px; font-weight: bold;">📅 Período Actual: {lbl_a}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        result_a = _build_chart_kg_dia_sala(
+            mos_principal,
+            title=f"📅 {lbl_a}",
+            subtitle=f"{ord_a} órdenes · {kg_a:,.0f} KG · {kh_a:,.0f} KG/h"
+        )
+        if result_a:
+            opts_a, salas_a = result_a
+            # Adjust for smaller column
+            opts_a["title"]["textStyle"]["fontSize"] = 14
+            opts_a["legend"]["textStyle"]["fontSize"] = 10
+            opts_a["legend"]["itemGap"] = 8
+            st_echarts(options=opts_a, height="420px", key="comp_chart_a")
+        else:
+            st.info("Sin datos para graficar")
+
+    with chart_col_b:
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 5px;">
+            <span style="color: #e040fb; font-size: 15px; font-weight: bold;">📅 Período Comparación: {lbl_b}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        result_b = _build_chart_kg_dia_sala(
+            mos_comp,
+            title=f"📅 {lbl_b}",
+            subtitle=f"{ord_b} órdenes · {kg_b:,.0f} KG · {kh_b:,.0f} KG/h"
+        )
+        if result_b:
+            opts_b, salas_b = result_b
+            opts_b["title"]["textStyle"]["fontSize"] = 14
+            opts_b["legend"]["textStyle"]["fontSize"] = 10
+            opts_b["legend"]["itemGap"] = 8
+            st_echarts(options=opts_b, height="420px", key="comp_chart_b")
+        else:
+            st.info("Sin datos para graficar")
+
+    st.markdown("---")
+
+    # === GRÁFICO V/S KG/Hora por Sala ===
     todas_salas = sorted(set(list(salas_principal.keys()) + list(salas_comp.keys())))
 
     if not todas_salas:
@@ -694,26 +711,22 @@ def _render_comparacion(
     nombres = []
     kh_actual = []
     kh_comp_vals = []
-    kg_actual = []
-    kg_comp_list = []
 
     for sala in todas_salas:
         nombres.append(sala)
-        # Período actual
+        # Período actual - KG/Hora = total_kg / duracion_total
         sa = salas_principal.get(sala)
-        if sa and sa['kg_hora_count'] > 0:
-            kh_actual.append(round(sa['kg_hora_sum'] / sa['kg_hora_count']))
+        if sa and sa['duracion_total'] > 0:
+            kh_actual.append(round(sa['total_kg'] / sa['duracion_total']))
         else:
             kh_actual.append(0)
-        kg_actual.append(round(sa['total_kg']) if sa else 0)
 
         # Período comparación
         sc = salas_comp.get(sala)
-        if sc and sc['kg_hora_count'] > 0:
-            kh_comp_vals.append(round(sc['kg_hora_sum'] / sc['kg_hora_count']))
+        if sc and sc['duracion_total'] > 0:
+            kh_comp_vals.append(round(sc['total_kg'] / sc['duracion_total']))
         else:
             kh_comp_vals.append(0)
-        kg_comp_list.append(round(sc['total_kg']) if sc else 0)
 
     options_vs = {
         "title": {
@@ -820,8 +833,8 @@ def _render_comparacion(
         sa = salas_principal.get(sala)
         sc = salas_comp.get(sala)
 
-        prom_a = (sa['kg_hora_sum'] / sa['kg_hora_count']) if sa and sa['kg_hora_count'] > 0 else 0
-        prom_b = (sc['kg_hora_sum'] / sc['kg_hora_count']) if sc and sc['kg_hora_count'] > 0 else 0
+        prom_a = (sa['total_kg'] / sa['duracion_total']) if sa and sa['duracion_total'] > 0 else 0
+        prom_b = (sc['total_kg'] / sc['duracion_total']) if sc and sc['duracion_total'] > 0 else 0
         kg_a_s = sa['total_kg'] if sa else 0
         kg_b_s = sc['total_kg'] if sc else 0
         ord_a_s = len(sa['ordenes']) if sa else 0
@@ -834,7 +847,7 @@ def _render_comparacion(
         with st.container(border=True):
             tc1, tc2, tc3, tc4, tc5 = st.columns([2, 1.5, 1.5, 1.5, 1])
             with tc1:
-                st.markdown(f"**🏭 {sala}**")
+                st.markdown(f"**🏭 {sala}** ({ord_a_s} vs {ord_b_s} órdenes)")
             with tc2:
                 st.metric(f"⚡ {lbl_a}", f"{prom_a:,.0f} kg/h")
             with tc3:
