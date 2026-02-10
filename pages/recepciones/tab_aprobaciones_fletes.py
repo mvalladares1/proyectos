@@ -1078,25 +1078,31 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
     # --- Fragment: solo la selección de checkboxes se re-renderiza al hacer click ---
     @st.fragment
     def _fragment_seleccion():
+        # Callback para "Seleccionar todas" - solo reacciona al click real del usuario
+        def on_select_all_change():
+            sa_key = f"select_all_{key_proveedor}"
+            if st.session_state[sa_key]:
+                # Usuario marcó "seleccionar todas"
+                st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
+                st.session_state[f'checkbox_version_{key_proveedor}'] += 1
+            else:
+                # Usuario desmarcó "seleccionar todas"
+                st.session_state[f'selected_{key_proveedor}'] = set()
+                st.session_state[f'checkbox_version_{key_proveedor}'] += 1
+        
         # Checkbox "Seleccionar todas"
         col_check, col_info = st.columns([1, 3])
         with col_check:
-            todas_seleccionadas = len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables) and len(df_aprobables) > 0
+            # Pre-inicializar el key si no existe
+            sa_key = f"select_all_{key_proveedor}"
+            if sa_key not in st.session_state:
+                st.session_state[sa_key] = False
             
-            select_all = st.checkbox(
+            st.checkbox(
                 "Seleccionar todas",
-                key=f"select_all_{key_proveedor}",
-                value=todas_seleccionadas
+                key=sa_key,
+                on_change=on_select_all_change
             )
-            
-            if select_all and not todas_seleccionadas:
-                st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
-                st.session_state[f'checkbox_version_{key_proveedor}'] += 1
-                st.rerun()
-            elif not select_all and todas_seleccionadas:
-                st.session_state[f'selected_{key_proveedor}'] = set()
-                st.session_state[f'checkbox_version_{key_proveedor}'] += 1
-                st.rerun()
         
         with col_info:
             if st.session_state[f'selected_{key_proveedor}']:
