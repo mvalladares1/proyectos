@@ -1222,8 +1222,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         else:
                             st.error(f"{oc_name}: {msg}")
                     
-                    # Limpiar selección
+                    # Limpiar selección y forzar rerun completo
                     st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state['force_rerun'] = True
                     time.sleep(1)
                     st.rerun()
         
@@ -1243,8 +1244,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         else:
                             st.warning(f"{oc_name}: {msg}")
                     
-                    # Limpiar selección
+                    # Limpiar selección y forzar rerun completo
                     st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state['force_rerun'] = True
                     time.sleep(1)
                     st.rerun()
         
@@ -1265,8 +1267,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         else:
                             st.error(f"{oc_name}: {msg}")
                     
-                    # Limpiar selección
+                    # Limpiar selección y forzar rerun completo
                     st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state['force_rerun'] = True
                     time.sleep(1)
                     st.rerun()
 
