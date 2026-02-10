@@ -88,57 +88,74 @@ def estado_label(state: str) -> str:
     return estados.get(state, state)
 
 
-def _render_grafico_salas(salas_data: Dict[str, Dict]):
-    """Gráfico de barras comparativo: KG/Hora, KG Totales y Órdenes por sala."""
-    if not salas_data:
+def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]):
+    """Gráfico de KG desglosado por día y sala."""
+    if not mos_filtradas:
         return
 
-    # Ordenar salas por KG/Hora promedio descendente
-    salas_sorted = sorted(
-        salas_data.items(),
-        key=lambda x: (x[1]['kg_hora_sum'] / x[1]['kg_hora_count'])
-        if x[1]['kg_hora_count'] > 0 else 0,
-        reverse=True
-    )
+    # --- Paleta de colores por sala ---
+    colores_paleta = [
+        '#00d4ff', '#e040fb', '#4caf50', '#ff9800', '#FF3366',
+        '#33FF99', '#FFCC00', '#3399FF', '#FF6633', '#66FFCC',
+        '#CC33FF', '#99FF33', '#6633FF', '#FF66CC', '#00FF66',
+    ]
 
-    nombres = []
-    kg_hora_vals = []
-    kg_total_vals = []
-    ordenes_vals = []
-    hechas_vals = []
-    no_hechas_vals = []
+    # Agrupar KG por fecha y sala
+    dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    todas_salas_set = set()
 
-    for sala, sd in salas_sorted:
-        nombres.append(sala)
-        prom = sd['kg_hora_sum'] / sd['kg_hora_count'] if sd['kg_hora_count'] > 0 else 0
-        kg_hora_vals.append(round(prom))
-        kg_total_vals.append(round(sd['total_kg']))
-        ordenes_vals.append(sd['hechas'] + sd['no_hechas'])
-        hechas_vals.append(sd['hechas'])
-        no_hechas_vals.append(sd['no_hechas'])
+    for mo in mos_filtradas:
+        sala = mo.get('sala') or 'Sin Sala'
+        todas_salas_set.add(sala)
+        # Usar fecha de inicio para determinar el día
+        dt = mo.get('_inicio_dt')
+        if not dt:
+            continue
+        dia_key = dt.strftime('%d/%m')
+        kg = mo.get('kg_pt', 0) or 0
+        dia_sala_kg[dia_key][sala] += kg
 
-    # Colores por rendimiento
-    colores_barra = [color_kg_hora(v) for v in kg_hora_vals]
-    data_kg_hora = []
-    for i, v in enumerate(kg_hora_vals):
-        data_kg_hora.append({
-            "value": v,
+    if not dia_sala_kg:
+        return
+
+    # Ordenar días cronológicamente
+    dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+    salas_sorted = sorted(todas_salas_set)
+    color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
+
+    # Construir series por sala
+    series = []
+    for sala in salas_sorted:
+        data_vals = [round(dia_sala_kg[dia].get(sala, 0)) for dia in dias_sorted]
+        c = color_map[sala]
+        series.append({
+            "name": sala,
+            "type": "bar",
+            "stack": "total",
+            "data": data_vals,
+            "barMaxWidth": 50,
             "itemStyle": {
                 "color": {
                     "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
                     "colorStops": [
-                        {"offset": 0, "color": colores_barra[i]},
-                        {"offset": 1, "color": colores_barra[i] + "66"}
+                        {"offset": 0, "color": c},
+                        {"offset": 1, "color": c + "88"}
                     ]
                 },
-                "borderRadius": [8, 8, 0, 0]
+                "borderRadius": [0, 0, 0, 0]
+            },
+            "emphasis": {
+                "itemStyle": {"shadowBlur": 10, "shadowColor": "rgba(0,0,0,0.4)"}
             }
         })
+    # Redondear bordes de la última serie (top del stack)
+    if series:
+        series[-1]["itemStyle"]["borderRadius"] = [8, 8, 0, 0]
 
     options = {
         "title": {
-            "text": "⚡ Comparativa de Rendimiento por Sala",
-            "subtext": "KG/Hora promedio · KG totales procesados · Órdenes completadas vs en proceso",
+            "text": "⚖️ KG Producidos por Día / Sala",
+            "subtext": "Kilogramos de producto terminado desglosados por día y sala",
             "left": "center",
             "textStyle": {"color": "#fff", "fontSize": 16, "fontWeight": "bold"},
             "subtextStyle": {"color": "#999", "fontSize": 12}
@@ -151,191 +168,47 @@ def _render_grafico_salas(salas_data: Dict[str, Dict]):
             "borderWidth": 1,
             "borderRadius": 10,
             "textStyle": {"color": "#fff", "fontSize": 13},
-            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);",
-            "formatter": None  # will use default multi-series
+            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
         },
         "legend": {
-            "data": ["⚡ KG/Hora Prom", "✅ Órdenes Hechas", "🔄 En Proceso"],
+            "data": salas_sorted,
             "bottom": 0,
             "textStyle": {"color": "#ccc", "fontSize": 12},
-            "itemGap": 25,
-            "icon": "roundRect"
+            "itemGap": 15,
+            "icon": "roundRect",
+            "type": "scroll"
         },
         "grid": {
             "left": "3%", "right": "4%",
-            "bottom": "15%", "top": "20%",
+            "bottom": "15%", "top": "18%",
             "containLabel": True
         },
         "xAxis": {
             "type": "category",
-            "data": nombres,
+            "data": dias_sorted,
             "axisLabel": {
                 "color": "#fff", "fontSize": 12, "fontWeight": "bold",
-                "rotate": 25 if len(nombres) > 5 else 0,
                 "interval": 0
             },
             "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
             "axisTick": {"show": False}
         },
-        "yAxis": [
-            {
-                "type": "value",
-                "name": "⚡ KG / Hora",
-                "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
-                "axisLabel": {"color": "#ccc", "fontSize": 11,
-                              "formatter": "{value}"},
-                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
-                "axisLine": {"show": False}
-            },
-            {
-                "type": "value",
-                "name": "📋 Órdenes",
-                "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
-                "axisLabel": {"color": "#ccc", "fontSize": 11},
-                "splitLine": {"show": False},
-                "axisLine": {"show": False}
-            }
-        ],
-        "series": [
-            {
-                "name": "⚡ KG/Hora Prom",
-                "type": "bar",
-                "data": data_kg_hora,
-                "barMaxWidth": 50,
-                "yAxisIndex": 0,
-                "label": {
-                    "show": True,
-                    "position": "top",
-                    "fontSize": 13,
-                    "fontWeight": "bold",
-                    "color": "#fff",
-                    "formatter": "{c} kg/h"
-                },
-                "emphasis": {
-                    "itemStyle": {"shadowBlur": 15, "shadowColor": "rgba(0,200,255,0.4)"}
-                }
-            },
-            {
-                "name": "✅ Órdenes Hechas",
-                "type": "bar",
-                "data": hechas_vals,
-                "yAxisIndex": 1,
-                "barMaxWidth": 30,
-                "itemStyle": {
-                    "color": "#4caf50",
-                    "borderRadius": [6, 6, 0, 0]
-                },
-                "label": {
-                    "show": True,
-                    "position": "top",
-                    "fontSize": 11,
-                    "fontWeight": "bold",
-                    "color": "#4caf50"
-                }
-            },
-            {
-                "name": "🔄 En Proceso",
-                "type": "bar",
-                "data": no_hechas_vals,
-                "yAxisIndex": 1,
-                "barMaxWidth": 30,
-                "itemStyle": {
-                    "color": "#ff9800",
-                    "borderRadius": [6, 6, 0, 0]
-                },
-                "label": {
-                    "show": True,
-                    "position": "top",
-                    "fontSize": 11,
-                    "fontWeight": "bold",
-                    "color": "#ff9800"
-                }
-            }
-        ],
+        "yAxis": {
+            "type": "value",
+            "name": "⚖️ KG",
+            "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
+            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+            "axisLine": {"show": False}
+        },
+        "series": series,
         "dataZoom": [
             {"type": "inside", "xAxisIndex": 0, "start": 0, "end": 100}
-        ] if len(nombres) > 8 else []
+        ] if len(dias_sorted) > 14 else []
     }
 
-    # KG Totales como gráfico separado debajo para que no sature el principal
-    altura = max(420, 350 + len(nombres) * 15)
+    altura = max(450, 380 + len(salas_sorted) * 8)
     st_echarts(options=options, height=f"{altura}px")
-
-    # === GRÁFICO 2: KG TOTALES POR SALA ===
-    data_kg_total = []
-    for i, v in enumerate(kg_total_vals):
-        c = colores_barra[i]
-        data_kg_total.append({
-            "value": v,
-            "itemStyle": {
-                "color": {
-                    "type": "linear", "x": 0, "y": 0, "x2": 1, "y2": 0,
-                    "colorStops": [
-                        {"offset": 0, "color": c + "66"},
-                        {"offset": 1, "color": c}
-                    ]
-                },
-                "borderRadius": [0, 8, 8, 0]
-            }
-        })
-
-    options_kg = {
-        "title": {
-            "text": "⚖️ KG Totales Procesados por Sala",
-            "subtext": "Kilogramos de producto terminado producidos en el período",
-            "left": "center",
-            "textStyle": {"color": "#fff", "fontSize": 15, "fontWeight": "bold"},
-            "subtextStyle": {"color": "#999", "fontSize": 11}
-        },
-        "tooltip": {
-            "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(10, 10, 30, 0.95)",
-            "borderColor": "#555",
-            "borderRadius": 10,
-            "textStyle": {"color": "#fff", "fontSize": 13},
-            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);",
-            "formatter": "{b}: {c} KG"
-        },
-        "grid": {
-            "left": "3%", "right": "12%",
-            "bottom": "5%", "top": "18%",
-            "containLabel": True
-        },
-        "xAxis": {
-            "type": "value",
-            "name": "⚖️ KG Totales",
-            "nameLocation": "middle",
-            "nameGap": 30,
-            "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
-            "axisLabel": {"color": "#ccc", "fontSize": 11,
-                          "formatter": "{value}"},
-            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
-        },
-        "yAxis": {
-            "type": "category",
-            "data": list(reversed(nombres)),
-            "axisLabel": {"color": "#eee", "fontSize": 12, "fontWeight": "bold"},
-            "axisLine": {"lineStyle": {"color": "#444"}},
-            "axisTick": {"show": False}
-        },
-        "series": [{
-            "type": "bar",
-            "data": list(reversed(data_kg_total)),
-            "barMaxWidth": 32,
-            "label": {
-                "show": True,
-                "position": "right",
-                "color": "#fff",
-                "fontSize": 13,
-                "fontWeight": "bold",
-                "formatter": "{c} kg"
-            }
-        }]
-    }
-
-    altura_kg = max(250, 50 + len(nombres) * 40)
-    st_echarts(options=options_kg, height=f"{altura_kg}px")
 
 
 def render(username: str = None, password: str = None):
@@ -527,8 +400,8 @@ def render(username: str = None, password: str = None):
 
     st.markdown("---")
 
-    # === GRÁFICO COMPARATIVO POR SALA ===
-    _render_grafico_salas(salas_data)
+    # === GRÁFICO KG POR DÍA/SALA ===
+    _render_grafico_salas(mos_filtradas, salas_data)
 
     st.markdown("---")
 
