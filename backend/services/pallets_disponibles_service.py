@@ -45,7 +45,7 @@ class PalletsDisponiblesService:
                 domain_lots,
                 ['product_id'],
                 limit=10000,
-                order='create_date desc'
+                order='id desc'
             )
             
             if not lotes:
@@ -96,7 +96,7 @@ class PalletsDisponiblesService:
                 domain_po,
                 ['partner_id'],
                 limit=5000,
-                order='date_order desc'
+                order='id desc'
             )
             
             if not ordenes:
