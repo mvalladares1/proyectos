@@ -566,7 +566,8 @@ async def buscar_orden_procesos(
         if orden.isdigit():
             domain = [('name', 'ilike', orden)]
         elif '/' in orden:
-            domain = [('name', '=', orden)]
+            # Usar ilike para ignorar mayúsculas/minúsculas
+            domain = [('name', 'ilike', orden)]
         else:
             domain = [('name', 'ilike', orden)]
         
