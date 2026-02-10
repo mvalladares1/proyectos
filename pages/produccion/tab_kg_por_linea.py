@@ -4,11 +4,17 @@ Muestra KG/Hora, órdenes, KG totales desglosado por sala con filtros de especie
 """
 import streamlit as st
 import httpx
+import os
+import io
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from streamlit_echarts import st_echarts
 from .shared import API_URL
+
+# Ruta al logo
+_LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                          'data', 'RFP - LOGO OFICIAL.png')
 
 
 def fetch_datos_produccion(username: str, password: str, fecha_inicio: str,
@@ -371,6 +377,20 @@ def render(username: str = None, password: str = None):
     with k4:
         st.metric("🏭 Salas Activas", f"{len(salas_data)}")
 
+    # === BOTÓN DESCARGAR INFORME ===
+    pdf_bytes = _generar_informe_pdf(
+        fecha_inicio, fecha_fin, planta_sel, especie_sel, sala_sel,
+        total_ordenes, total_kg, prom_kg_hora, hechas_total, no_hechas_total,
+        salas_data, mos_filtradas
+    )
+    st.download_button(
+        label="📥 Descargar Informe PDF",
+        data=pdf_bytes,
+        file_name=f"Informe_Rendimiento_{fecha_inicio}_{fecha_fin}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
+
     st.markdown("---")
 
     # === GRÁFICO KG POR DÍA/SALA ===
@@ -524,6 +544,275 @@ def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
         else:
             sd['no_hechas'] += 1
     return salas
+
+
+def _generar_informe_pdf(
+    fecha_inicio, fecha_fin, planta_sel, especie_sel, sala_sel,
+    total_ordenes, total_kg, prom_kg_hora, hechas_total, no_hechas_total,
+    salas_data, mos_filtradas
+) -> bytes:
+    """Genera un informe PDF con los datos filtrados del tab Rendimiento en Salas."""
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.units import mm, cm
+    from reportlab.lib.colors import HexColor, white, black
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Spacer,
+                                     Paragraph, Image, KeepTogether)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER,
+                            leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+
+    story = []
+    styles = getSampleStyleSheet()
+
+    # Colores corporativos
+    azul_corp = HexColor('#0d3b66')
+    azul_claro = HexColor('#00d4ff')
+    gris = HexColor('#666666')
+    verde = HexColor('#4caf50')
+    rojo = HexColor('#f44336')
+    fondo_header = HexColor('#0d3b66')
+    fondo_fila = HexColor('#f5f7fa')
+
+    # Estilos personalizados
+    titulo_style = ParagraphStyle('TituloInforme', parent=styles['Title'],
+                                   fontSize=18, textColor=azul_corp,
+                                   spaceAfter=4, alignment=TA_CENTER)
+    subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Normal'],
+                                      fontSize=11, textColor=gris,
+                                      spaceAfter=10, alignment=TA_CENTER)
+    seccion_style = ParagraphStyle('Seccion', parent=styles['Heading2'],
+                                    fontSize=13, textColor=azul_corp,
+                                    spaceBefore=14, spaceAfter=6)
+    normal_style = ParagraphStyle('NormalCustom', parent=styles['Normal'],
+                                   fontSize=9, textColor=black)
+    celda_style = ParagraphStyle('Celda', parent=styles['Normal'],
+                                  fontSize=8, textColor=black, leading=10)
+    celda_header = ParagraphStyle('CeldaHeader', parent=styles['Normal'],
+                                   fontSize=8, textColor=white, leading=10,
+                                   alignment=TA_CENTER)
+    celda_right = ParagraphStyle('CeldaRight', parent=styles['Normal'],
+                                  fontSize=8, textColor=black, leading=10,
+                                  alignment=TA_RIGHT)
+
+    # === LOGO ===
+    if os.path.exists(_LOGO_PATH):
+        logo = Image(_LOGO_PATH, width=5*cm, height=5*cm)
+        logo.hAlign = 'CENTER'
+        story.append(logo)
+        story.append(Spacer(1, 3*mm))
+
+    # === TÍTULO ===
+    story.append(Paragraph("Informe de Rendimiento en Salas", titulo_style))
+    story.append(Paragraph(
+        f"Período: {fecha_inicio} al {fecha_fin}",
+        subtitulo_style
+    ))
+
+    # Filtros aplicados
+    filtros = []
+    if planta_sel != "Todos":
+        filtros.append(f"Planta: {planta_sel}")
+    if especie_sel != "Todos":
+        filtros.append(f"Especie: {especie_sel}")
+    if sala_sel != "Todos":
+        filtros.append(f"Sala: {sala_sel}")
+    if filtros:
+        story.append(Paragraph(f"Filtros: {' | '.join(filtros)}", subtitulo_style))
+
+    story.append(Paragraph(
+        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        ParagraphStyle('Fecha', parent=styles['Normal'],
+                       fontSize=8, textColor=gris, alignment=TA_CENTER)
+    ))
+    story.append(Spacer(1, 5*mm))
+
+    # === KPIs GENERALES ===
+    story.append(Paragraph("Resumen General", seccion_style))
+
+    kpi_data = [
+        ['Órdenes Totales', 'KG Procesados', 'KG/Hora Prom', 'Completadas', 'En Proceso', 'Salas'],
+        [f'{total_ordenes:,}', f'{total_kg:,.0f}', f'{prom_kg_hora:,.0f}',
+         f'{hechas_total}', f'{no_hechas_total}', f'{len(salas_data)}']
+    ]
+    kpi_table = Table(kpi_data, colWidths=[3*cm, 3.2*cm, 3*cm, 2.5*cm, 2.5*cm, 2*cm])
+    kpi_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
+        ('TEXTCOLOR', (0, 0), (-1, 0), white),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 1), (-1, 1), 11),
+        ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0, 1), (-1, 1), azul_corp),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#dddddd')),
+        ('BACKGROUND', (0, 1), (-1, 1), fondo_fila),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(kpi_table)
+    story.append(Spacer(1, 6*mm))
+
+    # === PRODUCCIÓN POR DÍA ===
+    story.append(Paragraph("Producción por Día", seccion_style))
+
+    DIAS_ES = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié', 'Thu': 'Jue',
+               'Fri': 'Vie', 'Sat': 'Sáb', 'Sun': 'Dom'}
+
+    dia_kg = defaultdict(float)
+    dia_ordenes = defaultdict(int)
+    for mo in mos_filtradas:
+        dt = mo.get('_inicio_dt')
+        if not dt:
+            continue
+        dia_key = dt.strftime('%Y-%m-%d')
+        dia_kg[dia_key] += mo.get('kg_pt', 0) or 0
+        dia_ordenes[dia_key] += 1
+
+    dias_sorted = sorted(dia_kg.items())
+
+    if dias_sorted:
+        dia_rows = [['Día', 'Fecha', 'Órdenes', 'KG Producidos', '% del Total']]
+        for fecha, kg in dias_sorted:
+            dt = datetime.strptime(fecha, '%Y-%m-%d')
+            dia_en = dt.strftime('%a')
+            dia_esp = DIAS_ES.get(dia_en, dia_en)
+            pct = (kg / total_kg * 100) if total_kg > 0 else 0
+            dia_rows.append([
+                dia_esp,
+                dt.strftime('%d/%m/%Y'),
+                str(dia_ordenes.get(fecha, 0)),
+                f'{kg:,.0f}',
+                f'{pct:.1f}%'
+            ])
+        # Fila total
+        dia_rows.append(['', 'TOTAL', str(sum(dia_ordenes.values())),
+                          f'{total_kg:,.0f}', '100%'])
+
+        dia_table = Table(dia_rows, colWidths=[1.8*cm, 2.5*cm, 2*cm, 3.5*cm, 2.5*cm])
+        dia_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
+            ('TEXTCOLOR', (0, 0), (-1, 0), white),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), HexColor('#e8edf2')),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#dddddd')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [white, fondo_fila]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(dia_table)
+    story.append(Spacer(1, 6*mm))
+
+    # === DETALLE POR SALA ===
+    story.append(Paragraph("Detalle por Sala", seccion_style))
+
+    salas_ordenadas = sorted(
+        salas_data.items(),
+        key=lambda x: (x[1]['kg_con_duracion'] / x[1]['duracion_total'])
+        if x[1]['duracion_total'] > 0 else 0,
+        reverse=True
+    )
+
+    # Tabla resumen de salas
+    sala_rows = [['Sala', 'Órdenes', 'KG Totales', 'KG/Hora', 'Completadas', 'En Proceso']]
+    for sala, sd in salas_ordenadas:
+        kh = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
+        total_s = sd['hechas'] + sd['no_hechas']
+        sala_rows.append([
+            Paragraph(sala, celda_style),
+            str(total_s),
+            f"{sd['total_kg']:,.0f}",
+            f"{kh:,.0f}",
+            str(sd['hechas']),
+            str(sd['no_hechas'])
+        ])
+
+    sala_table = Table(sala_rows, colWidths=[4.5*cm, 1.8*cm, 2.8*cm, 2.5*cm, 2.5*cm, 2.5*cm])
+    sala_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
+        ('TEXTCOLOR', (0, 0), (-1, 0), white),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#dddddd')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, fondo_fila]),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    story.append(sala_table)
+    story.append(Spacer(1, 6*mm))
+
+    # === DETALLE DE ÓRDENES POR SALA ===
+    for sala, sd in salas_ordenadas:
+        kh_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
+        story.append(Paragraph(
+            f"{sala} — {len(sd['ordenes'])} órdenes — {sd['total_kg']:,.0f} KG — {kh_sala:,.0f} KG/h",
+            ParagraphStyle('SalaTitulo', parent=styles['Heading3'],
+                           fontSize=10, textColor=azul_corp, spaceBefore=8, spaceAfter=4)
+        ))
+
+        orden_rows = [['Orden', 'Especie', 'KG Total', 'KG/Hora', 'Dotación', 'Inicio', 'Fin', 'Rend.']]
+        ordenes_sorted = sorted(
+            sd['ordenes'],
+            key=lambda o: o.get('_inicio_dt') or datetime.min,
+            reverse=True
+        )
+
+        for orden in ordenes_sorted:
+            kg_h = orden.get('kg_hora_efectiva', 0) or orden.get('kg_por_hora', 0) or 0
+            kg_o = orden.get('kg_pt', 0) or 0
+            dot = orden.get('dotacion', 0) or 0
+            rend = orden.get('rendimiento', 0) or 0
+            especie_o = orden.get('especie', '-')
+            mo_name = orden.get('mo_name', 'N/A')
+            ini = orden.get('_inicio_dt')
+            fin = orden.get('_fin_dt')
+            hora_ini = ini.strftime("%d/%m %H:%M") if ini else '-'
+            hora_fin = fin.strftime("%d/%m %H:%M") if fin else '-'
+
+            orden_rows.append([
+                Paragraph(mo_name, celda_style),
+                especie_o,
+                f"{kg_o:,.0f}",
+                f"{kg_h:,.0f}",
+                str(int(dot)),
+                hora_ini,
+                hora_fin,
+                f"{rend:.1f}%"
+            ])
+
+        col_widths = [3.2*cm, 1.8*cm, 2*cm, 1.8*cm, 1.5*cm, 2.3*cm, 2.3*cm, 1.5*cm]
+        orden_table = Table(orden_rows, colWidths=col_widths)
+        orden_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), white),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (1, -1), 'LEFT'),
+            ('GRID', (0, 0), (-1, -1), 0.3, HexColor('#dddddd')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, fondo_fila]),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        story.append(orden_table)
+        story.append(Spacer(1, 3*mm))
+
+    # Build PDF
+    doc.build(story)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 def _render_comparacion(
