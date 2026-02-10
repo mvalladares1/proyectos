@@ -1030,9 +1030,8 @@ def render_tab(username, password):
     st.markdown(f"*Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
 
 
-@st.fragment
 def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, uid, username, password):
-    """Fragmento para renderizar tabla de un proveedor específico"""
+    """Renderizar tabla de un proveedor específico - Sin @st.fragment para que los botones funcionen"""
     # Filtrar solo OCs que se pueden aprobar (menos de 2 aprobaciones y no completamente aprobadas)
     df_aprobables = df_proveedor[
         (df_proveedor['num_aprobaciones'] < 2) &
