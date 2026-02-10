@@ -351,7 +351,7 @@ def render(username: str = None, password: str = None):
         return
 
     # === AGRUPAR POR SALA ===
-salas_data = _procesar_mos_a_salas(mos_filtradas)
+    salas_data = _procesar_mos_a_salas(mos_filtradas)
 
     # === KPIs GENERALES ===
     total_ordenes = len(mos_filtradas)
@@ -385,16 +385,16 @@ salas_data = _procesar_mos_a_salas(mos_filtradas)
         '#FF9933', '#66FFCC', '#FF66CC', '#99FF33', '#6633FF',
     ]
 
-    # Ordenar salas por KG/Hora (total_kg/duracion) descendente
+    # Ordenar salas por KG/Hora (kg_con_duracion/duracion) descendente
     salas_ordenadas = sorted(
         salas_data.items(),
-        key=lambda x: (x[1]['total_kg'] / x[1]['duracion_total'])
+        key=lambda x: (x[1]['kg_con_duracion'] / x[1]['duracion_total'])
         if x[1]['duracion_total'] > 0 else 0,
         reverse=True
     )
 
     for idx, (sala, sd) in enumerate(salas_ordenadas):
-        prom = sd['total_kg'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
+        prom = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         em = emoji_kg_hora(prom)
         c = colores_sala[idx % len(colores_sala)]
         total = sd['hechas'] + sd['no_hechas']
@@ -484,9 +484,12 @@ salas_data = _procesar_mos_a_salas(mos_filtradas)
 
 
 def _calcular_kg_hora(mos_list: List[Dict]) -> float:
-    """Calcula KG/Hora como total_kg / total_horas (promedio ponderado)."""
-    total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos_list)
-    total_horas = sum(mo.get('duracion_horas', 0) or 0 for mo in mos_list)
+    """Calcula KG/Hora solo con MOs que tienen duración > 0 (promedio ponderado real)."""
+    mos_con_dur = [mo for mo in mos_list if (mo.get('duracion_horas', 0) or 0) > 0]
+    if not mos_con_dur:
+        return 0
+    total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos_con_dur)
+    total_horas = sum(mo.get('duracion_horas', 0) or 0 for mo in mos_con_dur)
     return round(total_kg / total_horas, 1) if total_horas > 0 else 0
 
 
@@ -499,14 +502,19 @@ def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
             salas[sala] = {
                 'ordenes': [],
                 'total_kg': 0.0,
+                'kg_con_duracion': 0.0,
                 'duracion_total': 0.0,
                 'hechas': 0,
                 'no_hechas': 0,
             }
         sd = salas[sala]
         sd['ordenes'].append(mo)
-        sd['total_kg'] += mo.get('kg_pt', 0) or 0
-        sd['duracion_total'] += mo.get('duracion_horas', 0) or 0
+        kg = mo.get('kg_pt', 0) or 0
+        dur = mo.get('duracion_horas', 0) or 0
+        sd['total_kg'] += kg
+        if dur > 0:
+            sd['kg_con_duracion'] += kg
+            sd['duracion_total'] += dur
         if mo.get('fecha_termino'):
             sd['hechas'] += 1
         else:
@@ -520,7 +528,7 @@ def _render_comparacion(
     planta_sel, especie_sel, sala_sel,
     salas_principal, mos_principal
 ):
-    """Sección de Comparación: muestra gráficos de ambos períodos y V/S."""
+    """Sección de Comparación: comparación día a día real entre dos períodos."""
 
     st.markdown("""
     <div style="background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%);
@@ -528,8 +536,8 @@ def _render_comparacion(
                 border-left: 5px solid #e040fb;">
         <h2 style="margin:0; color:#e040fb;">📊 Comparación de Períodos</h2>
         <p style="margin:5px 0 0 0; color:#aaa;">
-            Selecciona otro rango de fechas para comparar contra el período principal
-            (se aplican los mismos filtros de Planta, Especie y Sala)
+            Compara la producción día a día contra otro período.
+            Se aplican los mismos filtros de Planta, Especie y Sala.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -613,156 +621,149 @@ def _render_comparacion(
     lbl_a = f"{fecha_inicio_principal.strftime('%d/%m')} - {fecha_fin_principal.strftime('%d/%m')}"
     lbl_b = f"{comp_inicio.strftime('%d/%m')} - {comp_fin.strftime('%d/%m')}"
 
-    # === CALCULAR TOTALES ===
-    def _totales(mos_list):
-        total_ordenes = len(mos_list)
-        total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos_list)
-        prom_kh = _calcular_kg_hora(mos_list)
-        hechas = sum(1 for mo in mos_list if mo.get('fecha_termino'))
-        return total_ordenes, total_kg, prom_kh, hechas
+    # === AGRUPAR KG POR DÍA ===
+    def _kg_por_dia(mos_list):
+        dia_kg = defaultdict(float)
+        dia_ordenes = defaultdict(int)
+        for mo in mos_list:
+            dt = mo.get('_inicio_dt')
+            if not dt:
+                continue
+            dia_key = dt.strftime('%Y-%m-%d')
+            dia_kg[dia_key] += mo.get('kg_pt', 0) or 0
+            dia_ordenes[dia_key] += 1
+        return dict(sorted(dia_kg.items())), dict(sorted(dia_ordenes.items()))
 
-    ord_a, kg_a, kh_a, hech_a = _totales(mos_principal)
-    ord_b, kg_b, kh_b, hech_b = _totales(mos_comp)
+    dias_kg_a, dias_ord_a = _kg_por_dia(mos_principal)
+    dias_kg_b, dias_ord_b = _kg_por_dia(mos_comp)
 
-    # === HEADER V/S ===
-    st.markdown(f"""
-    <div style="text-align: center; margin: 15px 0;">
-        <span style="color: #00d4ff; font-size: 18px; font-weight: bold;">📅 {lbl_a}</span>
-        <span style="color: #888; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
-        <span style="color: #e040fb; font-size: 18px; font-weight: bold;">📅 {lbl_b}</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Alinear por día relativo (Día 1, Día 2, ...)
+    dias_a_list = sorted(dias_kg_a.items())  # [(fecha, kg), ...]
+    dias_b_list = sorted(dias_kg_b.items())
+    max_dias = max(len(dias_a_list), len(dias_b_list))
 
-    # === KPIs V/S ===
+    if max_dias == 0:
+        st.warning("No hay datos diarios para comparar")
+        return
+
+    comparison_rows = []
+    for i in range(max_dias):
+        row = {'dia_num': i + 1}
+        if i < len(dias_a_list):
+            row['fecha_a'] = dias_a_list[i][0]
+            row['kg_a'] = dias_a_list[i][1]
+            row['ord_a'] = dias_ord_a.get(dias_a_list[i][0], 0)
+        else:
+            row['fecha_a'] = None
+            row['kg_a'] = 0
+            row['ord_a'] = 0
+        if i < len(dias_b_list):
+            row['fecha_b'] = dias_b_list[i][0]
+            row['kg_b'] = dias_b_list[i][1]
+            row['ord_b'] = dias_ord_b.get(dias_b_list[i][0], 0)
+        else:
+            row['fecha_b'] = None
+            row['kg_b'] = 0
+            row['ord_b'] = 0
+        row['diff'] = row['kg_a'] - row['kg_b']
+        row['diff_pct'] = ((row['kg_a'] - row['kg_b']) / row['kg_b'] * 100) if row['kg_b'] > 0 else 0
+        comparison_rows.append(row)
+
+    # === TOTALES ===
+    kg_a_total = sum(r['kg_a'] for r in comparison_rows)
+    kg_b_total = sum(r['kg_b'] for r in comparison_rows)
+    ord_a_total = len(mos_principal)
+    ord_b_total = len(mos_comp)
+    dias_a_count = len(dias_a_list)
+    dias_b_count = len(dias_b_list)
+    prom_dia_a = kg_a_total / dias_a_count if dias_a_count > 0 else 0
+    prom_dia_b = kg_b_total / dias_b_count if dias_b_count > 0 else 0
+
     def _delta(actual, anterior):
         if anterior == 0:
             return None
         pct = ((actual - anterior) / anterior) * 100
         return f"{pct:+.1f}%"
 
+    # === HEADER V/S ===
+    st.markdown(f"""
+    <div style="text-align: center; margin: 15px 0;">
+        <span style="color: #00d4ff; font-size: 18px; font-weight: bold;">📅 {lbl_a}  ({dias_a_count} días)</span>
+        <span style="color: #888; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
+        <span style="color: #e040fb; font-size: 18px; font-weight: bold;">📅 {lbl_b}  ({dias_b_count} días)</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # === KPIs V/S ===
     v1, v2, v3, v4 = st.columns(4)
     with v1:
-        st.metric("📋 Órdenes", f"{ord_a}", delta=_delta(ord_a, ord_b),
-                   help=f"Período actual: {ord_a} | Comparación: {ord_b}")
+        st.metric("📋 Órdenes", f"{ord_a_total}", delta=_delta(ord_a_total, ord_b_total),
+                   help=f"Actual: {ord_a_total} | Comparación: {ord_b_total}")
     with v2:
-        st.metric("⚖️ KG Totales", f"{kg_a:,.0f}", delta=_delta(kg_a, kg_b),
-                   help=f"Período actual: {kg_a:,.0f} | Comparación: {kg_b:,.0f}")
+        st.metric("⚖️ KG Totales", f"{kg_a_total:,.0f}", delta=_delta(kg_a_total, kg_b_total),
+                   help=f"Actual: {kg_a_total:,.0f} | Comparación: {kg_b_total:,.0f}")
     with v3:
-        st.metric("⚡ KG/Hora", f"{kh_a:,.0f}", delta=_delta(kh_a, kh_b),
-                   help=f"Período actual: {kh_a:,.0f} | Comparación: {kh_b:,.0f}")
+        st.metric("📊 KG Prom/Día", f"{prom_dia_a:,.0f}", delta=_delta(prom_dia_a, prom_dia_b),
+                   help=f"Actual: {prom_dia_a:,.0f} | Comparación: {prom_dia_b:,.0f}")
     with v4:
-        st.metric("✅ Completadas", f"{hech_a}", delta=_delta(hech_a, hech_b),
-                   help=f"Período actual: {hech_a} | Comparación: {hech_b}")
+        diff_total = kg_a_total - kg_b_total
+        diff_color = "#4caf50" if diff_total >= 0 else "#f44336"
+        diff_sign = "+" if diff_total >= 0 else ""
+        st.markdown(f"""
+        <div style="background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; text-align: center;">
+            <span style="color: #aaa; font-size: 12px;">⚖️ Diferencia KG</span><br>
+            <span style="color: {diff_color}; font-size: 28px; font-weight: bold;">{diff_sign}{diff_total:,.0f}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # === DOS GRÁFICOS: uno por cada período ===
-    chart_col_a, chart_col_b = st.columns(2)
+    # === GRÁFICO COMPARACIÓN DÍA A DÍA ===
+    x_labels = []
+    for r in comparison_rows:
+        fa = datetime.strptime(r['fecha_a'], '%Y-%m-%d').strftime('%d/%m') if r['fecha_a'] else '-'
+        fb = datetime.strptime(r['fecha_b'], '%Y-%m-%d').strftime('%d/%m') if r['fecha_b'] else '-'
+        x_labels.append(f"Día {r['dia_num']}\n{fa} vs {fb}")
 
-    with chart_col_a:
-        st.markdown(f"""
-        <div style="text-align: center; margin-bottom: 5px;">
-            <span style="color: #00d4ff; font-size: 15px; font-weight: bold;">📅 Período Actual: {lbl_a}</span>
-        </div>
-        """, unsafe_allow_html=True)
-        result_a = _build_chart_kg_dia_sala(
-            mos_principal,
-            title=f"📅 {lbl_a}",
-            subtitle=f"{ord_a} órdenes · {kg_a:,.0f} KG · {kh_a:,.0f} KG/h"
-        )
-        if result_a:
-            opts_a, salas_a = result_a
-            # Adjust for smaller column
-            opts_a["title"]["textStyle"]["fontSize"] = 14
-            opts_a["legend"]["textStyle"]["fontSize"] = 10
-            opts_a["legend"]["itemGap"] = 8
-            st_echarts(options=opts_a, height="420px", key="comp_chart_a")
-        else:
-            st.info("Sin datos para graficar")
+    series_kg_a = [round(r['kg_a']) for r in comparison_rows]
+    series_kg_b = [round(r['kg_b']) for r in comparison_rows]
+    series_diff = [round(r['diff']) for r in comparison_rows]
 
-    with chart_col_b:
-        st.markdown(f"""
-        <div style="text-align: center; margin-bottom: 5px;">
-            <span style="color: #e040fb; font-size: 15px; font-weight: bold;">📅 Período Comparación: {lbl_b}</span>
-        </div>
-        """, unsafe_allow_html=True)
-        result_b = _build_chart_kg_dia_sala(
-            mos_comp,
-            title=f"📅 {lbl_b}",
-            subtitle=f"{ord_b} órdenes · {kg_b:,.0f} KG · {kh_b:,.0f} KG/h"
-        )
-        if result_b:
-            opts_b, salas_b = result_b
-            opts_b["title"]["textStyle"]["fontSize"] = 14
-            opts_b["legend"]["textStyle"]["fontSize"] = 10
-            opts_b["legend"]["itemGap"] = 8
-            st_echarts(options=opts_b, height="420px", key="comp_chart_b")
-        else:
-            st.info("Sin datos para graficar")
-
-    st.markdown("---")
-
-    # === GRÁFICO V/S KG/Hora por Sala ===
-    todas_salas = sorted(set(list(salas_principal.keys()) + list(salas_comp.keys())))
-
-    if not todas_salas:
-        return
-
-    nombres = []
-    kh_actual = []
-    kh_comp_vals = []
-
-    for sala in todas_salas:
-        nombres.append(sala)
-        # Período actual - KG/Hora = total_kg / duracion_total
-        sa = salas_principal.get(sala)
-        if sa and sa['duracion_total'] > 0:
-            kh_actual.append(round(sa['total_kg'] / sa['duracion_total']))
-        else:
-            kh_actual.append(0)
-
-        # Período comparación
-        sc = salas_comp.get(sala)
-        if sc and sc['duracion_total'] > 0:
-            kh_comp_vals.append(round(sc['total_kg'] / sc['duracion_total']))
-        else:
-            kh_comp_vals.append(0)
-
-    options_vs = {
+    options_daily = {
         "title": {
-            "text": f"⚡ KG/Hora por Sala — {lbl_a} vs {lbl_b}",
-            "subtext": "Barras azules = período actual · Barras moradas = período comparación",
+            "text": f"⚖️ KG Producidos por Día — {lbl_a} vs {lbl_b}",
+            "subtext": "Barras agrupadas: producción diaria de cada período comparados lado a lado",
             "left": "center",
-            "textStyle": {"color": "#fff", "fontSize": 15, "fontWeight": "bold"},
-            "subtextStyle": {"color": "#999", "fontSize": 11}
+            "textStyle": {"color": "#fff", "fontSize": 16, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#999", "fontSize": 12}
         },
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"},
             "backgroundColor": "rgba(10, 10, 30, 0.95)",
             "borderColor": "#555",
+            "borderWidth": 1,
             "borderRadius": 10,
             "textStyle": {"color": "#fff", "fontSize": 13},
             "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
         },
         "legend": {
-            "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
+            "data": [f"📅 Actual ({lbl_a})", f"📅 Comparación ({lbl_b})", "Diferencia"],
             "bottom": 0,
             "textStyle": {"color": "#ccc", "fontSize": 12},
-            "itemGap": 30,
+            "itemGap": 20,
             "icon": "roundRect"
         },
         "grid": {
             "left": "3%", "right": "4%",
-            "bottom": "15%", "top": "20%",
+            "bottom": "12%", "top": "18%",
             "containLabel": True
         },
         "xAxis": {
             "type": "category",
-            "data": nombres,
+            "data": x_labels,
             "axisLabel": {
-                "color": "#fff", "fontSize": 12, "fontWeight": "bold",
-                "rotate": 25 if len(nombres) > 5 else 0,
+                "color": "#fff", "fontSize": 11, "fontWeight": "bold",
                 "interval": 0
             },
             "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
@@ -770,7 +771,7 @@ def _render_comparacion(
         },
         "yAxis": {
             "type": "value",
-            "name": "⚡ KG / Hora",
+            "name": "⚖️ KG",
             "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
             "axisLabel": {"color": "#ccc", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
@@ -778,11 +779,11 @@ def _render_comparacion(
         },
         "series": [
             {
-                "name": f"📅 {lbl_a}",
+                "name": f"📅 Actual ({lbl_a})",
                 "type": "bar",
-                "data": kh_actual,
-                "barMaxWidth": 40,
-                "barGap": "30%",
+                "data": series_kg_a,
+                "barMaxWidth": 45,
+                "barGap": "15%",
                 "itemStyle": {
                     "color": {
                         "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
@@ -795,15 +796,15 @@ def _render_comparacion(
                 },
                 "label": {
                     "show": True, "position": "top",
-                    "fontSize": 12, "fontWeight": "bold", "color": "#00d4ff",
+                    "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff",
                     "formatter": "{c}"
                 }
             },
             {
-                "name": f"📅 {lbl_b}",
+                "name": f"📅 Comparación ({lbl_b})",
                 "type": "bar",
-                "data": kh_comp_vals,
-                "barMaxWidth": 40,
+                "data": series_kg_b,
+                "barMaxWidth": 45,
                 "itemStyle": {
                     "color": {
                         "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
@@ -816,51 +817,227 @@ def _render_comparacion(
                 },
                 "label": {
                     "show": True, "position": "top",
-                    "fontSize": 12, "fontWeight": "bold", "color": "#e040fb",
+                    "fontSize": 11, "fontWeight": "bold", "color": "#e040fb",
+                    "formatter": "{c}"
+                }
+            },
+            {
+                "name": "Diferencia",
+                "type": "line",
+                "data": series_diff,
+                "smooth": True,
+                "symbol": "circle",
+                "symbolSize": 8,
+                "lineStyle": {"color": "#ffc107", "width": 2, "type": "dashed"},
+                "itemStyle": {"color": "#ffc107"},
+                "label": {
+                    "show": True, "position": "top",
+                    "fontSize": 10, "color": "#ffc107",
                     "formatter": "{c}"
                 }
             }
-        ]
+        ],
+        "dataZoom": [
+            {"type": "inside", "xAxisIndex": 0, "start": 0, "end": 100}
+        ] if max_dias > 10 else []
     }
 
-    altura_vs = max(420, 350 + len(nombres) * 15)
-    st_echarts(options=options_vs, height=f"{altura_vs}px")
+    st_echarts(options=options_daily, height="500px", key="comp_daily_chart")
 
-    # === TABLA DETALLE V/S POR SALA ===
-    st.markdown("##### 📋 Detalle Comparativo por Sala")
+    st.markdown("---")
 
-    for sala in todas_salas:
-        sa = salas_principal.get(sala)
-        sc = salas_comp.get(sala)
+    # === TABLA DÍA A DÍA ===
+    st.markdown("##### 📋 Detalle Día a Día")
 
-        prom_a = (sa['total_kg'] / sa['duracion_total']) if sa and sa['duracion_total'] > 0 else 0
-        prom_b = (sc['total_kg'] / sc['duracion_total']) if sc and sc['duracion_total'] > 0 else 0
-        kg_a_s = sa['total_kg'] if sa else 0
-        kg_b_s = sc['total_kg'] if sc else 0
-        ord_a_s = len(sa['ordenes']) if sa else 0
-        ord_b_s = len(sc['ordenes']) if sc else 0
+    # Header
+    st.markdown("""
+    <div style="display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1.2fr;
+                gap: 8px; padding: 10px 15px; background: rgba(0,212,255,0.1);
+                border-radius: 10px; margin-bottom: 8px; font-weight: bold; font-size: 13px;">
+        <span style="color: #aaa;">#</span>
+        <span style="color: #00d4ff;">📅 Período Actual</span>
+        <span style="color: #00d4ff; text-align: right;">KG</span>
+        <span style="color: #e040fb;">📅 Comparación</span>
+        <span style="color: #e040fb; text-align: right;">KG</span>
+        <span style="color: #ffc107; text-align: right;">Diferencia</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-        diff_kh = prom_a - prom_b
-        diff_color = "#4caf50" if diff_kh >= 0 else "#f44336"
-        diff_icon = "▲" if diff_kh >= 0 else "▼"
+    for r in comparison_rows:
+        fa_display = datetime.strptime(r['fecha_a'], '%Y-%m-%d').strftime('%a %d/%m') if r['fecha_a'] else '-'
+        fb_display = datetime.strptime(r['fecha_b'], '%Y-%m-%d').strftime('%a %d/%m') if r['fecha_b'] else '-'
 
-        with st.container(border=True):
-            tc1, tc2, tc3, tc4, tc5 = st.columns([2, 1.5, 1.5, 1.5, 1])
-            with tc1:
-                st.markdown(f"**🏭 {sala}** ({ord_a_s} vs {ord_b_s} órdenes)")
-            with tc2:
-                st.metric(f"⚡ {lbl_a}", f"{prom_a:,.0f} kg/h")
-            with tc3:
-                st.metric(f"⚡ {lbl_b}", f"{prom_b:,.0f} kg/h")
-            with tc4:
-                st.metric("⚖️ KG", f"{kg_a_s:,.0f} vs {kg_b_s:,.0f}")
-            with tc5:
-                st.markdown(f"""
-                <div style="text-align: center; padding-top: 10px;">
-                    <span style="color: {diff_color}; font-size: 22px; font-weight: bold;">
-                        {diff_icon} {abs(diff_kh):,.0f}
-                    </span>
-                    <br>
-                    <span style="color: #aaa; font-size: 11px;">kg/h dif.</span>
+        diff = r['diff']
+        diff_color = "#4caf50" if diff >= 0 else "#f44336"
+        diff_icon = "▲" if diff >= 0 else "▼"
+        diff_sign = "+" if diff >= 0 else ""
+        pct = f" ({diff_sign}{r['diff_pct']:.0f}%)" if r['kg_b'] > 0 else ""
+
+        # Visual bar indicator
+        max_kg = max(r['kg_a'], r['kg_b'], 1)
+        bar_a_width = r['kg_a'] / max_kg * 100
+        bar_b_width = r['kg_b'] / max_kg * 100
+
+        st.markdown(f"""
+        <div style="display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1.2fr;
+                    gap: 8px; padding: 10px 15px; background: rgba(255,255,255,0.03);
+                    border-radius: 8px; margin-bottom: 4px; align-items: center; font-size: 13px;">
+            <span style="color: #666; font-weight: bold;">D{r['dia_num']}</span>
+            <div>
+                <span style="color: #ccc;">{fa_display}</span>
+                <span style="color: #666; font-size: 11px;"> ({r['ord_a']} MO)</span>
+                <div style="background: #00d4ff33; height: 4px; border-radius: 2px; margin-top: 3px; width: {bar_a_width}%;">
+                    <div style="background: #00d4ff; height: 100%; border-radius: 2px; width: 100%;"></div>
                 </div>
-                """, unsafe_allow_html=True)
+            </div>
+            <span style="color: #00d4ff; text-align: right; font-weight: bold; font-size: 14px;">{r['kg_a']:,.0f}</span>
+            <div>
+                <span style="color: #ccc;">{fb_display}</span>
+                <span style="color: #666; font-size: 11px;"> ({r['ord_b']} MO)</span>
+                <div style="background: #e040fb33; height: 4px; border-radius: 2px; margin-top: 3px; width: {bar_b_width}%;">
+                    <div style="background: #e040fb; height: 100%; border-radius: 2px; width: 100%;"></div>
+                </div>
+            </div>
+            <span style="color: #e040fb; text-align: right; font-weight: bold; font-size: 14px;">{r['kg_b']:,.0f}</span>
+            <span style="color: {diff_color}; text-align: right; font-weight: bold; font-size: 14px;">
+                {diff_icon} {diff_sign}{diff:,.0f}{pct}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Fila totales
+    total_diff = kg_a_total - kg_b_total
+    td_color = "#4caf50" if total_diff >= 0 else "#f44336"
+    td_icon = "▲" if total_diff >= 0 else "▼"
+    td_sign = "+" if total_diff >= 0 else ""
+    td_pct = f" ({td_sign}{(total_diff / kg_b_total * 100):.0f}%)" if kg_b_total > 0 else ""
+
+    st.markdown(f"""
+    <div style="display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1.2fr;
+                gap: 8px; padding: 12px 15px; background: rgba(255,255,255,0.08);
+                border-radius: 10px; margin-top: 8px; font-weight: bold; font-size: 14px;
+                border: 1px solid rgba(255,255,255,0.15);">
+        <span style="color: #fff;">Σ</span>
+        <span style="color: #fff;">TOTAL</span>
+        <span style="color: #00d4ff; text-align: right; font-size: 16px;">{kg_a_total:,.0f}</span>
+        <span style="color: #fff;">TOTAL</span>
+        <span style="color: #e040fb; text-align: right; font-size: 16px;">{kg_b_total:,.0f}</span>
+        <span style="color: {td_color}; text-align: right; font-size: 16px;">
+            {td_icon} {td_sign}{total_diff:,.0f}{td_pct}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # === GRÁFICO KG POR SALA - COMPARACIÓN ===
+    todas_salas = sorted(set(list(salas_principal.keys()) + list(salas_comp.keys())))
+
+    if todas_salas:
+        nombres_sala = []
+        kg_sala_a = []
+        kg_sala_b = []
+
+        for sala in todas_salas:
+            nombres_sala.append(sala)
+            sa = salas_principal.get(sala)
+            sc = salas_comp.get(sala)
+            kg_sala_a.append(round(sa['total_kg']) if sa else 0)
+            kg_sala_b.append(round(sc['total_kg']) if sc else 0)
+
+        options_sala = {
+            "title": {
+                "text": f"🏭 KG Totales por Sala — {lbl_a} vs {lbl_b}",
+                "subtext": "Comparación de producción total por sala entre ambos períodos",
+                "left": "center",
+                "textStyle": {"color": "#fff", "fontSize": 15, "fontWeight": "bold"},
+                "subtextStyle": {"color": "#999", "fontSize": 11}
+            },
+            "tooltip": {
+                "trigger": "axis",
+                "axisPointer": {"type": "shadow"},
+                "backgroundColor": "rgba(10, 10, 30, 0.95)",
+                "borderColor": "#555",
+                "borderRadius": 10,
+                "textStyle": {"color": "#fff", "fontSize": 13},
+                "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
+            },
+            "legend": {
+                "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
+                "bottom": 0,
+                "textStyle": {"color": "#ccc", "fontSize": 12},
+                "itemGap": 30,
+                "icon": "roundRect"
+            },
+            "grid": {
+                "left": "3%", "right": "4%",
+                "bottom": "15%", "top": "20%",
+                "containLabel": True
+            },
+            "xAxis": {
+                "type": "category",
+                "data": nombres_sala,
+                "axisLabel": {
+                    "color": "#fff", "fontSize": 11, "fontWeight": "bold",
+                    "rotate": 20 if len(nombres_sala) > 5 else 0,
+                    "interval": 0
+                },
+                "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
+                "axisTick": {"show": False}
+            },
+            "yAxis": {
+                "type": "value",
+                "name": "⚖️ KG Totales",
+                "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
+                "axisLabel": {"color": "#ccc", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+                "axisLine": {"show": False}
+            },
+            "series": [
+                {
+                    "name": f"📅 {lbl_a}",
+                    "type": "bar",
+                    "data": kg_sala_a,
+                    "barMaxWidth": 40,
+                    "barGap": "20%",
+                    "itemStyle": {
+                        "color": {
+                            "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "#00d4ff"},
+                                {"offset": 1, "color": "#00d4ff55"}
+                            ]
+                        },
+                        "borderRadius": [8, 8, 0, 0]
+                    },
+                    "label": {
+                        "show": True, "position": "top",
+                        "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff",
+                        "formatter": "{c}"
+                    }
+                },
+                {
+                    "name": f"📅 {lbl_b}",
+                    "type": "bar",
+                    "data": kg_sala_b,
+                    "barMaxWidth": 40,
+                    "itemStyle": {
+                        "color": {
+                            "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "#e040fb"},
+                                {"offset": 1, "color": "#e040fb55"}
+                            ]
+                        },
+                        "borderRadius": [8, 8, 0, 0]
+                    },
+                    "label": {
+                        "show": True, "position": "top",
+                        "fontSize": 11, "fontWeight": "bold", "color": "#e040fb",
+                        "formatter": "{c}"
+                    }
+                }
+            ]
+        }
+
+        st_echarts(options=options_sala, height="450px", key="comp_sala_chart")
