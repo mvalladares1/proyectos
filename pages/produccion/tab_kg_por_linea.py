@@ -623,6 +623,17 @@ def _render_comparacion(
     lbl_a = f"{fecha_inicio_principal.strftime('%d/%m')} - {fecha_fin_principal.strftime('%d/%m')}"
     lbl_b = f"{comp_inicio.strftime('%d/%m')} - {comp_fin.strftime('%d/%m')}"
 
+    # === Traducción de días ===
+    DIAS_ES = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié', 'Thu': 'Jue',
+               'Fri': 'Vie', 'Sat': 'Sáb', 'Sun': 'Dom'}
+
+    def _dia_es(fecha_str):
+        """Convierte '2026-01-03' a 'Vie 03/01'."""
+        dt = datetime.strptime(fecha_str, '%Y-%m-%d')
+        dia_en = dt.strftime('%a')
+        dia_esp = DIAS_ES.get(dia_en, dia_en)
+        return f"{dia_esp} {dt.strftime('%d/%m')}"
+
     # === AGRUPAR KG POR DÍA ===
     def _kg_por_dia(mos_list):
         dia_kg = defaultdict(float)
@@ -639,41 +650,16 @@ def _render_comparacion(
     dias_kg_a, dias_ord_a = _kg_por_dia(mos_principal)
     dias_kg_b, dias_ord_b = _kg_por_dia(mos_comp)
 
-    # Alinear por día relativo (Día 1, Día 2, ...)
-    dias_a_list = sorted(dias_kg_a.items())  # [(fecha, kg), ...]
+    dias_a_list = sorted(dias_kg_a.items())
     dias_b_list = sorted(dias_kg_b.items())
-    max_dias = max(len(dias_a_list), len(dias_b_list))
 
-    if max_dias == 0:
+    if not dias_a_list and not dias_b_list:
         st.warning("No hay datos diarios para comparar")
         return
 
-    comparison_rows = []
-    for i in range(max_dias):
-        row = {'dia_num': i + 1}
-        if i < len(dias_a_list):
-            row['fecha_a'] = dias_a_list[i][0]
-            row['kg_a'] = dias_a_list[i][1]
-            row['ord_a'] = dias_ord_a.get(dias_a_list[i][0], 0)
-        else:
-            row['fecha_a'] = None
-            row['kg_a'] = 0
-            row['ord_a'] = 0
-        if i < len(dias_b_list):
-            row['fecha_b'] = dias_b_list[i][0]
-            row['kg_b'] = dias_b_list[i][1]
-            row['ord_b'] = dias_ord_b.get(dias_b_list[i][0], 0)
-        else:
-            row['fecha_b'] = None
-            row['kg_b'] = 0
-            row['ord_b'] = 0
-        row['diff'] = row['kg_a'] - row['kg_b']
-        row['diff_pct'] = ((row['kg_a'] - row['kg_b']) / row['kg_b'] * 100) if row['kg_b'] > 0 else 0
-        comparison_rows.append(row)
-
     # === TOTALES ===
-    kg_a_total = sum(r['kg_a'] for r in comparison_rows)
-    kg_b_total = sum(r['kg_b'] for r in comparison_rows)
+    kg_a_total = sum(kg for _, kg in dias_a_list)
+    kg_b_total = sum(kg for _, kg in dias_b_list)
     ord_a_total = len(mos_principal)
     ord_b_total = len(mos_comp)
     dias_a_count = len(dias_a_list)
@@ -720,213 +706,196 @@ def _render_comparacion(
 
     st.markdown("---")
 
-    # === GRÁFICO COMPARACIÓN DÍA A DÍA ===
-    x_labels = []
-    for r in comparison_rows:
-        fa = datetime.strptime(r['fecha_a'], '%Y-%m-%d').strftime('%d/%m') if r['fecha_a'] else '-'
-        fb = datetime.strptime(r['fecha_b'], '%Y-%m-%d').strftime('%d/%m') if r['fecha_b'] else '-'
-        x_labels.append(f"Día {r['dia_num']}\n{fa} vs {fb}")
+    # === GRÁFICO: producción diaria de cada período con fechas reales ===
+    # Eje X muestra fechas reales de ambos períodos combinadas
+    labels_a = [_dia_es(f) for f, _ in dias_a_list]
+    labels_b = [_dia_es(f) for f, _ in dias_b_list]
+    vals_a = [round(kg) for _, kg in dias_a_list]
+    vals_b = [round(kg) for _, kg in dias_b_list]
 
-    series_kg_a = [round(r['kg_a']) for r in comparison_rows]
-    series_kg_b = [round(r['kg_b']) for r in comparison_rows]
-    series_diff = [round(r['diff']) for r in comparison_rows]
+    # Gráficos lado a lado para cada período
+    chart_col_1, chart_col_2 = st.columns(2)
 
-    options_daily = {
-        "title": {
-            "text": f"⚖️ KG Producidos por Día — {lbl_a} vs {lbl_b}",
-            "subtext": "Barras agrupadas: producción diaria de cada período comparados lado a lado",
-            "left": "center",
-            "textStyle": {"color": "#fff", "fontSize": 16, "fontWeight": "bold"},
-            "subtextStyle": {"color": "#999", "fontSize": 12}
-        },
-        "tooltip": {
-            "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(10, 10, 30, 0.95)",
-            "borderColor": "#555",
-            "borderWidth": 1,
-            "borderRadius": 10,
-            "textStyle": {"color": "#fff", "fontSize": 13},
-            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
-        },
-        "legend": {
-            "data": [f"📅 Actual ({lbl_a})", f"📅 Comparación ({lbl_b})", "Diferencia"],
-            "bottom": 0,
-            "textStyle": {"color": "#ccc", "fontSize": 12},
-            "itemGap": 20,
-            "icon": "roundRect"
-        },
-        "grid": {
-            "left": "3%", "right": "4%",
-            "bottom": "12%", "top": "18%",
-            "containLabel": True
-        },
-        "xAxis": {
-            "type": "category",
-            "data": x_labels,
-            "axisLabel": {
-                "color": "#fff", "fontSize": 11, "fontWeight": "bold",
-                "interval": 0
+    with chart_col_1:
+        opts_a = {
+            "title": {
+                "text": f"📅 Período Actual: {lbl_a}",
+                "subtext": f"{ord_a_total} órdenes · {dias_a_count} días · Prom: {prom_dia_a:,.0f} KG/día",
+                "left": "center",
+                "textStyle": {"color": "#00d4ff", "fontSize": 14, "fontWeight": "bold"},
+                "subtextStyle": {"color": "#999", "fontSize": 11}
             },
-            "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
-            "axisTick": {"show": False}
-        },
-        "yAxis": {
-            "type": "value",
-            "name": "⚖️ KG",
-            "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
-            "axisLabel": {"color": "#ccc", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
-            "axisLine": {"show": False}
-        },
-        "series": [
-            {
-                "name": f"📅 Actual ({lbl_a})",
-                "type": "bar",
-                "data": series_kg_a,
-                "barMaxWidth": 45,
-                "barGap": "15%",
+            "tooltip": {
+                "trigger": "axis", "axisPointer": {"type": "shadow"},
+                "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
+                "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
+            },
+            "grid": {"left": "3%", "right": "4%", "bottom": "8%", "top": "22%", "containLabel": True},
+            "xAxis": {
+                "type": "category", "data": labels_a,
+                "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_a) > 5 else 0},
+                "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
+            },
+            "yAxis": {
+                "type": "value", "name": "KG",
+                "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+                "axisLabel": {"color": "#ccc", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+            },
+            "series": [{
+                "type": "bar", "data": vals_a, "barMaxWidth": 45,
                 "itemStyle": {
-                    "color": {
-                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                        "colorStops": [
-                            {"offset": 0, "color": "#00d4ff"},
-                            {"offset": 1, "color": "#00d4ff55"}
-                        ]
-                    },
+                    "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                              "colorStops": [{"offset": 0, "color": "#00d4ff"}, {"offset": 1, "color": "#00d4ff55"}]},
                     "borderRadius": [8, 8, 0, 0]
                 },
-                "label": {
-                    "show": True, "position": "top",
-                    "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff",
-                    "formatter": "{c}"
-                }
+                "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff"}
+            }]
+        }
+        st_echarts(options=opts_a, height="380px", key="comp_periodo_a")
+
+    with chart_col_2:
+        opts_b = {
+            "title": {
+                "text": f"📅 Período Comparación: {lbl_b}",
+                "subtext": f"{ord_b_total} órdenes · {dias_b_count} días · Prom: {prom_dia_b:,.0f} KG/día",
+                "left": "center",
+                "textStyle": {"color": "#e040fb", "fontSize": 14, "fontWeight": "bold"},
+                "subtextStyle": {"color": "#999", "fontSize": 11}
             },
-            {
-                "name": f"📅 Comparación ({lbl_b})",
-                "type": "bar",
-                "data": series_kg_b,
-                "barMaxWidth": 45,
+            "tooltip": {
+                "trigger": "axis", "axisPointer": {"type": "shadow"},
+                "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
+                "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
+            },
+            "grid": {"left": "3%", "right": "4%", "bottom": "8%", "top": "22%", "containLabel": True},
+            "xAxis": {
+                "type": "category", "data": labels_b,
+                "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_b) > 5 else 0},
+                "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
+            },
+            "yAxis": {
+                "type": "value", "name": "KG",
+                "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+                "axisLabel": {"color": "#ccc", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+            },
+            "series": [{
+                "type": "bar", "data": vals_b, "barMaxWidth": 45,
                 "itemStyle": {
-                    "color": {
-                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                        "colorStops": [
-                            {"offset": 0, "color": "#e040fb"},
-                            {"offset": 1, "color": "#e040fb55"}
-                        ]
-                    },
+                    "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                              "colorStops": [{"offset": 0, "color": "#e040fb"}, {"offset": 1, "color": "#e040fb55"}]},
                     "borderRadius": [8, 8, 0, 0]
                 },
-                "label": {
-                    "show": True, "position": "top",
-                    "fontSize": 11, "fontWeight": "bold", "color": "#e040fb",
-                    "formatter": "{c}"
-                }
-            },
-            {
-                "name": "Diferencia",
-                "type": "line",
-                "data": series_diff,
-                "smooth": True,
-                "symbol": "circle",
-                "symbolSize": 8,
-                "lineStyle": {"color": "#ffc107", "width": 2, "type": "dashed"},
-                "itemStyle": {"color": "#ffc107"},
-                "label": {
-                    "show": True, "position": "top",
-                    "fontSize": 10, "color": "#ffc107",
-                    "formatter": "{c}"
-                }
-            }
-        ],
-        "dataZoom": [
-            {"type": "inside", "xAxisIndex": 0, "start": 0, "end": 100}
-        ] if max_dias > 10 else []
-    }
-
-    st_echarts(options=options_daily, height="500px", key="comp_daily_chart")
+                "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#e040fb"}
+            }]
+        }
+        st_echarts(options=opts_b, height="380px", key="comp_periodo_b")
 
     st.markdown("---")
 
-    # === TABLA DÍA A DÍA ===
-    st.markdown("##### 📋 Detalle Día a Día")
+    # === RESUMEN COMPARATIVO ===
+    st.markdown("##### 📋 Resumen por Período")
 
-    # Header
-    st.markdown("""
-    <div style="display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1.2fr;
-                gap: 8px; padding: 10px 15px; background: rgba(0,212,255,0.1);
-                border-radius: 10px; margin-bottom: 8px; font-weight: bold; font-size: 13px;">
-        <span style="color: #aaa;">#</span>
-        <span style="color: #00d4ff;">📅 Período Actual</span>
-        <span style="color: #00d4ff; text-align: right;">KG</span>
-        <span style="color: #e040fb;">📅 Comparación</span>
-        <span style="color: #e040fb; text-align: right;">KG</span>
-        <span style="color: #ffc107; text-align: right;">Diferencia</span>
-    </div>
+    # Tabla período actual
+    st.markdown(f"""
+    <div style="margin-bottom: 15px;">
+        <div style="background: rgba(0,212,255,0.12); padding: 10px 15px; border-radius: 10px 10px 0 0;
+                    border-left: 4px solid #00d4ff; font-weight: bold; color: #00d4ff; font-size: 14px;">
+            📅 Período Actual: {lbl_a} — {dias_a_count} días — {ord_a_total} órdenes — {kg_a_total:,.0f} KG total — Prom: {prom_dia_a:,.0f} KG/día
+        </div>
     """, unsafe_allow_html=True)
 
-    for r in comparison_rows:
-        fa_display = datetime.strptime(r['fecha_a'], '%Y-%m-%d').strftime('%a %d/%m') if r['fecha_a'] else '-'
-        fb_display = datetime.strptime(r['fecha_b'], '%Y-%m-%d').strftime('%a %d/%m') if r['fecha_b'] else '-'
-
-        diff = r['diff']
-        diff_color = "#4caf50" if diff >= 0 else "#f44336"
-        diff_icon = "▲" if diff >= 0 else "▼"
-        diff_sign = "+" if diff >= 0 else ""
-        pct = f" ({diff_sign}{r['diff_pct']:.0f}%)" if r['kg_b'] > 0 else ""
-
-        # Visual bar indicator
-        max_kg = max(r['kg_a'], r['kg_b'], 1)
-        bar_a_width = r['kg_a'] / max_kg * 100
-        bar_b_width = r['kg_b'] / max_kg * 100
-
+    for fecha, kg in dias_a_list:
+        ordenes = dias_ord_a.get(fecha, 0)
+        pct_of_total = (kg / kg_a_total * 100) if kg_a_total > 0 else 0
+        bar_width = pct_of_total * 2  # scale for visual bar
+        dia_label = _dia_es(fecha)
         st.markdown(f"""
-        <div style="display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1.2fr;
-                    gap: 8px; padding: 10px 15px; background: rgba(255,255,255,0.03);
-                    border-radius: 8px; margin-bottom: 4px; align-items: center; font-size: 13px;">
-            <span style="color: #666; font-weight: bold;">D{r['dia_num']}</span>
-            <div>
-                <span style="color: #ccc;">{fa_display}</span>
-                <span style="color: #666; font-size: 11px;"> ({r['ord_a']} MO)</span>
-                <div style="background: #00d4ff33; height: 4px; border-radius: 2px; margin-top: 3px; width: {bar_a_width}%;">
-                    <div style="background: #00d4ff; height: 100%; border-radius: 2px; width: 100%;"></div>
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 2fr;
+                    gap: 8px; padding: 8px 15px; background: rgba(255,255,255,0.03);
+                    border-left: 4px solid #00d4ff33; align-items: center; font-size: 13px;">
+            <span style="color: #ccc; font-weight: bold;">{dia_label}</span>
+            <span style="color: #00d4ff; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
+            <span style="color: #666;">{ordenes} órdenes</span>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <div style="background: #00d4ff44; height: 10px; border-radius: 5px; width: {min(bar_width, 100)}%; min-width: 2px;">
+                    <div style="background: #00d4ff; height: 100%; border-radius: 5px; width: 100%;"></div>
                 </div>
+                <span style="color: #666; font-size: 11px;">{pct_of_total:.0f}%</span>
             </div>
-            <span style="color: #00d4ff; text-align: right; font-weight: bold; font-size: 14px;">{r['kg_a']:,.0f}</span>
-            <div>
-                <span style="color: #ccc;">{fb_display}</span>
-                <span style="color: #666; font-size: 11px;"> ({r['ord_b']} MO)</span>
-                <div style="background: #e040fb33; height: 4px; border-radius: 2px; margin-top: 3px; width: {bar_b_width}%;">
-                    <div style="background: #e040fb; height: 100%; border-radius: 2px; width: 100%;"></div>
-                </div>
-            </div>
-            <span style="color: #e040fb; text-align: right; font-weight: bold; font-size: 14px;">{r['kg_b']:,.0f}</span>
-            <span style="color: {diff_color}; text-align: right; font-weight: bold; font-size: 14px;">
-                {diff_icon} {diff_sign}{diff:,.0f}{pct}
-            </span>
         </div>
         """, unsafe_allow_html=True)
 
-    # Fila totales
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Tabla período comparación
+    st.markdown(f"""
+    <div style="margin-bottom: 15px; margin-top: 15px;">
+        <div style="background: rgba(224,64,251,0.12); padding: 10px 15px; border-radius: 10px 10px 0 0;
+                    border-left: 4px solid #e040fb; font-weight: bold; color: #e040fb; font-size: 14px;">
+            📅 Período Comparación: {lbl_b} — {dias_b_count} días — {ord_b_total} órdenes — {kg_b_total:,.0f} KG total — Prom: {prom_dia_b:,.0f} KG/día
+        </div>
+    """, unsafe_allow_html=True)
+
+    for fecha, kg in dias_b_list:
+        ordenes = dias_ord_b.get(fecha, 0)
+        pct_of_total = (kg / kg_b_total * 100) if kg_b_total > 0 else 0
+        bar_width = pct_of_total * 2
+        dia_label = _dia_es(fecha)
+        st.markdown(f"""
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 2fr;
+                    gap: 8px; padding: 8px 15px; background: rgba(255,255,255,0.03);
+                    border-left: 4px solid #e040fb33; align-items: center; font-size: 13px;">
+            <span style="color: #ccc; font-weight: bold;">{dia_label}</span>
+            <span style="color: #e040fb; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
+            <span style="color: #666;">{ordenes} órdenes</span>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <div style="background: #e040fb44; height: 10px; border-radius: 5px; width: {min(bar_width, 100)}%; min-width: 2px;">
+                    <div style="background: #e040fb; height: 100%; border-radius: 5px; width: 100%;"></div>
+                </div>
+                <span style="color: #666; font-size: 11px;">{pct_of_total:.0f}%</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # === RESUMEN FINAL ===
     total_diff = kg_a_total - kg_b_total
     td_color = "#4caf50" if total_diff >= 0 else "#f44336"
-    td_icon = "▲" if total_diff >= 0 else "▼"
     td_sign = "+" if total_diff >= 0 else ""
-    td_pct = f" ({td_sign}{(total_diff / kg_b_total * 100):.0f}%)" if kg_b_total > 0 else ""
+    td_icon = "▲" if total_diff >= 0 else "▼"
+    td_pct = f"({td_sign}{(total_diff / kg_b_total * 100):.0f}%)" if kg_b_total > 0 else ""
+
+    prom_diff = prom_dia_a - prom_dia_b
+    pd_color = "#4caf50" if prom_diff >= 0 else "#f44336"
+    pd_sign = "+" if prom_diff >= 0 else ""
+    pd_icon = "▲" if prom_diff >= 0 else "▼"
 
     st.markdown(f"""
-    <div style="display: grid; grid-template-columns: 0.5fr 1.5fr 1fr 1.5fr 1fr 1.2fr;
-                gap: 8px; padding: 12px 15px; background: rgba(255,255,255,0.08);
-                border-radius: 10px; margin-top: 8px; font-weight: bold; font-size: 14px;
-                border: 1px solid rgba(255,255,255,0.15);">
-        <span style="color: #fff;">Σ</span>
-        <span style="color: #fff;">TOTAL</span>
-        <span style="color: #00d4ff; text-align: right; font-size: 16px;">{kg_a_total:,.0f}</span>
-        <span style="color: #fff;">TOTAL</span>
-        <span style="color: #e040fb; text-align: right; font-size: 16px;">{kg_b_total:,.0f}</span>
-        <span style="color: {td_color}; text-align: right; font-size: 16px;">
-            {td_icon} {td_sign}{total_diff:,.0f}{td_pct}
-        </span>
+    <div style="background: rgba(255,255,255,0.06); border-radius: 12px; padding: 20px;
+                margin-top: 15px; border: 1px solid rgba(255,255,255,0.12);">
+        <div style="text-align: center; margin-bottom: 12px; color: #fff; font-size: 16px; font-weight: bold;">
+            📊 Conclusión
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
+            <div>
+                <div style="color: #aaa; font-size: 12px;">KG Totales</div>
+                <div style="color: {td_color}; font-size: 24px; font-weight: bold;">{td_icon} {td_sign}{total_diff:,.0f}</div>
+                <div style="color: #666; font-size: 12px;">{td_pct}</div>
+            </div>
+            <div>
+                <div style="color: #aaa; font-size: 12px;">KG Promedio/Día</div>
+                <div style="color: {pd_color}; font-size: 24px; font-weight: bold;">{pd_icon} {pd_sign}{prom_diff:,.0f}</div>
+                <div style="color: #666; font-size: 12px;">{prom_dia_a:,.0f} vs {prom_dia_b:,.0f}</div>
+            </div>
+            <div>
+                <div style="color: #aaa; font-size: 12px;">Órdenes</div>
+                <div style="color: #fff; font-size: 24px; font-weight: bold;">{ord_a_total} vs {ord_b_total}</div>
+                <div style="color: #666; font-size: 12px;">{dias_a_count} vs {dias_b_count} días</div>
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
