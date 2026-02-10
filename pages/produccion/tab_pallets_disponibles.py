@@ -87,11 +87,10 @@ def render(username: str = None, password: str = None):
         # Cargar productos 2026 si no están en session
         if 'pallets_disp_productos_2026' not in st.session_state:
             try:
-                with st.spinner("📅 Cargando productos..."):
-                    prods_2026 = fetch_productos_2026(username, password)
-                    st.session_state['pallets_disp_productos_2026'] = prods_2026
+                prods_2026 = fetch_productos_2026(username, password)
+                st.session_state['pallets_disp_productos_2026'] = prods_2026
             except Exception as e:
-                st.error(f"Error al cargar productos: {str(e)}")
+                # Si falla, simplemente continuar con lista vacía
                 st.session_state['pallets_disp_productos_2026'] = []
         
         productos_2026 = st.session_state.get('pallets_disp_productos_2026', [])
@@ -105,11 +104,10 @@ def render(username: str = None, password: str = None):
         # Cargar proveedores si no están en session
         if 'pallets_disp_proveedores' not in st.session_state:
             try:
-                with st.spinner("👥 Cargando proveedores..."):
-                    provs = fetch_proveedores_compras(username, password)
-                    st.session_state['pallets_disp_proveedores'] = provs
+                provs = fetch_proveedores_compras(username, password)
+                st.session_state['pallets_disp_proveedores'] = provs
             except Exception as e:
-                st.error(f"Error al cargar proveedores: {str(e)}")
+                # Si falla, simplemente continuar con lista vacía
                 st.session_state['pallets_disp_proveedores'] = []
         
         proveedores = st.session_state.get('pallets_disp_proveedores', [])

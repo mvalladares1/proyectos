@@ -3,7 +3,9 @@ Servicio para obtener pallets disponibles que NO están en ninguna fabricación.
 Excluye ubicaciones específicas de stock/cámaras.
 """
 import logging
-from typing import Dict, List, Any, Optionalfrom datetime import datetimefrom shared.odoo_client import OdooClient
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+from shared.odoo_client import OdooClient
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,7 @@ class PalletsDisponiblesService:
                 domain_lots,
                 ['product_id'],
                 limit=10000,
-                order='create_date desc'
+                order='id desc'
             )
             
             if not lotes:
@@ -96,7 +98,7 @@ class PalletsDisponiblesService:
                 domain_po,
                 ['partner_id'],
                 limit=5000,
-                order='date_order desc'
+                order='id desc'
             )
             
             if not ordenes:
