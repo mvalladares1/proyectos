@@ -609,29 +609,44 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             # Usuario no configurado, usar regla por defecto
             rule_id = 144
         
-        # 2. Verificar aprobaciones existentes para TODAS las reglas (144 y 122)
+        # 2. Verificar entradas existentes del usuario (aprobadas O rechazadas)
+        mi_entrada = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search_read',
+            [[('res_id', '=', int(oc_id)), ('rule_id', '=', rule_id), ('user_id', '=', int(uid))]],
+            {'fields': ['id', 'approved'], 'context': contexto}
+        )
+        
+        if mi_entrada:
+            if mi_entrada[0]['approved']:
+                return False, "Ya aprobaste esta OC anteriormente"
+            else:
+                # Tiene un rechazo previo → sobrescribir con aprobación
+                models.execute_kw(
+                    DB, uid, password,
+                    'studio.approval.entry', 'write',
+                    [[mi_entrada[0]['id']], {'approved': True}]
+                )
+        else:
+            # No tiene entrada → crear nueva aprobación
+            models.execute_kw(
+                DB, uid, password,
+                'studio.approval.entry', 'create',
+                [{
+                    'res_id': int(oc_id),
+                    'rule_id': rule_id,
+                    'user_id': int(uid),
+                    'approved': True
+                }],
+                {'context': contexto}
+            )
+        
+        # Contar aprobaciones totales (de todos los usuarios)
         aprobaciones_existentes = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
             [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('approved', '=', True)]],
             {'fields': ['id', 'user_id', 'rule_id'], 'context': contexto}
-        )
-        
-        # Si el usuario actual ya aprobó, no hacer nada
-        if any(aprobacion['user_id'][0] == uid for aprobacion in aprobaciones_existentes if aprobacion.get('user_id')):
-            return False, "Ya aprobaste esta OC anteriormente"
-        
-        # 3. Crear la entrada de aprobación en Studio CON LA REGLA ESPECÍFICA DEL USUARIO
-        models.execute_kw(
-            DB, uid, password,
-            'studio.approval.entry', 'create',
-            [{
-                'res_id': int(oc_id),
-                'rule_id': rule_id,
-                'user_id': int(uid),
-                'approved': True
-            }],
-            {'context': contexto}
         )
         
         # 4. Si hay actividad pendiente, completarla para limpieza visual
@@ -647,7 +662,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                 pass
         
         # 5. Determinar qué hacer según el número de aprobaciones
-        num_aprobaciones = len(aprobaciones_existentes) + 1
+        num_aprobaciones = len(aprobaciones_existentes)
         
         if num_aprobaciones >= 2:
             # Ya están las 2 aprobaciones - confirmar la orden
@@ -705,26 +720,26 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
 
 
 def quitar_aprobacion(models, uid, password, oc_id):
-    """Quitar la aprobación del usuario actual de una OC"""
+    """Quitar la aprobación o rechazo del usuario actual de una OC"""
     try:
-        # Buscar la aprobación del usuario actual para esta OC (cualquier regla: 144 o 122)
-        aprobaciones = models.execute_kw(
+        # Buscar cualquier entrada del usuario (aprobada o rechazada)
+        entradas = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search',
-            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('user_id', '=', int(uid)), ('approved', '=', True)]]
+            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('user_id', '=', int(uid))]]
         )
         
-        if not aprobaciones:
-            return False, "No tienes aprobación registrada para esta OC"
+        if not entradas:
+            return False, "No tienes aprobación ni rechazo registrado para esta OC"
         
-        # Eliminar la aprobación
+        # Eliminar la entrada
         models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'unlink',
-            [aprobaciones]
+            [entradas]
         )
         
-        return True, "Aprobación eliminada correctamente"
+        return True, "Aprobación/rechazo eliminado correctamente"
     except Exception as e:
         return False, str(e)
 
@@ -806,25 +821,7 @@ def rechazar_oc(models, uid, username, password, oc_id, motivo, activity_id=None
             except:
                 pass
         
-        # 3. Publicar nota interna de rechazo en el chatter
-        mensaje_rechazo = f"❌ <b>OC RECHAZADA</b> por {username}<br/><b>Motivo:</b> {motivo}"
-        try:
-            models.execute_kw(
-                DB, uid, password,
-                'purchase.order', 'message_post',
-                [int(oc_id)],
-                {
-                    'body': mensaje_rechazo,
-                    'message_type': 'comment',
-                    'subtype_xmlid': 'mail.mt_note',
-                    'context': contexto
-                }
-            )
-            resultados_parciales.append("Nota de rechazo publicada")
-        except Exception as e_msg:
-            resultados_parciales.append(f"Error al publicar nota: {str(e_msg)[:50]}")
-        
-        # 4. Crear actividad de seguimiento para el responsable de la OC
+        # 3. Crear actividad de seguimiento para el responsable de la OC
         try:
             # Obtener el responsable de la OC
             oc_data = models.execute_kw(
