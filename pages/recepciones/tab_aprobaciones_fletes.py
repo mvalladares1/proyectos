@@ -743,6 +743,135 @@ def rechazar_actividad(models, uid, username, password, activity_id, motivo):
         return False, str(e)
 
 
+def rechazar_oc(models, uid, username, password, oc_id, motivo, activity_id=None):
+    """
+    Rechazar una OC de flete:
+    1. Registrar rechazo en studio.approval.entry (approved=False) para que aparezca con ícono rojo
+    2. Si hay actividad pendiente, completarla con feedback de rechazo
+    3. Publicar nota de rechazo en el chatter
+    4. Crear actividad de seguimiento asignada al responsable de la OC
+    """
+    try:
+        contexto = {'lang': 'es_ES'}
+        resultados_parciales = []
+        
+        # 1. Determinar regla del usuario
+        if username.lower() == 'msepulveda@riofuturo.cl':
+            rule_id = 144
+        elif username.lower() == 'fhorst@riofuturo.cl':
+            rule_id = 122
+        else:
+            rule_id = 144
+        
+        # Verificar si el usuario ya tiene una entrada (aprobada o rechazada)
+        entrada_existente = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search',
+            [[('res_id', '=', int(oc_id)), ('rule_id', '=', rule_id), ('user_id', '=', int(uid))]]
+        )
+        
+        if entrada_existente:
+            # Actualizar la entrada existente a rechazada
+            models.execute_kw(
+                DB, uid, password,
+                'studio.approval.entry', 'write',
+                [entrada_existente, {'approved': False}]
+            )
+            resultados_parciales.append("Entrada de aprobación marcada como rechazada")
+        else:
+            # Crear nueva entrada con approved=False (rechazo)
+            models.execute_kw(
+                DB, uid, password,
+                'studio.approval.entry', 'create',
+                [{
+                    'res_id': int(oc_id),
+                    'rule_id': rule_id,
+                    'user_id': int(uid),
+                    'approved': False
+                }],
+                {'context': contexto}
+            )
+            resultados_parciales.append("Rechazo registrado en aprobaciones")
+        
+        # 2. Si hay actividad pendiente, completarla con feedback de rechazo
+        if activity_id and pd.notna(activity_id):
+            try:
+                models.execute_kw(
+                    DB, uid, password,
+                    'mail.activity', 'action_feedback',
+                    [[int(activity_id)]],
+                    {'feedback': f'RECHAZADO: {motivo}', 'context': contexto}
+                )
+                resultados_parciales.append("Actividad completada con rechazo")
+            except:
+                pass
+        
+        # 3. Publicar nota interna de rechazo en el chatter
+        mensaje_rechazo = f"❌ <b>OC RECHAZADA</b> por {username}<br/><b>Motivo:</b> {motivo}"
+        try:
+            models.execute_kw(
+                DB, uid, password,
+                'purchase.order', 'message_post',
+                [int(oc_id)],
+                {
+                    'body': mensaje_rechazo,
+                    'message_type': 'comment',
+                    'subtype_xmlid': 'mail.mt_note',
+                    'context': contexto
+                }
+            )
+            resultados_parciales.append("Nota de rechazo publicada")
+        except Exception as e_msg:
+            resultados_parciales.append(f"Error al publicar nota: {str(e_msg)[:50]}")
+        
+        # 4. Crear actividad de seguimiento para el responsable de la OC
+        try:
+            # Obtener el responsable de la OC
+            oc_data = models.execute_kw(
+                DB, uid, password,
+                'purchase.order', 'read',
+                [int(oc_id)],
+                {'fields': ['user_id', 'name'], 'context': contexto}
+            )
+            responsable_id = uid  # Por defecto, asignar al mismo usuario
+            oc_name = f"OC {oc_id}"
+            if oc_data and oc_data[0].get('user_id'):
+                responsable_id = oc_data[0]['user_id'][0]
+                oc_name = oc_data[0].get('name', oc_name)
+            
+            # Buscar el tipo de actividad "To Do" o "Por hacer"
+            activity_type_ids = models.execute_kw(
+                DB, uid, password,
+                'mail.activity.type', 'search',
+                [[('name', 'in', ['To Do', 'Por hacer'])]],
+                {'limit': 1}
+            )
+            activity_type_id = activity_type_ids[0] if activity_type_ids else 4  # 4 = To Do por defecto
+            
+            models.execute_kw(
+                DB, uid, password,
+                'mail.activity', 'create',
+                [{
+                    'res_model_id': models.execute_kw(DB, uid, password, 'ir.model', 'search', [[('model', '=', 'purchase.order')]])[0],
+                    'res_id': int(oc_id),
+                    'activity_type_id': activity_type_id,
+                    'user_id': responsable_id,
+                    'summary': f'OC Rechazada - Revisar',
+                    'note': f'Rechazada por {username}. Motivo: {motivo}',
+                    'date_deadline': datetime.now().strftime('%Y-%m-%d'),
+                }],
+                {'context': contexto}
+            )
+            resultados_parciales.append("Actividad de seguimiento creada")
+        except Exception as e_act:
+            resultados_parciales.append(f"Error al crear actividad: {str(e_act)[:50]}")
+        
+        resumen = " | ".join(resultados_parciales)
+        return True, f"❌ Rechazada - {resumen}"
+    except Exception as e:
+        return False, str(e)
+
+
 def render_tab(username, password):
     """Renderiza el tab de aprobaciones de fletes"""
     
@@ -1253,12 +1382,25 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             
             with col4:
                 if st.button(f"❌ Rechazar", key=f"rechazar_{key_proveedor}"):
+                    st.session_state[f'mostrar_motivo_rechazo_{key_proveedor}'] = True
+        
+        # Formulario de rechazo con motivo (fuera de las columnas para que tenga ancho completo)
+        if st.session_state.get(f'mostrar_motivo_rechazo_{key_proveedor}', False):
+            st.warning("⚠️ Ingresa el motivo del rechazo:")
+            motivo = st.text_input(
+                "Motivo del rechazo",
+                key=f"motivo_rechazo_{key_proveedor}",
+                placeholder="Ej: Precio fuera de rango, proveedor incorrecto, etc."
+            )
+            col_confirmar, col_cancelar, _ = st.columns([1, 1, 3])
+            with col_confirmar:
+                if st.button("✅ Confirmar rechazo", key=f"confirmar_rechazo_{key_proveedor}", type="primary", disabled=not motivo):
                     with st.spinner("Rechazando..."):
                         resultados = []
                         for oc_id in st.session_state[f'selected_{key_proveedor}']:
                             oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
                             activity_id = oc_data.get('actividad_id')
-                            success, msg = rechazar_oc(models, uid, password, oc_id, activity_id)
+                            success, msg = rechazar_oc(models, uid, username, password, oc_id, motivo, activity_id)
                             resultados.append((oc_data['oc_name'], success, msg))
                         
                         for oc_name, success, msg in resultados:
@@ -1267,9 +1409,14 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
+                        st.session_state[f'mostrar_motivo_rechazo_{key_proveedor}'] = False
                         obtener_ocs_fletes_con_aprobaciones.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
+            with col_cancelar:
+                if st.button("❌ Cancelar", key=f"cancelar_rechazo_{key_proveedor}"):
+                    st.session_state[f'mostrar_motivo_rechazo_{key_proveedor}'] = False
+                    st.rerun()
     
     # Ejecutar el fragment
     _fragment_seleccion()
