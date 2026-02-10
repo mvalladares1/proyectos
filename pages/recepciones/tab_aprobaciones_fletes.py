@@ -1027,7 +1027,7 @@ def render_tab(username, password):
 
 
 def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, uid, username, password):
-    """Renderizar tabla de un proveedor específico - Sin @st.fragment para que los botones funcionen"""
+    """Renderizar tabla de un proveedor específico con selección y acciones"""
     # Filtrar solo OCs que se pueden aprobar (menos de 2 aprobaciones y no completamente aprobadas)
     df_aprobables = df_proveedor[
         (df_proveedor['num_aprobaciones'] < 2) &
@@ -1075,210 +1075,201 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
     if f'checkbox_version_{key_proveedor}' not in st.session_state:
         st.session_state[f'checkbox_version_{key_proveedor}'] = 0
     
-    # Checkbox "Seleccionar todas"
-    col_check, col_info = st.columns([1, 3])
-    with col_check:
-        # Calcular si todas están seleccionadas
-        todas_seleccionadas = len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables) and len(df_aprobables) > 0
-        
-        select_all = st.checkbox(
-            "Seleccionar todas",
-            key=f"select_all_{key_proveedor}",
-            value=todas_seleccionadas
-        )
-        
-        # Actualizar selección según el estado del checkbox
-        if select_all and not todas_seleccionadas:
-            # Usuario marcó "seleccionar todas"
-            st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
-            st.session_state[f'checkbox_version_{key_proveedor}'] += 1
-            st.rerun()
-        elif not select_all and todas_seleccionadas:
-            # Usuario desmarcó "seleccionar todas"
-            st.session_state[f'selected_{key_proveedor}'] = set()
-            st.session_state[f'checkbox_version_{key_proveedor}'] += 1
-            st.rerun()
-    
-    with col_info:
-        if st.session_state[f'selected_{key_proveedor}']:
-            st.caption(f"✅ {len(st.session_state[f'selected_{key_proveedor}'])} OCs seleccionadas")
-    
-    # Función para comparar con presupuesto
-    def comparar_presupuesto(row):
-        if pd.isna(row['costo_presupuestado']) or not row['costo_presupuestado']:
-            return '⚠️ Sin ppto'
-        if pd.isna(row['monto']) or not row['monto']:
-            return '-'
-        
-        dif = row['monto'] - row['costo_presupuestado']
-        dif_pct = (dif / row['costo_presupuestado']) * 100
-        
-        if dif <= 0:
-            return f"🟢 -{abs(dif_pct):.0f}%"
-        elif dif_pct <= 10:
-            return f"🟡 +{dif_pct:.0f}%"
-        else:
-            return f"🔴 +{dif_pct:.0f}%"
-    
-    # Cabeceras de la tabla
-    col_sel_h, col_oc_h, col_fecha_h, col_monto_h, col_kg_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
-    with col_sel_h:
-        st.markdown("**✅**")
-    with col_oc_h:
-        st.markdown("**OC**")
-    with col_fecha_h:
-        st.markdown("**Fecha**")
-    with col_monto_h:
-        st.markdown("**Monto**")
-    with col_kg_h:
-        st.markdown("**$/kg USD**")
-    with col_ppto_h:
-        st.markdown("**vs Ppto**")
-    with col_aprob_h:
-        st.markdown("**Aprobación**")
-    
-    st.markdown("---")
-    
-    # Obtener versión actual de checkboxes
-    checkbox_version = st.session_state.get(f'checkbox_version_{key_proveedor}', 0)
-    
-    # Callback para manejar cambios de checkboxes individuales
-    def on_checkbox_change(oc_id, cb_key):
-        if st.session_state[cb_key]:
-            st.session_state[f'selected_{key_proveedor}'].add(oc_id)
-        else:
-            st.session_state[f'selected_{key_proveedor}'].discard(oc_id)
-    
-    # Pre-inicializar keys de checkboxes ANTES de renderizar
-    # Solo se inicializan si la key no existe aún (key nueva o version nueva)
-    for idx, row in df_aprobables.iterrows():
-        cb_key = f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
-        if cb_key not in st.session_state:
-            st.session_state[cb_key] = row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
-    
-    # Mostrar tabla con checkboxes
-    for idx, row in df_aprobables.iterrows():
-        col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
-        
-        with col_sel:
-            cb_key = f"check_{key_proveedor}_{row['oc_id']}_v{checkbox_version}"
+    # --- Fragment: solo la selección de checkboxes se re-renderiza al hacer click ---
+    @st.fragment
+    def _fragment_seleccion():
+        # Checkbox "Seleccionar todas"
+        col_check, col_info = st.columns([1, 3])
+        with col_check:
+            todas_seleccionadas = len(st.session_state[f'selected_{key_proveedor}']) == len(df_aprobables) and len(df_aprobables) > 0
             
-            st.checkbox(
-                f"Sel {row['oc_name']}",
-                key=cb_key,
-                label_visibility="collapsed",
-                on_change=on_checkbox_change,
-                args=(row['oc_id'], cb_key)
+            select_all = st.checkbox(
+                "Seleccionar todas",
+                key=f"select_all_{key_proveedor}",
+                value=todas_seleccionadas
             )
+            
+            if select_all and not todas_seleccionadas:
+                st.session_state[f'selected_{key_proveedor}'] = set(df_aprobables['oc_id'].tolist())
+                st.session_state[f'checkbox_version_{key_proveedor}'] += 1
+                st.rerun()
+            elif not select_all and todas_seleccionadas:
+                st.session_state[f'selected_{key_proveedor}'] = set()
+                st.session_state[f'checkbox_version_{key_proveedor}'] += 1
+                st.rerun()
         
-        with col_oc:
-            st.markdown(f"**{row['oc_name']}**")
+        with col_info:
+            if st.session_state[f'selected_{key_proveedor}']:
+                st.caption(f"✅ {len(st.session_state[f'selected_{key_proveedor}'])} OCs seleccionadas")
         
-        with col_fecha:
-            fecha_str = pd.to_datetime(row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(row['fecha_orden']) else 'Sin fecha'
-            st.text(fecha_str)
-        
-        with col_monto:
-            st.text(f"${row['monto']:,.0f}")
-        
-        with col_kg:
-            # Mostrar $/kg USD con alerta de color
-            if row.get('cost_per_kg_usd'):
-                costo_kg = row['cost_per_kg_usd']
-                if costo_kg > UMBRAL_COSTO_KG_USD * 1.2:
-                    st.markdown(f"🔴 ${costo_kg:.3f}")
-                elif costo_kg > UMBRAL_COSTO_KG_USD:
-                    st.markdown(f"🟡 ${costo_kg:.3f}")
-                else:
-                    st.markdown(f"🟢 ${costo_kg:.3f}")
+        # Función para comparar con presupuesto
+        def comparar_presupuesto(row):
+            if pd.isna(row['costo_presupuestado']) or not row['costo_presupuestado']:
+                return '⚠️ Sin ppto'
+            if pd.isna(row['monto']) or not row['monto']:
+                return '-'
+            dif = row['monto'] - row['costo_presupuestado']
+            dif_pct = (dif / row['costo_presupuestado']) * 100
+            if dif <= 0:
+                return f"🟢 -{abs(dif_pct):.0f}%"
+            elif dif_pct <= 10:
+                return f"🟡 +{dif_pct:.0f}%"
             else:
-                st.text("-")
+                return f"🔴 +{dif_pct:.0f}%"
         
-        with col_ppto:
-            st.text(comparar_presupuesto(row))
+        # Cabeceras de la tabla
+        col_sel_h, col_oc_h, col_fecha_h, col_monto_h, col_kg_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
+        with col_sel_h:
+            st.markdown("**✅**")
+        with col_oc_h:
+            st.markdown("**OC**")
+        with col_fecha_h:
+            st.markdown("**Fecha**")
+        with col_monto_h:
+            st.markdown("**Monto**")
+        with col_kg_h:
+            st.markdown("**$/kg USD**")
+        with col_ppto_h:
+            st.markdown("**vs Ppto**")
+        with col_aprob_h:
+            st.markdown("**Aprobación**")
         
-        with col_aprob:
-            st.text(f"{row['estado_aprobacion']} - {row['aprobadores'][:30]}")
-    
-    # Botones de acción
-    if st.session_state[f'selected_{key_proveedor}']:
         st.markdown("---")
         
-        # Obtener datos de OCs seleccionadas
-        ocs_seleccionadas = df_aprobables[df_aprobables['oc_id'].isin(st.session_state[f'selected_{key_proveedor}'])]
-        total_sel = ocs_seleccionadas['monto'].sum()
+        # Obtener versión actual de checkboxes
+        checkbox_version = st.session_state.get(f'checkbox_version_{key_proveedor}', 0)
         
-        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-        with col1:
-            st.markdown(f"**💰 Total: ${total_sel:,.0f}**")
+        # Callback para manejar cambios de checkboxes individuales
+        def on_checkbox_change(oc_id, cb_key):
+            if st.session_state[cb_key]:
+                st.session_state[f'selected_{key_proveedor}'].add(oc_id)
+            else:
+                st.session_state[f'selected_{key_proveedor}'].discard(oc_id)
         
-        with col2:
-            if st.button(f"✅ Aprobar", key=f"aprobar_{key_proveedor}", type="primary"):
-                with st.spinner("Aprobando..."):
-                    resultados = []
-                    for oc_id in st.session_state[f'selected_{key_proveedor}']:
-                        oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
-                        activity_id = oc_data.get('actividad_id')
-                        success, msg = aprobar_oc(models, uid, username, password, oc_id, activity_id)
-                        resultados.append((oc_data['oc_name'], success, msg))
-                    
-                    # Mostrar resultados
-                    for oc_name, success, msg in resultados:
-                        if success:
-                            st.success(f"{oc_name}: {msg}")
-                        else:
-                            st.error(f"{oc_name}: {msg}")
-                    
-                    # Limpiar selección y forzar rerun completo
-                    st.session_state[f'selected_{key_proveedor}'] = set()
-                    st.session_state['force_rerun'] = True
-                    time.sleep(1)
-                    st.rerun()
+        # Pre-inicializar keys de checkboxes ANTES de renderizar
+        for _idx, _row in df_aprobables.iterrows():
+            cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
+            if cb_key not in st.session_state:
+                st.session_state[cb_key] = _row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
         
-        with col3:
-            if st.button(f"🔄 Quitar aprobación", key=f"quitar_{key_proveedor}"):
-                with st.spinner("Quitando aprobaciones..."):
-                    resultados = []
-                    for oc_id in st.session_state[f'selected_{key_proveedor}']:
-                        oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
-                        success, msg = quitar_aprobacion(models, uid, password, oc_id)
-                        resultados.append((oc_data['oc_name'], success, msg))
-                    
-                    # Mostrar resultados
-                    for oc_name, success, msg in resultados:
-                        if success:
-                            st.success(f"{oc_name}: {msg}")
-                        else:
-                            st.warning(f"{oc_name}: {msg}")
-                    
-                    # Limpiar selección y forzar rerun completo
-                    st.session_state[f'selected_{key_proveedor}'] = set()
-                    st.session_state['force_rerun'] = True
-                    time.sleep(1)
-                    st.rerun()
+        # Mostrar tabla con checkboxes
+        for _idx, _row in df_aprobables.iterrows():
+            col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
+            
+            with col_sel:
+                cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
+                
+                st.checkbox(
+                    f"Sel {_row['oc_name']}",
+                    key=cb_key,
+                    label_visibility="collapsed",
+                    on_change=on_checkbox_change,
+                    args=(_row['oc_id'], cb_key)
+                )
+            
+            with col_oc:
+                st.markdown(f"**{_row['oc_name']}**")
+            
+            with col_fecha:
+                fecha_str = pd.to_datetime(_row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(_row['fecha_orden']) else 'Sin fecha'
+                st.text(fecha_str)
+            
+            with col_monto:
+                st.text(f"${_row['monto']:,.0f}")
+            
+            with col_kg:
+                if _row.get('cost_per_kg_usd'):
+                    costo_kg = _row['cost_per_kg_usd']
+                    if costo_kg > UMBRAL_COSTO_KG_USD * 1.2:
+                        st.markdown(f"🔴 ${costo_kg:.3f}")
+                    elif costo_kg > UMBRAL_COSTO_KG_USD:
+                        st.markdown(f"🟡 ${costo_kg:.3f}")
+                    else:
+                        st.markdown(f"🟢 ${costo_kg:.3f}")
+                else:
+                    st.text("-")
+            
+            with col_ppto:
+                st.text(comparar_presupuesto(_row))
+            
+            with col_aprob:
+                st.text(f"{_row['estado_aprobacion']} - {_row['aprobadores'][:30]}")
         
-        with col4:
-            if st.button(f"❌ Rechazar", key=f"rechazar_{key_proveedor}"):
-                with st.spinner("Rechazando..."):
-                    resultados = []
-                    for oc_id in st.session_state[f'selected_{key_proveedor}']:
-                        oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
-                        activity_id = oc_data.get('actividad_id')
-                        success, msg = rechazar_oc(models, uid, password, oc_id, activity_id)
-                        resultados.append((oc_data['oc_name'], success, msg))
-                    
-                    # Mostrar resultados
-                    for oc_name, success, msg in resultados:
-                        if success:
-                            st.info(f"{oc_name}: {msg}")
-                        else:
-                            st.error(f"{oc_name}: {msg}")
-                    
-                    # Limpiar selección y forzar rerun completo
-                    st.session_state[f'selected_{key_proveedor}'] = set()
-                    st.session_state['force_rerun'] = True
-                    time.sleep(1)
-                    st.rerun()
+        # Botones de acción DENTRO del fragment
+        if st.session_state[f'selected_{key_proveedor}']:
+            st.markdown("---")
+            
+            ocs_seleccionadas = df_aprobables[df_aprobables['oc_id'].isin(st.session_state[f'selected_{key_proveedor}'])]
+            total_sel = ocs_seleccionadas['monto'].sum()
+            
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+            with col1:
+                st.markdown(f"**💰 Total: ${total_sel:,.0f}**")
+            
+            with col2:
+                if st.button(f"✅ Aprobar", key=f"aprobar_{key_proveedor}", type="primary"):
+                    with st.spinner("Aprobando..."):
+                        resultados = []
+                        for oc_id in st.session_state[f'selected_{key_proveedor}']:
+                            oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
+                            activity_id = oc_data.get('actividad_id')
+                            success, msg = aprobar_oc(models, uid, username, password, oc_id, activity_id)
+                            resultados.append((oc_data['oc_name'], success, msg))
+                        
+                        for oc_name, success, msg in resultados:
+                            if success:
+                                st.success(f"{oc_name}: {msg}")
+                            else:
+                                st.error(f"{oc_name}: {msg}")
+                        
+                        st.session_state[f'selected_{key_proveedor}'] = set()
+                        st.session_state['force_rerun'] = True
+                        time.sleep(1)
+                        st.rerun(scope="app")
+            
+            with col3:
+                if st.button(f"🔄 Quitar aprobación", key=f"quitar_{key_proveedor}"):
+                    with st.spinner("Quitando aprobaciones..."):
+                        resultados = []
+                        for oc_id in st.session_state[f'selected_{key_proveedor}']:
+                            oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
+                            success, msg = quitar_aprobacion(models, uid, password, oc_id)
+                            resultados.append((oc_data['oc_name'], success, msg))
+                        
+                        for oc_name, success, msg in resultados:
+                            if success:
+                                st.success(f"{oc_name}: {msg}")
+                            else:
+                                st.warning(f"{oc_name}: {msg}")
+                        
+                        st.session_state[f'selected_{key_proveedor}'] = set()
+                        st.session_state['force_rerun'] = True
+                        time.sleep(1)
+                        st.rerun(scope="app")
+            
+            with col4:
+                if st.button(f"❌ Rechazar", key=f"rechazar_{key_proveedor}"):
+                    with st.spinner("Rechazando..."):
+                        resultados = []
+                        for oc_id in st.session_state[f'selected_{key_proveedor}']:
+                            oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
+                            activity_id = oc_data.get('actividad_id')
+                            success, msg = rechazar_oc(models, uid, password, oc_id, activity_id)
+                            resultados.append((oc_data['oc_name'], success, msg))
+                        
+                        for oc_name, success, msg in resultados:
+                            if success:
+                                st.info(f"{oc_name}: {msg}")
+                            else:
+                                st.error(f"{oc_name}: {msg}")
+                        
+                        st.session_state[f'selected_{key_proveedor}'] = set()
+                        st.session_state['force_rerun'] = True
+                        time.sleep(1)
+                        st.rerun(scope="app")
+    
+    # Ejecutar el fragment
+    _fragment_seleccion()
 
 
 def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, password):
