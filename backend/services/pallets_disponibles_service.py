@@ -3,7 +3,9 @@ Servicio para obtener pallets disponibles que NO están en ninguna fabricación.
 Excluye ubicaciones específicas de stock/cámaras.
 """
 import logging
-from typing import Dict, List, Any, Optionalfrom datetime import datetimefrom shared.odoo_client import OdooClient
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+from shared.odoo_client import OdooClient
 
 logger = logging.getLogger(__name__)
 
