@@ -494,7 +494,16 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "600",
                         "color": "#7FA8C9",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                        "formatter": JsCode(
+                            "function(params){" +
+                            "var detenciones = " + json.dumps({i: tooltip_data[i]['detenciones'] for i in range(len(dias_sorted))}) + ";" +
+                            "if(params.value<=0) return '';" +
+                            "var det = detenciones[params.dataIndex];" +
+                            "var label = Math.round(params.value);" +
+                            "if(det > 0) label += ' (⏸️' + det.toFixed(1) + 'h)';" +
+                            "return label;" +
+                            "}"
+                        ).js_code
                     }
                 },
                 {
@@ -532,9 +541,9 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     st.markdown("##### 🏭 KG/Hora por Sala")
     
     colores_sala = [
-        '#2196F3', '#FF9800', '#4CAF50', '#F44336', '#9C27B0',
-        '#FFEB3B', '#00BCD4', '#E91E63', '#8BC34A', '#673AB7',
-        '#FF5722', '#009688', '#03A9F4', '#FFC107', '#00ACC1',
+        '#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
+        '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7',
+        '#FF5722', '#03A9F4', '#8BC34A', '#00ACC1', '#FFEB3B',
     ]
     
     # Ordenar salas por KG/Hora promedio
@@ -672,7 +681,16 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 9,
                         "fontWeight": "600",
                         "color": color_sala,
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                        "formatter": JsCode(
+                            "function(params){" +
+                            "var detenciones = " + json.dumps({i: sala_tooltip_data[i]['detenciones'] for i in range(len(dias_sala_sorted))}) + ";" +
+                            "if(params.value<=0) return '';" +
+                            "var det = detenciones[params.dataIndex];" +
+                            "var label = Math.round(params.value);" +
+                            "if(det > 0) label += ' (⏸️' + det.toFixed(1) + 'h)';" +
+                            "return label;" +
+                            "}"
+                        ).js_code
                     }
                 },
                 {
@@ -889,9 +907,9 @@ def render(username: str = None, password: str = None):
 
     # === TARJETAS POR SALA ===
     colores_sala = [
-        '#2196F3', '#FF9800', '#4CAF50', '#F44336', '#9C27B0',
-        '#FFEB3B', '#00BCD4', '#E91E63', '#8BC34A', '#673AB7',
-        '#FF5722', '#009688', '#03A9F4', '#FFC107', '#00ACC1',
+        '#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
+        '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7',
+        '#FF5722', '#03A9F4', '#8BC34A', '#00ACC1', '#FFEB3B',
     ]
 
     # Ordenar salas por KG/Hora (kg_con_duracion/duracion) descendente
