@@ -97,6 +97,19 @@ def emoji_especie(especie: str) -> str:
     return '🍓'  # Default
 
 
+def emoji_estado(state: str) -> str:
+    """Retorna el emoji correspondiente al estado de la MO."""
+    if state == 'done':
+        return '✅'
+    elif state == 'progress':
+        return '🔄'
+    elif state == 'confirmed':
+        return '📋'
+    elif state == 'cancel':
+        return '❌'
+    return '📝'
+
+
 def estado_label(state: str) -> str:
     estados = {
         'draft': 'Borrador',
@@ -805,7 +818,9 @@ def render(username: str = None, password: str = None):
                 rend = orden.get('rendimiento', 0) or 0
                 especie_o = orden.get('especie', '-')
                 mo_name = orden.get('mo_name', 'N/A')
-                estado = 'Terminada' if orden.get('fecha_termino') else 'En Proceso'
+                estado_code = orden.get('state', 'progress')
+                estado = estado_label(estado_code)
+                em_estado = emoji_estado(estado_code)
 
                 inicio_dt = orden.get('_inicio_dt')
                 fin_dt = orden.get('_fin_dt')
@@ -819,7 +834,7 @@ def render(username: str = None, password: str = None):
                 em_o = emoji_kg_hora(kg_h)
                 em_esp = emoji_especie(especie_o)
 
-                st.markdown(f"**{em_o} {mo_name}** — {estado} — {em_esp} {especie_o}")
+                st.markdown(f"**{em_o} {mo_name}** — {em_estado} {estado} — {em_esp} {especie_o}")
 
                 # CSS para ajustar tamaño de fuente en métricas
                 st.markdown("""
