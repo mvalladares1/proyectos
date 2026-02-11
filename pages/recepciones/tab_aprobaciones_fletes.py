@@ -639,24 +639,39 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                 return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
             else:
                 # Tiene un rechazo previo → sobrescribir con aprobación
-                models.execute_kw(
-                    DB, uid, password,
-                    'studio.approval.entry', 'write',
-                    [[mi_entrada[0]['id']], {'approved': True}]
-                )
+                # Primero verificar que el registro aún exista
+                try:
+                    entrada_existe = models.execute_kw(
+                        DB, uid, password,
+                        'studio.approval.entry', 'search_count',
+                        [[('id', '=', mi_entrada[0]['id'])]]
+                    )
+                    if entrada_existe == 0:
+                        return False, f"❌ {oc_name}: La entrada de aprobación ya no existe. Recarga la página."
+                    
+                    models.execute_kw(
+                        DB, uid, password,
+                        'studio.approval.entry', 'write',
+                        [[mi_entrada[0]['id']], {'approved': True}]
+                    )
+                except Exception as e:
+                    return False, f"❌ {oc_name}: Error al actualizar aprobación: {str(e)}"
         else:
             # No tiene entrada → crear nueva aprobación
-            models.execute_kw(
-                DB, uid, password,
-                'studio.approval.entry', 'create',
-                [{
-                    'res_id': int(oc_id),
-                    'rule_id': rule_id,
-                    'user_id': int(uid),
-                    'approved': True
-                }],
-                {'context': contexto}
-            )
+            try:
+                models.execute_kw(
+                    DB, uid, password,
+                    'studio.approval.entry', 'create',
+                    [{
+                        'res_id': int(oc_id),
+                        'rule_id': rule_id,
+                        'user_id': int(uid),
+                        'approved': True
+                    }],
+                    {'context': contexto}
+                )
+            except Exception as e:
+                return False, f"❌ {oc_name}: Error al crear aprobación: {str(e)}"
         
         # Contar aprobaciones totales (de todos los usuarios)
         aprobaciones_existentes = models.execute_kw(
@@ -904,6 +919,8 @@ def render_tab(username, password):
     with col2:
         if st.button("📥 Cargar/Actualizar Datos", key="cargar_fletes", type="primary"):
             st.session_state.datos_cargados_fletes = True
+            # Limpiar caché específico de fletes y general
+            obtener_ocs_fletes_con_aprobaciones.clear()
             st.cache_data.clear()
             st.rerun()
     
@@ -1794,6 +1811,8 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                             exito, mensaje = aprobar_oc(models, uid, username, password, row['oc_id'], row.get('actividad_id'))
                             if exito:
                                 st.success(f"✅ {row['oc_name']} aprobada por {username}")
+                                # Limpiar caché específico y general
+                                obtener_ocs_fletes_con_aprobaciones.clear()
                                 st.cache_data.clear()
                                 time.sleep(1)
                                 st.rerun()
