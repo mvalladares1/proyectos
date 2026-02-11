@@ -634,12 +634,30 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             return False, f"❌ OC#{oc_id}: Error al leer orden de compra: {str(e)}"
         
         # 3. Verificar entradas existentes del usuario (aprobadas O rechazadas)
-        mi_entrada = models.execute_kw(
-            DB, uid, password,
-            'studio.approval.entry', 'search_read',
-            [[('res_id', '=', int(oc_id)), ('rule_id', '=', rule_id), ('user_id', '=', int(uid))]],
-            {'fields': ['id', 'approved'], 'context': contexto}
-        )
+        try:
+            mi_entrada = models.execute_kw(
+                DB, uid, password,
+                'studio.approval.entry', 'search_read',
+                [[('res_id', '=', int(oc_id)), ('rule_id', '=', rule_id), ('user_id', '=', int(uid))]],
+                {'fields': ['id', 'approved'], 'context': contexto}
+            )
+        except Exception as e:
+            return False, f"❌ {oc_name}: Error al buscar entrada de aprobación: {str(e)}"
+        
+        # DEBUG: Ver todas las entradas para esta OC
+        try:
+            todas_entradas = models.execute_kw(
+                DB, uid, password,
+                'studio.approval.entry', 'search_read',
+                [[('res_id', '=', int(oc_id))]],
+                {'fields': ['id', 'user_id', 'rule_id', 'approved'], 'context': contexto}
+            )
+            debug_entradas = f"\n\n🔍 DEBUG Estado OC: {oc_state} | Entradas totales: {len(todas_entradas)}"
+            for e in todas_entradas:
+                debug_entradas += f"\n  - Entry {e['id']}: User {e['user_id']}, Rule {e['rule_id']}, Approved: {e['approved']}"
+            debug_entradas += f"\n  - Buscando: User {uid}, Rule {rule_id}"
+        except Exception as e_debug:
+            debug_entradas = f"\n\n⚠️ No se pudo obtener debug info: {str(e_debug)}"
         
         if mi_entrada:
             if mi_entrada[0]['approved']:
