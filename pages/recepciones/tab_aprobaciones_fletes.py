@@ -637,53 +637,46 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         if mi_entrada and mi_entrada[0]['approved']:
             return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
         
-        # Usar el método action_approve que NO requiere permisos de admin
-        try:
-            # Buscar la entrada de aprobación pendiente para este usuario y regla
-            entrada_pendiente = models.execute_kw(
-                DB, uid, password,
-                'studio.approval.entry', 'search',
-                [[
-                    ('res_id', '=', int(oc_id)),
-                    ('rule_id', '=', rule_id),
-                    ('user_id', '=', int(uid))
-                ]],
-                {'context': contexto}
-            )
-            
-            if entrada_pendiente:
-                # Existe entrada, usar action_approve
-                models.execute_kw(
-                    DB, uid, password,
-                    'studio.approval.entry', 'action_approve',
-                    [entrada_pendiente],
-                    {'context': contexto}
-                )
-            else:
-                # No hay entrada, intentar aprobar directamente en la OC
-                # Esto puede crear la entrada automáticamente
-                models.execute_kw(
-                    DB, uid, password,
-                    'purchase.order', 'action_approve',
-                    [[int(oc_id)]],
-                    {'context': dict(contexto, studio_approval_rule_id=rule_id)}
-                )
-        except Exception as e_approve:
-            # Si falla el método action_approve, intentar plan B: crear con contexto especial
+        # Buscar la entrada de aprobación pendiente para este usuario y regla
+        entrada_pendiente = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search',
+            [[
+                ('res_id', '=', int(oc_id)),
+                ('rule_id', '=', rule_id),
+                ('user_id', '=', int(uid))
+            ]],
+            {'context': contexto}
+        )
+        
+        if not entrada_pendiente:
+            # Si no existe entrada, crearla primero
             try:
-                models.execute_kw(
+                entrada_id = models.execute_kw(
                     DB, uid, password,
                     'studio.approval.entry', 'create',
                     [{
                         'res_id': int(oc_id),
                         'rule_id': rule_id,
                         'user_id': int(uid),
-                        'approved': True
+                        'approved': False
                     }],
-                    {'context': dict(contexto, skip_validation=True)}
+                    {'context': contexto}
                 )
+                entrada_pendiente = [entrada_id]
             except Exception as e_create:
-                return False, f"Error al aprobar: {str(e_approve)}"
+                return False, f"Error al crear entrada de aprobación: {str(e_create)}"
+        
+        # Aprobar usando action_approve en la entrada
+        try:
+            models.execute_kw(
+                DB, uid, password,
+                'studio.approval.entry', 'action_approve',
+                [entrada_pendiente],
+                {'context': contexto}
+            )
+        except Exception as e_approve:
+            return False, f"Error al aprobar: {str(e_approve)}"
         
         # Contar aprobaciones totales (de todos los usuarios)
         aprobaciones_existentes = models.execute_kw(
