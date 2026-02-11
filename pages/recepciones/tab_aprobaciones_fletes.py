@@ -981,8 +981,14 @@ def render_tab(username, password):
         
         # Calcular $/km (monto OC / kilómetros)
         costo_por_km = None
-        if comparacion.get('kilometers') and comparacion['kilometers'] > 0:
-            costo_por_km = oc.get('amount_untaxed', 0) / comparacion['kilometers']
+        kilometers = comparacion.get('kilometers')
+        if kilometers:
+            try:
+                kilometers_float = float(kilometers)
+                if kilometers_float > 0:
+                    costo_por_km = oc.get('amount_untaxed', 0) / kilometers_float
+            except (ValueError, TypeError):
+                pass
         
         datos_completos.append({
             'actividad_id': oc.get('actividad_id'),
