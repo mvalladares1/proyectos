@@ -369,18 +369,11 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             {'fields': ['res_id', 'user_id', 'rule_id', 'create_date', 'approved']}
         )
         
-        # Obtener nombres de reglas para mostrar el rol
-        reglas_aprobacion = {}
-        try:
-            reglas = _models.execute_kw(
-                DB, _uid, password,
-                'studio.approval.rule', 'search_read',
-                [[('id', 'in', [144, 122])]],
-                {'fields': ['id', 'name']}
-            )
-            reglas_aprobacion = {r['id']: r['name'] for r in reglas}
-        except:
-            reglas_aprobacion = {144: 'Aprobador 1', 122: 'Aprobador 2'}
+        # Nombres de reglas hardcodeados (evita leer studio.approval.rule que requiere permisos admin)
+        reglas_aprobacion = {
+            144: 'Aprobación Transportes 1',
+            122: 'Aprobación Transportes 2'
+        }
         
         # Agrupar aprobaciones y rechazos por OC
         aprobaciones_por_oc = {}
@@ -468,18 +461,11 @@ def obtener_aprobaciones_oc(_models, _uid, password, oc_id):
             {'fields': ['user_id', 'rule_id', 'create_date']}
         )
         
-        # Obtener nombres de reglas
-        reglas_aprobacion = {}
-        try:
-            reglas = _models.execute_kw(
-                DB, _uid, password,
-                'studio.approval.rule', 'search_read',
-                [[('id', 'in', [144, 122])]],
-                {'fields': ['id', 'name']}
-            )
-            reglas_aprobacion = {r['id']: r['name'] for r in reglas}
-        except:
-            reglas_aprobacion = {144: 'Aprobador 1', 122: 'Aprobador 2'}
+        # Nombres de reglas hardcodeados (evita leer studio.approval.rule que requiere permisos admin)
+        reglas_aprobacion = {
+            144: 'Aprobación Transportes 1',
+            122: 'Aprobación Transportes 2'
+        }
         
         aprobaciones = []
         for entry in entries:
@@ -609,16 +595,28 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         # Contexto en español para todas las operaciones
         contexto = {'lang': 'es_ES'}
         
-        # 1. Determinar qué regla usar según el usuario
+        # 1. Determinar qué regla usar según el usuario y su rol
         if username.lower() == 'msepulveda@riofuturo.cl':
             rule_id = 144
+            rol_usuario = 'Gerente de procesos'
         elif username.lower() == 'fhorst@riofuturo.cl':
             rule_id = 122
+            rol_usuario = 'Gerente de Control de gestión'
         else:
             # Usuario no configurado, usar regla por defecto
             rule_id = 144
+            rol_usuario = 'Gerente de procesos'
         
-        # 2. Verificar entradas existentes del usuario (aprobadas O rechazadas)
+        # 2. Obtener nombre de la OC para mensajes
+        oc_data = models.execute_kw(
+            DB, uid, password,
+            'purchase.order', 'read',
+            [[int(oc_id)]],
+            {'fields': ['name'], 'context': contexto}
+        )
+        oc_name = oc_data[0]['name'] if oc_data else f"OC#{oc_id}"
+        
+        # 3. Verificar entradas existentes del usuario (aprobadas O rechazadas)
         mi_entrada = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
@@ -628,7 +626,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         
         if mi_entrada:
             if mi_entrada[0]['approved']:
-                return False, "Ya aprobaste esta OC anteriormente"
+                return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
             else:
                 # Tiene un rechazo previo → sobrescribir con aprobación
                 models.execute_kw(
@@ -716,13 +714,13 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
                     # Si falla la actualización de líneas, no es crítico
                     pass
                 
-                return True, f"✅ Segunda aprobación - Orden confirmada y marcada como recibida"
+                return True, f"✅ {oc_name}: Aprobado como {rol_usuario}"
             except Exception as e:
-                return True, f"✅ Segunda aprobación registrada (error al confirmar: {str(e)[:80]})"
+                return True, f"✅ {oc_name}: Aprobado como {rol_usuario} (error al confirmar orden)"
         else:
             # Primera aprobación - NO confirmar, solo notificar
             # La actividad para el segundo aprobador debe crearse manualmente o mediante reglas de Studio
-            return True, f"✅ Primera aprobación registrada - Pendiente segunda aprobación (1/2)"
+            return True, f"✅ {oc_name}: Aprobado como {rol_usuario}"
         
     except Exception as e:
         return False, str(e)
