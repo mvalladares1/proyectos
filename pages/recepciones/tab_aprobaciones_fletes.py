@@ -1445,7 +1445,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     st.text(f"{_row['estado_aprobacion']} - {_row['aprobadores'][:30]}")
                 
                 # Expander de detalles fuera de las columnas para ocupar ancho completo
-                with st.expander("📋 Ver detalles", expanded=False, key=f"expander_{key_proveedor}_{_row['oc_id']}"):
+                with st.expander("📋 Ver detalles", expanded=False):
                     col_det1, col_det2, col_det3 = st.columns(3)
                     
                     with col_det1:
