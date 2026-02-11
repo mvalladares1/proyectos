@@ -107,6 +107,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     ]
 
     dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    dia_horas: Dict[str, float] = defaultdict(float)
     todas_salas_set = set()
 
     for mo in mos_list:
@@ -118,6 +119,11 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         dia_key = dt.strftime('%d/%m')
         kg = mo.get('kg_pt', 0) or 0
         dia_sala_kg[dia_key][sala] += kg
+        
+        # Acumular horas del día para calcular KG/H
+        duracion = mo.get('duracion_horas', 0) or 0
+        if duracion > 0:
+            dia_horas[dia_key] += duracion
 
     if not dia_sala_kg:
         return None
@@ -125,6 +131,16 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
     salas_sorted = sorted(todas_salas_set)
     color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
+    
+    # Calcular KG/H por día
+    dia_kg_hora = {}
+    for dia in dias_sorted:
+        total_kg_dia = sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted)
+        horas_dia = dia_horas.get(dia, 0)
+        if horas_dia > 0:
+            dia_kg_hora[dia] = round(total_kg_dia / horas_dia, 0)
+        else:
+            dia_kg_hora[dia] = 0
 
     # Calcular el máximo total por día para determinar umbral de visibilidad de labels
     max_total_dia = 0
@@ -175,6 +191,36 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         })
     if series:
         series[-1]["itemStyle"]["borderRadius"] = [8, 8, 0, 0]
+    
+    # Agregar markPoint para mostrar KG/H arriba de cada columna
+    # Calcular los valores totales por día para posicionar los labels
+    total_kg_por_dia = [sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted) for dia in dias_sorted]
+    
+    # Crear data para markPoint con KG/H
+    mark_point_data = []
+    for i, dia in enumerate(dias_sorted):
+        kg_h = dia_kg_hora[dia]
+        if kg_h > 0:
+            mark_point_data.append({
+                "coord": [i, total_kg_por_dia[i]],
+                "value": f"{int(kg_h)} kg/h"
+            })
+    
+    # Agregar markPoint a la última serie (la de arriba)
+    if series and mark_point_data:
+        series[-1]["markPoint"] = {
+            "data": mark_point_data,
+            "symbol": "none",
+            "label": {
+                "show": True,
+                "position": "top",
+                "offset": [0, -8],
+                "fontSize": 11,
+                "fontWeight": "bold",
+                "color": "#999",
+                "formatter": "{c}"
+            }
+        }
 
     options = {
         "title": {
@@ -242,6 +288,253 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
     options, salas_sorted = result
     altura = max(450, 380 + len(salas_sorted) * 8)
     st_echarts(options=options, height=f"{altura}px")
+
+
+def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]):
+    """Renderiza gráficos dedicados de KG/H: uno general por día y uno por cada sala."""
+    if not mos_filtradas:
+        return
+    
+    st.markdown("---")
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                padding: 20px; border-radius: 12px; margin-bottom: 15px;
+                border-left: 5px solid #ffc107;">
+        <h3 style="margin:0; color:#ffc107;">⚡ Rendimiento KG/Hora</h3>
+        <p style="margin:5px 0 0 0; color:#aaa; font-size:13px;">
+            Análisis detallado de productividad por hora
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # === GRÁFICO GENERAL: KG/H POR DÍA (TODAS LAS SALAS) ===
+    dia_kg = defaultdict(float)
+    dia_horas = defaultdict(float)
+    
+    for mo in mos_filtradas:
+        dt = mo.get('_inicio_dt')
+        if not dt:
+            continue
+        dia_key = dt.strftime('%d/%m')
+        kg = mo.get('kg_pt', 0) or 0
+        horas = mo.get('duracion_horas', 0) or 0
+        dia_kg[dia_key] += kg
+        if horas > 0:
+            dia_horas[dia_key] += horas
+    
+    if dia_kg:
+        dias_sorted = sorted(dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+        kg_hora_vals = []
+        for dia in dias_sorted:
+            horas = dia_horas.get(dia, 0)
+            if horas > 0:
+                kg_hora_vals.append(round(dia_kg[dia] / horas, 0))
+            else:
+                kg_hora_vals.append(0)
+        
+        opts_general = {
+            "title": {
+                "text": "⚡ KG/Hora por Día - General",
+                "subtext": "Productividad diaria de todas las salas combinadas",
+                "left": "center",
+                "textStyle": {"color": "#ffc107", "fontSize": 15, "fontWeight": "bold"},
+                "subtextStyle": {"color": "#999", "fontSize": 12}
+            },
+            "tooltip": {
+                "trigger": "axis",
+                "axisPointer": {"type": "line"},
+                "backgroundColor": "rgba(10, 10, 30, 0.95)",
+                "borderColor": "#ffc107",
+                "borderWidth": 1,
+                "borderRadius": 10,
+                "textStyle": {"color": "#fff", "fontSize": 13},
+                "formatter": JsCode("function(params){return params[0].name + '<br/>⚡ ' + params[0].value.toLocaleString('es-CL') + ' kg/h';}").js_code
+            },
+            "grid": {
+                "left": "3%", "right": "4%",
+                "bottom": "12%", "top": "18%",
+                "containLabel": True
+            },
+            "xAxis": {
+                "type": "category",
+                "data": dias_sorted,
+                "axisLabel": {
+                    "color": "#fff", "fontSize": 11, "fontWeight": "bold",
+                    "interval": 0, "rotate": 25 if len(dias_sorted) > 10 else 0
+                },
+                "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
+                "axisTick": {"show": False}
+            },
+            "yAxis": {
+                "type": "value",
+                "name": "⚡ KG/Hora",
+                "nameTextStyle": {"color": "#ffc107", "fontSize": 13, "fontWeight": "bold"},
+                "axisLabel": {"color": "#ccc", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+                "axisLine": {"show": False}
+            },
+            "series": [{
+                "type": "line",
+                "data": kg_hora_vals,
+                "smooth": True,
+                "symbolSize": 8,
+                "itemStyle": {
+                    "color": "#ffc107",
+                    "borderWidth": 2,
+                    "borderColor": "#fff"
+                },
+                "lineStyle": {
+                    "color": "#ffc107",
+                    "width": 3,
+                    "shadowColor": "rgba(255, 193, 7, 0.5)",
+                    "shadowBlur": 10
+                },
+                "areaStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "rgba(255, 193, 7, 0.4)"},
+                            {"offset": 1, "color": "rgba(255, 193, 7, 0.05)"}
+                        ]
+                    }
+                },
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "fontSize": 11,
+                    "fontWeight": "bold",
+                    "color": "#ffc107",
+                    "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                }
+            }]
+        }
+        st_echarts(options=opts_general, height="420px", key="kg_hora_general")
+    
+    # === GRÁFICOS POR SALA: KG/H POR DÍA ===
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("##### 🏭 KG/Hora por Sala")
+    
+    colores_sala = [
+        '#FF3366', '#00CCFF', '#33FF99', '#FFCC00', '#FF6633',
+        '#CC33FF', '#00FF66', '#FF3399', '#3399FF', '#FFFF33',
+        '#FF9933', '#66FFCC', '#FF66CC', '#99FF33', '#6633FF',
+    ]
+    
+    # Ordenar salas por KG/Hora promedio
+    salas_ordenadas = sorted(
+        salas_data.items(),
+        key=lambda x: (x[1]['kg_con_duracion'] / x[1]['duracion_total'])
+        if x[1]['duracion_total'] > 0 else 0,
+        reverse=True
+    )
+    
+    for idx, (sala, sd) in enumerate(salas_ordenadas):
+        # Agrupar por día para esta sala
+        sala_dia_kg = defaultdict(float)
+        sala_dia_horas = defaultdict(float)
+        
+        for orden in sd['ordenes']:
+            dt = orden.get('_inicio_dt')
+            if not dt:
+                continue
+            dia_key = dt.strftime('%d/%m')
+            kg = orden.get('kg_pt', 0) or 0
+            horas = orden.get('duracion_horas', 0) or 0
+            sala_dia_kg[dia_key] += kg
+            if horas > 0:
+                sala_dia_horas[dia_key] += horas
+        
+        if not sala_dia_kg:
+            continue
+        
+        dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+        kg_hora_sala_vals = []
+        for dia in dias_sala_sorted:
+            horas = sala_dia_horas.get(dia, 0)
+            if horas > 0:
+                kg_hora_sala_vals.append(round(sala_dia_kg[dia] / horas, 0))
+            else:
+                kg_hora_sala_vals.append(0)
+        
+        prom_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
+        color_sala = colores_sala[idx % len(colores_sala)]
+        
+        opts_sala = {
+            "title": {
+                "text": f"🏭 {sala}",
+                "subtext": f"Promedio: {prom_sala:,.0f} kg/h · {sd['hechas'] + sd['no_hechas']} órdenes",
+                "left": "center",
+                "textStyle": {"color": color_sala, "fontSize": 14, "fontWeight": "bold"},
+                "subtextStyle": {"color": "#999", "fontSize": 11}
+            },
+            "tooltip": {
+                "trigger": "axis",
+                "axisPointer": {"type": "line"},
+                "backgroundColor": "rgba(10, 10, 30, 0.95)",
+                "borderColor": color_sala,
+                "borderWidth": 1,
+                "borderRadius": 10,
+                "textStyle": {"color": "#fff", "fontSize": 13},
+                "formatter": JsCode("function(params){return params[0].name + '<br/>⚡ ' + params[0].value.toLocaleString('es-CL') + ' kg/h';}").js_code
+            },
+            "grid": {
+                "left": "3%", "right": "4%",
+                "bottom": "12%", "top": "18%",
+                "containLabel": True
+            },
+            "xAxis": {
+                "type": "category",
+                "data": dias_sala_sorted,
+                "axisLabel": {
+                    "color": "#fff", "fontSize": 10, "fontWeight": "bold",
+                    "interval": 0, "rotate": 25 if len(dias_sala_sorted) > 10 else 0
+                },
+                "axisLine": {"lineStyle": {"color": "#444"}},
+                "axisTick": {"show": False}
+            },
+            "yAxis": {
+                "type": "value",
+                "name": "KG/H",
+                "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+                "axisLabel": {"color": "#ccc", "fontSize": 10},
+                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+                "axisLine": {"show": False}
+            },
+            "series": [{
+                "type": "line",
+                "data": kg_hora_sala_vals,
+                "smooth": True,
+                "symbolSize": 7,
+                "itemStyle": {
+                    "color": color_sala,
+                    "borderWidth": 2,
+                    "borderColor": "#fff"
+                },
+                "lineStyle": {
+                    "color": color_sala,
+                    "width": 3
+                },
+                "areaStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": color_sala + "66"},
+                            {"offset": 1, "color": color_sala + "11"}
+                        ]
+                    }
+                },
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                    "color": color_sala,
+                    "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                }
+            }]
+        }
+        
+        st_echarts(options=opts_sala, height="340px", key=f"kg_hora_sala_{idx}")
 
 
 def render(username: str = None, password: str = None):
@@ -418,6 +711,9 @@ def render(username: str = None, password: str = None):
 
     # === GRÁFICO KG POR DÍA/SALA ===
     _render_grafico_salas(mos_filtradas, salas_data)
+    
+    # === GRÁFICOS DE KG/HORA ===
+    _render_graficos_kg_hora(mos_filtradas, salas_data)
 
     st.markdown("---")
 
@@ -502,7 +798,7 @@ def render(username: str = None, password: str = None):
 
                 st.markdown(f"**{em_o} {mo_name}** — {estado} — 🍓 {especie_o}")
 
-                oc1, oc2, oc3, oc4, oc5, oc6 = st.columns([1, 1, 0.8, 1.2, 1.2, 0.8])
+                oc1, oc2, oc3, oc4, oc5, oc6, oc7, oc8 = st.columns([1, 1, 0.8, 1.2, 1.2, 0.8, 1, 1])
                 with oc1:
                     st.metric("⚡ KG/Hora", f"{kg_h:,.0f}")
                 with oc2:
@@ -515,6 +811,12 @@ def render(username: str = None, password: str = None):
                     st.metric("🕑 Fin", hora_fin, delta=duracion_str if duracion_str else None, delta_color="off")
                 with oc6:
                     st.metric("📈 Rend.", f"{rend:.1f}%")
+                with oc7:
+                    hh = orden.get('hh', 0) or 0
+                    st.metric("⏱️ HH", f"{hh:,.1f}")
+                with oc8:
+                    hh_efectiva = orden.get('hh_efectiva', 0) or 0
+                    st.metric("⏱️ HH Efectiva", f"{hh_efectiva:,.1f}")
 
                 if oi < len(ordenes_sorted) - 1:
                     st.divider()
@@ -952,6 +1254,7 @@ def _render_comparacion(
     def _kg_por_dia(mos_list):
         dia_kg = defaultdict(float)
         dia_ordenes = defaultdict(int)
+        dia_horas = defaultdict(float)
         for mo in mos_list:
             dt = mo.get('_inicio_dt')
             if not dt:
@@ -959,10 +1262,14 @@ def _render_comparacion(
             dia_key = dt.strftime('%Y-%m-%d')
             dia_kg[dia_key] += mo.get('kg_pt', 0) or 0
             dia_ordenes[dia_key] += 1
-        return dict(sorted(dia_kg.items())), dict(sorted(dia_ordenes.items()))
+            # Acumular horas del día
+            duracion = mo.get('duracion_horas', 0) or 0
+            if duracion > 0:
+                dia_horas[dia_key] += duracion
+        return dict(sorted(dia_kg.items())), dict(sorted(dia_ordenes.items())), dict(sorted(dia_horas.items()))
 
-    dias_kg_a, dias_ord_a = _kg_por_dia(mos_principal)
-    dias_kg_b, dias_ord_b = _kg_por_dia(mos_comp)
+    dias_kg_a, dias_ord_a, dias_horas_a = _kg_por_dia(mos_principal)
+    dias_kg_b, dias_ord_b, dias_horas_b = _kg_por_dia(mos_comp)
 
     dias_a_list = sorted(dias_kg_a.items())
     dias_b_list = sorted(dias_kg_b.items())
@@ -1054,6 +1361,23 @@ def _render_comparacion(
     labels_b = [_dia_es(f) for f, _ in dias_b_list]
     vals_a = [round(kg) for _, kg in dias_a_list]
     vals_b = [round(kg) for _, kg in dias_b_list]
+    
+    # Calcular KG/H por día para cada período
+    kg_hora_a = []
+    for fecha, kg in dias_a_list:
+        horas = dias_horas_a.get(fecha, 0)
+        if horas > 0:
+            kg_hora_a.append({"value": round(kg), "kg_hora": round(kg / horas, 0)})
+        else:
+            kg_hora_a.append({"value": round(kg), "kg_hora": 0})
+    
+    kg_hora_b = []
+    for fecha, kg in dias_b_list:
+        horas = dias_horas_b.get(fecha, 0)
+        if horas > 0:
+            kg_hora_b.append({"value": round(kg), "kg_hora": round(kg / horas, 0)})
+        else:
+            kg_hora_b.append({"value": round(kg), "kg_hora": 0})
 
     # Gráficos uno debajo del otro para mayor visibilidad
     opts_a = {
@@ -1081,15 +1405,34 @@ def _render_comparacion(
             "axisLabel": {"color": "#ccc", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
         },
-        "series": [{
-            "type": "bar", "data": vals_a, "barMaxWidth": 45,
-            "itemStyle": {
-                "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                          "colorStops": [{"offset": 0, "color": "#00d4ff"}, {"offset": 1, "color": "#00d4ff55"}]},
-                "borderRadius": [8, 8, 0, 0]
+        "series": [
+            {
+                "type": "bar", "data": vals_a, "barMaxWidth": 45,
+                "itemStyle": {
+                    "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                              "colorStops": [{"offset": 0, "color": "#00d4ff"}, {"offset": 1, "color": "#00d4ff55"}]},
+                    "borderRadius": [8, 8, 0, 0]
+                },
+                "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff"}
             },
-            "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff"}
-        }]
+            {
+                "name": "KG/H",
+                "type": "scatter",
+                "data": kg_hora_a,
+                "symbolSize": 0,
+                "z": 999,
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "distance": 22,
+                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}").js_code,
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                    "color": "#999",
+                },
+                "itemStyle": {"opacity": 0}
+            }
+        ]
     }
     st_echarts(options=opts_a, height="420px", key="comp_periodo_a")
 
@@ -1118,15 +1461,34 @@ def _render_comparacion(
             "axisLabel": {"color": "#ccc", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
         },
-        "series": [{
-            "type": "bar", "data": vals_b, "barMaxWidth": 45,
-            "itemStyle": {
-                "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                          "colorStops": [{"offset": 0, "color": "#e040fb"}, {"offset": 1, "color": "#e040fb55"}]},
-                "borderRadius": [8, 8, 0, 0]
+        "series": [
+            {
+                "type": "bar", "data": vals_b, "barMaxWidth": 45,
+                "itemStyle": {
+                    "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                              "colorStops": [{"offset": 0, "color": "#e040fb"}, {"offset": 1, "color": "#e040fb55"}]},
+                    "borderRadius": [8, 8, 0, 0]
+                },
+                "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#e040fb"}
             },
-            "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#e040fb"}
-        }]
+            {
+                "name": "KG/H",
+                "type": "scatter",
+                "data": kg_hora_b,
+                "symbolSize": 0,
+                "z": 999,
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "distance": 22,
+                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}").js_code,
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                    "color": "#999",
+                },
+                "itemStyle": {"opacity": 0}
+            }
+        ]
     }
     st_echarts(options=opts_b, height="420px", key="comp_periodo_b")
 
