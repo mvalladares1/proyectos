@@ -373,7 +373,7 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
             'studio.approval.entry', 'search_read',
             [[
                 ('res_id', 'in', oc_ids),
-                ('rule_id', 'in', [144, 122])
+                ('rule_id', 'in', [144, 120])
             ]],
             {'fields': ['res_id', 'user_id', 'rule_id', 'create_date', 'approved']}
         )
@@ -381,7 +381,7 @@ def obtener_ocs_fletes_con_aprobaciones(_models, _uid, username, password):
         # Nombres de reglas hardcodeados (evita leer studio.approval.rule que requiere permisos admin)
         reglas_aprobacion = {
             144: 'Aprobación Transportes 1',
-            122: 'Aprobación Transportes 2'
+            120: 'Aprobación Transportes 2'
         }
         
         # Agrupar aprobaciones y rechazos por OC
@@ -465,7 +465,7 @@ def obtener_aprobaciones_oc(_models, _uid, password, oc_id):
             'studio.approval.entry', 'search_read',
             [[
                 ('res_id', '=', int(oc_id)),
-                ('rule_id', 'in', [144, 122]),
+                ('rule_id', 'in', [144, 120]),
                 ('approved', '=', True)
             ]],
             {'fields': ['user_id', 'rule_id', 'create_date']}
@@ -474,7 +474,7 @@ def obtener_aprobaciones_oc(_models, _uid, password, oc_id):
         # Nombres de reglas hardcodeados (evita leer studio.approval.rule que requiere permisos admin)
         reglas_aprobacion = {
             144: 'Aprobación Transportes 1',
-            122: 'Aprobación Transportes 2'
+            120: 'Aprobación Transportes 2'
         }
         
         aprobaciones = []
@@ -610,7 +610,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             rule_id = 144
             rol_usuario = 'Gerente de procesos'
         elif username.lower() == 'fhorst@riofuturo.cl':
-            rule_id = 122
+            rule_id = 120
             rol_usuario = 'Gerente de Control de gestión'
         else:
             # Usuario no configurado, usar regla por defecto
@@ -634,30 +634,12 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             return False, f"❌ OC#{oc_id}: Error al leer orden de compra: {str(e)}"
         
         # 3. Verificar entradas existentes del usuario (aprobadas O rechazadas)
-        try:
-            mi_entrada = models.execute_kw(
-                DB, uid, password,
-                'studio.approval.entry', 'search_read',
-                [[('res_id', '=', int(oc_id)), ('rule_id', '=', rule_id), ('user_id', '=', int(uid))]],
-                {'fields': ['id', 'approved'], 'context': contexto}
-            )
-        except Exception as e:
-            return False, f"❌ {oc_name}: Error al buscar entrada de aprobación: {str(e)}"
-        
-        # DEBUG: Ver todas las entradas para esta OC
-        try:
-            todas_entradas = models.execute_kw(
-                DB, uid, password,
-                'studio.approval.entry', 'search_read',
-                [[('res_id', '=', int(oc_id))]],
-                {'fields': ['id', 'user_id', 'rule_id', 'approved'], 'context': contexto}
-            )
-            debug_entradas = f"\n\n🔍 DEBUG Estado OC: {oc_state} | Entradas totales: {len(todas_entradas)}"
-            for e in todas_entradas:
-                debug_entradas += f"\n  - Entry {e['id']}: User {e['user_id']}, Rule {e['rule_id']}, Approved: {e['approved']}"
-            debug_entradas += f"\n  - Buscando: User {uid}, Rule {rule_id}"
-        except Exception as e_debug:
-            debug_entradas = f"\n\n⚠️ No se pudo obtener debug info: {str(e_debug)}"
+        mi_entrada = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search_read',
+            [[('res_id', '=', int(oc_id)), ('rule_id', '=', rule_id), ('user_id', '=', int(uid))]],
+            {'fields': ['id', 'approved'], 'context': contexto}
+        )
         
         if mi_entrada:
             if mi_entrada[0]['approved']:
@@ -702,7 +684,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         aprobaciones_existentes = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
-            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('approved', '=', True)]],
+            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 120]), ('approved', '=', True)]],
             {'fields': ['id', 'user_id', 'rule_id'], 'context': contexto}
         )
         
@@ -783,7 +765,7 @@ def quitar_aprobacion(models, uid, password, oc_id):
         entradas = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search',
-            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 122]), ('user_id', '=', int(uid))]]
+            [[('res_id', '=', int(oc_id)), ('rule_id', 'in', [144, 120]), ('user_id', '=', int(uid))]]
         )
         
         if not entradas:
@@ -831,7 +813,7 @@ def rechazar_oc(models, uid, username, password, oc_id, motivo, activity_id=None
         if username.lower() == 'msepulveda@riofuturo.cl':
             rule_id = 144
         elif username.lower() == 'fhorst@riofuturo.cl':
-            rule_id = 122
+            rule_id = 120
         else:
             rule_id = 144
         
