@@ -6,6 +6,7 @@ import streamlit as st
 import httpx
 import os
 import io
+import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
@@ -134,6 +135,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     ]
 
     dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    dia_sala_detenciones: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
     dia_horas: Dict[str, float] = defaultdict(float)
     todas_salas_set = set()
 
@@ -145,7 +147,9 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             continue
         dia_key = dt.strftime('%d/%m')
         kg = mo.get('kg_pt', 0) or 0
+        det = mo.get('detenciones', 0) or 0
         dia_sala_kg[dia_key][sala] += kg
+        dia_sala_detenciones[dia_key][sala] += det
         
         # Acumular horas del día para calcular KG/H
         duracion = mo.get('duracion_horas', 0) or 0
@@ -169,13 +173,8 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         else:
             dia_kg_hora[dia] = 0
 
-    # Calcular el máximo total por día para determinar umbral de visibilidad de labels
-    max_total_dia = 0
-    for dia in dias_sorted:
-        total_dia = sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted)
-        if total_dia > max_total_dia:
-            max_total_dia = total_dia
-    umbral_label = max_total_dia * 0.08  # Solo mostrar label si el segmento es >= 8% del máximo
+    # Umbral fijo para mostrar labels (mostrar si >= 1000 kg)
+    umbral_label = 1000
 
     # Formatter JS: mostrar valor completo con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
@@ -256,6 +255,14 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     for s in series:
         s["barMaxWidth"] = bar_max_width
 
+    # Preparar diccionario de detenciones para tooltip
+    detenciones_dict = {}
+    for dia in dias_sorted:
+        detenciones_dict[dia] = {}
+        for sala in salas_sorted:
+            det_val = dia_sala_detenciones.get(dia, {}).get(sala, 0)
+            detenciones_dict[dia][sala] = round(det_val, 1)
+
     options = {
         "title": {
             "text": title,
@@ -272,7 +279,29 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "borderWidth": 2,
             "borderRadius": 8,
             "textStyle": {"color": "#333", "fontSize": 12},
-            "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
+            "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+            "formatter": JsCode("""
+                function(params) {
+                    var detenciones = """ + json.dumps(detenciones_dict) + """;
+                    var dia = params[0].name;
+                    var result = '<strong>' + dia + '</strong><br/>';
+                    var total = 0;
+                    for (var i = 0; i < params.length; i++) {
+                        if (params[i].value > 0) {
+                            var sala = params[i].seriesName;
+                            var det = detenciones[dia] && detenciones[dia][sala] ? detenciones[dia][sala].toFixed(1) : '0.0';
+                            result += params[i].marker + ' ' + sala + ': ' + params[i].value.toLocaleString('en-US') + ' kg';
+                            if (parseFloat(det) > 0) {
+                                result += ' <span style="color:#f44336">⏸️ ' + det + 'h</span>';
+                            }
+                            result += '<br/>';
+                            total += params[i].value;
+                        }
+                    }
+                    result += '<strong>Total: ' + total.toLocaleString('en-US') + ' kg</strong>';
+                    return result;
+                }
+            """).js_code
         },
         "legend": {
             "data": salas_sorted,
