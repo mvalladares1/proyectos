@@ -1444,10 +1444,14 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         
                         # Kilómetros y $/km
                         kilometers = _row.get('kilometers', 0)
-                        if kilometers > 0:
-                            st.markdown(f"**Kilómetros:** {kilometers:,.0f} km")
-                            if _row.get('costo_por_km'):
-                                st.markdown(f"**$/km:** ${_row['costo_por_km']:,.0f}")
+                        try:
+                            kilometers_float = float(kilometers) if kilometers else 0
+                            if kilometers_float > 0:
+                                st.markdown(f"**Kilómetros:** {kilometers_float:,.0f} km")
+                                if _row.get('costo_por_km'):
+                                    st.markdown(f"**$/km:** ${_row['costo_por_km']:,.0f}")
+                        except (ValueError, TypeError):
+                            pass
                         
                         tipo_camion = _row.get('tipo_camion', 'N/A')
                         st.markdown(f"**Tipo Camión:** {tipo_camion if tipo_camion else 'N/A'}")
