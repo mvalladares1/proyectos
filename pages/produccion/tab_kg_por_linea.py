@@ -177,9 +177,9 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             max_total_dia = total_dia
     umbral_label = max_total_dia * 0.08  # Solo mostrar label si el segmento es >= 8% del máximo
 
-    # Formatter JS: mostrar valor formateado con separador de miles, ocultar si es muy pequeño
+    # Formatter JS: mostrar valor completo con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
-        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';var v=params.value;return v>=1000?Math.round(v/1000)+'k':v;}"
+        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('es-CL');}"
     ).js_code
 
     series = []
