@@ -179,7 +179,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
 
     # Formatter JS: mostrar valor completo con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
-        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('es-CL');}"
+        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('en-US');}"
     ).js_code
 
     series = []
@@ -1991,7 +1991,7 @@ def _render_comparacion(
                             var result = params[0].name + '<br/>';
                             for (var i = 0; i < params.length; i++) {
                                 result += params[i].marker + ' ' + params[i].seriesName + ': ' + 
-                                         params[i].value.toLocaleString('es-CL') + ' kg/h<br/>';
+                                         params[i].value.toLocaleString('en-US') + ' kg/h<br/>';
                             }
                             if (params.length === 2 && params[0].value > 0 && params[1].value > 0) {
                                 var diff = params[0].value - params[1].value;
