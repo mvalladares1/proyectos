@@ -483,7 +483,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "lineStyle": {
                         "color": "#92C48C",
                         "width": 3,
-                        "type": "dashed"
+                        "type": "solid"
                     },
                     "label": {
                         "show": True,
@@ -661,7 +661,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "lineStyle": {
                         "color": "#92C48C",
                         "width": 2,
-                        "type": "dashed"
+                        "type": "solid"
                     },
                     "label": {
                         "show": True,
