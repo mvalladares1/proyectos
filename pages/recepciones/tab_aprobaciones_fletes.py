@@ -979,6 +979,11 @@ def render_tab(username, password):
         # Extraer creador de la OC
         creador = oc['user_id'][1] if oc.get('user_id') and isinstance(oc['user_id'], (list, tuple)) else 'N/A'
         
+        # Calcular $/km (monto OC / kilómetros)
+        costo_por_km = None
+        if comparacion.get('kilometers') and comparacion['kilometers'] > 0:
+            costo_por_km = oc.get('amount_untaxed', 0) / comparacion['kilometers']
+        
         datos_completos.append({
             'actividad_id': oc.get('actividad_id'),
             'oc_id': oc['id'],
@@ -999,6 +1004,7 @@ def render_tab(username, password):
             'fecha_orden': oc.get('date_order') if oc.get('date_order') else None,
             'creador': creador,
             'total_kilos': oc.get('total_kilos', 0),
+            'costo_por_km': costo_por_km,
             **comparacion  # Agregar info de logística
         })
     
@@ -1277,7 +1283,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                 return f"🔴 +{dif_pct:.0f}%"
         
         # Cabeceras de la tabla
-        col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.2, 0.8, 1, 1, 0.8, 0.8, 1.8])
+        col_expand_h, col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_km_h, col_ppto_h, col_aprob_h = st.columns([0.3, 0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
+        with col_expand_h:
+            st.markdown("**▶**")
         with col_sel_h:
             st.markdown("**✅**")
         with col_oc_h:
@@ -1290,6 +1298,8 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             st.markdown("**Monto**")
         with col_kg_h:
             st.markdown("**$/kg USD**")
+        with col_km_h:
+            st.markdown("**$/km**")
         with col_ppto_h:
             st.markdown("**vs Ppto**")
         with col_aprob_h:
@@ -1313,10 +1323,20 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             if cb_key not in st.session_state:
                 st.session_state[cb_key] = _row['oc_id'] in st.session_state[f'selected_{key_proveedor}']
         
-        # Mostrar tabla con checkboxes y expandibles
+        # Mostrar tabla con checkboxes
         for _idx, _row in df_aprobables.iterrows():
-            # Fila resumida con checkbox
-            col_sel, col_info = st.columns([0.5, 9.5])
+            # Inicializar estado de expansión si no existe
+            expand_key = f"expand_{key_proveedor}_{_row['oc_id']}"
+            if expand_key not in st.session_state:
+                st.session_state[expand_key] = False
+            
+            # Fila principal con datos
+            col_expand, col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_km, col_ppto, col_aprob = st.columns([0.3, 0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
+            
+            with col_expand:
+                # Botón para expandir/colapsar
+                if st.button("▶" if not st.session_state[expand_key] else "▼", key=f"btn_{expand_key}"):
+                    st.session_state[expand_key] = not st.session_state[expand_key]
             
             with col_sel:
                 cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
@@ -1328,19 +1348,49 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     args=(_row['oc_id'], cb_key)
                 )
             
-            with col_info:
-                # Título del expander con info resumida
-                fecha_str = pd.to_datetime(_row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(_row['fecha_orden']) else 'Sin fecha'
+            with col_oc:
+                st.markdown(f"**{_row['oc_name']}**")
+            
+            with col_ruta:
                 ruta_correlativo = _row.get('route_correlativo', None)
-                ruta_str = f" | Ruta: {ruta_correlativo}" if ruta_correlativo else ""
-                
-                # Ícono de estado
-                estado_icon = _row['estado_aprobacion'].split()[0]  # Extraer emoji
-                
-                titulo = f"{estado_icon} **{_row['oc_name']}** | {fecha_str} | ${_row['monto']:,.0f}{ruta_str}"
-                
-                with st.expander(titulo, expanded=False):
-                    # Detalles completos de la OC
+                st.text(ruta_correlativo if ruta_correlativo else "-")
+            
+            with col_fecha:
+                fecha_str = pd.to_datetime(_row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(_row['fecha_orden']) else 'Sin fecha'
+                st.text(fecha_str)
+            
+            with col_monto:
+                st.text(f"${_row['monto']:,.0f}")
+            
+            with col_kg:
+                if _row.get('cost_per_kg_usd'):
+                    costo_kg = _row['cost_per_kg_usd']
+                    if costo_kg > UMBRAL_COSTO_KG_USD * 1.2:
+                        st.markdown(f"🔴 ${costo_kg:.3f}")
+                    elif costo_kg > UMBRAL_COSTO_KG_USD:
+                        st.markdown(f"🟡 ${costo_kg:.3f}")
+                    else:
+                        st.markdown(f"🟢 ${costo_kg:.3f}")
+                else:
+                    st.text("-")
+            
+            with col_km:
+                if _row.get('costo_por_km'):
+                    costo_km = _row['costo_por_km']
+                    st.text(f"${costo_km:,.0f}")
+                else:
+                    st.text("-")
+            
+            with col_ppto:
+                st.text(comparar_presupuesto(_row))
+            
+            with col_aprob:
+                st.text(f"{_row['estado_aprobacion']} - {_row['aprobadores'][:30]}")
+            
+            # Si está expandido, mostrar detalles
+            if st.session_state[expand_key]:
+                with st.container():
+                    st.markdown("---")
                     col_det1, col_det2, col_det3 = st.columns(3)
                     
                     with col_det1:
@@ -1367,9 +1417,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         if _row.get('cost_per_kg_usd'):
                             costo_kg_usd = _row['cost_per_kg_usd']
                             if costo_kg_usd > UMBRAL_COSTO_KG_USD * 1.2:
-                                st.markdown(f"**$/kg USD:** 🔴 ${costo_kg_usd:.3f} (>{UMBRAL_COSTO_KG_USD})")
+                                st.markdown(f"**$/kg USD:** 🔴 ${costo_kg_usd:.3f} (>${UMBRAL_COSTO_KG_USD})")
                             elif costo_kg_usd > UMBRAL_COSTO_KG_USD:
-                                st.markdown(f"**$/kg USD:** 🟡 ${costo_kg_usd:.3f} (>{UMBRAL_COSTO_KG_USD})")
+                                st.markdown(f"**$/kg USD:** 🟡 ${costo_kg_usd:.3f} (>${UMBRAL_COSTO_KG_USD})")
                             else:
                                 st.markdown(f"**$/kg USD:** 🟢 ${costo_kg_usd:.3f}")
                         else:
@@ -1385,6 +1435,13 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         route_name = _row.get('route_name', 'N/A')
                         if route_name and route_name != 'N/A':
                             st.markdown(f"**Nombre Ruta:** {route_name[:30]}")
+                        
+                        # Kilómetros y $/km
+                        kilometers = _row.get('kilometers', 0)
+                        if kilometers > 0:
+                            st.markdown(f"**Kilómetros:** {kilometers:,.0f} km")
+                            if _row.get('costo_por_km'):
+                                st.markdown(f"**$/km:** ${_row['costo_por_km']:,.0f}")
                         
                         tipo_camion = _row.get('tipo_camion', 'N/A')
                         st.markdown(f"**Tipo Camión:** {tipo_camion if tipo_camion else 'N/A'}")
@@ -1414,6 +1471,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     st.markdown(f"**📝 Estado Aprobación:** {_row['estado_aprobacion']}")
                     if _row.get('aprobadores') and _row['aprobadores'] != 'Sin aprobaciones':
                         st.markdown(f"**Aprobadores:** {_row['aprobadores']}")
+                    st.markdown("---")
         
         # Botones de acción DENTRO del fragment
         if st.session_state[f'selected_{key_proveedor}']:
