@@ -622,14 +622,11 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             DB, uid, password,
             'purchase.order', 'read',
             [[int(oc_id)]],
-            {'fields': ['name', 'state', 'approval_state', 'approval_request'], 'context': contexto}
+            {'fields': ['name'], 'context': contexto}
         )
         oc_name = oc_data[0]['name'] if oc_data else f"OC#{oc_id}"
-        oc_state = oc_data[0].get('state') if oc_data else 'unknown'
-        oc_approval_state = oc_data[0].get('approval_state') if oc_data else 'unknown'
-        oc_approval_request = oc_data[0].get('approval_request') if oc_data else 'unknown'
         
-        # 3. Verificar si ya tiene aprobación del usuario
+        # 3. Verificar entradas existentes del usuario (aprobadas O rechazadas)
         mi_entrada = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
@@ -637,78 +634,29 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             {'fields': ['id', 'approved'], 'context': contexto}
         )
         
-        if mi_entrada and mi_entrada[0]['approved']:
-            return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
-        
-        # DEBUG: Ver todas las entradas de aprobación de esta OC
-        todas_entradas = models.execute_kw(
-            DB, uid, password,
-            'studio.approval.entry', 'search_read',
-            [[('res_id', '=', int(oc_id))]],
-            {'fields': ['id', 'user_id', 'rule_id', 'approved'], 'context': contexto}
-        )
-        
-        # Si no hay entradas, el flujo de aprobación no está activo
-        if not todas_entradas:
-            debug_oc = f"\n\n📋 Info de {oc_name}:"
-            debug_oc += f"\n  - State: {oc_state}"
-            debug_oc += f"\n  - Approval State: {oc_approval_state}"
-            debug_oc += f"\n  - Approval Request: {oc_approval_request}"
-            debug_oc += f"\n\n💡 Posibles causas:"
-            debug_oc += f"\n  1. La OC no cumple las condiciones de las reglas de aprobación"
-            debug_oc += f"\n  2. Las reglas solo se activan en ciertos estados de la OC"
-            debug_oc += f"\n  3. El flujo de aprobación no se ha iniciado en esta OC"
-            return False, f"❌ {oc_name}: No hay entradas de aprobación creadas.{debug_oc}"
-        
-        # Buscar la entrada para la regla correspondiente (sin importar el usuario)
-        entrada_para_regla = models.execute_kw(
-            DB, uid, password,
-            'studio.approval.entry', 'search_read',
-            [[
-                ('res_id', '=', int(oc_id)),
-                ('rule_id', '=', rule_id),
-                ('approved', '=', False)
-            ]],
-            {'fields': ['id', 'user_id'], 'context': contexto}
-        )
-        
-        if not entrada_para_regla:
-            # Verificar si ya fue aprobada
-            entrada_aprobada = models.execute_kw(
-                DB, uid, password,
-                'studio.approval.entry', 'search_read',
-                [[
-                    ('res_id', '=', int(oc_id)),
-                    ('rule_id', '=', rule_id),
-                    ('approved', '=', True)
-                ]],
-                {'fields': ['id', 'user_id'], 'context': contexto}
-            )
-            if entrada_aprobada:
+        if mi_entrada:
+            if mi_entrada[0]['approved']:
                 return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
             else:
-                debug_info = f"\n\n📋 Entradas: {len(todas_entradas)}\n"
-                for e in todas_entradas:
-                    debug_info += f"  - User {e['user_id']}, Rule {e['rule_id']}, Approved: {e['approved']}\n"
-                return False, f"❌ {oc_name}: No hay entrada pendiente para {rol_usuario}.{debug_info}"
-        
-        # Usar la entrada encontrada (aunque sea de otro usuario)
-        entrada_id = entrada_para_regla[0]['id']
-        usuario_asignado = entrada_para_regla[0]['user_id']
-        # Usar la entrada encontrada (aunque sea de otro usuario)
-        entrada_id = entrada_para_regla[0]['id']
-        usuario_asignado = entrada_para_regla[0]['user_id']
-        
-        # Aprobar usando write directamente (evita validaciones de permisos sobre studio.approval.rule)
-        try:
+                # Tiene un rechazo previo → sobrescribir con aprobación
+                models.execute_kw(
+                    DB, uid, password,
+                    'studio.approval.entry', 'write',
+                    [[mi_entrada[0]['id']], {'approved': True}]
+                )
+        else:
+            # No tiene entrada → crear nueva aprobación
             models.execute_kw(
                 DB, uid, password,
-                'studio.approval.entry', 'write',
-                [[entrada_id], {'approved': True}],
+                'studio.approval.entry', 'create',
+                [{
+                    'res_id': int(oc_id),
+                    'rule_id': rule_id,
+                    'user_id': int(uid),
+                    'approved': True
+                }],
                 {'context': contexto}
             )
-        except Exception as e_approve:
-            return False, f"❌ {oc_name}: Error al aprobar: {str(e_approve)}"
         
         # Contar aprobaciones totales (de todos los usuarios)
         aprobaciones_existentes = models.execute_kw(
