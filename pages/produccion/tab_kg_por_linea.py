@@ -128,9 +128,9 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         return None
 
     colores_paleta = [
-        '#00d4ff', '#e040fb', '#4caf50', '#ff9800', '#FF3366',
-        '#33FF99', '#FFCC00', '#3399FF', '#FF6633', '#66FFCC',
-        '#CC33FF', '#99FF33', '#6633FF', '#FF66CC', '#00FF66',
+        '#5B9BD5', '#70AD47', '#FFA726', '#E56590', '#9575CD',
+        '#4DB6AC', '#FFB74D', '#BA68C8', '#4A90E2', '#82C341',
+        '#FF7979', '#26A69A', '#78909C', '#AB47BC', '#66BB6A',
     ]
 
     dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -345,6 +345,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     # === GRÁFICO GENERAL: KG/H POR DÍA (TODAS LAS SALAS) ===
     dia_kg = defaultdict(float)
     dia_horas = defaultdict(float)
+    dia_hh_efectiva = defaultdict(float)
+    dia_detenciones = defaultdict(float)
     
     for mo in mos_filtradas:
         dt = mo.get('_inicio_dt')
@@ -353,19 +355,34 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         dia_key = dt.strftime('%d/%m')
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
+        hh_ef = mo.get('hh_efectiva', 0) or 0
+        det = mo.get('detenciones', 0) or 0
         dia_kg[dia_key] += kg
+        dia_hh_efectiva[dia_key] += hh_ef
+        dia_detenciones[dia_key] += det
         if horas > 0:
             dia_horas[dia_key] += horas
     
     if dia_kg:
         dias_sorted = sorted(dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
         kg_hora_vals = []
+        tooltip_data = []
         for dia in dias_sorted:
             horas = dia_horas.get(dia, 0)
+            hh_ef = dia_hh_efectiva.get(dia, 0)
+            det = dia_detenciones.get(dia, 0)
             if horas > 0:
-                kg_hora_vals.append(round(dia_kg[dia] / horas, 0))
+                kg_h = round(dia_kg[dia] / horas, 0)
+                kg_hora_vals.append(kg_h)
             else:
+                kg_h = 0
                 kg_hora_vals.append(0)
+            tooltip_data.append({
+                'dia': dia,
+                'kg_h': kg_h,
+                'hh_efectiva': hh_ef,
+                'detenciones': det
+            })
         
         opts_general = {
             "title": {
@@ -382,8 +399,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "borderColor": "#ffc107",
                 "borderWidth": 1,
                 "borderRadius": 10,
-                "textStyle": {"color": "#fff", "fontSize": 13},
-                "formatter": JsCode("function(params){return params[0].name + '<br/>⚡ ' + params[0].value.toLocaleString('es-CL') + ' kg/h';}").js_code
+                "textStyle": {"color": "#fff", "fontSize": 13}
             },
             "grid": {
                 "left": "3%", "right": "4%",
@@ -410,7 +426,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             },
             "series": [{
                 "type": "line",
-                "data": kg_hora_vals,
+                "data": [{
+                    'value': val,
+                    'hh_efectiva': tooltip_data[i]['hh_efectiva'],
+                    'detenciones': tooltip_data[i]['detenciones']
+                } for i, val in enumerate(kg_hora_vals)],
                 "smooth": True,
                 "symbolSize": 8,
                 "itemStyle": {
@@ -439,7 +459,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "fontSize": 11,
                     "fontWeight": "bold",
                     "color": "#ffc107",
-                    "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                    "formatter": JsCode("function(params){var v=params.data.value; var hh=params.data.hh_efectiva; return v>0?Math.round(v)+'\\nHH:'+hh.toFixed(1):'';}").js_code
                 }
             }]
         }
@@ -450,9 +470,9 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     st.markdown("##### 🏭 KG/Hora por Sala")
     
     colores_sala = [
-        '#FF3366', '#00CCFF', '#33FF99', '#FFCC00', '#FF6633',
-        '#CC33FF', '#00FF66', '#FF3399', '#3399FF', '#FFFF33',
-        '#FF9933', '#66FFCC', '#FF66CC', '#99FF33', '#6633FF',
+        '#5B9BD5', '#70AD47', '#FFA726', '#E56590', '#9575CD',
+        '#4DB6AC', '#FFB74D', '#BA68C8', '#4A90E2', '#82C341',
+        '#FF7979', '#26A69A', '#78909C', '#AB47BC', '#66BB6A',
     ]
     
     # Ordenar salas por KG/Hora promedio
@@ -467,6 +487,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         # Agrupar por día para esta sala
         sala_dia_kg = defaultdict(float)
         sala_dia_horas = defaultdict(float)
+        sala_dia_hh_efectiva = defaultdict(float)
+        sala_dia_detenciones = defaultdict(float)
         
         for orden in sd['ordenes']:
             dt = orden.get('_inicio_dt')
@@ -475,7 +497,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             dia_key = dt.strftime('%d/%m')
             kg = orden.get('kg_pt', 0) or 0
             horas = orden.get('duracion_horas', 0) or 0
+            hh_ef = orden.get('hh_efectiva', 0) or 0
+            det = orden.get('detenciones', 0) or 0
             sala_dia_kg[dia_key] += kg
+            sala_dia_hh_efectiva[dia_key] += hh_ef
+            sala_dia_detenciones[dia_key] += det
             if horas > 0:
                 sala_dia_horas[dia_key] += horas
         
@@ -484,12 +510,23 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         
         dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
         kg_hora_sala_vals = []
+        sala_tooltip_data = []
         for dia in dias_sala_sorted:
             horas = sala_dia_horas.get(dia, 0)
+            hh_ef = sala_dia_hh_efectiva.get(dia, 0)
+            det = sala_dia_detenciones.get(dia, 0)
             if horas > 0:
-                kg_hora_sala_vals.append(round(sala_dia_kg[dia] / horas, 0))
+                kg_h = round(sala_dia_kg[dia] / horas, 0)
+                kg_hora_sala_vals.append(kg_h)
             else:
+                kg_h = 0
                 kg_hora_sala_vals.append(0)
+            sala_tooltip_data.append({
+                'dia': dia,
+                'kg_h': kg_h,
+                'hh_efectiva': hh_ef,
+                'detenciones': det
+            })
         
         prom_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         color_sala = colores_sala[idx % len(colores_sala)]
@@ -509,8 +546,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "borderColor": color_sala,
                 "borderWidth": 1,
                 "borderRadius": 10,
-                "textStyle": {"color": "#fff", "fontSize": 13},
-                "formatter": JsCode("function(params){return params[0].name + '<br/>⚡ ' + params[0].value.toLocaleString('es-CL') + ' kg/h';}").js_code
+                "textStyle": {"color": "#fff", "fontSize": 13}
             },
             "grid": {
                 "left": "3%", "right": "4%",
@@ -537,7 +573,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             },
             "series": [{
                 "type": "line",
-                "data": kg_hora_sala_vals,
+                "data": [{
+                    'value': val,
+                    'hh_efectiva': sala_tooltip_data[i]['hh_efectiva'],
+                    'detenciones': sala_tooltip_data[i]['detenciones']
+                } for i, val in enumerate(kg_hora_sala_vals)],
                 "smooth": True,
                 "symbolSize": 7,
                 "itemStyle": {
@@ -561,10 +601,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "label": {
                     "show": True,
                     "position": "top",
-                    "fontSize": 10,
+                    "fontSize": 9,
                     "fontWeight": "bold",
                     "color": color_sala,
-                    "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                    "formatter": JsCode("function(params){var v=params.data.value; var hh=params.data.hh_efectiva; return v>0?Math.round(v)+'\\nHH:'+hh.toFixed(1):'';}").js_code
                 }
             }]
         }
@@ -754,9 +794,9 @@ def render(username: str = None, password: str = None):
 
     # === TARJETAS POR SALA ===
     colores_sala = [
-        '#FF3366', '#00CCFF', '#33FF99', '#FFCC00', '#FF6633',
-        '#CC33FF', '#00FF66', '#FF3399', '#3399FF', '#FFFF33',
-        '#FF9933', '#66FFCC', '#FF66CC', '#99FF33', '#6633FF',
+        '#5B9BD5', '#70AD47', '#FFA726', '#E56590', '#9575CD',
+        '#4DB6AC', '#FFB74D', '#BA68C8', '#4A90E2', '#82C341',
+        '#FF7979', '#26A69A', '#78909C', '#AB47BC', '#66BB6A',
     ]
 
     # Ordenar salas por KG/Hora (kg_con_duracion/duracion) descendente
@@ -833,8 +873,10 @@ def render(username: str = None, password: str = None):
 
                 em_o = emoji_kg_hora(kg_h)
                 em_esp = emoji_especie(especie_o)
+                det_o = orden.get('detenciones', 0) or 0
+                det_str = f" — ⏸️ Det: {det_o:.1f}h" if det_o > 0 else ""
 
-                st.markdown(f"**{em_o} {mo_name}** — {em_estado} {estado} — {em_esp} {especie_o}")
+                st.markdown(f"**{em_o} {mo_name}** — {em_estado} {estado} — {em_esp} {especie_o}{det_str}")
 
                 # CSS para ajustar tamaño de fuente en métricas
                 st.markdown("""
@@ -1086,6 +1128,68 @@ def _generar_informe_pdf(
         story.append(dia_table)
     story.append(Spacer(1, 6*mm))
 
+    # === RENDIMIENTO KG/HORA POR DÍA ===
+    story.append(Paragraph("Rendimiento KG/Hora por Día", seccion_style))
+    
+    dia_kg_hora_data = defaultdict(float)
+    dia_horas_data = defaultdict(float)
+    dia_hh_efectiva_data = defaultdict(float)
+    dia_detenciones_data = defaultdict(float)
+    
+    for mo in mos_filtradas:
+        dt = mo.get('_inicio_dt')
+        if not dt:
+            continue
+        dia_key = dt.strftime('%Y-%m-%d')
+        kg = mo.get('kg_pt', 0) or 0
+        horas = mo.get('duracion_horas', 0) or 0
+        hh_ef = mo.get('hh_efectiva', 0) or 0
+        det = mo.get('detenciones', 0) or 0
+        
+        dia_kg_hora_data[dia_key] += kg
+        dia_hh_efectiva_data[dia_key] += hh_ef
+        dia_detenciones_data[dia_key] += det
+        if horas > 0:
+            dia_horas_data[dia_key] += horas
+    
+    if dia_kg_hora_data:
+        kgh_rows = [['Día', 'Fecha', 'KG Producidos', 'Horas', 'KG/Hora', 'HH Efectiva', 'Detenciones']]
+        for fecha in sorted(dia_kg_hora_data.keys()):
+            dt = datetime.strptime(fecha, '%Y-%m-%d')
+            dia_en = dt.strftime('%a')
+            dia_esp = DIAS_ES.get(dia_en, dia_en)
+            kg = dia_kg_hora_data[fecha]
+            horas = dia_horas_data.get(fecha, 0)
+            hh_ef = dia_hh_efectiva_data.get(fecha, 0)
+            det = dia_detenciones_data.get(fecha, 0)
+            kg_h = (kg / horas) if horas > 0 else 0
+            
+            kgh_rows.append([
+                dia_esp,
+                dt.strftime('%d/%m/%Y'),
+                f'{kg:,.0f}',
+                f'{horas:.1f}',
+                f'{kg_h:,.0f}',
+                f'{hh_ef:.1f}',
+                f'{det:.1f}'
+            ])
+        
+        kgh_table = Table(kgh_rows, colWidths=[1.5*cm, 2.3*cm, 2.8*cm, 1.8*cm, 2.3*cm, 2.3*cm, 2.3*cm])
+        kgh_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
+            ('TEXTCOLOR', (0, 0), (-1, 0), white),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#dddddd')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, fondo_fila]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(kgh_table)
+    story.append(Spacer(1, 6*mm))
+
     # === DETALLE POR SALA ===
     story.append(Paragraph("Detalle por Sala", seccion_style))
 
@@ -1097,20 +1201,23 @@ def _generar_informe_pdf(
     )
 
     # Tabla resumen de salas
-    sala_rows = [['Sala', 'Órdenes', 'KG Totales', 'KG/Hora', 'Completadas', 'En Proceso']]
+    sala_rows = [['Sala', 'Órds', 'KG Totales', 'KG/Hora', 'HH Efec.', 'Comp.', 'Proceso']]
     for sala, sd in salas_ordenadas:
         kh = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         total_s = sd['hechas'] + sd['no_hechas']
+        # Calcular HH efectiva total de la sala
+        hh_ef_sala = sum(o.get('hh_efectiva', 0) or 0 for o in sd['ordenes'])
         sala_rows.append([
             Paragraph(sala, celda_style),
             str(total_s),
             f"{sd['total_kg']:,.0f}",
             f"{kh:,.0f}",
+            f"{hh_ef_sala:.1f}",
             str(sd['hechas']),
             str(sd['no_hechas'])
         ])
 
-    sala_table = Table(sala_rows, colWidths=[4.5*cm, 1.8*cm, 2.8*cm, 2.5*cm, 2.5*cm, 2.5*cm])
+    sala_table = Table(sala_rows, colWidths=[4*cm, 1.3*cm, 2.5*cm, 2*cm, 1.8*cm, 1.5*cm, 1.5*cm])
     sala_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
         ('TEXTCOLOR', (0, 0), (-1, 0), white),
@@ -1136,7 +1243,7 @@ def _generar_informe_pdf(
                            fontSize=10, textColor=azul_corp, spaceBefore=8, spaceAfter=4)
         ))
 
-        orden_rows = [['Orden', 'Especie', 'KG Total', 'KG/Hora', 'Dotación', 'Inicio', 'Fin', 'Rend.']]
+        orden_rows = [['Orden', 'Estado', 'Especie', 'KG Total', 'KG/Hora', 'Dot.', 'HH', 'HH Ef.', 'Det.(h)', 'Inicio', 'Fin', 'Rend.']]
         ordenes_sorted = sorted(
             sd['ordenes'],
             key=lambda o: o.get('_inicio_dt') or datetime.min,
@@ -1150,23 +1257,35 @@ def _generar_informe_pdf(
             rend = orden.get('rendimiento', 0) or 0
             especie_o = orden.get('especie', '-')
             mo_name = orden.get('mo_name', 'N/A')
+            estado_code = orden.get('state', 'progress')
+            estado = estado_label(estado_code)
+            hh = orden.get('hh', 0) or 0
+            hh_efectiva = orden.get('hh_efectiva', 0) or 0
+            detenciones = orden.get('detenciones', 0) or 0
             ini = orden.get('_inicio_dt')
             fin = orden.get('_fin_dt')
             hora_ini = ini.strftime("%d/%m %H:%M") if ini else '-'
             hora_fin = fin.strftime("%d/%m %H:%M") if fin else '-'
+            
+            # Emoji para estado
+            estado_emoji = '✅' if estado_code == 'done' else '🔄' if estado_code == 'progress' else '📋'
 
             orden_rows.append([
                 Paragraph(mo_name, celda_style),
+                estado_emoji,
                 especie_o,
                 f"{kg_o:,.0f}",
                 f"{kg_h:,.0f}",
                 str(int(dot)),
+                f"{hh:.1f}",
+                f"{hh_efectiva:.1f}",
+                f"{detenciones:.1f}",
                 hora_ini,
                 hora_fin,
                 f"{rend:.1f}%"
             ])
 
-        col_widths = [3.2*cm, 1.8*cm, 2*cm, 1.8*cm, 1.5*cm, 2.3*cm, 2.3*cm, 1.5*cm]
+        col_widths = [2.8*cm, 0.8*cm, 1.4*cm, 1.6*cm, 1.4*cm, 0.9*cm, 1.1*cm, 1.1*cm, 1.1*cm, 1.8*cm, 1.8*cm, 1.2*cm]
         orden_table = Table(orden_rows, colWidths=col_widths)
         orden_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HexColor('#34495e')),
