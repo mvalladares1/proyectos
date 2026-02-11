@@ -622,9 +622,12 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             DB, uid, password,
             'purchase.order', 'read',
             [[int(oc_id)]],
-            {'fields': ['name'], 'context': contexto}
+            {'fields': ['name', 'state', 'approval_state', 'approval_request'], 'context': contexto}
         )
         oc_name = oc_data[0]['name'] if oc_data else f"OC#{oc_id}"
+        oc_state = oc_data[0].get('state') if oc_data else 'unknown'
+        oc_approval_state = oc_data[0].get('approval_state') if oc_data else 'unknown'
+        oc_approval_request = oc_data[0].get('approval_request') if oc_data else 'unknown'
         
         # 3. Verificar si ya tiene aprobación del usuario
         mi_entrada = models.execute_kw(
@@ -647,7 +650,15 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         
         # Si no hay entradas, el flujo de aprobación no está activo
         if not todas_entradas:
-            return False, f"❌ {oc_name}: No hay flujo de aprobación configurado. Verifica que las reglas de Studio estén activas en Odoo."
+            debug_oc = f"\n\n📋 Info de {oc_name}:"
+            debug_oc += f"\n  - State: {oc_state}"
+            debug_oc += f"\n  - Approval State: {oc_approval_state}"
+            debug_oc += f"\n  - Approval Request: {oc_approval_request}"
+            debug_oc += f"\n\n💡 Posibles causas:"
+            debug_oc += f"\n  1. La OC no cumple las condiciones de las reglas de aprobación"
+            debug_oc += f"\n  2. Las reglas solo se activan en ciertos estados de la OC"
+            debug_oc += f"\n  3. El flujo de aprobación no se ha iniciado en esta OC"
+            return False, f"❌ {oc_name}: No hay entradas de aprobación creadas.{debug_oc}"
         
         # Buscar la entrada para la regla correspondiente (sin importar el usuario)
         entrada_para_regla = models.execute_kw(
