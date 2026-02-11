@@ -160,6 +160,13 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
     resultado['route_correlativo'] = ruta_info.get('name', None)  # Correlativo de la ruta
     resultado['route_name_str'] = 'Procesando...'
     
+    # Extraer total_qnt (cantidad real en kg) - viene como string
+    total_qnt_str = ruta_info.get('total_qnt', 0)
+    try:
+        resultado['total_qnt'] = float(total_qnt_str) if total_qnt_str else 0
+    except (ValueError, TypeError):
+        resultado['total_qnt'] = 0
+    
     # Extraer cost_per_kg de la ruta y calcular en USD
     cost_per_kg_clp = ruta_info.get('cost_per_kg', 0)
     
@@ -1009,7 +1016,8 @@ def render_tab(username, password):
             'fecha_creacion': oc.get('create_date', 'N/A'),
             'fecha_orden': oc.get('date_order') if oc.get('date_order') else None,
             'creador': creador,
-            'total_kilos': oc.get('total_kilos', 0),
+            'total_kilos': oc.get('total_kilos', 0),  # Kilos desde líneas Odoo (puede ser incorrecto)
+            'total_qnt_ruta': comparacion.get('total_qnt', 0),  # Kilos reales desde ruta (correcto)
             'costo_por_km': costo_por_km,
             **comparacion  # Agregar info de logística
         })
@@ -1289,9 +1297,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                 return f"🔴 +{dif_pct:.0f}%"
         
         # Cabeceras de la tabla
-        col_expand_h, col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_km_h, col_ppto_h, col_aprob_h = st.columns([0.3, 0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
-        with col_expand_h:
-            st.markdown("**▶**")
+        col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_km_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
         with col_sel_h:
             st.markdown("**✅**")
         with col_oc_h:
@@ -1331,19 +1337,11 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
         
         # Mostrar tabla con checkboxes
         for _idx, _row in df_aprobables.iterrows():
-            # Inicializar estado de expansión si no existe
-            expand_key = f"expand_{key_proveedor}_{_row['oc_id']}"
-            if expand_key not in st.session_state:
-                st.session_state[expand_key] = False
-            
-            # Fila principal con datos
-            col_expand, col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_km, col_ppto, col_aprob = st.columns([0.3, 0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
-            
-            with col_expand:
-                # Botón para expandir/colapsar
-                if st.button("▶" if not st.session_state[expand_key] else "▼", key=f"btn_{expand_key}"):
-                    st.session_state[expand_key] = not st.session_state[expand_key]
-            
+            # Contenedor para cada fila con expander
+            with st.container():
+                # Fila principal con datos
+                col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_km, col_ppto, col_aprob = st.columns([0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
+                
             with col_sel:
                 cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
                 st.checkbox(
@@ -1353,7 +1351,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     on_change=on_checkbox_change,
                     args=(_row['oc_id'], cb_key)
                 )
-            
+        
             with col_oc:
                 st.markdown(f"**{_row['oc_name']}**")
             
@@ -1392,11 +1390,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             
             with col_aprob:
                 st.text(f"{_row['estado_aprobacion']} - {_row['aprobadores'][:30]}")
-            
-            # Si está expandido, mostrar detalles
-            if st.session_state[expand_key]:
-                with st.container():
-                    st.markdown("---")
+                
+                # Expander compacto para detalles
+                with st.expander("📋 Ver detalles", expanded=False):
                     col_det1, col_det2, col_det3 = st.columns(3)
                     
                     with col_det1:
@@ -1409,15 +1405,24 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     with col_det2:
                         st.markdown("**💰 Costos y Cantidades**")
                         st.markdown(f"**Monto OC:** ${_row['monto']:,.0f}")
-                        total_kilos = _row.get('total_kilos', 0)
-                        st.markdown(f"**Cantidad:** {total_kilos:,.0f} kg")
                         
-                        # $/kg calculado desde monto / kilos
-                        if total_kilos > 0:
-                            costo_kg_oc = _row['monto'] / total_kilos
-                            st.markdown(f"**$/kg OC (CLP):** ${costo_kg_oc:,.0f}")
+                        # Usar cantidad desde ruta (total_qnt_ruta) que es la correcta
+                        total_kilos_ruta = _row.get('total_qnt_ruta', 0)
+                        if total_kilos_ruta > 0:
+                            st.markdown(f"**Cantidad:** {total_kilos_ruta:,.0f} kg")
+                            # $/kg calculado desde monto / kilos reales de la ruta
+                            costo_kg_oc = _row['monto'] / total_kilos_ruta
+                            st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
                         else:
-                            st.markdown(f"**$/kg OC:** N/A")
+                            # Fallback a kilos de Odoo si no hay datos de ruta
+                            total_kilos_odoo = _row.get('total_kilos', 0)
+                            if total_kilos_odoo > 0:
+                                st.markdown(f"**Cantidad:** {total_kilos_odoo:,.0f} kg ⚠️")
+                                costo_kg_oc = _row['monto'] / total_kilos_odoo
+                                st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
+                            else:
+                                st.markdown(f"**Cantidad:** N/A")
+                                st.markdown(f"**Costo/kg OC:** N/A")
                         
                         # $/kg USD desde ruta
                         if _row.get('cost_per_kg_usd'):
@@ -1483,7 +1488,8 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         st.markdown(f"**Aprobadores:** {_row['aprobadores']}")
                     st.markdown("---")
         
-        # Botones de acción DENTRO del fragment
+        # Botone
+                st.markdown("---")  # Separador entre filas fragment
         if st.session_state[f'selected_{key_proveedor}']:
             st.markdown("---")
             
