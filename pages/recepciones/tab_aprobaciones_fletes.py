@@ -1122,6 +1122,15 @@ def render_tab(username, password):
     with col8:
         filtro_alerta = st.selectbox("⚠️ Estado Info", ["Todas", "Info Completa", "Info Incompleta"], key="filtro_alerta_fletes")
     
+    col9, _, _ = st.columns(3)
+    
+    with col9:
+        filtro_costo_kg = st.selectbox(
+            "🟢🟡🔴 $/kg USD",
+            ["Todos", "🟢 Verde (≤$0.11)", "🟡 Amarillo (>$0.11)", "🔴 Rojo (>$0.132)", "🟢🟡 Verde y Amarillo"],
+            key="filtro_costo_kg_fletes"
+        )
+    
     # Aplicar filtros
     df_filtrado = df.copy()
     
@@ -1172,6 +1181,23 @@ def render_tab(username, password):
             (df_filtrado['costo_presupuestado'].isna()) | 
             (df_filtrado['tipo_camion'].isna())
         ]
+    
+    # Aplicar filtro de $/kg USD
+    if filtro_costo_kg != "Todos":
+        # Filtrar solo OCs que tienen cost_per_kg_usd
+        df_con_costo_kg = df_filtrado[df_filtrado['cost_per_kg_usd'].notna()]
+        
+        if filtro_costo_kg == "🟢 Verde (≤$0.11)":
+            df_filtrado = df_con_costo_kg[df_con_costo_kg['cost_per_kg_usd'] <= UMBRAL_COSTO_KG_USD]
+        elif filtro_costo_kg == "🟡 Amarillo (>$0.11)":
+            df_filtrado = df_con_costo_kg[
+                (df_con_costo_kg['cost_per_kg_usd'] > UMBRAL_COSTO_KG_USD) &
+                (df_con_costo_kg['cost_per_kg_usd'] <= UMBRAL_COSTO_KG_USD * 1.2)
+            ]
+        elif filtro_costo_kg == "🔴 Rojo (>$0.132)":
+            df_filtrado = df_con_costo_kg[df_con_costo_kg['cost_per_kg_usd'] > UMBRAL_COSTO_KG_USD * 1.2]
+        elif filtro_costo_kg == "🟢🟡 Verde y Amarillo":
+            df_filtrado = df_con_costo_kg[df_con_costo_kg['cost_per_kg_usd'] <= UMBRAL_COSTO_KG_USD * 1.2]
     
     st.markdown(f"**Mostrando {len(df_filtrado)} de {len(df)} OCs de Fletes**")
     
