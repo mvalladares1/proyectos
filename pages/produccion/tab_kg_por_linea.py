@@ -164,7 +164,6 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "type": "bar",
             "stack": "total",
             "data": data_vals,
-            "barMaxWidth": 50,
             "label": {
                 "show": True,
                 "position": "inside",
@@ -192,35 +191,43 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     if series:
         series[-1]["itemStyle"]["borderRadius"] = [8, 8, 0, 0]
     
-    # Agregar markPoint para mostrar KG/H arriba de cada columna
+    # Agregar serie adicional para mostrar KG/H arriba de cada columna
     # Calcular los valores totales por día para posicionar los labels
     total_kg_por_dia = [sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted) for dia in dias_sorted]
     
-    # Crear data para markPoint con KG/H
-    mark_point_data = []
-    for i, dia in enumerate(dias_sorted):
-        kg_h = dia_kg_hora[dia]
-        if kg_h > 0:
-            mark_point_data.append({
-                "coord": [i, total_kg_por_dia[i]],
-                "value": f"{int(kg_h)} kg/h"
-            })
+    # Crear serie de línea invisible solo para mostrar los KG/H
+    kg_hora_data = [dia_kg_hora[dia] if dia_kg_hora[dia] > 0 else None for dia in dias_sorted]
     
-    # Agregar markPoint a la última serie (la de arriba)
-    if series and mark_point_data:
-        series[-1]["markPoint"] = {
-            "data": mark_point_data,
-            "symbol": "none",
-            "label": {
-                "show": True,
-                "position": "top",
-                "offset": [0, -8],
-                "fontSize": 11,
-                "fontWeight": "bold",
-                "color": "#999",
-                "formatter": "{c}"
-            }
+    series.append({
+        "name": "KG/H",
+        "type": "line",
+        "data": total_kg_por_dia,
+        "yAxisIndex": 0,
+        "symbol": "none",
+        "lineStyle": {"width": 0, "opacity": 0},
+        "itemStyle": {"opacity": 0},
+        "zlevel": 10,
+        "label": {
+            "show": True,
+            "position": "top",
+            "distance": 5,
+            "fontSize": 10,
+            "fontWeight": "bold",
+            "color": "#999",
+            "formatter": JsCode("""
+                function(params) {
+                    var kgHora = """ + str(kg_hora_data).replace("None", "0") + """;
+                    var val = kgHora[params.dataIndex];
+                    return val > 0 ? Math.round(val) + ' kg/h' : '';
+                }
+            """).js_code
         }
+    })
+
+    # Ajustar ancho de barras según cantidad de días
+    bar_max_width = 40 if len(dias_sorted) > 20 else 50
+    for s in series[:-1]:  # Todas las series excepto la última (que es la de KG/H)
+        s["barMaxWidth"] = bar_max_width
 
     options = {
         "title": {
@@ -238,27 +245,43 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "borderWidth": 1,
             "borderRadius": 10,
             "textStyle": {"color": "#fff", "fontSize": 13},
-            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
+            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);",
+            "formatter": JsCode("""
+                function(params) {
+                    var result = params[0].name + '<br/>';
+                    var total = 0;
+                    for (var i = 0; i < params.length - 1; i++) {
+                        if (params[i].seriesType === 'bar') {
+                            result += params[i].marker + ' ' + params[i].seriesName + ': ' + 
+                                     params[i].value.toLocaleString('es-CL') + ' KG<br/>';
+                            total += params[i].value;
+                        }
+                    }
+                    result += '<b>Total: ' + total.toLocaleString('es-CL') + ' KG</b>';
+                    return result;
+                }
+            """).js_code
         },
         "legend": {
             "data": salas_sorted,
             "bottom": 0,
-            "textStyle": {"color": "#ccc", "fontSize": 12},
-            "itemGap": 15,
+            "textStyle": {"color": "#ccc", "fontSize": 11},
+            "itemGap": 12,
             "icon": "roundRect",
             "type": "scroll"
         },
         "grid": {
             "left": "3%", "right": "4%",
-            "bottom": "15%", "top": "18%",
+            "bottom": "15%", "top": "22%",
             "containLabel": True
         },
         "xAxis": {
             "type": "category",
             "data": dias_sorted,
             "axisLabel": {
-                "color": "#fff", "fontSize": 12, "fontWeight": "bold",
-                "interval": 0
+                "color": "#fff", "fontSize": 11, "fontWeight": "bold",
+                "interval": 0,
+                "rotate": 45 if len(dias_sorted) > 15 else 0
             },
             "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
             "axisTick": {"show": False}
@@ -1712,3 +1735,141 @@ def _render_comparacion(
         }
 
         st_echarts(options=options_sala, height="450px", key="comp_sala_chart")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # === GRÁFICO KG/H PROMEDIO POR SALA - COMPARACIÓN ===
+        nombres_sala_kgh = []
+        kgh_sala_a = []
+        kgh_sala_b = []
+        
+        for sala in todas_salas:
+            sa = salas_principal.get(sala)
+            sc = salas_comp.get(sala)
+            
+            # Calcular KG/H promedio de cada sala
+            kgh_a = (sa['kg_con_duracion'] / sa['duracion_total']) if sa and sa['duracion_total'] > 0 else 0
+            kgh_b = (sc['kg_con_duracion'] / sc['duracion_total']) if sc and sc['duracion_total'] > 0 else 0
+            
+            # Solo incluir salas que tengan datos en al menos uno de los períodos
+            if kgh_a > 0 or kgh_b > 0:
+                nombres_sala_kgh.append(sala)
+                kgh_sala_a.append(round(kgh_a, 0))
+                kgh_sala_b.append(round(kgh_b, 0))
+        
+        if nombres_sala_kgh:
+            options_kgh_sala = {
+                "title": {
+                    "text": f"⚡ KG/Hora Promedio por Sala — {lbl_a} vs {lbl_b}",
+                    "subtext": "Comparación de productividad promedio por sala entre ambos períodos",
+                    "left": "center",
+                    "textStyle": {"color": "#ffc107", "fontSize": 15, "fontWeight": "bold"},
+                    "subtextStyle": {"color": "#999", "fontSize": 11}
+                },
+                "tooltip": {
+                    "trigger": "axis",
+                    "axisPointer": {"type": "shadow"},
+                    "backgroundColor": "rgba(10, 10, 30, 0.95)",
+                    "borderColor": "#ffc107",
+                    "borderRadius": 10,
+                    "textStyle": {"color": "#fff", "fontSize": 13},
+                    "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);",
+                    "formatter": JsCode("""
+                        function(params) {
+                            var result = params[0].name + '<br/>';
+                            for (var i = 0; i < params.length; i++) {
+                                result += params[i].marker + ' ' + params[i].seriesName + ': ' + 
+                                         params[i].value.toLocaleString('es-CL') + ' kg/h<br/>';
+                            }
+                            if (params.length === 2 && params[0].value > 0 && params[1].value > 0) {
+                                var diff = params[0].value - params[1].value;
+                                var pct = ((diff / params[1].value) * 100).toFixed(1);
+                                var color = diff >= 0 ? '#4caf50' : '#f44336';
+                                var arrow = diff >= 0 ? '▲' : '▼';
+                                result += '<br/><b style="color:' + color + '">' + arrow + ' Diferencia: ' + 
+                                         (diff >= 0 ? '+' : '') + diff.toFixed(0) + ' kg/h (' + 
+                                         (diff >= 0 ? '+' : '') + pct + '%)</b>';
+                            }
+                            return result;
+                        }
+                    """).js_code
+                },
+                "legend": {
+                    "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
+                    "bottom": 0,
+                    "textStyle": {"color": "#ccc", "fontSize": 12},
+                    "itemGap": 30,
+                    "icon": "roundRect"
+                },
+                "grid": {
+                    "left": "3%", "right": "4%",
+                    "bottom": "15%", "top": "20%",
+                    "containLabel": True
+                },
+                "xAxis": {
+                    "type": "category",
+                    "data": nombres_sala_kgh,
+                    "axisLabel": {
+                        "color": "#fff", "fontSize": 11, "fontWeight": "bold",
+                        "rotate": 20 if len(nombres_sala_kgh) > 5 else 0,
+                        "interval": 0
+                    },
+                    "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
+                    "axisTick": {"show": False}
+                },
+                "yAxis": {
+                    "type": "value",
+                    "name": "⚡ KG/Hora",
+                    "nameTextStyle": {"color": "#ffc107", "fontSize": 13, "fontWeight": "bold"},
+                    "axisLabel": {"color": "#ccc", "fontSize": 11},
+                    "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+                    "axisLine": {"show": False}
+                },
+                "series": [
+                    {
+                        "name": f"📅 {lbl_a}",
+                        "type": "bar",
+                        "data": kgh_sala_a,
+                        "barMaxWidth": 40,
+                        "barGap": "20%",
+                        "itemStyle": {
+                            "color": {
+                                "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "#00d4ff"},
+                                    {"offset": 1, "color": "#00d4ff55"}
+                                ]
+                            },
+                            "borderRadius": [8, 8, 0, 0]
+                        },
+                        "label": {
+                            "show": True, "position": "top",
+                            "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff",
+                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                        }
+                    },
+                    {
+                        "name": f"📅 {lbl_b}",
+                        "type": "bar",
+                        "data": kgh_sala_b,
+                        "barMaxWidth": 40,
+                        "itemStyle": {
+                            "color": {
+                                "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "#e040fb"},
+                                    {"offset": 1, "color": "#e040fb55"}
+                                ]
+                            },
+                            "borderRadius": [8, 8, 0, 0]
+                        },
+                        "label": {
+                            "show": True, "position": "top",
+                            "fontSize": 11, "fontWeight": "bold", "color": "#e040fb",
+                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                        }
+                    }
+                ]
+            }
+            
+            st_echarts(options=options_kgh_sala, height="450px", key="comp_kgh_sala_chart")
