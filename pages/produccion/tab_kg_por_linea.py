@@ -128,9 +128,9 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         return None
 
     colores_paleta = [
-        '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#F44336',
-        '#00BCD4', '#FFEB3B', '#673AB7', '#009688', '#FF5722',
-        '#03A9F4', '#8BC34A', '#E91E63', '#00ACC1', '#FFC107',
+        '#2196F3', '#FF9800', '#4CAF50', '#F44336', '#9C27B0',
+        '#FFEB3B', '#00BCD4', '#E91E63', '#8BC34A', '#673AB7',
+        '#FF5722', '#009688', '#03A9F4', '#FFC107', '#00ACC1',
     ]
 
     dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -503,9 +503,9 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     st.markdown("##### 🏭 KG/Hora por Sala")
     
     colores_sala = [
-        '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#F44336',
-        '#00BCD4', '#FFEB3B', '#673AB7', '#009688', '#FF5722',
-        '#03A9F4', '#8BC34A', '#E91E63', '#00ACC1', '#FFC107',
+        '#2196F3', '#FF9800', '#4CAF50', '#F44336', '#9C27B0',
+        '#FFEB3B', '#00BCD4', '#E91E63', '#8BC34A', '#673AB7',
+        '#FF5722', '#009688', '#03A9F4', '#FFC107', '#00ACC1',
     ]
     
     # Ordenar salas por KG/Hora promedio
@@ -860,9 +860,9 @@ def render(username: str = None, password: str = None):
 
     # === TARJETAS POR SALA ===
     colores_sala = [
-        '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#F44336',
-        '#00BCD4', '#FFEB3B', '#673AB7', '#009688', '#FF5722',
-        '#03A9F4', '#8BC34A', '#E91E63', '#00ACC1', '#FFC107',
+        '#2196F3', '#FF9800', '#4CAF50', '#F44336', '#9C27B0',
+        '#FFEB3B', '#00BCD4', '#E91E63', '#8BC34A', '#673AB7',
+        '#FF5722', '#009688', '#03A9F4', '#FFC107', '#00ACC1',
     ]
 
     # Ordenar salas por KG/Hora (kg_con_duracion/duracion) descendente
