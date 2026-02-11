@@ -645,6 +645,15 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             {'fields': ['id', 'user_id', 'rule_id', 'approved'], 'context': contexto}
         )
         
+        # DEBUG: Siempre mostrar las entradas para diagnóstico
+        debug_info = f"\n\n📋 DEBUG - Entradas de aprobación para {oc_name}:\n"
+        if todas_entradas:
+            for entrada in todas_entradas:
+                debug_info += f"  - Entry ID {entrada['id']}: User ID {entrada['user_id']}, Rule ID {entrada['rule_id']}, Approved: {entrada['approved']}\n"
+        else:
+            debug_info += "  (No hay entradas creadas - la OC no tiene flujo de aprobación activo)\n"
+        debug_info += f"\n🔍 Tú eres User ID {uid}, buscando entrada con Rule ID {rule_id} ({rol_usuario})"
+        
         # Buscar la entrada de aprobación pendiente para este usuario y regla
         entrada_pendiente = models.execute_kw(
             DB, uid, password,
@@ -658,12 +667,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         )
         
         if not entrada_pendiente:
-            # Si no existe entrada, mostrar qué entradas SÍ existen para debugging
-            debug_info = f"\n\nDEBUG - Entradas existentes para {oc_name}:\n"
-            for entrada in todas_entradas:
-                debug_info += f"  - Entry ID {entrada['id']}: User ID {entrada['user_id']}, Rule ID {entrada['rule_id']}, Approved: {entrada['approved']}\n"
-            debug_info += f"\nBuscando: User ID {uid}, Rule ID {rule_id}"
-            return False, f"❌ {oc_name}: No se encontró entrada de aprobación para {rol_usuario}.{debug_info}"
+            return False, f"❌ {oc_name}: No tienes entrada de aprobación asignada.{debug_info}\n\n💡 Esto significa que tu usuario no está configurado en las reglas de aprobación de Odoo Studio."
         
         # Aprobar usando write directamente (evita validaciones de permisos sobre studio.approval.rule)
         try:
