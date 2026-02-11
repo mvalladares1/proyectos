@@ -123,6 +123,9 @@ def classify_sala(sala_name: str, product_name: str = '') -> Tuple[str, str]:
     # Ej: "[1.4] PROCESO CONGELADO TÚNEL CONTÍNUO" (con tilde en la U)
     if ('tunel continuo' in product_lower or 'túnel continuo' in product_lower or
         'tunel contínuo' in product_lower or 'túnel contínuo' in product_lower):
+        # Si la MO tiene sala asignada (ej: Sala 2), mostrar "Sala 2 - Túnel Continuo"
+        if sala_name and sala_lower and 'tunel' not in sala_lower and 'túnel' not in sala_lower:
+            return ('CONGELADO', f'{sala_name} - Túnel Continuo')
         return ('CONGELADO', 'Túnel Continuo')
     
     # PRIORIDAD 2: Congelado explícito por sala - túneles estáticos

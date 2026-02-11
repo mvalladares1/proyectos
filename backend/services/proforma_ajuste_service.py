@@ -833,6 +833,7 @@ def enviar_proforma_email(
             "subject": asunto,
             "body_html": cuerpo_html,
             "email_to": email_destino,
+            "email_cc": "asesorias@riofuturo.cl",  # Copia a asesorías
             "email_from": "notificaciones-rfp@riofuturo.cl",  # Servidor configurado en Odoo
             "attachment_ids": [(6, 0, [attachment_id])],  # Tupla para many2many
             "auto_delete": True

@@ -282,7 +282,11 @@ def grafico_tuneles_consolidado(mos_data: list, agrupacion: str = "Semana"):
         
         # Nombre del túnel
         if es_tunel_continuo:
-            tunel_nombre = 'Túnel Continuo'
+            # Si tiene sala asignada, mostrar "Sala X - Túnel Continuo"
+            if sala_completa and 'tunel' not in sala_lower and 'túnel' not in sala_lower:
+                tunel_nombre = f'{sala_completa} - Túnel Continuo'
+            else:
+                tunel_nombre = 'Túnel Continuo'
         else:
             tunel_nombre = sala_completa
         
