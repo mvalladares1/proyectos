@@ -1027,84 +1027,80 @@ def _render_comparacion(
     vals_a = [round(kg) for _, kg in dias_a_list]
     vals_b = [round(kg) for _, kg in dias_b_list]
 
-    # Gráficos lado a lado para cada período
-    chart_col_1, chart_col_2 = st.columns(2)
+    # Gráficos uno debajo del otro para mayor visibilidad
+    opts_a = {
+        "title": {
+            "text": f"📅 Período Actual: {lbl_a}",
+            "subtext": f"{ord_a_total} órdenes · {dias_a_count} días · Prom: {prom_dia_a:,.0f} KG/día",
+            "left": "center",
+            "textStyle": {"color": "#00d4ff", "fontSize": 14, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#999", "fontSize": 11}
+        },
+        "tooltip": {
+            "trigger": "axis", "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
+            "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
+        },
+        "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "18%", "containLabel": True},
+        "xAxis": {
+            "type": "category", "data": labels_a,
+            "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_a) > 10 else 0},
+            "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
+        },
+        "yAxis": {
+            "type": "value", "name": "KG",
+            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+        },
+        "series": [{
+            "type": "bar", "data": vals_a, "barMaxWidth": 45,
+            "itemStyle": {
+                "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                          "colorStops": [{"offset": 0, "color": "#00d4ff"}, {"offset": 1, "color": "#00d4ff55"}]},
+                "borderRadius": [8, 8, 0, 0]
+            },
+            "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff"}
+        }]
+    }
+    st_echarts(options=opts_a, height="420px", key="comp_periodo_a")
 
-    with chart_col_1:
-        opts_a = {
-            "title": {
-                "text": f"📅 Período Actual: {lbl_a}",
-                "subtext": f"{ord_a_total} órdenes · {dias_a_count} días · Prom: {prom_dia_a:,.0f} KG/día",
-                "left": "center",
-                "textStyle": {"color": "#00d4ff", "fontSize": 14, "fontWeight": "bold"},
-                "subtextStyle": {"color": "#999", "fontSize": 11}
+    opts_b = {
+        "title": {
+            "text": f"📅 Período Comparación: {lbl_b}",
+            "subtext": f"{ord_b_total} órdenes · {dias_b_count} días · Prom: {prom_dia_b:,.0f} KG/día",
+            "left": "center",
+            "textStyle": {"color": "#e040fb", "fontSize": 14, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#999", "fontSize": 11}
+        },
+        "tooltip": {
+            "trigger": "axis", "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
+            "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
+        },
+        "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "18%", "containLabel": True},
+        "xAxis": {
+            "type": "category", "data": labels_b,
+            "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_b) > 10 else 0},
+            "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
+        },
+        "yAxis": {
+            "type": "value", "name": "KG",
+            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
+            "axisLabel": {"color": "#ccc", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+        },
+        "series": [{
+            "type": "bar", "data": vals_b, "barMaxWidth": 45,
+            "itemStyle": {
+                "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                          "colorStops": [{"offset": 0, "color": "#e040fb"}, {"offset": 1, "color": "#e040fb55"}]},
+                "borderRadius": [8, 8, 0, 0]
             },
-            "tooltip": {
-                "trigger": "axis", "axisPointer": {"type": "shadow"},
-                "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
-                "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
-            },
-            "grid": {"left": "3%", "right": "4%", "bottom": "8%", "top": "22%", "containLabel": True},
-            "xAxis": {
-                "type": "category", "data": labels_a,
-                "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_a) > 5 else 0},
-                "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
-            },
-            "yAxis": {
-                "type": "value", "name": "KG",
-                "nameTextStyle": {"color": "#aaa", "fontSize": 12},
-                "axisLabel": {"color": "#ccc", "fontSize": 11},
-                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
-            },
-            "series": [{
-                "type": "bar", "data": vals_a, "barMaxWidth": 45,
-                "itemStyle": {
-                    "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                              "colorStops": [{"offset": 0, "color": "#00d4ff"}, {"offset": 1, "color": "#00d4ff55"}]},
-                    "borderRadius": [8, 8, 0, 0]
-                },
-                "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#00d4ff"}
-            }]
-        }
-        st_echarts(options=opts_a, height="380px", key="comp_periodo_a")
-
-    with chart_col_2:
-        opts_b = {
-            "title": {
-                "text": f"📅 Período Comparación: {lbl_b}",
-                "subtext": f"{ord_b_total} órdenes · {dias_b_count} días · Prom: {prom_dia_b:,.0f} KG/día",
-                "left": "center",
-                "textStyle": {"color": "#e040fb", "fontSize": 14, "fontWeight": "bold"},
-                "subtextStyle": {"color": "#999", "fontSize": 11}
-            },
-            "tooltip": {
-                "trigger": "axis", "axisPointer": {"type": "shadow"},
-                "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
-                "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
-            },
-            "grid": {"left": "3%", "right": "4%", "bottom": "8%", "top": "22%", "containLabel": True},
-            "xAxis": {
-                "type": "category", "data": labels_b,
-                "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_b) > 5 else 0},
-                "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
-            },
-            "yAxis": {
-                "type": "value", "name": "KG",
-                "nameTextStyle": {"color": "#aaa", "fontSize": 12},
-                "axisLabel": {"color": "#ccc", "fontSize": 11},
-                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
-            },
-            "series": [{
-                "type": "bar", "data": vals_b, "barMaxWidth": 45,
-                "itemStyle": {
-                    "color": {"type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
-                              "colorStops": [{"offset": 0, "color": "#e040fb"}, {"offset": 1, "color": "#e040fb55"}]},
-                    "borderRadius": [8, 8, 0, 0]
-                },
-                "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#e040fb"}
-            }]
-        }
-        st_echarts(options=opts_b, height="380px", key="comp_periodo_b")
+            "label": {"show": True, "position": "top", "fontSize": 11, "fontWeight": "bold", "color": "#e040fb"}
+        }]
+    }
+    st_echarts(options=opts_b, height="420px", key="comp_periodo_b")
 
     st.markdown("---")
 
