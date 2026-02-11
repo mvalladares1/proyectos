@@ -1027,11 +1027,15 @@ def _render_comparacion(
     vals_a = [round(kg) for _, kg in dias_a_list]
     vals_b = [round(kg) for _, kg in dias_b_list]
 
+    # KG/Hora promedio por período
+    kgh_a = _calcular_kg_hora(mos_principal)
+    kgh_b = _calcular_kg_hora(mos_comp)
+
     # Gráficos uno debajo del otro para mayor visibilidad
     opts_a = {
         "title": {
             "text": f"📅 Período Actual: {lbl_a}",
-            "subtext": f"{ord_a_total} órdenes · {dias_a_count} días · Prom: {prom_dia_a:,.0f} KG/día",
+            "subtext": f"{ord_a_total} órdenes · {kg_a_total:,.0f} KG · {kgh_a:,.0f} KG/H · {prom_dia_a:,.0f} KG/día",
             "left": "center",
             "textStyle": {"color": "#00d4ff", "fontSize": 14, "fontWeight": "bold"},
             "subtextStyle": {"color": "#999", "fontSize": 11}
@@ -1068,7 +1072,7 @@ def _render_comparacion(
     opts_b = {
         "title": {
             "text": f"📅 Período Comparación: {lbl_b}",
-            "subtext": f"{ord_b_total} órdenes · {dias_b_count} días · Prom: {prom_dia_b:,.0f} KG/día",
+            "subtext": f"{ord_b_total} órdenes · {kg_b_total:,.0f} KG · {kgh_b:,.0f} KG/H · {prom_dia_b:,.0f} KG/día",
             "left": "center",
             "textStyle": {"color": "#e040fb", "fontSize": 14, "fontWeight": "bold"},
             "subtextStyle": {"color": "#999", "fontSize": 11}
