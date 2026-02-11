@@ -155,15 +155,26 @@ def get_facturas_borrador(
     )
     
     # Excluir facturas creadas automáticamente por Nubistalia (DTE/SII)
-    # Estas no son proformas de MP generadas por el equipo
+    # Y filtrar SOLO las de MARCELO JARAMILLO CADEGAN
     USUARIOS_EXCLUIDOS = ["nubistalia", "nubistalia gateways platform"]
-    facturas = [
-        f for f in facturas
-        if not any(
-            excl in (f.get("create_uid", [0, ""])[1] if isinstance(f.get("create_uid"), (list, tuple)) else "").lower()
-            for excl in USUARIOS_EXCLUIDOS
-        )
-    ]
+    USUARIO_PERMITIDO = "MARCELO JARAMILLO CADEGAN"
+    
+    facturas_filtradas = []
+    for f in facturas:
+        creador = f.get("create_uid", [0, ""])
+        nombre_creador = creador[1] if isinstance(creador, (list, tuple)) and len(creador) > 1 else ""
+        nombre_creador_upper = str(nombre_creador).upper()
+        
+        # 1. Excluir Nubistalia
+        if any(excl in nombre_creador_upper.lower() for excl in USUARIOS_EXCLUIDOS):
+            continue
+            
+        # 2. Filtrar SOLO Marcelo Jaramillo Cadegan
+        # Se usa in para ser flexible con espacios o mayúsculas exactas
+        if USUARIO_PERMITIDO in nombre_creador_upper:
+            facturas_filtradas.append(f)
+    
+    facturas = facturas_filtradas
     
     resultado = []
     
