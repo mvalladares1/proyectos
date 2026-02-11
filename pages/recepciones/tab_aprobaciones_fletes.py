@@ -1459,10 +1459,20 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                         st.markdown("**💰 Costos y Cantidades**")
                         st.markdown(f"**Monto OC:** ${_row['monto']:,.0f}")
                         
+                        # Determinar si mostrar alerta basado en cost_per_kg_usd
+                        mostrar_alerta = False
+                        if _row.get('cost_per_kg_usd'):
+                            costo_kg_usd = _row['cost_per_kg_usd']
+                            if costo_kg_usd > UMBRAL_COSTO_KG_USD * 1.2:  # Rojo
+                                mostrar_alerta = True
+                        
                         # Usar cantidad desde ruta (total_qnt_ruta) que es la correcta
                         total_kilos_ruta = _row.get('total_qnt_ruta', 0)
                         if total_kilos_ruta > 0:
-                            st.markdown(f"**Cantidad:** {total_kilos_ruta:,.0f} kg")
+                            cantidad_str = f"{total_kilos_ruta:,.0f} kg"
+                            if mostrar_alerta:
+                                cantidad_str += " ⚠️"
+                            st.markdown(f"**Cantidad:** {cantidad_str}")
                             # $/kg calculado desde monto / kilos reales de la ruta
                             costo_kg_oc = _row['monto'] / total_kilos_ruta
                             st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
@@ -1470,7 +1480,10 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             # Fallback a kilos de Odoo si no hay datos de ruta
                             total_kilos_odoo = _row.get('total_kilos', 0)
                             if total_kilos_odoo > 0:
-                                st.markdown(f"**Cantidad:** {total_kilos_odoo:,.0f} kg ⚠️")
+                                cantidad_str = f"{total_kilos_odoo:,.0f} kg"
+                                if mostrar_alerta:
+                                    cantidad_str += " ⚠️"
+                                st.markdown(f"**Cantidad:** {cantidad_str}")
                                 costo_kg_oc = _row['monto'] / total_kilos_odoo
                                 st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
                             else:
