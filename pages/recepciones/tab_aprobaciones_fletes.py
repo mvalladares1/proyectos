@@ -143,6 +143,7 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
         'alerta': None,
         'route_name': None,
         'route_name_str': 'Sin ruta',
+        'route_correlativo': None,  # Campo 'name' de la ruta
         'kilometers': None,
         # Nuevos campos para costo por kg
         'cost_per_kg_clp': None,
@@ -156,6 +157,7 @@ def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, 
     
     resultado['tiene_ruta'] = True
     resultado['kilometers'] = ruta_info.get('total_distance_km', 0)
+    resultado['route_correlativo'] = ruta_info.get('name', None)  # Correlativo de la ruta
     resultado['route_name_str'] = 'Procesando...'
     
     # Extraer cost_per_kg de la ruta y calcular en USD
@@ -1269,11 +1271,13 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                 return f"🔴 +{dif_pct:.0f}%"
         
         # Cabeceras de la tabla
-        col_sel_h, col_oc_h, col_fecha_h, col_monto_h, col_kg_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
+        col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_ppto_h, col_aprob_h = st.columns([0.5, 1.2, 0.8, 1, 1, 0.8, 0.8, 1.8])
         with col_sel_h:
             st.markdown("**✅**")
         with col_oc_h:
             st.markdown("**OC**")
+        with col_ruta_h:
+            st.markdown("**Ruta**")
         with col_fecha_h:
             st.markdown("**Fecha**")
         with col_monto_h:
@@ -1305,7 +1309,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
         
         # Mostrar tabla con checkboxes
         for _idx, _row in df_aprobables.iterrows():
-            col_sel, col_oc, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.5, 1, 1, 0.8, 0.8, 1.8])
+            col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_ppto, col_aprob = st.columns([0.5, 1.2, 0.8, 1, 1, 0.8, 0.8, 1.8])
             
             with col_sel:
                 cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
@@ -1320,6 +1324,10 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             
             with col_oc:
                 st.markdown(f"**{_row['oc_name']}**")
+            
+            with col_ruta:
+                ruta_correlativo = _row.get('route_correlativo', None)
+                st.text(ruta_correlativo if ruta_correlativo else "-")
             
             with col_fecha:
                 fecha_str = pd.to_datetime(_row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(_row['fecha_orden']) else 'Sin fecha'
