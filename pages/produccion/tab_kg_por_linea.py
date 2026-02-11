@@ -360,29 +360,19 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     
     if dia_kg:
         dias_sorted = sorted(dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
-        kg_hora_vals = []
-        tooltip_data = []
+        kg_hh_efectiva_vals = []
         for dia in dias_sorted:
-            horas = dia_horas.get(dia, 0)
             hh_ef = dia_hh_efectiva.get(dia, 0)
-            det = dia_detenciones.get(dia, 0)
-            if horas > 0:
-                kg_h = round(dia_kg[dia] / horas, 0)
-                kg_hora_vals.append(kg_h)
+            if hh_ef > 0:
+                kg_hh = round(dia_kg[dia] / hh_ef, 0)
+                kg_hh_efectiva_vals.append(kg_hh)
             else:
-                kg_h = 0
-                kg_hora_vals.append(0)
-            tooltip_data.append({
-                'dia': dia,
-                'kg_h': kg_h,
-                'hh_efectiva': hh_ef,
-                'detenciones': det
-            })
+                kg_hh_efectiva_vals.append(0)
         
         opts_general = {
             "title": {
-                "text": "⚡ KG/Hora y Horas Efectivas por Día",
-                "subtext": "Productividad diaria de todas las salas combinadas",
+                "text": "⚡ KG/HH Efectiva por Día",
+                "subtext": "Productividad por hora efectiva de todas las salas combinadas",
                 "left": "center",
                 "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
                 "subtextStyle": {"color": "#888", "fontSize": 12}
@@ -397,7 +387,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "textStyle": {"color": "#333", "fontSize": 13}
             },
             "legend": {
-                "data": ["KG/Hora", "HH Efectivas"],
+                "data": ["KG/HH Efectiva"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 11},
                 "itemGap": 15
@@ -417,30 +407,19 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "axisLine": {"lineStyle": {"color": "#ddd", "width": 1}},
                 "axisTick": {"show": False}
             },
-            "yAxis": [
-                {
-                    "type": "value",
-                    "name": "⚡ KG/Hora",
-                    "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
-                    "axisLabel": {"color": "#666", "fontSize": 11},
-                    "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
-                    "axisLine": {"show": False}
-                },
-                {
-                    "type": "value",
-                    "name": "⏱️ HH",
-                    "nameTextStyle": {"color": "#FF6B6B", "fontSize": 13, "fontWeight": "600"},
-                    "axisLabel": {"color": "#666", "fontSize": 11},
-                    "splitLine": {"show": False},
-                    "axisLine": {"show": False}
-                }
-            ],
+            "yAxis": {
+                "type": "value",
+                "name": "⚡ KG/HH Efectiva",
+                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                "axisLabel": {"color": "#666", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
+                "axisLine": {"show": False}
+            },
             "series": [
                 {
-                    "name": "KG/Hora",
+                    "name": "KG/HH Efectiva",
                     "type": "line",
-                    "yAxisIndex": 0,
-                    "data": kg_hora_vals,
+                    "data": kg_hh_efectiva_vals,
                     "smooth": True,
                     "symbolSize": 8,
                     "itemStyle": {
@@ -461,32 +440,6 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontWeight": "600",
                         "color": "#7FA8C9",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
-                    }
-                },
-                {
-                    "name": "HH Efectivas",
-                    "type": "line",
-                    "yAxisIndex": 1,
-                    "data": [tooltip_data[i]['hh_efectiva'] for i in range(len(dias_sorted))],
-                    "smooth": True,
-                    "symbolSize": 8,
-                    "itemStyle": {
-                        "color": "#FF6B6B",
-                        "borderWidth": 2,
-                        "borderColor": "#fff"
-                    },
-                    "lineStyle": {
-                        "color": "#FF6B6B",
-                        "width": 3,
-                        "type": "solid"
-                    },
-                    "label": {
-                        "show": True,
-                        "position": "bottom",
-                        "fontSize": 10,
-                        "fontWeight": "600",
-                        "color": "#FF6B6B",
-                        "formatter": JsCode("function(params){return params.value>0?params.value.toFixed(1):'';}").js_code
                     }
                 }
             ]
@@ -537,24 +490,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             continue
         
         dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
-        kg_hora_sala_vals = []
-        sala_tooltip_data = []
+        kg_hh_efectiva_sala_vals = []
         for dia in dias_sala_sorted:
-            horas = sala_dia_horas.get(dia, 0)
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
-            det = sala_dia_detenciones.get(dia, 0)
-            if horas > 0:
-                kg_h = round(sala_dia_kg[dia] / horas, 0)
-                kg_hora_sala_vals.append(kg_h)
+            if hh_ef > 0:
+                kg_hh = round(sala_dia_kg[dia] / hh_ef, 0)
+                kg_hh_efectiva_sala_vals.append(kg_hh)
             else:
-                kg_h = 0
-                kg_hora_sala_vals.append(0)
-            sala_tooltip_data.append({
-                'dia': dia,
-                'kg_h': kg_h,
-                'hh_efectiva': hh_ef,
-                'detenciones': det
-            })
+                kg_hh_efectiva_sala_vals.append(0)
         
         prom_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         color_sala = colores_sala[idx % len(colores_sala)]
@@ -577,7 +520,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "textStyle": {"color": "#333", "fontSize": 13}
             },
             "legend": {
-                "data": ["KG/Hora", "HH Efectivas"],
+                "data": ["KG/HH Efectiva"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 10},
                 "itemGap": 12
@@ -597,30 +540,19 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "axisLine": {"lineStyle": {"color": "#ddd"}},
                 "axisTick": {"show": False}
             },
-            "yAxis": [
-                {
-                    "type": "value",
-                    "name": "KG/H",
-                    "nameTextStyle": {"color": color_sala, "fontSize": 12, "fontWeight": "600"},
-                    "axisLabel": {"color": "#666", "fontSize": 10},
-                    "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
-                    "axisLine": {"show": False}
-                },
-                {
-                    "type": "value",
-                    "name": "HH",
-                    "nameTextStyle": {"color": "#FF6B6B", "fontSize": 12, "fontWeight": "600"},
-                    "axisLabel": {"color": "#666", "fontSize": 10},
-                    "splitLine": {"show": False},
-                    "axisLine": {"show": False}
-                }
-            ],
+            "yAxis": {
+                "type": "value",
+                "name": "KG/HH Efectiva",
+                "nameTextStyle": {"color": color_sala, "fontSize": 12, "fontWeight": "600"},
+                "axisLabel": {"color": "#666", "fontSize": 10},
+                "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
+                "axisLine": {"show": False}
+            },
             "series": [
                 {
-                    "name": "KG/Hora",
+                    "name": "KG/HH Efectiva",
                     "type": "line",
-                    "yAxisIndex": 0,
-                    "data": kg_hora_sala_vals,
+                    "data": kg_hh_efectiva_sala_vals,
                     "smooth": True,
                     "symbolSize": 7,
                     "itemStyle": {
@@ -639,32 +571,6 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontWeight": "600",
                         "color": color_sala,
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
-                    }
-                },
-                {
-                    "name": "HH Efectivas",
-                    "type": "line",
-                    "yAxisIndex": 1,
-                    "data": [sala_tooltip_data[i]['hh_efectiva'] for i in range(len(dias_sala_sorted))],
-                    "smooth": True,
-                    "symbolSize": 6,
-                    "itemStyle": {
-                        "color": "#FF6B6B",
-                        "borderWidth": 2,
-                        "borderColor": "#fff"
-                    },
-                    "lineStyle": {
-                        "color": "#FF6B6B",
-                        "width": 2,
-                        "type": "solid"
-                    },
-                    "label": {
-                        "show": True,
-                        "position": "bottom",
-                        "fontSize": 8,
-                        "fontWeight": "600",
-                        "color": "#FF6B6B",
-                        "formatter": JsCode("function(params){return params.value>0?params.value.toFixed(1):'';}").js_code
                     }
                 }
             ]
