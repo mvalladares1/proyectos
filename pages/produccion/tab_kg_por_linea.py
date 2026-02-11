@@ -1001,42 +1001,49 @@ def _render_comparacion(
     """, unsafe_allow_html=True)
 
     # === KPIs COMPARATIVOS ===
-    def _kpi_card(label, icon, val_a, val_b, fmt=",.0f"):
+    def _kpi_card(label, icon, val_a_str, val_b_str, diff_str, pct_val, is_positive):
         """Genera HTML de una tarjeta KPI comparativa."""
-        diff = val_a - val_b
-        pct = _delta(val_a, val_b)
-        diff_color = "#4caf50" if diff >= 0 else "#f44336"
-        diff_sign = "+" if diff >= 0 else ""
-        arrow = "▲" if diff >= 0 else "▼"
-        pct_str = f"{pct:+.1f}%" if pct is not None else "—"
-        return f"""
-        <div style="background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px 14px; text-align: center; border: 1px solid rgba(255,255,255,0.08);">
-            <div style="color: #888; font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">{icon} {label}</div>
-            <div style="display: flex; justify-content: center; align-items: baseline; gap: 12px; margin-bottom: 6px;">
-                <span style="color: #00d4ff; font-size: 26px; font-weight: bold;">{val_a:{fmt}}</span>
-                <span style="color: #555; font-size: 14px;">vs</span>
-                <span style="color: #e040fb; font-size: 18px; font-weight: 600;">{val_b:{fmt}}</span>
-            </div>
-            <div style="color: {diff_color}; font-size: 14px; font-weight: bold;">
-                {arrow} {diff_sign}{diff:{fmt}} ({pct_str})
-            </div>
-        </div>
-        """
+        diff_color = "#4caf50" if is_positive else "#f44336"
+        arrow = "▲" if is_positive else "▼"
+        pct_str = f"{pct_val:+.1f}%" if pct_val is not None else "—"
+        return (
+            '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:16px 14px;text-align:center;border:1px solid rgba(255,255,255,0.08);">'
+            f'<div style="color:#888;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">{icon} {label}</div>'
+            '<div style="display:flex;justify-content:center;align-items:baseline;gap:12px;margin-bottom:6px;">'
+            f'<span style="color:#00d4ff;font-size:26px;font-weight:bold;">{val_a_str}</span>'
+            '<span style="color:#555;font-size:14px;">vs</span>'
+            f'<span style="color:#e040fb;font-size:18px;font-weight:600;">{val_b_str}</span>'
+            '</div>'
+            f'<div style="color:{diff_color};font-size:14px;font-weight:bold;">'
+            f'{arrow} {diff_str} ({pct_str})'
+            '</div></div>'
+        )
 
-    cards_html = f"""
-    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 10px 0 20px 0;">
-        {_kpi_card("Órdenes", "📋", ord_a_total, ord_b_total, ",d")}
-        {_kpi_card("KG Totales", "⚖️", kg_a_total, kg_b_total)}
-        {_kpi_card("KG/Hora", "⚡", kgh_a, kgh_b)}
-        {_kpi_card("KG/Día", "📊", prom_dia_a, prom_dia_b)}
-        <div style="background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px 14px; text-align: center; border: 1px solid rgba(255,255,255,0.08);">
-            <div style="color: #888; font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">⚖️ DIFERENCIA KG</div>
-            <div style="color: {'#4caf50' if kg_a_total - kg_b_total >= 0 else '#f44336'}; font-size: 32px; font-weight: bold;">
-                {'+'if kg_a_total - kg_b_total >= 0 else ''}{kg_a_total - kg_b_total:,.0f}
-            </div>
-        </div>
-    </div>
-    """
+    def _fmt_kpi(label, icon, va, vb, fmt_fn):
+        diff = va - vb
+        pct = _delta(va, vb)
+        is_pos = diff >= 0
+        sign = "+" if is_pos else ""
+        return _kpi_card(label, icon, fmt_fn(va), fmt_fn(vb), sign + fmt_fn(diff), pct, is_pos)
+
+    fmt_int = lambda v: f"{v:,}"
+    fmt_dec = lambda v: f"{v:,.0f}"
+
+    diff_kg = kg_a_total - kg_b_total
+    diff_kg_color = "#4caf50" if diff_kg >= 0 else "#f44336"
+    diff_kg_sign = "+" if diff_kg >= 0 else ""
+
+    cards_html = (
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:10px 0 20px 0;">'
+        + _fmt_kpi("Órdenes", "📋", ord_a_total, ord_b_total, fmt_int)
+        + _fmt_kpi("KG Totales", "⚖️", kg_a_total, kg_b_total, fmt_dec)
+        + _fmt_kpi("KG/Hora", "⚡", kgh_a, kgh_b, fmt_dec)
+        + _fmt_kpi("KG/Día", "📊", prom_dia_a, prom_dia_b, fmt_dec)
+        + '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:16px 14px;text-align:center;border:1px solid rgba(255,255,255,0.08);">'
+        + '<div style="color:#888;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ DIFERENCIA KG</div>'
+        + f'<div style="color:{diff_kg_color};font-size:32px;font-weight:bold;">{diff_kg_sign}{diff_kg:,.0f}</div>'
+        + '</div></div>'
+    )
     st.markdown(cards_html, unsafe_allow_html=True)
 
     st.markdown("---")
