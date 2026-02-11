@@ -429,7 +429,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 {
                     "type": "value",
                     "name": "⏱️ HH",
-                    "nameTextStyle": {"color": "#92C48C", "fontSize": 13, "fontWeight": "600"},
+                    "nameTextStyle": {"color": "#FF6B6B", "fontSize": 13, "fontWeight": "600"},
                     "axisLabel": {"color": "#666", "fontSize": 11},
                     "splitLine": {"show": False},
                     "axisLine": {"show": False}
@@ -471,12 +471,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "smooth": True,
                     "symbolSize": 8,
                     "itemStyle": {
-                        "color": "#92C48C",
+                        "color": "#FF6B6B",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#92C48C",
+                        "color": "#FF6B6B",
                         "width": 3,
                         "type": "solid"
                     },
@@ -485,7 +485,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "bottom",
                         "fontSize": 10,
                         "fontWeight": "600",
-                        "color": "#92C48C",
+                        "color": "#FF6B6B",
                         "formatter": JsCode("function(params){return params.value>0?params.value.toFixed(1):'';}").js_code
                     }
                 }
@@ -609,7 +609,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 {
                     "type": "value",
                     "name": "HH",
-                    "nameTextStyle": {"color": "#92C48C", "fontSize": 12, "fontWeight": "600"},
+                    "nameTextStyle": {"color": "#FF6B6B", "fontSize": 12, "fontWeight": "600"},
                     "axisLabel": {"color": "#666", "fontSize": 10},
                     "splitLine": {"show": False},
                     "axisLine": {"show": False}
@@ -649,12 +649,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "smooth": True,
                     "symbolSize": 6,
                     "itemStyle": {
-                        "color": "#92C48C",
+                        "color": "#FF6B6B",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#92C48C",
+                        "color": "#FF6B6B",
                         "width": 2,
                         "type": "solid"
                     },
@@ -663,7 +663,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "bottom",
                         "fontSize": 8,
                         "fontWeight": "600",
-                        "color": "#92C48C",
+                        "color": "#FF6B6B",
                         "formatter": JsCode("function(params){return params.value>0?params.value.toFixed(1):'';}").js_code
                     }
                 }
