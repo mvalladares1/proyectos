@@ -637,6 +637,14 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         if mi_entrada and mi_entrada[0]['approved']:
             return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
         
+        # DEBUG: Ver todas las entradas de aprobación de esta OC
+        todas_entradas = models.execute_kw(
+            DB, uid, password,
+            'studio.approval.entry', 'search_read',
+            [[('res_id', '=', int(oc_id))]],
+            {'fields': ['id', 'user_id', 'rule_id', 'approved'], 'context': contexto}
+        )
+        
         # Buscar la entrada de aprobación pendiente para este usuario y regla
         entrada_pendiente = models.execute_kw(
             DB, uid, password,
@@ -650,8 +658,12 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         )
         
         if not entrada_pendiente:
-            # Si no existe entrada, la OC no tiene flujo de aprobación activado
-            return False, f"❌ {oc_name}: No se encontró entrada de aprobación para {rol_usuario}. Verifica que el flujo de aprobación esté configurado."
+            # Si no existe entrada, mostrar qué entradas SÍ existen para debugging
+            debug_info = f"\n\nDEBUG - Entradas existentes para {oc_name}:\n"
+            for entrada in todas_entradas:
+                debug_info += f"  - Entry ID {entrada['id']}: User ID {entrada['user_id']}, Rule ID {entrada['rule_id']}, Approved: {entrada['approved']}\n"
+            debug_info += f"\nBuscando: User ID {uid}, Rule ID {rule_id}"
+            return False, f"❌ {oc_name}: No se encontró entrada de aprobación para {rol_usuario}.{debug_info}"
         
         # Aprobar usando write directamente (evita validaciones de permisos sobre studio.approval.rule)
         try:
