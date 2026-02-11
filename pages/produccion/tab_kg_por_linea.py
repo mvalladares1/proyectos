@@ -1128,6 +1128,68 @@ def _generar_informe_pdf(
         story.append(dia_table)
     story.append(Spacer(1, 6*mm))
 
+    # === RENDIMIENTO KG/HORA POR DÍA ===
+    story.append(Paragraph("Rendimiento KG/Hora por Día", seccion_style))
+    
+    dia_kg_hora_data = defaultdict(float)
+    dia_horas_data = defaultdict(float)
+    dia_hh_efectiva_data = defaultdict(float)
+    dia_detenciones_data = defaultdict(float)
+    
+    for mo in mos_filtradas:
+        dt = mo.get('_inicio_dt')
+        if not dt:
+            continue
+        dia_key = dt.strftime('%Y-%m-%d')
+        kg = mo.get('kg_pt', 0) or 0
+        horas = mo.get('duracion_horas', 0) or 0
+        hh_ef = mo.get('hh_efectiva', 0) or 0
+        det = mo.get('detenciones', 0) or 0
+        
+        dia_kg_hora_data[dia_key] += kg
+        dia_hh_efectiva_data[dia_key] += hh_ef
+        dia_detenciones_data[dia_key] += det
+        if horas > 0:
+            dia_horas_data[dia_key] += horas
+    
+    if dia_kg_hora_data:
+        kgh_rows = [['Día', 'Fecha', 'KG Producidos', 'Horas', 'KG/Hora', 'HH Efectiva', 'Detenciones']]
+        for fecha in sorted(dia_kg_hora_data.keys()):
+            dt = datetime.strptime(fecha, '%Y-%m-%d')
+            dia_en = dt.strftime('%a')
+            dia_esp = DIAS_ES.get(dia_en, dia_en)
+            kg = dia_kg_hora_data[fecha]
+            horas = dia_horas_data.get(fecha, 0)
+            hh_ef = dia_hh_efectiva_data.get(fecha, 0)
+            det = dia_detenciones_data.get(fecha, 0)
+            kg_h = (kg / horas) if horas > 0 else 0
+            
+            kgh_rows.append([
+                dia_esp,
+                dt.strftime('%d/%m/%Y'),
+                f'{kg:,.0f}',
+                f'{horas:.1f}',
+                f'{kg_h:,.0f}',
+                f'{hh_ef:.1f}',
+                f'{det:.1f}'
+            ])
+        
+        kgh_table = Table(kgh_rows, colWidths=[1.5*cm, 2.3*cm, 2.8*cm, 1.8*cm, 2.3*cm, 2.3*cm, 2.3*cm])
+        kgh_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
+            ('TEXTCOLOR', (0, 0), (-1, 0), white),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#dddddd')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, fondo_fila]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(kgh_table)
+    story.append(Spacer(1, 6*mm))
+
     # === DETALLE POR SALA ===
     story.append(Paragraph("Detalle por Sala", seccion_style))
 
@@ -1139,20 +1201,23 @@ def _generar_informe_pdf(
     )
 
     # Tabla resumen de salas
-    sala_rows = [['Sala', 'Órdenes', 'KG Totales', 'KG/Hora', 'Completadas', 'En Proceso']]
+    sala_rows = [['Sala', 'Órds', 'KG Totales', 'KG/Hora', 'HH Efec.', 'Comp.', 'Proceso']]
     for sala, sd in salas_ordenadas:
         kh = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         total_s = sd['hechas'] + sd['no_hechas']
+        # Calcular HH efectiva total de la sala
+        hh_ef_sala = sum(o.get('hh_efectiva', 0) or 0 for o in sd['ordenes'])
         sala_rows.append([
             Paragraph(sala, celda_style),
             str(total_s),
             f"{sd['total_kg']:,.0f}",
             f"{kh:,.0f}",
+            f"{hh_ef_sala:.1f}",
             str(sd['hechas']),
             str(sd['no_hechas'])
         ])
 
-    sala_table = Table(sala_rows, colWidths=[4.5*cm, 1.8*cm, 2.8*cm, 2.5*cm, 2.5*cm, 2.5*cm])
+    sala_table = Table(sala_rows, colWidths=[4*cm, 1.3*cm, 2.5*cm, 2*cm, 1.8*cm, 1.5*cm, 1.5*cm])
     sala_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), fondo_header),
         ('TEXTCOLOR', (0, 0), (-1, 0), white),
@@ -1178,7 +1243,7 @@ def _generar_informe_pdf(
                            fontSize=10, textColor=azul_corp, spaceBefore=8, spaceAfter=4)
         ))
 
-        orden_rows = [['Orden', 'Especie', 'KG Total', 'KG/Hora', 'Dotación', 'Inicio', 'Fin', 'Rend.']]
+        orden_rows = [['Orden', 'Estado', 'Especie', 'KG Total', 'KG/Hora', 'Dot.', 'HH', 'HH Ef.', 'Det.(h)', 'Inicio', 'Fin', 'Rend.']]
         ordenes_sorted = sorted(
             sd['ordenes'],
             key=lambda o: o.get('_inicio_dt') or datetime.min,
@@ -1192,23 +1257,35 @@ def _generar_informe_pdf(
             rend = orden.get('rendimiento', 0) or 0
             especie_o = orden.get('especie', '-')
             mo_name = orden.get('mo_name', 'N/A')
+            estado_code = orden.get('state', 'progress')
+            estado = estado_label(estado_code)
+            hh = orden.get('hh', 0) or 0
+            hh_efectiva = orden.get('hh_efectiva', 0) or 0
+            detenciones = orden.get('detenciones', 0) or 0
             ini = orden.get('_inicio_dt')
             fin = orden.get('_fin_dt')
             hora_ini = ini.strftime("%d/%m %H:%M") if ini else '-'
             hora_fin = fin.strftime("%d/%m %H:%M") if fin else '-'
+            
+            # Emoji para estado
+            estado_emoji = '✅' if estado_code == 'done' else '🔄' if estado_code == 'progress' else '📋'
 
             orden_rows.append([
                 Paragraph(mo_name, celda_style),
+                estado_emoji,
                 especie_o,
                 f"{kg_o:,.0f}",
                 f"{kg_h:,.0f}",
                 str(int(dot)),
+                f"{hh:.1f}",
+                f"{hh_efectiva:.1f}",
+                f"{detenciones:.1f}",
                 hora_ini,
                 hora_fin,
                 f"{rend:.1f}%"
             ])
 
-        col_widths = [3.2*cm, 1.8*cm, 2*cm, 1.8*cm, 1.5*cm, 2.3*cm, 2.3*cm, 1.5*cm]
+        col_widths = [2.8*cm, 0.8*cm, 1.4*cm, 1.6*cm, 1.4*cm, 0.9*cm, 1.1*cm, 1.1*cm, 1.1*cm, 1.8*cm, 1.8*cm, 1.2*cm]
         orden_table = Table(orden_rows, colWidths=col_widths)
         orden_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HexColor('#34495e')),
