@@ -148,11 +148,11 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         total_dia = sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted)
         if total_dia > max_total_dia:
             max_total_dia = total_dia
-    umbral_label = max_total_dia * 0.05  # Solo mostrar label si el segmento es >= 5% del máximo
+    umbral_label = max_total_dia * 0.08  # Solo mostrar label si el segmento es >= 8% del máximo
 
     # Formatter JS: mostrar valor formateado con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
-        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('es-CL');}"
+        "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';var v=params.value;return v>=1000?Math.round(v/1000)+'k':v;}"
     ).js_code
 
     series = []
@@ -168,7 +168,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
                 "show": True,
                 "position": "inside",
                 "formatter": label_formatter,
-                "fontSize": 10,
+                "fontSize": 9,
                 "fontWeight": "bold",
                 "color": "#fff",
                 "textShadowColor": "rgba(0,0,0,0.7)",
@@ -195,38 +195,38 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     # Calcular los valores totales por día para posicionar los labels
     total_kg_por_dia = [sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted) for dia in dias_sorted]
     
-    # Crear serie de línea invisible solo para mostrar los KG/H
-    kg_hora_data = [dia_kg_hora[dia] if dia_kg_hora[dia] > 0 else None for dia in dias_sorted]
+    # Preparar data para labels de KG/H - usar valores reales en vez de None
+    kg_hora_values = [int(dia_kg_hora[dia]) if dia_kg_hora[dia] > 0 else 0 for dia in dias_sorted]
     
-    series.append({
-        "name": "KG/H",
-        "type": "line",
-        "data": total_kg_por_dia,
-        "yAxisIndex": 0,
-        "symbol": "none",
-        "lineStyle": {"width": 0, "opacity": 0},
-        "itemStyle": {"opacity": 0},
-        "zlevel": 10,
-        "label": {
-            "show": True,
-            "position": "top",
-            "distance": 5,
-            "fontSize": 10,
-            "fontWeight": "bold",
-            "color": "#999",
-            "formatter": JsCode("""
-                function(params) {
-                    var kgHora = """ + str(kg_hora_data).replace("None", "0") + """;
-                    var val = kgHora[params.dataIndex];
-                    return val > 0 ? Math.round(val) + ' kg/h' : '';
+    # Crear la serie para mostrar KG/H usando markPoint en la última serie de barras
+    if series and kg_hora_values:
+        mark_points = []
+        for i, val in enumerate(kg_hora_values):
+            if val > 0:
+                mark_points.append({
+                    "xAxis": i,
+                    "yAxis": total_kg_por_dia[i],
+                    "value": f"{val} kg/h"
+                })
+        
+        if mark_points:
+            series[-1]["markPoint"] = {
+                "data": mark_points,
+                "symbol": "none",
+                "label": {
+                    "show": True,
+                    "position": "top",
+                    "distance": 8,
+                    "fontSize": 10,
+                    "fontWeight": "bold",
+                    "color": "#999",
+                    "formatter": "{c}"
                 }
-            """).js_code
-        }
-    })
+            }
 
     # Ajustar ancho de barras según cantidad de días
     bar_max_width = 40 if len(dias_sorted) > 20 else 50
-    for s in series[:-1]:  # Todas las series excepto la última (que es la de KG/H)
+    for s in series:
         s["barMaxWidth"] = bar_max_width
 
     options = {
@@ -244,23 +244,8 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "borderColor": "#555",
             "borderWidth": 1,
             "borderRadius": 10,
-            "textStyle": {"color": "#fff", "fontSize": 13},
-            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);",
-            "formatter": JsCode("""
-                function(params) {
-                    var result = params[0].name + '<br/>';
-                    var total = 0;
-                    for (var i = 0; i < params.length - 1; i++) {
-                        if (params[i].seriesType === 'bar') {
-                            result += params[i].marker + ' ' + params[i].seriesName + ': ' + 
-                                     params[i].value.toLocaleString('es-CL') + ' KG<br/>';
-                            total += params[i].value;
-                        }
-                    }
-                    result += '<b>Total: ' + total.toLocaleString('es-CL') + ' KG</b>';
-                    return result;
-                }
-            """).js_code
+            "textStyle": {"color": "#fff", "fontSize": 12},
+            "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
         },
         "legend": {
             "data": salas_sorted,
