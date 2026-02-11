@@ -83,6 +83,20 @@ def color_kg_hora(kg: float) -> str:
     return '#f44336'
 
 
+def emoji_especie(especie: str) -> str:
+    """Retorna el emoji correspondiente a la especie."""
+    esp = (especie or '').lower().strip()
+    if 'arándano' in esp or 'arandano' in esp:
+        return '🫐'
+    elif 'frutilla' in esp or 'fresa' in esp:
+        return '🍓'
+    elif 'frambuesa' in esp:
+        return '🍇'
+    elif 'mix' in esp:
+        return '🫐🍓🍇'
+    return '🍓'  # Default
+
+
 def estado_label(state: str) -> str:
     estados = {
         'draft': 'Borrador',
@@ -803,8 +817,21 @@ def render(username: str = None, password: str = None):
                     duracion_str = f"{dur_h:.1f}h"
 
                 em_o = emoji_kg_hora(kg_h)
+                em_esp = emoji_especie(especie_o)
 
-                st.markdown(f"**{em_o} {mo_name}** — {estado} — 🍓 {especie_o}")
+                st.markdown(f"**{em_o} {mo_name}** — {estado} — {em_esp} {especie_o}")
+
+                # CSS para ajustar tamaño de fuente en métricas
+                st.markdown("""
+                <style>
+                [data-testid="stMetricValue"] {
+                    font-size: 1.2rem !important;
+                }
+                [data-testid="stMetricLabel"] {
+                    font-size: 0.85rem !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
 
                 oc1, oc2, oc3, oc4, oc5, oc6, oc7, oc8 = st.columns([1, 1, 0.8, 1.2, 1.2, 0.8, 1, 1])
                 with oc1:
