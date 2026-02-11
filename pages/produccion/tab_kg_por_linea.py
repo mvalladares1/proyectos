@@ -459,7 +459,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "fontSize": 11,
                     "fontWeight": "bold",
                     "color": "#ffc107",
-                    "formatter": JsCode("function(params){var v=params.data.value; var hh=params.data.hh_efectiva; var det=params.data.detenciones; return v>0?Math.round(v)+'\\nHH:'+hh.toFixed(1)+'\\nDet:'+det.toFixed(1)+'h':'';}").js_code
+                    "formatter": JsCode("function(params){var v=params.data.value; var hh=params.data.hh_efectiva; return v>0?Math.round(v)+'\\nHH:'+hh.toFixed(1):'';}").js_code
                 }
             }]
         }
@@ -604,7 +604,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "fontSize": 9,
                     "fontWeight": "bold",
                     "color": color_sala,
-                    "formatter": JsCode("function(params){var v=params.data.value; var hh=params.data.hh_efectiva; var det=params.data.detenciones; return v>0?Math.round(v)+'\\nHH:'+hh.toFixed(1)+'\\nDet:'+det.toFixed(1)+'h':'';}").js_code
+                    "formatter": JsCode("function(params){var v=params.data.value; var hh=params.data.hh_efectiva; return v>0?Math.round(v)+'\\nHH:'+hh.toFixed(1):'';}").js_code
                 }
             }]
         }
