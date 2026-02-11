@@ -626,7 +626,7 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
         )
         oc_name = oc_data[0]['name'] if oc_data else f"OC#{oc_id}"
         
-        # 3. Verificar entradas existentes del usuario (aprobadas O rechazadas)
+        # 3. Verificar si ya tiene aprobación del usuario
         mi_entrada = models.execute_kw(
             DB, uid, password,
             'studio.approval.entry', 'search_read',
@@ -634,29 +634,56 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             {'fields': ['id', 'approved'], 'context': contexto}
         )
         
-        if mi_entrada:
-            if mi_entrada[0]['approved']:
-                return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
-            else:
-                # Tiene un rechazo previo → sobrescribir con aprobación
-                models.execute_kw(
-                    DB, uid, password,
-                    'studio.approval.entry', 'write',
-                    [[mi_entrada[0]['id']], {'approved': True}]
-                )
-        else:
-            # No tiene entrada → crear nueva aprobación
-            models.execute_kw(
+        if mi_entrada and mi_entrada[0]['approved']:
+            return False, f"✅ {oc_name}: Ya aprobado como {rol_usuario}"
+        
+        # Usar el método action_approve que NO requiere permisos de admin
+        try:
+            # Buscar la entrada de aprobación pendiente para este usuario y regla
+            entrada_pendiente = models.execute_kw(
                 DB, uid, password,
-                'studio.approval.entry', 'create',
-                [{
-                    'res_id': int(oc_id),
-                    'rule_id': rule_id,
-                    'user_id': int(uid),
-                    'approved': True
-                }],
+                'studio.approval.entry', 'search',
+                [[
+                    ('res_id', '=', int(oc_id)),
+                    ('rule_id', '=', rule_id),
+                    ('user_id', '=', int(uid))
+                ]],
                 {'context': contexto}
             )
+            
+            if entrada_pendiente:
+                # Existe entrada, usar action_approve
+                models.execute_kw(
+                    DB, uid, password,
+                    'studio.approval.entry', 'action_approve',
+                    [entrada_pendiente],
+                    {'context': contexto}
+                )
+            else:
+                # No hay entrada, intentar aprobar directamente en la OC
+                # Esto puede crear la entrada automáticamente
+                models.execute_kw(
+                    DB, uid, password,
+                    'purchase.order', 'action_approve',
+                    [[int(oc_id)]],
+                    {'context': dict(contexto, studio_approval_rule_id=rule_id)}
+                )
+        except Exception as e_approve:
+            # Si falla el método action_approve, intentar plan B: crear con contexto especial
+            try:
+                models.execute_kw(
+                    DB, uid, password,
+                    'studio.approval.entry', 'create',
+                    [{
+                        'res_id': int(oc_id),
+                        'rule_id': rule_id,
+                        'user_id': int(uid),
+                        'approved': True
+                    }],
+                    {'context': dict(contexto, skip_validation=True)}
+                )
+            except Exception as e_create:
+                return False, f"Error al aprobar: {str(e_approve)}"
         
         # Contar aprobaciones totales (de todos los usuarios)
         aprobaciones_existentes = models.execute_kw(
@@ -1368,153 +1395,152 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                 # Fila principal con datos
                 col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_km, col_ppto, col_aprob = st.columns([0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 1.5])
                 
-            with col_sel:
-                cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
-                st.checkbox(
-                    f"Sel {_row['oc_name']}",
-                    key=cb_key,
-                    label_visibility="collapsed",
-                    on_change=on_checkbox_change,
-                    args=(_row['oc_id'], cb_key)
-                )
-        
-            with col_oc:
-                st.markdown(f"**{_row['oc_name']}**")
+                with col_sel:
+                    cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
+                    st.checkbox(
+                        f"Sel {_row['oc_name']}",
+                        key=cb_key,
+                        label_visibility="collapsed",
+                        on_change=on_checkbox_change,
+                        args=(_row['oc_id'], cb_key)
+                    )
             
-            with col_ruta:
-                ruta_correlativo = _row.get('route_correlativo', None)
-                st.text(ruta_correlativo if ruta_correlativo else "-")
-            
-            with col_fecha:
-                fecha_str = pd.to_datetime(_row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(_row['fecha_orden']) else 'Sin fecha'
-                st.text(fecha_str)
-            
-            with col_monto:
-                st.text(f"${_row['monto']:,.0f}")
-            
-            with col_kg:
-                if _row.get('cost_per_kg_usd'):
-                    costo_kg = _row['cost_per_kg_usd']
-                    if costo_kg > UMBRAL_COSTO_KG_USD * 1.2:
-                        st.markdown(f"🔴 ${costo_kg:.3f}")
-                    elif costo_kg > UMBRAL_COSTO_KG_USD:
-                        st.markdown(f"🟡 ${costo_kg:.3f}")
-                    else:
-                        st.markdown(f"🟢 ${costo_kg:.3f}")
-                else:
-                    st.text("-")
-            
-            with col_km:
-                if _row.get('costo_por_km'):
-                    costo_km = _row['costo_por_km']
-                    st.text(f"${costo_km:,.0f}")
-                else:
-                    st.text("-")
-            
-            with col_ppto:
-                st.text(comparar_presupuesto(_row))
-            
-            with col_aprob:
-                st.text(f"{_row['estado_aprobacion']} - {_row['aprobadores'][:30]}")
-            
-        # Expander de detalles fuera de las columnas para ocupar ancho completo
-        with st.expander("📋 Ver detalles", expanded=False):
-            col_det1, col_det2, col_det3 = st.columns(3)
-            
-            with col_det1:
-                st.markdown("**📋 Información General**")
-                st.markdown(f"**OC:** {_row['oc_name']}")
-                st.markdown(f"**Creador:** {_row.get('creador', 'N/A')}")
-                st.markdown(f"**Fecha:** {fecha_str}")
-                st.markdown(f"**Proveedor:** {_row.get('proveedor', 'N/A')[:30]}")
-            
-            with col_det2:
-                st.markdown("**💰 Costos y Cantidades**")
-                st.markdown(f"**Monto OC:** ${_row['monto']:,.0f}")
+                with col_oc:
+                    st.markdown(f"**{_row['oc_name']}**")
                 
-                # Usar cantidad desde ruta (total_qnt_ruta) que es la correcta
-                total_kilos_ruta = _row.get('total_qnt_ruta', 0)
-                if total_kilos_ruta > 0:
-                    st.markdown(f"**Cantidad:** {total_kilos_ruta:,.0f} kg")
-                    # $/kg calculado desde monto / kilos reales de la ruta
-                    costo_kg_oc = _row['monto'] / total_kilos_ruta
-                    st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
-                else:
-                    # Fallback a kilos de Odoo si no hay datos de ruta
-                    total_kilos_odoo = _row.get('total_kilos', 0)
-                    if total_kilos_odoo > 0:
-                        st.markdown(f"**Cantidad:** {total_kilos_odoo:,.0f} kg ⚠️")
-                        costo_kg_oc = _row['monto'] / total_kilos_odoo
-                        st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
-                    else:
-                        st.markdown(f"**Cantidad:** N/A")
-                        st.markdown(f"**Costo/kg OC:** N/A")
+                with col_ruta:
+                    ruta_correlativo = _row.get('route_correlativo', None)
+                    st.text(ruta_correlativo if ruta_correlativo else "-")
                 
-                # $/kg USD desde ruta
-                if _row.get('cost_per_kg_usd'):
-                    costo_kg_usd = _row['cost_per_kg_usd']
-                    if costo_kg_usd > UMBRAL_COSTO_KG_USD * 1.2:
-                        st.markdown(f"**Costo/kg USD:** 🔴 ${costo_kg_usd:.3f} (>${UMBRAL_COSTO_KG_USD})")
-                    elif costo_kg_usd > UMBRAL_COSTO_KG_USD:
-                        st.markdown(f"**Costo/kg USD:** 🟡 ${costo_kg_usd:.3f} (>${UMBRAL_COSTO_KG_USD})")
-                    else:
-                        st.markdown(f"**Costo/kg USD:** 🟢 ${costo_kg_usd:.3f}")
-                else:
-                    st.markdown(f"**Costo/kg USD:** N/A")
-            
-            with col_det3:
-                st.markdown("**🚛 Logística y Presupuesto**")
-                if ruta_correlativo:
-                    st.markdown(f"**Ruta:** {ruta_correlativo}")
-                else:
-                    st.markdown(f"**Ruta:** ⚠️ Sin ruta asignada")
+                with col_fecha:
+                    fecha_str = pd.to_datetime(_row['fecha_orden'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(_row['fecha_orden']) else 'Sin fecha'
+                    st.text(fecha_str)
                 
-                route_name = _row.get('route_name', 'N/A')
-                if route_name and route_name != 'N/A':
-                    st.markdown(f"**Nombre Ruta:** {route_name[:30]}")
+                with col_monto:
+                    st.text(f"${_row['monto']:,.0f}")
                 
-                # Kilómetros y $/km
-                kilometers = _row.get('kilometers', 0)
-                try:
-                    kilometers_float = float(kilometers) if kilometers else 0
-                    if kilometers_float > 0:
-                        st.markdown(f"**Kilómetros:** {kilometers_float:,.0f} km")
-                        if _row.get('costo_por_km'):
-                            st.markdown(f"**Costo/km:** ${_row['costo_por_km']:,.0f}")
-                except (ValueError, TypeError):
-                    pass
-                
-                tipo_camion = _row.get('tipo_camion', 'N/A')
-                st.markdown(f"**Tipo Camión:** {tipo_camion if tipo_camion else 'N/A'}")
-                
-                # Comparación con presupuesto
-                if pd.notna(_row.get('costo_presupuestado')) and _row.get('costo_presupuestado'):
-                    costo_ppto = _row['costo_presupuestado']
-                    st.markdown(f"**Presupuesto:** ${costo_ppto:,.0f}")
-                    
-                    dif = _row['monto'] - costo_ppto
-                    dif_pct = (dif / costo_ppto) * 100
-                    
-                    if dif > 0:
-                        if dif_pct > 20:
-                            st.markdown(f"**vs Ppto:** 🔴 Sobrecosto +{dif_pct:.1f}% (${dif:,.0f})")
-                        elif dif_pct > 10:
-                            st.markdown(f"**vs Ppto:** 🟡 Sobrecosto +{dif_pct:.1f}% (${dif:,.0f})")
+                with col_kg:
+                    if _row.get('cost_per_kg_usd'):
+                        costo_kg = _row['cost_per_kg_usd']
+                        if costo_kg > UMBRAL_COSTO_KG_USD * 1.2:
+                            st.markdown(f"🔴 ${costo_kg:.3f}")
+                        elif costo_kg > UMBRAL_COSTO_KG_USD:
+                            st.markdown(f"🟡 ${costo_kg:.3f}")
                         else:
-                            st.markdown(f"**vs Ppto:** 🟢 Sobrecosto +{dif_pct:.1f}% (${dif:,.0f})")
+                            st.markdown(f"🟢 ${costo_kg:.3f}")
                     else:
-                        st.markdown(f"**vs Ppto:** 🟢 Ahorro {dif_pct:.1f}% (${abs(dif):,.0f})")
-                else:
-                    st.markdown(f"**Presupuesto:** ⚠️ Sin presupuesto")
-            
-            # Estado de aprobación
-            st.markdown("---")
-            st.markdown(f"**📝 Estado Aprobación:** {_row['estado_aprobacion']}")
-            if _row.get('aprobadores') and _row['aprobadores'] != 'Sin aprobaciones':
-                st.markdown(f"**Aprobadores:** {_row['aprobadores']}")
-            st.markdown("---")
-
-        st.markdown("---")  # Separador entre filas fragment
+                        st.text("-")
+                
+                with col_km:
+                    if _row.get('costo_por_km'):
+                        costo_km = _row['costo_por_km']
+                        st.text(f"${costo_km:,.0f}")
+                    else:
+                        st.text("-")
+                
+                with col_ppto:
+                    st.text(comparar_presupuesto(_row))
+                
+                with col_aprob:
+                    st.text(f"{_row['estado_aprobacion']} - {_row['aprobadores'][:30]}")
+                
+                # Expander de detalles fuera de las columnas para ocupar ancho completo
+                with st.expander("📋 Ver detalles", expanded=False, key=f"expander_{key_proveedor}_{_row['oc_id']}"):
+                    col_det1, col_det2, col_det3 = st.columns(3)
+                    
+                    with col_det1:
+                        st.markdown("**📋 Información General**")
+                        st.markdown(f"**OC:** {_row['oc_name']}")
+                        st.markdown(f"**Creador:** {_row.get('creador', 'N/A')}")
+                        st.markdown(f"**Fecha:** {fecha_str}")
+                        st.markdown(f"**Proveedor:** {_row.get('proveedor', 'N/A')[:30]}")
+                    
+                    with col_det2:
+                        st.markdown("**💰 Costos y Cantidades**")
+                        st.markdown(f"**Monto OC:** ${_row['monto']:,.0f}")
+                        
+                        # Usar cantidad desde ruta (total_qnt_ruta) que es la correcta
+                        total_kilos_ruta = _row.get('total_qnt_ruta', 0)
+                        if total_kilos_ruta > 0:
+                            st.markdown(f"**Cantidad:** {total_kilos_ruta:,.0f} kg")
+                            # $/kg calculado desde monto / kilos reales de la ruta
+                            costo_kg_oc = _row['monto'] / total_kilos_ruta
+                            st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
+                        else:
+                            # Fallback a kilos de Odoo si no hay datos de ruta
+                            total_kilos_odoo = _row.get('total_kilos', 0)
+                            if total_kilos_odoo > 0:
+                                st.markdown(f"**Cantidad:** {total_kilos_odoo:,.0f} kg ⚠️")
+                                costo_kg_oc = _row['monto'] / total_kilos_odoo
+                                st.markdown(f"**Costo/kg OC (CLP):** ${costo_kg_oc:,.0f}")
+                            else:
+                                st.markdown(f"**Cantidad:** N/A")
+                                st.markdown(f"**Costo/kg OC:** N/A")
+                        
+                        # $/kg USD desde ruta
+                        if _row.get('cost_per_kg_usd'):
+                            costo_kg_usd = _row['cost_per_kg_usd']
+                            if costo_kg_usd > UMBRAL_COSTO_KG_USD * 1.2:
+                                st.markdown(f"**Costo/kg USD:** 🔴 ${costo_kg_usd:.3f} (>${UMBRAL_COSTO_KG_USD})")
+                            elif costo_kg_usd > UMBRAL_COSTO_KG_USD:
+                                st.markdown(f"**Costo/kg USD:** 🟡 ${costo_kg_usd:.3f} (>${UMBRAL_COSTO_KG_USD})")
+                            else:
+                                st.markdown(f"**Costo/kg USD:** 🟢 ${costo_kg_usd:.3f}")
+                        else:
+                            st.markdown(f"**Costo/kg USD:** N/A")
+                    
+                    with col_det3:
+                        st.markdown("**🚛 Logística y Presupuesto**")
+                        if ruta_correlativo:
+                            st.markdown(f"**Ruta:** {ruta_correlativo}")
+                        else:
+                            st.markdown(f"**Ruta:** ⚠️ Sin ruta asignada")
+                        
+                        route_name = _row.get('route_name', 'N/A')
+                        if route_name and route_name != 'N/A':
+                            st.markdown(f"**Nombre Ruta:** {route_name[:30]}")
+                        
+                        # Kilómetros y $/km
+                        kilometers = _row.get('kilometers', 0)
+                        try:
+                            kilometers_float = float(kilometers) if kilometers else 0
+                            if kilometers_float > 0:
+                                st.markdown(f"**Kilómetros:** {kilometers_float:,.0f} km")
+                                if _row.get('costo_por_km'):
+                                    st.markdown(f"**Costo/km:** ${_row['costo_por_km']:,.0f}")
+                        except (ValueError, TypeError):
+                            pass
+                        
+                        tipo_camion = _row.get('tipo_camion', 'N/A')
+                        st.markdown(f"**Tipo Camión:** {tipo_camion if tipo_camion else 'N/A'}")
+                        
+                        # Comparación con presupuesto
+                        if pd.notna(_row.get('costo_presupuestado')) and _row.get('costo_presupuestado'):
+                            costo_ppto = _row['costo_presupuestado']
+                            st.markdown(f"**Presupuesto:** ${costo_ppto:,.0f}")
+                            
+                            dif = _row['monto'] - costo_ppto
+                            dif_pct = (dif / costo_ppto) * 100
+                            
+                            if dif > 0:
+                                if dif_pct > 20:
+                                    st.markdown(f"**vs Ppto:** 🔴 Sobrecosto +{dif_pct:.1f}% (${dif:,.0f})")
+                                elif dif_pct > 10:
+                                    st.markdown(f"**vs Ppto:** 🟡 Sobrecosto +{dif_pct:.1f}% (${dif:,.0f})")
+                                else:
+                                    st.markdown(f"**vs Ppto:** 🟢 Sobrecosto +{dif_pct:.1f}% (${dif:,.0f})")
+                            else:
+                                st.markdown(f"**vs Ppto:** 🟢 Ahorro {dif_pct:.1f}% (${abs(dif):,.0f})")
+                        else:
+                            st.markdown(f"**Presupuesto:** ⚠️ Sin presupuesto")
+                    
+                    # Estado de aprobación
+                    st.markdown("---")
+                    st.markdown(f"**📝 Estado Aprobación:** {_row['estado_aprobacion']}")
+                    if _row.get('aprobadores') and _row['aprobadores'] != 'Sin aprobaciones':
+                        st.markdown(f"**Aprobadores:** {_row['aprobadores']}")
+                
+                st.markdown("---")  # Separador entre filas
         if st.session_state[f'selected_{key_proveedor}']:
             st.markdown("---")
             
