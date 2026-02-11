@@ -617,14 +617,21 @@ def aprobar_oc(models, uid, username, password, oc_id, activity_id=None):
             rule_id = 144
             rol_usuario = 'Gerente de procesos'
         
-        # 2. Obtener nombre de la OC para mensajes
-        oc_data = models.execute_kw(
-            DB, uid, password,
-            'purchase.order', 'read',
-            [[int(oc_id)]],
-            {'fields': ['name'], 'context': contexto}
-        )
-        oc_name = oc_data[0]['name'] if oc_data else f"OC#{oc_id}"
+        # 2. Obtener nombre y estado de la OC para mensajes
+        try:
+            oc_data = models.execute_kw(
+                DB, uid, password,
+                'purchase.order', 'read',
+                [[int(oc_id)]],
+                {'fields': ['name', 'state'], 'context': contexto}
+            )
+            if not oc_data:
+                return False, f"❌ OC#{oc_id}: No se encontró la orden de compra"
+            
+            oc_name = oc_data[0]['name']
+            oc_state = oc_data[0]['state']
+        except Exception as e:
+            return False, f"❌ OC#{oc_id}: Error al leer orden de compra: {str(e)}"
         
         # 3. Verificar entradas existentes del usuario (aprobadas O rechazadas)
         mi_entrada = models.execute_kw(
