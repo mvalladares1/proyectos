@@ -985,7 +985,11 @@ def _render_comparacion(
         if anterior == 0:
             return None
         pct = ((actual - anterior) / anterior) * 100
-        return f"{pct:+.1f}%"
+        return pct
+
+    # KG/Hora promedio por período
+    kgh_a = _calcular_kg_hora(mos_principal)
+    kgh_b = _calcular_kg_hora(mos_comp)
 
     # === HEADER V/S ===
     st.markdown(f"""
@@ -996,27 +1000,44 @@ def _render_comparacion(
     </div>
     """, unsafe_allow_html=True)
 
-    # === KPIs V/S ===
-    v1, v2, v3, v4 = st.columns(4)
-    with v1:
-        st.metric("📋 Órdenes", f"{ord_a_total}", delta=_delta(ord_a_total, ord_b_total),
-                   help=f"Actual: {ord_a_total} | Comparación: {ord_b_total}")
-    with v2:
-        st.metric("⚖️ KG Totales", f"{kg_a_total:,.0f}", delta=_delta(kg_a_total, kg_b_total),
-                   help=f"Actual: {kg_a_total:,.0f} | Comparación: {kg_b_total:,.0f}")
-    with v3:
-        st.metric("📊 KG Prom/Día", f"{prom_dia_a:,.0f}", delta=_delta(prom_dia_a, prom_dia_b),
-                   help=f"Actual: {prom_dia_a:,.0f} | Comparación: {prom_dia_b:,.0f}")
-    with v4:
-        diff_total = kg_a_total - kg_b_total
-        diff_color = "#4caf50" if diff_total >= 0 else "#f44336"
-        diff_sign = "+" if diff_total >= 0 else ""
-        st.markdown(f"""
-        <div style="background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px; text-align: center;">
-            <span style="color: #aaa; font-size: 12px;">⚖️ Diferencia KG</span><br>
-            <span style="color: {diff_color}; font-size: 28px; font-weight: bold;">{diff_sign}{diff_total:,.0f}</span>
+    # === KPIs COMPARATIVOS ===
+    def _kpi_card(label, icon, val_a, val_b, fmt=",.0f"):
+        """Genera HTML de una tarjeta KPI comparativa."""
+        diff = val_a - val_b
+        pct = _delta(val_a, val_b)
+        diff_color = "#4caf50" if diff >= 0 else "#f44336"
+        diff_sign = "+" if diff >= 0 else ""
+        arrow = "▲" if diff >= 0 else "▼"
+        pct_str = f"{pct:+.1f}%" if pct is not None else "—"
+        return f"""
+        <div style="background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px 14px; text-align: center; border: 1px solid rgba(255,255,255,0.08);">
+            <div style="color: #888; font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">{icon} {label}</div>
+            <div style="display: flex; justify-content: center; align-items: baseline; gap: 12px; margin-bottom: 6px;">
+                <span style="color: #00d4ff; font-size: 26px; font-weight: bold;">{val_a:{fmt}}</span>
+                <span style="color: #555; font-size: 14px;">vs</span>
+                <span style="color: #e040fb; font-size: 18px; font-weight: 600;">{val_b:{fmt}}</span>
+            </div>
+            <div style="color: {diff_color}; font-size: 14px; font-weight: bold;">
+                {arrow} {diff_sign}{diff:{fmt}} ({pct_str})
+            </div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+
+    cards_html = f"""
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 10px 0 20px 0;">
+        {_kpi_card("Órdenes", "📋", ord_a_total, ord_b_total, ",d")}
+        {_kpi_card("KG Totales", "⚖️", kg_a_total, kg_b_total)}
+        {_kpi_card("KG/Hora", "⚡", kgh_a, kgh_b)}
+        {_kpi_card("KG/Día", "📊", prom_dia_a, prom_dia_b)}
+        <div style="background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px 14px; text-align: center; border: 1px solid rgba(255,255,255,0.08);">
+            <div style="color: #888; font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">⚖️ DIFERENCIA KG</div>
+            <div style="color: {'#4caf50' if kg_a_total - kg_b_total >= 0 else '#f44336'}; font-size: 32px; font-weight: bold;">
+                {'+'if kg_a_total - kg_b_total >= 0 else ''}{kg_a_total - kg_b_total:,.0f}
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(cards_html, unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -1026,10 +1047,6 @@ def _render_comparacion(
     labels_b = [_dia_es(f) for f, _ in dias_b_list]
     vals_a = [round(kg) for _, kg in dias_a_list]
     vals_b = [round(kg) for _, kg in dias_b_list]
-
-    # KG/Hora promedio por período
-    kgh_a = _calcular_kg_hora(mos_principal)
-    kgh_b = _calcular_kg_hora(mos_comp)
 
     # Gráficos uno debajo del otro para mayor visibilidad
     opts_a = {
