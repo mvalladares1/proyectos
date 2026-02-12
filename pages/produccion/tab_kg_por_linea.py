@@ -1392,8 +1392,27 @@ def render(username: str = None, password: str = None):
                 em_esp = emoji_especie(especie_o)
                 det_o = orden.get('detenciones', 0) or 0
                 det_str = f" — ⏸️ Det: {det_o:.1f}h" if det_o > 0 else ""
+                
+                # Badge de estado con color
+                if estado_code == 'done':
+                    badge_color = "#4caf50"
+                    badge_text = "✅ Cerrada"
+                elif estado_code == 'progress':
+                    badge_color = "#2196F3"
+                    badge_text = "🔄 En Proceso"
+                elif estado_code == 'cancel':
+                    badge_color = "#f44336"
+                    badge_text = "❌ Cancelada"
+                else:
+                    badge_color = "#9e9e9e"
+                    badge_text = f"📋 {estado}"
 
-                st.markdown(f"**{em_o} {mo_name}** — {em_estado} {estado} — {em_esp} {especie_o}{det_str}")
+                st.markdown(
+                    f'**{em_o} {mo_name}** — '
+                    f'<span style="background:{badge_color};color:white;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;">{badge_text}</span>'
+                    f' — {em_esp} {especie_o}{det_str}',
+                    unsafe_allow_html=True
+                )
 
                 # CSS para ajustar tamaño de fuente en métricas
                 st.markdown("""
