@@ -337,231 +337,268 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     </div>
     """, unsafe_allow_html=True)
     
-    # === GRÁFICO GENERAL: KG/Hora y KG/Hora Efectiva POR DÍA ===
-    dia_kg = defaultdict(float)
-    dia_horas = defaultdict(float)
-    dia_hh_efectiva = defaultdict(float)
-    dia_detenciones = defaultdict(float)
+    # === Clasificación por turno ===
+    def _clasificar_turno(dt):
+        """Clasifica en turno Día o Tarde basado en hora de inicio."""
+        if dt is None:
+            return "Día"
+        hora = dt.hour + dt.minute / 60.0
+        dow = dt.weekday()  # 0=Lun, 4=Vie, 5=Sáb
+        if dow <= 3:  # Lunes a Jueves
+            return "Día" if hora < 17.5 else "Tarde"
+        elif dow == 4:  # Viernes
+            return "Día" if hora < 16.5 else "Tarde"
+        elif dow == 5:  # Sábado
+            return "Día" if hora < 13 else "Tarde"
+        return "Día"
+    
+    # === GRÁFICO GENERAL: KG/Hora y KG/Hora Efectiva POR TURNO ===
+    turnos_data = {}
+    for t_name in ["Día", "Tarde"]:
+        turnos_data[t_name] = {
+            'dia_kg': defaultdict(float),
+            'dia_horas': defaultdict(float),
+            'dia_detenciones': defaultdict(float),
+        }
     
     for mo in mos_filtradas:
         dt = mo.get('_inicio_dt')
         if not dt:
             continue
         dia_key = dt.strftime('%d/%m')
+        turno = _clasificar_turno(dt)
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
-        hh_ef = mo.get('hh_efectiva', 0) or 0
         detenciones = mo.get('detenciones', 0) or 0
-        dia_kg[dia_key] += kg
-        dia_hh_efectiva[dia_key] += hh_ef
-        dia_detenciones[dia_key] += detenciones
+        td = turnos_data[turno]
+        td['dia_kg'][dia_key] += kg
+        td['dia_detenciones'][dia_key] += detenciones
         if horas > 0:
-            dia_horas[dia_key] += horas
+            td['dia_horas'][dia_key] += horas
     
-    if dia_kg:
-        dias_sorted = sorted(dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
-        kg_hora_efectiva_vals = []  # kg_pt / duracion_horas
-        kg_hh_efectiva_vals = []     # kg_pt / hh_efectiva
-        detenciones_vals = []  # detenciones por día para tooltip
-        
-        for dia in dias_sorted:
-            horas = dia_horas.get(dia, 0)
-            hh_ef = dia_hh_efectiva.get(dia, 0)
-            kg_total = dia_kg[dia]
-            detenciones = dia_detenciones.get(dia, 0)
-            detenciones_vals.append(round(detenciones, 1))
+    tab_dia, tab_tarde = st.tabs(["☀️ Turno Día", "🌙 Turno Tarde"])
+    
+    for turno_tab, turno_name, turno_key in [(tab_dia, "Día", "dia"), (tab_tarde, "Tarde", "tarde")]:
+        with turno_tab:
+            td = turnos_data[turno_name]
+            if not td['dia_kg']:
+                st.info(f"No hay datos para Turno {turno_name}")
+                continue
             
-            # KG/Hora (basado en duración total)
-            if horas > 0:
-                kg_hora_efectiva_vals.append(round(kg_total / horas, 0))
-            else:
-                kg_hora_efectiva_vals.append(0)
+            dias_sorted = sorted(td['dia_kg'].keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+            kg_hora_vals = []
+            kg_hora_ef_vals = []
+            detenciones_vals = []
             
-            # KG/Hora Efectiva (descontando detenciones)
-            horas_efectivas = max(horas - detenciones, 0)
-            if horas_efectivas > 0:
-                kg_hh_efectiva_vals.append(round(kg_total / horas_efectivas, 0))
-            else:
-                kg_hh_efectiva_vals.append(0)
-        
-        total_detenciones = sum(dia_detenciones.values())
-        
-        opts_general = {
-            "title": {
-                "text": "⚡ KG/Hora y KG/Hora Efectiva por Día",
-                "subtext": f"Productividad total vs productividad por hora efectiva  ·  Detenciones totales: {total_detenciones:,.1f} hrs",
-                "left": "center",
-                "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
-                "subtextStyle": {"color": "#888", "fontSize": 12}
-            },
-            "tooltip": {
-                "trigger": "axis",
-                "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
-                "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": "#6BA3C4",
-                "borderWidth": 2,
-                "borderRadius": 8,
-                "textStyle": {"color": "#333", "fontSize": 12},
-                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
-                "formatter": JsCode("""
-                    function(params) {
-                        var tip = '<div style="padding:8px;">';
-                        tip += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:#333;">' + params[0].axisValue + '</div>';
-                        
-                        for(var i=0; i<params.length; i++) {
-                            if(params[i].seriesName !== 'Detenciones') {
-                                var color = params[i].seriesName === 'KG/Hora Efectiva' ? '#6BA3C4' : '#C9997D';
-                                tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
-                                tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
-                                tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
-                                tip += '<span style="font-weight:600;color:' + color + ';margin-left:12px;">' + params[i].value.toLocaleString() + ' kg/h</span>';
-                                tip += '</div>';
+            for dia in dias_sorted:
+                horas = td['dia_horas'].get(dia, 0)
+                kg_total = td['dia_kg'][dia]
+                detenciones = td['dia_detenciones'].get(dia, 0)
+                detenciones_vals.append(round(detenciones, 1))
+                
+                # KG/Hora (basado en duración total)
+                if horas > 0:
+                    kg_hora_vals.append(round(kg_total / horas, 0))
+                else:
+                    kg_hora_vals.append(0)
+                
+                # KG/Hora Efectiva (descontando detenciones)
+                horas_ef = max(horas - detenciones, 0)
+                if horas_ef > 0:
+                    kg_hora_ef_vals.append(round(kg_total / horas_ef, 0))
+                else:
+                    kg_hora_ef_vals.append(0)
+            
+            total_det = sum(td['dia_detenciones'].values())
+            icono = "☀️" if turno_name == "Día" else "🌙"
+            
+            # Promedios
+            total_kg_turno = sum(td['dia_kg'].values())
+            total_horas_turno = sum(td['dia_horas'].values())
+            total_det_turno = sum(td['dia_detenciones'].values())
+            prom_kg_hora = total_kg_turno / total_horas_turno if total_horas_turno > 0 else 0
+            horas_ef_turno = max(total_horas_turno - total_det_turno, 0)
+            prom_kg_hora_ef = total_kg_turno / horas_ef_turno if horas_ef_turno > 0 else 0
+            
+            subtexto = (f"KG/Hora: {prom_kg_hora:,.0f}  ·  KG/Hora Efectiva: {prom_kg_hora_ef:,.0f}"
+                        f"  ·  Detenciones: {total_det:,.1f} hrs  ·  {len(dias_sorted)} días")
+            
+            opts_turno = {
+                "title": {
+                    "text": f"{icono} Turno {turno_name} — KG/Hora por Día",
+                    "subtext": subtexto,
+                    "left": "center",
+                    "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
+                    "subtextStyle": {"color": "#888", "fontSize": 12}
+                },
+                "tooltip": {
+                    "trigger": "axis",
+                    "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
+                    "backgroundColor": "rgba(255, 255, 255, 0.96)",
+                    "borderColor": "#6BA3C4",
+                    "borderWidth": 2,
+                    "borderRadius": 8,
+                    "textStyle": {"color": "#333", "fontSize": 12},
+                    "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+                    "formatter": JsCode("""
+                        function(params) {
+                            var tip = '<div style="padding:8px;">';
+                            tip += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:#333;">' + params[0].axisValue + '</div>';
+                            
+                            for(var i=0; i<params.length; i++) {
+                                if(params[i].seriesName !== 'Detenciones') {
+                                    var color = params[i].seriesName === 'KG/Hora' ? '#6BA3C4' : '#C9997D';
+                                    tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
+                                    tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
+                                    tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
+                                    tip += '<span style="font-weight:600;color:' + color + ';margin-left:12px;">' + params[i].value.toLocaleString() + ' kg/h</span>';
+                                    tip += '</div>';
+                                }
                             }
+                            
+                            // Agregar detenciones si existen
+                            if(params.length > 2 && params[2].value > 0) {
+                                tip += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">';
+                                tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
+                                tip += '<span style="display:inline-block;width:10px;height:10px;background:#E57373;border-radius:50%;margin-right:8px;"></span>';
+                                tip += '<span style="color:#666;flex:1;">Detenciones:</span>';
+                                tip += '<span style="font-weight:600;color:#D32F2F;margin-left:12px;">' + params[2].value.toFixed(1) + ' h</span>';
+                                tip += '</div></div>';
+                            }
+                            
+                            tip += '</div>';
+                            return tip;
                         }
-                        
-                        // Agregar detenciones si existen
-                        if(params.length > 2 && params[2].value > 0) {
-                            tip += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">';
-                            tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
-                            tip += '<span style="display:inline-block;width:10px;height:10px;background:#E57373;border-radius:50%;margin-right:8px;"></span>';
-                            tip += '<span style="color:#666;flex:1;">Detenciones:</span>';
-                            tip += '<span style="font-weight:600;color:#D32F2F;margin-left:12px;">' + params[2].value.toFixed(1) + ' h</span>';
-                            tip += '</div></div>';
-                        }
-                        
-                        tip += '</div>';
-                        return tip;
+                    """).js_code
+                },
+                "legend": {
+                    "data": ["KG/Hora", "KG/Hora Efectiva"],
+                    "bottom": 0,
+                    "textStyle": {"color": "#666", "fontSize": 11},
+                    "itemGap": 15
+                },
+                "grid": {
+                    "left": "3%", "right": "5%",
+                    "bottom": "15%", "top": "18%",
+                    "containLabel": True
+                },
+                "xAxis": {
+                    "type": "category",
+                    "data": dias_sorted,
+                    "axisLabel": {
+                        "color": "#666", "fontSize": 11, "fontWeight": "500",
+                        "interval": 0, "rotate": 35 if len(dias_sorted) > 10 else 0
+                    },
+                    "axisLine": {"lineStyle": {"color": "#ddd", "width": 1}},
+                    "axisTick": {"show": False}
+                },
+                "yAxis": {
+                    "type": "value",
+                    "name": "⚡ KG/Hora",
+                    "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                    "axisLabel": {"color": "#666", "fontSize": 11},
+                    "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
+                    "axisLine": {"show": False}
+                },
+                "labelLayout": {
+                    "hideOverlap": True,
+                    "moveOverlap": "shiftY"
+                },
+                "series": [
+                    {
+                        "name": "KG/Hora",
+                        "type": "line",
+                        "yAxisIndex": 0,
+                        "data": kg_hora_vals,
+                        "smooth": True,
+                        "symbolSize": 9,
+                        "symbol": "circle",
+                        "itemStyle": {
+                            "color": "#6BA3C4",
+                            "borderWidth": 2,
+                            "borderColor": "#fff"
+                        },
+                        "lineStyle": {
+                            "color": "#6BA3C4",
+                            "width": 3.5,
+                            "shadowColor": "rgba(107, 163, 196, 0.4)",
+                            "shadowBlur": 8
+                        },
+                        "areaStyle": {
+                            "color": {
+                                "type": "linear",
+                                "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "rgba(107, 163, 196, 0.25)"},
+                                    {"offset": 1, "color": "rgba(107, 163, 196, 0.02)"}
+                                ]
+                            }
+                        },
+                        "label": {
+                            "show": True,
+                            "position": "top",
+                            "fontSize": 10,
+                            "fontWeight": "600",
+                            "color": "#5A8FAD",
+                            "distance": 8,
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                        },
+                        "z": 2
+                    },
+                    {
+                        "name": "KG/Hora Efectiva",
+                        "type": "line",
+                        "yAxisIndex": 0,
+                        "data": kg_hora_ef_vals,
+                        "smooth": True,
+                        "symbolSize": 9,
+                        "symbol": "diamond",
+                        "itemStyle": {
+                            "color": "#C9997D",
+                            "borderWidth": 2,
+                            "borderColor": "#fff"
+                        },
+                        "lineStyle": {
+                            "color": "#C9997D",
+                            "width": 3.5,
+                            "type": "solid",
+                            "shadowColor": "rgba(201, 153, 125, 0.4)",
+                            "shadowBlur": 8
+                        },
+                        "areaStyle": {
+                            "color": {
+                                "type": "linear",
+                                "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "rgba(201, 153, 125, 0.25)"},
+                                    {"offset": 1, "color": "rgba(201, 153, 125, 0.02)"}
+                                ]
+                            }
+                        },
+                        "label": {
+                            "show": True,
+                            "position": "bottom",
+                            "fontSize": 10,
+                            "fontWeight": "600",
+                            "color": "#B38967",
+                            "distance": 8,
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                        },
+                        "z": 3
+                    },
+                    {
+                        "name": "Detenciones",
+                        "type": "line",
+                        "yAxisIndex": 0,
+                        "data": detenciones_vals,
+                        "showSymbol": False,
+                        "lineStyle": {"width": 0, "opacity": 0},
+                        "itemStyle": {"opacity": 0},
+                        "tooltip": {"show": True}
                     }
-                """).js_code
-            },
-            "legend": {
-                "data": ["KG/Hora", "KG/Hora Efectiva"],
-                "bottom": 0,
-                "textStyle": {"color": "#666", "fontSize": 11},
-                "itemGap": 15
-            },
-            "grid": {
-                "left": "3%", "right": "5%",
-                "bottom": "15%", "top": "18%",
-                "containLabel": True
-            },
-            "xAxis": {
-                "type": "category",
-                "data": dias_sorted,
-                "axisLabel": {
-                    "color": "#666", "fontSize": 11, "fontWeight": "500",
-                    "interval": 0, "rotate": 35 if len(dias_sorted) > 10 else 0
-                },
-                "axisLine": {"lineStyle": {"color": "#ddd", "width": 1}},
-                "axisTick": {"show": False}
-            },
-            "yAxis": {
-                "type": "value",
-                "name": "⚡ KG/Hora",
-                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
-                "axisLabel": {"color": "#666", "fontSize": 11},
-                "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
-                "axisLine": {"show": False}
-            },
-            "labelLayout": {
-                "hideOverlap": True,
-                "moveOverlap": "shiftY"
-            },
-            "series": [
-                {
-                    "name": "KG/Hora",
-                    "type": "line",
-                    "yAxisIndex": 0,
-                    "data": kg_hora_efectiva_vals,
-                    "smooth": True,
-                    "symbolSize": 9,
-                    "symbol": "circle",
-                    "itemStyle": {
-                        "color": "#6BA3C4",
-                        "borderWidth": 2,
-                        "borderColor": "#fff"
-                    },
-                    "lineStyle": {
-                        "color": "#6BA3C4",
-                        "width": 3.5,
-                        "shadowColor": "rgba(107, 163, 196, 0.4)",
-                        "shadowBlur": 8
-                    },
-                    "areaStyle": {
-                        "color": {
-                            "type": "linear",
-                            "x": 0, "y": 0, "x2": 0, "y2": 1,
-                            "colorStops": [
-                                {"offset": 0, "color": "rgba(107, 163, 196, 0.25)"},
-                                {"offset": 1, "color": "rgba(107, 163, 196, 0.02)"}
-                            ]
-                        }
-                    },
-                    "label": {
-                        "show": True,
-                        "position": "top",
-                        "fontSize": 10,
-                        "fontWeight": "600",
-                        "color": "#5A8FAD",
-                        "distance": 8,
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
-                    },
-                    "z": 2
-                },
-                {
-                    "name": "KG/Hora Efectiva",
-                    "type": "line",
-                    "yAxisIndex": 0,
-                    "data": kg_hh_efectiva_vals,
-                    "smooth": True,
-                    "symbolSize": 9,
-                    "symbol": "diamond",
-                    "itemStyle": {
-                        "color": "#C9997D",
-                        "borderWidth": 2,
-                        "borderColor": "#fff"
-                    },
-                    "lineStyle": {
-                        "color": "#C9997D",
-                        "width": 3.5,
-                        "type": "solid",
-                        "shadowColor": "rgba(201, 153, 125, 0.4)",
-                        "shadowBlur": 8
-                    },
-                    "areaStyle": {
-                        "color": {
-                            "type": "linear",
-                            "x": 0, "y": 0, "x2": 0, "y2": 1,
-                            "colorStops": [
-                                {"offset": 0, "color": "rgba(201, 153, 125, 0.25)"},
-                                {"offset": 1, "color": "rgba(201, 153, 125, 0.02)"}
-                            ]
-                        }
-                    },
-                    "label": {
-                        "show": True,
-                        "position": "bottom",
-                        "fontSize": 10,
-                        "fontWeight": "600",
-                        "color": "#B38967",
-                        "distance": 8,
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
-                    },
-                    "z": 3
-                },
-                {
-                    "name": "Detenciones",
-                    "type": "line",
-                    "yAxisIndex": 0,
-                    "data": detenciones_vals,
-                    "showSymbol": False,
-                    "lineStyle": {"width": 0, "opacity": 0},
-                    "itemStyle": {"opacity": 0},
-                    "tooltip": {"show": True}
-                }
-            ]
-        }
-        st_echarts(options=opts_general, height="450px", key="kg_hora_general")
+                ]
+            }
+            st_echarts(options=opts_turno, height="450px", key=f"kg_hora_{turno_key}")
     
     # === GRÁFICOS POR SALA: KG/H POR DÍA ===
     st.markdown("<br>", unsafe_allow_html=True)
