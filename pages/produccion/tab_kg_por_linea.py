@@ -454,7 +454,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             tip += '</div>';
                             return tip;
                         }
-                    """)
+                    """).js_code
                 },
                 "legend": {
                     "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -526,7 +526,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#5A8FAD",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                         },
                         "z": 2
                     },
@@ -567,7 +567,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#B38967",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                         },
                         "z": 3
                     },
@@ -727,7 +727,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         tip += '</div>';
                         return tip;
                     }
-                """)
+                """).js_code
             },
             "legend": {
                 "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -794,7 +794,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#5A8FAD",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                     },
                     "z": 2
                 },
@@ -834,7 +834,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#B38967",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                     },
                     "z": 3
                 },
@@ -1056,7 +1056,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#E65100",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             },
             {
@@ -1076,7 +1076,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#4527A0",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             },
             {
@@ -1097,7 +1097,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#F57C00",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             },
             {
@@ -1118,7 +1118,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#5E35B1",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             }
         ]
