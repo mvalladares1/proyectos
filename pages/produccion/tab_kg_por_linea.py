@@ -371,15 +371,16 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             detenciones = dia_detenciones.get(dia, 0)
             detenciones_vals.append(round(detenciones, 1))
             
-            # KG/Hora Efectiva (basado en duración total)
+            # KG/Hora (basado en duración total)
             if horas > 0:
                 kg_hora_efectiva_vals.append(round(kg_total / horas, 0))
             else:
                 kg_hora_efectiva_vals.append(0)
             
-            # KG/HH Efectiva (basado en horas efectivas de trabajo)
-            if hh_ef > 0:
-                kg_hh_efectiva_vals.append(round(kg_total / hh_ef, 0))
+            # KG/Hora Efectiva (descontando detenciones)
+            horas_efectivas = max(horas - detenciones, 0)
+            if horas_efectivas > 0:
+                kg_hh_efectiva_vals.append(round(kg_total / horas_efectivas, 0))
             else:
                 kg_hh_efectiva_vals.append(0)
         
@@ -615,15 +616,16 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             detenciones = sala_dia_detenciones.get(dia, 0)
             detenciones_sala_vals.append(round(detenciones, 1))
             
-            # KG/Hora Efectiva
+            # KG/Hora
             if horas > 0:
                 kg_hora_efectiva_sala_vals.append(round(kg_total / horas, 0))
             else:
                 kg_hora_efectiva_sala_vals.append(0)
             
-            # KG/HH Efectiva
-            if hh_ef > 0:
-                kg_hh_efectiva_sala_vals.append(round(kg_total / hh_ef, 0))
+            # KG/Hora Efectiva (descontando detenciones)
+            horas_efectivas = max(horas - detenciones, 0)
+            if horas_efectivas > 0:
+                kg_hh_efectiva_sala_vals.append(round(kg_total / horas_efectivas, 0))
             else:
                 kg_hh_efectiva_sala_vals.append(0)
         
@@ -1444,19 +1446,18 @@ def _generar_informe_pdf(
         for fecha in fechas_graf:
             kg = dia_kg_hora_data[fecha]
             horas = dia_horas_data.get(fecha, 0)
-            hh_ef = dia_hh_efectiva_data.get(fecha, 0)
             det = dia_detenciones_data.get(fecha, 0)
+            
+            # KG/Hora (duración total)
+            if horas > 0:
+                kg_hora_vals.append(kg / horas)
+            else:
+                kg_hora_vals.append(0)
             
             # KG/Hora Efectiva (descontando detenciones)
             horas_efectivas = max(horas - det, 0)
             if horas_efectivas > 0:
-                kg_hora_vals.append(kg / horas_efectivas)
-            else:
-                kg_hora_vals.append(0)
-            
-            # KG/HH Efectiva
-            if hh_ef > 0:
-                kg_hh_vals.append(kg / hh_ef)
+                kg_hh_vals.append(kg / horas_efectivas)
             else:
                 kg_hh_vals.append(0)
         
@@ -1673,14 +1674,16 @@ def _generar_informe_pdf(
             
             for dia in dias_sala:
                 data = sala_dia_data[dia]
-                horas_ef = max(data['horas'] - data['det'], 0)
-                if horas_ef > 0:
-                    kg_hora_sala_vals.append(data['kg'] / horas_ef)
+                # KG/Hora (duración total)
+                if data['horas'] > 0:
+                    kg_hora_sala_vals.append(data['kg'] / data['horas'])
                 else:
                     kg_hora_sala_vals.append(0)
                 
-                if data['hh_ef'] > 0:
-                    kg_hh_sala_vals.append(data['kg'] / data['hh_ef'])
+                # KG/Hora Efectiva (descontando detenciones)
+                horas_ef = max(data['horas'] - data['det'], 0)
+                if horas_ef > 0:
+                    kg_hh_sala_vals.append(data['kg'] / horas_ef)
                 else:
                     kg_hh_sala_vals.append(0)
             
