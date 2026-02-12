@@ -175,7 +175,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     # Formatter JS: mostrar valor completo con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
         "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('en-US');}"
-    ).js_code
+    )
 
     series = []
     for sala in salas_sorted:
@@ -454,7 +454,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             tip += '</div>';
                             return tip;
                         }
-                    """).js_code
+                    """)
                 },
                 "legend": {
                     "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -526,7 +526,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#5A8FAD",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                         },
                         "z": 2
                     },
@@ -567,7 +567,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#B38967",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                         },
                         "z": 3
                     },
@@ -727,7 +727,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         tip += '</div>';
                         return tip;
                     }
-                """).js_code
+                """)
             },
             "legend": {
                 "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -794,7 +794,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#5A8FAD",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                     },
                     "z": 2
                 },
@@ -834,7 +834,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#B38967",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                     },
                     "z": 3
                 },
@@ -1056,7 +1056,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#E65100",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
                 }
             },
             {
@@ -1076,7 +1076,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#4527A0",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
                 }
             },
             {
@@ -1097,7 +1097,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#F57C00",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
                 }
             },
             {
@@ -1118,7 +1118,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#5E35B1",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
                 }
             }
         ]
@@ -2562,7 +2562,7 @@ def _render_comparacion(
                     "show": True,
                     "position": "top",
                     "distance": 22,
-                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}").js_code,
+                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}"),
                     "fontSize": 10,
                     "fontWeight": "bold",
                     "color": "#999",
@@ -2618,7 +2618,7 @@ def _render_comparacion(
                     "show": True,
                     "position": "top",
                     "distance": 22,
-                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}").js_code,
+                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}"),
                     "fontSize": 10,
                     "fontWeight": "bold",
                     "color": "#999",
@@ -2906,7 +2906,7 @@ def _render_comparacion(
                             }
                             return result;
                         }
-                    """).js_code
+                    """)
                 },
                 "legend": {
                     "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
@@ -2959,7 +2959,7 @@ def _render_comparacion(
                         "label": {
                             "show": True, "position": "top",
                             "fontSize": 11, "fontWeight": "bold", "color": "#7FA8C9",
-                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}")
                         }
                     },
                     {
@@ -2980,7 +2980,7 @@ def _render_comparacion(
                         "label": {
                             "show": True, "position": "top",
                             "fontSize": 11, "fontWeight": "bold", "color": "#D999B2",
-                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}").js_code
+                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}")
                         }
                     }
                 ]
