@@ -427,6 +427,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
                 "axisLine": {"show": False}
             },
+            "labelLayout": {
+                "hideOverlap": True,
+                "moveOverlap": "shiftY"
+            },
             "series": [
                 {
                     "name": "KG/Hora Efectiva",
@@ -460,9 +464,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "label": {
                         "show": True,
                         "position": "top",
-                        "fontSize": 11,
-                        "fontWeight": "bold",
+                        "fontSize": 10,
+                        "fontWeight": "600",
                         "color": "#FFC107",
+                        "distance": 8,
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 2
@@ -500,9 +505,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "label": {
                         "show": True,
                         "position": "bottom",
-                        "fontSize": 11,
-                        "fontWeight": "bold",
+                        "fontSize": 10,
+                        "fontWeight": "600",
                         "color": "#FF5252",
+                        "distance": 8,
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 3
@@ -1382,12 +1388,30 @@ def _generar_informe_pdf(
                 zorder=3)
         ax.fill_between(x_pos, kg_hora_vals, alpha=0.2, color='#FFC107', zorder=1)
         
+        # Agregar valores numéricos en puntos amarillos
+        for i, (x, y) in enumerate(zip(x_pos, kg_hora_vals)):
+            if y > 0:
+                ax.text(x, y, f'{y:,.0f}', 
+                       ha='center', va='bottom', fontsize=8, 
+                       fontweight='600', color='#FFC107',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                edgecolor='none', alpha=0.7))
+        
         # KG/HH Efectiva - línea roja
         ax.plot(x_pos, kg_hh_vals, color='#FF5252', linewidth=2.5,
                 marker='D', markersize=5, label='KG/HH Efectiva',
                 markerfacecolor='#FF5252', markeredgecolor='white', markeredgewidth=1.5,
                 zorder=3)
         ax.fill_between(x_pos, kg_hh_vals, alpha=0.2, color='#FF5252', zorder=1)
+        
+        # Agregar valores numéricos en puntos rojos
+        for i, (x, y) in enumerate(zip(x_pos, kg_hh_vals)):
+            if y > 0:
+                ax.text(x, y, f'{y:,.0f}', 
+                       ha='center', va='top', fontsize=8, 
+                       fontweight='600', color='#FF5252',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                edgecolor='none', alpha=0.7))
         
         # Estilo del gráfico
         ax.set_xlabel('Día', fontsize=10, fontweight='600', color='#666')
