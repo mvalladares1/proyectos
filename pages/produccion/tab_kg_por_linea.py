@@ -1419,7 +1419,8 @@ def render(username: str = None, password: str = None):
                 with oc5:
                     st.metric("🕑 Fin", hora_fin, delta=duracion_str if duracion_str else None, delta_color="off")
                 with oc6:
-                    st.metric("📈 Rend.", f"{rend:.1f}%")
+                    merma = max(100 - rend, 0)
+                    st.metric("📈 Rend.", f"{rend:.1f}%", delta=f"-{merma:.1f}% merma" if merma > 0 else None, delta_color="inverse")
                 with oc7:
                     hh = orden.get('hh', 0) or 0
                     st.metric("⏱️ HH", f"{hh:,.1f}")
