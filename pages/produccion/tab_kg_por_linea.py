@@ -296,7 +296,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         "yAxis": {
             "type": "value",
             "name": "⚖️ KG",
-            "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+            "nameTextStyle": {"color": "#3d7a9e", "fontSize": 13, "fontWeight": "600"},
             "axisLabel": {"color": "#666", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
             "axisLine": {"show": False}
@@ -327,11 +327,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     
     st.markdown("---")
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    <div style="background: #ffffff;
                 padding: 20px; border-radius: 12px; margin-bottom: 15px;
-                border-left: 5px solid #7FA8C9; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h3 style="margin:0; color:#7FA8C9;">⚡ Rendimiento KG/Hora</h3>
-        <p style="margin:5px 0 0 0; color:#666; font-size:13px;">
+                border-left: 5px solid #0d3b66; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h3 style="margin:0; color:#0d3b66 !important;">⚡ Rendimiento KG/Hora</h3>
+        <p style="margin:5px 0 0 0; color:#555 !important; font-size:13px;">
             Análisis detallado de productividad por hora
         </p>
     </div>
@@ -413,7 +413,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "text": f"{icono} Turno {turno_name} — KG/Hora por Día",
                     "subtext": subtexto,
                     "left": "center",
-                    "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
+                    "textStyle": {"color": "#3d7a9e", "fontSize": 15, "fontWeight": "bold"},
                     "subtextStyle": {"color": "#888", "fontSize": 12}
                 },
                 "tooltip": {
@@ -480,7 +480,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "yAxis": {
                     "type": "value",
                     "name": "⚡ KG/Hora",
-                    "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                    "nameTextStyle": {"color": "#3d7a9e", "fontSize": 13, "fontWeight": "600"},
                     "axisLabel": {"color": "#666", "fontSize": 11},
                     "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
                     "axisLine": {"show": False}
@@ -686,7 +686,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "text": f"🏭 {sala}{turno_label}",
                 "subtext": f"KG/Hora: {prom_sala:,.0f}  ·  KG/Hora Efectiva: {prom_sala_efectiva:,.0f}  ·  Det: {total_det_sala:,.1f}h  ·  {len(ordenes_filtradas)} órdenes",
                 "left": "center",
-                "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "600"},
+                "textStyle": {"color": "#3d7a9e", "fontSize": 14, "fontWeight": "600"},
                 "subtextStyle": {"color": "#888", "fontSize": 11}
             },
             "tooltip": {
@@ -753,7 +753,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             "yAxis": {
                 "type": "value",
                 "name": "⚡ KG/Hora",
-                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                "nameTextStyle": {"color": "#3d7a9e", "fontSize": 13, "fontWeight": "600"},
                 "axisLabel": {"color": "#666", "fontSize": 11},
                 "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
                 "axisLine": {"show": False}
@@ -879,11 +879,11 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
     
     st.markdown("---")
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    <div style="background: #ffffff;
                 padding: 20px; border-radius: 12px; margin-bottom: 15px;
-                border-left: 5px solid #E8A87C; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h3 style="margin:0; color:#E8A87C;">☀️🌙 Comparación Turno Día vs Turno Tarde</h3>
-        <p style="margin:5px 0 0 0; color:#666; font-size:13px;">
+                border-left: 5px solid #E8A87C; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h3 style="margin:0; color:#C27A50 !important;">☀️🌙 Comparación Turno Día vs Turno Tarde</h3>
+        <p style="margin:5px 0 0 0; color:#555 !important; font-size:13px;">
             KG/Hora y KG/Hora Efectiva por sala y turno
         </p>
     </div>
@@ -994,7 +994,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
             "text": "☀️🌙 KG/Hora por Sala — Día vs Tarde",
             "subtext": f"Día: {prom_d:,} kg/h ({total_d['ord']} órd)  ·  Tarde: {prom_t:,} kg/h ({total_t['ord']} órd)",
             "left": "center",
-            "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
+            "textStyle": {"color": "#3d7a9e", "fontSize": 15, "fontWeight": "bold"},
             "subtextStyle": {"color": "#888", "fontSize": 12}
         },
         "tooltip": {
@@ -1031,7 +1031,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
         "yAxis": {
             "type": "value",
             "name": "KG/Hora",
-            "nameTextStyle": {"color": "#7FA8C9", "fontSize": 12, "fontWeight": "600"},
+            "nameTextStyle": {"color": "#3d7a9e", "fontSize": 12, "fontWeight": "600"},
             "axisLabel": {"color": "#666", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#f0f0f0"}},
             "axisLine": {"show": False}
@@ -1138,13 +1138,73 @@ def render(username: str = None, password: str = None):
         st.warning("⚠️ Debes iniciar sesión para ver este módulo")
         return
 
+    # === FONDO BLANCO SOLO PARA ESTA PÁGINA ===
+    st.markdown("""
+    <style>
+    /* Fondo blanco principal */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"],
+    .main .block-container, section[data-testid="stMainBlockContainer"] {
+        background-color: #ffffff !important;
+    }
+    /* Sidebar sin cambios */
+    [data-testid="stSidebar"] {
+        background-color: inherit !important;
+    }
+    /* Textos oscuros para contraste */
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {
+        color: #1a1a2e !important;
+    }
+    .stApp p, .stApp span, .stApp label, .stApp div {
+        color: #333 !important;
+    }
+    /* Métricas */
+    [data-testid="stMetricValue"] {
+        color: #1a1a2e !important;
+    }
+    [data-testid="stMetricLabel"] {
+        color: #555 !important;
+    }
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #f8f9fa !important;
+        border-radius: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #555 !important;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #0d3b66 !important;
+        font-weight: 600 !important;
+    }
+    /* Expanders */
+    [data-testid="stExpander"] {
+        background-color: #f8f9fa !important;
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 8px !important;
+    }
+    /* Selectbox y inputs */
+    [data-testid="stSelectbox"] label, [data-testid="stDateInput"] label {
+        color: #333 !important;
+    }
+    /* Dividers */
+    hr {
+        border-color: #e0e0e0 !important;
+    }
+    /* Botones de descarga */
+    .stDownloadButton button {
+        background-color: #0d3b66 !important;
+        color: white !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # === HEADER ===
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    <div style="background: linear-gradient(135deg, #0d3b66 0%, #1a5276 100%);
                 padding: 25px; border-radius: 15px; margin-bottom: 20px;
-                border-left: 5px solid #7FA8C9; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h2 style="margin:0; color:#7FA8C9;">🏭 Rendimiento en Salas</h2>
-        <p style="margin:5px 0 0 0; color:#666;">
+                box-shadow: 0 4px 12px rgba(13,59,102,0.15);">
+        <h2 style="margin:0; color:#ffffff !important;">🏭 Rendimiento en Salas</h2>
+        <p style="margin:5px 0 0 0; color:#b0c4de !important;">
             Rendimiento, KG/Hora y detalle de órdenes por sala de proceso
         </p>
     </div>
@@ -2155,11 +2215,11 @@ def _render_comparacion(
     """Sección de Comparación: comparación día a día real entre dos períodos."""
 
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    <div style="background: #ffffff;
                 padding: 25px; border-radius: 15px; margin-bottom: 20px;
-                border-left: 5px solid #D999B2; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h2 style="margin:0; color:#D999B2;">📊 Comparación de Períodos</h2>
-        <p style="margin:5px 0 0 0; color:#666;">
+                border-left: 5px solid #D999B2; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h2 style="margin:0; color:#B07090 !important;">📊 Comparación de Períodos</h2>
+        <p style="margin:5px 0 0 0; color:#555 !important;">
             Compara la producción día a día contra otro período.
             Se aplican los mismos filtros de Planta, Especie y Sala.
         </p>
@@ -2307,9 +2367,9 @@ def _render_comparacion(
     # === HEADER V/S ===
     st.markdown(f"""
     <div style="text-align: center; margin: 15px 0;">
-        <span style="color: #7FA8C9; font-size: 18px; font-weight: bold;">📅 {lbl_a}  ({dias_a_count} días)</span>
-        <span style="color: #888; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
-        <span style="color: #D999B2; font-size: 18px; font-weight: bold;">📅 {lbl_b}  ({dias_b_count} días)</span>
+        <span style="color: #0d3b66; font-size: 18px; font-weight: bold;">📅 {lbl_a}  ({dias_a_count} días)</span>
+        <span style="color: #999; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
+        <span style="color: #B07090; font-size: 18px; font-weight: bold;">📅 {lbl_b}  ({dias_b_count} días)</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2320,12 +2380,12 @@ def _render_comparacion(
         arrow = "▲" if is_positive else "▼"
         pct_str = f"{pct_val:+.1f}%" if pct_val is not None else "—"
         return (
-            '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:16px 14px;text-align:center;border:1px solid rgba(255,255,255,0.08);">'
-            f'<div style="color:#888;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">{icon} {label}</div>'
+            '<div style="background:#f8f9fa;border-radius:12px;padding:16px 14px;text-align:center;border:1px solid #e0e0e0;">'
+            f'<div style="color:#666;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">{icon} {label}</div>'
             '<div style="display:flex;justify-content:center;align-items:baseline;gap:12px;margin-bottom:6px;">'
-            f'<span style="color:#7FA8C9;font-size:26px;font-weight:bold;">{val_a_str}</span>'
-            '<span style="color:#555;font-size:14px;">vs</span>'
-            f'<span style="color:#D999B2;font-size:18px;font-weight:600;">{val_b_str}</span>'
+            f'<span style="color:#0d3b66;font-size:26px;font-weight:bold;">{val_a_str}</span>'
+            '<span style="color:#888;font-size:14px;">vs</span>'
+            f'<span style="color:#B07090;font-size:18px;font-weight:600;">{val_b_str}</span>'
             '</div>'
             f'<div style="color:{diff_color};font-size:14px;font-weight:bold;">'
             f'{arrow} {diff_str} ({pct_str})'
@@ -2352,8 +2412,8 @@ def _render_comparacion(
         + _fmt_kpi("KG Totales", "⚖️", kg_a_total, kg_b_total, fmt_dec)
         + _fmt_kpi("KG/Hora", "⚡", kgh_a, kgh_b, fmt_dec)
         + _fmt_kpi("KG/Día", "📊", prom_dia_a, prom_dia_b, fmt_dec)
-        + '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:16px 14px;text-align:center;border:1px solid rgba(255,255,255,0.08);">'
-        + '<div style="color:#888;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ DIFERENCIA KG</div>'
+        + '<div style="background:#f8f9fa;border-radius:12px;padding:16px 14px;text-align:center;border:1px solid #e0e0e0;">'
+        + '<div style="color:#666;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ DIFERENCIA KG</div>'
         + f'<div style="color:{diff_kg_color};font-size:32px;font-weight:bold;">{diff_kg_sign}{diff_kg:,.0f}</div>'
         + '</div></div>'
     )
@@ -2391,25 +2451,25 @@ def _render_comparacion(
             "text": f"📅 Período Actual: {lbl_a}",
             "subtext": f"{ord_a_total} órdenes · {kg_a_total:,.0f} KG · {kgh_a:,.0f} KG/H · {prom_dia_a:,.0f} KG/día",
             "left": "center",
-            "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "bold"},
-            "subtextStyle": {"color": "#999", "fontSize": 11}
+            "textStyle": {"color": "#0d3b66", "fontSize": 14, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#666", "fontSize": 11}
         },
         "tooltip": {
             "trigger": "axis", "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
-            "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
+            "backgroundColor": "rgba(255, 255, 255, 0.96)", "borderColor": "#ddd",
+            "borderRadius": 10, "textStyle": {"color": "#333", "fontSize": 13}
         },
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "18%", "containLabel": True},
         "xAxis": {
             "type": "category", "data": labels_a,
-            "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_a) > 10 else 0},
-            "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
+            "axisLabel": {"color": "#555", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_a) > 10 else 0},
+            "axisLine": {"lineStyle": {"color": "#ccc"}}, "axisTick": {"show": False}
         },
         "yAxis": {
             "type": "value", "name": "KG",
-            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
-            "axisLabel": {"color": "#ccc", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+            "nameTextStyle": {"color": "#666", "fontSize": 12},
+            "axisLabel": {"color": "#666", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#e8e8e8", "type": "dashed"}}
         },
         "series": [
             {
@@ -2447,25 +2507,25 @@ def _render_comparacion(
             "text": f"📅 Período Comparación: {lbl_b}",
             "subtext": f"{ord_b_total} órdenes · {kg_b_total:,.0f} KG · {kgh_b:,.0f} KG/H · {prom_dia_b:,.0f} KG/día",
             "left": "center",
-            "textStyle": {"color": "#D999B2", "fontSize": 14, "fontWeight": "bold"},
-            "subtextStyle": {"color": "#999", "fontSize": 11}
+            "textStyle": {"color": "#B07090", "fontSize": 14, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#666", "fontSize": 11}
         },
         "tooltip": {
             "trigger": "axis", "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(10,10,30,0.95)", "borderColor": "#555",
-            "borderRadius": 10, "textStyle": {"color": "#fff", "fontSize": 13}
+            "backgroundColor": "rgba(255, 255, 255, 0.96)", "borderColor": "#ddd",
+            "borderRadius": 10, "textStyle": {"color": "#333", "fontSize": 13}
         },
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "18%", "containLabel": True},
         "xAxis": {
             "type": "category", "data": labels_b,
-            "axisLabel": {"color": "#fff", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_b) > 10 else 0},
-            "axisLine": {"lineStyle": {"color": "#444"}}, "axisTick": {"show": False}
+            "axisLabel": {"color": "#555", "fontSize": 11, "fontWeight": "bold", "interval": 0, "rotate": 25 if len(labels_b) > 10 else 0},
+            "axisLine": {"lineStyle": {"color": "#ccc"}}, "axisTick": {"show": False}
         },
         "yAxis": {
             "type": "value", "name": "KG",
-            "nameTextStyle": {"color": "#aaa", "fontSize": 12},
-            "axisLabel": {"color": "#ccc", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}}
+            "nameTextStyle": {"color": "#666", "fontSize": 12},
+            "axisLabel": {"color": "#666", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#e8e8e8", "type": "dashed"}}
         },
         "series": [
             {
@@ -2506,8 +2566,8 @@ def _render_comparacion(
     # Tabla período actual
     st.markdown(f"""
     <div style="margin-bottom: 15px;">
-        <div style="background: rgba(0,212,255,0.12); padding: 10px 15px; border-radius: 10px 10px 0 0;
-                    border-left: 4px solid #7FA8C9; font-weight: bold; color: #7FA8C9; font-size: 14px;">
+        <div style="background: #e8f4f8; padding: 10px 15px; border-radius: 10px 10px 0 0;
+                    border-left: 4px solid #0d3b66; font-weight: bold; color: #0d3b66; font-size: 14px;">
             📅 Período Actual: {lbl_a} — {dias_a_count} días — {ord_a_total} órdenes — {kg_a_total:,.0f} KG total — Prom: {prom_dia_a:,.0f} KG/día
         </div>
     """, unsafe_allow_html=True)
@@ -2519,10 +2579,10 @@ def _render_comparacion(
         dia_label = _dia_es(fecha)
         st.markdown(f"""
         <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 2fr;
-                    gap: 8px; padding: 8px 15px; background: rgba(255,255,255,0.03);
-                    border-left: 4px solid #7FA8C933; align-items: center; font-size: 13px;">
-            <span style="color: #ccc; font-weight: bold;">{dia_label}</span>
-            <span style="color: #7FA8C9; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
+                    gap: 8px; padding: 8px 15px; background: #fafafa;
+                    border-left: 4px solid #0d3b6633; align-items: center; font-size: 13px;">
+            <span style="color: #333; font-weight: bold;">{dia_label}</span>
+            <span style="color: #0d3b66; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
             <span style="color: #666;">{ordenes} órdenes</span>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <div style="background: #7FA8C944; height: 10px; border-radius: 5px; width: {min(bar_width, 100)}%; min-width: 2px;">
@@ -2538,8 +2598,8 @@ def _render_comparacion(
     # Tabla período comparación
     st.markdown(f"""
     <div style="margin-bottom: 15px; margin-top: 15px;">
-        <div style="background: rgba(224,64,251,0.12); padding: 10px 15px; border-radius: 10px 10px 0 0;
-                    border-left: 4px solid #D999B2; font-weight: bold; color: #D999B2; font-size: 14px;">
+        <div style="background: #fce4ec; padding: 10px 15px; border-radius: 10px 10px 0 0;
+                    border-left: 4px solid #B07090; font-weight: bold; color: #B07090; font-size: 14px;">
             📅 Período Comparación: {lbl_b} — {dias_b_count} días — {ord_b_total} órdenes — {kg_b_total:,.0f} KG total — Prom: {prom_dia_b:,.0f} KG/día
         </div>
     """, unsafe_allow_html=True)
@@ -2551,10 +2611,10 @@ def _render_comparacion(
         dia_label = _dia_es(fecha)
         st.markdown(f"""
         <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 2fr;
-                    gap: 8px; padding: 8px 15px; background: rgba(255,255,255,0.03);
-                    border-left: 4px solid #D999B233; align-items: center; font-size: 13px;">
-            <span style="color: #ccc; font-weight: bold;">{dia_label}</span>
-            <span style="color: #D999B2; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
+                    gap: 8px; padding: 8px 15px; background: #fafafa;
+                    border-left: 4px solid #B0709033; align-items: center; font-size: 13px;">
+            <span style="color: #333; font-weight: bold;">{dia_label}</span>
+            <span style="color: #B07090; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
             <span style="color: #666;">{ordenes} órdenes</span>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <div style="background: #D999B244; height: 10px; border-radius: 5px; width: {min(bar_width, 100)}%; min-width: 2px;">
@@ -2580,26 +2640,26 @@ def _render_comparacion(
     pd_icon = "▲" if prom_diff >= 0 else "▼"
 
     st.markdown(f"""
-    <div style="background: rgba(255,255,255,0.06); border-radius: 12px; padding: 20px;
-                margin-top: 15px; border: 1px solid rgba(255,255,255,0.12);">
-        <div style="text-align: center; margin-bottom: 12px; color: #fff; font-size: 16px; font-weight: bold;">
+    <div style="background: #f8f9fa; border-radius: 12px; padding: 20px;
+                margin-top: 15px; border: 1px solid #e0e0e0;">
+        <div style="text-align: center; margin-bottom: 12px; color: #1a1a2e; font-size: 16px; font-weight: bold;">
             📊 Conclusión
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
             <div>
-                <div style="color: #aaa; font-size: 12px;">KG Totales</div>
+                <div style="color: #666; font-size: 12px;">KG Totales</div>
                 <div style="color: {td_color}; font-size: 24px; font-weight: bold;">{td_icon} {td_sign}{total_diff:,.0f}</div>
-                <div style="color: #666; font-size: 12px;">{td_pct}</div>
+                <div style="color: #888; font-size: 12px;">{td_pct}</div>
             </div>
             <div>
-                <div style="color: #aaa; font-size: 12px;">KG Promedio/Día</div>
+                <div style="color: #666; font-size: 12px;">KG Promedio/Día</div>
                 <div style="color: {pd_color}; font-size: 24px; font-weight: bold;">{pd_icon} {pd_sign}{prom_diff:,.0f}</div>
-                <div style="color: #666; font-size: 12px;">{prom_dia_a:,.0f} vs {prom_dia_b:,.0f}</div>
+                <div style="color: #888; font-size: 12px;">{prom_dia_a:,.0f} vs {prom_dia_b:,.0f}</div>
             </div>
             <div>
-                <div style="color: #aaa; font-size: 12px;">Órdenes</div>
-                <div style="color: #fff; font-size: 24px; font-weight: bold;">{ord_a_total} vs {ord_b_total}</div>
-                <div style="color: #666; font-size: 12px;">{dias_a_count} vs {dias_b_count} días</div>
+                <div style="color: #666; font-size: 12px;">Órdenes</div>
+                <div style="color: #1a1a2e; font-size: 24px; font-weight: bold;">{ord_a_total} vs {ord_b_total}</div>
+                <div style="color: #888; font-size: 12px;">{dias_a_count} vs {dias_b_count} días</div>
             </div>
         </div>
     </div>
@@ -2627,22 +2687,22 @@ def _render_comparacion(
                 "text": f"🏭 KG Totales por Sala — {lbl_a} vs {lbl_b}",
                 "subtext": "Comparación de producción total por sala entre ambos períodos",
                 "left": "center",
-                "textStyle": {"color": "#fff", "fontSize": 15, "fontWeight": "bold"},
-                "subtextStyle": {"color": "#999", "fontSize": 11}
+                "textStyle": {"color": "#0d3b66", "fontSize": 15, "fontWeight": "bold"},
+                "subtextStyle": {"color": "#666", "fontSize": 11}
             },
             "tooltip": {
                 "trigger": "axis",
                 "axisPointer": {"type": "shadow"},
-                "backgroundColor": "rgba(10, 10, 30, 0.95)",
-                "borderColor": "#555",
+                "backgroundColor": "rgba(255, 255, 255, 0.96)",
+                "borderColor": "#ddd",
                 "borderRadius": 10,
-                "textStyle": {"color": "#fff", "fontSize": 13},
-                "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);"
+                "textStyle": {"color": "#333", "fontSize": 13},
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
             },
             "legend": {
                 "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
                 "bottom": 0,
-                "textStyle": {"color": "#ccc", "fontSize": 12},
+                "textStyle": {"color": "#555", "fontSize": 12},
                 "itemGap": 30,
                 "icon": "roundRect"
             },
@@ -2655,19 +2715,19 @@ def _render_comparacion(
                 "type": "category",
                 "data": nombres_sala,
                 "axisLabel": {
-                    "color": "#fff", "fontSize": 11, "fontWeight": "bold",
+                    "color": "#555", "fontSize": 11, "fontWeight": "bold",
                     "rotate": 20 if len(nombres_sala) > 5 else 0,
                     "interval": 0
                 },
-                "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
+                "axisLine": {"lineStyle": {"color": "#ccc", "width": 2}},
                 "axisTick": {"show": False}
             },
             "yAxis": {
                 "type": "value",
                 "name": "⚖️ KG Totales",
-                "nameTextStyle": {"color": "#aaa", "fontSize": 13, "fontWeight": "bold"},
-                "axisLabel": {"color": "#ccc", "fontSize": 11},
-                "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+                "nameTextStyle": {"color": "#666", "fontSize": 13, "fontWeight": "bold"},
+                "axisLabel": {"color": "#666", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#e8e8e8", "type": "dashed"}},
                 "axisLine": {"show": False}
             },
             "series": [
@@ -2746,17 +2806,17 @@ def _render_comparacion(
                     "text": f"⚡ KG/Hora Promedio por Sala — {lbl_a} vs {lbl_b}",
                     "subtext": "Comparación de productividad promedio por sala entre ambos períodos",
                     "left": "center",
-                    "textStyle": {"color": "#ffc107", "fontSize": 15, "fontWeight": "bold"},
-                    "subtextStyle": {"color": "#999", "fontSize": 11}
+                    "textStyle": {"color": "#B8860B", "fontSize": 15, "fontWeight": "bold"},
+                    "subtextStyle": {"color": "#666", "fontSize": 11}
                 },
                 "tooltip": {
                     "trigger": "axis",
                     "axisPointer": {"type": "shadow"},
-                    "backgroundColor": "rgba(10, 10, 30, 0.95)",
-                    "borderColor": "#ffc107",
+                    "backgroundColor": "rgba(255, 255, 255, 0.96)",
+                    "borderColor": "#ddd",
                     "borderRadius": 10,
-                    "textStyle": {"color": "#fff", "fontSize": 13},
-                    "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.5);",
+                    "textStyle": {"color": "#333", "fontSize": 13},
+                    "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
                     "formatter": JsCode("""
                         function(params) {
                             var result = params[0].name + '<br/>';
@@ -2780,7 +2840,7 @@ def _render_comparacion(
                 "legend": {
                     "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
                     "bottom": 0,
-                    "textStyle": {"color": "#ccc", "fontSize": 12},
+                    "textStyle": {"color": "#555", "fontSize": 12},
                     "itemGap": 30,
                     "icon": "roundRect"
                 },
@@ -2793,19 +2853,19 @@ def _render_comparacion(
                     "type": "category",
                     "data": nombres_sala_kgh,
                     "axisLabel": {
-                        "color": "#fff", "fontSize": 11, "fontWeight": "bold",
+                        "color": "#555", "fontSize": 11, "fontWeight": "bold",
                         "rotate": 20 if len(nombres_sala_kgh) > 5 else 0,
                         "interval": 0
                     },
-                    "axisLine": {"lineStyle": {"color": "#444", "width": 2}},
+                    "axisLine": {"lineStyle": {"color": "#ccc", "width": 2}},
                     "axisTick": {"show": False}
                 },
                 "yAxis": {
                     "type": "value",
                     "name": "⚡ KG/Hora",
-                    "nameTextStyle": {"color": "#ffc107", "fontSize": 13, "fontWeight": "bold"},
-                    "axisLabel": {"color": "#ccc", "fontSize": 11},
-                    "splitLine": {"lineStyle": {"color": "#2a2a4a", "type": "dashed"}},
+                    "nameTextStyle": {"color": "#B8860B", "fontSize": 13, "fontWeight": "bold"},
+                    "axisLabel": {"color": "#666", "fontSize": 11},
+                    "splitLine": {"lineStyle": {"color": "#e8e8e8", "type": "dashed"}},
                     "axisLine": {"show": False}
                 },
                 "series": [
