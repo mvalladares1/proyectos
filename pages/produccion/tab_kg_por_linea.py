@@ -337,21 +337,6 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     </div>
     """, unsafe_allow_html=True)
     
-    # === Clasificación por turno ===
-    def _clasificar_turno(dt):
-        """Clasifica en turno Día o Tarde basado en hora de inicio."""
-        if dt is None:
-            return "Día"
-        hora = dt.hour + dt.minute / 60.0
-        dow = dt.weekday()  # 0=Lun, 4=Vie, 5=Sáb
-        if dow <= 3:  # Lunes a Jueves
-            return "Día" if hora < 17.5 else "Tarde"
-        elif dow == 4:  # Viernes
-            return "Día" if hora < 16.5 else "Tarde"
-        elif dow == 5:  # Sábado
-            return "Día" if hora < 13 else "Tarde"
-        return "Día"
-    
     # === GRÁFICO GENERAL: KG/Hora y KG/Hora Efectiva POR TURNO ===
     turnos_data = {}
     for t_name in ["Día", "Tarde"]:
@@ -869,6 +854,278 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         st_echarts(options=opts_sala, height="380px", key=f"kg_hora_sala_{idx}")
 
 
+def _clasificar_turno(dt):
+    """Clasifica en turno Día o Tarde basado en hora de inicio.
+    Día: L-J 8:00-17:30, V 8:00-16:30, S 8:00-13:00
+    Tarde: L-J 17:30-23:30, V 16:30-22:30, S 14:00-22:00
+    """
+    if dt is None:
+        return "Día"
+    hora = dt.hour + dt.minute / 60.0
+    dow = dt.weekday()  # 0=Lun, 4=Vie, 5=Sáb
+    if dow <= 3:  # Lunes a Jueves
+        return "Día" if hora < 17.5 else "Tarde"
+    elif dow == 4:  # Viernes
+        return "Día" if hora < 16.5 else "Tarde"
+    elif dow == 5:  # Sábado
+        return "Día" if hora < 13 else "Tarde"
+    return "Día"
+
+
+def _render_comparacion_turnos(mos_filtradas: List[Dict]):
+    """Renderiza gráfico de barras comparando Turno Día vs Turno Tarde por sala."""
+    if not mos_filtradas:
+        return
+    
+    st.markdown("---")
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+                padding: 20px; border-radius: 12px; margin-bottom: 15px;
+                border-left: 5px solid #E8A87C; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+        <h3 style="margin:0; color:#E8A87C;">☀️🌙 Comparación Turno Día vs Turno Tarde</h3>
+        <p style="margin:5px 0 0 0; color:#666; font-size:13px;">
+            KG/Hora y KG/Hora Efectiva por sala y turno
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Agrupar por sala y turno
+    sala_turno = {}  # {sala: {turno: {kg, horas, detenciones, ordenes}}}
+    
+    for mo in mos_filtradas:
+        dt = mo.get('_inicio_dt')
+        if not dt:
+            continue
+        sala = mo.get('sala') or 'Sin Sala'
+        turno = _clasificar_turno(dt)
+        kg = mo.get('kg_pt', 0) or 0
+        horas = mo.get('duracion_horas', 0) or 0
+        detenciones = mo.get('detenciones', 0) or 0
+        
+        if sala not in sala_turno:
+            sala_turno[sala] = {}
+        if turno not in sala_turno[sala]:
+            sala_turno[sala][turno] = {'kg': 0, 'horas': 0, 'detenciones': 0, 'ordenes': 0}
+        
+        st_data = sala_turno[sala][turno]
+        st_data['kg'] += kg
+        st_data['ordenes'] += 1
+        if horas > 0:
+            st_data['horas'] += horas
+            st_data['detenciones'] += detenciones
+    
+    if not sala_turno:
+        return
+    
+    # Ordenar salas por KG/Hora total
+    salas_sorted = sorted(sala_turno.keys(), key=lambda s: (
+        sala_turno[s].get('Día', {}).get('kg', 0) + sala_turno[s].get('Tarde', {}).get('kg', 0)
+    ) / max(
+        sala_turno[s].get('Día', {}).get('horas', 0) + sala_turno[s].get('Tarde', {}).get('horas', 0), 1
+    ), reverse=True)
+    
+    # Preparar datos para el gráfico
+    kg_hora_dia = []
+    kg_hora_tarde = []
+    kg_hora_ef_dia = []
+    kg_hora_ef_tarde = []
+    ordenes_dia = []
+    ordenes_tarde = []
+    
+    for sala in salas_sorted:
+        # Turno Día
+        d = sala_turno[sala].get('Día', {'kg': 0, 'horas': 0, 'detenciones': 0, 'ordenes': 0})
+        kh_d = round(d['kg'] / d['horas']) if d['horas'] > 0 else 0
+        horas_ef_d = max(d['horas'] - d['detenciones'], 0)
+        kh_ef_d = round(d['kg'] / horas_ef_d) if horas_ef_d > 0 else 0
+        kg_hora_dia.append(kh_d)
+        kg_hora_ef_dia.append(kh_ef_d)
+        ordenes_dia.append(d['ordenes'])
+        
+        # Turno Tarde
+        t = sala_turno[sala].get('Tarde', {'kg': 0, 'horas': 0, 'detenciones': 0, 'ordenes': 0})
+        kh_t = round(t['kg'] / t['horas']) if t['horas'] > 0 else 0
+        horas_ef_t = max(t['horas'] - t['detenciones'], 0)
+        kh_ef_t = round(t['kg'] / horas_ef_t) if horas_ef_t > 0 else 0
+        kg_hora_tarde.append(kh_t)
+        kg_hora_ef_tarde.append(kh_ef_t)
+        ordenes_tarde.append(t['ordenes'])
+    
+    # Totales generales por turno
+    total_d = {'kg': 0, 'horas': 0, 'det': 0, 'ord': 0}
+    total_t = {'kg': 0, 'horas': 0, 'det': 0, 'ord': 0}
+    for sala in sala_turno:
+        dd = sala_turno[sala].get('Día', {'kg': 0, 'horas': 0, 'detenciones': 0, 'ordenes': 0})
+        tt = sala_turno[sala].get('Tarde', {'kg': 0, 'horas': 0, 'detenciones': 0, 'ordenes': 0})
+        total_d['kg'] += dd['kg']; total_d['horas'] += dd['horas']; total_d['det'] += dd['detenciones']; total_d['ord'] += dd['ordenes']
+        total_t['kg'] += tt['kg']; total_t['horas'] += tt['horas']; total_t['det'] += tt['detenciones']; total_t['ord'] += tt['ordenes']
+    
+    prom_d = round(total_d['kg'] / total_d['horas']) if total_d['horas'] > 0 else 0
+    prom_t = round(total_t['kg'] / total_t['horas']) if total_t['horas'] > 0 else 0
+    ef_h_d = max(total_d['horas'] - total_d['det'], 0)
+    ef_h_t = max(total_t['horas'] - total_t['det'], 0)
+    prom_ef_d = round(total_d['kg'] / ef_h_d) if ef_h_d > 0 else 0
+    prom_ef_t = round(total_t['kg'] / ef_h_t) if ef_h_t > 0 else 0
+    
+    # KPIs resumen
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#FFF8E1,#FFFDE7);padding:15px;border-radius:10px;border-left:4px solid #FFB74D;text-align:center;">
+            <div style="font-size:13px;color:#F57C00;font-weight:600;">☀️ Turno Día</div>
+            <div style="font-size:22px;font-weight:700;color:#E65100;">{prom_d:,} <span style="font-size:12px;">kg/h</span></div>
+            <div style="font-size:11px;color:#888;">Efectiva: {prom_ef_d:,} kg/h · {total_d['ord']} órdenes · Det: {total_d['det']:,.1f}h</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#E8EAF6,#F3E5F5);padding:15px;border-radius:10px;border-left:4px solid #7E57C2;text-align:center;">
+            <div style="font-size:13px;color:#5E35B1;font-weight:600;">🌙 Turno Tarde</div>
+            <div style="font-size:22px;font-weight:700;color:#4527A0;">{prom_t:,} <span style="font-size:12px;">kg/h</span></div>
+            <div style="font-size:11px;color:#888;">Efectiva: {prom_ef_t:,} kg/h · {total_t['ord']} órdenes · Det: {total_t['det']:,.1f}h</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Gráfico de barras agrupadas
+    opts_comp = {
+        "title": {
+            "text": "☀️🌙 KG/Hora por Sala — Día vs Tarde",
+            "subtext": f"Día: {prom_d:,} kg/h ({total_d['ord']} órd)  ·  Tarde: {prom_t:,} kg/h ({total_t['ord']} órd)",
+            "left": "center",
+            "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
+            "subtextStyle": {"color": "#888", "fontSize": 12}
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(255, 255, 255, 0.96)",
+            "borderColor": "#ddd",
+            "borderWidth": 1,
+            "borderRadius": 8,
+            "textStyle": {"color": "#333", "fontSize": 12},
+            "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+        },
+        "legend": {
+            "data": ["☀️ KG/Hora Día", "🌙 KG/Hora Tarde", "☀️ KG/H Efectiva Día", "🌙 KG/H Efectiva Tarde"],
+            "bottom": 0,
+            "textStyle": {"color": "#666", "fontSize": 10},
+            "itemGap": 10
+        },
+        "grid": {
+            "left": "3%", "right": "5%",
+            "bottom": "18%", "top": "18%",
+            "containLabel": True
+        },
+        "xAxis": {
+            "type": "category",
+            "data": salas_sorted,
+            "axisLabel": {
+                "color": "#666", "fontSize": 10, "fontWeight": "500",
+                "interval": 0, "rotate": 25 if len(salas_sorted) > 4 else 0
+            },
+            "axisLine": {"lineStyle": {"color": "#ddd"}},
+            "axisTick": {"show": False}
+        },
+        "yAxis": {
+            "type": "value",
+            "name": "KG/Hora",
+            "nameTextStyle": {"color": "#7FA8C9", "fontSize": 12, "fontWeight": "600"},
+            "axisLabel": {"color": "#666", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#f0f0f0"}},
+            "axisLine": {"show": False}
+        },
+        "series": [
+            {
+                "name": "☀️ KG/Hora Día",
+                "type": "bar",
+                "data": kg_hora_dia,
+                "barGap": "0%",
+                "barCategoryGap": "35%",
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#FFB74D"},
+                            {"offset": 1, "color": "#FF9800"}
+                        ]
+                    },
+                    "borderRadius": [4, 4, 0, 0]
+                },
+                "label": {
+                    "show": True, "position": "top",
+                    "fontSize": 9, "fontWeight": "600", "color": "#E65100",
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                }
+            },
+            {
+                "name": "🌙 KG/Hora Tarde",
+                "type": "bar",
+                "data": kg_hora_tarde,
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#9575CD"},
+                            {"offset": 1, "color": "#7E57C2"}
+                        ]
+                    },
+                    "borderRadius": [4, 4, 0, 0]
+                },
+                "label": {
+                    "show": True, "position": "top",
+                    "fontSize": 9, "fontWeight": "600", "color": "#4527A0",
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                }
+            },
+            {
+                "name": "☀️ KG/H Efectiva Día",
+                "type": "bar",
+                "data": kg_hora_ef_dia,
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#FFCC80"},
+                            {"offset": 1, "color": "#FFB74D"}
+                        ]
+                    },
+                    "borderRadius": [4, 4, 0, 0],
+                    "opacity": 0.7
+                },
+                "label": {
+                    "show": True, "position": "top",
+                    "fontSize": 9, "fontWeight": "600", "color": "#F57C00",
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                }
+            },
+            {
+                "name": "🌙 KG/H Efectiva Tarde",
+                "type": "bar",
+                "data": kg_hora_ef_tarde,
+                "itemStyle": {
+                    "color": {
+                        "type": "linear", "x": 0, "y": 0, "x2": 0, "y2": 1,
+                        "colorStops": [
+                            {"offset": 0, "color": "#B39DDB"},
+                            {"offset": 1, "color": "#9575CD"}
+                        ]
+                    },
+                    "borderRadius": [4, 4, 0, 0],
+                    "opacity": 0.7
+                },
+                "label": {
+                    "show": True, "position": "top",
+                    "fontSize": 9, "fontWeight": "600", "color": "#5E35B1",
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                }
+            }
+        ]
+    }
+    st_echarts(options=opts_comp, height="480px", key="comp_turnos_barras")
+
+
 def render(username: str = None, password: str = None):
     """Render principal del tab Rendimiento en Salas."""
 
@@ -1046,6 +1303,9 @@ def render(username: str = None, password: str = None):
     
     # === GRÁFICOS DE KG/HORA ===
     _render_graficos_kg_hora(mos_filtradas, salas_data)
+
+    # === COMPARACIÓN TURNO DÍA VS TURNO TARDE (BARRAS) ===
+    _render_comparacion_turnos(mos_filtradas)
 
     st.markdown("---")
 
