@@ -1150,11 +1150,14 @@ def render(username: str = None, password: str = None):
     [data-testid="stSidebar"] {
         background-color: inherit !important;
     }
+    [data-testid="stSidebar"] * {
+        color: inherit !important;
+    }
     /* Textos oscuros para contraste */
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {
+    .stApp .main h1, .stApp .main h2, .stApp .main h3, .stApp .main h4, .stApp .main h5, .stApp .main h6 {
         color: #1a1a2e !important;
     }
-    .stApp p, .stApp span, .stApp label, .stApp div {
+    .stApp .main p, .stApp .main span, .stApp .main label, .stApp .main div {
         color: #333 !important;
     }
     /* Métricas */
@@ -1164,9 +1167,70 @@ def render(username: str = None, password: str = None):
     [data-testid="stMetricLabel"] {
         color: #555 !important;
     }
+    [data-testid="stMetricDelta"] svg {
+        fill: currentColor !important;
+    }
+    /* === INPUTS, SELECTS, DATE PICKERS === */
+    .stApp .main [data-baseweb="input"],
+    .stApp .main [data-baseweb="base-input"],
+    .stApp .main [data-baseweb="select"] > div,
+    .stApp .main [data-baseweb="popover"] > div,
+    .stApp .main input,
+    .stApp .main [data-testid="stDateInput"] > div > div,
+    .stApp .main [data-testid="stDateInput"] input,
+    .stApp .main [data-testid="stSelectbox"] > div > div,
+    .stApp .main [data-testid="stMultiSelect"] > div > div {
+        background-color: #ffffff !important;
+        color: #333 !important;
+        border-color: #ccc !important;
+    }
+    .stApp .main [data-baseweb="input"] input,
+    .stApp .main [data-baseweb="select"] input {
+        color: #333 !important;
+        -webkit-text-fill-color: #333 !important;
+    }
+    /* Select dropdown value text */
+    .stApp .main [data-baseweb="select"] span,
+    .stApp .main [data-baseweb="select"] div[aria-selected] {
+        color: #333 !important;
+    }
+    /* Select dropdown arrow */
+    .stApp .main [data-baseweb="select"] svg {
+        fill: #666 !important;
+    }
+    /* Date input containers */
+    .stApp .main [data-testid="stDateInput"] > div > div > div {
+        background-color: #ffffff !important;
+        border: 1px solid #ccc !important;
+        border-radius: 8px !important;
+    }
+    /* === BOTONES === */
+    .stApp .main .stButton button {
+        background-color: #0d3b66 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 8px !important;
+    }
+    .stApp .main .stButton button:hover {
+        background-color: #1a5276 !important;
+        color: #ffffff !important;
+    }
+    .stApp .main .stButton button p,
+    .stApp .main .stButton button span {
+        color: #ffffff !important;
+    }
+    /* Botones de descarga */
+    .stApp .main .stDownloadButton button {
+        background-color: #0d3b66 !important;
+        color: #ffffff !important;
+    }
+    .stApp .main .stDownloadButton button p,
+    .stApp .main .stDownloadButton button span {
+        color: #ffffff !important;
+    }
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        background-color: #f8f9fa !important;
+        background-color: #f0f2f5 !important;
         border-radius: 8px;
     }
     .stTabs [data-baseweb="tab"] {
@@ -1182,18 +1246,25 @@ def render(username: str = None, password: str = None):
         border: 1px solid #e0e0e0 !important;
         border-radius: 8px !important;
     }
-    /* Selectbox y inputs */
-    [data-testid="stSelectbox"] label, [data-testid="stDateInput"] label {
+    [data-testid="stExpander"] summary span {
         color: #333 !important;
     }
     /* Dividers */
-    hr {
+    .stApp .main hr {
         border-color: #e0e0e0 !important;
     }
-    /* Botones de descarga */
-    .stDownloadButton button {
-        background-color: #0d3b66 !important;
-        color: white !important;
+    /* Info/Warning boxes */
+    .stApp .main .stAlert {
+        background-color: #f0f7ff !important;
+        border: 1px solid #cce0ff !important;
+    }
+    .stApp .main .stAlert p, .stApp .main .stAlert span {
+        color: #333 !important;
+    }
+    /* Selectbox labels */
+    .stApp .main [data-testid="stSelectbox"] label,
+    .stApp .main [data-testid="stDateInput"] label {
+        color: #333 !important;
     }
     </style>
     """, unsafe_allow_html=True)
