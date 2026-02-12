@@ -337,11 +337,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     </div>
     """, unsafe_allow_html=True)
     
-    # === GRÁFICO GENERAL: KG/H POR DÍA (TODAS LAS SALAS) ===
+    # === GRÁFICO GENERAL: KG/Hora Efectiva y KG/HH Efectiva POR DÍA ===
     dia_kg = defaultdict(float)
     dia_horas = defaultdict(float)
     dia_hh_efectiva = defaultdict(float)
-    dia_detenciones = defaultdict(float)
     
     for mo in mos_filtradas:
         dt = mo.get('_inicio_dt')
@@ -351,43 +350,53 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
         hh_ef = mo.get('hh_efectiva', 0) or 0
-        det = mo.get('detenciones', 0) or 0
         dia_kg[dia_key] += kg
         dia_hh_efectiva[dia_key] += hh_ef
-        dia_detenciones[dia_key] += det
         if horas > 0:
             dia_horas[dia_key] += horas
     
     if dia_kg:
         dias_sorted = sorted(dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
-        kg_hh_efectiva_vals = []
+        kg_hora_efectiva_vals = []  # kg_pt / duracion_horas
+        kg_hh_efectiva_vals = []     # kg_pt / hh_efectiva
+        
         for dia in dias_sorted:
+            horas = dia_horas.get(dia, 0)
             hh_ef = dia_hh_efectiva.get(dia, 0)
+            kg_total = dia_kg[dia]
+            
+            # KG/Hora Efectiva (basado en duración total)
+            if horas > 0:
+                kg_hora_efectiva_vals.append(round(kg_total / horas, 0))
+            else:
+                kg_hora_efectiva_vals.append(0)
+            
+            # KG/HH Efectiva (basado en horas efectivas de trabajo)
             if hh_ef > 0:
-                kg_hh = round(dia_kg[dia] / hh_ef, 0)
-                kg_hh_efectiva_vals.append(kg_hh)
+                kg_hh_efectiva_vals.append(round(kg_total / hh_ef, 0))
             else:
                 kg_hh_efectiva_vals.append(0)
         
         opts_general = {
             "title": {
-                "text": "⚡ KG/HH Efectiva por Día",
-                "subtext": "Productividad por hora efectiva de todas las salas combinadas",
+                "text": "⚡ KG/Hora Efectiva y KG/HH Efectiva por Día",
+                "subtext": "Productividad total vs productividad por hora efectiva",
                 "left": "center",
                 "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
                 "subtextStyle": {"color": "#888", "fontSize": 12}
             },
             "tooltip": {
                 "trigger": "axis",
-                "axisPointer": {"type": "line"},
+                "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
                 "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": "#7FA8C9",
+                "borderColor": "#4FC3F7",
                 "borderWidth": 2,
                 "borderRadius": 8,
-                "textStyle": {"color": "#333", "fontSize": 13}
+                "textStyle": {"color": "#333", "fontSize": 12},
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
             },
             "legend": {
-                "data": ["KG/HH Efectiva"],
+                "data": ["KG/Hora Efectiva", "KG/HH Efectiva"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 11},
                 "itemGap": 15
@@ -397,19 +406,19 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "bottom": "15%", "top": "18%",
                 "containLabel": True
             },
- "xAxis": {
+            "xAxis": {
                 "type": "category",
                 "data": dias_sorted,
                 "axisLabel": {
                     "color": "#666", "fontSize": 11, "fontWeight": "500",
-                    "interval": 0, "rotate": 25 if len(dias_sorted) > 10 else 0
+                    "interval": 0, "rotate": 35 if len(dias_sorted) > 10 else 0
                 },
                 "axisLine": {"lineStyle": {"color": "#ddd", "width": 1}},
                 "axisTick": {"show": False}
             },
             "yAxis": {
                 "type": "value",
-                "name": "⚡ KG/HH Efectiva",
+                "name": "⚡ KG/Hora",
                 "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
                 "axisLabel": {"color": "#666", "fontSize": 11},
                 "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
@@ -417,34 +426,87 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             },
             "series": [
                 {
-                    "name": "KG/HH Efectiva",
+                    "name": "KG/Hora Efectiva",
                     "type": "line",
-                    "data": kg_hh_efectiva_vals,
+                    "yAxisIndex": 0,
+                    "data": kg_hora_efectiva_vals,
                     "smooth": True,
-                    "symbolSize": 8,
+                    "symbolSize": 9,
+                    "symbol": "circle",
                     "itemStyle": {
-                        "color": "#7FA8C9",
+                        "color": "#4FC3F7",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#7FA8C9",
-                        "width": 3,
-                        "shadowColor": "rgba(91, 155, 213, 0.3)",
-                        "shadowBlur": 8
+                        "color": "#4FC3F7",
+                        "width": 4,
+                        "shadowColor": "rgba(79, 195, 247, 0.5)",
+                        "shadowBlur": 10
+                    },
+                    "areaStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "rgba(79, 195, 247, 0.3)"},
+                                {"offset": 1, "color": "rgba(79, 195, 247, 0.02)"}
+                            ]
+                        }
                     },
                     "label": {
                         "show": True,
                         "position": "top",
-                        "fontSize": 10,
-                        "fontWeight": "600",
-                        "color": "#7FA8C9",
+                        "fontSize": 11,
+                        "fontWeight": "bold",
+                        "color": "#4FC3F7",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
-                    }
+                    },
+                    "z": 2
+                },
+                {
+                    "name": "KG/HH Efectiva",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": kg_hh_efectiva_vals,
+                    "smooth": True,
+                    "symbolSize": 9,
+                    "symbol": "diamond",
+                    "itemStyle": {
+                        "color": "#66BB6A",
+                        "borderWidth": 2,
+                        "borderColor": "#fff"
+                    },
+                    "lineStyle": {
+                        "color": "#66BB6A",
+                        "width": 4,
+                        "type": "solid",
+                        "shadowColor": "rgba(102, 187, 106, 0.5)",
+                        "shadowBlur": 10
+                    },
+                    "areaStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "rgba(102, 187, 106, 0.3)"},
+                                {"offset": 1, "color": "rgba(102, 187, 106, 0.02)"}
+                            ]
+                        }
+                    },
+                    "label": {
+                        "show": True,
+                        "position": "bottom",
+                        "fontSize": 11,
+                        "fontWeight": "bold",
+                        "color": "#66BB6A",
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                    },
+                    "z": 3
                 }
             ]
         }
-        st_echarts(options=opts_general, height="420px", key="kg_hora_general")
+        st_echarts(options=opts_general, height="450px", key="kg_hora_general")
     
     # === GRÁFICOS POR SALA: KG/H POR DÍA ===
     st.markdown("<br>", unsafe_allow_html=True)
@@ -469,7 +531,6 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         sala_dia_kg = defaultdict(float)
         sala_dia_horas = defaultdict(float)
         sala_dia_hh_efectiva = defaultdict(float)
-        sala_dia_detenciones = defaultdict(float)
         
         for orden in sd['ordenes']:
             dt = orden.get('_inicio_dt')
@@ -479,10 +540,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             kg = orden.get('kg_pt', 0) or 0
             horas = orden.get('duracion_horas', 0) or 0
             hh_ef = orden.get('hh_efectiva', 0) or 0
-            det = orden.get('detenciones', 0) or 0
             sala_dia_kg[dia_key] += kg
             sala_dia_hh_efectiva[dia_key] += hh_ef
-            sala_dia_detenciones[dia_key] += det
             if horas > 0:
                 sala_dia_horas[dia_key] += horas
         
@@ -490,12 +549,23 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             continue
         
         dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
-        kg_hh_efectiva_sala_vals = []
+        kg_hora_efectiva_sala_vals = []  # kg_pt / duracion_horas
+        kg_hh_efectiva_sala_vals = []    # kg_pt / hh_efectiva
+        
         for dia in dias_sala_sorted:
+            horas = sala_dia_horas.get(dia, 0)
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
+            kg_total = sala_dia_kg[dia]
+            
+            # KG/Hora Efectiva
+            if horas > 0:
+                kg_hora_efectiva_sala_vals.append(round(kg_total / horas, 0))
+            else:
+                kg_hora_efectiva_sala_vals.append(0)
+            
+            # KG/HH Efectiva
             if hh_ef > 0:
-                kg_hh = round(sala_dia_kg[dia] / hh_ef, 0)
-                kg_hh_efectiva_sala_vals.append(kg_hh)
+                kg_hh_efectiva_sala_vals.append(round(kg_total / hh_ef, 0))
             else:
                 kg_hh_efectiva_sala_vals.append(0)
         
@@ -507,20 +577,21 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "text": f"🏭 {sala}",
                 "subtext": f"Promedio: {prom_sala:,.0f} kg/h · {sd['hechas'] + sd['no_hechas']} órdenes",
                 "left": "center",
-                "textStyle": {"color": color_sala, "fontSize": 14, "fontWeight": "600"},
+                "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "600"},
                 "subtextStyle": {"color": "#888", "fontSize": 11}
             },
             "tooltip": {
                 "trigger": "axis",
-                "axisPointer": {"type": "line"},
+                "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
                 "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": color_sala,
+                "borderColor": "#4FC3F7",
                 "borderWidth": 2,
                 "borderRadius": 8,
-                "textStyle": {"color": "#333", "fontSize": 13}
+                "textStyle": {"color": "#333", "fontSize": 12},
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
             },
             "legend": {
-                "data": ["KG/HH Efectiva"],
+                "data": ["KG/Hora Efectiva", "KG/HH Efectiva"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 10},
                 "itemGap": 12
@@ -534,49 +605,104 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "type": "category",
                 "data": dias_sala_sorted,
                 "axisLabel": {
-                    "color": "#666", "fontSize": 10, "fontWeight": "500",
-                    "interval": 0, "rotate": 25 if len(dias_sala_sorted) > 10 else 0
+                    "color": "#666", "fontSize": 11, "fontWeight": "500",
+                    "interval": 0, "rotate": 35 if len(dias_sala_sorted) > 10 else 0
                 },
                 "axisLine": {"lineStyle": {"color": "#ddd"}},
                 "axisTick": {"show": False}
             },
             "yAxis": {
                 "type": "value",
-                "name": "KG/HH Efectiva",
-                "nameTextStyle": {"color": color_sala, "fontSize": 12, "fontWeight": "600"},
-                "axisLabel": {"color": "#666", "fontSize": 10},
+                "name": "⚡ KG/Hora",
+                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                "axisLabel": {"color": "#666", "fontSize": 11},
                 "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
                 "axisLine": {"show": False}
             },
             "series": [
                 {
-                    "name": "KG/HH Efectiva",
+                    "name": "KG/Hora Efectiva",
                     "type": "line",
-                    "data": kg_hh_efectiva_sala_vals,
+                    "yAxisIndex": 0,
+                    "data": kg_hora_efectiva_sala_vals,
                     "smooth": True,
-                    "symbolSize": 7,
+                    "symbolSize": 8,
+                    "symbol": "circle",
                     "itemStyle": {
-                        "color": color_sala,
+                        "color": "#4FC3F7",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": color_sala,
-                        "width": 3
+                        "color": "#4FC3F7",
+                        "width": 4,
+                        "shadowColor": "rgba(79, 195, 247, 0.5)",
+                        "shadowBlur": 8
+                    },
+                    "areaStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "rgba(79, 195, 247, 0.3)"},
+                                {"offset": 1, "color": "rgba(79, 195, 247, 0.02)"}
+                            ]
+                        }
                     },
                     "label": {
                         "show": True,
                         "position": "top",
-                        "fontSize": 9,
-                        "fontWeight": "600",
-                        "color": color_sala,
+                        "fontSize": 10,
+                        "fontWeight": "bold",
+                        "color": "#4FC3F7",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
-                    }
+                    },
+                    "z": 2
+                },
+                {
+                    "name": "KG/HH Efectiva",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": kg_hh_efectiva_sala_vals,
+                    "smooth": True,
+                    "symbolSize": 8,
+                    "symbol": "diamond",
+                    "itemStyle": {
+                        "color": "#66BB6A",
+                        "borderWidth": 2,
+                        "borderColor": "#fff"
+                    },
+                    "lineStyle": {
+                        "color": "#66BB6A",
+                        "width": 4,
+                        "type": "solid",
+                        "shadowColor": "rgba(102, 187, 106, 0.5)",
+                        "shadowBlur": 8
+                    },
+                    "areaStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "rgba(102, 187, 106, 0.3)"},
+                                {"offset": 1, "color": "rgba(102, 187, 106, 0.02)"}
+                            ]
+                        }
+                    },
+                    "label": {
+                        "show": True,
+                        "position": "bottom",
+                        "fontSize": 10,
+                        "fontWeight": "bold",
+                        "color": "#66BB6A",
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                    },
+                    "z": 3
                 }
             ]
         }
         
-        st_echarts(options=opts_sala, height="340px", key=f"kg_hora_sala_{idx}")
+        st_echarts(options=opts_sala, height="380px", key=f"kg_hora_sala_{idx}")
 
 
 def render(username: str = None, password: str = None):
