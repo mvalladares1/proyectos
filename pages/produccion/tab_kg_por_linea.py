@@ -469,7 +469,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             tip += '</div>';
                             return tip;
                         }
-                    """).js_code
+                    """)
                 },
                 "legend": {
                     "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -541,7 +541,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#5A8FAD",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                         },
                         "z": 2
                     },
@@ -582,7 +582,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#B38967",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                         },
                         "z": 3
                     },
@@ -742,7 +742,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         tip += '</div>';
                         return tip;
                     }
-                """).js_code
+                """)
             },
             "legend": {
                 "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -809,7 +809,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#5A8FAD",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                     },
                     "z": 2
                 },
@@ -849,7 +849,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#B38967",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
                     },
                     "z": 3
                 },
