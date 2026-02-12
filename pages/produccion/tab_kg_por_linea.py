@@ -252,6 +252,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         s["barMaxWidth"] = bar_max_width
 
     options = {
+        "backgroundColor": "#ffffff",
         "title": {
             "text": title,
             "subtext": subtitle,
@@ -296,7 +297,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         "yAxis": {
             "type": "value",
             "name": "⚖️ KG",
-            "nameTextStyle": {"color": "#3d7a9e", "fontSize": 13, "fontWeight": "600"},
+            "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
             "axisLabel": {"color": "#666", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
             "axisLine": {"show": False}
@@ -327,11 +328,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     
     st.markdown("---")
     st.markdown("""
-    <div style="background: #ffffff;
+    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
                 padding: 20px; border-radius: 12px; margin-bottom: 15px;
-                border-left: 5px solid #0d3b66; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <h3 style="margin:0; color:#0d3b66 !important;">⚡ Rendimiento KG/Hora</h3>
-        <p style="margin:5px 0 0 0; color:#555 !important; font-size:13px;">
+                border-left: 5px solid #7FA8C9; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+        <h3 style="margin:0; color:#7FA8C9;">⚡ Rendimiento KG/Hora</h3>
+        <p style="margin:5px 0 0 0; color:#666; font-size:13px;">
             Análisis detallado de productividad por hora
         </p>
     </div>
@@ -409,11 +410,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         f"  ·  Detenciones: {total_det:,.1f} hrs  ·  {len(dias_sorted)} días")
             
             opts_turno = {
+                "backgroundColor": "#ffffff",
                 "title": {
                     "text": f"{icono} Turno {turno_name} — KG/Hora por Día",
                     "subtext": subtexto,
                     "left": "center",
-                    "textStyle": {"color": "#3d7a9e", "fontSize": 15, "fontWeight": "bold"},
+                    "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
                     "subtextStyle": {"color": "#888", "fontSize": 12}
                 },
                 "tooltip": {
@@ -450,7 +452,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "yAxis": {
                     "type": "value",
                     "name": "⚡ KG/Hora",
-                    "nameTextStyle": {"color": "#3d7a9e", "fontSize": 13, "fontWeight": "600"},
+                    "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
                     "axisLabel": {"color": "#666", "fontSize": 11},
                     "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
                     "axisLine": {"show": False}
@@ -652,11 +654,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         color_sala = colores_sala[idx % len(colores_sala)]
         
         opts_sala = {
+            "backgroundColor": "#ffffff",
             "title": {
                 "text": f"🏭 {sala}{turno_label}",
                 "subtext": f"KG/Hora: {prom_sala:,.0f}  ·  KG/Hora Efectiva: {prom_sala_efectiva:,.0f}  ·  Det: {total_det_sala:,.1f}h  ·  {len(ordenes_filtradas)} órdenes",
                 "left": "center",
-                "textStyle": {"color": "#3d7a9e", "fontSize": 14, "fontWeight": "600"},
+                "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "600"},
                 "subtextStyle": {"color": "#888", "fontSize": 11}
             },
             "tooltip": {
@@ -693,7 +696,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             "yAxis": {
                 "type": "value",
                 "name": "⚡ KG/Hora",
-                "nameTextStyle": {"color": "#3d7a9e", "fontSize": 13, "fontWeight": "600"},
+                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
                 "axisLabel": {"color": "#666", "fontSize": 11},
                 "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
                 "axisLine": {"show": False}
@@ -819,11 +822,11 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
     
     st.markdown("---")
     st.markdown("""
-    <div style="background: #ffffff;
+    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
                 padding: 20px; border-radius: 12px; margin-bottom: 15px;
-                border-left: 5px solid #E8A87C; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <h3 style="margin:0; color:#C27A50 !important;">☀️🌙 Comparación Turno Día vs Turno Tarde</h3>
-        <p style="margin:5px 0 0 0; color:#555 !important; font-size:13px;">
+                border-left: 5px solid #E8A87C; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+        <h3 style="margin:0; color:#E8A87C;">☀️🌙 Comparación Turno Día vs Turno Tarde</h3>
+        <p style="margin:5px 0 0 0; color:#666; font-size:13px;">
             KG/Hora y KG/Hora Efectiva por sala y turno
         </p>
     </div>
@@ -930,11 +933,12 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
     
     # Gráfico de barras agrupadas
     opts_comp = {
+        "backgroundColor": "#ffffff",
         "title": {
             "text": "☀️🌙 KG/Hora por Sala — Día vs Tarde",
             "subtext": f"Día: {prom_d:,} kg/h ({total_d['ord']} órd)  ·  Tarde: {prom_t:,} kg/h ({total_t['ord']} órd)",
             "left": "center",
-            "textStyle": {"color": "#3d7a9e", "fontSize": 15, "fontWeight": "bold"},
+            "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
             "subtextStyle": {"color": "#888", "fontSize": 12}
         },
         "tooltip": {
@@ -971,7 +975,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
         "yAxis": {
             "type": "value",
             "name": "KG/Hora",
-            "nameTextStyle": {"color": "#3d7a9e", "fontSize": 12, "fontWeight": "600"},
+            "nameTextStyle": {"color": "#7FA8C9", "fontSize": 12, "fontWeight": "600"},
             "axisLabel": {"color": "#666", "fontSize": 11},
             "splitLine": {"lineStyle": {"color": "#f0f0f0"}},
             "axisLine": {"show": False}
@@ -1078,144 +1082,48 @@ def render(username: str = None, password: str = None):
         st.warning("⚠️ Debes iniciar sesión para ver este módulo")
         return
 
-    # === FONDO BLANCO SOLO PARA ESTA PÁGINA ===
+    # === FONDO BLANCO solo para main content (NO sidebar) ===
     st.markdown("""
     <style>
-    /* Fondo blanco principal */
-    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"],
-    .main .block-container, section[data-testid="stMainBlockContainer"] {
+    section.main > div.block-container {
         background-color: #ffffff !important;
     }
-    /* Sidebar sin cambios */
-    [data-testid="stSidebar"] {
-        background-color: inherit !important;
-    }
-    [data-testid="stSidebar"] * {
-        color: inherit !important;
-    }
-    /* Textos oscuros para contraste */
-    .stApp .main h1, .stApp .main h2, .stApp .main h3, .stApp .main h4, .stApp .main h5, .stApp .main h6 {
-        color: #1a1a2e !important;
-    }
-    .stApp .main p, .stApp .main span, .stApp .main label, .stApp .main div {
+    section.main > div.block-container p,
+    section.main > div.block-container span,
+    section.main > div.block-container label {
         color: #333 !important;
     }
-    /* Métricas */
-    [data-testid="stMetricValue"] {
-        color: #1a1a2e !important;
-    }
-    [data-testid="stMetricLabel"] {
-        color: #555 !important;
-    }
-    [data-testid="stMetricDelta"] svg {
-        fill: currentColor !important;
-    }
-    /* === INPUTS, SELECTS, DATE PICKERS === */
-    .stApp .main [data-baseweb="input"],
-    .stApp .main [data-baseweb="base-input"],
-    .stApp .main [data-baseweb="select"] > div,
-    .stApp .main [data-baseweb="popover"] > div,
-    .stApp .main input,
-    .stApp .main [data-testid="stDateInput"] > div > div,
-    .stApp .main [data-testid="stDateInput"] input,
-    .stApp .main [data-testid="stSelectbox"] > div > div,
-    .stApp .main [data-testid="stMultiSelect"] > div > div {
-        background-color: #ffffff !important;
-        color: #333 !important;
-        border-color: #ccc !important;
-    }
-    .stApp .main [data-baseweb="input"] input,
-    .stApp .main [data-baseweb="select"] input {
-        color: #333 !important;
-        -webkit-text-fill-color: #333 !important;
-    }
-    /* Select dropdown value text */
-    .stApp .main [data-baseweb="select"] span,
-    .stApp .main [data-baseweb="select"] div[aria-selected] {
+    section.main > div.block-container h1,
+    section.main > div.block-container h2,
+    section.main > div.block-container h3 {
         color: #333 !important;
     }
-    /* Select dropdown arrow */
-    .stApp .main [data-baseweb="select"] svg {
-        fill: #666 !important;
-    }
-    /* Date input containers */
-    .stApp .main [data-testid="stDateInput"] > div > div > div {
-        background-color: #ffffff !important;
-        border: 1px solid #ccc !important;
-        border-radius: 8px !important;
-    }
-    /* === BOTONES === */
-    .stApp .main .stButton button {
-        background-color: #0d3b66 !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 8px !important;
-    }
-    .stApp .main .stButton button:hover {
-        background-color: #1a5276 !important;
-        color: #ffffff !important;
-    }
-    .stApp .main .stButton button p,
-    .stApp .main .stButton button span {
-        color: #ffffff !important;
-    }
-    /* Botones de descarga */
-    .stApp .main .stDownloadButton button {
-        background-color: #0d3b66 !important;
-        color: #ffffff !important;
-    }
-    .stApp .main .stDownloadButton button p,
-    .stApp .main .stDownloadButton button span {
-        color: #ffffff !important;
-    }
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #f0f2f5 !important;
-        border-radius: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        color: #555 !important;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #0d3b66 !important;
-        font-weight: 600 !important;
-    }
-    /* Expanders */
-    [data-testid="stExpander"] {
-        background-color: #f8f9fa !important;
-        border: 1px solid #e0e0e0 !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stExpander"] summary span {
+    section.main > div.block-container .stSelectbox label,
+    section.main > div.block-container .stDateInput label,
+    section.main > div.block-container .stMultiSelect label {
         color: #333 !important;
     }
-    /* Dividers */
-    .stApp .main hr {
+    section.main > div.block-container [data-baseweb="select"],
+    section.main > div.block-container [data-baseweb="input"] {
+        background-color: #fff !important;
+        color: #333 !important;
+    }
+    section.main > div.block-container [data-baseweb="select"] * {
+        color: #333 !important;
+    }
+    section.main > div.block-container hr {
         border-color: #e0e0e0 !important;
-    }
-    /* Info/Warning boxes */
-    .stApp .main .stAlert {
-        background-color: #f0f7ff !important;
-        border: 1px solid #cce0ff !important;
-    }
-    .stApp .main .stAlert p, .stApp .main .stAlert span {
-        color: #333 !important;
-    }
-    /* Selectbox labels */
-    .stApp .main [data-testid="stSelectbox"] label,
-    .stApp .main [data-testid="stDateInput"] label {
-        color: #333 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
     # === HEADER ===
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #0d3b66 0%, #1a5276 100%);
+    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
                 padding: 25px; border-radius: 15px; margin-bottom: 20px;
-                box-shadow: 0 4px 12px rgba(13,59,102,0.15);">
-        <h2 style="margin:0; color:#ffffff !important;">🏭 Rendimiento en Salas</h2>
-        <p style="margin:5px 0 0 0; color:#b0c4de !important;">
+                border-left: 5px solid #7FA8C9; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+        <h2 style="margin:0; color:#7FA8C9;">🏭 Rendimiento en Salas</h2>
+        <p style="margin:5px 0 0 0; color:#666;">
             Rendimiento, KG/Hora y detalle de órdenes por sala de proceso
         </p>
     </div>
@@ -2226,11 +2134,11 @@ def _render_comparacion(
     """Sección de Comparación: comparación día a día real entre dos períodos."""
 
     st.markdown("""
-    <div style="background: #ffffff;
+    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
                 padding: 25px; border-radius: 15px; margin-bottom: 20px;
-                border-left: 5px solid #D999B2; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <h2 style="margin:0; color:#B07090 !important;">📊 Comparación de Períodos</h2>
-        <p style="margin:5px 0 0 0; color:#555 !important;">
+                border-left: 5px solid #D999B2; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+        <h2 style="margin:0; color:#D999B2;">📊 Comparación de Períodos</h2>
+        <p style="margin:5px 0 0 0; color:#666;">
             Compara la producción día a día contra otro período.
             Se aplican los mismos filtros de Planta, Especie y Sala.
         </p>
@@ -2378,9 +2286,9 @@ def _render_comparacion(
     # === HEADER V/S ===
     st.markdown(f"""
     <div style="text-align: center; margin: 15px 0;">
-        <span style="color: #0d3b66; font-size: 18px; font-weight: bold;">📅 {lbl_a}  ({dias_a_count} días)</span>
-        <span style="color: #999; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
-        <span style="color: #B07090; font-size: 18px; font-weight: bold;">📅 {lbl_b}  ({dias_b_count} días)</span>
+        <span style="color: #7FA8C9; font-size: 18px; font-weight: bold;">📅 {lbl_a}  ({dias_a_count} días)</span>
+        <span style="color: #555; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
+        <span style="color: #D999B2; font-size: 18px; font-weight: bold;">📅 {lbl_b}  ({dias_b_count} días)</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2392,11 +2300,11 @@ def _render_comparacion(
         pct_str = f"{pct_val:+.1f}%" if pct_val is not None else "—"
         return (
             '<div style="background:#f8f9fa;border-radius:12px;padding:16px 14px;text-align:center;border:1px solid #e0e0e0;">'
-            f'<div style="color:#666;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">{icon} {label}</div>'
+            f'<div style="color:#555;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">{icon} {label}</div>'
             '<div style="display:flex;justify-content:center;align-items:baseline;gap:12px;margin-bottom:6px;">'
-            f'<span style="color:#0d3b66;font-size:26px;font-weight:bold;">{val_a_str}</span>'
-            '<span style="color:#888;font-size:14px;">vs</span>'
-            f'<span style="color:#B07090;font-size:18px;font-weight:600;">{val_b_str}</span>'
+            f'<span style="color:#7FA8C9;font-size:26px;font-weight:bold;">{val_a_str}</span>'
+            '<span style="color:#555;font-size:14px;">vs</span>'
+            f'<span style="color:#D999B2;font-size:18px;font-weight:600;">{val_b_str}</span>'
             '</div>'
             f'<div style="color:{diff_color};font-size:14px;font-weight:bold;">'
             f'{arrow} {diff_str} ({pct_str})'
@@ -2424,7 +2332,7 @@ def _render_comparacion(
         + _fmt_kpi("KG/Hora", "⚡", kgh_a, kgh_b, fmt_dec)
         + _fmt_kpi("KG/Día", "📊", prom_dia_a, prom_dia_b, fmt_dec)
         + '<div style="background:#f8f9fa;border-radius:12px;padding:16px 14px;text-align:center;border:1px solid #e0e0e0;">'
-        + '<div style="color:#666;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ DIFERENCIA KG</div>'
+        + '<div style="color:#555;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ DIFERENCIA KG</div>'
         + f'<div style="color:{diff_kg_color};font-size:32px;font-weight:bold;">{diff_kg_sign}{diff_kg:,.0f}</div>'
         + '</div></div>'
     )
@@ -2458,16 +2366,17 @@ def _render_comparacion(
 
     # Gráficos uno debajo del otro para mayor visibilidad
     opts_a = {
+        "backgroundColor": "#ffffff",
         "title": {
             "text": f"📅 Período Actual: {lbl_a}",
             "subtext": f"{ord_a_total} órdenes · {kg_a_total:,.0f} KG · {kgh_a:,.0f} KG/H · {prom_dia_a:,.0f} KG/día",
             "left": "center",
-            "textStyle": {"color": "#0d3b66", "fontSize": 14, "fontWeight": "bold"},
+            "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "bold"},
             "subtextStyle": {"color": "#666", "fontSize": 11}
         },
         "tooltip": {
             "trigger": "axis", "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(255, 255, 255, 0.96)", "borderColor": "#ddd",
+            "backgroundColor": "rgba(255,255,255,0.96)", "borderColor": "#ddd",
             "borderRadius": 10, "textStyle": {"color": "#333", "fontSize": 13}
         },
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "18%", "containLabel": True},
@@ -2514,16 +2423,17 @@ def _render_comparacion(
     st_echarts(options=opts_a, height="420px", key="comp_periodo_a")
 
     opts_b = {
+        "backgroundColor": "#ffffff",
         "title": {
             "text": f"📅 Período Comparación: {lbl_b}",
             "subtext": f"{ord_b_total} órdenes · {kg_b_total:,.0f} KG · {kgh_b:,.0f} KG/H · {prom_dia_b:,.0f} KG/día",
             "left": "center",
-            "textStyle": {"color": "#B07090", "fontSize": 14, "fontWeight": "bold"},
+            "textStyle": {"color": "#D999B2", "fontSize": 14, "fontWeight": "bold"},
             "subtextStyle": {"color": "#666", "fontSize": 11}
         },
         "tooltip": {
             "trigger": "axis", "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(255, 255, 255, 0.96)", "borderColor": "#ddd",
+            "backgroundColor": "rgba(255,255,255,0.96)", "borderColor": "#ddd",
             "borderRadius": 10, "textStyle": {"color": "#333", "fontSize": 13}
         },
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "18%", "containLabel": True},
@@ -2577,8 +2487,8 @@ def _render_comparacion(
     # Tabla período actual
     st.markdown(f"""
     <div style="margin-bottom: 15px;">
-        <div style="background: #e8f4f8; padding: 10px 15px; border-radius: 10px 10px 0 0;
-                    border-left: 4px solid #0d3b66; font-weight: bold; color: #0d3b66; font-size: 14px;">
+        <div style="background: rgba(0,212,255,0.12); padding: 10px 15px; border-radius: 10px 10px 0 0;
+                    border-left: 4px solid #7FA8C9; font-weight: bold; color: #7FA8C9; font-size: 14px;">
             📅 Período Actual: {lbl_a} — {dias_a_count} días — {ord_a_total} órdenes — {kg_a_total:,.0f} KG total — Prom: {prom_dia_a:,.0f} KG/día
         </div>
     """, unsafe_allow_html=True)
@@ -2590,10 +2500,10 @@ def _render_comparacion(
         dia_label = _dia_es(fecha)
         st.markdown(f"""
         <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 2fr;
-                    gap: 8px; padding: 8px 15px; background: #fafafa;
-                    border-left: 4px solid #0d3b6633; align-items: center; font-size: 13px;">
+                    gap: 8px; padding: 8px 15px; background: #f8f9fa;
+                    border-left: 4px solid #7FA8C933; align-items: center; font-size: 13px;">
             <span style="color: #333; font-weight: bold;">{dia_label}</span>
-            <span style="color: #0d3b66; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
+            <span style="color: #7FA8C9; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
             <span style="color: #666;">{ordenes} órdenes</span>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <div style="background: #7FA8C944; height: 10px; border-radius: 5px; width: {min(bar_width, 100)}%; min-width: 2px;">
@@ -2609,8 +2519,8 @@ def _render_comparacion(
     # Tabla período comparación
     st.markdown(f"""
     <div style="margin-bottom: 15px; margin-top: 15px;">
-        <div style="background: #fce4ec; padding: 10px 15px; border-radius: 10px 10px 0 0;
-                    border-left: 4px solid #B07090; font-weight: bold; color: #B07090; font-size: 14px;">
+        <div style="background: rgba(224,64,251,0.12); padding: 10px 15px; border-radius: 10px 10px 0 0;
+                    border-left: 4px solid #D999B2; font-weight: bold; color: #D999B2; font-size: 14px;">
             📅 Período Comparación: {lbl_b} — {dias_b_count} días — {ord_b_total} órdenes — {kg_b_total:,.0f} KG total — Prom: {prom_dia_b:,.0f} KG/día
         </div>
     """, unsafe_allow_html=True)
@@ -2622,10 +2532,10 @@ def _render_comparacion(
         dia_label = _dia_es(fecha)
         st.markdown(f"""
         <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr 2fr;
-                    gap: 8px; padding: 8px 15px; background: #fafafa;
-                    border-left: 4px solid #B0709033; align-items: center; font-size: 13px;">
+                    gap: 8px; padding: 8px 15px; background: #f8f9fa;
+                    border-left: 4px solid #D999B233; align-items: center; font-size: 13px;">
             <span style="color: #333; font-weight: bold;">{dia_label}</span>
-            <span style="color: #B07090; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
+            <span style="color: #D999B2; font-weight: bold; font-size: 15px;">{kg:,.0f} KG</span>
             <span style="color: #666;">{ordenes} órdenes</span>
             <div style="display: flex; align-items: center; gap: 5px;">
                 <div style="background: #D999B244; height: 10px; border-radius: 5px; width: {min(bar_width, 100)}%; min-width: 2px;">
@@ -2660,17 +2570,17 @@ def _render_comparacion(
             <div>
                 <div style="color: #666; font-size: 12px;">KG Totales</div>
                 <div style="color: {td_color}; font-size: 24px; font-weight: bold;">{td_icon} {td_sign}{total_diff:,.0f}</div>
-                <div style="color: #888; font-size: 12px;">{td_pct}</div>
+                <div style="color: #666; font-size: 12px;">{td_pct}</div>
             </div>
             <div>
                 <div style="color: #666; font-size: 12px;">KG Promedio/Día</div>
                 <div style="color: {pd_color}; font-size: 24px; font-weight: bold;">{pd_icon} {pd_sign}{prom_diff:,.0f}</div>
-                <div style="color: #888; font-size: 12px;">{prom_dia_a:,.0f} vs {prom_dia_b:,.0f}</div>
+                <div style="color: #666; font-size: 12px;">{prom_dia_a:,.0f} vs {prom_dia_b:,.0f}</div>
             </div>
             <div>
                 <div style="color: #666; font-size: 12px;">Órdenes</div>
                 <div style="color: #1a1a2e; font-size: 24px; font-weight: bold;">{ord_a_total} vs {ord_b_total}</div>
-                <div style="color: #888; font-size: 12px;">{dias_a_count} vs {dias_b_count} días</div>
+                <div style="color: #666; font-size: 12px;">{dias_a_count} vs {dias_b_count} días</div>
             </div>
         </div>
     </div>
@@ -2694,6 +2604,7 @@ def _render_comparacion(
             kg_sala_b.append(round(sc['total_kg']) if sc else 0)
 
         options_sala = {
+            "backgroundColor": "#ffffff",
             "title": {
                 "text": f"🏭 KG Totales por Sala — {lbl_a} vs {lbl_b}",
                 "subtext": "Comparación de producción total por sala entre ambos períodos",
@@ -2704,11 +2615,11 @@ def _render_comparacion(
             "tooltip": {
                 "trigger": "axis",
                 "axisPointer": {"type": "shadow"},
-                "backgroundColor": "rgba(255, 255, 255, 0.96)",
+                "backgroundColor": "rgba(255,255,255,0.96)",
                 "borderColor": "#ddd",
                 "borderRadius": 10,
                 "textStyle": {"color": "#333", "fontSize": 13},
-                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
+                "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.15);"
             },
             "legend": {
                 "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
@@ -2813,21 +2724,22 @@ def _render_comparacion(
         
         if nombres_sala_kgh:
             options_kgh_sala = {
+                "backgroundColor": "#ffffff",
                 "title": {
                     "text": f"⚡ KG/Hora Promedio por Sala — {lbl_a} vs {lbl_b}",
                     "subtext": "Comparación de productividad promedio por sala entre ambos períodos",
                     "left": "center",
-                    "textStyle": {"color": "#B8860B", "fontSize": 15, "fontWeight": "bold"},
+                    "textStyle": {"color": "#e6a500", "fontSize": 15, "fontWeight": "bold"},
                     "subtextStyle": {"color": "#666", "fontSize": 11}
                 },
                 "tooltip": {
                     "trigger": "axis",
                     "axisPointer": {"type": "shadow"},
-                    "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                    "borderColor": "#ddd",
+                    "backgroundColor": "rgba(255,255,255,0.96)",
+                    "borderColor": "#e6a500",
                     "borderRadius": 10,
                     "textStyle": {"color": "#333", "fontSize": 13},
-                    "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+                    "extraCssText": "box-shadow: 0 4px 20px rgba(0,0,0,0.15);",
                     "formatter": "{b}<br/>{a}: {c} kg/h"
                 },
                 "legend": {
@@ -2856,7 +2768,7 @@ def _render_comparacion(
                 "yAxis": {
                     "type": "value",
                     "name": "⚡ KG/Hora",
-                    "nameTextStyle": {"color": "#B8860B", "fontSize": 13, "fontWeight": "bold"},
+                    "nameTextStyle": {"color": "#e6a500", "fontSize": 13, "fontWeight": "bold"},
                     "axisLabel": {"color": "#666", "fontSize": 11},
                     "splitLine": {"lineStyle": {"color": "#e8e8e8", "type": "dashed"}},
                     "axisLine": {"show": False}
