@@ -389,7 +389,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "trigger": "axis",
                 "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
                 "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": "#4FC3F7",
+                "borderColor": "#FFC107",
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
@@ -434,14 +434,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 9,
                     "symbol": "circle",
                     "itemStyle": {
-                        "color": "#4FC3F7",
+                        "color": "#FFC107",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#4FC3F7",
+                        "color": "#FFC107",
                         "width": 4,
-                        "shadowColor": "rgba(79, 195, 247, 0.5)",
+                        "shadowColor": "rgba(255, 193, 7, 0.6)",
                         "shadowBlur": 10
                     },
                     "areaStyle": {
@@ -449,8 +449,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(79, 195, 247, 0.3)"},
-                                {"offset": 1, "color": "rgba(79, 195, 247, 0.02)"}
+                                {"offset": 0, "color": "rgba(255, 193, 7, 0.35)"},
+                                {"offset": 1, "color": "rgba(255, 193, 7, 0.02)"}
                             ]
                         }
                     },
@@ -459,7 +459,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "top",
                         "fontSize": 11,
                         "fontWeight": "bold",
-                        "color": "#4FC3F7",
+                        "color": "#FFC107",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 2
@@ -473,15 +473,15 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 9,
                     "symbol": "diamond",
                     "itemStyle": {
-                        "color": "#66BB6A",
+                        "color": "#FF5252",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#66BB6A",
+                        "color": "#FF5252",
                         "width": 4,
                         "type": "solid",
-                        "shadowColor": "rgba(102, 187, 106, 0.5)",
+                        "shadowColor": "rgba(255, 82, 82, 0.6)",
                         "shadowBlur": 10
                     },
                     "areaStyle": {
@@ -489,8 +489,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(102, 187, 106, 0.3)"},
-                                {"offset": 1, "color": "rgba(102, 187, 106, 0.02)"}
+                                {"offset": 0, "color": "rgba(255, 82, 82, 0.35)"},
+                                {"offset": 1, "color": "rgba(255, 82, 82, 0.02)"}
                             ]
                         }
                     },
@@ -499,7 +499,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "bottom",
                         "fontSize": 11,
                         "fontWeight": "bold",
-                        "color": "#66BB6A",
+                        "color": "#FF5252",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 3
@@ -584,7 +584,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "trigger": "axis",
                 "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
                 "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": "#4FC3F7",
+                "borderColor": "#FFC107",
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
@@ -629,14 +629,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 8,
                     "symbol": "circle",
                     "itemStyle": {
-                        "color": "#4FC3F7",
+                        "color": "#FFC107",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#4FC3F7",
+                        "color": "#FFC107",
                         "width": 4,
-                        "shadowColor": "rgba(79, 195, 247, 0.5)",
+                        "shadowColor": "rgba(255, 193, 7, 0.6)",
                         "shadowBlur": 8
                     },
                     "areaStyle": {
@@ -644,8 +644,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(79, 195, 247, 0.3)"},
-                                {"offset": 1, "color": "rgba(79, 195, 247, 0.02)"}
+                                {"offset": 0, "color": "rgba(255, 193, 7, 0.35)"},
+                                {"offset": 1, "color": "rgba(255, 193, 7, 0.02)"}
                             ]
                         }
                     },
@@ -654,7 +654,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "top",
                         "fontSize": 10,
                         "fontWeight": "bold",
-                        "color": "#4FC3F7",
+                        "color": "#FFC107",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 2
@@ -668,15 +668,15 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 8,
                     "symbol": "diamond",
                     "itemStyle": {
-                        "color": "#66BB6A",
+                        "color": "#FF5252",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#66BB6A",
+                        "color": "#FF5252",
                         "width": 4,
                         "type": "solid",
-                        "shadowColor": "rgba(102, 187, 106, 0.5)",
+                        "shadowColor": "rgba(255, 82, 82, 0.6)",
                         "shadowBlur": 8
                     },
                     "areaStyle": {
@@ -684,8 +684,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(102, 187, 106, 0.3)"},
-                                {"offset": 1, "color": "rgba(102, 187, 106, 0.02)"}
+                                {"offset": 0, "color": "rgba(255, 82, 82, 0.35)"},
+                                {"offset": 1, "color": "rgba(255, 82, 82, 0.02)"}
                             ]
                         }
                     },
@@ -694,7 +694,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "bottom",
                         "fontSize": 10,
                         "fontWeight": "bold",
-                        "color": "#66BB6A",
+                        "color": "#FF5252",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 3
