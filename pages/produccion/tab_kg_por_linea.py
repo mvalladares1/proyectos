@@ -175,7 +175,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     # Formatter JS: mostrar valor completo con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
         "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('en-US');}"
-    )
+    ).js_code
 
     series = []
     for sala in salas_sorted:
@@ -424,37 +424,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "borderWidth": 2,
                     "borderRadius": 8,
                     "textStyle": {"color": "#333", "fontSize": 12},
-                    "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
-                    "formatter": JsCode("""
-                        function(params) {
-                            var tip = '<div style="padding:8px;">';
-                            tip += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:#333;">' + params[0].axisValue + '</div>';
-                            
-                            for(var i=0; i<params.length; i++) {
-                                if(params[i].seriesName !== 'Detenciones') {
-                                    var color = params[i].seriesName === 'KG/Hora' ? '#6BA3C4' : '#C9997D';
-                                    tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
-                                    tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
-                                    tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
-                                    tip += '<span style="font-weight:600;color:' + color + ';margin-left:12px;">' + params[i].value.toLocaleString() + ' kg/h</span>';
-                                    tip += '</div>';
-                                }
-                            }
-                            
-                            // Agregar detenciones si existen
-                            if(params.length > 2 && params[2].value > 0) {
-                                tip += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">';
-                                tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
-                                tip += '<span style="display:inline-block;width:10px;height:10px;background:#E57373;border-radius:50%;margin-right:8px;"></span>';
-                                tip += '<span style="color:#666;flex:1;">Detenciones:</span>';
-                                tip += '<span style="font-weight:600;color:#D32F2F;margin-left:12px;">' + params[2].value.toFixed(1) + ' h</span>';
-                                tip += '</div></div>';
-                            }
-                            
-                            tip += '</div>';
-                            return tip;
-                        }
-                    """)
+                    "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
                 },
                 "legend": {
                     "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -526,7 +496,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#5A8FAD",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                         },
                         "z": 2
                     },
@@ -567,7 +537,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "fontWeight": "600",
                             "color": "#B38967",
                             "distance": 8,
-                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                            "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                         },
                         "z": 3
                     },
@@ -697,37 +667,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
-                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
-                "formatter": JsCode("""
-                    function(params) {
-                        var tip = '<div style="padding:8px;">';
-                        tip += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:#333;">' + params[0].axisValue + '</div>';
-                        
-                        for(var i=0; i<params.length; i++) {
-                            if(params[i].seriesName !== 'Detenciones') {
-                                var color = params[i].seriesName === 'KG/Hora' ? '#6BA3C4' : '#C9997D';
-                                tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
-                                tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
-                                tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
-                                tip += '<span style="font-weight:600;color:' + color + ';margin-left:12px;">' + params[i].value.toLocaleString() + ' kg/h</span>';
-                                tip += '</div>';
-                            }
-                        }
-                        
-                        // Agregar detenciones si existen
-                        if(params.length > 2 && params[2].value > 0) {
-                            tip += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">';
-                            tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
-                            tip += '<span style="display:inline-block;width:10px;height:10px;background:#E57373;border-radius:50%;margin-right:8px;"></span>';
-                            tip += '<span style="color:#666;flex:1;">Detenciones:</span>';
-                            tip += '<span style="font-weight:600;color:#D32F2F;margin-left:12px;">' + params[2].value.toFixed(1) + ' h</span>';
-                            tip += '</div></div>';
-                        }
-                        
-                        tip += '</div>';
-                        return tip;
-                    }
-                """)
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
             },
             "legend": {
                 "data": ["KG/Hora", "KG/Hora Efectiva"],
@@ -794,7 +734,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#5A8FAD",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                     },
                     "z": 2
                 },
@@ -834,7 +774,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "fontSize": 10,
                         "fontWeight": "bold",
                         "color": "#B38967",
-                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}")
+                        "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                     },
                     "z": 3
                 },
@@ -1056,7 +996,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#E65100",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             },
             {
@@ -1076,7 +1016,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#4527A0",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             },
             {
@@ -1097,7 +1037,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#F57C00",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             },
             {
@@ -1118,7 +1058,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 "label": {
                     "show": True, "position": "top",
                     "fontSize": 9, "fontWeight": "600", "color": "#5E35B1",
-                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}")
+                    "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString():''}").js_code
                 }
             }
         ]
@@ -2562,7 +2502,7 @@ def _render_comparacion(
                     "show": True,
                     "position": "top",
                     "distance": 22,
-                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}"),
+                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}").js_code,
                     "fontSize": 10,
                     "fontWeight": "bold",
                     "color": "#999",
@@ -2618,7 +2558,7 @@ def _render_comparacion(
                     "show": True,
                     "position": "top",
                     "distance": 22,
-                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}"),
+                    "formatter": JsCode("function(params){return params.data.kg_hora > 0 ? Math.round(params.data.kg_hora) + ' kg/h' : '';}").js_code,
                     "fontSize": 10,
                     "fontWeight": "bold",
                     "color": "#999",
@@ -2888,25 +2828,7 @@ def _render_comparacion(
                     "borderRadius": 10,
                     "textStyle": {"color": "#333", "fontSize": 13},
                     "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
-                    "formatter": JsCode("""
-                        function(params) {
-                            var result = params[0].name + '<br/>';
-                            for (var i = 0; i < params.length; i++) {
-                                result += params[i].marker + ' ' + params[i].seriesName + ': ' + 
-                                         params[i].value.toLocaleString('en-US') + ' kg/h<br/>';
-                            }
-                            if (params.length === 2 && params[0].value > 0 && params[1].value > 0) {
-                                var diff = params[0].value - params[1].value;
-                                var pct = ((diff / params[1].value) * 100).toFixed(1);
-                                var color = diff >= 0 ? '#4caf50' : '#f44336';
-                                var arrow = diff >= 0 ? '▲' : '▼';
-                                result += '<br/><b style="color:' + color + '">' + arrow + ' Diferencia: ' + 
-                                         (diff >= 0 ? '+' : '') + diff.toFixed(0) + ' kg/h (' + 
-                                         (diff >= 0 ? '+' : '') + pct + '%)</b>';
-                            }
-                            return result;
-                        }
-                    """)
+                    "formatter": "{b}<br/>{a}: {c} kg/h"
                 },
                 "legend": {
                     "data": [f"📅 {lbl_a}", f"📅 {lbl_b}"],
@@ -2959,7 +2881,7 @@ def _render_comparacion(
                         "label": {
                             "show": True, "position": "top",
                             "fontSize": 11, "fontWeight": "bold", "color": "#7FA8C9",
-                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}")
+                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : ''}").js_code
                         }
                     },
                     {
@@ -2980,7 +2902,7 @@ def _render_comparacion(
                         "label": {
                             "show": True, "position": "top",
                             "fontSize": 11, "fontWeight": "bold", "color": "#D999B2",
-                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : '';}")
+                            "formatter": JsCode("function(params){return params.value > 0 ? Math.round(params.value) : ''}").js_code
                         }
                     }
                 ]
