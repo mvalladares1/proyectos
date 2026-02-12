@@ -337,7 +337,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     </div>
     """, unsafe_allow_html=True)
     
-    # === GRÁFICO GENERAL: KG/Hora Efectiva y KG/HH Efectiva POR DÍA ===
+    # === GRÁFICO GENERAL: KG/Hora y KG/Hora Efectiva POR DÍA ===
     dia_kg = defaultdict(float)
     dia_horas = defaultdict(float)
     dia_hh_efectiva = defaultdict(float)
@@ -385,7 +385,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         
         opts_general = {
             "title": {
-                "text": "⚡ KG/Hora Efectiva y KG/HH Efectiva por Día",
+                "text": "⚡ KG/Hora y KG/Hora Efectiva por Día",
                 "subtext": "Productividad total vs productividad por hora efectiva",
                 "left": "center",
                 "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
@@ -432,7 +432,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 """).js_code
             },
             "legend": {
-                "data": ["KG/Hora Efectiva", "KG/HH Efectiva"],
+                "data": ["KG/Hora", "KG/Hora Efectiva"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 11},
                 "itemGap": 15
@@ -466,7 +466,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             },
             "series": [
                 {
-                    "name": "KG/Hora Efectiva",
+                    "name": "KG/Hora",
                     "type": "line",
                     "yAxisIndex": 0,
                     "data": kg_hora_efectiva_vals,
@@ -506,7 +506,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "z": 2
                 },
                 {
-                    "name": "KG/HH Efectiva",
+                    "name": "KG/Hora Efectiva",
                     "type": "line",
                     "yAxisIndex": 0,
                     "data": kg_hh_efectiva_vals,
@@ -654,7 +654,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         
                         for(var i=0; i<params.length; i++) {
                             if(params[i].seriesName !== 'Detenciones') {
-                                var color = params[i].seriesName === 'KG/Hora Efectiva' ? '#6BA3C4' : '#C9997D';
+                                var color = params[i].seriesName === 'KG/Hora' ? '#6BA3C4' : '#C9997D';
                                 tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
                                 tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
                                 tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
@@ -679,7 +679,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 """).js_code
             },
             "legend": {
-                "data": ["KG/Hora Efectiva", "KG/HH Efectiva"],
+                "data": ["KG/Hora", "KG/Hora Efectiva"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 10},
                 "itemGap": 12
@@ -709,7 +709,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             },
             "series": [
                 {
-                    "name": "KG/Hora Efectiva",
+                    "name": "KG/Hora",
                     "type": "line",
                     "yAxisIndex": 0,
                     "data": kg_hora_efectiva_sala_vals,
@@ -748,7 +748,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "z": 2
                 },
                 {
-                    "name": "KG/HH Efectiva",
+                    "name": "KG/Hora Efectiva",
                     "type": "line",
                     "yAxisIndex": 0,
                     "data": kg_hh_efectiva_sala_vals,
@@ -1467,9 +1467,9 @@ def _generar_informe_pdf(
         
         x_pos = list(range(len(dias_labels)))
         
-        # KG/Hora Efectiva - línea azul elegante
+        # KG/Hora - línea azul elegante
         ax.plot(x_pos, kg_hora_vals, color='#6BA3C4', linewidth=2.5, 
-                marker='o', markersize=6, label='KG/Hora Efectiva',
+                marker='o', markersize=6, label='KG/Hora',
                 markerfacecolor='#6BA3C4', markeredgecolor='white', markeredgewidth=1.5,
                 zorder=3)
         ax.fill_between(x_pos, kg_hora_vals, alpha=0.2, color='#6BA3C4', zorder=1)
@@ -1483,9 +1483,9 @@ def _generar_informe_pdf(
                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
                                 edgecolor='none', alpha=0.7))
         
-        # KG/HH Efectiva - línea beige/salmón
+        # KG/Hora Efectiva - línea beige/salmón
         ax.plot(x_pos, kg_hh_vals, color='#C9997D', linewidth=2.5,
-                marker='D', markersize=5, label='KG/HH Efectiva',
+                marker='D', markersize=5, label='KG/Hora Efectiva',
                 markerfacecolor='#C9997D', markeredgecolor='white', markeredgewidth=1.5,
                 zorder=3)
         ax.fill_between(x_pos, kg_hh_vals, alpha=0.2, color='#C9997D', zorder=1)
@@ -1502,7 +1502,7 @@ def _generar_informe_pdf(
         # Estilo del gráfico
         ax.set_xlabel('Día', fontsize=10, fontweight='600', color='#666')
         ax.set_ylabel('KG/Hora', fontsize=10, fontweight='600', color='#0d3b66')
-        ax.set_title('⚡ KG/Hora Efectiva y KG/HH Efectiva por Día', 
+        ax.set_title('⚡ KG/Hora y KG/Hora Efectiva por Día', 
                      fontsize=12, fontweight='bold', color='#0d3b66', pad=15)
         
         ax.set_xticks(x_pos)
@@ -1691,10 +1691,10 @@ def _generar_informe_pdf(
             
             x_sala = list(range(len(dias_sala)))
             ax_sala.plot(x_sala, kg_hora_sala_vals, color='#6BA3C4', linewidth=2,
-                        marker='o', markersize=4, label='KG/Hora Efectiva',
+                        marker='o', markersize=4, label='KG/Hora',
                         markerfacecolor='#6BA3C4', markeredgecolor='white', markeredgewidth=1)
             ax_sala.plot(x_sala, kg_hh_sala_vals, color='#C9997D', linewidth=2,
-                        marker='D', markersize=3.5, label='KG/HH Efectiva',
+                        marker='D', markersize=3.5, label='KG/Hora Efectiva',
                         markerfacecolor='#C9997D', markeredgecolor='white', markeredgewidth=1)
             
             # Agregar valores numéricos en los puntos
