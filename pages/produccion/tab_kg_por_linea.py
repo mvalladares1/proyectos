@@ -604,6 +604,13 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("##### 🏭 KG/Hora por Sala")
     
+    filtro_turno_sala = st.selectbox(
+        "Filtrar por turno",
+        ["Todos", "☀️ Día", "🌙 Tarde"],
+        index=0,
+        key="filtro_turno_sala"
+    )
+    
     colores_sala = [
         '#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
         '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7',
@@ -619,13 +626,24 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     )
     
     for idx, (sala, sd) in enumerate(salas_ordenadas):
+        # Filtrar órdenes por turno si aplica
+        if filtro_turno_sala == "☀️ Día":
+            ordenes_filtradas = [o for o in sd['ordenes'] if _clasificar_turno(o.get('_inicio_dt')) == "Día"]
+        elif filtro_turno_sala == "🌙 Tarde":
+            ordenes_filtradas = [o for o in sd['ordenes'] if _clasificar_turno(o.get('_inicio_dt')) == "Tarde"]
+        else:
+            ordenes_filtradas = sd['ordenes']
+        
+        if not ordenes_filtradas:
+            continue
+        
         # Agrupar por día para esta sala
         sala_dia_kg = defaultdict(float)
         sala_dia_horas = defaultdict(float)
         sala_dia_hh_efectiva = defaultdict(float)
         sala_dia_detenciones = defaultdict(float)
         
-        for orden in sd['ordenes']:
+        for orden in ordenes_filtradas:
             dt = orden.get('_inicio_dt')
             if not dt:
                 continue
@@ -668,15 +686,20 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             else:
                 kg_hh_efectiva_sala_vals.append(0)
         
-        prom_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
-        dur_efectiva = max(sd['duracion_total'] - sd['detenciones_total'], 0)
-        prom_sala_efectiva = sd['kg_con_duracion'] / dur_efectiva if dur_efectiva > 0 else 0
+        # Promedios basados en órdenes filtradas
+        total_kg_sala = sum(sala_dia_kg.values())
+        total_horas_sala = sum(sala_dia_horas.values())
+        total_det_sala = sum(sala_dia_detenciones.values())
+        prom_sala = total_kg_sala / total_horas_sala if total_horas_sala > 0 else 0
+        horas_ef_sala = max(total_horas_sala - total_det_sala, 0)
+        prom_sala_efectiva = total_kg_sala / horas_ef_sala if horas_ef_sala > 0 else 0
+        turno_label = f" ({filtro_turno_sala})" if filtro_turno_sala != "Todos" else ""
         color_sala = colores_sala[idx % len(colores_sala)]
         
         opts_sala = {
             "title": {
-                "text": f"🏭 {sala}",
-                "subtext": f"Promedio KG/Hora: {prom_sala:,.0f}  ·  KG/Hora Efectiva: {prom_sala_efectiva:,.0f}  ·  {sd['hechas'] + sd['no_hechas']} órdenes",
+                "text": f"🏭 {sala}{turno_label}",
+                "subtext": f"KG/Hora: {prom_sala:,.0f}  ·  KG/Hora Efectiva: {prom_sala_efectiva:,.0f}  ·  Det: {total_det_sala:,.1f}h  ·  {len(ordenes_filtradas)} órdenes",
                 "left": "center",
                 "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "600"},
                 "subtextStyle": {"color": "#888", "fontSize": 11}
