@@ -362,11 +362,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         dias_sorted = sorted(dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
         kg_hora_efectiva_vals = []  # kg_pt / duracion_horas
         kg_hh_efectiva_vals = []     # kg_pt / hh_efectiva
+        detenciones_vals = []  # detenciones por día para tooltip
         
         for dia in dias_sorted:
             horas = dia_horas.get(dia, 0)
             hh_ef = dia_hh_efectiva.get(dia, 0)
             kg_total = dia_kg[dia]
+            detenciones = dia_detenciones.get(dia, 0)
+            detenciones_vals.append(round(detenciones, 1))
             
             # KG/Hora Efectiva (basado en duración total)
             if horas > 0:
@@ -396,7 +399,37 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
-                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+                "formatter": JsCode("""
+                    function(params) {
+                        var tip = '<div style="padding:8px;">';
+                        tip += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:#333;">' + params[0].axisValue + '</div>';
+                        
+                        for(var i=0; i<params.length; i++) {
+                            if(params[i].seriesName !== 'Detenciones') {
+                                var color = params[i].seriesName === 'KG/Hora Efectiva' ? '#6BA3C4' : '#C9997D';
+                                tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
+                                tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
+                                tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
+                                tip += '<span style="font-weight:600;color:' + color + ';margin-left:12px;">' + params[i].value.toLocaleString() + ' kg/h</span>';
+                                tip += '</div>';
+                            }
+                        }
+                        
+                        // Agregar detenciones si existen
+                        if(params.length > 2 && params[2].value > 0) {
+                            tip += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">';
+                            tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
+                            tip += '<span style="display:inline-block;width:10px;height:10px;background:#E57373;border-radius:50%;margin-right:8px;"></span>';
+                            tip += '<span style="color:#666;flex:1;">Detenciones:</span>';
+                            tip += '<span style="font-weight:600;color:#D32F2F;margin-left:12px;">' + params[2].value.toFixed(1) + ' h</span>';
+                            tip += '</div></div>';
+                        }
+                        
+                        tip += '</div>';
+                        return tip;
+                    }
+                """).js_code
             },
             "legend": {
                 "data": ["KG/Hora Efectiva", "KG/HH Efectiva"],
@@ -512,6 +545,16 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 3
+                },
+                {
+                    "name": "Detenciones",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": detenciones_vals,
+                    "showSymbol": False,
+                    "lineStyle": {"width": 0, "opacity": 0},
+                    "itemStyle": {"opacity": 0},
+                    "tooltip": {"show": True}
                 }
             ]
         }
@@ -563,11 +606,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
         kg_hora_efectiva_sala_vals = []  # kg_pt / duracion_horas
         kg_hh_efectiva_sala_vals = []    # kg_pt / hh_efectiva
+        detenciones_sala_vals = []  # detenciones por día para tooltip
         
         for dia in dias_sala_sorted:
             horas = sala_dia_horas.get(dia, 0)
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
             kg_total = sala_dia_kg[dia]
+            detenciones = sala_dia_detenciones.get(dia, 0)
+            detenciones_sala_vals.append(round(detenciones, 1))
             
             # KG/Hora Efectiva
             if horas > 0:
@@ -600,7 +646,37 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
-                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+                "formatter": JsCode("""
+                    function(params) {
+                        var tip = '<div style="padding:8px;">';
+                        tip += '<div style="font-weight:600;margin-bottom:8px;font-size:13px;color:#333;">' + params[0].axisValue + '</div>';
+                        
+                        for(var i=0; i<params.length; i++) {
+                            if(params[i].seriesName !== 'Detenciones') {
+                                var color = params[i].seriesName === 'KG/Hora Efectiva' ? '#6BA3C4' : '#C9997D';
+                                tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
+                                tip += '<span style="display:inline-block;width:10px;height:10px;background:' + color + ';border-radius:50%;margin-right:8px;"></span>';
+                                tip += '<span style="color:#666;flex:1;">' + params[i].seriesName + ':</span>';
+                                tip += '<span style="font-weight:600;color:' + color + ';margin-left:12px;">' + params[i].value.toLocaleString() + ' kg/h</span>';
+                                tip += '</div>';
+                            }
+                        }
+                        
+                        // Agregar detenciones si existen
+                        if(params.length > 2 && params[2].value > 0) {
+                            tip += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">';
+                            tip += '<div style="margin:4px 0;display:flex;align-items:center;">';
+                            tip += '<span style="display:inline-block;width:10px;height:10px;background:#E57373;border-radius:50%;margin-right:8px;"></span>';
+                            tip += '<span style="color:#666;flex:1;">Detenciones:</span>';
+                            tip += '<span style="font-weight:600;color:#D32F2F;margin-left:12px;">' + params[2].value.toFixed(1) + ' h</span>';
+                            tip += '</div></div>';
+                        }
+                        
+                        tip += '</div>';
+                        return tip;
+                    }
+                """).js_code
             },
             "legend": {
                 "data": ["KG/Hora Efectiva", "KG/HH Efectiva"],
@@ -710,6 +786,16 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 3
+                },
+                {
+                    "name": "Detenciones",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": detenciones_sala_vals,
+                    "showSymbol": False,
+                    "lineStyle": {"width": 0, "opacity": 0},
+                    "itemStyle": {"opacity": 0},
+                    "tooltip": {"show": True}
                 }
             ]
         }
