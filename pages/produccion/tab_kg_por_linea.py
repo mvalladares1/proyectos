@@ -366,13 +366,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         for dia in dias_sorted:
             horas = dia_horas.get(dia, 0)
             hh_ef = dia_hh_efectiva.get(dia, 0)
-            detenciones = dia_detenciones.get(dia, 0)
             kg_total = dia_kg[dia]
             
-            # KG/Hora Efectiva (basado en duración total - detenciones)
-            horas_efectivas = max(horas - detenciones, 0)
-            if horas_efectivas > 0:
-                kg_hora_efectiva_vals.append(round(kg_total / horas_efectivas, 0))
+            # KG/Hora Efectiva (basado en duración total)
+            if horas > 0:
+                kg_hora_efectiva_vals.append(round(kg_total / horas, 0))
             else:
                 kg_hora_efectiva_vals.append(0)
             
@@ -563,13 +561,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         for dia in dias_sala_sorted:
             horas = sala_dia_horas.get(dia, 0)
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
-            detenciones = sala_dia_detenciones.get(dia, 0)
             kg_total = sala_dia_kg[dia]
             
-            # KG/Hora Efectiva (descontando detenciones)
-            horas_efectivas = max(horas - detenciones, 0)
-            if horas_efectivas > 0:
-                kg_hora_efectiva_sala_vals.append(round(kg_total / horas_efectivas, 0))
+            # KG/Hora Efectiva
+            if horas > 0:
+                kg_hora_efectiva_sala_vals.append(round(kg_total / horas, 0))
             else:
                 kg_hora_efectiva_sala_vals.append(0)
             
