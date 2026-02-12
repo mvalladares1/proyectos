@@ -384,10 +384,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             else:
                 kg_hh_efectiva_vals.append(0)
         
+        total_detenciones = sum(dia_detenciones.values())
+        
         opts_general = {
             "title": {
                 "text": "⚡ KG/Hora y KG/Hora Efectiva por Día",
-                "subtext": "Productividad total vs productividad por hora efectiva",
+                "subtext": f"Productividad total vs productividad por hora efectiva  ·  Detenciones totales: {total_detenciones:,.1f} hrs",
                 "left": "center",
                 "textStyle": {"color": "#7FA8C9", "fontSize": 15, "fontWeight": "bold"},
                 "subtextStyle": {"color": "#888", "fontSize": 12}
