@@ -630,12 +630,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 kg_hh_efectiva_sala_vals.append(0)
         
         prom_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
+        dur_efectiva = max(sd['duracion_total'] - sd['detenciones_total'], 0)
+        prom_sala_efectiva = sd['kg_con_duracion'] / dur_efectiva if dur_efectiva > 0 else 0
         color_sala = colores_sala[idx % len(colores_sala)]
         
         opts_sala = {
             "title": {
                 "text": f"🏭 {sala}",
-                "subtext": f"Promedio: {prom_sala:,.0f} kg/h · {sd['hechas'] + sd['no_hechas']} órdenes",
+                "subtext": f"Promedio KG/Hora: {prom_sala:,.0f}  ·  KG/Hora Efectiva: {prom_sala_efectiva:,.0f}  ·  {sd['hechas'] + sd['no_hechas']} órdenes",
                 "left": "center",
                 "textStyle": {"color": "#7FA8C9", "fontSize": 14, "fontWeight": "600"},
                 "subtextStyle": {"color": "#888", "fontSize": 11}
@@ -1138,6 +1140,7 @@ def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
                 'total_kg': 0.0,
                 'kg_con_duracion': 0.0,
                 'duracion_total': 0.0,
+                'detenciones_total': 0.0,
                 'hechas': 0,
                 'no_hechas': 0,
             }
@@ -1145,10 +1148,12 @@ def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
         sd['ordenes'].append(mo)
         kg = mo.get('kg_pt', 0) or 0
         dur = mo.get('duracion_horas', 0) or 0
+        det = mo.get('detenciones', 0) or 0
         sd['total_kg'] += kg
         if dur > 0:
             sd['kg_con_duracion'] += kg
             sd['duracion_total'] += dur
+            sd['detenciones_total'] += det
         if mo.get('fecha_termino'):
             sd['hechas'] += 1
         else:
