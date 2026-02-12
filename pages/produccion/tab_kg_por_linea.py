@@ -341,6 +341,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     dia_kg = defaultdict(float)
     dia_horas = defaultdict(float)
     dia_hh_efectiva = defaultdict(float)
+    dia_detenciones = defaultdict(float)
     
     for mo in mos_filtradas:
         dt = mo.get('_inicio_dt')
@@ -350,8 +351,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
         hh_ef = mo.get('hh_efectiva', 0) or 0
+        detenciones = mo.get('detenciones', 0) or 0
         dia_kg[dia_key] += kg
         dia_hh_efectiva[dia_key] += hh_ef
+        dia_detenciones[dia_key] += detenciones
         if horas > 0:
             dia_horas[dia_key] += horas
     
@@ -363,11 +366,13 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         for dia in dias_sorted:
             horas = dia_horas.get(dia, 0)
             hh_ef = dia_hh_efectiva.get(dia, 0)
+            detenciones = dia_detenciones.get(dia, 0)
             kg_total = dia_kg[dia]
             
-            # KG/Hora Efectiva (basado en duración total)
-            if horas > 0:
-                kg_hora_efectiva_vals.append(round(kg_total / horas, 0))
+            # KG/Hora Efectiva (basado en duración total - detenciones)
+            horas_efectivas = max(horas - detenciones, 0)
+            if horas_efectivas > 0:
+                kg_hora_efectiva_vals.append(round(kg_total / horas_efectivas, 0))
             else:
                 kg_hora_efectiva_vals.append(0)
             
@@ -531,6 +536,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         sala_dia_kg = defaultdict(float)
         sala_dia_horas = defaultdict(float)
         sala_dia_hh_efectiva = defaultdict(float)
+        sala_dia_detenciones = defaultdict(float)
         
         for orden in sd['ordenes']:
             dt = orden.get('_inicio_dt')
@@ -540,8 +546,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             kg = orden.get('kg_pt', 0) or 0
             horas = orden.get('duracion_horas', 0) or 0
             hh_ef = orden.get('hh_efectiva', 0) or 0
+            detenciones = orden.get('detenciones', 0) or 0
             sala_dia_kg[dia_key] += kg
             sala_dia_hh_efectiva[dia_key] += hh_ef
+            sala_dia_detenciones[dia_key] += detenciones
             if horas > 0:
                 sala_dia_horas[dia_key] += horas
         
@@ -555,11 +563,13 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         for dia in dias_sala_sorted:
             horas = sala_dia_horas.get(dia, 0)
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
+            detenciones = sala_dia_detenciones.get(dia, 0)
             kg_total = sala_dia_kg[dia]
             
-            # KG/Hora Efectiva
-            if horas > 0:
-                kg_hora_efectiva_sala_vals.append(round(kg_total / horas, 0))
+            # KG/Hora Efectiva (descontando detenciones)
+            horas_efectivas = max(horas - detenciones, 0)
+            if horas_efectivas > 0:
+                kg_hora_efectiva_sala_vals.append(round(kg_total / horas_efectivas, 0))
             else:
                 kg_hora_efectiva_sala_vals.append(0)
             
@@ -1066,9 +1076,13 @@ def _generar_informe_pdf(
     from reportlab.lib.units import mm, cm
     from reportlab.lib.colors import HexColor, white, black
     from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Spacer,
-                                     Paragraph, Image, KeepTogether)
+                                     Paragraph, Image, KeepTogether, PageBreak)
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=LETTER,
@@ -1219,6 +1233,56 @@ def _generar_informe_pdf(
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
         story.append(dia_table)
+        
+        # === GRÁFICO DE PRODUCCIÓN DIARIA ===
+        if len(dias_sorted) > 0:
+            fechas_prod = [f for f, kg in dias_sorted]
+            kg_prod = [kg for f, kg in dias_sorted]
+            labels_prod = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m') for f in fechas_prod]
+            
+            fig_prod, ax_prod = plt.subplots(figsize=(7, 3))
+            fig_prod.patch.set_facecolor('white')
+            ax_prod.set_facecolor('#fafbfc')
+            
+            # Barras con degradado de color
+            colores_prod = ['#0d3b66' if kg == max(kg_prod) else '#7FA8C9' for kg in kg_prod]
+            bars = ax_prod.bar(range(len(labels_prod)), kg_prod, color=colores_prod, 
+                               edgecolor='white', linewidth=1.5, alpha=0.85)
+            
+            ax_prod.set_xlabel('Día', fontsize=9, fontweight='600', color='#666')
+            ax_prod.set_ylabel('KG Producidos', fontsize=9, fontweight='600', color='#0d3b66')
+            ax_prod.set_title('📊 Producción Diaria (KG)', fontsize=11, fontweight='bold', 
+                             color='#0d3b66', pad=12)
+            ax_prod.set_xticks(range(len(labels_prod)))
+            ax_prod.set_xticklabels(labels_prod, rotation=45 if len(labels_prod) > 5 else 0,
+                                    ha='right' if len(labels_prod) > 5 else 'center',
+                                    fontsize=8, color='#666')
+            ax_prod.tick_params(axis='y', labelsize=8, colors='#666')
+            ax_prod.grid(axis='y', alpha=0.2, linestyle='-', linewidth=0.5)
+            ax_prod.spines['top'].set_visible(False)
+            ax_prod.spines['right'].set_visible(False)
+            ax_prod.spines['left'].set_color('#ddd')
+            ax_prod.spines['bottom'].set_color('#ddd')
+            
+            # Añadir valores encima de las barras
+            for i, (bar, val) in enumerate(zip(bars, kg_prod)):
+                height = bar.get_height()
+                ax_prod.text(bar.get_x() + bar.get_width()/2., height + max(kg_prod)*0.02,
+                            f'{val:,.0f}', ha='center', va='bottom', 
+                            fontsize=7, fontweight='600', color='#0d3b66')
+            
+            plt.tight_layout()
+            
+            img_buf_prod = io.BytesIO()
+            plt.savefig(img_buf_prod, format='png', dpi=150, bbox_inches='tight',
+                       facecolor='white', edgecolor='none')
+            img_buf_prod.seek(0)
+            plt.close(fig_prod)
+            
+            img_prod = Image(img_buf_prod, width=17*cm, height=7*cm)
+            story.append(Spacer(1, 4*mm))
+            story.append(img_prod)
+    
     story.append(Spacer(1, 6*mm))
 
     # === RENDIMIENTO KG/HORA POR DÍA ===
@@ -1281,6 +1345,89 @@ def _generar_informe_pdf(
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
         story.append(kgh_table)
+        
+        # === GRÁFICO KG/HORA EFECTIVA ===
+        # Preparar datos para el gráfico
+        fechas_graf = sorted(dia_kg_hora_data.keys())
+        dias_labels = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m') for f in fechas_graf]
+        kg_hora_vals = []
+        kg_hh_vals = []
+        
+        for fecha in fechas_graf:
+            kg = dia_kg_hora_data[fecha]
+            horas = dia_horas_data.get(fecha, 0)
+            hh_ef = dia_hh_efectiva_data.get(fecha, 0)
+            det = dia_detenciones_data.get(fecha, 0)
+            
+            # KG/Hora Efectiva (descontando detenciones)
+            horas_efectivas = max(horas - det, 0)
+            if horas_efectivas > 0:
+                kg_hora_vals.append(kg / horas_efectivas)
+            else:
+                kg_hora_vals.append(0)
+            
+            # KG/HH Efectiva
+            if hh_ef > 0:
+                kg_hh_vals.append(kg / hh_ef)
+            else:
+                kg_hh_vals.append(0)
+        
+        # Generar gráfico con matplotlib
+        fig, ax = plt.subplots(figsize=(7, 3.5))
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('#fafbfc')
+        
+        x_pos = list(range(len(dias_labels)))
+        
+        # KG/Hora Efectiva - línea amarilla
+        ax.plot(x_pos, kg_hora_vals, color='#FFC107', linewidth=2.5, 
+                marker='o', markersize=6, label='KG/Hora Efectiva',
+                markerfacecolor='#FFC107', markeredgecolor='white', markeredgewidth=1.5,
+                zorder=3)
+        ax.fill_between(x_pos, kg_hora_vals, alpha=0.2, color='#FFC107', zorder=1)
+        
+        # KG/HH Efectiva - línea roja
+        ax.plot(x_pos, kg_hh_vals, color='#FF5252', linewidth=2.5,
+                marker='D', markersize=5, label='KG/HH Efectiva',
+                markerfacecolor='#FF5252', markeredgecolor='white', markeredgewidth=1.5,
+                zorder=3)
+        ax.fill_between(x_pos, kg_hh_vals, alpha=0.2, color='#FF5252', zorder=1)
+        
+        # Estilo del gráfico
+        ax.set_xlabel('Día', fontsize=10, fontweight='600', color='#666')
+        ax.set_ylabel('KG/Hora', fontsize=10, fontweight='600', color='#0d3b66')
+        ax.set_title('⚡ KG/Hora Efectiva y KG/HH Efectiva por Día', 
+                     fontsize=12, fontweight='bold', color='#0d3b66', pad=15)
+        
+        ax.set_xticks(x_pos)
+        ax.set_xlim(-0.5, len(dias_labels) - 0.5)
+        ax.set_xticklabels(dias_labels, rotation=45 if len(dias_labels) > 7 else 0, 
+                           ha='right' if len(dias_labels) > 7 else 'center',
+                           fontsize=8, color='#666')
+        ax.tick_params(axis='y', labelsize=9, colors='#666')
+        ax.grid(True, alpha=0.2, linestyle='-', linewidth=0.5, color='#ddd', zorder=0)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('#ddd')
+        ax.spines['bottom'].set_color('#ddd')
+        
+        # Leyenda
+        ax.legend(loc='upper left', frameon=True, fancybox=True, shadow=True,
+                  fontsize=9, edgecolor='#ddd', facecolor='white', framealpha=0.95)
+        
+        plt.tight_layout()
+        
+        # Convertir a imagen para PDF
+        img_buf = io.BytesIO()
+        plt.savefig(img_buf, format='png', dpi=150, bbox_inches='tight', 
+                    facecolor='white', edgecolor='none')
+        img_buf.seek(0)
+        plt.close(fig)
+        
+        # Agregar imagen al PDF
+        img_graf = Image(img_buf, width=17*cm, height=8.5*cm)
+        story.append(Spacer(1, 4*mm))
+        story.append(img_graf)
     story.append(Spacer(1, 6*mm))
 
     # === DETALLE POR SALA ===
@@ -1325,9 +1472,73 @@ def _generar_informe_pdf(
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
     story.append(sala_table)
+    
+    # === GRÁFICO COMPARATIVO DE SALAS ===
+    if len(salas_ordenadas) > 0:
+        nombres_salas = [sala for sala, sd in salas_ordenadas[:10]]  # Top 10 salas
+        kg_hora_salas = [
+            (sd['kg_con_duracion'] / sd['duracion_total']) if sd['duracion_total'] > 0 else 0 
+            for sala, sd in salas_ordenadas[:10]
+        ]
+        kg_totales_salas = [sd['total_kg'] for sala, sd in salas_ordenadas[:10]]
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, 3))
+        fig.patch.set_facecolor('white')
+        
+        # Gráfico 1: KG/Hora por Sala
+        colores_barras = ['#FFC107' if i == 0 else '#7FA8C9' for i in range(len(nombres_salas))]
+        ax1.barh(nombres_salas, kg_hora_salas, color=colores_barras, edgecolor='white', linewidth=1.5)
+        ax1.set_xlabel('KG/Hora', fontsize=9, fontweight='600', color='#666')
+        ax1.set_title('Rendimiento por Sala', fontsize=10, fontweight='bold', color='#0d3b66', pad=10)
+        ax1.tick_params(axis='both', labelsize=8, colors='#666')
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.spines['left'].set_color('#ddd')
+        ax1.spines['bottom'].set_color('#ddd')
+        ax1.grid(axis='x', alpha=0.2, linestyle='-', linewidth=0.5)
+        
+        # Añadir valores a las barras
+        for i, v in enumerate(kg_hora_salas):
+            ax1.text(v + max(kg_hora_salas) * 0.02, i, f'{v:,.0f}', 
+                    va='center', fontsize=8, fontweight='600', color='#0d3b66')
+        
+        # Gráfico 2: KG Totales por Sala
+        colores_barras2 = ['#FF5252' if i == 0 else '#7FA8C9' for i in range(len(nombres_salas))]
+        ax2.barh(nombres_salas, kg_totales_salas, color=colores_barras2, edgecolor='white', linewidth=1.5)
+        ax2.set_xlabel('KG Procesados', fontsize=9, fontweight='600', color='#666')
+        ax2.set_title('Producción Total por Sala', fontsize=10, fontweight='bold', color='#0d3b66', pad=10)
+        ax2.tick_params(axis='both', labelsize=8, colors='#666')
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.spines['left'].set_color('#ddd')
+        ax2.spines['bottom'].set_color('#ddd')
+        ax2.grid(axis='x', alpha=0.2, linestyle='-', linewidth=0.5)
+        
+        # Añadir valores a las barras
+        for i, v in enumerate(kg_totales_salas):
+            ax2.text(v + max(kg_totales_salas) * 0.02, i, f'{v:,.0f}', 
+                    va='center', fontsize=8, fontweight='600', color='#0d3b66')
+        
+        plt.tight_layout()
+        
+        # Convertir a imagen
+        img_buf_salas = io.BytesIO()
+        plt.savefig(img_buf_salas, format='png', dpi=150, bbox_inches='tight',
+                    facecolor='white', edgecolor='none')
+        img_buf_salas.seek(0)
+        plt.close(fig)
+        
+        img_salas = Image(img_buf_salas, width=17*cm, height=7*cm)
+        story.append(Spacer(1, 4*mm))
+        story.append(img_salas)
+    
     story.append(Spacer(1, 6*mm))
 
     # === DETALLE DE ÓRDENES POR SALA ===
+    story.append(PageBreak())
+    story.append(Paragraph("Detalle de Órdenes por Sala", seccion_style))
+    story.append(Spacer(1, 3*mm))
+    
     for sala, sd in salas_ordenadas:
         kh_sala = sd['kg_con_duracion'] / sd['duracion_total'] if sd['duracion_total'] > 0 else 0
         story.append(Paragraph(
@@ -1335,6 +1546,73 @@ def _generar_informe_pdf(
             ParagraphStyle('SalaTitulo', parent=styles['Heading3'],
                            fontSize=10, textColor=azul_corp, spaceBefore=8, spaceAfter=4)
         ))
+        
+        # === MINI GRÁFICO DE KG/HORA PARA LA SALA ===
+        # Agrupar datos de la sala por día
+        sala_dia_data = defaultdict(lambda: {'kg': 0, 'horas': 0, 'det': 0, 'hh_ef': 0})
+        for orden in sd['ordenes']:
+            dt = orden.get('_inicio_dt')
+            if not dt:
+                continue
+            dia_key = dt.strftime('%d/%m')
+            sala_dia_data[dia_key]['kg'] += orden.get('kg_pt', 0) or 0
+            sala_dia_data[dia_key]['horas'] += orden.get('duracion_horas', 0) or 0
+            sala_dia_data[dia_key]['det'] += orden.get('detenciones', 0) or 0
+            sala_dia_data[dia_key]['hh_ef'] += orden.get('hh_efectiva', 0) or 0
+        
+        if len(sala_dia_data) > 1:  # Solo mostrar si hay más de un día
+            dias_sala = sorted(sala_dia_data.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+            kg_hora_sala_vals = []
+            kg_hh_sala_vals = []
+            
+            for dia in dias_sala:
+                data = sala_dia_data[dia]
+                horas_ef = max(data['horas'] - data['det'], 0)
+                if horas_ef > 0:
+                    kg_hora_sala_vals.append(data['kg'] / horas_ef)
+                else:
+                    kg_hora_sala_vals.append(0)
+                
+                if data['hh_ef'] > 0:
+                    kg_hh_sala_vals.append(data['kg'] / data['hh_ef'])
+                else:
+                    kg_hh_sala_vals.append(0)
+            
+            # Crear mini gráfico
+            fig_sala, ax_sala = plt.subplots(figsize=(6, 2))
+            fig_sala.patch.set_facecolor('white')
+            ax_sala.set_facecolor('#fafbfc')
+            
+            x_sala = list(range(len(dias_sala)))
+            ax_sala.plot(x_sala, kg_hora_sala_vals, color='#FFC107', linewidth=2,
+                        marker='o', markersize=4, label='KG/Hora Efectiva',
+                        markerfacecolor='#FFC107', markeredgecolor='white', markeredgewidth=1)
+            ax_sala.plot(x_sala, kg_hh_sala_vals, color='#FF5252', linewidth=2,
+                        marker='D', markersize=3.5, label='KG/HH Efectiva',
+                        markerfacecolor='#FF5252', markeredgecolor='white', markeredgewidth=1)
+            
+            ax_sala.set_xticks(x_sala)
+            ax_sala.set_xticklabels(dias_sala, fontsize=7, color='#666')
+            ax_sala.tick_params(axis='y', labelsize=7, colors='#666')
+            ax_sala.grid(True, alpha=0.15, linestyle='-', linewidth=0.5)
+            ax_sala.spines['top'].set_visible(False)
+            ax_sala.spines['right'].set_visible(False)
+            ax_sala.spines['left'].set_color('#ddd')
+            ax_sala.spines['bottom'].set_color('#ddd')
+            ax_sala.legend(loc='upper left', fontsize=7, frameon=False)
+            ax_sala.set_ylabel('KG/Hora', fontsize=8, color='#666')
+            
+            plt.tight_layout()
+            
+            img_buf_sala = io.BytesIO()
+            plt.savefig(img_buf_sala, format='png', dpi=120, bbox_inches='tight',
+                       facecolor='white', edgecolor='none')
+            img_buf_sala.seek(0)
+            plt.close(fig_sala)
+            
+            img_mini_sala = Image(img_buf_sala, width=14*cm, height=5*cm)
+            story.append(img_mini_sala)
+            story.append(Spacer(1, 2*mm))
 
         orden_rows = [['Orden', 'Estado', 'Especie', 'KG Total', 'KG/Hora', 'Dot.', 'HH', 'HH Ef.', 'Det.(h)', 'Inicio', 'Fin', 'Rend.']]
         ordenes_sorted = sorted(
