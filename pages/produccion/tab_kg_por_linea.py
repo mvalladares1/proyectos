@@ -392,7 +392,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "trigger": "axis",
                 "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
                 "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": "#FFC107",
+                "borderColor": "#6BA3C4",
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
@@ -441,23 +441,23 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 9,
                     "symbol": "circle",
                     "itemStyle": {
-                        "color": "#FFC107",
+                        "color": "#6BA3C4",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#FFC107",
-                        "width": 4,
-                        "shadowColor": "rgba(255, 193, 7, 0.6)",
-                        "shadowBlur": 10
+                        "color": "#6BA3C4",
+                        "width": 3.5,
+                        "shadowColor": "rgba(107, 163, 196, 0.4)",
+                        "shadowBlur": 8
                     },
                     "areaStyle": {
                         "color": {
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(255, 193, 7, 0.35)"},
-                                {"offset": 1, "color": "rgba(255, 193, 7, 0.02)"}
+                                {"offset": 0, "color": "rgba(107, 163, 196, 0.25)"},
+                                {"offset": 1, "color": "rgba(107, 163, 196, 0.02)"}
                             ]
                         }
                     },
@@ -466,7 +466,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "top",
                         "fontSize": 10,
                         "fontWeight": "600",
-                        "color": "#FFC107",
+                        "color": "#5A8FAD",
                         "distance": 8,
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
@@ -481,24 +481,24 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 9,
                     "symbol": "diamond",
                     "itemStyle": {
-                        "color": "#FF5252",
+                        "color": "#C9997D",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#FF5252",
-                        "width": 4,
+                        "color": "#C9997D",
+                        "width": 3.5,
                         "type": "solid",
-                        "shadowColor": "rgba(255, 82, 82, 0.6)",
-                        "shadowBlur": 10
+                        "shadowColor": "rgba(201, 153, 125, 0.4)",
+                        "shadowBlur": 8
                     },
                     "areaStyle": {
                         "color": {
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(255, 82, 82, 0.35)"},
-                                {"offset": 1, "color": "rgba(255, 82, 82, 0.02)"}
+                                {"offset": 0, "color": "rgba(201, 153, 125, 0.25)"},
+                                {"offset": 1, "color": "rgba(201, 153, 125, 0.02)"}
                             ]
                         }
                     },
@@ -507,7 +507,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "bottom",
                         "fontSize": 10,
                         "fontWeight": "600",
-                        "color": "#FF5252",
+                        "color": "#B38967",
                         "distance": 8,
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
@@ -596,7 +596,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "trigger": "axis",
                 "axisPointer": {"type": "cross", "crossStyle": {"color": "#999"}},
                 "backgroundColor": "rgba(255, 255, 255, 0.96)",
-                "borderColor": "#FFC107",
+                "borderColor": "#6BA3C4",
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
@@ -641,14 +641,14 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 8,
                     "symbol": "circle",
                     "itemStyle": {
-                        "color": "#FFC107",
+                        "color": "#6BA3C4",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#FFC107",
+                        "color": "#6BA3C4",
                         "width": 4,
-                        "shadowColor": "rgba(255, 193, 7, 0.6)",
+                        "shadowColor": "rgba(107, 163, 196, 0.4)",
                         "shadowBlur": 8
                     },
                     "areaStyle": {
@@ -656,8 +656,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(255, 193, 7, 0.35)"},
-                                {"offset": 1, "color": "rgba(255, 193, 7, 0.02)"}
+                                {"offset": 0, "color": "rgba(107, 163, 196, 0.25)"},
+                                {"offset": 1, "color": "rgba(107, 163, 196, 0.02)"}
                             ]
                         }
                     },
@@ -666,7 +666,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "top",
                         "fontSize": 10,
                         "fontWeight": "bold",
-                        "color": "#FFC107",
+                        "color": "#5A8FAD",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 2
@@ -680,15 +680,15 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "symbolSize": 8,
                     "symbol": "diamond",
                     "itemStyle": {
-                        "color": "#FF5252",
+                        "color": "#C9997D",
                         "borderWidth": 2,
                         "borderColor": "#fff"
                     },
                     "lineStyle": {
-                        "color": "#FF5252",
+                        "color": "#C9997D",
                         "width": 4,
                         "type": "solid",
-                        "shadowColor": "rgba(255, 82, 82, 0.6)",
+                        "shadowColor": "rgba(201, 153, 125, 0.4)",
                         "shadowBlur": 8
                     },
                     "areaStyle": {
@@ -696,8 +696,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(255, 82, 82, 0.35)"},
-                                {"offset": 1, "color": "rgba(255, 82, 82, 0.02)"}
+                                {"offset": 0, "color": "rgba(201, 153, 125, 0.25)"},
+                                {"offset": 1, "color": "rgba(201, 153, 125, 0.02)"}
                             ]
                         }
                     },
@@ -706,7 +706,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                         "position": "bottom",
                         "fontSize": 10,
                         "fontWeight": "bold",
-                        "color": "#FF5252",
+                        "color": "#B38967",
                         "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):'';}").js_code
                     },
                     "z": 3
@@ -1381,35 +1381,35 @@ def _generar_informe_pdf(
         
         x_pos = list(range(len(dias_labels)))
         
-        # KG/Hora Efectiva - línea amarilla
-        ax.plot(x_pos, kg_hora_vals, color='#FFC107', linewidth=2.5, 
+        # KG/Hora Efectiva - línea azul elegante
+        ax.plot(x_pos, kg_hora_vals, color='#6BA3C4', linewidth=2.5, 
                 marker='o', markersize=6, label='KG/Hora Efectiva',
-                markerfacecolor='#FFC107', markeredgecolor='white', markeredgewidth=1.5,
+                markerfacecolor='#6BA3C4', markeredgecolor='white', markeredgewidth=1.5,
                 zorder=3)
-        ax.fill_between(x_pos, kg_hora_vals, alpha=0.2, color='#FFC107', zorder=1)
+        ax.fill_between(x_pos, kg_hora_vals, alpha=0.2, color='#6BA3C4', zorder=1)
         
-        # Agregar valores numéricos en puntos amarillos
+        # Agregar valores numéricos en puntos azules
         for i, (x, y) in enumerate(zip(x_pos, kg_hora_vals)):
             if y > 0:
                 ax.text(x, y, f'{y:,.0f}', 
                        ha='center', va='bottom', fontsize=8, 
-                       fontweight='600', color='#FFC107',
+                       fontweight='600', color='#5A8FAD',
                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
                                 edgecolor='none', alpha=0.7))
         
-        # KG/HH Efectiva - línea roja
-        ax.plot(x_pos, kg_hh_vals, color='#FF5252', linewidth=2.5,
+        # KG/HH Efectiva - línea beige/salmón
+        ax.plot(x_pos, kg_hh_vals, color='#C9997D', linewidth=2.5,
                 marker='D', markersize=5, label='KG/HH Efectiva',
-                markerfacecolor='#FF5252', markeredgecolor='white', markeredgewidth=1.5,
+                markerfacecolor='#C9997D', markeredgecolor='white', markeredgewidth=1.5,
                 zorder=3)
-        ax.fill_between(x_pos, kg_hh_vals, alpha=0.2, color='#FF5252', zorder=1)
+        ax.fill_between(x_pos, kg_hh_vals, alpha=0.2, color='#C9997D', zorder=1)
         
-        # Agregar valores numéricos en puntos rojos
+        # Agregar valores numéricos en puntos beige
         for i, (x, y) in enumerate(zip(x_pos, kg_hh_vals)):
             if y > 0:
                 ax.text(x, y, f'{y:,.0f}', 
                        ha='center', va='top', fontsize=8, 
-                       fontweight='600', color='#FF5252',
+                       fontweight='600', color='#B38967',
                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
                                 edgecolor='none', alpha=0.7))
         
@@ -1506,7 +1506,7 @@ def _generar_informe_pdf(
         fig.patch.set_facecolor('white')
         
         # Gráfico 1: KG/Hora por Sala
-        colores_barras = ['#FFC107' if i == 0 else '#7FA8C9' for i in range(len(nombres_salas))]
+        colores_barras = ['#6BA3C4' if i == 0 else '#A8C4C9' for i in range(len(nombres_salas))]
         ax1.barh(nombres_salas, kg_hora_salas, color=colores_barras, edgecolor='white', linewidth=1.5)
         ax1.set_xlabel('KG/Hora', fontsize=9, fontweight='600', color='#666')
         ax1.set_title('Rendimiento por Sala', fontsize=10, fontweight='bold', color='#0d3b66', pad=10)
@@ -1523,7 +1523,7 @@ def _generar_informe_pdf(
                     va='center', fontsize=8, fontweight='600', color='#0d3b66')
         
         # Gráfico 2: KG Totales por Sala
-        colores_barras2 = ['#FF5252' if i == 0 else '#7FA8C9' for i in range(len(nombres_salas))]
+        colores_barras2 = ['#C9997D' if i == 0 else '#C9AFA8' for i in range(len(nombres_salas))]
         ax2.barh(nombres_salas, kg_totales_salas, color=colores_barras2, edgecolor='white', linewidth=1.5)
         ax2.set_xlabel('KG Procesados', fontsize=9, fontweight='600', color='#666')
         ax2.set_title('Producción Total por Sala', fontsize=10, fontweight='bold', color='#0d3b66', pad=10)
@@ -1604,12 +1604,22 @@ def _generar_informe_pdf(
             ax_sala.set_facecolor('#fafbfc')
             
             x_sala = list(range(len(dias_sala)))
-            ax_sala.plot(x_sala, kg_hora_sala_vals, color='#FFC107', linewidth=2,
+            ax_sala.plot(x_sala, kg_hora_sala_vals, color='#6BA3C4', linewidth=2,
                         marker='o', markersize=4, label='KG/Hora Efectiva',
-                        markerfacecolor='#FFC107', markeredgecolor='white', markeredgewidth=1)
-            ax_sala.plot(x_sala, kg_hh_sala_vals, color='#FF5252', linewidth=2,
+                        markerfacecolor='#6BA3C4', markeredgecolor='white', markeredgewidth=1)
+            ax_sala.plot(x_sala, kg_hh_sala_vals, color='#C9997D', linewidth=2,
                         marker='D', markersize=3.5, label='KG/HH Efectiva',
-                        markerfacecolor='#FF5252', markeredgecolor='white', markeredgewidth=1)
+                        markerfacecolor='#C9997D', markeredgecolor='white', markeredgewidth=1)
+            
+            # Agregar valores numéricos en los puntos
+            for i, (x, y) in enumerate(zip(x_sala, kg_hora_sala_vals)):
+                if y > 0:
+                    ax_sala.text(x, y, f'{y:,.0f}', ha='center', va='bottom', 
+                               fontsize=6, fontweight='600', color='#5A8FAD')
+            for i, (x, y) in enumerate(zip(x_sala, kg_hh_sala_vals)):
+                if y > 0:
+                    ax_sala.text(x, y, f'{y:,.0f}', ha='center', va='top', 
+                               fontsize=6, fontweight='600', color='#B38967')
             
             ax_sala.set_xticks(x_sala)
             ax_sala.set_xticklabels(dias_sala, fontsize=7, color='#666')
