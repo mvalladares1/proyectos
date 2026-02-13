@@ -352,7 +352,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         if not dt:
             continue
         dia_key = dt.strftime('%d/%m')
-        turno = _clasificar_turno(dt)
+        turno = _clasificar_turno(dt, mo.get('_fin_dt'))
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
         detenciones = mo.get('detenciones', 0) or 0
@@ -585,9 +585,9 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     for idx, (sala, sd) in enumerate(salas_ordenadas):
         # Filtrar órdenes por turno si aplica
         if filtro_turno_sala == "☀️ Día":
-            ordenes_filtradas = [o for o in sd['ordenes'] if _clasificar_turno(o.get('_inicio_dt')) == "Día"]
+            ordenes_filtradas = [o for o in sd['ordenes'] if _clasificar_turno(o.get('_inicio_dt'), o.get('_fin_dt')) == "Día"]
         elif filtro_turno_sala == "🌙 Tarde":
-            ordenes_filtradas = [o for o in sd['ordenes'] if _clasificar_turno(o.get('_inicio_dt')) == "Tarde"]
+            ordenes_filtradas = [o for o in sd['ordenes'] if _clasificar_turno(o.get('_inicio_dt'), o.get('_fin_dt')) == "Tarde"]
         else:
             ordenes_filtradas = sd['ordenes']
         
@@ -797,15 +797,21 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         st_echarts(options=opts_sala, height="380px", key=f"kg_hora_sala_{idx}")
 
 
-def _clasificar_turno(dt):
-    """Clasifica en turno Día o Tarde basado en hora de inicio.
+def _clasificar_turno(dt, dt_fin=None):
+    """Clasifica en turno Día o Tarde basado en el punto medio del proceso.
+    Si solo hay hora de inicio, usa esa. Si hay inicio y fin, usa el punto medio.
     Día: L-J 8:00-17:30, V 8:00-16:30, S 8:00-13:00
     Tarde: L-J 17:30-23:30, V 16:30-22:30, S 14:00-22:00
     """
     if dt is None:
         return "Día"
-    hora = dt.hour + dt.minute / 60.0
-    dow = dt.weekday()  # 0=Lun, 4=Vie, 5=Sáb
+    # Usar punto medio si hay fecha de fin
+    if dt_fin is not None and dt_fin > dt:
+        medio = dt + (dt_fin - dt) / 2
+    else:
+        medio = dt
+    hora = medio.hour + medio.minute / 60.0
+    dow = medio.weekday()  # 0=Lun, 4=Vie, 5=Sáb
     if dow <= 3:  # Lunes a Jueves
         return "Día" if hora < 17.5 else "Tarde"
     elif dow == 4:  # Viernes
@@ -840,7 +846,7 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
         if not dt:
             continue
         sala = mo.get('sala') or 'Sin Sala'
-        turno = _clasificar_turno(dt)
+        turno = _clasificar_turno(dt, mo.get('_fin_dt'))
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
         detenciones = mo.get('detenciones', 0) or 0
