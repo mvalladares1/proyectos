@@ -451,6 +451,8 @@ class ComprasService:
         
         oc_ids = [oc['id'] for oc in ocs]
         oc_info_map = {oc['id']: oc for oc in ocs}
+        # Mapa nombre OC -> ID para asociar facturas con su OC
+        oc_name_to_id = {oc['name']: oc['id'] for oc in ocs}
         
         # Filtrar OCs que NO tienen factura asociada (uso tentativo)
         ocs_sin_factura_by_partner = {}
@@ -660,16 +662,28 @@ class ComprasService:
                 if f_is_usd:
                     f_monto = CurrencyService.convert_usd_to_clp(f_monto_original)
                 
+                # Buscar oc_id desde el origen de la factura
+                f_origen = f.get('invoice_origin') or ''
+                f_oc_id = None
+                if f_origen:
+                    # El origen puede ser múltiple "OC1, OC2", tomar el primero
+                    for oc_ref in f_origen.split(','):
+                        oc_ref = oc_ref.strip()
+                        if oc_ref in oc_name_to_id:
+                            f_oc_id = oc_name_to_id[oc_ref]
+                            break
+                
                 detalle_facturas.append({
                     'tipo': 'Factura',
                     'numero': f.get('name', ''),
+                    'oc_id': f_oc_id,  # ID de la OC para link a Odoo
                     'monto': round(f_monto, 0),
                     'monto_original': round(f_monto_original, 2) if f_is_usd else None,
                     'moneda_original': 'USD' if f_is_usd else 'CLP',
                     'tipo_cambio': round(exchange_rate, 2) if f_is_usd else None,
                     'fecha': str(f.get('invoice_date') or '')[:10],
                     'fecha_vencimiento': fecha_venc,
-                    'origen': f.get('invoice_origin') or '',
+                    'origen': f_origen,
                     'estado': 'Pendiente pago'
                 })
             
