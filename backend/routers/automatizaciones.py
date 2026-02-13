@@ -644,6 +644,60 @@ async def validar_pallets_procesos(
         odoo = get_odoo_client(username=username, password=password)
         resultados = []
         
+        # === Obtener pallets ya existentes en la orden ===
+        pallets_ya_en_orden = set()
+        try:
+            es_picking_val = False
+            # Intentar buscar en mrp.production primero
+            mo_info = odoo.search_read(
+                'mrp.production',
+                [('id', '=', request.orden_id)],
+                ['move_raw_ids', 'move_finished_ids'],
+                limit=1
+            )
+            if mo_info:
+                move_ids = []
+                if request.tipo == 'componentes':
+                    move_ids = mo_info[0].get('move_raw_ids', [])
+                else:
+                    move_ids = mo_info[0].get('move_finished_ids', [])
+                
+                if move_ids:
+                    move_lines = odoo.search_read(
+                        'stock.move.line',
+                        [('move_id', 'in', move_ids)],
+                        ['package_id', 'result_package_id'],
+                    )
+                    for ml in move_lines:
+                        if ml.get('package_id'):
+                            pallets_ya_en_orden.add(ml['package_id'][0])
+                        if ml.get('result_package_id'):
+                            pallets_ya_en_orden.add(ml['result_package_id'][0])
+            else:
+                # Buscar en stock.picking
+                pk_info = odoo.search_read(
+                    'stock.picking',
+                    [('id', '=', request.orden_id)],
+                    ['move_ids'],
+                    limit=1
+                )
+                if pk_info:
+                    es_picking_val = True
+                    move_ids = pk_info[0].get('move_ids', [])
+                    if move_ids:
+                        move_lines = odoo.search_read(
+                            'stock.move.line',
+                            [('move_id', 'in', move_ids)],
+                            ['package_id', 'result_package_id'],
+                        )
+                        for ml in move_lines:
+                            if ml.get('package_id'):
+                                pallets_ya_en_orden.add(ml['package_id'][0])
+                            if ml.get('result_package_id'):
+                                pallets_ya_en_orden.add(ml['result_package_id'][0])
+        except Exception as e:
+            print(f"Advertencia al verificar pallets existentes: {e}")
+        
         for codigo in request.pallets:
             # Normalizar código
             codigo_normalizado = codigo.strip().upper()
@@ -668,7 +722,16 @@ async def validar_pallets_procesos(
             
             package_id = packages[0]['id']
             
-            # Buscar quant con stock
+            # === Verificar si el pallet ya está en la orden ===
+            if package_id in pallets_ya_en_orden:
+                resultados.append({
+                    'codigo': codigo_normalizado,
+                    'valido': False,
+                    'error': 'Ya está ingresado en esta orden'
+                })
+                continue
+            
+            # Buscar quant con stock > 0
             quants = odoo.search_read(
                 'stock.quant',
                 [
@@ -680,28 +743,29 @@ async def validar_pallets_procesos(
             )
             
             if not quants:
-                # Intentar buscar sin filtro de cantidad (puede estar reservado)
-                quants = odoo.search_read(
-                    'stock.quant',
-                    [('package_id', '=', package_id)],
-                    ['product_id', 'quantity', 'lot_id', 'location_id'],
-                    limit=1
-                )
-            
-            if not quants:
                 resultados.append({
                     'codigo': codigo_normalizado,
                     'valido': False,
-                    'error': 'Sin stock en este package'
+                    'error': 'Sin stock disponible (0 KG)'
                 })
                 continue
             
             quant = quants[0]
+            kg_disponibles = quant['quantity']
+            
+            # === No agregar pallets con 0 KG ===
+            if kg_disponibles <= 0:
+                resultados.append({
+                    'codigo': codigo_normalizado,
+                    'valido': False,
+                    'error': 'Pallet con 0 KG - no se puede agregar'
+                })
+                continue
             
             resultados.append({
                 'codigo': codigo_normalizado,
                 'valido': True,
-                'kg': quant['quantity'],
+                'kg': kg_disponibles,
                 'producto_id': quant['product_id'][0] if quant['product_id'] else None,
                 'producto_nombre': quant['product_id'][1] if quant['product_id'] else 'N/A',
                 'lote_id': quant['lot_id'][0] if quant['lot_id'] else None,
@@ -781,6 +845,11 @@ async def agregar_pallets_procesos(
                     errores.append(f"{codigo}: Sin producto_id")
                     continue
                 
+                # No agregar pallets con 0 kg
+                if kg <= 0:
+                    errores.append(f"{codigo}: 0 KG - no se agrega")
+                    continue
+                
                 if es_picking:
                     # === STOCK.PICKING (Transferencias) ===
                     
@@ -842,12 +911,11 @@ async def agregar_pallets_procesos(
                         }
                         move_id = odoo.execute('stock.move', 'create', move_data)
                     
-                    # Crear stock.move.line
+                    # Crear stock.move.line (sin reservar)
                     move_line_data = {
                         'move_id': move_id,
                         'product_id': producto_id,
                         'qty_done': kg,
-                        'reserved_uom_qty': kg,
                         'product_uom_id': 12,
                         'location_id': orden['location_id'][0],
                         'location_dest_id': orden['location_dest_id'][0],
@@ -925,12 +993,11 @@ async def agregar_pallets_procesos(
                         }
                         move_id = odoo.execute('stock.move', 'create', move_data)
                     
-                    # Crear stock.move.line
+                    # Crear stock.move.line (sin reservar)
                     move_line_data = {
                         'move_id': move_id,
                         'product_id': producto_id,
                         'qty_done': kg,
-                        'reserved_uom_qty': kg,
                         'product_uom_id': 12,
                         'location_id': ubicacion_id or orden['location_src_id'][0],
                         'location_dest_id': ubicacion_virtual,
@@ -1044,12 +1111,11 @@ async def agregar_pallets_procesos(
                         }
                         move_id = odoo.execute('stock.move', 'create', move_data)
                     
-                    # Crear stock.move.line con result_package_id
+                    # Crear stock.move.line con result_package_id (sin reservar)
                     move_line_data = {
                         'move_id': move_id,
                         'product_id': producto_output_id,
                         'qty_done': kg,
-                        'reserved_uom_qty': kg,
                         'product_uom_id': 12,
                         'location_id': ubicacion_virtual,
                         'location_dest_id': orden['location_dest_id'][0],
