@@ -119,9 +119,12 @@ def get_facturas_borrador(
     client = OdooClient(username=username, password=password)
     
     # Construir dominio de búsqueda
+    # Filtrar directamente en Odoo por create_uid para evitar que el limit
+    # devuelva facturas de otros usuarios (Nubistalia DTE, nómina, etc.)
     domain = [
         ("move_type", "=", "in_invoice"),  # Facturas de proveedor
         ("state", "=", "draft"),  # Solo borradores
+        ("create_uid.name", "=", "MARCELO JARAMILLO CADEGAN"),  # Solo facturas manuales
     ]
     
     # Filtro de moneda: moneda_filtro tiene prioridad sobre solo_usd
@@ -150,31 +153,9 @@ def get_facturas_borrador(
             "invoice_line_ids", "invoice_origin", "ref",
             "create_uid"
         ],
-        limit=100,
+        limit=200,
         order="create_date desc"
     )
-    
-    # Excluir facturas creadas automáticamente por Nubistalia (DTE/SII)
-    # Y filtrar SOLO las de MARCELO JARAMILLO CADEGAN
-    USUARIOS_EXCLUIDOS = ["nubistalia", "nubistalia gateways platform"]
-    USUARIO_PERMITIDO = "MARCELO JARAMILLO CADEGAN"
-    
-    facturas_filtradas = []
-    for f in facturas:
-        creador = f.get("create_uid", [0, ""])
-        nombre_creador = creador[1] if isinstance(creador, (list, tuple)) and len(creador) > 1 else ""
-        nombre_creador_upper = str(nombre_creador).upper()
-        
-        # 1. Excluir Nubistalia
-        if any(excl in nombre_creador_upper.lower() for excl in USUARIOS_EXCLUIDOS):
-            continue
-            
-        # 2. Filtrar SOLO Marcelo Jaramillo Cadegan
-        # Se usa in para ser flexible con espacios o mayúsculas exactas
-        if USUARIO_PERMITIDO in nombre_creador_upper:
-            facturas_filtradas.append(f)
-    
-    facturas = facturas_filtradas
     
     resultado = []
     

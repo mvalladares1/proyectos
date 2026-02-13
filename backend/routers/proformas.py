@@ -11,7 +11,7 @@ from backend.services.proforma_ajuste_service import (
     eliminar_linea_factura
 )
 
-router = APIRouter(prefix="/proformas", tags=["proformas"])
+router = APIRouter(prefix="/api/v1/proformas", tags=["proformas"])
 
 
 @router.get("/proveedores")

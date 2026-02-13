@@ -38,6 +38,7 @@ def render(username: str, password: str):
     
     if cargar_lineas:
         st.session_state.lineas_loading = True
+        st.session_state.lineas_fecha_desde = fecha_desde_lc.strftime("%Y-%m-%d")
         try:
             # Progress bar personalizado
             progress_bar = st.progress(0)
@@ -49,13 +50,15 @@ def render(username: str, password: str):
             status_text.text("⏳ Fase 2/4: Consultando líneas de crédito...")
             progress_bar.progress(50)
             
-            # Llamadas cacheadas
-            st.session_state.lineas_resumen = fetch_lineas_credito_resumen(username, password)
+            fecha_str = fecha_desde_lc.strftime("%Y-%m-%d")
+            
+            # Llamadas cacheadas con fecha
+            st.session_state.lineas_resumen = fetch_lineas_credito_resumen(username, password, fecha_str)
             
             status_text.text("⏳ Fase 3/4: Procesando datos...")
             progress_bar.progress(75)
             
-            st.session_state.lineas_credito = fetch_lineas_credito(username, password)
+            st.session_state.lineas_credito = fetch_lineas_credito(username, password, fecha_str)
             
             status_text.text("✅ Fase 4/4: Completado")
             progress_bar.progress(100)
@@ -70,8 +73,13 @@ def render(username: str, password: str):
     
     resumen = st.session_state.get('lineas_resumen')
     lineas = st.session_state.get('lineas_credito')
+    fecha_filtrada = st.session_state.get('lineas_fecha_desde')
     
     if resumen:
+        # Mostrar fecha del filtro aplicado
+        if fecha_filtrada:
+            st.info(f"📅 Datos filtrados desde: **{fecha_filtrada}** (facturas y recepciones)")
+        
         # KPIs de líneas de crédito
         kpi_cols = st.columns(5)
         with kpi_cols[0]:
@@ -187,7 +195,11 @@ def _render_proveedor_card(prov):
         
         detalle = prov.get('detalle', [])
         if detalle:
-            _render_detalle_compromisos(detalle)
+            tab_detalle, tab_ocs = st.tabs(["📋 Detalle de Compromisos", "📦 Vista por OC"])
+            with tab_detalle:
+                _render_detalle_compromisos(detalle)
+            with tab_ocs:
+                _render_vista_por_oc(detalle)
         else:
             st.success("✅ Sin compromisos pendientes")
 
@@ -234,6 +246,155 @@ def _render_detalle_compromisos(detalle):
                     "Estado": st.column_config.TextColumn(width="medium"),
                     "Odoo": st.column_config.LinkColumn(width="small", display_text="🔗 Abrir"),
                 })
+
+
+def _render_vista_por_oc(detalle):
+    """Renderiza vista agrupada por OC mostrando pagado vs pendiente."""
+    st.markdown("##### 📦 Desglose por Orden de Compra")
+    st.caption("Agrupación de compromisos por OC: recibido, facturado y pendiente")
+    
+    ODOO_BASE = "https://riofuturo.server98c6e.oerpondemand.net/web#"
+    
+    # Agrupar datos por OC
+    ocs_data = {}
+    facturas_sin_oc = []
+    
+    for item in detalle:
+        tipo = item.get('tipo', '')
+        numero = item.get('numero', '')
+        monto = float(item.get('monto', 0))
+        fecha = item.get('fecha', '')
+        origen = item.get('origen', '')  # Para facturas, puede contener nombre de OC
+        oc_id = item.get('oc_id')
+        
+        if tipo == 'Factura':
+            # Intentar asociar factura a OC vía origen
+            if origen and origen.strip():
+                # El origen puede ser "OC012345" o similar
+                oc_name = origen.strip()
+                if oc_name not in ocs_data:
+                    ocs_data[oc_name] = {
+                        'oc_name': oc_name,
+                        'oc_id': None,
+                        'monto_recibido': 0,
+                        'monto_facturado': monto,
+                        'monto_tentativo': 0,
+                        'facturas': [numero],
+                        'fecha_min': fecha,
+                    }
+                else:
+                    ocs_data[oc_name]['monto_facturado'] += monto
+                    ocs_data[oc_name]['facturas'].append(numero)
+            else:
+                facturas_sin_oc.append({'numero': numero, 'monto': monto, 'fecha': fecha})
+                
+        elif tipo == 'Recepción':
+            oc_name = numero  # El número de recepción ES el nombre de la OC
+            if oc_name not in ocs_data:
+                ocs_data[oc_name] = {
+                    'oc_name': oc_name,
+                    'oc_id': oc_id,
+                    'monto_recibido': monto,
+                    'monto_facturado': 0,
+                    'monto_tentativo': 0,
+                    'facturas': [],
+                    'fecha_min': fecha,
+                }
+            else:
+                ocs_data[oc_name]['monto_recibido'] += monto
+                ocs_data[oc_name]['oc_id'] = ocs_data[oc_name]['oc_id'] or oc_id
+                
+        elif tipo == 'OC Tentativa':
+            oc_name = numero
+            if oc_name not in ocs_data:
+                ocs_data[oc_name] = {
+                    'oc_name': oc_name,
+                    'oc_id': oc_id,
+                    'monto_recibido': 0,
+                    'monto_facturado': 0,
+                    'monto_tentativo': monto,
+                    'facturas': [],
+                    'fecha_min': fecha,
+                }
+            else:
+                ocs_data[oc_name]['monto_tentativo'] += monto
+                ocs_data[oc_name]['oc_id'] = ocs_data[oc_name]['oc_id'] or oc_id
+    
+    if not ocs_data and not facturas_sin_oc:
+        st.info("No hay datos de OC para mostrar")
+        return
+    
+    # Crear DataFrame para mostrar
+    rows = []
+    for oc_name, data in ocs_data.items():
+        monto_pendiente = data['monto_recibido']  # Lo recibido sin facturar
+        
+        odoo_link = None
+        if data['oc_id']:
+            odoo_link = f"{ODOO_BASE}id={data['oc_id']}&menu_id=411&cids=1&action=627&model=purchase.order&view_type=form"
+        
+        rows.append({
+            'OC': oc_name,
+            'Recibido sin Fact.': data['monto_recibido'],
+            'Facturado Pend. Pago': data['monto_facturado'],
+            'OC Tentativa': data['monto_tentativo'],
+            'Total Compromiso': data['monto_recibido'] + data['monto_facturado'] + data['monto_tentativo'],
+            'Facturas': ', '.join(data['facturas']) if data['facturas'] else '-',
+            'Fecha': data['fecha_min'],
+            'odoo_link': odoo_link,
+        })
+    
+    # Agregar facturas sin OC asociada
+    for f in facturas_sin_oc:
+        rows.append({
+            'OC': '(Sin OC)',
+            'Recibido sin Fact.': 0,
+            'Facturado Pend. Pago': f['monto'],
+            'OC Tentativa': 0,
+            'Total Compromiso': f['monto'],
+            'Facturas': f['numero'],
+            'Fecha': f['fecha'],
+            'odoo_link': None,
+        })
+    
+    df_ocs = pd.DataFrame(rows)
+    df_ocs = df_ocs.sort_values('Total Compromiso', ascending=False)
+    
+    # Formatear montos
+    df_display = df_ocs.copy()
+    df_display['Recibido sin Fact.'] = df_ocs['Recibido sin Fact.'].apply(lambda x: fmt_moneda(x) if x > 0 else '-')
+    df_display['Facturado Pend. Pago'] = df_ocs['Facturado Pend. Pago'].apply(lambda x: fmt_moneda(x) if x > 0 else '-')
+    df_display['OC Tentativa'] = df_ocs['OC Tentativa'].apply(lambda x: fmt_moneda(x) if x > 0 else '-')
+    df_display['Total Compromiso'] = df_ocs['Total Compromiso'].apply(fmt_moneda)
+    df_display['Fecha'] = df_ocs['Fecha'].apply(fmt_fecha)
+    
+    st.dataframe(df_display, use_container_width=True, hide_index=True,
+                column_config={
+                    "OC": st.column_config.TextColumn(width="medium"),
+                    "Recibido sin Fact.": st.column_config.TextColumn(width="medium", help="Material recibido pendiente de facturar"),
+                    "Facturado Pend. Pago": st.column_config.TextColumn(width="medium", help="Facturas emitidas pendientes de pago"),
+                    "OC Tentativa": st.column_config.TextColumn(width="medium", help="OC sin recepciones (informativo)"),
+                    "Total Compromiso": st.column_config.TextColumn(width="medium"),
+                    "Facturas": st.column_config.TextColumn(width="large"),
+                    "Fecha": st.column_config.TextColumn(width="small"),
+                    "odoo_link": st.column_config.LinkColumn(width="small", display_text="🔗 Ver OC"),
+                })
+    
+    # Resumen rápido
+    total_recibido = sum(r['Recibido sin Fact.'] for r in rows if isinstance(r['Recibido sin Fact.'], (int, float)))
+    total_recibido = sum(d['monto_recibido'] for d in ocs_data.values())
+    total_facturado = sum(d['monto_facturado'] for d in ocs_data.values())
+    total_facturado += sum(f['monto'] for f in facturas_sin_oc)
+    total_tentativo = sum(d['monto_tentativo'] for d in ocs_data.values())
+    
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📦 Total Recibido sin Facturar", fmt_moneda(total_recibido))
+    with col2:
+        st.metric("💰 Total Facturado Pend. Pago", fmt_moneda(total_facturado))
+    with col3:
+        st.metric("📄 Total OCs Tentativas", fmt_moneda(total_tentativo), help="Solo informativo, no afecta el cupo")
 
 
 def _render_grafico_uso(lineas):

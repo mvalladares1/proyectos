@@ -124,13 +124,16 @@ def fetch_compras_ordenes(_username, _password, status_filter=None, fecha_inicio
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_lineas_credito_resumen(_username, _password):
+def fetch_lineas_credito_resumen(_username, _password, fecha_desde: str = None):
     """Obtiene resumen de líneas de crédito."""
     try:
         import requests
+        params = {"username": _username, "password": _password}
+        if fecha_desde:
+            params["fecha_desde"] = fecha_desde
         resp = requests.get(
             f"{API_URL}/api/v1/compras/lineas-credito/resumen",
-            params={"username": _username, "password": _password},
+            params=params,
             timeout=120
         )
         if resp.status_code == 200:
@@ -142,13 +145,16 @@ def fetch_lineas_credito_resumen(_username, _password):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_lineas_credito(_username, _password):
+def fetch_lineas_credito(_username, _password, fecha_desde: str = None):
     """Obtiene líneas de crédito detalladas."""
     try:
         import requests
+        params = {"username": _username, "password": _password}
+        if fecha_desde:
+            params["fecha_desde"] = fecha_desde
         resp = requests.get(
             f"{API_URL}/api/v1/compras/lineas-credito",
-            params={"username": _username, "password": _password},
+            params=params,
             timeout=120
         )
         if resp.status_code == 200:
