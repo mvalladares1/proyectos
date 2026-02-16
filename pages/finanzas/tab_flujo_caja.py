@@ -76,8 +76,8 @@ def render(username: str, password: str):
         act_cols = st.columns(2)
         expand_all = act_cols[0].button("📂 Expandir Todo", use_container_width=True)
         collapse_all = act_cols[1].button("📁 Contraer Todo", use_container_width=True)
-        solo_pendiente = st.checkbox("📌 Parciales: solo lo pendiente", value=False, key="solo_pendiente_parciales",
-                                     help="Quitar la parte ya pagada de Facturas Parcialmente Pagadas")
+        solo_pendiente = st.checkbox("📌 Solo pendiente", value=False, key="solo_pendiente_parciales",
+                                     help="Excluir todo lo ya pagado/cobrado de Operación. Muestra solo lo que falta por llegar o pagar.")
     
     st.markdown("---")
     
@@ -202,20 +202,49 @@ def render(username: str, password: str):
         efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
         
-        # ========== FILTRO: Solo pendiente en Parciales ==========
+        # ========== FILTRO: Solo pendiente (excluir todo lo ya pagado/cobrado) ==========
         if solo_pendiente:
             import copy
             actividades = copy.deepcopy(actividades)
-            for act_key, act_data in actividades.items():
+            act_data = actividades.get("OPERACION", {})
+            if act_data:
                 for concepto in act_data.get("conceptos", []):
-                    for cuenta in concepto.get("cuentas", []):
-                        if cuenta.get("codigo") == "parciales" and "montos_real_por_mes" in cuenta:
-                            # Restar montos reales del estado
+                    cuentas = concepto.get("cuentas", [])
+                    # Solo procesar conceptos con estructura CxP/CxC (tienen estados pagadas/parciales)
+                    tiene_estructura = any(c.get("es_cuenta_cxp") or c.get("es_cuenta_cxc") for c in cuentas)
+                    if not tiene_estructura:
+                        continue
+                    
+                    for cuenta in cuentas:
+                        if cuenta.get("codigo") == "pagadas":
+                            # PAGADAS: Excluir completamente (ya se pagó/cobró)
+                            monto_pagadas = cuenta.get("monto", 0)
+                            # Restar del concepto padre
+                            concepto["total"] = concepto.get("total", 0) - monto_pagadas
+                            for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                            # Restar del subtotal de actividad
+                            act_data["subtotal"] = act_data.get("subtotal", 0) - monto_pagadas
+                            if "subtotales_por_mes" in act_data:
+                                for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                    act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                            # Poner en cero la cuenta pagadas
+                            cuenta["monto"] = 0
+                            cuenta["montos_por_mes"] = {}
+                            for etiqueta in cuenta.get("etiquetas", []):
+                                etiqueta["monto"] = 0
+                                etiqueta["montos_por_mes"] = {}
+                                for sub in etiqueta.get("sub_etiquetas", []):
+                                    sub["monto"] = 0
+                                    sub["montos_por_mes"] = {}
+                        
+                        elif cuenta.get("codigo") == "parciales" and "montos_real_por_mes" in cuenta:
+                            # PARCIALES: Quitar la parte ya pagada, dejar solo lo pendiente
                             monto_real_estado = cuenta.get("monto_real", 0)
                             cuenta["monto"] = cuenta.get("monto", 0) - monto_real_estado
                             for mes, val in cuenta.get("montos_real_por_mes", {}).items():
                                 cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
-                            # También del concepto padre (1.2.1) y del subtotal de actividad
+                            # Restar del concepto padre
                             concepto["total"] = concepto.get("total", 0) - monto_real_estado
                             for mes, val in cuenta.get("montos_real_por_mes", {}).items():
                                 concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
@@ -224,26 +253,19 @@ def render(username: str, password: str):
                             if "subtotales_por_mes" in act_data:
                                 for mes, val in cuenta.get("montos_real_por_mes", {}).items():
                                     act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
-                            # Limpiar campos real del estado
-                            cuenta.pop("montos_real_por_mes", None)
-                            cuenta.pop("monto_real", None)
-                            # Restar de etiquetas (categorías) y sub_etiquetas (proveedores)
+                            # Restar de etiquetas y sub_etiquetas
                             for etiqueta in cuenta.get("etiquetas", []):
                                 if "montos_real_por_mes" in etiqueta:
                                     et_real = etiqueta.get("monto_real", 0)
                                     etiqueta["monto"] = etiqueta.get("monto", 0) - et_real
                                     for mes, val in etiqueta.get("montos_real_por_mes", {}).items():
                                         etiqueta["montos_por_mes"][mes] = etiqueta.get("montos_por_mes", {}).get(mes, 0) - val
-                                    etiqueta.pop("montos_real_por_mes", None)
-                                    etiqueta.pop("monto_real", None)
                                 for sub in etiqueta.get("sub_etiquetas", []):
                                     if "montos_real_por_mes" in sub:
                                         sub_real = sub.get("monto_real", 0)
                                         sub["monto"] = sub.get("monto", 0) - sub_real
                                         for mes, val in sub.get("montos_real_por_mes", {}).items():
                                             sub["montos_por_mes"][mes] = sub.get("montos_por_mes", {}).get(mes, 0) - val
-                                        sub.pop("montos_real_por_mes", None)
-                                        sub.pop("monto_real", None)
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
