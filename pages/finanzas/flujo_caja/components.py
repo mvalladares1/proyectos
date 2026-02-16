@@ -22,21 +22,31 @@ function toggleConcept(conceptId) {
     rows.forEach(row => {
         row.style.display = isExpanded ? 'none' : 'table-row';
         
-        // Si estamos colapsando (isExpanded = true), también ocultar las etiquetas de esta fila
+        // Si estamos colapsando, cerrar TODOS los niveles hijos
         if (isExpanded) {
-            // Buscar el ID de cuenta asociado a esta fila detail
             const classes = Array.from(row.classList);
             const cuentaClass = classes.find(c => c.startsWith('cuenta-'));
             
             if (cuentaClass) {
                 const cuentaId = cuentaClass.replace('cuenta-', '');
-                // Ocultar todas las etiquetas de esta cuenta
+                // Ocultar nivel 3 (categorías/etiquetas)
                 const etiquetasRows = document.querySelectorAll('.etiqueta-' + cuentaId);
                 etiquetasRows.forEach(etiqRow => {
                     etiqRow.style.display = 'none';
                 });
-                // Marcar las etiquetas como colapsadas
+                // Ocultar nivel 4 (sub-etiquetas/proveedores)
+                const subEtiquetasRows = document.querySelectorAll('.sub-etiqueta-of-' + cuentaId);
+                subEtiquetasRows.forEach(subRow => {
+                    subRow.style.display = 'none';
+                });
+                // Limpiar estados expandidos
                 expandedEtiquetas.delete(cuentaId);
+                // Limpiar todas las categorías expandidas de esta cuenta
+                expandedCategorias.forEach(key => {
+                    if (key.startsWith(cuentaId + '_')) {
+                        expandedCategorias.delete(key);
+                    }
+                });
             }
         }
     });
@@ -53,7 +63,7 @@ function toggleConcept(conceptId) {
 // Estado para etiquetas expandidas
 let expandedEtiquetas = new Set();
 
-// ============ TOGGLE ETIQUETAS (Nivel 3) ============
+// ============ TOGGLE ETIQUETAS (Nivel 2 -> Nivel 3) ============
 function toggleEtiquetas(cuentaId) {
     const rows = document.querySelectorAll('.etiqueta-' + cuentaId);
     
@@ -64,6 +74,20 @@ function toggleEtiquetas(cuentaId) {
     rows.forEach(row => {
         row.style.display = isExpanded ? 'none' : 'table-row';
     });
+    
+    // Si estamos colapsando nivel 2, también cerrar TODOS los proveedores (nivel 4)
+    if (isExpanded) {
+        const subEtiquetasRows = document.querySelectorAll('.sub-etiqueta-of-' + cuentaId);
+        subEtiquetasRows.forEach(subRow => {
+            subRow.style.display = 'none';
+        });
+        // Limpiar categorías expandidas de esta cuenta
+        expandedCategorias.forEach(key => {
+            if (key.startsWith(cuentaId + '_')) {
+                expandedCategorias.delete(key);
+            }
+        });
+    }
     
     if (isExpanded) {
         expandedEtiquetas.delete(cuentaId);
@@ -77,8 +101,9 @@ let expandedCategorias = new Set();
 
 // ============ TOGGLE CATEGORIA (Nivel 3 → Nivel 4) ============
 function toggleCategoria(categoriaId, cuentaId) {
-    // Seleccionar solo las sub-etiquetas (proveedores) de esta categoría
-    const rows = document.querySelectorAll('.sub-etiqueta-' + categoriaId);
+    // Seleccionar solo las sub-etiquetas (proveedores) de esta categoría Y esta cuenta
+    const uniqueId = cuentaId + '__' + categoriaId;
+    const rows = document.querySelectorAll('.sub-etiqueta-' + uniqueId);
     
     if (!rows.length) return;
     

@@ -551,6 +551,8 @@ def render(username: str, password: str):
                                 
                                 if et_nivel == 3:  # CATEGORÍA (expandible con sub_etiquetas)
                                     categoria_id_safe = et_nombre.replace(" ", "_").replace("📁", "").strip().replace(".", "_")
+                                    # ID ÚNICO por cuenta+categoría para evitar conflictos entre estados
+                                    unique_cat_id = f"{cuenta_id_safe}__{categoria_id_safe}"
                                     has_proveedores = len(sub_etiquetas) > 0
                                     
                                     # Icono para expandir/contraer proveedores
@@ -559,9 +561,9 @@ def render(username: str, password: str):
                                     else:
                                         categoria_icon = '<span style="width:24px;display:inline-block;"></span>'
                                     
-                                    # Fila de CATEGORÍA (nivel 3)
-                                    html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe} categoria-{categoria_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                    html_parts.append(f'<td class="frozen" style="padding-left: 80px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
+                                    # Fila de CATEGORÍA (nivel 3) - indentación 100px
+                                    html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
                                     
                                     # Montos por mes de la categoría
                                     for mes in meses_lista:
@@ -579,9 +581,9 @@ def render(username: str, password: str):
                                         sub_tiene_facturas = "facturas" in sub_etiqueta and len(sub_etiqueta.get("facturas", [])) > 0
                                         sub_total_facturas = sub_etiqueta.get("total_facturas", 0)
                                         
-                                        # Fila de PROVEEDOR (nivel 4, inicialmente oculta)
-                                        html_parts.append(f'<tr class="sub-etiqueta-row sub-etiqueta-{categoria_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                        html_parts.append(f'<td class="frozen" style="padding-left: 120px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
+                                        # Fila de PROVEEDOR (nivel 4) - ID único por cuenta+categoría
+                                        html_parts.append(f'<tr class="sub-etiqueta-row sub-etiqueta-{unique_cat_id} sub-etiqueta-of-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                        html_parts.append(f'<td class="frozen" style="padding-left: 130px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
                                         
                                         # Montos por mes del proveedor
                                         for mes in meses_lista:
