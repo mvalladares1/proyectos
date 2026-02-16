@@ -130,7 +130,7 @@ class RealProyectadoCalculator:
                     ['state', '=', 'posted']
                 ],
                 ['id', 'name', 'move_type', 'date', 'invoice_date', 'invoice_date_due',
-                 'amount_total', 'amount_residual', 'payment_state', 'partner_id'],
+                 'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago'],
                 limit=5000
             )
             
@@ -270,10 +270,14 @@ class RealProyectadoCalculator:
                     fecha_real = f.get('date', '')
                     periodo_real = self._fecha_a_periodo(fecha_real, meses_lista)
                     
-                    # Fecha PROYECTADA = vencimiento o +30 días
+                    # Fecha PROYECTADA = x_studio_fecha_estimada_de_pago > invoice_date_due > +30 días
+                    fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
                     invoice_date = f.get('invoice_date', '')
                     invoice_date_due = f.get('invoice_date_due')
-                    if invoice_date_due:
+                    
+                    if fecha_estimada:
+                        periodo_proyectado = self._fecha_a_periodo(fecha_estimada, meses_lista)
+                    elif invoice_date_due:
                         periodo_proyectado = self._fecha_a_periodo(invoice_date_due, meses_lista)
                     elif invoice_date:
                         from datetime import datetime, timedelta
@@ -297,10 +301,14 @@ class RealProyectadoCalculator:
                     
                     periodo_real = None
                     
-                    # Fecha PROYECTADA = vencimiento o +30 días
+                    # Fecha PROYECTADA = x_studio_fecha_estimada_de_pago > invoice_date_due > +30 días
+                    fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
                     invoice_date = f.get('invoice_date', '')
                     invoice_date_due = f.get('invoice_date_due')
-                    if invoice_date_due:
+                    
+                    if fecha_estimada:
+                        periodo_proyectado = self._fecha_a_periodo(fecha_estimada, meses_lista)
+                    elif invoice_date_due:
                         periodo_proyectado = self._fecha_a_periodo(invoice_date_due, meses_lista)
                     elif invoice_date:
                         from datetime import datetime, timedelta
@@ -369,19 +377,22 @@ class RealProyectadoCalculator:
                 if periodo_proyectado:
                     proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
-            # PASO 3: Convertir estructura jerárquica a estructura plana para el frontend
-            # Frontend espera: Concepto → Cuentas (Estado+Categoria) → Etiquetas (Proveedores)
+            # PASO 3: Convertir estructura a 4 NIVELES REALES
+            # Nivel 2 (cuentas): ESTADOS
+            # Nivel 3 (etiquetas): CATEGORÍAS (header visual)
+            # Nivel 4 (etiquetas): PROVEEDORES (indentados)
             montos_por_mes_total = defaultdict(float)
             for periodo in set(real_por_periodo.keys()) | set(proyectado_por_periodo.keys()):
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
-            # Aplanar estructura: Cada combinación Estado+Categoría se convierte en una "cuenta"
             cuentas_resultado = []
             orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']
             
             for estado_key in orden_estados:
                 estado = estados[estado_key]
-                estado_emoji = estado['nombre'].split()[0]  # Obtener emoji (✅, ⏳, ❌)
+                
+                # Nivel 2: ESTADO como cuenta
+                etiquetas_list = []
                 
                 # Ordenar categorías por monto (descendente)
                 categorias_ordenadas = sorted(
@@ -391,35 +402,43 @@ class RealProyectadoCalculator:
                 )
                 
                 for categoria_nombre, categoria_data in categorias_ordenadas:
-                    # Crear una "cuenta" para cada Estado+Categoría
-                    cuenta_nombre = f"{estado_emoji} {categoria_nombre}"
-                    cuenta_codigo = f"{estado['codigo']}_{categoria_nombre.replace(' ', '_').lower()[:20]}"
+                    # Nivel 3: CATEGORÍA como etiqueta header
+                    etiquetas_list.append({
+                        'nombre': f"📁 {categoria_nombre}",
+                        'monto': categoria_data['monto'],
+                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
+                        'tipo': 'categoria',
+                        'nivel': 3,
+                        'activo': True
+                    })
                     
-                    # Convertir proveedores a etiquetas
-                    etiquetas_list = []
+                    # Nivel 4: PROVEEDORES como etiquetas indentadas
                     proveedores_ordenados = sorted(
                         categoria_data['proveedores'].items(),
                         key=lambda x: abs(x[1]['monto']),
                         reverse=True
                     )
                     
-                    for prov_nombre, prov_data in proveedores_ordenados[:30]:  # Top 30 proveedores
+                    for prov_nombre, prov_data in proveedores_ordenados[:30]:  # Top 30 por categoría
                         etiquetas_list.append({
-                            'nombre': prov_data['nombre'],
+                            'nombre': f"  ↳ {prov_data['nombre']}",
                             'monto': prov_data['monto'],
                             'montos_por_mes': dict(prov_data['montos_por_mes']),
-                            'activo': True  # Agregar campo activo para filtros
+                            'tipo': 'proveedor',
+                            'nivel': 4,
+                            'categoria': categoria_nombre,
+                            'activo': True
                         })
-                    
-                    cuentas_resultado.append({
-                        'codigo': cuenta_codigo,
-                        'nombre': cuenta_nombre,
-                        'monto': categoria_data['monto'],
-                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
-                        'etiquetas': etiquetas_list,
-                        'es_cuenta_cxp': True,
-                        'activo': True  # Campo para filtro por actividad
-                    })
+                
+                cuentas_resultado.append({
+                    'codigo': estado['codigo'],
+                    'nombre': estado['nombre'],
+                    'monto': estado['monto'],
+                    'montos_por_mes': dict(estado['montos_por_mes']),
+                    'etiquetas': etiquetas_list,
+                    'es_cuenta_cxp': True,
+                    'activo': True
+                })
             
             return {
                 'montos_por_mes': dict(montos_por_mes_total),

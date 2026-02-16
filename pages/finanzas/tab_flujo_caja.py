@@ -547,27 +547,46 @@ def render(username: str, password: str):
                         }
                         
                         if has_etiquetas:
-                            for etiqueta in etiquetas[:10]:  # Top 10 etiquetas
-                                et_nombre = etiqueta.get("nombre", "")[:50]
+                            # Mostrar TODAS las etiquetas (categorías + proveedores)
+                            for etiqueta in etiquetas:
+                                et_nombre = etiqueta.get("nombre", "")
                                 et_monto = etiqueta.get("monto", 0)
                                 et_montos_mes = etiqueta.get("montos_por_mes", {})
+                                et_nivel = etiqueta.get("nivel", 4)  # Default nivel 4 (proveedor)
+                                et_tipo = etiqueta.get("tipo", "proveedor")
                                 tiene_facturas = "facturas" in etiqueta and len(etiqueta.get("facturas", [])) > 0
                                 total_facturas = etiqueta.get("total_facturas", 0)
                                 
+                                # Estilos según nivel
+                                if et_nivel == 3:  # CATEGORÍA (header)
+                                    padding_left = "80px"
+                                    font_size = "13px"
+                                    font_weight = "bold"
+                                    color = "#e0e0e0"
+                                    border_style = "3px solid #667eea"
+                                else:  # PROVEEDOR (indentado)
+                                    padding_left = "120px"
+                                    font_size = "12px"
+                                    font_weight = "normal"
+                                    color = "#ccc"
+                                    border_style = "3px solid #4a5568"
+                                
                                 # Fondo sólido oscuro para evitar transparencia al deslizar
-                                # Indentación aumentada a 100px con borde izquierdo para indicar jerarquía
                                 html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
                                 
-                                # Obtener icono según estado de pago (si es CxC) o icono genérico
-                                icono = ESTADO_ICONS.get(et_nombre, '🏷️') if es_cuenta_cxc else '🏷️'
-                                
-                                # Nombre de etiqueta con indicador de facturas si es CxC
-                                if es_cuenta_cxc and tiene_facturas:
-                                    nombre_display = f'{icono} {et_nombre} <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                # Obtener icono según estado de pago (si es CxC) o usar el del nombre
+                                if es_cuenta_cxc:
+                                    icono = ESTADO_ICONS.get(et_nombre, '🏷️')
+                                    nombre_display = et_nombre
                                 else:
-                                    nombre_display = f'{icono} {et_nombre}'
+                                    # El nombre ya incluye el icono (📁 para categoría, ↳ para proveedor)
+                                    nombre_display = et_nombre
                                 
-                                html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
+                                # Indicador de facturas si es CxC
+                                if es_cuenta_cxc and tiene_facturas:
+                                    nombre_display += f' <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                
+                                html_parts.append(f'<td class="frozen" style="padding-left: {padding_left}; font-size: {font_size}; font-weight: {font_weight}; color: {color}; background-color: #1a1a2e; border-left: {border_style};">{nombre_display}</td>')
                                 
                                 # Montos por mes de la etiqueta - clickeables si tiene facturas
                                 for mes in meses_lista:
