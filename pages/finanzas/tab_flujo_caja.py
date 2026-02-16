@@ -561,9 +561,9 @@ def render(username: str, password: str):
                                     else:
                                         categoria_icon = '<span style="width:24px;display:inline-block;"></span>'
                                     
-                                    # Fila de CATEGORÍA (nivel 3) - indentación 100px
+                                    # Fila de CATEGORÍA (nivel 3) - indentación 140px
                                     html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                    html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: 140px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
                                     
                                     # Montos por mes de la categoría
                                     for mes in meses_lista:
@@ -583,7 +583,7 @@ def render(username: str, password: str):
                                         
                                         # Fila de PROVEEDOR (nivel 4) - ID único por cuenta+categoría
                                         html_parts.append(f'<tr class="sub-etiqueta-row sub-etiqueta-{unique_cat_id} sub-etiqueta-of-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                        html_parts.append(f'<td class="frozen" style="padding-left: 130px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
+                                        html_parts.append(f'<td class="frozen" style="padding-left: 180px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
                                         
                                         # Montos por mes del proveedor
                                         for mes in meses_lista:
