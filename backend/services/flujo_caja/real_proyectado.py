@@ -369,43 +369,57 @@ class RealProyectadoCalculator:
                 if periodo_proyectado:
                     proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
-            # PASO 3: Convertir a estructura de respuesta
+            # PASO 3: Convertir estructura jerárquica a estructura plana para el frontend
+            # Frontend espera: Concepto → Cuentas (Estado+Categoria) → Etiquetas (Proveedores)
             montos_por_mes_total = defaultdict(float)
             for periodo in set(real_por_periodo.keys()) | set(proyectado_por_periodo.keys()):
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
-            # Convertir estados a lista ordenada (solo 3 categorías)
+            # Aplanar estructura: Cada combinación Estado+Categoría se convierte en una "cuenta"
             cuentas_resultado = []
-            for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']:
-                estado_data = estados[estado_key]
+            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']
+            
+            for estado_key in orden_estados:
+                estado = estados[estado_key]
+                estado_emoji = estado['nombre'].split()[0]  # Obtener emoji (✅, ⏳, ❌)
                 
-                # Nivel 3: Convertir categorías de contacto a lista
-                etiquetas_list = []
-                for cat_nombre, cat_data in sorted(estado_data['categorias'].items(), key=lambda x: x[1]['monto']):
-                    # Nivel 4: Convertir proveedores dentro de cada categoría a lista
-                    proveedores_list = []
-                    for prov_nombre, prov_data in sorted(cat_data['proveedores'].items(), key=lambda x: x[1]['monto']):
-                        proveedores_list.append({
+                # Ordenar categorías por monto (descendente)
+                categorias_ordenadas = sorted(
+                    estado['categorias'].items(),
+                    key=lambda x: abs(x[1]['monto']),
+                    reverse=True
+                )
+                
+                for categoria_nombre, categoria_data in categorias_ordenadas:
+                    # Crear una "cuenta" para cada Estado+Categoría
+                    cuenta_nombre = f"{estado_emoji} {categoria_nombre}"
+                    cuenta_codigo = f"{estado['codigo']}_{categoria_nombre.replace(' ', '_').lower()[:20]}"
+                    
+                    # Convertir proveedores a etiquetas
+                    etiquetas_list = []
+                    proveedores_ordenados = sorted(
+                        categoria_data['proveedores'].items(),
+                        key=lambda x: abs(x[1]['monto']),
+                        reverse=True
+                    )
+                    
+                    for prov_nombre, prov_data in proveedores_ordenados[:30]:  # Top 30 proveedores
+                        etiquetas_list.append({
                             'nombre': prov_data['nombre'],
                             'monto': prov_data['monto'],
-                            'montos_por_mes': dict(prov_data['montos_por_mes'])
+                            'montos_por_mes': dict(prov_data['montos_por_mes']),
+                            'activo': True  # Agregar campo activo para filtros
                         })
                     
-                    etiquetas_list.append({
-                        'nombre': cat_data['nombre'],
-                        'monto': cat_data['monto'],
-                        'montos_por_mes': dict(cat_data['montos_por_mes']),
-                        'etiquetas': proveedores_list  # Proveedores individuales en nivel 4
+                    cuentas_resultado.append({
+                        'codigo': cuenta_codigo,
+                        'nombre': cuenta_nombre,
+                        'monto': categoria_data['monto'],
+                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
+                        'etiquetas': etiquetas_list,
+                        'es_cuenta_cxp': True,
+                        'activo': True  # Campo para filtro por actividad
                     })
-                
-                cuentas_resultado.append({
-                    'codigo': estado_data['codigo'],
-                    'nombre': estado_data['nombre'],
-                    'monto': estado_data['monto'],
-                    'montos_por_mes': dict(estado_data['montos_por_mes']),
-                    'etiquetas': etiquetas_list,  # Categorías de contacto en nivel 3
-                    'es_cuenta_cxp': True
-                })
             
             return {
                 'montos_por_mes': dict(montos_por_mes_total),
