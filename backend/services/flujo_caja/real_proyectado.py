@@ -180,6 +180,8 @@ class RealProyectadoCalculator:
                     'nombre': '⏳ Facturas Parcialmente Pagadas',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
+                    'monto_real': 0.0,
+                    'montos_real_por_mes': defaultdict(float),
                     'categorias': {},  # Nivel 3: Categorías de contacto
                     'es_cuenta_cxp': True,
                     'orden': 2
@@ -339,6 +341,12 @@ class RealProyectadoCalculator:
                 if periodo_proyectado:
                     estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
                 
+                # Para PARCIALES: guardar montos reales por separado
+                if estado_key == 'PARCIALES':
+                    estado['monto_real'] += monto_real
+                    if periodo_real:
+                        estado['montos_real_por_mes'][periodo_real] += monto_real
+                
                 # Obtener información del partner
                 partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
                 partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
@@ -346,12 +354,16 @@ class RealProyectadoCalculator:
                 
                 # Nivel 3: Agrupar por categoría de contacto
                 if categoria_nombre not in estado['categorias']:
-                    estado['categorias'][categoria_nombre] = {
+                    cat_init = {
                         'nombre': categoria_nombre,
                         'monto': 0.0,
                         'montos_por_mes': defaultdict(float),
                         'proveedores': {}  # Nivel 4: Proveedores individuales
                     }
+                    if estado_key == 'PARCIALES':
+                        cat_init['monto_real'] = 0.0
+                        cat_init['montos_real_por_mes'] = defaultdict(float)
+                    estado['categorias'][categoria_nombre] = cat_init
                 
                 categoria = estado['categorias'][categoria_nombre]
                 categoria['monto'] += monto_real + monto_proyectado
@@ -361,13 +373,25 @@ class RealProyectadoCalculator:
                 if periodo_proyectado:
                     categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
                 
+                # Para PARCIALES: guardar montos reales por separado en categoría
+                if estado_key == 'PARCIALES':
+                    categoria['monto_real'] = categoria.get('monto_real', 0.0) + monto_real
+                    if periodo_real:
+                        if 'montos_real_por_mes' not in categoria:
+                            categoria['montos_real_por_mes'] = defaultdict(float)
+                        categoria['montos_real_por_mes'][periodo_real] += monto_real
+                
                 # Nivel 4: Agrupar por proveedor individual
                 if partner_name not in categoria['proveedores']:
-                    categoria['proveedores'][partner_name] = {
+                    prov_init = {
                         'nombre': partner_name[:50],
                         'monto': 0.0,
                         'montos_por_mes': defaultdict(float)
                     }
+                    if estado_key == 'PARCIALES':
+                        prov_init['monto_real'] = 0.0
+                        prov_init['montos_real_por_mes'] = defaultdict(float)
+                    categoria['proveedores'][partner_name] = prov_init
                 
                 proveedor = categoria['proveedores'][partner_name]
                 proveedor['monto'] += monto_real + monto_proyectado
@@ -376,6 +400,14 @@ class RealProyectadoCalculator:
                     proveedor['montos_por_mes'][periodo_real] += monto_real
                 if periodo_proyectado:
                     proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                
+                # Para PARCIALES: guardar montos reales por separado en proveedor
+                if estado_key == 'PARCIALES':
+                    proveedor['monto_real'] = proveedor.get('monto_real', 0.0) + monto_real
+                    if periodo_real:
+                        if 'montos_real_por_mes' not in proveedor:
+                            proveedor['montos_real_por_mes'] = defaultdict(float)
+                        proveedor['montos_real_por_mes'][periodo_real] += monto_real
             
             # PASO 3: Convertir estructura a 4 NIVELES EXPANDIBLES
             # Nivel 2 (cuentas): ESTADOS (expandible)
@@ -416,14 +448,18 @@ class RealProyectadoCalculator:
                     resto_proveedores = proveedores_ordenados[30:]
                     
                     for prov_nombre, prov_data in top_proveedores:
-                        sub_etiquetas_proveedores.append({
+                        prov_entry = {
                             'nombre': f"↳ {prov_data['nombre']}",
                             'monto': prov_data['monto'],
                             'montos_por_mes': dict(prov_data['montos_por_mes']),
                             'tipo': 'proveedor',
                             'nivel': 4,
                             'activo': True
-                        })
+                        }
+                        if estado_key == 'PARCIALES' and 'montos_real_por_mes' in prov_data:
+                            prov_entry['monto_real'] = prov_data.get('monto_real', 0.0)
+                            prov_entry['montos_real_por_mes'] = dict(prov_data['montos_real_por_mes'])
+                        sub_etiquetas_proveedores.append(prov_entry)
                     
                     # Agregar fila "Otros proveedores" con los montos restantes
                     if resto_proveedores:
@@ -432,16 +468,26 @@ class RealProyectadoCalculator:
                         for _, p_data in resto_proveedores:
                             for mes, val in p_data['montos_por_mes'].items():
                                 otros_montos_por_mes[mes] = otros_montos_por_mes.get(mes, 0) + val
-                        sub_etiquetas_proveedores.append({
+                        otros_entry = {
                             'nombre': f"↳ Otros proveedores ({len(resto_proveedores)})",
                             'monto': otros_monto,
                             'montos_por_mes': otros_montos_por_mes,
                             'tipo': 'proveedor',
                             'nivel': 4,
                             'activo': True
-                        })
+                        }
+                        if estado_key == 'PARCIALES':
+                            otros_real = sum(p[1].get('monto_real', 0) for p in resto_proveedores)
+                            otros_real_por_mes = {}
+                            for _, p_data in resto_proveedores:
+                                for mes, val in p_data.get('montos_real_por_mes', {}).items():
+                                    otros_real_por_mes[mes] = otros_real_por_mes.get(mes, 0) + val
+                            if otros_real != 0 or otros_real_por_mes:
+                                otros_entry['monto_real'] = otros_real
+                                otros_entry['montos_real_por_mes'] = otros_real_por_mes
+                        sub_etiquetas_proveedores.append(otros_entry)
                     
-                    etiquetas_list.append({
+                    cat_entry = {
                         'nombre': f"📁 {categoria_nombre}",
                         'monto': categoria_data['monto'],
                         'montos_por_mes': dict(categoria_data['montos_por_mes']),
@@ -449,9 +495,13 @@ class RealProyectadoCalculator:
                         'nivel': 3,
                         'activo': True,
                         'sub_etiquetas': sub_etiquetas_proveedores  # ANIDADOS
-                    })
+                    }
+                    if estado_key == 'PARCIALES' and 'montos_real_por_mes' in categoria_data:
+                        cat_entry['monto_real'] = categoria_data.get('monto_real', 0.0)
+                        cat_entry['montos_real_por_mes'] = dict(categoria_data['montos_real_por_mes'])
+                    etiquetas_list.append(cat_entry)
                 
-                cuentas_resultado.append({
+                cuenta_entry = {
                     'codigo': estado['codigo'],
                     'nombre': estado['nombre'],
                     'monto': estado['monto'],
@@ -459,7 +509,11 @@ class RealProyectadoCalculator:
                     'etiquetas': etiquetas_list,
                     'es_cuenta_cxp': True,
                     'activo': True
-                })
+                }
+                if estado_key == 'PARCIALES':
+                    cuenta_entry['monto_real'] = estado.get('monto_real', 0.0)
+                    cuenta_entry['montos_real_por_mes'] = dict(estado.get('montos_real_por_mes', {}))
+                cuentas_resultado.append(cuenta_entry)
             
             return {
                 'montos_por_mes': dict(montos_por_mes_total),
