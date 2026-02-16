@@ -140,6 +140,7 @@ class RealProyectadoCalculator:
             proyectado_por_periodo = defaultdict(float)
             
             # Estructura jerárquica: {estado: {proveedor: {datos}}}
+            # Las N/C se integran en las mismas categorías con signo invertido
             estados = {
                 'PAGADAS': {
                     'codigo': 'pagadas',
@@ -148,8 +149,6 @@ class RealProyectadoCalculator:
                     'real': 0.0,
                     'proyectado': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'real_por_mes': defaultdict(float),
-                    'proyectado_por_mes': defaultdict(float),
                     'etiquetas': {},
                     'es_cuenta_cxp': True,
                     'orden': 1
@@ -161,8 +160,6 @@ class RealProyectadoCalculator:
                     'real': 0.0,
                     'proyectado': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'real_por_mes': defaultdict(float),
-                    'proyectado_por_mes': defaultdict(float),
                     'etiquetas': {},
                     'es_cuenta_cxp': True,
                     'orden': 2
@@ -174,50 +171,9 @@ class RealProyectadoCalculator:
                     'real': 0.0,
                     'proyectado': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'real_por_mes': defaultdict(float),
-                    'proyectado_por_mes': defaultdict(float),
                     'etiquetas': {},
                     'es_cuenta_cxp': True,
                     'orden': 3
-                },
-                'NC_DEVUELTAS': {
-                    'codigo': 'nc_devueltas',
-                    'nombre': '💚 N/C Devueltas',
-                    'monto': 0.0,
-                    'real': 0.0,
-                    'proyectado': 0.0,
-                    'montos_por_mes': defaultdict(float),
-                    'real_por_mes': defaultdict(float),
-                    'proyectado_por_mes': defaultdict(float),
-                    'etiquetas': {},
-                    'es_cuenta_cxp': True,
-                    'orden': 4
-                },
-                'NC_PARCIALES': {
-                    'codigo': 'nc_parciales',
-                    'nombre': '💛 N/C Parcialmente Devueltas',
-                    'monto': 0.0,
-                    'real': 0.0,
-                    'proyectado': 0.0,
-                    'montos_por_mes': defaultdict(float),
-                    'real_por_mes': defaultdict(float),
-                    'proyectado_por_mes': defaultdict(float),
-                    'etiquetas': {},
-                    'es_cuenta_cxp': True,
-                    'orden': 5
-                },
-                'NC_PENDIENTES': {
-                    'codigo': 'nc_pendientes',
-                    'nombre': '🔄 N/C Pendientes',
-                    'monto': 0.0,
-                    'real': 0.0,
-                    'proyectado': 0.0,
-                    'montos_por_mes': defaultdict(float),
-                    'real_por_mes': defaultdict(float),
-                    'proyectado_por_mes': defaultdict(float),
-                    'etiquetas': {},
-                    'es_cuenta_cxp': True,
-                    'orden': 6
                 }
             }
             
@@ -264,9 +220,10 @@ class RealProyectadoCalculator:
                 es_nc = (move_type == 'in_refund')
                 
                 # CLASIFICACIÓN POR MATCHING_NUMBER
+                # Las N/C se clasifican en las mismas categorías que facturas, pero con signo invertido
                 if matching_number and str(matching_number).startswith('A'):
                     # ===== CASO 1: PAGADAS CON MATCHING AXXXXX =====
-                    estado_key = 'NC_DEVUELTAS' if es_nc else 'PAGADAS'
+                    estado_key = 'PAGADAS'
                     
                     # Monto REAL = lo ya pagado (negativo = salida para facturas, positivo = ingreso para N/C)
                     monto_real = -(amount_total - amount_residual) * signo
@@ -284,7 +241,7 @@ class RealProyectadoCalculator:
                     
                 elif matching_number == 'P':
                     # ===== CASO 2: PARCIALES CON MATCHING P =====
-                    estado_key = 'NC_PARCIALES' if es_nc else 'PARCIALES'
+                    estado_key = 'PARCIALES'
                     
                     # Monto REAL = lo ya pagado
                     monto_real = -(amount_total - amount_residual) * signo
@@ -313,7 +270,7 @@ class RealProyectadoCalculator:
                     
                 else:
                     # ===== CASO 3: NO PAGADAS (sin matching) =====
-                    estado_key = 'NC_PENDIENTES' if es_nc else 'NO_PAGADAS'
+                    estado_key = 'NO_PAGADAS'
                     
                     # Monto REAL = 0 (no hay pagos/devoluciones)
                     monto_real = 0
@@ -355,10 +312,8 @@ class RealProyectadoCalculator:
                 
                 if periodo_real:
                     estado['montos_por_mes'][periodo_real] += monto_real
-                    estado['real_por_mes'][periodo_real] += monto_real
                 if periodo_proyectado:
                     estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
-                    estado['proyectado_por_mes'][periodo_proyectado] += monto_proyectado
                 
                 # Agrupar por proveedor (Nivel 3)
                 if partner_name not in estado['etiquetas']:
@@ -367,9 +322,7 @@ class RealProyectadoCalculator:
                         'monto': 0.0,
                         'real': 0.0,
                         'proyectado': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float)
+                        'montos_por_mes': defaultdict(float)
                     }
                 
                 proveedor = estado['etiquetas'][partner_name]
@@ -379,24 +332,18 @@ class RealProyectadoCalculator:
                 
                 if periodo_real:
                     proveedor['montos_por_mes'][periodo_real] += monto_real
-                    proveedor['real_por_mes'][periodo_real] += monto_real
                 if periodo_proyectado:
                     proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
-                    proveedor['proyectado_por_mes'][periodo_proyectado] += monto_proyectado
             
             # PASO 3: Convertir a estructura de respuesta
             montos_por_mes_total = defaultdict(float)
             for periodo in set(real_por_periodo.keys()) | set(proyectado_por_periodo.keys()):
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
-            # Convertir estados a lista ordenada
+            # Convertir estados a lista ordenada (solo 3 categorías)
             cuentas_resultado = []
-            for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'NC_DEVUELTAS', 'NC_PARCIALES', 'NC_PENDIENTES']:
+            for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']:
                 estado_data = estados[estado_key]
-                
-                # Solo agregar si tiene datos
-                if estado_data['monto'] == 0 and estado_data['real'] == 0 and estado_data['proyectado'] == 0:
-                    continue
                 
                 # Convertir proveedores a lista
                 etiquetas_list = []
@@ -406,20 +353,14 @@ class RealProyectadoCalculator:
                         'monto': prov_data['monto'],
                         'real': prov_data['real'],
                         'proyectado': prov_data['proyectado'],
-                        'montos_por_mes': dict(prov_data['montos_por_mes']),
-                        'real_por_mes': dict(prov_data['real_por_mes']),
-                        'proyectado_por_mes': dict(prov_data['proyectado_por_mes'])
+                        'montos_por_mes': dict(prov_data['montos_por_mes'])
                     })
                 
                 cuentas_resultado.append({
                     'codigo': estado_data['codigo'],
                     'nombre': estado_data['nombre'],
                     'monto': estado_data['monto'],
-                    'real': estado_data['real'],
-                    'proyectado': estado_data['proyectado'],
                     'montos_por_mes': dict(estado_data['montos_por_mes']),
-                    'real_por_mes': dict(estado_data['real_por_mes']),
-                    'proyectado_por_mes': dict(estado_data['proyectado_por_mes']),
                     'etiquetas': etiquetas_list,
                     'es_cuenta_cxp': True
                 })
