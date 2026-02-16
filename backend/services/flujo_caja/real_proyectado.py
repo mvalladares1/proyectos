@@ -109,93 +109,216 @@ class RealProyectadoCalculator:
         """
         Calcula REAL y PROYECTADO para 1.2.1 - Pagos a proveedores.
         
-        ESTRUCTURA JERÁRQUICA (como 1.1.1):
-        - Nivel 2: Por estado de pago (Pagadas, Parciales, No Pagadas)
-        - Nivel 3: Por proveedor
+        NUEVA LÓGICA BASADA EN MATCHING_NUMBER:
+        - PAGADAS (AXXXXX): Buscar fecha de pago real
+        - PARCIALES (P): Monto pagado y pendiente
+        - NO PAGADAS (blank): Todo va a proyectado con fecha +30
         
-        LÓGICA:
-        - REAL = Monto efectivamente pagado (amount_total - amount_residual)
-        - PROYECTADO = Monto pendiente de pago (amount_residual)
+        ESTRUCTURA JERÁRQUICA:
+        - Nivel 2: Por estado (Pagadas, Parciales, No Pagadas)
+        - Nivel 3: Por proveedor
         """
         try:
-            # Buscar facturas de proveedor con info del partner
+            # PASO 1: Buscar facturas de proveedor desde diario específico
             facturas = self.odoo.search_read(
                 'account.move',
                 [
                     ['move_type', 'in', ['in_invoice', 'in_refund']],
+                    ['journal_id', '=', 2],  # Facturas de Proveedores
                     ['date', '>=', fecha_inicio],
                     ['date', '<=', fecha_fin],
                     ['state', '=', 'posted']
                 ],
-                ['id', 'name', 'move_type', 'date', 'amount_total', 
-                 'amount_residual', 'payment_state', 'partner_id'],
+                ['id', 'name', 'move_type', 'date', 'invoice_date', 'invoice_date_due',
+                 'amount_total', 'amount_residual', 'payment_state', 'partner_id'],
                 limit=5000
             )
             
             real_total = 0.0
             proyectado_total = 0.0
-            real_por_mes = defaultdict(float)
-            proyectado_por_mes = defaultdict(float)
+            real_por_periodo = defaultdict(float)
+            proyectado_por_periodo = defaultdict(float)
             
             # Estructura jerárquica: {estado: {proveedor: {datos}}}
-            estados = {}
+            estados = {
+                'PAGADAS': {
+                    'codigo': 'pagadas',
+                    'nombre': '✅ Facturas Pagadas',
+                    'monto': 0.0,
+                    'real': 0.0,
+                    'proyectado': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'real_por_mes': defaultdict(float),
+                    'proyectado_por_mes': defaultdict(float),
+                    'etiquetas': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 1
+                },
+                'PARCIALES': {
+                    'codigo': 'parciales',
+                    'nombre': '⏳ Facturas Parcialmente Pagadas',
+                    'monto': 0.0,
+                    'real': 0.0,
+                    'proyectado': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'real_por_mes': defaultdict(float),
+                    'proyectado_por_mes': defaultdict(float),
+                    'etiquetas': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 2
+                },
+                'NO_PAGADAS': {
+                    'codigo': 'no_pagadas',
+                    'nombre': '❌ Facturas No Pagadas',
+                    'monto': 0.0,
+                    'real': 0.0,
+                    'proyectado': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'real_por_mes': defaultdict(float),
+                    'proyectado_por_mes': defaultdict(float),
+                    'etiquetas': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 3
+                }
+            }
             
+            # PASO 2: Buscar TODAS las líneas de las facturas de una sola vez
+            factura_ids = [f['id'] for f in facturas]
+            todas_lineas = self.odoo.search_read(
+                'account.move.line',
+                [['move_id', 'in', factura_ids]],
+                ['id', 'move_id', 'matching_number', 'date', 'debit', 'credit'],
+                limit=50000
+            )
+            
+            # Agrupar líneas por factura
+            lineas_por_factura = defaultdict(list)
+            for linea in todas_lineas:
+                move_id = linea.get('move_id')
+                if isinstance(move_id, (list, tuple)):
+                    move_id = move_id[0]
+                lineas_por_factura[move_id].append(linea)
+            
+            # PASO 3: Clasificar cada factura por matching_number
             for f in facturas:
-                fecha = f.get('date', '')
-                if not fecha:
-                    continue
-                    
-                periodo = self._fecha_a_periodo(fecha, meses_lista)
+                # Obtener líneas de esta factura
+                lineas = lineas_por_factura.get(f['id'], [])
+
                 
+                # Detectar matching_number
+                matching_number = None
+                for linea in lineas:
+                    match = linea.get('matching_number')
+                    if match and match not in ['False', False, '', None]:
+                        matching_number = match
+                        break
+                
+                # Datos básicos de la factura
                 amount_total = f.get('amount_total', 0) or 0
                 amount_residual = f.get('amount_residual', 0) or 0
                 move_type = f.get('move_type', '')
-                payment_state = f.get('payment_state', 'not_paid')
                 partner_data = f.get('partner_id', [0, 'Sin proveedor'])
                 partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
                 
-                # Nota de crédito invierte el signo
+                # Signo: N/C invierten el signo (devuelven dinero)
                 signo = -1 if move_type == 'in_refund' else 1
                 
-                # REAL = lo efectivamente pagado (negativo porque es salida)
-                pagado = -(amount_total - amount_residual) * signo
+                # CLASIFICACIÓN POR MATCHING_NUMBER
+                if matching_number and str(matching_number).startswith('A'):
+                    # ===== CASO 1: FACTURAS PAGADAS (AXXXXX) =====
+                    estado_key = 'PAGADAS'
+                    
+                    # Monto REAL = lo ya pagado (negativo = salida)
+                    monto_real = -(amount_total - amount_residual) * signo
+                    monto_proyectado = 0  # Ya está pagado
+                    
+                    # Buscar fecha de pago en las líneas de esta factura
+                    fecha_real = f.get('date', '')
+                    for linea in lineas:
+                        if linea.get('debit', 0) > 0:
+                            fecha_real = linea.get('date', fecha_real)
+                            break
+                    
+                    periodo_real = self._fecha_a_periodo(fecha_real, meses_lista)
+                    periodo_proyectado = None
+                    
+                elif matching_number == 'P':
+                    # ===== CASO 2: FACTURAS PARCIALES (P) =====
+                    estado_key = 'PARCIALES'
+                    
+                    # Monto REAL = lo ya pagado
+                    monto_real = -(amount_total - amount_residual) * signo
+                    # Monto PROYECTADO = lo que falta
+                    monto_proyectado = -amount_residual * signo
+                    
+                    # Fecha REAL = fecha de la factura
+                    fecha_real = f.get('date', '')
+                    periodo_real = self._fecha_a_periodo(fecha_real, meses_lista)
+                    
+                    # Fecha PROYECTADA = vencimiento o +30 días
+                    invoice_date = f.get('invoice_date', '')
+                    invoice_date_due = f.get('invoice_date_due')
+                    if invoice_date_due:
+                        periodo_proyectado = self._fecha_a_periodo(invoice_date_due, meses_lista)
+                    elif invoice_date:
+                        from datetime import datetime, timedelta
+                        try:
+                            fecha_dt = datetime.strptime(invoice_date, '%Y-%m-%d')
+                            fecha_proyectada = (fecha_dt + timedelta(days=30)).strftime('%Y-%m-%d')
+                            periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
+                        except:
+                            periodo_proyectado = self._fecha_a_periodo(invoice_date, meses_lista)
+                    else:
+                        periodo_proyectado = periodo_real
+                    
+                else:
+                    # ===== CASO 3: FACTURAS NO PAGADAS (blank) =====
+                    estado_key = 'NO_PAGADAS'
+                    
+                    # Monto REAL = 0 (no hay pagos)
+                    monto_real = 0
+                    # Monto PROYECTADO = todo el monto
+                    monto_proyectado = -amount_total * signo
+                    
+                    periodo_real = None
+                    
+                    # Fecha PROYECTADA = vencimiento o +30 días
+                    invoice_date = f.get('invoice_date', '')
+                    invoice_date_due = f.get('invoice_date_due')
+                    if invoice_date_due:
+                        periodo_proyectado = self._fecha_a_periodo(invoice_date_due, meses_lista)
+                    elif invoice_date:
+                        from datetime import datetime, timedelta
+                        try:
+                            fecha_dt = datetime.strptime(invoice_date, '%Y-%m-%d')
+                            fecha_proyectada = (fecha_dt + timedelta(days=30)).strftime('%Y-%m-%d')
+                            periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
+                        except:
+                            periodo_proyectado = self._fecha_a_periodo(invoice_date, meses_lista)
+                    else:
+                        periodo_proyectado = self._fecha_a_periodo(f.get('date', ''), meses_lista)
                 
-                # PROYECTADO = lo que falta por pagar (negativo porque es salida)
-                pendiente = -amount_residual * signo
+                # Acumular totales generales
+                real_total += monto_real
+                proyectado_total += monto_proyectado
                 
-                real_total += pagado
-                proyectado_total += pendiente
+                if periodo_real:
+                    real_por_periodo[periodo_real] += monto_real
+                if periodo_proyectado:
+                    proyectado_por_periodo[periodo_proyectado] += monto_proyectado
                 
-                real_por_mes[periodo] += pagado
-                proyectado_por_mes[periodo] += pendiente
+                # Acumular por estado (Nivel 2)
+                estado = estados[estado_key]
+                estado['monto'] += monto_real + monto_proyectado
+                estado['real'] += monto_real
+                estado['proyectado'] += monto_proyectado
                 
-                # Agrupar por estado de pago (Nivel 2)
-                estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
-                estado_icon = self.ESTADO_ICONS.get(payment_state, '📄')
-                
-                if estado_label not in estados:
-                    estados[estado_label] = {
-                        'codigo': f'estado_{payment_state}',
-                        'nombre': estado_label,
-                        'icon': estado_icon,
-                        'monto': 0.0,
-                        'real': 0.0,
-                        'proyectado': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float),
-                        'etiquetas': {},  # Proveedores
-                        'es_cuenta_cxp': True,
-                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state) if payment_state in self.ESTADO_LABELS else 99
-                    }
-                
-                estado = estados[estado_label]
-                estado['monto'] += pagado + pendiente
-                estado['real'] += pagado
-                estado['proyectado'] += pendiente
-                estado['montos_por_mes'][periodo] += pagado + pendiente
-                estado['real_por_mes'][periodo] += pagado
-                estado['proyectado_por_mes'][periodo] += pendiente
+                if periodo_real:
+                    estado['montos_por_mes'][periodo_real] += monto_real
+                    estado['real_por_mes'][periodo_real] += monto_real
+                if periodo_proyectado:
+                    estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    estado['proyectado_por_mes'][periodo_proyectado] += monto_proyectado
                 
                 # Agrupar por proveedor (Nivel 3)
                 if partner_name not in estado['etiquetas']:
@@ -206,40 +329,32 @@ class RealProyectadoCalculator:
                         'proyectado': 0.0,
                         'montos_por_mes': defaultdict(float),
                         'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float),
-                        'facturas': []
+                        'proyectado_por_mes': defaultdict(float)
                     }
                 
                 proveedor = estado['etiquetas'][partner_name]
-                proveedor['monto'] += pagado + pendiente
-                proveedor['real'] += pagado
-                proveedor['proyectado'] += pendiente
-                proveedor['montos_por_mes'][periodo] += pagado + pendiente
-                proveedor['real_por_mes'][periodo] += pagado
-                proveedor['proyectado_por_mes'][periodo] += pendiente
+                proveedor['monto'] += monto_real + monto_proyectado
+                proveedor['real'] += monto_real
+                proveedor['proyectado'] += monto_proyectado
                 
-                # Guardar factura para drill-down
-                if len(proveedor['facturas']) < 50:
-                    proveedor['facturas'].append({
-                        'name': f['name'],
-                        'move_id': f['id'],
-                        'tipo': move_type,
-                        'total': amount_total,
-                        'pagado': -pagado,  # Mostrar positivo en detalle
-                        'pendiente': -pendiente,  # Mostrar positivo en detalle
-                        'fecha': fecha,
-                        'payment_state': payment_state
-                    })
+                if periodo_real:
+                    proveedor['montos_por_mes'][periodo_real] += monto_real
+                    proveedor['real_por_mes'][periodo_real] += monto_real
+                if periodo_proyectado:
+                    proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    proveedor['proyectado_por_mes'][periodo_proyectado] += monto_proyectado
             
-            # Calcular montos_por_mes como suma de real + proyectado por período
-            # Esto es lo que se mostrará en las columnas mensuales/semanales del concepto principal
+            # PASO 3: Convertir a estructura de respuesta
             montos_por_mes_total = defaultdict(float)
-            for periodo in set(real_por_mes.keys()) | set(proyectado_por_mes.keys()):
-                montos_por_mes_total[periodo] = real_por_mes.get(periodo, 0) + proyectado_por_mes.get(periodo, 0)
+            for periodo in set(real_por_periodo.keys()) | set(proyectado_por_periodo.keys()):
+                montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
-            # Convertir defaultdicts a dicts normales y ordenar
+            # Convertir estados a lista ordenada
             cuentas_resultado = []
-            for estado_label, estado_data in sorted(estados.items(), key=lambda x: x[1]['orden']):
+            for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']:
+                estado_data = estados[estado_key]
+                
+                # Convertir proveedores a lista
                 etiquetas_list = []
                 for prov_name, prov_data in sorted(estado_data['etiquetas'].items(), key=lambda x: x[1]['monto']):
                     etiquetas_list.append({
@@ -249,14 +364,12 @@ class RealProyectadoCalculator:
                         'proyectado': prov_data['proyectado'],
                         'montos_por_mes': dict(prov_data['montos_por_mes']),
                         'real_por_mes': dict(prov_data['real_por_mes']),
-                        'proyectado_por_mes': dict(prov_data['proyectado_por_mes']),
-                        'facturas': prov_data['facturas'],
-                        'total_facturas': len(prov_data['facturas'])
+                        'proyectado_por_mes': dict(prov_data['proyectado_por_mes'])
                     })
                 
                 cuentas_resultado.append({
                     'codigo': estado_data['codigo'],
-                    'nombre': f"{estado_data['icon']} {estado_data['nombre']}",
+                    'nombre': estado_data['nombre'],
                     'monto': estado_data['monto'],
                     'real': estado_data['real'],
                     'proyectado': estado_data['proyectado'],
@@ -271,11 +384,11 @@ class RealProyectadoCalculator:
                 'real': real_total,
                 'proyectado': proyectado_total,
                 'ppto': 0.0,
-                'real_por_mes': dict(real_por_mes),
-                'proyectado_por_mes': dict(proyectado_por_mes),
-                'montos_por_mes': dict(montos_por_mes_total),  # Sumatoria para columnas mensuales
+                'real_por_mes': dict(real_por_periodo),
+                'proyectado_por_mes': dict(proyectado_por_periodo),
+                'montos_por_mes': dict(montos_por_mes_total),
                 'total': real_total + proyectado_total,
-                'cuentas': cuentas_resultado,  # Estructura jerárquica
+                'cuentas': cuentas_resultado,
                 'facturas_count': len(facturas)
             }
             
