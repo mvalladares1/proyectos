@@ -343,10 +343,6 @@ def render(username: str, password: str):
             html_parts.append('<thead>')
             html_parts.append('<tr class="header-meses">')
             html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
-            # Columnas REAL/PROYECTADO/PPTO
-            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; font-weight: 700;">REAL</th>')
-            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; font-weight: 700;">PROYECTADO</th>')
-            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; font-weight: 700;">PPTO</th>')
             
             for mes in meses_ordenados:
                 num_semanas = len(semanas_por_mes[mes])
@@ -365,13 +361,9 @@ def render(username: str, password: str):
             html_parts.append('</tr>')
             html_parts.append('</thead>')
         else:
-            # Vista mensual: Header simple con REAL/PROYECTADO/PPTO
+            # Vista mensual: Header simple
             html_parts.append('<thead><tr>')
             html_parts.append('<th class="frozen">CONCEPTO</th>')
-            # Columnas especiales ANTES de los meses
-            html_parts.append('<th style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; font-weight: 700;">REAL</th>')
-            html_parts.append('<th style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; font-weight: 700;">PROYECTADO</th>')
-            html_parts.append('<th style="background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; font-weight: 700;">PPTO</th>')
             for mes in meses_lista:
                 html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
             html_parts.append('<th><strong>TOTAL</strong></th>')
@@ -407,8 +399,6 @@ def render(username: str, password: str):
             # Activity Header
             html_parts.append(f'<tr class="activity-header">')
             html_parts.append(f'<td class="frozen">{config["icon"]} {act_nombre}</td>')
-            # Columnas REAL/PROYECTADO/PPTO vacías para header de actividad
-            html_parts.append('<td></td><td></td><td></td>')
             for _ in meses_lista:
                 html_parts.append('<td></td>')
             html_parts.append('<td></td>')
@@ -423,11 +413,6 @@ def render(username: str, password: str):
                 c_total = concepto.get("total", 0)
                 montos_mes = concepto.get("montos_por_mes", {})
                 cuentas = concepto.get("cuentas", [])
-                
-                # Obtener valores REAL/PROYECTADO/PPTO
-                c_real = concepto.get("real", c_total)  # Fallback a total si no tiene
-                c_proyectado = concepto.get("proyectado", 0)
-                c_ppto = concepto.get("ppto", 0)
                 
                 if c_tipo == "HEADER":
                     continue
@@ -468,11 +453,6 @@ def render(username: str, password: str):
                 html_parts.append(f'<tr class="{row_class} {expandable_class}" {draggable} {onclick}>')
                 html_parts.append(f'<td class="frozen {indent_class}">{icon_svg}{c_id} - {tooltip_html}</td>')
                 
-                # Columnas REAL/PROYECTADO/PPTO
-                html_parts.append(f'<td class="real-col">{fmt_monto_html(c_real)}</td>')
-                html_parts.append(f'<td class="proyectado-col">{fmt_monto_html(c_proyectado)}</td>')
-                html_parts.append(f'<td class="ppto-col">{fmt_monto_html(c_ppto)}</td>')
-                
                 # Valores mensuales con HEATMAP y click para composición
                 valores_lista = []
                 for mes in meses_lista:
@@ -509,11 +489,6 @@ def render(username: str, password: str):
                         cu_montos_mes = cuenta.get("montos_por_mes", {})
                         etiquetas = cuenta.get("etiquetas", [])
                         
-                        # REAL/PROYECTADO para cuentas especiales
-                        cuenta_real = cuenta.get("real", 0)
-                        cuenta_proyectado = cuenta.get("proyectado", 0)
-                        tiene_real_proyectado = cuenta_real != 0 or cuenta_proyectado != 0
-                        
                         # ID único para esta cuenta (para expandir etiquetas)
                         cuenta_id_safe = f"{c_id_safe}_{cuenta_codigo.replace('.', '_')}"
                         has_etiquetas = len(etiquetas) > 0
@@ -541,14 +516,6 @@ def render(username: str, password: str):
                         else:
                             # Mostrar código + nombre normal
                             html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
-                        
-                        # Columnas REAL/PROYECTADO/PPTO para filas de detalle
-                        if tiene_real_proyectado:
-                            html_parts.append(f'<td class="real-col" style="font-size:12px;">{fmt_monto_html(cuenta_real)}</td>')
-                            html_parts.append(f'<td class="proyectado-col" style="font-size:12px;">{fmt_monto_html(cuenta_proyectado)}</td>')
-                            html_parts.append('<td></td>')
-                        else:
-                            html_parts.append('<td></td><td></td><td></td>')
                         
                         # Celdas mensuales del nivel 2 - clickeables si tiene facturas
                         for mes in meses_lista:
@@ -587,11 +554,6 @@ def render(username: str, password: str):
                                 tiene_facturas = "facturas" in etiqueta and len(etiqueta.get("facturas", [])) > 0
                                 total_facturas = etiqueta.get("total_facturas", 0)
                                 
-                                # REAL/PROYECTADO para etiquetas especiales
-                                et_real = etiqueta.get("real", 0)
-                                et_proyectado = etiqueta.get("proyectado", 0)
-                                et_tiene_real_proyectado = et_real != 0 or et_proyectado != 0
-                                
                                 # Fondo sólido oscuro para evitar transparencia al deslizar
                                 # Indentación aumentada a 100px con borde izquierdo para indicar jerarquía
                                 html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
@@ -606,14 +568,6 @@ def render(username: str, password: str):
                                     nombre_display = f'{icono} {et_nombre}'
                                 
                                 html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
-                                
-                                # Columnas REAL/PROYECTADO/PPTO para etiquetas
-                                if et_tiene_real_proyectado:
-                                    html_parts.append(f'<td style="font-size:10px; color:#4ade80; background-color: #1a1a2e;">{fmt_monto_html(et_real)}</td>')
-                                    html_parts.append(f'<td style="font-size:10px; color:#facc15; background-color: #1a1a2e;">{fmt_monto_html(et_proyectado)}</td>')
-                                    html_parts.append('<td style="background-color: #1a1a2e;"></td>')
-                                else:
-                                    html_parts.append('<td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td>')
                                 
                                 # Montos por mes de la etiqueta - clickeables si tiene facturas
                                 for mes in meses_lista:
@@ -636,8 +590,6 @@ def render(username: str, password: str):
             # Subtotal de actividad
             html_parts.append(f'<tr class="subtotal">')
             html_parts.append(f'<td class="frozen"><strong>Subtotal {act_key}</strong></td>')
-            # Columnas REAL/PROYECTADO/PPTO vacías para subtotales de actividad
-            html_parts.append('<td></td><td></td><td></td>')
             for mes in meses_lista:
                 monto_mes_sub = act_subtotal_por_mes.get(mes, 0)
                 html_parts.append(f'<td>{fmt_monto_html(monto_mes_sub)}</td>')
@@ -647,8 +599,6 @@ def render(username: str, password: str):
         # Grand Totals
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
-        # Columnas REAL/PROYECTADO/PPTO vacías para grand total
-        html_parts.append('<td></td><td></td><td></td>')
         for mes in meses_lista:
             variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
             html_parts.append(f'<td>{fmt_monto_html(variacion_mes)}</td>')
@@ -657,8 +607,6 @@ def render(username: str, password: str):
         
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
-        # Columnas REAL/PROYECTADO/PPTO vacías
-        html_parts.append('<td></td><td></td><td></td>')
         for mes in meses_lista:
             ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
             html_parts.append(f'<td>{fmt_monto_html(ef_ini_mes)}</td>')
@@ -667,8 +615,6 @@ def render(username: str, password: str):
         
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append('<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
-        # Columnas REAL/PROYECTADO/PPTO vacías
-        html_parts.append('<td></td><td></td><td></td>')
         for mes in meses_lista:
             ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{fmt_monto_html(ef_fin_mes)}</td>')
