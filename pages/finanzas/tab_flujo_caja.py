@@ -555,7 +555,7 @@ def render(username: str, password: str):
                                     
                                     # Icono para expandir/contraer proveedores
                                     if has_proveedores:
-                                        categoria_icon = f'<span class="icon-expand" style="cursor:pointer;" onclick="toggleCategoria(\\'{categoria_id_safe}\\', \\'{cuenta_id_safe}\\')">{SVG_ICONS["chevron"]}</span>'
+                                        categoria_icon = f'<span class="icon-expand" style="cursor:pointer;" onclick="toggleCategoria(\'{categoria_id_safe}\', \'{cuenta_id_safe}\')">{SVG_ICONS["chevron"]}</span>'
                                     else:
                                         categoria_icon = '<span style="width:24px;display:inline-block;"></span>'
                                     
@@ -589,7 +589,7 @@ def render(username: str, password: str):
                                             
                                             # Clickeable si tiene facturas y monto != 0
                                             if sub_tiene_facturas and sub_mes_monto != 0:
-                                                sub_nombre_js = sub_nombre.replace("'", "\\\\'")
+                                                sub_nombre_js = sub_nombre.replace("'", "\\'")
                                                 onclick = f"event.stopPropagation(); showFacturasModal('{sub_nombre_js}', '{mes}', '{cuenta_codigo}')"
                                                 html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {sub_total_facturas} factura(s)">{fmt_monto_html(sub_mes_monto)}</td>')
                                             else:
@@ -619,7 +619,7 @@ def render(username: str, password: str):
                                         et_mes_monto = et_montos_mes.get(mes, 0)
                                         
                                         if tiene_facturas and et_mes_monto != 0:
-                                            et_nombre_js = et_nombre.replace("'", "\\\\'")
+                                            et_nombre_js = et_nombre.replace("'", "\\'")
                                             onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
                                             html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
                                         else:
