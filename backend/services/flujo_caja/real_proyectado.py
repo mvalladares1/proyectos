@@ -179,6 +179,45 @@ class RealProyectadoCalculator:
                     'etiquetas': {},
                     'es_cuenta_cxp': True,
                     'orden': 3
+                },
+                'NC_DEVUELTAS': {
+                    'codigo': 'nc_devueltas',
+                    'nombre': '💚 N/C Devueltas',
+                    'monto': 0.0,
+                    'real': 0.0,
+                    'proyectado': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'real_por_mes': defaultdict(float),
+                    'proyectado_por_mes': defaultdict(float),
+                    'etiquetas': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 4
+                },
+                'NC_PARCIALES': {
+                    'codigo': 'nc_parciales',
+                    'nombre': '💛 N/C Parcialmente Devueltas',
+                    'monto': 0.0,
+                    'real': 0.0,
+                    'proyectado': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'real_por_mes': defaultdict(float),
+                    'proyectado_por_mes': defaultdict(float),
+                    'etiquetas': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 5
+                },
+                'NC_PENDIENTES': {
+                    'codigo': 'nc_pendientes',
+                    'nombre': '🔄 N/C Pendientes',
+                    'monto': 0.0,
+                    'real': 0.0,
+                    'proyectado': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'real_por_mes': defaultdict(float),
+                    'proyectado_por_mes': defaultdict(float),
+                    'etiquetas': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 6
                 }
             }
             
@@ -222,15 +261,16 @@ class RealProyectadoCalculator:
                 
                 # Signo: N/C invierten el signo (devuelven dinero)
                 signo = -1 if move_type == 'in_refund' else 1
+                es_nc = (move_type == 'in_refund')
                 
                 # CLASIFICACIÓN POR MATCHING_NUMBER
                 if matching_number and str(matching_number).startswith('A'):
-                    # ===== CASO 1: FACTURAS PAGADAS (AXXXXX) =====
-                    estado_key = 'PAGADAS'
+                    # ===== CASO 1: PAGADAS CON MATCHING AXXXXX =====
+                    estado_key = 'NC_DEVUELTAS' if es_nc else 'PAGADAS'
                     
-                    # Monto REAL = lo ya pagado (negativo = salida)
+                    # Monto REAL = lo ya pagado (negativo = salida para facturas, positivo = ingreso para N/C)
                     monto_real = -(amount_total - amount_residual) * signo
-                    monto_proyectado = 0  # Ya está pagado
+                    monto_proyectado = 0  # Ya está pagado/devuelto
                     
                     # Buscar fecha de pago en las líneas de esta factura
                     fecha_real = f.get('date', '')
@@ -243,8 +283,8 @@ class RealProyectadoCalculator:
                     periodo_proyectado = None
                     
                 elif matching_number == 'P':
-                    # ===== CASO 2: FACTURAS PARCIALES (P) =====
-                    estado_key = 'PARCIALES'
+                    # ===== CASO 2: PARCIALES CON MATCHING P =====
+                    estado_key = 'NC_PARCIALES' if es_nc else 'PARCIALES'
                     
                     # Monto REAL = lo ya pagado
                     monto_real = -(amount_total - amount_residual) * signo
@@ -272,10 +312,10 @@ class RealProyectadoCalculator:
                         periodo_proyectado = periodo_real
                     
                 else:
-                    # ===== CASO 3: FACTURAS NO PAGADAS (blank) =====
-                    estado_key = 'NO_PAGADAS'
+                    # ===== CASO 3: NO PAGADAS (sin matching) =====
+                    estado_key = 'NC_PENDIENTES' if es_nc else 'NO_PAGADAS'
                     
-                    # Monto REAL = 0 (no hay pagos)
+                    # Monto REAL = 0 (no hay pagos/devoluciones)
                     monto_real = 0
                     # Monto PROYECTADO = todo el monto
                     monto_proyectado = -amount_total * signo
@@ -351,8 +391,12 @@ class RealProyectadoCalculator:
             
             # Convertir estados a lista ordenada
             cuentas_resultado = []
-            for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']:
+            for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'NC_DEVUELTAS', 'NC_PARCIALES', 'NC_PENDIENTES']:
                 estado_data = estados[estado_key]
+                
+                # Solo agregar si tiene datos
+                if estado_data['monto'] == 0 and estado_data['real'] == 0 and estado_data['proyectado'] == 0:
+                    continue
                 
                 # Convertir proveedores a lista
                 etiquetas_list = []
