@@ -460,20 +460,9 @@ def render(username: str, password: str):
                     valores_lista.append(monto_mes)
                     heatmap_class = get_heatmap_class(monto_mes, max_abs)
                     cell_id = f"cell_{c_id_safe}_{mes}"
-                    # Agregar onclick para mostrar composición de cuentas SI tiene cuentas y monto != 0
-                    tiene_cuentas = len(cuentas) > 0
-                    tiene_monto = monto_mes != 0
+                    # NO onclick para composición (removed per user request)
                     
-                    if tiene_cuentas and tiene_monto:
-                        onclick_comp = f"event.stopPropagation(); showComposicionModal('{c_id}', '{mes}')"
-                        cell_class = "cell-clickable"
-                        title_attr = f'title="Click para ver composición"'
-                    else:
-                        onclick_comp = ""
-                        cell_class = ""
-                        title_attr = ""
-                    
-                    html_parts.append(f'<td class="clickable {heatmap_class} {cell_class}" id="{cell_id}" onclick="{onclick_comp}" {title_attr} oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
+                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
                 
                 # Total con SPARKLINE
                 sparkline = generate_sparkline(valores_lista)

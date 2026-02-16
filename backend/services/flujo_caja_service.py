@@ -559,6 +559,19 @@ class FlujoCajaService:
                     concepto, real_proyectado_data, concepto_id
                 )
         
+        # RECALCULAR subtotales después de enriquecer (importante para 1.2.1 con estructura especial)
+        subtotales_por_actividad = {
+            "OPERACION": {m: 0.0 for m in meses_lista},
+            "INVERSION": {m: 0.0 for m in meses_lista},
+            "FINANCIAMIENTO": {m: 0.0 for m in meses_lista}
+        }
+        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            conceptos = conceptos_por_actividad.get(act_key, [])
+            for concepto in conceptos:
+                montos_mes = concepto.get('montos_por_mes', {})
+                for mes in meses_lista:
+                    subtotales_por_actividad[act_key][mes] += montos_mes.get(mes, 0)
+        
         for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
             subtotal_mes = subtotales_por_actividad[act_key]
             resultado["actividades"][act_key] = {
