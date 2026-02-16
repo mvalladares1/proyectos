@@ -72,6 +72,30 @@ function toggleEtiquetas(cuentaId) {
     }
 }
 
+// Estado para categorías expandidas (Nivel 3 con sub_etiquetas de nivel 4)
+let expandedCategorias = new Set();
+
+// ============ TOGGLE CATEGORIA (Nivel 3 → Nivel 4) ============
+function toggleCategoria(categoriaId, cuentaId) {
+    // Seleccionar solo las sub-etiquetas (proveedores) de esta categoría
+    const rows = document.querySelectorAll('.sub-etiqueta-' + categoriaId);
+    
+    if (!rows.length) return;
+    
+    const key = cuentaId + '_' + categoriaId;
+    const isExpanded = expandedCategorias.has(key);
+    
+    rows.forEach(row => {
+        row.style.display = isExpanded ? 'none' : 'table-row';
+    });
+    
+    if (isExpanded) {
+        expandedCategorias.delete(key);
+    } else {
+        expandedCategorias.add(key);
+    }
+}
+
 // ============ EXPAND ALL / COLLAPSE ALL ============
 function expandAll() {
     document.querySelectorAll('.expandable').forEach(parent => {
@@ -211,6 +235,12 @@ toggleConcept = function(conceptId) {
 const originalToggleEtiquetas = toggleEtiquetas;
 toggleEtiquetas = function(cuentaId) {
     originalToggleEtiquetas(cuentaId);
+    setTimeout(updateFrameHeight, 100);
+};
+
+const originalToggleCategoria = toggleCategoria;
+toggleCategoria = function(categoriaId, cuentaId) {
+    originalToggleCategoria(categoriaId, cuentaId);
     setTimeout(updateFrameHeight, 100);
 };
 

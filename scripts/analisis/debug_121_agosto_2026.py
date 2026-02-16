@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Script para debuggear datos de 1.2.1 hasta agosto 2026
-Muestra desglose de facturas PARCIALES y NO_PAGADAS
+Muestra desglose de 4 NIVELES REALES:
+- Nivel 2: ESTADOS (Pagadas, Parciales, No Pagadas)
+- Nivel 3: CATEGORÍAS de contacto
+- Nivel 4: PROVEEDORES individuales
 """
 import sys
 import os
@@ -40,58 +43,51 @@ def main():
     print(f"\nTOTAL GENERAL: {format_money(resultado['total'])}")
     print(f"Facturas procesadas: {resultado.get('facturas_count', 0)}")
     
-    # Buscar cuentas que corresponden a parciales o no_pagadas
+    # Buscar cuentas (ESTADOS)
     cuentas = resultado.get('cuentas', [])
     
-    print(f"\nTotal de cuentas encontradas: {len(cuentas)}")
+    print(f"\nTotal de ESTADOS encontrados: {len(cuentas)}")
     
-    # Agrupar cuentas por estado (usando emoji)
-    estados_encontrados = {
-        'PARCIALES': [],
-        'NO_PAGADAS': []
-    }
-    
-    iconos = {
-        'PARCIALES': '⏳',
-        'NO_PAGADAS': '❌'
-    }
-    
-    for cuenta in cuentas:
-        nombre = cuenta.get('nombre', '')
-        if '⏳' in nombre:
-            estados_encontrados['PARCIALES'].append(cuenta)
-        elif '❌' in nombre:
-            estados_encontrados['NO_PAGADAS'].append(cuenta)
-    
-    # Mostrar información por estado
-    for estado_key, cuentas_estado in estados_encontrados.items():
-        if not cuentas_estado:
-            continue
-            
-        icono = iconos[estado_key]
-        total_estado = sum(c.get('monto', 0) for c in cuentas_estado)
+    for idx_estado, cuenta in enumerate(cuentas, 1):
+        nombre_estado = cuenta.get('nombre', '')
+        monto_estado = cuenta.get('monto', 0)
+        etiquetas = cuenta.get('etiquetas', [])
         
         print("\n" + "="*100)
-        print(f"ESTADO: {icono} Facturas {estado_key.title()}")
-        print(f"MONTO TOTAL: {format_money(total_estado)}")
-        print(f"Categorías encontradas: {len(cuentas_estado)}")
+        print(f"NIVEL 2 - ESTADO {idx_estado}: {nombre_estado}")
+        print(f"MONTO TOTAL: {format_money(monto_estado)}")
         print("="*100)
         
+        if not etiquetas:
+            print("⚠️ NO HAY ETIQUETAS EN ESTE ESTADO")
+            continue
+        
+        # Las etiquetas ahora son CATEGORÍAS (nivel 3) con sub_etiquetas (proveedores nivel 4) ANIDADOS
+        categorias = [e for e in etiquetas if e.get('nivel') == 3]
+        
+        # Contar proveedores totales
+        total_proveedores = sum(len(cat.get('sub_etiquetas', [])) for cat in categorias)
+        
+        print(f"\nCategorías (Nivel 3): {len(categorias)}")
+        print(f"Proveedores (Nivel 4): {total_proveedores}")
+        
         # Mostrar top 5 categorías
-        for idx, cuenta in enumerate(sorted(cuentas_estado, key=lambda x: abs(x.get('monto', 0)), reverse=True)[:5], 1):
-            cat_nombre = cuenta.get('nombre', '').replace(icono, '').strip()
-            cat_monto = cuenta.get('monto', 0)
-            etiquetas = cuenta.get('etiquetas', [])
+        for idx_cat, cat in enumerate(categorias[:5], 1):
+            cat_nombre = cat.get('nombre', '').replace('📁 ', '').strip()
+            cat_monto = cat.get('monto', 0)
             
-            print(f"\n  📁 CATEGORÍA {idx}: {cat_nombre}")
+            # Obtener proveedores ANIDADOS en esta categoría
+            proveedores_cat = cat.get('sub_etiquetas', [])
+            
+            print(f"\n  NIVEL 3 - CATEGORÍA {idx_cat}: {cat_nombre}")
             print(f"     Monto: {format_money(cat_monto)}")
-            print(f"     Proveedores: {len(etiquetas)}")
+            print(f"     Proveedores: {len(proveedores_cat)}")
             
-            # Mostrar top 5 proveedores
-            if etiquetas:
-                print(f"\n     Top 5 proveedores:")
-                for prov_idx, prov in enumerate(etiquetas[:5], 1):
-                    prov_nombre = prov.get('nombre', '')
+            # Mostrar top 5 proveedores de esta categoría
+            if proveedores_cat:
+                print(f"\n     NIVEL 4 - Top 5 proveedores:")
+                for prov_idx, prov in enumerate(proveedores_cat[:5], 1):
+                    prov_nombre = prov.get('nombre', '').replace('↳ ', '').strip()
                     prov_monto = prov.get('monto', 0)
                     montos_por_mes = prov.get('montos_por_mes', {})
                     

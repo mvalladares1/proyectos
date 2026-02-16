@@ -377,10 +377,10 @@ class RealProyectadoCalculator:
                 if periodo_proyectado:
                     proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
-            # PASO 3: Convertir estructura a 4 NIVELES REALES
-            # Nivel 2 (cuentas): ESTADOS
-            # Nivel 3 (etiquetas): CATEGORÍAS (header visual)
-            # Nivel 4 (etiquetas): PROVEEDORES (indentados)
+            # PASO 3: Convertir estructura a 4 NIVELES EXPANDIBLES
+            # Nivel 2 (cuentas): ESTADOS (expandible)
+            # Nivel 3 (etiquetas): CATEGORÍAS (expandible con sub_etiquetas)
+            # Nivel 4 (sub_etiquetas): PROVEEDORES (anidados bajo categoría)
             montos_por_mes_total = defaultdict(float)
             for periodo in set(real_por_periodo.keys()) | set(proyectado_por_periodo.keys()):
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
@@ -402,33 +402,35 @@ class RealProyectadoCalculator:
                 )
                 
                 for categoria_nombre, categoria_data in categorias_ordenadas:
-                    # Nivel 3: CATEGORÍA como etiqueta header
-                    etiquetas_list.append({
-                        'nombre': f"📁 {categoria_nombre}",
-                        'monto': categoria_data['monto'],
-                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
-                        'tipo': 'categoria',
-                        'nivel': 3,
-                        'activo': True
-                    })
-                    
-                    # Nivel 4: PROVEEDORES como etiquetas indentadas
+                    # Nivel 3: CATEGORÍA como etiqueta EXPANDIBLE con sub_etiquetas
+                    # Ordenar proveedores por monto
                     proveedores_ordenados = sorted(
                         categoria_data['proveedores'].items(),
                         key=lambda x: abs(x[1]['monto']),
                         reverse=True
                     )
                     
+                    # Nivel 4: PROVEEDORES como sub_etiquetas anidadas
+                    sub_etiquetas_proveedores = []
                     for prov_nombre, prov_data in proveedores_ordenados[:30]:  # Top 30 por categoría
-                        etiquetas_list.append({
-                            'nombre': f"  ↳ {prov_data['nombre']}",
+                        sub_etiquetas_proveedores.append({
+                            'nombre': f"↳ {prov_data['nombre']}",
                             'monto': prov_data['monto'],
                             'montos_por_mes': dict(prov_data['montos_por_mes']),
                             'tipo': 'proveedor',
                             'nivel': 4,
-                            'categoria': categoria_nombre,
                             'activo': True
                         })
+                    
+                    etiquetas_list.append({
+                        'nombre': f"📁 {categoria_nombre}",
+                        'monto': categoria_data['monto'],
+                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
+                        'tipo': 'categoria',
+                        'nivel': 3,
+                        'activo': True,
+                        'sub_etiquetas': sub_etiquetas_proveedores  # ANIDADOS
+                    })
                 
                 cuentas_resultado.append({
                     'codigo': estado['codigo'],

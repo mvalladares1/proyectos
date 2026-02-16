@@ -536,63 +536,98 @@ def render(username: str, password: str):
                         }
                         
                         if has_etiquetas:
-                            # Mostrar TODAS las etiquetas (categorías + proveedores)
+                            # Renderizar etiquetas con estructura anidada de 4 niveles
+                            # Nivel 3: CATEGORÍAS (expandibles)
+                            # Nivel 4: PROVEEDORES (sub_etiquetas anidadas bajo categoría)
                             for etiqueta in etiquetas:
                                 et_nombre = etiqueta.get("nombre", "")
                                 et_monto = etiqueta.get("monto", 0)
                                 et_montos_mes = etiqueta.get("montos_por_mes", {})
-                                et_nivel = etiqueta.get("nivel", 4)  # Default nivel 4 (proveedor)
+                                et_nivel = etiqueta.get("nivel", 4)
                                 et_tipo = etiqueta.get("tipo", "proveedor")
+                                sub_etiquetas = etiqueta.get("sub_etiquetas", [])
                                 tiene_facturas = "facturas" in etiqueta and len(etiqueta.get("facturas", [])) > 0
                                 total_facturas = etiqueta.get("total_facturas", 0)
                                 
-                                # Estilos según nivel
-                                if et_nivel == 3:  # CATEGORÍA (header)
-                                    padding_left = "80px"
-                                    font_size = "13px"
-                                    font_weight = "bold"
-                                    color = "#e0e0e0"
-                                    border_style = "3px solid #667eea"
-                                else:  # PROVEEDOR (indentado)
-                                    padding_left = "120px"
-                                    font_size = "12px"
-                                    font_weight = "normal"
-                                    color = "#ccc"
-                                    border_style = "3px solid #4a5568"
-                                
-                                # Fondo sólido oscuro para evitar transparencia al deslizar
-                                html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                
-                                # Obtener icono según estado de pago (si es CxC) o usar el del nombre
-                                if es_cuenta_cxc:
-                                    icono = ESTADO_ICONS.get(et_nombre, '🏷️')
-                                    nombre_display = et_nombre
-                                else:
-                                    # El nombre ya incluye el icono (📁 para categoría, ↳ para proveedor)
-                                    nombre_display = et_nombre
-                                
-                                # Indicador de facturas si es CxC
-                                if es_cuenta_cxc and tiene_facturas:
-                                    nombre_display += f' <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
-                                
-                                html_parts.append(f'<td class="frozen" style="padding-left: {padding_left}; font-size: {font_size}; font-weight: {font_weight}; color: {color}; background-color: #1a1a2e; border-left: {border_style};">{nombre_display}</td>')
-                                
-                                # Montos por mes de la etiqueta - clickeables si tiene facturas
-                                for mes in meses_lista:
-                                    et_mes_monto = et_montos_mes.get(mes, 0)
+                                if et_nivel == 3:  # CATEGORÍA (expandible con sub_etiquetas)
+                                    categoria_id_safe = et_nombre.replace(" ", "_").replace("📁", "").strip().replace(".", "_")
+                                    has_proveedores = len(sub_etiquetas) > 0
                                     
-                                    # Mostrar modal de facturas si tiene facturas y monto != 0
-                                    if tiene_facturas and et_mes_monto != 0:
-                                        # Celda clickeable para mostrar modal
-                                        et_nombre_js = et_nombre.replace("'", "\\'")
-                                        onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                        cell_class = "cell-clickable"
-                                        html_parts.append(f'<td class="{cell_class}" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
+                                    # Icono para expandir/contraer proveedores
+                                    if has_proveedores:
+                                        categoria_icon = f'<span class="icon-expand" style="cursor:pointer;" onclick="toggleCategoria(\\'{categoria_id_safe}\\', \\'{cuenta_id_safe}\\')">{SVG_ICONS["chevron"]}</span>'
                                     else:
-                                        html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                        categoria_icon = '<span style="width:24px;display:inline-block;"></span>'
+                                    
+                                    # Fila de CATEGORÍA (nivel 3)
+                                    html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe} categoria-{categoria_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: 80px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
+                                    
+                                    # Montos por mes de la categoría
+                                    for mes in meses_lista:
+                                        et_mes_monto = et_montos_mes.get(mes, 0)
+                                        html_parts.append(f'<td style="font-size: 12px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                    
+                                    html_parts.append(f'<td style="font-size: 13px; font-weight: bold; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
+                                    html_parts.append('</tr>')
+                                    
+                                    # NIVEL 4: PROVEEDORES (sub_etiquetas anidadas bajo categoría)
+                                    for sub_etiqueta in sub_etiquetas:
+                                        sub_nombre = sub_etiqueta.get("nombre", "")
+                                        sub_monto = sub_etiqueta.get("monto", 0)
+                                        sub_montos_mes = sub_etiqueta.get("montos_por_mes", {})
+                                        sub_tiene_facturas = "facturas" in sub_etiqueta and len(sub_etiqueta.get("facturas", [])) > 0
+                                        sub_total_facturas = sub_etiqueta.get("total_facturas", 0)
+                                        
+                                        # Fila de PROVEEDOR (nivel 4, inicialmente oculta)
+                                        html_parts.append(f'<tr class="sub-etiqueta-row sub-etiqueta-{categoria_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                        html_parts.append(f'<td class="frozen" style="padding-left: 120px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
+                                        
+                                        # Montos por mes del proveedor
+                                        for mes in meses_lista:
+                                            sub_mes_monto = sub_montos_mes.get(mes, 0)
+                                            
+                                            # Clickeable si tiene facturas y monto != 0
+                                            if sub_tiene_facturas and sub_mes_monto != 0:
+                                                sub_nombre_js = sub_nombre.replace("'", "\\\\'")
+                                                onclick = f"event.stopPropagation(); showFacturasModal('{sub_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                                html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {sub_total_facturas} factura(s)">{fmt_monto_html(sub_mes_monto)}</td>')
+                                            else:
+                                                html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(sub_mes_monto)}</td>')
+                                        
+                                        html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(sub_monto)}</td>')
+                                        html_parts.append('</tr>')
                                 
-                                html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
-                                html_parts.append('</tr>')
+                                else:
+                                    # Etiquetas sin estructura anidada (otros casos como CxC)
+                                    # Obtener icono según estado de pago (si es CxC)
+                                    if es_cuenta_cxc:
+                                        icono = ESTADO_ICONS.get(et_nombre, '🏷️')
+                                        nombre_display = et_nombre
+                                    else:
+                                        nombre_display = et_nombre
+                                    
+                                    # Indicador de facturas si es CxC
+                                    if es_cuenta_cxc and tiene_facturas:
+                                        nombre_display += f' <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                    
+                                    html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: 80px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
+                                    
+                                    # Montos por mes
+                                    for mes in meses_lista:
+                                        et_mes_monto = et_montos_mes.get(mes, 0)
+                                        
+                                        if tiene_facturas and et_mes_monto != 0:
+                                            et_nombre_js = et_nombre.replace("'", "\\\\'")
+                                            onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
+                                            html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
+                                        else:
+                                            html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                    
+                                    html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
+                                    html_parts.append('</tr>')
+
 
             
             # Subtotal de actividad
