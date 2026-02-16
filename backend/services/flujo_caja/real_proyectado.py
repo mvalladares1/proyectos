@@ -139,17 +139,39 @@ class RealProyectadoCalculator:
             real_por_periodo = defaultdict(float)
             proyectado_por_periodo = defaultdict(float)
             
-            # Estructura jerárquica: {estado: {proveedor: {datos}}}
+            # PASO 1.5: Obtener información de partners con categoría de contacto
+            partner_ids = list(set([f.get('partner_id')[0] if isinstance(f.get('partner_id'), (list, tuple)) else f.get('partner_id') 
+                                   for f in facturas if f.get('partner_id')]))
+            
+            partners_info = {}
+            if partner_ids:
+                partners_data = self.odoo.search_read(
+                    'res.partner',
+                    [['id', 'in', partner_ids]],
+                    ['id', 'name', 'x_studio_categora_de_contacto'],
+                    limit=10000
+                )
+                for p in partners_data:
+                    categoria = p.get('x_studio_categora_de_contacto', False)
+                    if categoria and isinstance(categoria, (list, tuple)):
+                        categoria = categoria[1]  # Obtener el nombre si es selection
+                    elif not categoria or categoria == 'False':
+                        categoria = 'Sin Categoría'
+                    
+                    partners_info[p['id']] = {
+                        'name': p.get('name', 'Sin nombre'),
+                        'categoria': categoria
+                    }
+            
+            # Estructura jerárquica: {estado: {categoria: {proveedor: {datos}}}}
             # Las N/C se integran en las mismas categorías con signo invertido
             estados = {
                 'PAGADAS': {
                     'codigo': 'pagadas',
                     'nombre': '✅ Facturas Pagadas',
                     'monto': 0.0,
-                    'real': 0.0,
-                    'proyectado': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'etiquetas': {},
+                    'categorias': {},  # Nivel 3: Categorías de contacto
                     'es_cuenta_cxp': True,
                     'orden': 1
                 },
@@ -157,10 +179,8 @@ class RealProyectadoCalculator:
                     'codigo': 'parciales',
                     'nombre': '⏳ Facturas Parcialmente Pagadas',
                     'monto': 0.0,
-                    'real': 0.0,
-                    'proyectado': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'etiquetas': {},
+                    'categorias': {},  # Nivel 3: Categorías de contacto
                     'es_cuenta_cxp': True,
                     'orden': 2
                 },
@@ -168,10 +188,8 @@ class RealProyectadoCalculator:
                     'codigo': 'no_pagadas',
                     'nombre': '❌ Facturas No Pagadas',
                     'monto': 0.0,
-                    'real': 0.0,
-                    'proyectado': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'etiquetas': {},
+                    'categorias': {},  # Nivel 3: Categorías de contacto
                     'es_cuenta_cxp': True,
                     'orden': 3
                 }
@@ -307,28 +325,44 @@ class RealProyectadoCalculator:
                 # Acumular por estado (Nivel 2)
                 estado = estados[estado_key]
                 estado['monto'] += monto_real + monto_proyectado
-                estado['real'] += monto_real
-                estado['proyectado'] += monto_proyectado
                 
                 if periodo_real:
                     estado['montos_por_mes'][periodo_real] += monto_real
                 if periodo_proyectado:
                     estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
                 
-                # Agrupar por proveedor (Nivel 3)
-                if partner_name not in estado['etiquetas']:
-                    estado['etiquetas'][partner_name] = {
+                # Obtener información del partner
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
+                partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
+                categoria_nombre = partner_info['categoria']
+                
+                # Nivel 3: Agrupar por categoría de contacto
+                if categoria_nombre not in estado['categorias']:
+                    estado['categorias'][categoria_nombre] = {
+                        'nombre': categoria_nombre,
+                        'monto': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'proveedores': {}  # Nivel 4: Proveedores individuales
+                    }
+                
+                categoria = estado['categorias'][categoria_nombre]
+                categoria['monto'] += monto_real + monto_proyectado
+                
+                if periodo_real:
+                    categoria['montos_por_mes'][periodo_real] += monto_real
+                if periodo_proyectado:
+                    categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                
+                # Nivel 4: Agrupar por proveedor individual
+                if partner_name not in categoria['proveedores']:
+                    categoria['proveedores'][partner_name] = {
                         'nombre': partner_name[:50],
                         'monto': 0.0,
-                        'real': 0.0,
-                        'proyectado': 0.0,
                         'montos_por_mes': defaultdict(float)
                     }
                 
-                proveedor = estado['etiquetas'][partner_name]
+                proveedor = categoria['proveedores'][partner_name]
                 proveedor['monto'] += monto_real + monto_proyectado
-                proveedor['real'] += monto_real
-                proveedor['proyectado'] += monto_proyectado
                 
                 if periodo_real:
                     proveedor['montos_por_mes'][periodo_real] += monto_real
@@ -345,15 +379,23 @@ class RealProyectadoCalculator:
             for estado_key in ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']:
                 estado_data = estados[estado_key]
                 
-                # Convertir proveedores a lista
+                # Nivel 3: Convertir categorías de contacto a lista
                 etiquetas_list = []
-                for prov_name, prov_data in sorted(estado_data['etiquetas'].items(), key=lambda x: x[1]['monto']):
+                for cat_nombre, cat_data in sorted(estado_data['categorias'].items(), key=lambda x: x[1]['monto']):
+                    # Nivel 4: Convertir proveedores dentro de cada categoría a lista
+                    proveedores_list = []
+                    for prov_nombre, prov_data in sorted(cat_data['proveedores'].items(), key=lambda x: x[1]['monto']):
+                        proveedores_list.append({
+                            'nombre': prov_data['nombre'],
+                            'monto': prov_data['monto'],
+                            'montos_por_mes': dict(prov_data['montos_por_mes'])
+                        })
+                    
                     etiquetas_list.append({
-                        'nombre': prov_data['nombre'],
-                        'monto': prov_data['monto'],
-                        'real': prov_data['real'],
-                        'proyectado': prov_data['proyectado'],
-                        'montos_por_mes': dict(prov_data['montos_por_mes'])
+                        'nombre': cat_data['nombre'],
+                        'monto': cat_data['monto'],
+                        'montos_por_mes': dict(cat_data['montos_por_mes']),
+                        'etiquetas': proveedores_list  # Proveedores individuales en nivel 4
                     })
                 
                 cuentas_resultado.append({
@@ -361,16 +403,11 @@ class RealProyectadoCalculator:
                     'nombre': estado_data['nombre'],
                     'monto': estado_data['monto'],
                     'montos_por_mes': dict(estado_data['montos_por_mes']),
-                    'etiquetas': etiquetas_list,
+                    'etiquetas': etiquetas_list,  # Categorías de contacto en nivel 3
                     'es_cuenta_cxp': True
                 })
             
             return {
-                'real': real_total,
-                'proyectado': proyectado_total,
-                'ppto': 0.0,
-                'real_por_mes': dict(real_por_periodo),
-                'proyectado_por_mes': dict(proyectado_por_periodo),
                 'montos_por_mes': dict(montos_por_mes_total),
                 'total': real_total + proyectado_total,
                 'cuentas': cuentas_resultado,
@@ -382,12 +419,8 @@ class RealProyectadoCalculator:
             import traceback
             traceback.print_exc()
             return {
-                'real': 0.0,
-                'proyectado': 0.0,
-                'ppto': 0.0,
-                'real_por_mes': {},
-                'proyectado_por_mes': {},
                 'montos_por_mes': {},
+                'total': 0.0,
                 'cuentas': [],
                 'error': str(e)
             }
