@@ -708,6 +708,70 @@ class AgregadorFlujo:
         """
         if concepto_id not in self.cuentas_por_concepto:
             return []
+
+        # Caso especial CxC 1.1.1: exponer estados como NIVEL 2 y partners como NIVEL 3
+        # (sin mostrar cuenta intermedia "DEUDORES POR VENTAS")
+        if concepto_id == '1.1.1':
+            cuentas_cxc = self.cuentas_por_concepto.get(concepto_id, {})
+            cuenta_base = None
+            for codigo, cuenta in cuentas_cxc.items():
+                if cuenta.get('facturas_por_estado'):
+                    cuenta_base = cuenta
+                    break
+
+            if cuenta_base:
+                etiquetas_dict = cuenta_base.get('etiquetas', {})
+                facturas_por_estado = cuenta_base.get('facturas_por_estado', {})
+
+                estado_def = [
+                    ('paid', '✅ Facturas Pagadas', 'Facturas Pagadas', 1),
+                    ('partial', '⏳ Facturas Parcialmente Pagadas', 'Facturas Parcialmente Pagadas', 2),
+                    ('in_payment', '🔄 En Proceso de Pago', 'En Proceso de Pago', 3),
+                    ('not_paid', '❌ Facturas No Pagadas', 'Facturas No Pagadas', 4),
+                    ('estado_projected', '🔮 Facturas Proyectadas', '🔮 Facturas Proyectadas', 4.5),
+                    ('reversed', '↩️ Facturas Revertidas', 'Facturas Revertidas', 5),
+                ]
+
+                resultado_estados = []
+                for estado_codigo, estado_nombre, estado_label, estado_orden in estado_def:
+                    etiqueta_estado = etiquetas_dict.get(estado_label, {})
+                    facturas_estado = facturas_por_estado.get(estado_codigo, {})
+
+                    if not etiqueta_estado and not facturas_estado:
+                        continue
+
+                    montos_por_mes_estado = etiqueta_estado.get('montos_por_mes', {}) if isinstance(etiqueta_estado, dict) else {}
+                    monto_estado = etiqueta_estado.get('monto', 0) if isinstance(etiqueta_estado, dict) else 0
+
+                    etiquetas_partners = []
+                    for partner_nombre, partner_datos in facturas_estado.items():
+                        etiquetas_partners.append({
+                            'nombre': str(partner_nombre)[:60],
+                            'monto': round(partner_datos.get('monto_total', 0), 0),
+                            'montos_por_mes': {
+                                m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
+                                for m in self.meses_lista
+                            }
+                        })
+
+                    etiquetas_partners.sort(key=lambda x: abs(x.get('monto', 0)), reverse=True)
+
+                    resultado_estados.append({
+                        'codigo': f'estado_{estado_codigo}' if not str(estado_codigo).startswith('estado_') else estado_codigo,
+                        'nombre': estado_nombre,
+                        'monto': round(monto_estado, 0),
+                        'cantidad': len(facturas_estado),
+                        'montos_por_mes': {m: round(montos_por_mes_estado.get(m, 0), 0) for m in self.meses_lista},
+                        'etiquetas': etiquetas_partners,
+                        'es_cuenta_cxc': True,
+                        '_orden_estado': estado_orden
+                    })
+
+                resultado_estados.sort(key=lambda x: x.get('_orden_estado', 99))
+                for item in resultado_estados:
+                    item.pop('_orden_estado', None)
+
+                return resultado_estados
         
         # Ordenar por monto absoluto
         sorted_cuentas = sorted(
