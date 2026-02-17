@@ -1,10 +1,11 @@
 """
 Servicio de Tipos de Cambio - Conversión USD a CLP
-Utiliza la API gratuita de ExchangeRate-API con caché en memoria.
+Utiliza tipo de cambio oficial BCCh (Dólar observado) vía mindicador.cl con caché.
 """
 import time
 import requests
 from typing import Optional
+from datetime import datetime, timezone, timedelta
 
 
 class CurrencyService:
@@ -12,9 +13,11 @@ class CurrencyService:
     Servicio para obtener tipos de cambio USD → CLP.
     
     Características:
+    - Usa Dólar observado oficial BCCh (serie pública de mindicador.cl)
+    - Prioriza tasa del día actual (hora Chile)
+    - Si hoy no está publicado (feriado/no hábil), usa último dato disponible
     - Caché en memoria por 1 hora para evitar llamadas excesivas
     - Fallback a valor por defecto si la API falla
-    - API gratuita sin necesidad de API key
     """
     
     # Caché de clase (compartido entre instancias)
@@ -25,8 +28,8 @@ class CurrencyService:
     # Valor de fallback si la API falla
     FALLBACK_RATE: float = 950.0
     
-    # URL de la API
-    API_URL: str = "https://api.exchangerate-api.com/v4/latest/USD"
+    # URL serie pública del dólar observado (fuente BCCh)
+    API_URL: str = "https://mindicador.cl/api/dolar"
     
     @classmethod
     def get_usd_to_clp_rate(cls) -> float:
@@ -46,17 +49,49 @@ class CurrencyService:
             if elapsed < cls._cache_ttl:
                 return cls._cache_rate
         
-        # Consultar API externa
+        # Consultar serie oficial
         try:
             response = requests.get(cls.API_URL, timeout=10)
             response.raise_for_status()
             
             data = response.json()
-            rate = data.get('rates', {}).get('CLP')
-            
+            serie = data.get('serie', []) if isinstance(data, dict) else []
+
+            if not serie:
+                print("[CurrencyService] Serie de dólar vacía, usando fallback")
+                return cls.FALLBACK_RATE
+
+            # Fecha actual en Chile (UTC-3/UTC-4 aproximado para comparación de día)
+            chile_tz = timezone(timedelta(hours=-3))
+            hoy_chile = datetime.now(chile_tz).date()
+
+            # Buscar valor del día actual
+            rate = None
+            for item in serie:
+                fecha_str = item.get('fecha', '')
+                valor = item.get('valor')
+                if not fecha_str or valor is None:
+                    continue
+                try:
+                    fecha_item = datetime.fromisoformat(fecha_str.replace('Z', '+00:00')).date()
+                except Exception:
+                    continue
+
+                if fecha_item == hoy_chile:
+                    rate = float(valor)
+                    break
+
+            # Si hoy no está disponible (feriado/no hábil), usar el último disponible
+            if rate is None:
+                primer = serie[0] if serie else {}
+                valor_ultimo = primer.get('valor')
+                if valor_ultimo is not None:
+                    rate = float(valor_ultimo)
+                    print(f"[CurrencyService] Tasa de hoy no disponible, usando último valor BCCh: {rate}")
+
             if rate and rate > 0:
                 # Guardar en caché
-                cls._cache_rate = float(rate)
+                cls._cache_rate = rate
                 cls._cache_time = time.time()
                 return cls._cache_rate
             else:
