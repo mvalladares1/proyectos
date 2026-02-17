@@ -477,8 +477,8 @@ class AgregadorFlujo:
         monto_total_procesado = 0
         
         for presu in presupuestos:
-            # Obtener fecha de compromiso
-            fecha = presu.get('commitment_date') or presu.get('date_order', '')
+            # Fecha de clasificación: tentativa de pago (fallback date_order)
+            fecha = presu.get('x_studio_fecha_tentativa_de_pago') or presu.get('date_order', '')
             if not fecha:
                 continue
             

@@ -506,21 +506,30 @@ class FlujoCajaService:
             # Procesar con inversión de signo para CxC
             agregador.procesar_lineas_cxc(lineas_monitoreadas, self._clasificar_cuenta, agrupacion)
             
-            # Query C: Presupuestos de venta (Facturas Proyectadas) - OPCIONAL
+            # Query C: Presupuestos/SO sin facturar (Facturas Proyectadas) - OPCIONAL
             # IMPORTANTE: Se ejecuta DESPUÉS de Query B para que las cuentas CxC ya existan
             if incluir_proyecciones:
-                print(f"[FlujoCaja] Query C: Procesando presupuestos de venta (draft/sent)")
+                print(f"[FlujoCaja] Query C: Procesando SO sin facturar (draft/sent/sale)")
                 print(f"[FlujoCaja] incluir_proyecciones={incluir_proyecciones}")
                 try:
-                    # Consultar presupuestos de venta con estado draft o sent
+                    # Consultar SO en estados draft/sent/sale SIN facturas generadas
+                    # Fecha de clasificación: x_studio_fecha_tentativa_de_pago (fallback date_order)
                     presupuestos = self.odoo_manager.odoo.search_read(
                         'sale.order',
                         [
-                            ('state', 'in', ['draft', 'sent']),
-                            ('commitment_date', '>=', fecha_inicio),
-                            ('commitment_date', '<=', fecha_fin)
+                            ('state', 'in', ['draft', 'sent', 'sale']),
+                            ('invoice_ids', '=', False),
+                            '|',
+                                '&',
+                                    ('x_studio_fecha_tentativa_de_pago', '!=', False),
+                                    ('x_studio_fecha_tentativa_de_pago', '>=', fecha_inicio),
+                                    ('x_studio_fecha_tentativa_de_pago', '<=', fecha_fin),
+                                '&',
+                                    ('x_studio_fecha_tentativa_de_pago', '=', False),
+                                    ('date_order', '>=', fecha_inicio),
+                                    ('date_order', '<=', fecha_fin)
                         ],
-                        ['name', 'partner_id', 'amount_total', 'currency_id', 'commitment_date', 'date_order', 'state']
+                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state']
                     )
                     print(f"[FlujoCaja] Query C: Encontrados {len(presupuestos)} presupuestos")
                     
@@ -528,7 +537,7 @@ class FlujoCajaService:
                         # Mostrar sample
                         sample = presupuestos[:3]
                         for p in sample:
-                            print(f"[FlujoCaja]   - {p['name']}: {p.get('amount_total', 0)} {p.get('currency_id', ['', 'CLP'])[1]} en {p.get('commitment_date', 'N/A')}")
+                            print(f"[FlujoCaja]   - {p['name']}: {p.get('amount_total', 0)} {p.get('currency_id', ['', 'CLP'])[1]} en {p.get('x_studio_fecha_tentativa_de_pago') or p.get('date_order', 'N/A')}")
                     
                     # Procesar presupuestos con conversión de moneda
                     print(f"[FlujoCaja] Llamando a procesar_presupuestos_ventas...")
