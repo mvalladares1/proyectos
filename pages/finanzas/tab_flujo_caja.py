@@ -642,15 +642,17 @@ def render(username: str, password: str):
                                     if es_cuenta_cxc:
                                         icono = ESTADO_ICONS.get(et_nombre, '🏷️')
                                         nombre_display = et_nombre
+                                        padding_left_etiqueta = 140
                                     else:
                                         nombre_display = et_nombre
+                                        padding_left_etiqueta = 80
                                     
                                     # Indicador de facturas si es CxC
                                     if es_cuenta_cxc and tiene_facturas:
                                         nombre_display += f' <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
                                     
                                     html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                    html_parts.append(f'<td class="frozen" style="padding-left: 80px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: {padding_left_etiqueta}px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
                                     
                                     # Montos por mes
                                     for mes in meses_lista:
