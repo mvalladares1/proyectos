@@ -196,15 +196,10 @@ def render(username: str, password: str):
         
         # ========== FILTRO: Solo pendiente (excluir todo lo ya pagado/cobrado) ==========
         if solo_pendiente:
-            st.info(f"🔍 DEBUG: Aplicando filtro 'Solo pendiente' (solo_pendiente={solo_pendiente})")
             import copy
             actividades = copy.deepcopy(actividades)
             act_data = actividades.get("OPERACION", {})
-            st.write(f"DEBUG: OPERACION subtotal antes del filtro: ${act_data.get('subtotal', 0):,.0f}")
             if act_data:
-                conceptos_procesados = 0
-                cxc_encontradas = 0
-                cxc_filtradas = 0
                 for concepto in act_data.get("conceptos", []):
                     cuentas = concepto.get("cuentas", [])
                     # Solo procesar conceptos con estructura CxP/CxC (tienen estados pagadas/parciales)
@@ -212,9 +207,6 @@ def render(username: str, password: str):
                     tiene_cxc = any(c.get("es_cuenta_cxc") for c in cuentas)
                     if not tiene_cxp and not tiene_cxc:
                         continue
-                    
-                    conceptos_procesados += 1
-                    st.write(f"DEBUG: Procesando concepto '{concepto.get('nombre', '')}' tiene_cxp={tiene_cxp} tiene_cxc={tiene_cxc}")
                     
                     if tiene_cxp:
                         # === CxP (1.2.1): Estados son cuentas con codigo ===
@@ -266,22 +258,15 @@ def render(username: str, password: str):
                     
                     elif tiene_cxc:
                         # === CxC (1.1.1): Estados son cuentas con codigo (igual que CxP) ===
-                        st.write(f"DEBUG CxC: Procesando {len(cuentas)} cuentas en concepto")
                         for cuenta in cuentas:
                             if not cuenta.get("es_cuenta_cxc"):
-                                st.write(f"  - Cuenta '{cuenta.get('nombre', '')}' NO es CxC (es_cuenta_cxc={cuenta.get('es_cuenta_cxc')})")
                                 continue
                             
-                            cxc_encontradas += 1
                             cuenta_codigo = cuenta.get("codigo", "")
-                            cuenta_nombre = cuenta.get("nombre", "")
-                            cuenta_monto = cuenta.get("monto", 0)
-                            st.write(f"  ✅ Cuenta CxC encontrada: '{cuenta_nombre}' codigo='{cuenta_codigo}' monto=${cuenta_monto:,.0f}")
                             
                             # Si la cuenta tiene codigo "estado_paid" → Facturas Pagadas → excluir
                             if cuenta_codigo == "estado_paid":
-                                cxc_filtradas += 1
-                                st.write(f"    🎯 FILTRANDO esta cuenta (estado_paid)")
+                                cuenta_monto = cuenta.get("monto", 0)
                                 
                                 # Restar de concepto
                                 concepto["total"] = concepto.get("total", 0) - cuenta_monto
@@ -302,11 +287,6 @@ def render(username: str, password: str):
                                 for etiqueta in cuenta.get("etiquetas", []):
                                     etiqueta["monto"] = 0
                                     etiqueta["montos_por_mes"] = {}
-                                
-                                st.write(f"    ✅ Cuenta zerada: monto={cuenta.get('monto', 0)}")
-                
-                st.success(f"📊 RESUMEN FILTRO: Conceptos procesados={conceptos_procesados}, CxC encontradas={cxc_encontradas}, CxC filtradas={cxc_filtradas}")
-                st.write(f"DEBUG: OPERACION subtotal DESPUÉS del filtro: ${act_data.get('subtotal', 0):,.0f}")
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
