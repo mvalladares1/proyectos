@@ -600,6 +600,15 @@ class FlujoCajaService:
             conceptos = conceptos_por_actividad.get(act_key, [])
             for concepto in conceptos:
                 concepto_id = concepto.get('id', '')
+                # Si se incluyen proyecciones de venta, mantener la estructura agregada de 1.1.1
+                # (evita que real_proyectado reemplace cuentas y elimine estado_projected)
+                if incluir_proyecciones and concepto_id == '1.1.1':
+                    concepto['real'] = concepto.get('total', 0)
+                    concepto['proyectado'] = 0
+                    concepto['ppto'] = 0
+                    concepto['real_por_mes'] = concepto.get('montos_por_mes', {})
+                    concepto['proyectado_por_mes'] = {}
+                    continue
                 self.real_proyectado_calc.enriquecer_concepto(
                     concepto, real_proyectado_data, concepto_id
                 )
