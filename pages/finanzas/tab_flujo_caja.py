@@ -257,30 +257,40 @@ def render(username: str, password: str):
                                                 sub["montos_por_mes"][mes] = sub.get("montos_por_mes", {}).get(mes, 0) - val
                     
                     elif tiene_cxc:
-                        # === CxC (1.1.1): Estados son etiquetas dentro de la cuenta ===
+                        # === CxC (1.1.1): Estados son cuentas con codigo (igual que CxP) ===
                         for cuenta in cuentas:
                             if not cuenta.get("es_cuenta_cxc"):
                                 continue
-                            for etiqueta in cuenta.get("etiquetas", []):
-                                et_nombre = etiqueta.get("nombre", "")
-                                st.write(f"DEBUG CxC etiqueta: '{et_nombre}', monto antes: {etiqueta.get('monto', 0)}")
-                                if "Pagadas" in et_nombre and "Parcialmente" not in et_nombre and "No Pagadas" not in et_nombre:
-                                    # Excluir "Facturas Pagadas" completamente
-                                    et_monto = etiqueta.get("monto", 0)
-                                    st.write(f"  -> FILTRANDO: '{et_nombre}' monto: {et_monto}")
-                                    concepto["total"] = concepto.get("total", 0) - et_monto
-                                    for mes, val in etiqueta.get("montos_por_mes", {}).items():
-                                        concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
-                                    cuenta["monto"] = cuenta.get("monto", 0) - et_monto
-                                    for mes, val in etiqueta.get("montos_por_mes", {}).items():
-                                        cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
-                                    act_data["subtotal"] = act_data.get("subtotal", 0) - et_monto
-                                    if "subtotales_por_mes" in act_data:
-                                        for mes, val in etiqueta.get("montos_por_mes", {}).items():
-                                            act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                            
+                            cuenta_codigo = cuenta.get("codigo", "")
+                            st.write(f"DEBUG CxC cuenta código: '{cuenta_codigo}', nombre: '{cuenta.get('nombre', '')}', monto: {cuenta.get('monto', 0)}")
+                            
+                            # Si la cuenta tiene codigo "estado_paid" → Facturas Pagadas → excluir
+                            if cuenta_codigo == "estado_paid":
+                                cuenta_monto = cuenta.get("monto", 0)
+                                st.write(f"  -> FILTRANDO cuenta CxC pagadas: {cuenta_monto}")
+                                
+                                # Restar de concepto
+                                concepto["total"] = concepto.get("total", 0) - cuenta_monto
+                                for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                
+                                # Restar de operacion
+                                act_data["subtotal"] = act_data.get("subtotal", 0) - cuenta_monto
+                                if "subtotales_por_mes" in act_data:
+                                    for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                
+                                # Poner cuenta en 0
+                                cuenta["monto"] = 0
+                                cuenta["montos_por_mes"] = {}
+                                
+                                # Poner todas las etiquetas (clientes) en 0
+                                for etiqueta in cuenta.get("etiquetas", []):
                                     etiqueta["monto"] = 0
                                     etiqueta["montos_por_mes"] = {}
-                                    st.write(f"  -> DESPUÉS: monto={etiqueta.get('monto', 0)}, montos_por_mes={etiqueta.get('montos_por_mes', {})}")
+                                
+                                st.write(f"  -> DESPUÉS: cuenta monto={cuenta.get('monto', 0)}")
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
