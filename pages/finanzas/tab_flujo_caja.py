@@ -263,12 +263,10 @@ def render(username: str, password: str):
                                 continue
                             
                             cuenta_codigo = cuenta.get("codigo", "")
-                            st.write(f"DEBUG CxC cuenta código: '{cuenta_codigo}', nombre: '{cuenta.get('nombre', '')}', monto: {cuenta.get('monto', 0)}")
                             
                             # Si la cuenta tiene codigo "estado_paid" → Facturas Pagadas → excluir
                             if cuenta_codigo == "estado_paid":
                                 cuenta_monto = cuenta.get("monto", 0)
-                                st.write(f"  -> FILTRANDO cuenta CxC pagadas: {cuenta_monto}")
                                 
                                 # Restar de concepto
                                 concepto["total"] = concepto.get("total", 0) - cuenta_monto
@@ -289,8 +287,6 @@ def render(username: str, password: str):
                                 for etiqueta in cuenta.get("etiquetas", []):
                                     etiqueta["monto"] = 0
                                     etiqueta["montos_por_mes"] = {}
-                                
-                                st.write(f"  -> DESPUÉS: cuenta monto={cuenta.get('monto', 0)}")
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
