@@ -518,25 +518,25 @@ class FlujoCajaService:
                         'sale.order',
                         [
                             ('state', 'in', ['draft', 'sent', 'sale']),
-                            ('invoice_status', '!=', 'invoiced'),
-                            '|',
-                                '&',
-                                    ('x_studio_fecha_tentativa_de_pago', '!=', False),
-                                    ('x_studio_fecha_tentativa_de_pago', '>=', fecha_inicio),
-                                    ('x_studio_fecha_tentativa_de_pago', '<=', fecha_fin),
-                                '&',
-                                    ('x_studio_fecha_tentativa_de_pago', '=', False),
-                                    ('date_order', '>=', fecha_inicio),
-                                    ('date_order', '<=', fecha_fin)
+                            ('invoice_status', '!=', 'invoiced')
                         ],
-                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state', 'invoice_status', 'invoice_ids']
+                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state', 'invoice_status', 'invoice_ids'],
+                        limit=10000
                     )
 
                     # Filtro robusto: excluir cualquier SO efectivamente facturado
-                    presupuestos = [
-                        p for p in (presupuestos_raw or [])
-                        if str(p.get('invoice_status', '')).lower() != 'invoiced'
-                    ]
+                    presupuestos = []
+                    for p in (presupuestos_raw or []):
+                        if str(p.get('invoice_status', '')).lower() == 'invoiced':
+                            continue
+
+                        fecha_ref = p.get('x_studio_fecha_tentativa_de_pago') or p.get('date_order')
+                        if not fecha_ref:
+                            continue
+
+                        fecha_ref = str(fecha_ref)[:10]
+                        if fecha_inicio <= fecha_ref <= fecha_fin:
+                            presupuestos.append(p)
                     print(f"[FlujoCaja] Query C: Encontrados {len(presupuestos)} presupuestos")
                     
                     if len(presupuestos) > 0:
