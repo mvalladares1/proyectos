@@ -292,7 +292,6 @@ class RealProyectadoCalculator:
                     elif invoice_date_due:
                         periodo_proyectado = self._fecha_a_periodo(invoice_date_due, meses_lista)
                     elif invoice_date:
-                        from datetime import datetime, timedelta
                         try:
                             fecha_dt = datetime.strptime(invoice_date, '%Y-%m-%d')
                             fecha_proyectada = (fecha_dt + timedelta(days=30)).strftime('%Y-%m-%d')
@@ -323,7 +322,6 @@ class RealProyectadoCalculator:
                     elif invoice_date_due:
                         periodo_proyectado = self._fecha_a_periodo(invoice_date_due, meses_lista)
                     elif invoice_date:
-                        from datetime import datetime, timedelta
                         try:
                             fecha_dt = datetime.strptime(invoice_date, '%Y-%m-%d')
                             fecha_proyectada = (fecha_dt + timedelta(days=30)).strftime('%Y-%m-%d')
