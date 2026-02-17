@@ -38,8 +38,6 @@ from .flujo_caja import (
     ENTERPRISE_CSS,
     ENTERPRISE_JS,
     SVG_ICONS,
-    MODAL_CSS,
-    MODAL_HTML,
     generate_sparkline,
     get_heatmap_class,
     fmt_monto_html,
@@ -73,16 +71,13 @@ def render(username: str, password: str):
         filter_fin = f_cols[2].checkbox("🟣 Financiamiento", value=True, key="filter_fin")
     
     with col_actions:
-        act_cols = st.columns(2)
-        expand_all = act_cols[0].button("📂 Expandir Todo", use_container_width=True)
-        collapse_all = act_cols[1].button("📁 Contraer Todo", use_container_width=True)
         solo_pendiente = st.checkbox("📌 Solo pendiente", value=False, key="solo_pendiente_parciales",
                                      help="Excluir todo lo ya pagado/cobrado de Operación. Muestra solo lo que falta por llegar o pagar.")
     
     st.markdown("---")
     
     # ========== SELECTORES DE PERÍODO ==========
-    col_desde, col_hasta, col_agrupacion, col_btn, col_export, col_waterfall = st.columns([2, 2, 2, 1, 1, 1])
+    col_desde, col_hasta, col_agrupacion, col_btn, col_export = st.columns([2, 2, 2, 1, 1])
     
     with col_desde:
         fecha_inicio = st.date_input(
@@ -115,9 +110,6 @@ def render(username: str, password: str):
     
     with col_export:
         export_placeholder = st.empty()
-    
-    with col_waterfall:
-        show_waterfall = st.button("📊 Cascada", use_container_width=True, key="show_waterfall")
     
     st.markdown("---")
     
@@ -211,61 +203,81 @@ def render(username: str, password: str):
                 for concepto in act_data.get("conceptos", []):
                     cuentas = concepto.get("cuentas", [])
                     # Solo procesar conceptos con estructura CxP/CxC (tienen estados pagadas/parciales)
-                    tiene_estructura = any(c.get("es_cuenta_cxp") or c.get("es_cuenta_cxc") for c in cuentas)
-                    if not tiene_estructura:
+                    tiene_cxp = any(c.get("es_cuenta_cxp") for c in cuentas)
+                    tiene_cxc = any(c.get("es_cuenta_cxc") for c in cuentas)
+                    if not tiene_cxp and not tiene_cxc:
                         continue
                     
-                    for cuenta in cuentas:
-                        if cuenta.get("codigo") == "pagadas":
-                            # PAGADAS: Excluir completamente (ya se pagó/cobró)
-                            monto_pagadas = cuenta.get("monto", 0)
-                            # Restar del concepto padre
-                            concepto["total"] = concepto.get("total", 0) - monto_pagadas
-                            for mes, val in cuenta.get("montos_por_mes", {}).items():
-                                concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
-                            # Restar del subtotal de actividad
-                            act_data["subtotal"] = act_data.get("subtotal", 0) - monto_pagadas
-                            if "subtotales_por_mes" in act_data:
+                    if tiene_cxp:
+                        # === CxP (1.2.1): Estados son cuentas con codigo ===
+                        for cuenta in cuentas:
+                            if cuenta.get("codigo") == "pagadas":
+                                # PAGADAS: Excluir completamente
+                                monto_pagadas = cuenta.get("monto", 0)
+                                concepto["total"] = concepto.get("total", 0) - monto_pagadas
                                 for mes, val in cuenta.get("montos_por_mes", {}).items():
-                                    act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
-                            # Poner en cero la cuenta pagadas
-                            cuenta["monto"] = 0
-                            cuenta["montos_por_mes"] = {}
-                            for etiqueta in cuenta.get("etiquetas", []):
-                                etiqueta["monto"] = 0
-                                etiqueta["montos_por_mes"] = {}
-                                for sub in etiqueta.get("sub_etiquetas", []):
-                                    sub["monto"] = 0
-                                    sub["montos_por_mes"] = {}
-                        
-                        elif cuenta.get("codigo") == "parciales" and "montos_real_por_mes" in cuenta:
-                            # PARCIALES: Quitar la parte ya pagada, dejar solo lo pendiente
-                            monto_real_estado = cuenta.get("monto_real", 0)
-                            cuenta["monto"] = cuenta.get("monto", 0) - monto_real_estado
-                            for mes, val in cuenta.get("montos_real_por_mes", {}).items():
-                                cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
-                            # Restar del concepto padre
-                            concepto["total"] = concepto.get("total", 0) - monto_real_estado
-                            for mes, val in cuenta.get("montos_real_por_mes", {}).items():
-                                concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
-                            # Restar del subtotal de actividad
-                            act_data["subtotal"] = act_data.get("subtotal", 0) - monto_real_estado
-                            if "subtotales_por_mes" in act_data:
+                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                act_data["subtotal"] = act_data.get("subtotal", 0) - monto_pagadas
+                                if "subtotales_por_mes" in act_data:
+                                    for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                cuenta["monto"] = 0
+                                cuenta["montos_por_mes"] = {}
+                                for etiqueta in cuenta.get("etiquetas", []):
+                                    etiqueta["monto"] = 0
+                                    etiqueta["montos_por_mes"] = {}
+                                    for sub in etiqueta.get("sub_etiquetas", []):
+                                        sub["monto"] = 0
+                                        sub["montos_por_mes"] = {}
+                            
+                            elif cuenta.get("codigo") == "parciales" and "montos_real_por_mes" in cuenta:
+                                # PARCIALES: Quitar la parte ya pagada
+                                monto_real_estado = cuenta.get("monto_real", 0)
+                                cuenta["monto"] = cuenta.get("monto", 0) - monto_real_estado
                                 for mes, val in cuenta.get("montos_real_por_mes", {}).items():
-                                    act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
-                            # Restar de etiquetas y sub_etiquetas
+                                    cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
+                                concepto["total"] = concepto.get("total", 0) - monto_real_estado
+                                for mes, val in cuenta.get("montos_real_por_mes", {}).items():
+                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                act_data["subtotal"] = act_data.get("subtotal", 0) - monto_real_estado
+                                if "subtotales_por_mes" in act_data:
+                                    for mes, val in cuenta.get("montos_real_por_mes", {}).items():
+                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                for etiqueta in cuenta.get("etiquetas", []):
+                                    if "montos_real_por_mes" in etiqueta:
+                                        et_real = etiqueta.get("monto_real", 0)
+                                        etiqueta["monto"] = etiqueta.get("monto", 0) - et_real
+                                        for mes, val in etiqueta.get("montos_real_por_mes", {}).items():
+                                            etiqueta["montos_por_mes"][mes] = etiqueta.get("montos_por_mes", {}).get(mes, 0) - val
+                                    for sub in etiqueta.get("sub_etiquetas", []):
+                                        if "montos_real_por_mes" in sub:
+                                            sub_real = sub.get("monto_real", 0)
+                                            sub["monto"] = sub.get("monto", 0) - sub_real
+                                            for mes, val in sub.get("montos_real_por_mes", {}).items():
+                                                sub["montos_por_mes"][mes] = sub.get("montos_por_mes", {}).get(mes, 0) - val
+                    
+                    elif tiene_cxc:
+                        # === CxC (1.1.1): Estados son etiquetas dentro de la cuenta ===
+                        for cuenta in cuentas:
+                            if not cuenta.get("es_cuenta_cxc"):
+                                continue
                             for etiqueta in cuenta.get("etiquetas", []):
-                                if "montos_real_por_mes" in etiqueta:
-                                    et_real = etiqueta.get("monto_real", 0)
-                                    etiqueta["monto"] = etiqueta.get("monto", 0) - et_real
-                                    for mes, val in etiqueta.get("montos_real_por_mes", {}).items():
-                                        etiqueta["montos_por_mes"][mes] = etiqueta.get("montos_por_mes", {}).get(mes, 0) - val
-                                for sub in etiqueta.get("sub_etiquetas", []):
-                                    if "montos_real_por_mes" in sub:
-                                        sub_real = sub.get("monto_real", 0)
-                                        sub["monto"] = sub.get("monto", 0) - sub_real
-                                        for mes, val in sub.get("montos_real_por_mes", {}).items():
-                                            sub["montos_por_mes"][mes] = sub.get("montos_por_mes", {}).get(mes, 0) - val
+                                et_nombre = etiqueta.get("nombre", "")
+                                if "Pagadas" in et_nombre and "Parcialmente" not in et_nombre and "No Pagadas" not in et_nombre:
+                                    # Excluir "Facturas Pagadas" completamente
+                                    et_monto = etiqueta.get("monto", 0)
+                                    concepto["total"] = concepto.get("total", 0) - et_monto
+                                    for mes, val in etiqueta.get("montos_por_mes", {}).items():
+                                        concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                    cuenta["monto"] = cuenta.get("monto", 0) - et_monto
+                                    for mes, val in etiqueta.get("montos_por_mes", {}).items():
+                                        cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
+                                    act_data["subtotal"] = act_data.get("subtotal", 0) - et_monto
+                                    if "subtotales_por_mes" in act_data:
+                                        for mes, val in etiqueta.get("montos_por_mes", {}).items():
+                                            act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                    etiqueta["monto"] = 0
+                                    etiqueta["montos_por_mes"] = {}
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
@@ -347,47 +359,7 @@ def render(username: str, password: str):
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # ========== WATERFALL CHART ==========
-        if show_waterfall:
-            st.markdown("### 📊 Gráfico de Cascada (Waterfall Chart)")
-            
-            waterfall_data = {
-                "Concepto": ["Ef. Inicial", "Operación", "Inversión", "Financiamiento", "Ef. Final"],
-                "Valor": [ef_ini, op, inv, fin, ef_fin],
-                "Tipo": ["inicial", "flujo", "flujo", "flujo", "final"]
-            }
-            
-            # Aquí podrías integrar un gráfico de Plotly o similar
-            st.info("🚧 Gráfico de cascada interactivo en desarrollo...")
-            st.dataframe(pd.DataFrame(waterfall_data))
-        
-        # ========== RECOLECTAR DATOS DE FACTURAS PARA MODAL ==========
-        facturas_data = {}
-        for act_data in actividades.values():
-            for concepto in act_data.get("conceptos", []):
-                for cuenta in concepto.get("cuentas", []):
-                    # Procesar TODAS las cuentas con facturas, no solo CxC
-                    cuenta_codigo = cuenta.get("codigo", "")
-                    for etiqueta in cuenta.get("etiquetas", []):
-                        et_nombre = etiqueta.get("nombre", "")
-                        facturas = etiqueta.get("facturas", [])
-                        if facturas:
-                            key = f"{et_nombre}_{cuenta_codigo}"
-                            facturas_data[key] = facturas
-        
-        # Serializar facturas para JavaScript
-        facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
-        
-        # Preparar datos de composición para el modal (cuentas por concepto)
-        composicion_data = {}
-        for act_data in actividades.values():
-            for concepto in act_data.get("conceptos", []):
-                c_id = concepto.get("id") or concepto.get("codigo")
-                cuentas = concepto.get("cuentas", [])
-                if cuentas:
-                    composicion_data[c_id] = cuentas
-        
-        composicion_json = json.dumps(composicion_data, ensure_ascii=False, default=str)
+
         
         # ========== DETECTAR VISTA SEMANAL ==========
         vista_semanal = es_vista_semanal(meses_lista)
@@ -400,7 +372,7 @@ def render(username: str, password: str):
             meses_ordenados = list(semanas_por_mes.keys())
         
         # ========== GENERAR TABLA HTML ==========
-        html_parts = [ENTERPRISE_CSS, MODAL_CSS, '<div class="excel-container">']
+        html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
         
         # HEADER
@@ -573,18 +545,10 @@ def render(username: str, password: str):
                             # Mostrar código + nombre normal
                             html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
                         
-                        # Celdas mensuales del nivel 2 - clickeables si tiene facturas
+                        # Celdas mensuales del nivel 2
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
-                            
-                            # Si tiene facturas y monto != 0, hacer clickeable para mostrar modal agregado
-                            if tiene_facturas_cuenta and m_acc != 0:
-                                # Usamos el nombre de la cuenta como estado para el modal
-                                cuenta_nombre_js = cuenta_nombre.replace("'", "\\'")
-                                onclick = f"event.stopPropagation(); showFacturasModal('{cuenta_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                html_parts.append(f'<td class="cell-clickable" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(m_acc)}</td>')
-                            else:
-                                html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
+                            html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
                         
                         html_parts.append(f'<td>{fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
@@ -655,14 +619,7 @@ def render(username: str, password: str):
                                         # Montos por mes del proveedor
                                         for mes in meses_lista:
                                             sub_mes_monto = sub_montos_mes.get(mes, 0)
-                                            
-                                            # Clickeable si tiene facturas y monto != 0
-                                            if sub_tiene_facturas and sub_mes_monto != 0:
-                                                sub_nombre_js = sub_nombre.replace("'", "\\'")
-                                                onclick = f"event.stopPropagation(); showFacturasModal('{sub_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                                html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {sub_total_facturas} factura(s)">{fmt_monto_html(sub_mes_monto)}</td>')
-                                            else:
-                                                html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(sub_mes_monto)}</td>')
+                                            html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(sub_mes_monto)}</td>')
                                         
                                         html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(sub_monto)}</td>')
                                         html_parts.append('</tr>')
@@ -686,13 +643,7 @@ def render(username: str, password: str):
                                     # Montos por mes
                                     for mes in meses_lista:
                                         et_mes_monto = et_montos_mes.get(mes, 0)
-                                        
-                                        if tiene_facturas and et_mes_monto != 0:
-                                            et_nombre_js = et_nombre.replace("'", "\\'")
-                                            onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                            html_parts.append(f'<td class="cell-clickable" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
-                                        else:
-                                            html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                        html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
                                     
                                     html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
                                     html_parts.append('</tr>')
@@ -741,33 +692,8 @@ def render(username: str, password: str):
         
         html_parts.append('</div>')
         
-        # Agregar HTML del Modal de Facturas
-        html_parts.append(MODAL_HTML)
-        
         # Agregar JavaScript principal
         html_parts.append(ENTERPRISE_JS)
-        
-        # Agregar script para inicializar datos de facturas y composición
-        html_parts.append(f'''
-<script>
-// Inicializar datos de facturas para el modal
-setFacturasData({facturas_json});
-// Inicializar datos de composición de cuentas
-setComposicionData({composicion_json});
-
-// Debug: Mostrar conceptos con composición
-console.log('[Composición] Conceptos disponibles:', Object.keys(composicionData));
-console.log('[Composición] Total conceptos:', Object.keys(composicionData).length);
-
-// Verificar que los modales existan
-setTimeout(function() {{
-    const modal = document.getElementById('composicion-modal');
-    const overlay = document.getElementById('composicion-modal-overlay');
-    console.log('[Modal] Modal exists:', !!modal);
-    console.log('[Modal] Overlay exists:', !!overlay);
-}}, 100);
-</script>
-''')
         
         # Renderizar con components.html con altura dinámica
         full_html = "".join(html_parts)
