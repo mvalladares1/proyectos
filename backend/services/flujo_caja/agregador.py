@@ -391,7 +391,7 @@ class AgregadorFlujo:
         
         ESTADO_LABEL = '🔮 Facturas Proyectadas'
         ESTADO_CODE = 'estado_projected'
-        ORDEN_ESTADO = 0  # Mostrar primero
+        ORDEN_ESTADO = 3.5  # Debajo de No Pagadas (3) y antes de Revertidas (4)
         
         # Buscar cuentas CxC existentes en el concepto 1.1.1
         concepto_id = '1.1.1'
@@ -402,25 +402,34 @@ class AgregadorFlujo:
             print(f"[Agregador] ERROR: Concepto {concepto_id} no existe todavía")
             return
         
-        # Buscar cuenta CxC existente (11030101 o similar)
+        # Buscar cuenta CxC existente (priorizar 11030101)
         cuenta_cxc = None
         codigo_cxc = None
-        
-        for codigo, cuenta in self.cuentas_por_concepto[concepto_id].items():
-            if cuenta.get('es_cuenta_cxc') or codigo.startswith('estado_'):
-                # Esta es una cuenta CxC
-                cuenta_cxc = cuenta
-                codigo_cxc = codigo
-                print(f"[Agregador] Encontrada cuenta CxC: {codigo}")
-                break
+
+        cuentas_concepto = self.cuentas_por_concepto.get(concepto_id, {})
+
+        # 1) Prioridad: cuenta principal deudores por ventas
+        if '11030101' in cuentas_concepto:
+            cuenta_cxc = cuentas_concepto['11030101']
+            codigo_cxc = '11030101'
+            print(f"[Agregador] Encontrada cuenta CxC principal: {codigo_cxc}")
+
+        # 2) Fallback: cualquier cuenta 1103 existente
+        if not cuenta_cxc:
+            for codigo, cuenta in cuentas_concepto.items():
+                if str(codigo).startswith('1103'):
+                    cuenta_cxc = cuenta
+                    codigo_cxc = codigo
+                    print(f"[Agregador] Encontrada cuenta CxC fallback: {codigo}")
+                    break
         
         if not cuenta_cxc:
             print(f"[Agregador] ERROR: No se encontró cuenta CxC en {concepto_id}")
-            # Crear una cuenta nueva estado_projected si no hay CxC
-            print(f"[Agregador] Creando nueva cuenta estado_projected")
-            self.cuentas_por_concepto[concepto_id][ESTADO_CODE] = {
-                'codigo': ESTADO_CODE,
-                'nombre': ESTADO_LABEL,
+            # Fallback extremo: crear cuenta base CxC estándar
+            print(f"[Agregador] Creando cuenta base 11030101")
+            self.cuentas_por_concepto[concepto_id]['11030101'] = {
+                'codigo': '11030101',
+                'nombre': 'DEUDORES POR VENTAS',
                 'monto': 0.0,
                 'cantidad': 0,
                 'montos_por_mes': {m: 0.0 for m in self.meses_lista},
@@ -429,8 +438,8 @@ class AgregadorFlujo:
                 'facturas_por_estado': {},
                 'es_cuenta_cxc': True
             }
-            cuenta_cxc = self.cuentas_por_concepto[concepto_id][ESTADO_CODE]
-            codigo_cxc = ESTADO_CODE
+            cuenta_cxc = self.cuentas_por_concepto[concepto_id]['11030101']
+            codigo_cxc = '11030101'
         
         # Inicializar estructuras si no existen
         if 'etiquetas' not in cuenta_cxc:
@@ -756,6 +765,7 @@ class AgregadorFlujo:
                 'Facturas Parcialmente Pagadas': 'partial',
                 'En Proceso de Pago': 'in_payment',
                 'Facturas No Pagadas': 'not_paid',
+                '🔮 Facturas Proyectadas': 'estado_projected',
                 'Facturas Revertidas': 'reversed'
             }
             
