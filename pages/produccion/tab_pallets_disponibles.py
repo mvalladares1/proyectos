@@ -13,7 +13,10 @@ from .shared import API_URL
 def fetch_pallets_disponibles(username: str, password: str, 
                                planta: str = None,
                                producto_id: int = None,
-                               proveedor_id: int = None) -> Dict[str, Any]:
+                               proveedor_id: int = None,
+                               fecha_desde: str = None,
+                               fecha_hasta: str = None,
+                               pallet_codigo: str = None) -> Dict[str, Any]:
     """Obtiene pallets disponibles del backend."""
     params = {
         "username": username,
@@ -25,6 +28,12 @@ def fetch_pallets_disponibles(username: str, password: str,
         params["producto_id"] = producto_id
     if proveedor_id:
         params["proveedor_id"] = proveedor_id
+    if fecha_desde:
+        params["fecha_desde"] = fecha_desde
+    if fecha_hasta:
+        params["fecha_hasta"] = fecha_hasta
+    if pallet_codigo:
+        params["pallet_codigo"] = pallet_codigo
     
     response = httpx.get(f"{API_URL}/api/v1/produccion/pallets-disponibles",
                          params=params, timeout=120.0)
@@ -76,7 +85,7 @@ def render(username: str = None, password: str = None):
     """, unsafe_allow_html=True)
     
     # === FILTROS ===
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
         planta_sel = st.selectbox(
             "🏭 Planta",
@@ -90,7 +99,6 @@ def render(username: str = None, password: str = None):
                 prods_2026 = fetch_productos_2026(username, password)
                 st.session_state['pallets_disp_productos_2026'] = prods_2026
             except Exception as e:
-                # Si falla, simplemente continuar con lista vacía
                 st.session_state['pallets_disp_productos_2026'] = []
         
         productos_2026 = st.session_state.get('pallets_disp_productos_2026', [])
@@ -107,7 +115,6 @@ def render(username: str = None, password: str = None):
                 provs = fetch_proveedores_compras(username, password)
                 st.session_state['pallets_disp_proveedores'] = provs
             except Exception as e:
-                # Si falla, simplemente continuar con lista vacía
                 st.session_state['pallets_disp_proveedores'] = []
         
         proveedores = st.session_state.get('pallets_disp_proveedores', [])
@@ -117,9 +124,32 @@ def render(username: str = None, password: str = None):
             opciones_proveedor,
             key="pallets_disp_proveedor"
         )
-    with col4:
+    
+    # Fila 2: fechas y búsqueda de pallet
+    from datetime import date, timedelta
+    col_f1, col_f2, col_f3, col_btn = st.columns([2, 2, 2, 1])
+    with col_f1:
+        fecha_desde = st.date_input(
+            "📅 Fecha Desde",
+            value=date.today() - timedelta(days=30),
+            key="pallets_disp_fecha_desde"
+        )
+    with col_f2:
+        fecha_hasta = st.date_input(
+            "📅 Fecha Hasta",
+            value=date.today(),
+            key="pallets_disp_fecha_hasta"
+        )
+    with col_f3:
+        pallet_buscar = st.text_input(
+            "🔎 Buscar Pallet",
+            placeholder="PACK0012345",
+            key="pallets_disp_buscar_codigo",
+            help="Busca un pallet específico por su código"
+        )
+    with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
-        btn_buscar = st.button("🔍 Buscar Pallets", type="primary", 
+        btn_buscar = st.button("🔍 Buscar", type="primary", 
                                 use_container_width=True, key="pallets_disp_buscar")
     
     st.markdown("---")
@@ -145,8 +175,16 @@ def render(username: str = None, password: str = None):
                         proveedor_id = prov['id']
                         break
             
+            # Preparar filtros de fecha
+            f_desde = fecha_desde.isoformat() if fecha_desde else None
+            f_hasta = fecha_hasta.isoformat() if fecha_hasta else None
+            p_codigo = pallet_buscar.strip().upper() if pallet_buscar and pallet_buscar.strip() else None
+            
             with st.spinner("Buscando pallets disponibles..."):
-                data = fetch_pallets_disponibles(username, password, planta_sel, producto_id, proveedor_id)
+                data = fetch_pallets_disponibles(
+                    username, password, planta_sel, producto_id, proveedor_id,
+                    f_desde, f_hasta, p_codigo
+                )
                 st.session_state['pallets_disp_data'] = data
                 st.session_state['pallets_disp_loaded'] = True
         except Exception as e:
