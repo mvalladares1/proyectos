@@ -387,6 +387,8 @@ class AgregadorFlujo:
             currency_converter: Función para convertir USD a CLP
             agrupacion: 'mensual' o 'semanal'
         """
+        print(f"[Agregador] procesar_presupuestos_ventas: {len(presupuestos)} presupuestos")
+        
         ESTADO_LABEL = '🔮 Facturas Proyectadas'
         ESTADO_CODE = 'estado_projected'
         ORDEN_ESTADO = 0  # Mostrar primero
@@ -396,16 +398,22 @@ class AgregadorFlujo:
         CUENTA_CXC_DISPLAY = '11030101 Deudores por Ventas'
         CUENTA_CXC_ID = 999999  # ID ficticio para tracking
         
+        print(f"[Agregador] Clasificando cuenta {CUENTA_CXC_CODIGO}")
+        
         # Clasificar cuenta CxC
         concepto_id, es_pendiente = clasificar_fn(CUENTA_CXC_CODIGO)
         if concepto_id is None:
+            print(f"[Agregador] ERROR: Cuenta {CUENTA_CXC_CODIGO} no clasificó a ningún concepto")
             return
+        
+        print(f"[Agregador] Cuenta clasificada a concepto: {concepto_id}")
         
         # Asegurar estructura de cuenta
         if concepto_id not in self.cuentas_por_concepto:
             self.cuentas_por_concepto[concepto_id] = {}
         
         if CUENTA_CXC_CODIGO not in self.cuentas_por_concepto[concepto_id]:
+            print(f"[Agregador] Creando nueva estructura para cuenta {CUENTA_CXC_CODIGO}")
             self.cuentas_por_concepto[concepto_id][CUENTA_CXC_CODIGO] = {
                 'codigo': CUENTA_CXC_CODIGO,
                 'nombre': CUENTA_CXC_DISPLAY,
@@ -421,6 +429,7 @@ class AgregadorFlujo:
         
         # Crear estructura de estado proyectado
         if ESTADO_LABEL not in cuenta['etiquetas']:
+            print(f"[Agregador] Creando etiqueta {ESTADO_LABEL}")
             cuenta['etiquetas'][ESTADO_LABEL] = {
                 'monto': 0.0,
                 'montos_por_mes': {m: 0.0 for m in self.meses_lista},
@@ -432,6 +441,9 @@ class AgregadorFlujo:
             cuenta['facturas_por_estado'][ESTADO_CODE] = {}
         
         # Procesar cada presupuesto
+        presupuestos_procesados = 0
+        monto_total_procesado = 0
+        
         for presu in presupuestos:
             # Obtener fecha de compromiso
             fecha = presu.get('commitment_date') or presu.get('date_order', '')
@@ -507,6 +519,13 @@ class AgregadorFlujo:
                 'moneda_original': currency_name,
                 'monto_original': amount_total
             })
+            
+            presupuestos_procesados += 1
+            monto_total_procesado += monto_clp
+        
+        print(f"[Agregador] Procesados {presupuestos_procesados}/{len(presupuestos)} presupuestos")
+        print(f"[Agregador] Monto total: ${monto_total_procesado:,.0f} CLP")
+        print(f"[Agregador] Concepto {concepto_id} monto final: ${self.montos_por_concepto_mes.get(concepto_id, {}).get(self.meses_lista[0] if self.meses_lista else '2026-01', 0):,.0f}")
 
     def procesar_facturas_draft(self, facturas: List[Dict], lineas: Dict[int, List[Dict]],
                                clasificar_fn, cuentas_info: Dict,

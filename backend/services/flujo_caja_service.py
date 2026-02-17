@@ -509,6 +509,7 @@ class FlujoCajaService:
         # Query C: Presupuestos de venta (Facturas Proyectadas) - OPCIONAL
         if incluir_proyecciones:
             print(f"[FlujoCaja] Query C: Procesando presupuestos de venta (draft/sent)")
+            print(f"[FlujoCaja] incluir_proyecciones={incluir_proyecciones}")
             try:
                 # Consultar presupuestos de venta con estado draft o sent
                 presupuestos = self.odoo_manager.odoo.search_read(
@@ -522,15 +523,27 @@ class FlujoCajaService:
                 )
                 print(f"[FlujoCaja] Query C: Encontrados {len(presupuestos)} presupuestos")
                 
+                if len(presupuestos) > 0:
+                    # Mostrar sample
+                    sample = presupuestos[:3]
+                    for p in sample:
+                        print(f"[FlujoCaja]   - {p['name']}: {p.get('amount_total', 0)} {p.get('currency_id', ['', 'CLP'])[1]} en {p.get('commitment_date', 'N/A')}")
+                
                 # Procesar presupuestos con conversión de moneda
+                print(f"[FlujoCaja] Llamando a procesar_presupuestos_ventas...")
                 agregador.procesar_presupuestos_ventas(
                     presupuestos, 
                     self._clasificar_cuenta,
                     CurrencyService.convert_usd_to_clp,
                     agrupacion
                 )
+                print(f"[FlujoCaja] Presupuestos procesados correctamente")
             except Exception as e:
                 print(f"[FlujoCaja] Error procesando presupuestos: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"[FlujoCaja] incluir_proyecciones=False, saltando Query C")
         
         # 7. Procesar etiquetas (EXCLUYENDO cuentas CxC que ya se procesaron en Query B)
         try:
