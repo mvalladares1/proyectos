@@ -17,7 +17,8 @@ ESTRUCTURA JERÁRQUICA (igual que 1.1.1):
 """
 from typing import Dict, List, Tuple
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
+from backend.services.currency_service import CurrencyService
 
 
 class RealProyectadoCalculator:
@@ -194,6 +195,15 @@ class RealProyectadoCalculator:
                     'categorias': {},  # Nivel 3: Categorías de contacto
                     'es_cuenta_cxp': True,
                     'orden': 3
+                },
+                'PROYECTADAS_COMPRAS': {
+                    'codigo': 'proyectadas_compras',
+                    'nombre': '📦 Facturas Proyectadas (Modulo Compras)',
+                    'monto': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'categorias': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 4
                 }
             }
             
@@ -408,6 +418,161 @@ class RealProyectadoCalculator:
                         if 'montos_real_por_mes' not in proveedor:
                             proveedor['montos_real_por_mes'] = defaultdict(float)
                         proveedor['montos_real_por_mes'][periodo_real] += monto_real
+
+            # PASO 4: Agregar proyecciones desde Módulo Compras (purchase.order)
+            campos_oc = [
+                'id', 'name', 'partner_id', 'amount_total', 'date_order',
+                'date_planned', 'date_approve', 'payment_term_id',
+                'invoice_ids', 'invoice_status', 'currency_id'
+            ]
+
+            ocs_compra = []
+            ocs_compra = self.odoo.search_read(
+                'purchase.order',
+                [['state', '=', 'purchase']],
+                campos_oc,
+                limit=10000
+            )
+
+            # Mapa payment_term_id -> días de plazo (máximo día de las líneas)
+            payment_term_ids = []
+            for oc in ocs_compra:
+                pt_data = oc.get('payment_term_id')
+                pt_id = pt_data[0] if isinstance(pt_data, (list, tuple)) and len(pt_data) > 0 else pt_data
+                if pt_id:
+                    payment_term_ids.append(pt_id)
+
+            payment_term_days = {}
+            if payment_term_ids:
+                try:
+                    lineas_plazo = self.odoo.search_read(
+                        'account.payment.term.line',
+                        [['payment_id', 'in', list(set(payment_term_ids))]],
+                        ['payment_id', 'days'],
+                        limit=10000
+                    )
+
+                    for linea in lineas_plazo:
+                        payment_data = linea.get('payment_id')
+                        payment_id = payment_data[0] if isinstance(payment_data, (list, tuple)) and len(payment_data) > 0 else payment_data
+                        if not payment_id:
+                            continue
+
+                        dias = int(linea.get('days') or 0)
+                        actual = payment_term_days.get(payment_id)
+                        if actual is None or dias > actual:
+                            payment_term_days[payment_id] = dias
+                except Exception:
+                    payment_term_days = {}
+
+            # Cargar categorías de partners de OCs que no estén en cache
+            partner_ids_oc = []
+            for oc in ocs_compra:
+                partner_data = oc.get('partner_id')
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else partner_data
+                if partner_id and partner_id not in partners_info:
+                    partner_ids_oc.append(partner_id)
+
+            if partner_ids_oc:
+                partners_data_oc = self.odoo.search_read(
+                    'res.partner',
+                    [['id', 'in', list(set(partner_ids_oc))]],
+                    ['id', 'name', 'x_studio_categora_de_contacto'],
+                    limit=10000
+                )
+                for p in partners_data_oc:
+                    categoria = p.get('x_studio_categora_de_contacto', False)
+                    if categoria and isinstance(categoria, (list, tuple)):
+                        categoria = categoria[1]
+                    elif not categoria or categoria == 'False':
+                        categoria = 'Sin Categoría'
+
+                    partners_info[p['id']] = {
+                        'name': p.get('name', 'Sin nombre'),
+                        'categoria': categoria
+                    }
+
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+
+            for oc in ocs_compra:
+                invoice_ids = oc.get('invoice_ids') or []
+                invoice_status = oc.get('invoice_status') or ''
+                if invoice_ids or invoice_status == 'invoiced':
+                    continue
+
+                fecha_base = str(oc.get('date_approve') or '')[:10]
+                if not fecha_base:
+                    continue
+
+                try:
+                    fecha_base_dt = datetime.strptime(fecha_base, '%Y-%m-%d').date()
+                except Exception:
+                    continue
+
+                pt_data = oc.get('payment_term_id')
+                pt_id = pt_data[0] if isinstance(pt_data, (list, tuple)) and len(pt_data) > 0 else pt_data
+                dias_plazo = payment_term_days.get(pt_id, 0)
+
+                if dias_plazo and dias_plazo > 0:
+                    fecha_proyectada_dt = fecha_base_dt + timedelta(days=dias_plazo)
+                else:
+                    fecha_proyectada_dt = fecha_base_dt
+
+                fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
+
+                if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
+                    continue
+
+                periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
+                if not periodo_proyectado:
+                    continue
+
+                amount_total = float(oc.get('amount_total') or 0.0)
+                currency_data = oc.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name and 'USD' in str(currency_name).upper():
+                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+
+                monto_proyectado = -amount_total
+                if monto_proyectado == 0:
+                    continue
+
+                partner_data = oc.get('partner_id', [0, 'Sin proveedor'])
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
+                partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
+                partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
+                categoria_nombre = partner_info['categoria']
+
+                proyectado_total += monto_proyectado
+                proyectado_por_periodo[periodo_proyectado] += monto_proyectado
+
+                estado = estados['PROYECTADAS_COMPRAS']
+                estado['monto'] += monto_proyectado
+                estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
+
+                if categoria_nombre not in estado['categorias']:
+                    estado['categorias'][categoria_nombre] = {
+                        'nombre': categoria_nombre,
+                        'monto': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'proveedores': {}
+                    }
+
+                categoria = estado['categorias'][categoria_nombre]
+                categoria['monto'] += monto_proyectado
+                categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+
+                if partner_name not in categoria['proveedores']:
+                    categoria['proveedores'][partner_name] = {
+                        'nombre': partner_name[:50],
+                        'monto': 0.0,
+                        'montos_por_mes': defaultdict(float)
+                    }
+
+                proveedor = categoria['proveedores'][partner_name]
+                proveedor['monto'] += monto_proyectado
+                proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
             # PASO 3: Convertir estructura a 4 NIVELES EXPANDIBLES
             # Nivel 2 (cuentas): ESTADOS (expandible)
@@ -418,7 +583,7 @@ class RealProyectadoCalculator:
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
             cuentas_resultado = []
-            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS']
+            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'PROYECTADAS_COMPRAS']
             
             for estado_key in orden_estados:
                 estado = estados[estado_key]
