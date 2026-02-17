@@ -379,7 +379,7 @@ class AgregadorFlujo:
         """
         Procesa presupuestos de venta (sale.order con state = draft/sent) para proyección CxC.
         
-        Crea un nuevo estado "Facturas Proyectadas" (estado_projected) con el emoji 🔮.
+        Crea un nuevo estado "Facturas Proyectadas" (estado_projected) DENTRO de la cuenta CxC existente.
         
         Args:
             presupuestos: Lista de sale.order con state in ['draft', 'sent']
@@ -393,52 +393,65 @@ class AgregadorFlujo:
         ESTADO_CODE = 'estado_projected'
         ORDEN_ESTADO = 0  # Mostrar primero
         
-        # Cuenta fija para CxC - Deudores por Ventas
-        CUENTA_CXC_CODIGO = '11030101'
-        CUENTA_CXC_DISPLAY = '11030101 Deudores por Ventas'
-        CUENTA_CXC_ID = 999999  # ID ficticio para tracking
+        # Buscar cuentas CxC existentes en el concepto 1.1.1
+        concepto_id = '1.1.1'
         
-        print(f"[Agregador] Clasificando cuenta {CUENTA_CXC_CODIGO}")
+        print(f"[Agregador] Buscando cuentas CxC en concepto {concepto_id}")
         
-        # Clasificar cuenta CxC
-        concepto_id, es_pendiente = clasificar_fn(CUENTA_CXC_CODIGO)
-        if concepto_id is None:
-            print(f"[Agregador] ERROR: Cuenta {CUENTA_CXC_CODIGO} no clasificó a ningún concepto")
+        if concepto_id not in self.cuentas_por_concepto:
+            print(f"[Agregador] ERROR: Concepto {concepto_id} no existe todavía")
             return
         
-        print(f"[Agregador] Cuenta clasificada a concepto: {concepto_id}")
+        # Buscar cuenta CxC existente (11030101 o similar)
+        cuenta_cxc = None
+        codigo_cxc = None
         
-        # Asegurar estructura de cuenta
-        if concepto_id not in self.cuentas_por_concepto:
-            self.cuentas_por_concepto[concepto_id] = {}
+        for codigo, cuenta in self.cuentas_por_concepto[concepto_id].items():
+            if cuenta.get('es_cuenta_cxc') or codigo.startswith('estado_'):
+                # Esta es una cuenta CxC
+                cuenta_cxc = cuenta
+                codigo_cxc = codigo
+                print(f"[Agregador] Encontrada cuenta CxC: {codigo}")
+                break
         
-        if CUENTA_CXC_CODIGO not in self.cuentas_por_concepto[concepto_id]:
-            print(f"[Agregador] Creando nueva estructura para cuenta {CUENTA_CXC_CODIGO}")
-            self.cuentas_por_concepto[concepto_id][CUENTA_CXC_CODIGO] = {
-                'codigo': CUENTA_CXC_CODIGO,
-                'nombre': CUENTA_CXC_DISPLAY,
+        if not cuenta_cxc:
+            print(f"[Agregador] ERROR: No se encontró cuenta CxC en {concepto_id}")
+            # Crear una cuenta nueva estado_projected si no hay CxC
+            print(f"[Agregador] Creando nueva cuenta estado_projected")
+            self.cuentas_por_concepto[concepto_id][ESTADO_CODE] = {
+                'codigo': ESTADO_CODE,
+                'nombre': ESTADO_LABEL,
                 'monto': 0.0,
                 'cantidad': 0,
                 'montos_por_mes': {m: 0.0 for m in self.meses_lista},
-                'account_id': CUENTA_CXC_ID,
+                'account_id': 999999,
                 'etiquetas': {},
-                'facturas_por_estado': {}
+                'facturas_por_estado': {},
+                'es_cuenta_cxc': True
             }
+            cuenta_cxc = self.cuentas_por_concepto[concepto_id][ESTADO_CODE]
+            codigo_cxc = ESTADO_CODE
         
-        cuenta = self.cuentas_por_concepto[concepto_id][CUENTA_CXC_CODIGO]
+        # Inicializar estructuras si no existen
+        if 'etiquetas' not in cuenta_cxc:
+            cuenta_cxc['etiquetas'] = {}
+        if 'facturas_por_estado' not in cuenta_cxc:
+            cuenta_cxc['facturas_por_estado'] = {}
+        
+        # Marcar como cuenta CxC
+        cuenta_cxc['es_cuenta_cxc'] = True
         
         # Crear estructura de estado proyectado
-        if ESTADO_LABEL not in cuenta['etiquetas']:
-            print(f"[Agregador] Creando etiqueta {ESTADO_LABEL}")
-            cuenta['etiquetas'][ESTADO_LABEL] = {
+        if ESTADO_LABEL not in cuenta_cxc['etiquetas']:
+            print(f"[Agregador] Creando etiqueta {ESTADO_LABEL} en cuenta {codigo_cxc}")
+            cuenta_cxc['etiquetas'][ESTADO_LABEL] = {
                 'monto': 0.0,
                 'montos_por_mes': {m: 0.0 for m in self.meses_lista},
-                'orden': ORDEN_ESTADO,
-                'codigo': ESTADO_CODE
+                'orden': ORDEN_ESTADO
             }
         
-        if ESTADO_CODE not in cuenta['facturas_por_estado']:
-            cuenta['facturas_por_estado'][ESTADO_CODE] = {}
+        if ESTADO_CODE not in cuenta_cxc['facturas_por_estado']:
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE] = {}
         
         # Procesar cada presupuesto
         presupuestos_procesados = 0
@@ -488,18 +501,18 @@ class AgregadorFlujo:
             
             self.montos_por_concepto_mes[concepto_id][mes_str] += monto_clp
             
-            # Acumular en cuenta
-            cuenta['monto'] += monto_clp
-            cuenta['montos_por_mes'][mes_str] += monto_clp
+            # Acumular en cuenta CxC
+            cuenta_cxc['monto'] += monto_clp
+            cuenta_cxc['montos_por_mes'][mes_str] += monto_clp
             
             # Acumular en estado proyectado
-            cuenta['etiquetas'][ESTADO_LABEL]['monto'] += monto_clp
-            cuenta['etiquetas'][ESTADO_LABEL]['montos_por_mes'][mes_str] += monto_clp
+            cuenta_cxc['etiquetas'][ESTADO_LABEL]['monto'] += monto_clp
+            cuenta_cxc['etiquetas'][ESTADO_LABEL]['montos_por_mes'][mes_str] += monto_clp
             
             # Guardar detalle del presupuesto para modal
             # Agrupar por cliente para drill-down
-            if cliente_nombre not in cuenta['facturas_por_estado'][ESTADO_CODE]:
-                cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre] = {
+            if cliente_nombre not in cuenta_cxc['facturas_por_estado'][ESTADO_CODE]:
+                cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre] = {
                     'nombre': cliente_nombre,
                     'move_id': None,  # No es una factura, es un presupuesto
                     'monto_total': 0.0,
@@ -510,9 +523,9 @@ class AgregadorFlujo:
                 }
             
             # Agregar presupuesto al cliente
-            cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['monto_total'] += monto_clp
-            cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['montos_por_mes'][mes_str] += monto_clp
-            cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['presupuestos'].append({
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['monto_total'] += monto_clp
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['montos_por_mes'][mes_str] += monto_clp
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['presupuestos'].append({
                 'nombre': presu_name,
                 'monto': round(monto_clp, 0),
                 'fecha': fecha,
@@ -525,7 +538,7 @@ class AgregadorFlujo:
         
         print(f"[Agregador] Procesados {presupuestos_procesados}/{len(presupuestos)} presupuestos")
         print(f"[Agregador] Monto total: ${monto_total_procesado:,.0f} CLP")
-        print(f"[Agregador] Concepto {concepto_id} monto final: ${self.montos_por_concepto_mes.get(concepto_id, {}).get(self.meses_lista[0] if self.meses_lista else '2026-01', 0):,.0f}")
+        print(f"[Agregador] Cuenta {codigo_cxc} monto final: ${cuenta_cxc.get('monto', 0):,.0f}")
 
     def procesar_facturas_draft(self, facturas: List[Dict], lineas: Dict[int, List[Dict]],
                                clasificar_fn, cuentas_info: Dict,
