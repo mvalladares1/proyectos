@@ -512,13 +512,13 @@ class FlujoCajaService:
                 print(f"[FlujoCaja] Query C: Procesando SO sin facturar (draft/sent/sale)")
                 print(f"[FlujoCaja] incluir_proyecciones={incluir_proyecciones}")
                 try:
-                    # Consultar SO en estados draft/sent/sale SIN facturas generadas
+                    # Consultar SO en estados draft/sent/sale NO facturados
                     # Fecha de clasificación: x_studio_fecha_tentativa_de_pago (fallback date_order)
-                    presupuestos = self.odoo_manager.odoo.search_read(
+                    presupuestos_raw = self.odoo_manager.odoo.search_read(
                         'sale.order',
                         [
                             ('state', 'in', ['draft', 'sent', 'sale']),
-                            ('invoice_ids', '=', False),
+                            ('invoice_status', '!=', 'invoiced'),
                             '|',
                                 '&',
                                     ('x_studio_fecha_tentativa_de_pago', '!=', False),
@@ -529,8 +529,14 @@ class FlujoCajaService:
                                     ('date_order', '>=', fecha_inicio),
                                     ('date_order', '<=', fecha_fin)
                         ],
-                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state']
+                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state', 'invoice_status', 'invoice_ids']
                     )
+
+                    # Filtro robusto: excluir cualquier SO efectivamente facturado
+                    presupuestos = [
+                        p for p in (presupuestos_raw or [])
+                        if str(p.get('invoice_status', '')).lower() != 'invoiced'
+                    ]
                     print(f"[FlujoCaja] Query C: Encontrados {len(presupuestos)} presupuestos")
                     
                     if len(presupuestos) > 0:
