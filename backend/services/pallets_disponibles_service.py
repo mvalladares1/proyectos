@@ -62,12 +62,11 @@ class PalletsDisponiblesService:
                     prod_id = prod[0]
                     prod_name = prod[1]
                     # Excluir códigos [3 y [4 (productos terminados)
-                    if not prod_name.startswith('[3') and not prod_name.startswith('[4'):
-                        if prod_id not in productos_dict:
-                            productos_dict[prod_id] = {
-                                'id': prod_id,
-                                'nombre': prod_name
-                            }
+                    if prod_id not in productos_dict:
+                        productos_dict[prod_id] = {
+                            'id': prod_id,
+                            'nombre': prod_name
+                        }
             
             resultado = sorted(productos_dict.values(), key=lambda x: x['nombre'])
             logger.info(f"[PALLETS] Productos encontrados: {len(resultado)}")
@@ -240,10 +239,6 @@ class PalletsDisponiblesService:
                 if isinstance(q.get('product_id'), (list, tuple)) and len(q['product_id']) > 1:
                     product_name = q['product_id'][1]
                     product_id_val = q['product_id'][0]
-                
-                # Excluir productos con código que empiece en [3 o [4
-                if product_name.startswith('[3') or product_name.startswith('[4'):
-                    continue
                 
                 lot_name = ''
                 lot_id = None
