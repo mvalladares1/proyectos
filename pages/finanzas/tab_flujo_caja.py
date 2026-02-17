@@ -263,9 +263,11 @@ def render(username: str, password: str):
                                 continue
                             for etiqueta in cuenta.get("etiquetas", []):
                                 et_nombre = etiqueta.get("nombre", "")
+                                st.write(f"DEBUG CxC etiqueta: '{et_nombre}', monto antes: {etiqueta.get('monto', 0)}")
                                 if "Pagadas" in et_nombre and "Parcialmente" not in et_nombre and "No Pagadas" not in et_nombre:
                                     # Excluir "Facturas Pagadas" completamente
                                     et_monto = etiqueta.get("monto", 0)
+                                    st.write(f"  -> FILTRANDO: '{et_nombre}' monto: {et_monto}")
                                     concepto["total"] = concepto.get("total", 0) - et_monto
                                     for mes, val in etiqueta.get("montos_por_mes", {}).items():
                                         concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
@@ -278,6 +280,7 @@ def render(username: str, password: str):
                                             act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
                                     etiqueta["monto"] = 0
                                     etiqueta["montos_por_mes"] = {}
+                                    st.write(f"  -> DESPUÉS: monto={etiqueta.get('monto', 0)}, montos_por_mes={etiqueta.get('montos_por_mes', {})}")
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
