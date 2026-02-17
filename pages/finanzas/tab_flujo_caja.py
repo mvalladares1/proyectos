@@ -73,6 +73,8 @@ def render(username: str, password: str):
     with col_actions:
         solo_pendiente = st.checkbox("📌 Solo pendiente", value=False, key="solo_pendiente_parciales",
                                      help="Excluir todo lo ya pagado/cobrado de Operación. Muestra solo lo que falta por llegar o pagar.")
+        incluir_proyecciones = st.checkbox("🔮 Incluir Facturas Proyectadas", value=False, key="incluir_proyecciones",
+                                          help="Incluir presupuestos de venta (estado draft/sent) como Facturas Proyectadas en CxC.")
     
     st.markdown("---")
     
@@ -114,7 +116,7 @@ def render(username: str, password: str):
     st.markdown("---")
     
     # ========== CARGAR DATOS ==========
-    cache_key = f"flujo_excel_{tipo_periodo}_{fecha_inicio_str}_{fecha_fin_str}"
+    cache_key = f"flujo_excel_{tipo_periodo}_{fecha_inicio_str}_{fecha_fin_str}_proy_{incluir_proyecciones}"
     
     if btn_generar:
         if cache_key in st.session_state:
@@ -135,7 +137,8 @@ def render(username: str, password: str):
                             "fecha_inicio": fecha_inicio_str,
                             "fecha_fin": fecha_fin_str,
                             "username": username,
-                            "password": password
+                            "password": password,
+                            "incluir_proyecciones": incluir_proyecciones
                         },
                         timeout=120
                     )

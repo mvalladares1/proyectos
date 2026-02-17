@@ -21,6 +21,9 @@ import os
 
 from shared.odoo_client import OdooClient
 
+# Importar servicio de conversión de moneda
+from .currency_service import CurrencyService
+
 # Importar desde módulos modularizados
 from .flujo_caja.constants import (
     CONCEPTO_FALLBACK,
@@ -387,7 +390,8 @@ class FlujoCajaService:
     # ==================== FLUJO MENSUALIZADO ====================
     
     def get_flujo_mensualizado(self, fecha_inicio: str, fecha_fin: str, 
-                               company_id=None, agrupacion='mensual') -> Dict:
+                               company_id=None, agrupacion='mensual', 
+                               incluir_proyecciones=False) -> Dict:
         """
         Genera el Estado de Flujo de Efectivo con granularidad MENSUAL.
         
@@ -396,6 +400,7 @@ class FlujoCajaService:
             fecha_fin: Fecha fin YYYY-MM-DD
             company_id: ID de compañía
             agrupacion: 'mensual' o 'semanal'
+            incluir_proyecciones: Si True, incluye presupuestos de venta como Facturas Proyectadas
             
         Returns:
             Flujo estructurado por actividad y mes
@@ -500,6 +505,32 @@ class FlujoCajaService:
             print(f"[FlujoCaja] Query B: Encontradas {len(lineas_monitoreadas)} líneas CxC")
             # Procesar con inversión de signo para CxC
             agregador.procesar_lineas_cxc(lineas_monitoreadas, self._clasificar_cuenta, agrupacion)
+        
+        # Query C: Presupuestos de venta (Facturas Proyectadas) - OPCIONAL
+        if incluir_proyecciones:
+            print(f"[FlujoCaja] Query C: Procesando presupuestos de venta (draft/sent)")
+            try:
+                # Consultar presupuestos de venta con estado draft o sent
+                presupuestos = self.odoo_manager.odoo.search_read(
+                    'sale.order',
+                    [
+                        ('state', 'in', ['draft', 'sent']),
+                        ('commitment_date', '>=', fecha_inicio),
+                        ('commitment_date', '<=', fecha_fin)
+                    ],
+                    ['name', 'partner_id', 'amount_total', 'currency_id', 'commitment_date', 'date_order', 'state']
+                )
+                print(f"[FlujoCaja] Query C: Encontrados {len(presupuestos)} presupuestos")
+                
+                # Procesar presupuestos con conversión de moneda
+                agregador.procesar_presupuestos_ventas(
+                    presupuestos, 
+                    self._clasificar_cuenta,
+                    CurrencyService.convert_usd_to_clp,
+                    agrupacion
+                )
+            except Exception as e:
+                print(f"[FlujoCaja] Error procesando presupuestos: {e}")
         
         # 7. Procesar etiquetas (EXCLUYENDO cuentas CxC que ya se procesaron en Query B)
         try:

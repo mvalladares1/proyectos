@@ -372,6 +372,142 @@ class AgregadorFlujo:
             if mes_str in self.meses_lista:
                 cuenta['facturas_por_estado'][payment_state][move_name]['montos_por_mes'][mes_str] += monto_efectivo
 
+    def procesar_presupuestos_ventas(self, presupuestos: List[Dict], 
+                                    clasificar_fn,
+                                    currency_converter,
+                                    agrupacion: str = 'mensual') -> None:
+        """
+        Procesa presupuestos de venta (sale.order con state = draft/sent) para proyección CxC.
+        
+        Crea un nuevo estado "Facturas Proyectadas" (estado_projected) con el emoji 🔮.
+        
+        Args:
+            presupuestos: Lista de sale.order con state in ['draft', 'sent']
+            clasificar_fn: Función de clasificación
+            currency_converter: Función para convertir USD a CLP
+            agrupacion: 'mensual' o 'semanal'
+        """
+        ESTADO_LABEL = '🔮 Facturas Proyectadas'
+        ESTADO_CODE = 'estado_projected'
+        ORDEN_ESTADO = 0  # Mostrar primero
+        
+        # Cuenta fija para CxC - Deudores por Ventas
+        CUENTA_CXC_CODIGO = '11030101'
+        CUENTA_CXC_DISPLAY = '11030101 Deudores por Ventas'
+        CUENTA_CXC_ID = 999999  # ID ficticio para tracking
+        
+        # Clasificar cuenta CxC
+        concepto_id, es_pendiente = clasificar_fn(CUENTA_CXC_CODIGO)
+        if concepto_id is None:
+            return
+        
+        # Asegurar estructura de cuenta
+        if concepto_id not in self.cuentas_por_concepto:
+            self.cuentas_por_concepto[concepto_id] = {}
+        
+        if CUENTA_CXC_CODIGO not in self.cuentas_por_concepto[concepto_id]:
+            self.cuentas_por_concepto[concepto_id][CUENTA_CXC_CODIGO] = {
+                'codigo': CUENTA_CXC_CODIGO,
+                'nombre': CUENTA_CXC_DISPLAY,
+                'monto': 0.0,
+                'cantidad': 0,
+                'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                'account_id': CUENTA_CXC_ID,
+                'etiquetas': {},
+                'facturas_por_estado': {}
+            }
+        
+        cuenta = self.cuentas_por_concepto[concepto_id][CUENTA_CXC_CODIGO]
+        
+        # Crear estructura de estado proyectado
+        if ESTADO_LABEL not in cuenta['etiquetas']:
+            cuenta['etiquetas'][ESTADO_LABEL] = {
+                'monto': 0.0,
+                'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                'orden': ORDEN_ESTADO,
+                'codigo': ESTADO_CODE
+            }
+        
+        if ESTADO_CODE not in cuenta['facturas_por_estado']:
+            cuenta['facturas_por_estado'][ESTADO_CODE] = {}
+        
+        # Procesar cada presupuesto
+        for presu in presupuestos:
+            # Obtener fecha de compromiso
+            fecha = presu.get('commitment_date') or presu.get('date_order', '')
+            if not fecha:
+                continue
+            
+            # Determinar período
+            try:
+                if agrupacion == 'semanal':
+                    fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                    y, w, d = fecha_dt.isocalendar()
+                    mes_str = f"{y}-W{w:02d}"
+                else:
+                    mes_str = fecha[:7]
+            except:
+                continue
+            
+            if mes_str not in self.meses_lista:
+                continue
+            
+            # Obtener monto y moneda
+            amount_total = presu.get('amount_total', 0)
+            currency_data = presu.get('currency_id', [])
+            currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else 'CLP'
+            
+            # Convertir USD a CLP si es necesario
+            if 'USD' in currency_name.upper():
+                monto_clp = currency_converter(amount_total)
+            else:
+                monto_clp = amount_total
+            
+            # Obtener cliente
+            partner_data = presu.get('partner_id', [])
+            cliente_nombre = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Cliente Desconocido'
+            
+            # Nombre del presupuesto
+            presu_name = presu.get('name', 'SO-???')
+            
+            # Acumular en concepto y mes
+            if concepto_id not in self.montos_por_concepto_mes:
+                self.montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in self.meses_lista}
+            
+            self.montos_por_concepto_mes[concepto_id][mes_str] += monto_clp
+            
+            # Acumular en cuenta
+            cuenta['monto'] += monto_clp
+            cuenta['montos_por_mes'][mes_str] += monto_clp
+            
+            # Acumular en estado proyectado
+            cuenta['etiquetas'][ESTADO_LABEL]['monto'] += monto_clp
+            cuenta['etiquetas'][ESTADO_LABEL]['montos_por_mes'][mes_str] += monto_clp
+            
+            # Guardar detalle del presupuesto para modal
+            # Agrupar por cliente para drill-down
+            if cliente_nombre not in cuenta['facturas_por_estado'][ESTADO_CODE]:
+                cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre] = {
+                    'nombre': cliente_nombre,
+                    'move_id': None,  # No es una factura, es un presupuesto
+                    'monto_total': 0.0,
+                    'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                    'fecha': fecha,
+                    'payment_state': ESTADO_CODE,
+                    'presupuestos': []  # Lista de presupuestos de este cliente
+                }
+            
+            # Agregar presupuesto al cliente
+            cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['monto_total'] += monto_clp
+            cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['montos_por_mes'][mes_str] += monto_clp
+            cuenta['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['presupuestos'].append({
+                'nombre': presu_name,
+                'monto': round(monto_clp, 0),
+                'fecha': fecha,
+                'moneda_original': currency_name,
+                'monto_original': amount_total
+            })
+
     def procesar_facturas_draft(self, facturas: List[Dict], lineas: Dict[int, List[Dict]],
                                clasificar_fn, cuentas_info: Dict,
                                agrupacion: str = 'mensual') -> None:
