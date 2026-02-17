@@ -292,6 +292,7 @@ class AgregadorFlujo:
             # Obtener nombre de factura
             move_data = linea.get('move_id', [0, ''])
             move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else linea.get('name', 'Sin nombre')
+            partner_name = linea.get('partner_name', 'Sin partner')
             
             # USAR FECHA_EFECTIVA (fecha pago si existe, sino fecha contable)
             fecha = linea.get('fecha_efectiva') or linea.get('date', '')
@@ -357,20 +358,29 @@ class AgregadorFlujo:
             # Obtener move_id para link a Odoo
             move_id = move_data[0] if isinstance(move_data, (list, tuple)) and len(move_data) > 0 else None
             
-            # Agrupar por factura y mes
-            if move_name not in cuenta['facturas_por_estado'][payment_state]:
-                cuenta['facturas_por_estado'][payment_state][move_name] = {
-                    'nombre': move_name,
-                    'move_id': move_id,  # ID para link a Odoo
+            # Agrupar por PARTNER y mes (nivel 3)
+            if partner_name not in cuenta['facturas_por_estado'][payment_state]:
+                cuenta['facturas_por_estado'][payment_state][partner_name] = {
+                    'nombre': partner_name,
+                    'move_id': move_id,
                     'monto_total': 0.0,
                     'montos_por_mes': {m: 0.0 for m in self.meses_lista},
                     'fecha': fecha,
-                    'payment_state': payment_state
+                    'payment_state': payment_state,
+                    'facturas': []
                 }
+
+            # Mantener detalle de factura para trazabilidad
+            cuenta['facturas_por_estado'][payment_state][partner_name]['facturas'].append({
+                'nombre': move_name,
+                'move_id': move_id,
+                'monto': monto_efectivo,
+                'fecha': fecha
+            })
             
-            cuenta['facturas_por_estado'][payment_state][move_name]['monto_total'] += monto_efectivo
+            cuenta['facturas_por_estado'][payment_state][partner_name]['monto_total'] += monto_efectivo
             if mes_str in self.meses_lista:
-                cuenta['facturas_por_estado'][payment_state][move_name]['montos_por_mes'][mes_str] += monto_efectivo
+                cuenta['facturas_por_estado'][payment_state][partner_name]['montos_por_mes'][mes_str] += monto_efectivo
 
     def procesar_presupuestos_ventas(self, presupuestos: List[Dict], 
                                     clasificar_fn,

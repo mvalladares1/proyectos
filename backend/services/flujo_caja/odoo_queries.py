@@ -481,7 +481,7 @@ class OdooQueryManager:
             moves = self.odoo.search_read(
                 'account.move',
                 domain_moves,
-                ['id', 'name', 'x_studio_fecha_de_pago', 'date', 'move_type', 'state', 'payment_state']
+                ['id', 'name', 'x_studio_fecha_de_pago', 'date', 'move_type', 'state', 'payment_state', 'partner_id']
             )
             
             # Crear diccionario de move_id -> (fecha_efectiva, es_proyeccion)
@@ -504,7 +504,10 @@ class OdooQueryManager:
                 move_info[m['id']] = {
                     'name': m.get('name'),
                     'payment_state': payment_state,
-                    'es_proyeccion': es_proyeccion
+                    'es_proyeccion': es_proyeccion,
+                    'partner_name': (m.get('partner_id', [0, 'Sin partner'])[1]
+                                    if isinstance(m.get('partner_id'), (list, tuple)) and len(m.get('partner_id')) > 1
+                                    else 'Sin partner')
                 }
                 
                 if es_proyeccion:
@@ -565,6 +568,7 @@ class OdooQueryManager:
                 info = move_info.get(move_id, {})
                 linea['es_proyeccion'] = info.get('es_proyeccion', False)
                 linea['payment_state'] = info.get('payment_state', 'not_paid')
+                linea['partner_name'] = info.get('partner_name', 'Sin partner')
             
             return lineas
         except Exception as e:
