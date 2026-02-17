@@ -484,12 +484,14 @@ class AgregadorFlujo:
             
             # Determinar período
             try:
+                # commitment_date suele venir como 'YYYY-MM-DD HH:MM:SS'
+                fecha_base = str(fecha)[:10]
                 if agrupacion == 'semanal':
-                    fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                    fecha_dt = datetime.strptime(fecha_base, '%Y-%m-%d')
                     y, w, d = fecha_dt.isocalendar()
                     mes_str = f"{y}-W{w:02d}"
                 else:
-                    mes_str = fecha[:7]
+                    mes_str = fecha_base[:7]
             except:
                 continue
             
