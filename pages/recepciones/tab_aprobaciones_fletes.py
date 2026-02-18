@@ -1305,6 +1305,13 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
     if ocs_a_remover:
         st.session_state[f'selected_{key_proveedor}'] = ocs_seleccionadas_antiguas & ocs_actuales
         st.session_state[f'checkbox_version_{key_proveedor}'] += 1
+        # Si hay OCs que ya no están, desmarcar "Seleccionar todas"
+        if f'select_all_{key_proveedor}' in st.session_state:
+            st.session_state[f'select_all_{key_proveedor}'] = False
+    
+    # Si después de limpiar no quedan OCs seleccionadas, asegurar que "Seleccionar todas" esté desmarcada
+    if not st.session_state[f'selected_{key_proveedor}'] and f'select_all_{key_proveedor}' in st.session_state:
+        st.session_state[f'select_all_{key_proveedor}'] = False
     
     # --- Fragment: solo la selección de checkboxes se re-renderiza al hacer click ---
     @st.fragment
@@ -1571,13 +1578,28 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             
             with col2:
                 if st.button(f"✅ Aprobar", key=f"aprobar_{key_proveedor}", type="primary"):
+                    # Copiar datos de OCs seleccionadas ANTES de procesar
+                    ocs_a_procesar = []
+                    for oc_id in st.session_state[f'selected_{key_proveedor}']:
+                        oc_filtrada = df_aprobables[df_aprobables['oc_id'] == oc_id]
+                        if not oc_filtrada.empty:
+                            oc_data = oc_filtrada.iloc[0]
+                            ocs_a_procesar.append({
+                                'oc_id': oc_id,
+                                'oc_name': oc_data['oc_name'],
+                                'activity_id': oc_data.get('actividad_id')
+                            })
+                    
+                    # Limpiar selección ANTES de empezar a aprobar
+                    st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state[f'select_all_{key_proveedor}'] = False
+                    st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
+                    
                     with st.spinner("Aprobando..."):
                         resultados = []
-                        for oc_id in st.session_state[f'selected_{key_proveedor}']:
-                            oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
-                            activity_id = oc_data.get('actividad_id')
-                            success, msg = aprobar_oc(models, uid, username, password, oc_id, activity_id)
-                            resultados.append((oc_data['oc_name'], success, msg))
+                        for oc in ocs_a_procesar:
+                            success, msg = aprobar_oc(models, uid, username, password, oc['oc_id'], oc['activity_id'])
+                            resultados.append((oc['oc_name'], success, msg))
                         
                         for oc_name, success, msg in resultados:
                             if success:
@@ -1585,9 +1607,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
-                        # Limpiar selección y forzar recreación de checkboxes
-                        st.session_state[f'selected_{key_proveedor}'] = set()
-                        st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
+                        # Limpiar caché y recargar
                         obtener_ocs_fletes_con_aprobaciones.clear()
                         st.cache_data.clear()
                         time.sleep(1)
@@ -1595,12 +1615,27 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             
             with col3:
                 if st.button(f"🔄 Quitar aprobación", key=f"quitar_{key_proveedor}"):
+                    # Copiar datos de OCs seleccionadas ANTES de procesar
+                    ocs_a_procesar = []
+                    for oc_id in st.session_state[f'selected_{key_proveedor}']:
+                        oc_filtrada = df_aprobables[df_aprobables['oc_id'] == oc_id]
+                        if not oc_filtrada.empty:
+                            oc_data = oc_filtrada.iloc[0]
+                            ocs_a_procesar.append({
+                                'oc_id': oc_id,
+                                'oc_name': oc_data['oc_name']
+                            })
+                    
+                    # Limpiar selección ANTES de empezar a procesar
+                    st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state[f'select_all_{key_proveedor}'] = False
+                    st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
+                    
                     with st.spinner("Quitando aprobaciones..."):
                         resultados = []
-                        for oc_id in st.session_state[f'selected_{key_proveedor}']:
-                            oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
-                            success, msg = quitar_aprobacion(models, uid, password, oc_id)
-                            resultados.append((oc_data['oc_name'], success, msg))
+                        for oc in ocs_a_procesar:
+                            success, msg = quitar_aprobacion(models, uid, password, oc['oc_id'])
+                            resultados.append((oc['oc_name'], success, msg))
                         
                         for oc_name, success, msg in resultados:
                             if success:
@@ -1608,9 +1643,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.warning(f"{oc_name}: {msg}")
                         
-                        # Limpiar selección y forzar recreación de checkboxes
-                        st.session_state[f'selected_{key_proveedor}'] = set()
-                        st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
+                        # Limpiar caché y recargar
                         obtener_ocs_fletes_con_aprobaciones.clear()
                         st.cache_data.clear()
                         time.sleep(1)
@@ -1631,13 +1664,28 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             col_confirmar, col_cancelar, _ = st.columns([1, 1, 3])
             with col_confirmar:
                 if st.button("✅ Confirmar rechazo", key=f"confirmar_rechazo_{key_proveedor}", type="primary", disabled=not motivo):
+                    # Copiar datos de OCs seleccionadas ANTES de procesar
+                    ocs_a_procesar = []
+                    for oc_id in st.session_state[f'selected_{key_proveedor}']:
+                        oc_filtrada = df_aprobables[df_aprobables['oc_id'] == oc_id]
+                        if not oc_filtrada.empty:
+                            oc_data = oc_filtrada.iloc[0]
+                            ocs_a_procesar.append({
+                                'oc_id': oc_id,
+                                'oc_name': oc_data['oc_name'],
+                                'activity_id': oc_data.get('actividad_id')
+                            })
+                    
+                    # Limpiar selección ANTES de empezar a rechazar
+                    st.session_state[f'selected_{key_proveedor}'] = set()
+                    st.session_state[f'select_all_{key_proveedor}'] = False
+                    st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
+                    
                     with st.spinner("Rechazando..."):
                         resultados = []
-                        for oc_id in st.session_state[f'selected_{key_proveedor}']:
-                            oc_data = df_aprobables[df_aprobables['oc_id'] == oc_id].iloc[0]
-                            activity_id = oc_data.get('actividad_id')
-                            success, msg = rechazar_oc(models, uid, username, password, oc_id, motivo, activity_id)
-                            resultados.append((oc_data['oc_name'], success, msg))
+                        for oc in ocs_a_procesar:
+                            success, msg = rechazar_oc(models, uid, username, password, oc['oc_id'], motivo, oc['activity_id'])
+                            resultados.append((oc['oc_name'], success, msg))
                         
                         for oc_name, success, msg in resultados:
                             if success:
@@ -1645,9 +1693,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
-                        # Limpiar selección y forzar recreación de checkboxes
-                        st.session_state[f'selected_{key_proveedor}'] = set()
-                        st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
+                        # Limpiar estado y recargar
                         st.session_state[f'mostrar_motivo_rechazo_{key_proveedor}'] = False
                         obtener_ocs_fletes_con_aprobaciones.clear()
                         st.cache_data.clear()
