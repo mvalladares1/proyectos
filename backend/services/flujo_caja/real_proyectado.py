@@ -591,7 +591,7 @@ class RealProyectadoCalculator:
                     ['move_type', 'in', ['in_invoice', 'in_refund']]
                 ],
                 ['id', 'name', 'partner_id', 'amount_total', 'date', 'invoice_date',
-                 'invoice_date_due', 'state', 'payment_term_id', 'currency_id', 'move_type'],
+                 'invoice_date_due', 'state', 'currency_id', 'move_type'],
                 limit=10000
             )
 
@@ -641,15 +641,8 @@ class RealProyectadoCalculator:
                     except Exception:
                         fecha_proyectada_dt = fecha_base_dt
                 else:
-                    # Sin fecha de vencimiento, usar payment_term o fecha base
-                    pt_data = fp.get('payment_term_id')
-                    pt_id = pt_data[0] if isinstance(pt_data, (list, tuple)) and len(pt_data) > 0 else pt_data
-                    dias_plazo = payment_term_days.get(pt_id, 0) if pt_id else 0
-                    
-                    if dias_plazo and dias_plazo > 0:
-                        fecha_proyectada_dt = fecha_base_dt + timedelta(days=dias_plazo)
-                    else:
-                        fecha_proyectada_dt = fecha_base_dt
+                    # Sin fecha de vencimiento, usar fecha base directamente
+                    fecha_proyectada_dt = fecha_base_dt
                 
                 fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
 
