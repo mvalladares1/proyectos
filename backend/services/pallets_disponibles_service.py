@@ -62,12 +62,11 @@ class PalletsDisponiblesService:
                     prod_id = prod[0]
                     prod_name = prod[1]
                     # Excluir códigos [3 y [4 (productos terminados)
-                    if not prod_name.startswith('[3') and not prod_name.startswith('[4'):
-                        if prod_id not in productos_dict:
-                            productos_dict[prod_id] = {
-                                'id': prod_id,
-                                'nombre': prod_name
-                            }
+                    if prod_id not in productos_dict:
+                        productos_dict[prod_id] = {
+                            'id': prod_id,
+                            'nombre': prod_name
+                        }
             
             resultado = sorted(productos_dict.values(), key=lambda x: x['nombre'])
             logger.info(f"[PALLETS] Productos encontrados: {len(resultado)}")
@@ -129,7 +128,10 @@ class PalletsDisponiblesService:
     
     def get_pallets_disponibles(self, planta: Optional[str] = None, 
                                  producto_id: Optional[int] = None,
-                                 proveedor_id: Optional[int] = None) -> Dict[str, Any]:
+                                 proveedor_id: Optional[int] = None,
+                                 fecha_desde: Optional[str] = None,
+                                 fecha_hasta: Optional[str] = None,
+                                 pallet_codigo: Optional[str] = None) -> Dict[str, Any]:
         """
         Obtiene pallets con stock que NO están asignados a ninguna fabricación.
         
@@ -137,6 +139,9 @@ class PalletsDisponiblesService:
             planta: 'VILKUN', 'RIO FUTURO' o None para todas
             producto_id: ID del producto para filtrar (opcional)
             proveedor_id: ID del proveedor/productor para filtrar (opcional, solo frescos)
+            fecha_desde: Fecha mínima de ingreso YYYY-MM-DD (opcional)
+            fecha_hasta: Fecha máxima de ingreso YYYY-MM-DD (opcional)
+            pallet_codigo: Código de pallet para buscar (opcional)
         
         Returns:
             Dict con pallets disponibles y estadísticas
@@ -166,6 +171,19 @@ class PalletsDisponiblesService:
             # Filtrar por producto si se especifica
             if producto_id:
                 domain_quants.append(('product_id', '=', producto_id))
+            
+            # Filtrar por fecha de ingreso
+            if fecha_desde:
+                domain_quants.append(('in_date', '>=', f'{fecha_desde} 00:00:00'))
+            if fecha_hasta:
+                domain_quants.append(('in_date', '<=', f'{fecha_hasta} 23:59:59'))
+            
+            # Filtrar por código de pallet
+            if pallet_codigo:
+                codigo_buscar = pallet_codigo.strip().upper()
+                if codigo_buscar.startswith('PAC') and not codigo_buscar.startswith('PACK'):
+                    codigo_buscar = 'PACK' + codigo_buscar[3:]
+                domain_quants.append(('package_id.name', 'ilike', codigo_buscar))
             
             quants = self.odoo.search_read(
                 'stock.quant',
@@ -221,10 +239,6 @@ class PalletsDisponiblesService:
                 if isinstance(q.get('product_id'), (list, tuple)) and len(q['product_id']) > 1:
                     product_name = q['product_id'][1]
                     product_id_val = q['product_id'][0]
-                
-                # Excluir productos con código que empiece en [3 o [4
-                if product_name.startswith('[3') or product_name.startswith('[4'):
-                    continue
                 
                 lot_name = ''
                 lot_id = None

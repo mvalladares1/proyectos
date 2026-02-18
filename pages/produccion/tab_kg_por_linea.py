@@ -1661,38 +1661,59 @@ def _generar_informe_pdf(
             fechas_prod = [f for f, kg in dias_sorted]
             kg_prod = [kg for f, kg in dias_sorted]
             labels_prod = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m') for f in fechas_prod]
+            dias_semana_prod = [DIAS_ES.get(datetime.strptime(f, '%Y-%m-%d').strftime('%a'), '') for f in fechas_prod]
             
-            fig_prod, ax_prod = plt.subplots(figsize=(7, 3))
+            fig_prod, ax_prod = plt.subplots(figsize=(7.5, 3.5))
             fig_prod.patch.set_facecolor('white')
-            ax_prod.set_facecolor('#fafbfc')
+            ax_prod.set_facecolor('white')
             
-            # Barras con degradado de color
-            colores_prod = ['#0d3b66' if kg == max(kg_prod) else '#7FA8C9' for kg in kg_prod]
-            bars = ax_prod.bar(range(len(labels_prod)), kg_prod, color=colores_prod, 
-                               edgecolor='white', linewidth=1.5, alpha=0.85)
+            # Gradiente de color basado en valor (de claro a oscuro)
+            max_kg = max(kg_prod) if kg_prod else 1
+            from matplotlib.colors import LinearSegmentedColormap
+            cmap_prod = LinearSegmentedColormap.from_list('corp', ['#B8D4E3', '#6BA3C4', '#0d3b66'])
+            colores_prod = [cmap_prod(v / max_kg) for v in kg_prod]
             
-            ax_prod.set_xlabel('Día', fontsize=9, fontweight='600', color='#666')
+            x_pos_prod = range(len(labels_prod))
+            bar_width = 0.65
+            bars = ax_prod.bar(x_pos_prod, kg_prod, width=bar_width, color=colores_prod,
+                               edgecolor='white', linewidth=0.8, zorder=3)
+            
+            # Línea de promedio
+            prom_kg_dia = sum(kg_prod) / len(kg_prod) if kg_prod else 0
+            ax_prod.axhline(y=prom_kg_dia, color='#C9997D', linewidth=1.5, 
+                           linestyle='--', alpha=0.7, zorder=2,
+                           label=f'Promedio: {prom_kg_dia:,.0f} KG')
+            
             ax_prod.set_ylabel('KG Producidos', fontsize=9, fontweight='600', color='#0d3b66')
-            ax_prod.set_title('📊 Producción Diaria (KG)', fontsize=11, fontweight='bold', 
-                             color='#0d3b66', pad=12)
-            ax_prod.set_xticks(range(len(labels_prod)))
-            ax_prod.set_xticklabels(labels_prod, rotation=45 if len(labels_prod) > 5 else 0,
-                                    ha='right' if len(labels_prod) > 5 else 'center',
-                                    fontsize=8, color='#666')
-            ax_prod.tick_params(axis='y', labelsize=8, colors='#666')
-            ax_prod.grid(axis='y', alpha=0.2, linestyle='-', linewidth=0.5)
+            ax_prod.set_title('Producción Diaria (KG)', fontsize=12, fontweight='bold', 
+                             color='#0d3b66', pad=15)
+            ax_prod.set_xticks(list(x_pos_prod))
+            combined_labels = [f'{d}\n{l}' for d, l in zip(dias_semana_prod, labels_prod)]
+            ax_prod.set_xticklabels(combined_labels, fontsize=7.5, color='#555', ha='center')
+            ax_prod.tick_params(axis='y', labelsize=8, colors='#888')
+            ax_prod.tick_params(axis='x', length=0)
+            ax_prod.grid(axis='y', alpha=0.15, linestyle='-', linewidth=0.5, color='#ccc', zorder=0)
             ax_prod.spines['top'].set_visible(False)
             ax_prod.spines['right'].set_visible(False)
-            ax_prod.spines['left'].set_color('#ddd')
-            ax_prod.spines['bottom'].set_color('#ddd')
+            ax_prod.spines['left'].set_color('#e0e0e0')
+            ax_prod.spines['bottom'].set_color('#e0e0e0')
+            ax_prod.set_xlim(-0.5, len(labels_prod) - 0.5)
             
-            # Añadir valores encima de las barras
+            # Valores encima de las barras con fondo redondeado
             for i, (bar, val) in enumerate(zip(bars, kg_prod)):
                 height = bar.get_height()
-                ax_prod.text(bar.get_x() + bar.get_width()/2., height + max(kg_prod)*0.02,
+                is_max = val == max_kg
+                ax_prod.text(bar.get_x() + bar.get_width()/2., height + max_kg*0.025,
                             f'{val:,.0f}', ha='center', va='bottom', 
-                            fontsize=7, fontweight='600', color='#0d3b66')
+                            fontsize=7.5 if is_max else 7, 
+                            fontweight='bold' if is_max else '600', 
+                            color='#0d3b66' if is_max else '#555',
+                            bbox=dict(boxstyle='round,pad=0.25', facecolor='white',
+                                     edgecolor='#ddd' if is_max else 'none', 
+                                     alpha=0.85, linewidth=0.5))
             
+            ax_prod.legend(loc='upper right', fontsize=8, frameon=True, fancybox=True,
+                          edgecolor='#ddd', facecolor='white', framealpha=0.9)
             plt.tight_layout()
             
             img_buf_prod = io.BytesIO()
@@ -1794,65 +1815,85 @@ def _generar_informe_pdf(
                 kg_hh_vals.append(0)
         
         # Generar gráfico con matplotlib
-        fig, ax = plt.subplots(figsize=(7, 3.5))
+        fig, ax = plt.subplots(figsize=(7.5, 3.8))
         fig.patch.set_facecolor('white')
-        ax.set_facecolor('#fafbfc')
+        ax.set_facecolor('white')
         
         x_pos = list(range(len(dias_labels)))
         
+        # Promedios
+        prom_kgh = sum(kg_hora_vals) / len(kg_hora_vals) if kg_hora_vals else 0
+        prom_kgh_ef = sum(kg_hh_vals) / len(kg_hh_vals) if kg_hh_vals else 0
+        
+        # Área de relleno con gradiente suave
+        ax.fill_between(x_pos, kg_hora_vals, alpha=0.12, color='#6BA3C4', zorder=1)
+        ax.fill_between(x_pos, kg_hh_vals, alpha=0.10, color='#C9997D', zorder=1)
+        
         # KG/Hora - línea azul elegante
-        ax.plot(x_pos, kg_hora_vals, color='#6BA3C4', linewidth=2.5, 
-                marker='o', markersize=6, label='KG/Hora',
-                markerfacecolor='#6BA3C4', markeredgecolor='white', markeredgewidth=1.5,
-                zorder=3)
-        ax.fill_between(x_pos, kg_hora_vals, alpha=0.2, color='#6BA3C4', zorder=1)
+        ax.plot(x_pos, kg_hora_vals, color='#6BA3C4', linewidth=2.8, 
+                marker='o', markersize=7, label=f'KG/Hora (prom: {prom_kgh:,.0f})',
+                markerfacecolor='white', markeredgecolor='#6BA3C4', markeredgewidth=2,
+                zorder=4, solid_capstyle='round')
+        
+        # Línea promedio KG/Hora
+        ax.axhline(y=prom_kgh, color='#6BA3C4', linewidth=1, linestyle=':', alpha=0.5, zorder=2)
         
         # Agregar valores numéricos en puntos azules
         for i, (x, y) in enumerate(zip(x_pos, kg_hora_vals)):
             if y > 0:
-                ax.text(x, y, f'{y:,.0f}', 
-                       ha='center', va='bottom', fontsize=8, 
-                       fontweight='600', color='#5A8FAD',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
-                                edgecolor='none', alpha=0.7))
+                offset_y = max(max(kg_hh_vals + kg_hora_vals)) * 0.04
+                ax.text(x, y + offset_y, f'{y:,.0f}', 
+                       ha='center', va='bottom', fontsize=7.5, 
+                       fontweight='bold', color='#4A8DB5',
+                       bbox=dict(boxstyle='round,pad=0.2', facecolor='white', 
+                                edgecolor='#6BA3C4', alpha=0.85, linewidth=0.5))
         
         # KG/Hora Efectiva - línea beige/salmón
-        ax.plot(x_pos, kg_hh_vals, color='#C9997D', linewidth=2.5,
-                marker='D', markersize=5, label='KG/Hora Efectiva',
-                markerfacecolor='#C9997D', markeredgecolor='white', markeredgewidth=1.5,
-                zorder=3)
-        ax.fill_between(x_pos, kg_hh_vals, alpha=0.2, color='#C9997D', zorder=1)
+        ax.plot(x_pos, kg_hh_vals, color='#C9997D', linewidth=2.8,
+                marker='D', markersize=5.5, label=f'KG/Hora Efectiva (prom: {prom_kgh_ef:,.0f})',
+                markerfacecolor='white', markeredgecolor='#C9997D', markeredgewidth=2,
+                zorder=4, solid_capstyle='round')
+        
+        # Línea promedio KG/Hora Efectiva
+        ax.axhline(y=prom_kgh_ef, color='#C9997D', linewidth=1, linestyle=':', alpha=0.5, zorder=2)
         
         # Agregar valores numéricos en puntos beige
         for i, (x, y) in enumerate(zip(x_pos, kg_hh_vals)):
             if y > 0:
-                ax.text(x, y, f'{y:,.0f}', 
-                       ha='center', va='top', fontsize=8, 
-                       fontweight='600', color='#B38967',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
-                                edgecolor='none', alpha=0.7))
+                offset_y = max(max(kg_hh_vals + kg_hora_vals)) * 0.04
+                ax.text(x, y - offset_y, f'{y:,.0f}', 
+                       ha='center', va='top', fontsize=7.5, 
+                       fontweight='bold', color='#A07D63',
+                       bbox=dict(boxstyle='round,pad=0.2', facecolor='white', 
+                                edgecolor='#C9997D', alpha=0.85, linewidth=0.5))
         
         # Estilo del gráfico
-        ax.set_xlabel('Día', fontsize=10, fontweight='600', color='#666')
         ax.set_ylabel('KG/Hora', fontsize=10, fontweight='600', color='#0d3b66')
-        ax.set_title('⚡ KG/Hora y KG/Hora Efectiva por Día', 
+        ax.set_title('KG/Hora y KG/Hora Efectiva por Día', 
                      fontsize=12, fontweight='bold', color='#0d3b66', pad=15)
         
         ax.set_xticks(x_pos)
         ax.set_xlim(-0.5, len(dias_labels) - 0.5)
-        ax.set_xticklabels(dias_labels, rotation=45 if len(dias_labels) > 7 else 0, 
-                           ha='right' if len(dias_labels) > 7 else 'center',
-                           fontsize=8, color='#666')
-        ax.tick_params(axis='y', labelsize=9, colors='#666')
-        ax.grid(True, alpha=0.2, linestyle='-', linewidth=0.5, color='#ddd', zorder=0)
+        # Agregar día de la semana a las etiquetas
+        dias_kgh_labels = []
+        for f in fechas_graf:
+            dt_l = datetime.strptime(f, '%Y-%m-%d')
+            dia_en = dt_l.strftime('%a')
+            dia_esp = DIAS_ES.get(dia_en, dia_en)
+            dias_kgh_labels.append(f'{dia_esp}\n{dt_l.strftime("%d/%m")}')
+        ax.set_xticklabels(dias_kgh_labels, fontsize=7.5, color='#555', ha='center')
+        ax.tick_params(axis='y', labelsize=9, colors='#888')
+        ax.tick_params(axis='x', length=0)
+        ax.grid(True, alpha=0.12, linestyle='-', linewidth=0.5, color='#ccc', zorder=0)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#ddd')
-        ax.spines['bottom'].set_color('#ddd')
+        ax.spines['left'].set_color('#e0e0e0')
+        ax.spines['bottom'].set_color('#e0e0e0')
         
         # Leyenda
-        ax.legend(loc='upper left', frameon=True, fancybox=True, shadow=True,
-                  fontsize=9, edgecolor='#ddd', facecolor='white', framealpha=0.95)
+        ax.legend(loc='upper left', frameon=True, fancybox=True, 
+                  fontsize=8, edgecolor='#ddd', facecolor='white', framealpha=0.95,
+                  borderpad=0.8, handlelength=2.5)
         
         plt.tight_layout()
         
@@ -1921,44 +1962,72 @@ def _generar_informe_pdf(
         ]
         kg_totales_salas = [sd['total_kg'] for sala, sd in salas_ordenadas[:10]]
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, 3))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, max(3.5, len(nombres_salas) * 0.45)))
         fig.patch.set_facecolor('white')
+        fig.suptitle('Comparativo por Sala', fontsize=13, fontweight='bold', 
+                    color='#0d3b66', y=0.98)
         
-        # Gráfico 1: KG/Hora por Sala
-        colores_barras = ['#6BA3C4' if i == 0 else '#A8C4C9' for i in range(len(nombres_salas))]
-        ax1.barh(nombres_salas, kg_hora_salas, color=colores_barras, edgecolor='white', linewidth=1.5)
-        ax1.set_xlabel('KG/Hora', fontsize=9, fontweight='600', color='#666')
+        # Gráfico 1: KG/Hora por Sala — gradiente por valor
+        from matplotlib.colors import LinearSegmentedColormap
+        max_kh = max(kg_hora_salas) if kg_hora_salas else 1
+        cmap_blue = LinearSegmentedColormap.from_list('blue_g', ['#B8D4E3', '#6BA3C4', '#2C7DA0'])
+        colores_kh = [cmap_blue(v / max_kh) for v in kg_hora_salas]
+        
+        y_pos = range(len(nombres_salas))
+        bars1 = ax1.barh(y_pos, kg_hora_salas, color=colores_kh, edgecolor='white', 
+                         linewidth=0.8, height=0.6, zorder=3)
+        ax1.set_yticks(list(y_pos))
+        ax1.set_yticklabels(nombres_salas, fontsize=7.5, color='#333')
+        ax1.set_xlabel('KG/Hora', fontsize=9, fontweight='600', color='#555')
         ax1.set_title('Rendimiento por Sala', fontsize=10, fontweight='bold', color='#0d3b66', pad=10)
-        ax1.tick_params(axis='both', labelsize=8, colors='#666')
+        ax1.tick_params(axis='x', labelsize=7.5, colors='#888')
+        ax1.tick_params(axis='y', length=0)
         ax1.spines['top'].set_visible(False)
         ax1.spines['right'].set_visible(False)
-        ax1.spines['left'].set_color('#ddd')
-        ax1.spines['bottom'].set_color('#ddd')
-        ax1.grid(axis='x', alpha=0.2, linestyle='-', linewidth=0.5)
+        ax1.spines['left'].set_visible(False)
+        ax1.spines['bottom'].set_color('#e0e0e0')
+        ax1.grid(axis='x', alpha=0.12, linestyle='-', linewidth=0.5, zorder=0)
+        ax1.invert_yaxis()
         
-        # Añadir valores a las barras
+        # Valores en las barras con badge
         for i, v in enumerate(kg_hora_salas):
-            ax1.text(v + max(kg_hora_salas) * 0.02, i, f'{v:,.0f}', 
-                    va='center', fontsize=8, fontweight='600', color='#0d3b66')
+            is_top = (i == 0)
+            ax1.text(v + max_kh * 0.03, i, f'{v:,.0f}', 
+                    va='center', fontsize=7.5, fontweight='bold' if is_top else '600', 
+                    color='#0d3b66' if is_top else '#555',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='#E8F4FD' if is_top else 'none',
+                             edgecolor='none', alpha=0.9))
         
-        # Gráfico 2: KG Totales por Sala
-        colores_barras2 = ['#C9997D' if i == 0 else '#C9AFA8' for i in range(len(nombres_salas))]
-        ax2.barh(nombres_salas, kg_totales_salas, color=colores_barras2, edgecolor='white', linewidth=1.5)
-        ax2.set_xlabel('KG Procesados', fontsize=9, fontweight='600', color='#666')
+        # Gráfico 2: KG Totales por Sala — gradiente beige
+        max_kg_s = max(kg_totales_salas) if kg_totales_salas else 1
+        cmap_beige = LinearSegmentedColormap.from_list('beige_g', ['#E8D5C4', '#C9997D', '#A67B5B'])
+        colores_kg_s = [cmap_beige(v / max_kg_s) for v in kg_totales_salas]
+        
+        bars2 = ax2.barh(y_pos, kg_totales_salas, color=colores_kg_s, edgecolor='white', 
+                         linewidth=0.8, height=0.6, zorder=3)
+        ax2.set_yticks(list(y_pos))
+        ax2.set_yticklabels(nombres_salas, fontsize=7.5, color='#333')
+        ax2.set_xlabel('KG Procesados', fontsize=9, fontweight='600', color='#555')
         ax2.set_title('Producción Total por Sala', fontsize=10, fontweight='bold', color='#0d3b66', pad=10)
-        ax2.tick_params(axis='both', labelsize=8, colors='#666')
+        ax2.tick_params(axis='x', labelsize=7.5, colors='#888')
+        ax2.tick_params(axis='y', length=0)
         ax2.spines['top'].set_visible(False)
         ax2.spines['right'].set_visible(False)
-        ax2.spines['left'].set_color('#ddd')
-        ax2.spines['bottom'].set_color('#ddd')
-        ax2.grid(axis='x', alpha=0.2, linestyle='-', linewidth=0.5)
+        ax2.spines['left'].set_visible(False)
+        ax2.spines['bottom'].set_color('#e0e0e0')
+        ax2.grid(axis='x', alpha=0.12, linestyle='-', linewidth=0.5, zorder=0)
+        ax2.invert_yaxis()
         
-        # Añadir valores a las barras
+        # Valores en las barras
         for i, v in enumerate(kg_totales_salas):
-            ax2.text(v + max(kg_totales_salas) * 0.02, i, f'{v:,.0f}', 
-                    va='center', fontsize=8, fontweight='600', color='#0d3b66')
+            is_top = (i == 0)
+            ax2.text(v + max_kg_s * 0.03, i, f'{v:,.0f}', 
+                    va='center', fontsize=7.5, fontweight='bold' if is_top else '600', 
+                    color='#0d3b66' if is_top else '#555',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='#F5E6DA' if is_top else 'none',
+                             edgecolor='none', alpha=0.9))
         
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.94])
         
         # Convertir a imagen
         img_buf_salas = io.BytesIO()
@@ -2020,38 +2089,54 @@ def _generar_informe_pdf(
                     kg_hh_sala_vals.append(0)
             
             # Crear mini gráfico
-            fig_sala, ax_sala = plt.subplots(figsize=(6, 2))
+            fig_sala, ax_sala = plt.subplots(figsize=(6, 2.2))
             fig_sala.patch.set_facecolor('white')
-            ax_sala.set_facecolor('#fafbfc')
+            ax_sala.set_facecolor('white')
             
             x_sala = list(range(len(dias_sala)))
-            ax_sala.plot(x_sala, kg_hora_sala_vals, color='#6BA3C4', linewidth=2,
-                        marker='o', markersize=4, label='KG/Hora',
-                        markerfacecolor='#6BA3C4', markeredgecolor='white', markeredgewidth=1)
-            ax_sala.plot(x_sala, kg_hh_sala_vals, color='#C9997D', linewidth=2,
-                        marker='D', markersize=3.5, label='KG/Hora Efectiva',
-                        markerfacecolor='#C9997D', markeredgecolor='white', markeredgewidth=1)
+            
+            # Áreas de relleno suaves
+            ax_sala.fill_between(x_sala, kg_hora_sala_vals, alpha=0.10, color='#6BA3C4', zorder=1)
+            ax_sala.fill_between(x_sala, kg_hh_sala_vals, alpha=0.08, color='#C9997D', zorder=1)
+            
+            ax_sala.plot(x_sala, kg_hora_sala_vals, color='#6BA3C4', linewidth=2.2,
+                        marker='o', markersize=5, label='KG/Hora',
+                        markerfacecolor='white', markeredgecolor='#6BA3C4', markeredgewidth=1.5,
+                        zorder=4, solid_capstyle='round')
+            ax_sala.plot(x_sala, kg_hh_sala_vals, color='#C9997D', linewidth=2.2,
+                        marker='D', markersize=4, label='KG/Hora Efectiva',
+                        markerfacecolor='white', markeredgecolor='#C9997D', markeredgewidth=1.5,
+                        zorder=4, solid_capstyle='round')
             
             # Agregar valores numéricos en los puntos
+            all_vals_sala = kg_hora_sala_vals + kg_hh_sala_vals
+            max_val_sala = max(all_vals_sala) if all_vals_sala else 1
+            offset_sala = max_val_sala * 0.06
             for i, (x, y) in enumerate(zip(x_sala, kg_hora_sala_vals)):
                 if y > 0:
-                    ax_sala.text(x, y, f'{y:,.0f}', ha='center', va='bottom', 
-                               fontsize=6, fontweight='600', color='#5A8FAD')
+                    ax_sala.text(x, y + offset_sala, f'{y:,.0f}', ha='center', va='bottom', 
+                               fontsize=6.5, fontweight='bold', color='#4A8DB5',
+                               bbox=dict(boxstyle='round,pad=0.15', facecolor='white',
+                                        edgecolor='#6BA3C4', alpha=0.8, linewidth=0.4))
             for i, (x, y) in enumerate(zip(x_sala, kg_hh_sala_vals)):
                 if y > 0:
-                    ax_sala.text(x, y, f'{y:,.0f}', ha='center', va='top', 
-                               fontsize=6, fontweight='600', color='#B38967')
+                    ax_sala.text(x, y - offset_sala, f'{y:,.0f}', ha='center', va='top', 
+                               fontsize=6.5, fontweight='bold', color='#A07D63',
+                               bbox=dict(boxstyle='round,pad=0.15', facecolor='white',
+                                        edgecolor='#C9997D', alpha=0.8, linewidth=0.4))
             
             ax_sala.set_xticks(x_sala)
-            ax_sala.set_xticklabels(dias_sala, fontsize=7, color='#666')
-            ax_sala.tick_params(axis='y', labelsize=7, colors='#666')
-            ax_sala.grid(True, alpha=0.15, linestyle='-', linewidth=0.5)
+            ax_sala.set_xticklabels(dias_sala, fontsize=7, color='#555')
+            ax_sala.tick_params(axis='y', labelsize=7, colors='#888')
+            ax_sala.tick_params(axis='x', length=0)
+            ax_sala.grid(True, alpha=0.10, linestyle='-', linewidth=0.5, color='#ccc')
             ax_sala.spines['top'].set_visible(False)
             ax_sala.spines['right'].set_visible(False)
-            ax_sala.spines['left'].set_color('#ddd')
-            ax_sala.spines['bottom'].set_color('#ddd')
-            ax_sala.legend(loc='upper left', fontsize=7, frameon=False)
-            ax_sala.set_ylabel('KG/Hora', fontsize=8, color='#666')
+            ax_sala.spines['left'].set_color('#e0e0e0')
+            ax_sala.spines['bottom'].set_color('#e0e0e0')
+            ax_sala.legend(loc='upper left', fontsize=6.5, frameon=True, fancybox=True,
+                          edgecolor='#ddd', facecolor='white', framealpha=0.9)
+            ax_sala.set_ylabel('KG/Hora', fontsize=7.5, fontweight='600', color='#555')
             
             plt.tight_layout()
             

@@ -21,6 +21,9 @@ import os
 
 from shared.odoo_client import OdooClient
 
+# Importar servicio de conversión de moneda
+from .currency_service import CurrencyService
+
 # Importar desde módulos modularizados
 from .flujo_caja.constants import (
     CONCEPTO_FALLBACK,
@@ -387,7 +390,8 @@ class FlujoCajaService:
     # ==================== FLUJO MENSUALIZADO ====================
     
     def get_flujo_mensualizado(self, fecha_inicio: str, fecha_fin: str, 
-                               company_id=None, agrupacion='mensual') -> Dict:
+                               company_id=None, agrupacion='mensual', 
+                               incluir_proyecciones=False) -> Dict:
         """
         Genera el Estado de Flujo de Efectivo con granularidad MENSUAL.
         
@@ -396,6 +400,7 @@ class FlujoCajaService:
             fecha_fin: Fecha fin YYYY-MM-DD
             company_id: ID de compañía
             agrupacion: 'mensual' o 'semanal'
+            incluir_proyecciones: Si True, incluye presupuestos de venta como Facturas Proyectadas
             
         Returns:
             Flujo estructurado por actividad y mes
@@ -500,6 +505,61 @@ class FlujoCajaService:
             print(f"[FlujoCaja] Query B: Encontradas {len(lineas_monitoreadas)} líneas CxC")
             # Procesar con inversión de signo para CxC
             agregador.procesar_lineas_cxc(lineas_monitoreadas, self._clasificar_cuenta, agrupacion)
+            
+            # Query C: Presupuestos/SO sin facturar (Facturas Proyectadas) - OPCIONAL
+            # IMPORTANTE: Se ejecuta DESPUÉS de Query B para que las cuentas CxC ya existan
+            if incluir_proyecciones:
+                print(f"[FlujoCaja] Query C: Procesando SO sin facturar (draft/sent/sale)")
+                print(f"[FlujoCaja] incluir_proyecciones={incluir_proyecciones}")
+                try:
+                    # Consultar SO en estados draft/sent/sale NO facturados
+                    # Fecha de clasificación: x_studio_fecha_tentativa_de_pago (fallback date_order)
+                    presupuestos_raw = self.odoo_manager.odoo.search_read(
+                        'sale.order',
+                        [
+                            ('state', 'in', ['draft', 'sent', 'sale']),
+                            ('invoice_status', '!=', 'invoiced')
+                        ],
+                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state', 'invoice_status', 'invoice_ids'],
+                        limit=10000
+                    )
+
+                    # Filtro robusto: excluir cualquier SO efectivamente facturado
+                    presupuestos = []
+                    for p in (presupuestos_raw or []):
+                        if str(p.get('invoice_status', '')).lower() == 'invoiced':
+                            continue
+
+                        fecha_ref = p.get('x_studio_fecha_tentativa_de_pago') or p.get('date_order')
+                        if not fecha_ref:
+                            continue
+
+                        fecha_ref = str(fecha_ref)[:10]
+                        if fecha_inicio <= fecha_ref <= fecha_fin:
+                            presupuestos.append(p)
+                    print(f"[FlujoCaja] Query C: Encontrados {len(presupuestos)} presupuestos")
+                    
+                    if len(presupuestos) > 0:
+                        # Mostrar sample
+                        sample = presupuestos[:3]
+                        for p in sample:
+                            print(f"[FlujoCaja]   - {p['name']}: {p.get('amount_total', 0)} {p.get('currency_id', ['', 'CLP'])[1]} en {p.get('x_studio_fecha_tentativa_de_pago') or p.get('date_order', 'N/A')}")
+                    
+                    # Procesar presupuestos con conversión de moneda
+                    print(f"[FlujoCaja] Llamando a procesar_presupuestos_ventas...")
+                    agregador.procesar_presupuestos_ventas(
+                        presupuestos, 
+                        self._clasificar_cuenta,
+                        CurrencyService.convert_usd_to_clp,
+                        agrupacion
+                    )
+                    print(f"[FlujoCaja] Presupuestos procesados correctamente")
+                except Exception as e:
+                    print(f"[FlujoCaja] Error procesando presupuestos: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"[FlujoCaja] incluir_proyecciones=False, saltando Query C")
         
         # 7. Procesar etiquetas (EXCLUYENDO cuentas CxC que ya se procesaron en Query B)
         try:
@@ -555,9 +615,31 @@ class FlujoCajaService:
             conceptos = conceptos_por_actividad.get(act_key, [])
             for concepto in conceptos:
                 concepto_id = concepto.get('id', '')
+                # Si se incluyen proyecciones de venta, mantener la estructura agregada de 1.1.1
+                # (evita que real_proyectado reemplace cuentas y elimine estado_projected)
+                if incluir_proyecciones and concepto_id == '1.1.1':
+                    concepto['real'] = concepto.get('total', 0)
+                    concepto['proyectado'] = 0
+                    concepto['ppto'] = 0
+                    concepto['real_por_mes'] = concepto.get('montos_por_mes', {})
+                    concepto['proyectado_por_mes'] = {}
+                    continue
                 self.real_proyectado_calc.enriquecer_concepto(
                     concepto, real_proyectado_data, concepto_id
                 )
+        
+        # RECALCULAR subtotales después de enriquecer (importante para 1.2.1 con estructura especial)
+        subtotales_por_actividad = {
+            "OPERACION": {m: 0.0 for m in meses_lista},
+            "INVERSION": {m: 0.0 for m in meses_lista},
+            "FINANCIAMIENTO": {m: 0.0 for m in meses_lista}
+        }
+        for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            conceptos = conceptos_por_actividad.get(act_key, [])
+            for concepto in conceptos:
+                montos_mes = concepto.get('montos_por_mes', {})
+                for mes in meses_lista:
+                    subtotales_por_actividad[act_key][mes] += montos_mes.get(mes, 0)
         
         for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
             subtotal_mes = subtotales_por_actividad[act_key]

@@ -38,8 +38,6 @@ from .flujo_caja import (
     ENTERPRISE_CSS,
     ENTERPRISE_JS,
     SVG_ICONS,
-    MODAL_CSS,
-    MODAL_HTML,
     generate_sparkline,
     get_heatmap_class,
     fmt_monto_html,
@@ -73,14 +71,15 @@ def render(username: str, password: str):
         filter_fin = f_cols[2].checkbox("🟣 Financiamiento", value=True, key="filter_fin")
     
     with col_actions:
-        act_cols = st.columns(2)
-        expand_all = act_cols[0].button("📂 Expandir Todo", use_container_width=True)
-        collapse_all = act_cols[1].button("📁 Contraer Todo", use_container_width=True)
+        solo_pendiente = st.checkbox("📌 Solo pendiente", value=False, key="solo_pendiente_parciales",
+                                     help="Excluir todo lo ya pagado/cobrado de Operación. Muestra solo lo que falta por llegar o pagar.")
+        incluir_proyecciones = st.checkbox("🔮 Incluir Facturas Proyectadas", value=False, key="incluir_proyecciones",
+                                          help="Incluir presupuestos de venta (estado draft/sent) como Facturas Proyectadas en CxC.")
     
     st.markdown("---")
     
     # ========== SELECTORES DE PERÍODO ==========
-    col_desde, col_hasta, col_agrupacion, col_btn, col_export, col_waterfall = st.columns([2, 2, 2, 1, 1, 1])
+    col_desde, col_hasta, col_agrupacion, col_btn, col_export = st.columns([2, 2, 2, 1, 1])
     
     with col_desde:
         fecha_inicio = st.date_input(
@@ -114,13 +113,10 @@ def render(username: str, password: str):
     with col_export:
         export_placeholder = st.empty()
     
-    with col_waterfall:
-        show_waterfall = st.button("📊 Cascada", use_container_width=True, key="show_waterfall")
-    
     st.markdown("---")
     
     # ========== CARGAR DATOS ==========
-    cache_key = f"flujo_excel_{tipo_periodo}_{fecha_inicio_str}_{fecha_fin_str}"
+    cache_key = f"flujo_excel_{tipo_periodo}_{fecha_inicio_str}_{fecha_fin_str}_proy_{incluir_proyecciones}"
     
     if btn_generar:
         if cache_key in st.session_state:
@@ -141,7 +137,8 @@ def render(username: str, password: str):
                             "fecha_inicio": fecha_inicio_str,
                             "fecha_fin": fecha_fin_str,
                             "username": username,
-                            "password": password
+                            "password": password,
+                            "incluir_proyecciones": incluir_proyecciones
                         },
                         timeout=120
                     )
@@ -199,6 +196,100 @@ def render(username: str, password: str):
         meses_lista = flujo_data.get("meses", [])
         efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
+        
+        # ========== FILTRO: Solo pendiente (excluir todo lo ya pagado/cobrado) ==========
+        if solo_pendiente:
+            import copy
+            actividades = copy.deepcopy(actividades)
+            act_data = actividades.get("OPERACION", {})
+            if act_data:
+                for concepto in act_data.get("conceptos", []):
+                    cuentas = concepto.get("cuentas", [])
+                    # Solo procesar conceptos con estructura CxP/CxC (tienen estados pagadas/parciales)
+                    tiene_cxp = any(c.get("es_cuenta_cxp") for c in cuentas)
+                    tiene_cxc = any(c.get("es_cuenta_cxc") for c in cuentas)
+                    if not tiene_cxp and not tiene_cxc:
+                        continue
+                    
+                    if tiene_cxp:
+                        # === CxP (1.2.1): Estados son cuentas con codigo ===
+                        for cuenta in cuentas:
+                            if cuenta.get("codigo") == "pagadas":
+                                # PAGADAS: Excluir completamente
+                                monto_pagadas = cuenta.get("monto", 0)
+                                concepto["total"] = concepto.get("total", 0) - monto_pagadas
+                                for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                act_data["subtotal"] = act_data.get("subtotal", 0) - monto_pagadas
+                                if "subtotales_por_mes" in act_data:
+                                    for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                cuenta["monto"] = 0
+                                cuenta["montos_por_mes"] = {}
+                                for etiqueta in cuenta.get("etiquetas", []):
+                                    etiqueta["monto"] = 0
+                                    etiqueta["montos_por_mes"] = {}
+                                    for sub in etiqueta.get("sub_etiquetas", []):
+                                        sub["monto"] = 0
+                                        sub["montos_por_mes"] = {}
+                            
+                            elif cuenta.get("codigo") == "parciales" and "montos_real_por_mes" in cuenta:
+                                # PARCIALES: Quitar la parte ya pagada
+                                monto_real_estado = cuenta.get("monto_real", 0)
+                                cuenta["monto"] = cuenta.get("monto", 0) - monto_real_estado
+                                for mes, val in cuenta.get("montos_real_por_mes", {}).items():
+                                    cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
+                                concepto["total"] = concepto.get("total", 0) - monto_real_estado
+                                for mes, val in cuenta.get("montos_real_por_mes", {}).items():
+                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                act_data["subtotal"] = act_data.get("subtotal", 0) - monto_real_estado
+                                if "subtotales_por_mes" in act_data:
+                                    for mes, val in cuenta.get("montos_real_por_mes", {}).items():
+                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                for etiqueta in cuenta.get("etiquetas", []):
+                                    if "montos_real_por_mes" in etiqueta:
+                                        et_real = etiqueta.get("monto_real", 0)
+                                        etiqueta["monto"] = etiqueta.get("monto", 0) - et_real
+                                        for mes, val in etiqueta.get("montos_real_por_mes", {}).items():
+                                            etiqueta["montos_por_mes"][mes] = etiqueta.get("montos_por_mes", {}).get(mes, 0) - val
+                                    for sub in etiqueta.get("sub_etiquetas", []):
+                                        if "montos_real_por_mes" in sub:
+                                            sub_real = sub.get("monto_real", 0)
+                                            sub["monto"] = sub.get("monto", 0) - sub_real
+                                            for mes, val in sub.get("montos_real_por_mes", {}).items():
+                                                sub["montos_por_mes"][mes] = sub.get("montos_por_mes", {}).get(mes, 0) - val
+                    
+                    elif tiene_cxc:
+                        # === CxC (1.1.1): Estados son cuentas con codigo (igual que CxP) ===
+                        for cuenta in cuentas:
+                            if not cuenta.get("es_cuenta_cxc"):
+                                continue
+                            
+                            cuenta_codigo = cuenta.get("codigo", "")
+                            
+                            # Si la cuenta tiene codigo "estado_paid" → Facturas Pagadas → excluir
+                            if cuenta_codigo == "estado_paid":
+                                cuenta_monto = cuenta.get("monto", 0)
+                                
+                                # Restar de concepto
+                                concepto["total"] = concepto.get("total", 0) - cuenta_monto
+                                for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
+                                
+                                # Restar de operacion
+                                act_data["subtotal"] = act_data.get("subtotal", 0) - cuenta_monto
+                                if "subtotales_por_mes" in act_data:
+                                    for mes, val in cuenta.get("montos_por_mes", {}).items():
+                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
+                                
+                                # Poner cuenta en 0
+                                cuenta["monto"] = 0
+                                cuenta["montos_por_mes"] = {}
+                                
+                                # Poner todas las etiquetas (clientes) en 0
+                                for etiqueta in cuenta.get("etiquetas", []):
+                                    etiqueta["monto"] = 0
+                                    etiqueta["montos_por_mes"] = {}
         
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
@@ -280,47 +371,7 @@ def render(username: str, password: str):
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # ========== WATERFALL CHART ==========
-        if show_waterfall:
-            st.markdown("### 📊 Gráfico de Cascada (Waterfall Chart)")
-            
-            waterfall_data = {
-                "Concepto": ["Ef. Inicial", "Operación", "Inversión", "Financiamiento", "Ef. Final"],
-                "Valor": [ef_ini, op, inv, fin, ef_fin],
-                "Tipo": ["inicial", "flujo", "flujo", "flujo", "final"]
-            }
-            
-            # Aquí podrías integrar un gráfico de Plotly o similar
-            st.info("🚧 Gráfico de cascada interactivo en desarrollo...")
-            st.dataframe(pd.DataFrame(waterfall_data))
-        
-        # ========== RECOLECTAR DATOS DE FACTURAS PARA MODAL ==========
-        facturas_data = {}
-        for act_data in actividades.values():
-            for concepto in act_data.get("conceptos", []):
-                for cuenta in concepto.get("cuentas", []):
-                    # Procesar TODAS las cuentas con facturas, no solo CxC
-                    cuenta_codigo = cuenta.get("codigo", "")
-                    for etiqueta in cuenta.get("etiquetas", []):
-                        et_nombre = etiqueta.get("nombre", "")
-                        facturas = etiqueta.get("facturas", [])
-                        if facturas:
-                            key = f"{et_nombre}_{cuenta_codigo}"
-                            facturas_data[key] = facturas
-        
-        # Serializar facturas para JavaScript
-        facturas_json = json.dumps(facturas_data, ensure_ascii=False, default=str)
-        
-        # Preparar datos de composición para el modal (cuentas por concepto)
-        composicion_data = {}
-        for act_data in actividades.values():
-            for concepto in act_data.get("conceptos", []):
-                c_id = concepto.get("id") or concepto.get("codigo")
-                cuentas = concepto.get("cuentas", [])
-                if cuentas:
-                    composicion_data[c_id] = cuentas
-        
-        composicion_json = json.dumps(composicion_data, ensure_ascii=False, default=str)
+
         
         # ========== DETECTAR VISTA SEMANAL ==========
         vista_semanal = es_vista_semanal(meses_lista)
@@ -333,7 +384,7 @@ def render(username: str, password: str):
             meses_ordenados = list(semanas_por_mes.keys())
         
         # ========== GENERAR TABLA HTML ==========
-        html_parts = [ENTERPRISE_CSS, MODAL_CSS, '<div class="excel-container">']
+        html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
         html_parts.append('<table class="excel-table">')
         
         # HEADER
@@ -343,10 +394,6 @@ def render(username: str, password: str):
             html_parts.append('<thead>')
             html_parts.append('<tr class="header-meses">')
             html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
-            # Columnas REAL/PROYECTADO/PPTO
-            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; font-weight: 700;">REAL</th>')
-            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; font-weight: 700;">PROYECTADO</th>')
-            html_parts.append('<th rowspan="2" style="background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; font-weight: 700;">PPTO</th>')
             
             for mes in meses_ordenados:
                 num_semanas = len(semanas_por_mes[mes])
@@ -365,13 +412,9 @@ def render(username: str, password: str):
             html_parts.append('</tr>')
             html_parts.append('</thead>')
         else:
-            # Vista mensual: Header simple con REAL/PROYECTADO/PPTO
+            # Vista mensual: Header simple
             html_parts.append('<thead><tr>')
             html_parts.append('<th class="frozen">CONCEPTO</th>')
-            # Columnas especiales ANTES de los meses
-            html_parts.append('<th style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; font-weight: 700;">REAL</th>')
-            html_parts.append('<th style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; font-weight: 700;">PROYECTADO</th>')
-            html_parts.append('<th style="background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; font-weight: 700;">PPTO</th>')
             for mes in meses_lista:
                 html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
             html_parts.append('<th><strong>TOTAL</strong></th>')
@@ -407,8 +450,6 @@ def render(username: str, password: str):
             # Activity Header
             html_parts.append(f'<tr class="activity-header">')
             html_parts.append(f'<td class="frozen">{config["icon"]} {act_nombre}</td>')
-            # Columnas REAL/PROYECTADO/PPTO vacías para header de actividad
-            html_parts.append('<td></td><td></td><td></td>')
             for _ in meses_lista:
                 html_parts.append('<td></td>')
             html_parts.append('<td></td>')
@@ -423,11 +464,6 @@ def render(username: str, password: str):
                 c_total = concepto.get("total", 0)
                 montos_mes = concepto.get("montos_por_mes", {})
                 cuentas = concepto.get("cuentas", [])
-                
-                # Obtener valores REAL/PROYECTADO/PPTO
-                c_real = concepto.get("real", c_total)  # Fallback a total si no tiene
-                c_proyectado = concepto.get("proyectado", 0)
-                c_ppto = concepto.get("ppto", 0)
                 
                 if c_tipo == "HEADER":
                     continue
@@ -468,11 +504,6 @@ def render(username: str, password: str):
                 html_parts.append(f'<tr class="{row_class} {expandable_class}" {draggable} {onclick}>')
                 html_parts.append(f'<td class="frozen {indent_class}">{icon_svg}{c_id} - {tooltip_html}</td>')
                 
-                # Columnas REAL/PROYECTADO/PPTO
-                html_parts.append(f'<td class="real-col">{fmt_monto_html(c_real)}</td>')
-                html_parts.append(f'<td class="proyectado-col">{fmt_monto_html(c_proyectado)}</td>')
-                html_parts.append(f'<td class="ppto-col">{fmt_monto_html(c_ppto)}</td>')
-                
                 # Valores mensuales con HEATMAP y click para composición
                 valores_lista = []
                 for mes in meses_lista:
@@ -480,20 +511,9 @@ def render(username: str, password: str):
                     valores_lista.append(monto_mes)
                     heatmap_class = get_heatmap_class(monto_mes, max_abs)
                     cell_id = f"cell_{c_id_safe}_{mes}"
-                    # Agregar onclick para mostrar composición de cuentas SI tiene cuentas y monto != 0
-                    tiene_cuentas = len(cuentas) > 0
-                    tiene_monto = monto_mes != 0
+                    # NO onclick para composición (removed per user request)
                     
-                    if tiene_cuentas and tiene_monto:
-                        onclick_comp = f"event.stopPropagation(); showComposicionModal('{c_id}', '{mes}')"
-                        cell_class = "cell-clickable"
-                        title_attr = f'title="Click para ver composición"'
-                    else:
-                        onclick_comp = ""
-                        cell_class = ""
-                        title_attr = ""
-                    
-                    html_parts.append(f'<td class="clickable {heatmap_class} {cell_class}" id="{cell_id}" onclick="{onclick_comp}" {title_attr} oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
+                    html_parts.append(f'<td class="clickable {heatmap_class}" id="{cell_id}" oncontextmenu="addNote(\'{c_id}\', \'{cell_id}\'); return false;">{fmt_monto_html(monto_mes)}</td>')
                 
                 # Total con SPARKLINE
                 sparkline = generate_sparkline(valores_lista)
@@ -508,11 +528,6 @@ def render(username: str, password: str):
                         cuenta_monto = cuenta.get("monto", 0)
                         cu_montos_mes = cuenta.get("montos_por_mes", {})
                         etiquetas = cuenta.get("etiquetas", [])
-                        
-                        # REAL/PROYECTADO para cuentas especiales
-                        cuenta_real = cuenta.get("real", 0)
-                        cuenta_proyectado = cuenta.get("proyectado", 0)
-                        tiene_real_proyectado = cuenta_real != 0 or cuenta_proyectado != 0
                         
                         # ID único para esta cuenta (para expandir etiquetas)
                         cuenta_id_safe = f"{c_id_safe}_{cuenta_codigo.replace('.', '_')}"
@@ -542,26 +557,10 @@ def render(username: str, password: str):
                             # Mostrar código + nombre normal
                             html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
                         
-                        # Columnas REAL/PROYECTADO/PPTO para filas de detalle
-                        if tiene_real_proyectado:
-                            html_parts.append(f'<td class="real-col" style="font-size:12px;">{fmt_monto_html(cuenta_real)}</td>')
-                            html_parts.append(f'<td class="proyectado-col" style="font-size:12px;">{fmt_monto_html(cuenta_proyectado)}</td>')
-                            html_parts.append('<td></td>')
-                        else:
-                            html_parts.append('<td></td><td></td><td></td>')
-                        
-                        # Celdas mensuales del nivel 2 - clickeables si tiene facturas
+                        # Celdas mensuales del nivel 2
                         for mes in meses_lista:
                             m_acc = cu_montos_mes.get(mes, 0)
-                            
-                            # Si tiene facturas y monto != 0, hacer clickeable para mostrar modal agregado
-                            if tiene_facturas_cuenta and m_acc != 0:
-                                # Usamos el nombre de la cuenta como estado para el modal
-                                cuenta_nombre_js = cuenta_nombre.replace("'", "\\'")
-                                onclick = f"event.stopPropagation(); showFacturasModal('{cuenta_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                html_parts.append(f'<td class="cell-clickable" onclick="{onclick}" title="Click para ver detalle de facturas">{fmt_monto_html(m_acc)}</td>')
-                            else:
-                                html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
+                            html_parts.append(f'<td>{fmt_monto_html(m_acc)}</td>')
                         
                         html_parts.append(f'<td>{fmt_monto_html(cuenta_monto)}</td>')
                         html_parts.append('</tr>')
@@ -580,64 +579,94 @@ def render(username: str, password: str):
                         }
                         
                         if has_etiquetas:
-                            for etiqueta in etiquetas[:10]:  # Top 10 etiquetas
-                                et_nombre = etiqueta.get("nombre", "")[:50]
+                            # Renderizar etiquetas con estructura anidada de 4 niveles
+                            # Nivel 3: CATEGORÍAS (expandibles)
+                            # Nivel 4: PROVEEDORES (sub_etiquetas anidadas bajo categoría)
+                            for etiqueta in etiquetas:
+                                et_nombre = etiqueta.get("nombre", "")
                                 et_monto = etiqueta.get("monto", 0)
                                 et_montos_mes = etiqueta.get("montos_por_mes", {})
+                                et_nivel = etiqueta.get("nivel", 4)
+                                et_tipo = etiqueta.get("tipo", "proveedor")
+                                sub_etiquetas = etiqueta.get("sub_etiquetas", [])
                                 tiene_facturas = "facturas" in etiqueta and len(etiqueta.get("facturas", [])) > 0
                                 total_facturas = etiqueta.get("total_facturas", 0)
                                 
-                                # REAL/PROYECTADO para etiquetas especiales
-                                et_real = etiqueta.get("real", 0)
-                                et_proyectado = etiqueta.get("proyectado", 0)
-                                et_tiene_real_proyectado = et_real != 0 or et_proyectado != 0
-                                
-                                # Fondo sólido oscuro para evitar transparencia al deslizar
-                                # Indentación aumentada a 100px con borde izquierdo para indicar jerarquía
-                                html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
-                                
-                                # Obtener icono según estado de pago (si es CxC) o icono genérico
-                                icono = ESTADO_ICONS.get(et_nombre, '🏷️') if es_cuenta_cxc else '🏷️'
-                                
-                                # Nombre de etiqueta con indicador de facturas si es CxC
-                                if es_cuenta_cxc and tiene_facturas:
-                                    nombre_display = f'{icono} {et_nombre} <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
-                                else:
-                                    nombre_display = f'{icono} {et_nombre}'
-                                
-                                html_parts.append(f'<td class="frozen" style="padding-left: 100px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
-                                
-                                # Columnas REAL/PROYECTADO/PPTO para etiquetas
-                                if et_tiene_real_proyectado:
-                                    html_parts.append(f'<td style="font-size:10px; color:#4ade80; background-color: #1a1a2e;">{fmt_monto_html(et_real)}</td>')
-                                    html_parts.append(f'<td style="font-size:10px; color:#facc15; background-color: #1a1a2e;">{fmt_monto_html(et_proyectado)}</td>')
-                                    html_parts.append('<td style="background-color: #1a1a2e;"></td>')
-                                else:
-                                    html_parts.append('<td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td><td style="background-color: #1a1a2e;"></td>')
-                                
-                                # Montos por mes de la etiqueta - clickeables si tiene facturas
-                                for mes in meses_lista:
-                                    et_mes_monto = et_montos_mes.get(mes, 0)
+                                if et_nivel == 3:  # CATEGORÍA (expandible con sub_etiquetas)
+                                    categoria_id_safe = et_nombre.replace(" ", "_").replace("📁", "").strip().replace(".", "_")
+                                    # ID ÚNICO por cuenta+categoría para evitar conflictos entre estados
+                                    unique_cat_id = f"{cuenta_id_safe}__{categoria_id_safe}"
+                                    has_proveedores = len(sub_etiquetas) > 0
                                     
-                                    # Mostrar modal de facturas si tiene facturas y monto != 0
-                                    if tiene_facturas and et_mes_monto != 0:
-                                        # Celda clickeable para mostrar modal
-                                        et_nombre_js = et_nombre.replace("'", "\\'")
-                                        onclick = f"event.stopPropagation(); showFacturasModal('{et_nombre_js}', '{mes}', '{cuenta_codigo}')"
-                                        cell_class = "cell-clickable"
-                                        html_parts.append(f'<td class="{cell_class}" style="font-size: 11px; color: #aaa; background-color: #1a1a2e; cursor: pointer;" onclick="{onclick}" title="Click para ver detalle de {total_facturas} factura(s)">{fmt_monto_html(et_mes_monto)}</td>')
+                                    # Icono para expandir/contraer proveedores
+                                    if has_proveedores:
+                                        categoria_icon = f'<span class="icon-expand" style="cursor:pointer;" onclick="toggleCategoria(\'{categoria_id_safe}\', \'{cuenta_id_safe}\')">{SVG_ICONS["chevron"]}</span>'
                                     else:
-                                        html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                        categoria_icon = '<span style="width:24px;display:inline-block;"></span>'
+                                    
+                                    # Fila de CATEGORÍA (nivel 3) - indentación 140px
+                                    html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: 140px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
+                                    
+                                    # Montos por mes de la categoría
+                                    for mes in meses_lista:
+                                        et_mes_monto = et_montos_mes.get(mes, 0)
+                                        html_parts.append(f'<td style="font-size: 12px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                    
+                                    html_parts.append(f'<td style="font-size: 13px; font-weight: bold; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
+                                    html_parts.append('</tr>')
+                                    
+                                    # NIVEL 4: PROVEEDORES (sub_etiquetas anidadas bajo categoría)
+                                    for sub_etiqueta in sub_etiquetas:
+                                        sub_nombre = sub_etiqueta.get("nombre", "")
+                                        sub_monto = sub_etiqueta.get("monto", 0)
+                                        sub_montos_mes = sub_etiqueta.get("montos_por_mes", {})
+                                        sub_tiene_facturas = "facturas" in sub_etiqueta and len(sub_etiqueta.get("facturas", [])) > 0
+                                        sub_total_facturas = sub_etiqueta.get("total_facturas", 0)
+                                        
+                                        # Fila de PROVEEDOR (nivel 4) - ID único por cuenta+categoría
+                                        html_parts.append(f'<tr class="sub-etiqueta-row sub-etiqueta-{unique_cat_id} sub-etiqueta-of-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                        html_parts.append(f'<td class="frozen" style="padding-left: 180px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
+                                        
+                                        # Montos por mes del proveedor
+                                        for mes in meses_lista:
+                                            sub_mes_monto = sub_montos_mes.get(mes, 0)
+                                            html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(sub_mes_monto)}</td>')
+                                        
+                                        html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(sub_monto)}</td>')
+                                        html_parts.append('</tr>')
                                 
-                                html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
-                                html_parts.append('</tr>')
+                                else:
+                                    # Etiquetas sin estructura anidada (otros casos como CxC)
+                                    # Obtener icono según estado de pago (si es CxC)
+                                    if es_cuenta_cxc:
+                                        icono = ESTADO_ICONS.get(et_nombre, '🏷️')
+                                        nombre_display = et_nombre
+                                        padding_left_etiqueta = 140
+                                    else:
+                                        nombre_display = et_nombre
+                                        padding_left_etiqueta = 80
+                                    
+                                    # Indicador de facturas si es CxC
+                                    if es_cuenta_cxc and tiene_facturas:
+                                        nombre_display += f' <span style="color: #667eea; font-size: 10px;">({total_facturas})</span>'
+                                    
+                                    html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
+                                    html_parts.append(f'<td class="frozen" style="padding-left: {padding_left_etiqueta}px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
+                                    
+                                    # Montos por mes
+                                    for mes in meses_lista:
+                                        et_mes_monto = et_montos_mes.get(mes, 0)
+                                        html_parts.append(f'<td style="font-size: 11px; color: #aaa; background-color: #1a1a2e;">{fmt_monto_html(et_mes_monto)}</td>')
+                                    
+                                    html_parts.append(f'<td style="font-size: 12px; background-color: #1a1a2e;">{fmt_monto_html(et_monto)}</td>')
+                                    html_parts.append('</tr>')
+
 
             
             # Subtotal de actividad
             html_parts.append(f'<tr class="subtotal">')
             html_parts.append(f'<td class="frozen"><strong>Subtotal {act_key}</strong></td>')
-            # Columnas REAL/PROYECTADO/PPTO vacías para subtotales de actividad
-            html_parts.append('<td></td><td></td><td></td>')
             for mes in meses_lista:
                 monto_mes_sub = act_subtotal_por_mes.get(mes, 0)
                 html_parts.append(f'<td>{fmt_monto_html(monto_mes_sub)}</td>')
@@ -647,8 +676,6 @@ def render(username: str, password: str):
         # Grand Totals
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
-        # Columnas REAL/PROYECTADO/PPTO vacías para grand total
-        html_parts.append('<td></td><td></td><td></td>')
         for mes in meses_lista:
             variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
             html_parts.append(f'<td>{fmt_monto_html(variacion_mes)}</td>')
@@ -657,8 +684,6 @@ def render(username: str, password: str):
         
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
-        # Columnas REAL/PROYECTADO/PPTO vacías
-        html_parts.append('<td></td><td></td><td></td>')
         for mes in meses_lista:
             ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
             html_parts.append(f'<td>{fmt_monto_html(ef_ini_mes)}</td>')
@@ -667,8 +692,6 @@ def render(username: str, password: str):
         
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append('<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
-        # Columnas REAL/PROYECTADO/PPTO vacías
-        html_parts.append('<td></td><td></td><td></td>')
         for mes in meses_lista:
             ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{fmt_monto_html(ef_fin_mes)}</td>')
@@ -683,33 +706,8 @@ def render(username: str, password: str):
         
         html_parts.append('</div>')
         
-        # Agregar HTML del Modal de Facturas
-        html_parts.append(MODAL_HTML)
-        
         # Agregar JavaScript principal
         html_parts.append(ENTERPRISE_JS)
-        
-        # Agregar script para inicializar datos de facturas y composición
-        html_parts.append(f'''
-<script>
-// Inicializar datos de facturas para el modal
-setFacturasData({facturas_json});
-// Inicializar datos de composición de cuentas
-setComposicionData({composicion_json});
-
-// Debug: Mostrar conceptos con composición
-console.log('[Composición] Conceptos disponibles:', Object.keys(composicionData));
-console.log('[Composición] Total conceptos:', Object.keys(composicionData).length);
-
-// Verificar que los modales existan
-setTimeout(function() {{
-    const modal = document.getElementById('composicion-modal');
-    const overlay = document.getElementById('composicion-modal-overlay');
-    console.log('[Modal] Modal exists:', !!modal);
-    console.log('[Modal] Overlay exists:', !!overlay);
-}}, 100);
-</script>
-''')
         
         # Renderizar con components.html con altura dinámica
         full_html = "".join(html_parts)

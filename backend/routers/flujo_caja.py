@@ -57,7 +57,8 @@ async def get_flujo_mensualizado(
     fecha_fin: str,
     username: str,
     password: str,
-    company_id: Optional[int] = None
+    company_id: Optional[int] = None,
+    incluir_proyecciones: Optional[bool] = False
 ):
     """
     Obtiene el Estado de Flujo de Efectivo con granularidad MENSUAL.
@@ -70,6 +71,7 @@ async def get_flujo_mensualizado(
         username: Usuario Odoo
         password: Contraseña Odoo
         company_id: ID de compañía (opcional)
+        incluir_proyecciones: Si True, incluye presupuestos de venta (draft/sent) como Facturas Proyectadas (opcional)
     
     Returns:
         {
@@ -89,7 +91,8 @@ async def get_flujo_mensualizado(
         resultado = service.get_flujo_mensualizado(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
-            company_id=company_id
+            company_id=company_id,
+            incluir_proyecciones=incluir_proyecciones
         )
         return resultado
     except Exception as e:
@@ -105,7 +108,8 @@ async def get_flujo_semanal(
     fecha_fin: str,
     username: str,
     password: str,
-    company_id: Optional[int] = None
+    company_id: Optional[int] = None,
+    incluir_proyecciones: Optional[bool] = False
 ):
     """
     Obtiene el Estado de Flujo de Efectivo con granularidad SEMANAL.
@@ -118,6 +122,7 @@ async def get_flujo_semanal(
         username: Usuario Odoo
         password: Contraseña Odoo
         company_id: ID de compañía (opcional)
+        incluir_proyecciones: Si True, incluye presupuestos de venta (draft/sent) como Facturas Proyectadas (opcional)
     
     Returns:
         {
@@ -138,7 +143,8 @@ async def get_flujo_semanal(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
             company_id=company_id,
-            agrupacion='semanal'
+            agrupacion='semanal',
+            incluir_proyecciones=incluir_proyecciones
         )
         return resultado
     except Exception as e:

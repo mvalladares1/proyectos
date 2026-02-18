@@ -292,6 +292,7 @@ class AgregadorFlujo:
             # Obtener nombre de factura
             move_data = linea.get('move_id', [0, ''])
             move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else linea.get('name', 'Sin nombre')
+            partner_name = linea.get('partner_name', 'Sin partner')
             
             # USAR FECHA_EFECTIVA (fecha pago si existe, sino fecha contable)
             fecha = linea.get('fecha_efectiva') or linea.get('date', '')
@@ -357,20 +358,208 @@ class AgregadorFlujo:
             # Obtener move_id para link a Odoo
             move_id = move_data[0] if isinstance(move_data, (list, tuple)) and len(move_data) > 0 else None
             
-            # Agrupar por factura y mes
-            if move_name not in cuenta['facturas_por_estado'][payment_state]:
-                cuenta['facturas_por_estado'][payment_state][move_name] = {
-                    'nombre': move_name,
-                    'move_id': move_id,  # ID para link a Odoo
+            # Agrupar por PARTNER y mes (nivel 3)
+            if partner_name not in cuenta['facturas_por_estado'][payment_state]:
+                cuenta['facturas_por_estado'][payment_state][partner_name] = {
+                    'nombre': partner_name,
+                    'move_id': move_id,
                     'monto_total': 0.0,
                     'montos_por_mes': {m: 0.0 for m in self.meses_lista},
                     'fecha': fecha,
-                    'payment_state': payment_state
+                    'payment_state': payment_state,
+                    'facturas': []
+                }
+
+            # Mantener detalle de factura para trazabilidad
+            cuenta['facturas_por_estado'][payment_state][partner_name]['facturas'].append({
+                'nombre': move_name,
+                'move_id': move_id,
+                'monto': monto_efectivo,
+                'fecha': fecha
+            })
+            
+            cuenta['facturas_por_estado'][payment_state][partner_name]['monto_total'] += monto_efectivo
+            if mes_str in self.meses_lista:
+                cuenta['facturas_por_estado'][payment_state][partner_name]['montos_por_mes'][mes_str] += monto_efectivo
+
+    def procesar_presupuestos_ventas(self, presupuestos: List[Dict], 
+                                    clasificar_fn,
+                                    currency_converter,
+                                    agrupacion: str = 'mensual') -> None:
+        """
+        Procesa presupuestos de venta (sale.order con state = draft/sent) para proyección CxC.
+        
+        Crea un nuevo estado "Facturas Proyectadas" (estado_projected) DENTRO de la cuenta CxC existente.
+        
+        Args:
+            presupuestos: Lista de sale.order con state in ['draft', 'sent']
+            clasificar_fn: Función de clasificación
+            currency_converter: Función para convertir USD a CLP
+            agrupacion: 'mensual' o 'semanal'
+        """
+        print(f"[Agregador] procesar_presupuestos_ventas: {len(presupuestos)} presupuestos")
+        
+        ESTADO_LABEL = '🔮 Facturas Proyectadas'
+        ESTADO_CODE = 'estado_projected'
+        ORDEN_ESTADO = 3.5  # Debajo de No Pagadas (3) y antes de Revertidas (4)
+        
+        # Buscar cuentas CxC existentes en el concepto 1.1.1
+        concepto_id = '1.1.1'
+        
+        print(f"[Agregador] Buscando cuentas CxC en concepto {concepto_id}")
+        
+        if concepto_id not in self.cuentas_por_concepto:
+            print(f"[Agregador] ERROR: Concepto {concepto_id} no existe todavía")
+            return
+        
+        # Buscar cuenta CxC existente (priorizar 11030101)
+        cuenta_cxc = None
+        codigo_cxc = None
+
+        cuentas_concepto = self.cuentas_por_concepto.get(concepto_id, {})
+
+        # 1) Prioridad: cuenta principal deudores por ventas
+        if '11030101' in cuentas_concepto:
+            cuenta_cxc = cuentas_concepto['11030101']
+            codigo_cxc = '11030101'
+            print(f"[Agregador] Encontrada cuenta CxC principal: {codigo_cxc}")
+
+        # 2) Fallback: cualquier cuenta 1103 existente
+        if not cuenta_cxc:
+            for codigo, cuenta in cuentas_concepto.items():
+                if str(codigo).startswith('1103'):
+                    cuenta_cxc = cuenta
+                    codigo_cxc = codigo
+                    print(f"[Agregador] Encontrada cuenta CxC fallback: {codigo}")
+                    break
+        
+        if not cuenta_cxc:
+            print(f"[Agregador] ERROR: No se encontró cuenta CxC en {concepto_id}")
+            # Fallback extremo: crear cuenta base CxC estándar
+            print(f"[Agregador] Creando cuenta base 11030101")
+            self.cuentas_por_concepto[concepto_id]['11030101'] = {
+                'codigo': '11030101',
+                'nombre': 'DEUDORES POR VENTAS',
+                'monto': 0.0,
+                'cantidad': 0,
+                'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                'account_id': 999999,
+                'etiquetas': {},
+                'facturas_por_estado': {},
+                'es_cuenta_cxc': True
+            }
+            cuenta_cxc = self.cuentas_por_concepto[concepto_id]['11030101']
+            codigo_cxc = '11030101'
+        
+        # Inicializar estructuras si no existen
+        if 'etiquetas' not in cuenta_cxc:
+            cuenta_cxc['etiquetas'] = {}
+        if 'facturas_por_estado' not in cuenta_cxc:
+            cuenta_cxc['facturas_por_estado'] = {}
+        
+        # Marcar como cuenta CxC
+        cuenta_cxc['es_cuenta_cxc'] = True
+        
+        # Crear estructura de estado proyectado
+        if ESTADO_LABEL not in cuenta_cxc['etiquetas']:
+            print(f"[Agregador] Creando etiqueta {ESTADO_LABEL} en cuenta {codigo_cxc}")
+            cuenta_cxc['etiquetas'][ESTADO_LABEL] = {
+                'monto': 0.0,
+                'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                'orden': ORDEN_ESTADO
+            }
+        
+        if ESTADO_CODE not in cuenta_cxc['facturas_por_estado']:
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE] = {}
+        
+        # Procesar cada presupuesto
+        presupuestos_procesados = 0
+        monto_total_procesado = 0
+        
+        for presu in presupuestos:
+            # Fecha de clasificación: tentativa de pago (fallback date_order)
+            fecha = presu.get('x_studio_fecha_tentativa_de_pago') or presu.get('date_order', '')
+            if not fecha:
+                continue
+            
+            # Determinar período
+            try:
+                # commitment_date suele venir como 'YYYY-MM-DD HH:MM:SS'
+                fecha_base = str(fecha)[:10]
+                if agrupacion == 'semanal':
+                    fecha_dt = datetime.strptime(fecha_base, '%Y-%m-%d')
+                    y, w, d = fecha_dt.isocalendar()
+                    mes_str = f"{y}-W{w:02d}"
+                else:
+                    mes_str = fecha_base[:7]
+            except:
+                continue
+            
+            if mes_str not in self.meses_lista:
+                continue
+            
+            # Obtener monto y moneda
+            amount_total = presu.get('amount_total', 0)
+            currency_data = presu.get('currency_id', [])
+            currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else 'CLP'
+            
+            # Convertir USD a CLP si es necesario
+            if 'USD' in currency_name.upper():
+                monto_clp = currency_converter(amount_total)
+            else:
+                monto_clp = amount_total
+            
+            # Obtener cliente
+            partner_data = presu.get('partner_id', [])
+            cliente_nombre = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Cliente Desconocido'
+            
+            # Nombre del presupuesto
+            presu_name = presu.get('name', 'SO-???')
+            
+            # Acumular en concepto y mes
+            if concepto_id not in self.montos_por_concepto_mes:
+                self.montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in self.meses_lista}
+            
+            self.montos_por_concepto_mes[concepto_id][mes_str] += monto_clp
+            
+            # Acumular en cuenta CxC
+            cuenta_cxc['monto'] += monto_clp
+            cuenta_cxc['montos_por_mes'][mes_str] += monto_clp
+            
+            # Acumular en estado proyectado
+            cuenta_cxc['etiquetas'][ESTADO_LABEL]['monto'] += monto_clp
+            cuenta_cxc['etiquetas'][ESTADO_LABEL]['montos_por_mes'][mes_str] += monto_clp
+            
+            # Guardar detalle del presupuesto para modal
+            # Agrupar por cliente para drill-down
+            if cliente_nombre not in cuenta_cxc['facturas_por_estado'][ESTADO_CODE]:
+                cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre] = {
+                    'nombre': cliente_nombre,
+                    'move_id': None,  # No es una factura, es un presupuesto
+                    'monto_total': 0.0,
+                    'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                    'fecha': fecha,
+                    'payment_state': ESTADO_CODE,
+                    'presupuestos': []  # Lista de presupuestos de este cliente
                 }
             
-            cuenta['facturas_por_estado'][payment_state][move_name]['monto_total'] += monto_efectivo
-            if mes_str in self.meses_lista:
-                cuenta['facturas_por_estado'][payment_state][move_name]['montos_por_mes'][mes_str] += monto_efectivo
+            # Agregar presupuesto al cliente
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['monto_total'] += monto_clp
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['montos_por_mes'][mes_str] += monto_clp
+            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['presupuestos'].append({
+                'nombre': presu_name,
+                'monto': round(monto_clp, 0),
+                'fecha': fecha,
+                'moneda_original': currency_name,
+                'monto_original': amount_total
+            })
+            
+            presupuestos_procesados += 1
+            monto_total_procesado += monto_clp
+        
+        print(f"[Agregador] Procesados {presupuestos_procesados}/{len(presupuestos)} presupuestos")
+        print(f"[Agregador] Monto total: ${monto_total_procesado:,.0f} CLP")
+        print(f"[Agregador] Cuenta {codigo_cxc} monto final: ${cuenta_cxc.get('monto', 0):,.0f}")
 
     def procesar_facturas_draft(self, facturas: List[Dict], lineas: Dict[int, List[Dict]],
                                clasificar_fn, cuentas_info: Dict,
@@ -531,6 +720,70 @@ class AgregadorFlujo:
         """
         if concepto_id not in self.cuentas_por_concepto:
             return []
+
+        # Caso especial CxC 1.1.1: exponer estados como NIVEL 2 y partners como NIVEL 3
+        # (sin mostrar cuenta intermedia "DEUDORES POR VENTAS")
+        if concepto_id == '1.1.1':
+            cuentas_cxc = self.cuentas_por_concepto.get(concepto_id, {})
+            cuenta_base = None
+            for codigo, cuenta in cuentas_cxc.items():
+                if cuenta.get('facturas_por_estado'):
+                    cuenta_base = cuenta
+                    break
+
+            if cuenta_base:
+                etiquetas_dict = cuenta_base.get('etiquetas', {})
+                facturas_por_estado = cuenta_base.get('facturas_por_estado', {})
+
+                estado_def = [
+                    ('paid', '✅ Facturas Pagadas', 'Facturas Pagadas', 1),
+                    ('partial', '⏳ Facturas Parcialmente Pagadas', 'Facturas Parcialmente Pagadas', 2),
+                    ('in_payment', '🔄 En Proceso de Pago', 'En Proceso de Pago', 3),
+                    ('not_paid', '❌ Facturas No Pagadas', 'Facturas No Pagadas', 4),
+                    ('estado_projected', '🔮 Facturas Proyectadas', '🔮 Facturas Proyectadas', 4.5),
+                    ('reversed', '↩️ Facturas Revertidas', 'Facturas Revertidas', 5),
+                ]
+
+                resultado_estados = []
+                for estado_codigo, estado_nombre, estado_label, estado_orden in estado_def:
+                    etiqueta_estado = etiquetas_dict.get(estado_label, {})
+                    facturas_estado = facturas_por_estado.get(estado_codigo, {})
+
+                    if not etiqueta_estado and not facturas_estado:
+                        continue
+
+                    montos_por_mes_estado = etiqueta_estado.get('montos_por_mes', {}) if isinstance(etiqueta_estado, dict) else {}
+                    monto_estado = etiqueta_estado.get('monto', 0) if isinstance(etiqueta_estado, dict) else 0
+
+                    etiquetas_partners = []
+                    for partner_nombre, partner_datos in facturas_estado.items():
+                        etiquetas_partners.append({
+                            'nombre': str(partner_nombre)[:60],
+                            'monto': round(partner_datos.get('monto_total', 0), 0),
+                            'montos_por_mes': {
+                                m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
+                                for m in self.meses_lista
+                            }
+                        })
+
+                    etiquetas_partners.sort(key=lambda x: abs(x.get('monto', 0)), reverse=True)
+
+                    resultado_estados.append({
+                        'codigo': f'estado_{estado_codigo}' if not str(estado_codigo).startswith('estado_') else estado_codigo,
+                        'nombre': estado_nombre,
+                        'monto': round(monto_estado, 0),
+                        'cantidad': len(facturas_estado),
+                        'montos_por_mes': {m: round(montos_por_mes_estado.get(m, 0), 0) for m in self.meses_lista},
+                        'etiquetas': etiquetas_partners,
+                        'es_cuenta_cxc': True,
+                        '_orden_estado': estado_orden
+                    })
+
+                resultado_estados.sort(key=lambda x: x.get('_orden_estado', 99))
+                for item in resultado_estados:
+                    item.pop('_orden_estado', None)
+
+                return resultado_estados
         
         # Ordenar por monto absoluto
         sorted_cuentas = sorted(
@@ -588,6 +841,7 @@ class AgregadorFlujo:
                 'Facturas Parcialmente Pagadas': 'partial',
                 'En Proceso de Pago': 'in_payment',
                 'Facturas No Pagadas': 'not_paid',
+                '🔮 Facturas Proyectadas': 'estado_projected',
                 'Facturas Revertidas': 'reversed'
             }
             

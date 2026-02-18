@@ -269,13 +269,16 @@ def _render_vista_por_oc(detalle):
         
         if tipo == 'Factura':
             # Intentar asociar factura a OC vía origen
+            # El origen puede ser múltiple "OC1, OC2", tomar el primero
+            oc_ref = None
             if origen and origen.strip():
-                # El origen puede ser "OC012345" o similar
-                oc_name = origen.strip()
-                if oc_name not in ocs_data:
-                    ocs_data[oc_name] = {
-                        'oc_name': oc_name,
-                        'oc_id': None,
+                oc_ref = origen.split(',')[0].strip()
+            
+            if oc_ref:
+                if oc_ref not in ocs_data:
+                    ocs_data[oc_ref] = {
+                        'oc_name': oc_ref,
+                        'oc_id': oc_id,  # Usar el oc_id que ahora viene del backend
                         'monto_recibido': 0,
                         'monto_facturado': monto,
                         'monto_tentativo': 0,
@@ -283,8 +286,11 @@ def _render_vista_por_oc(detalle):
                         'fecha_min': fecha,
                     }
                 else:
-                    ocs_data[oc_name]['monto_facturado'] += monto
-                    ocs_data[oc_name]['facturas'].append(numero)
+                    ocs_data[oc_ref]['monto_facturado'] += monto
+                    ocs_data[oc_ref]['facturas'].append(numero)
+                    # Actualizar oc_id si no lo teníamos
+                    if oc_id and not ocs_data[oc_ref]['oc_id']:
+                        ocs_data[oc_ref]['oc_id'] = oc_id
             else:
                 facturas_sin_oc.append({'numero': numero, 'monto': monto, 'fecha': fecha})
                 

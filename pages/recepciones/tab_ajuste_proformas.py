@@ -868,7 +868,7 @@ def _eliminar_linea(linea_id: int, factura: dict, username: str, password: str):
     with st.spinner("Eliminando línea..."):
         try:
             response = requests.delete(
-                f"{API_URL}/proformas/linea/{linea_id}",
+                f"{API_URL}/api/v1/proformas/linea/{linea_id}",
                 params={"username": username, "password": password}
             )
             
@@ -905,7 +905,10 @@ def _eliminar_linea(linea_id: int, factura: dict, username: str, password: str):
                 time.sleep(0.3)
                 st.rerun()
             else:
-                error_detail = response.json().get("detail", "Error desconocido")
+                try:
+                    error_detail = response.json().get("detail", "Error desconocido")
+                except Exception:
+                    error_detail = response.text or "Error desconocido"
                 st.error(f"❌ Error al eliminar: {error_detail}")
         except Exception as e:
             st.error(f"❌ Error: {e}")

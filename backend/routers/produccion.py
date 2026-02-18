@@ -325,7 +325,10 @@ async def get_pallets_disponibles(
     password: str = Query(..., description="API Key Odoo"),
     planta: Optional[str] = Query(None, description="Filtrar por planta"),
     producto_id: Optional[int] = Query(None, description="Filtrar por producto"),
-    proveedor_id: Optional[int] = Query(None, description="Filtrar por proveedor")
+    proveedor_id: Optional[int] = Query(None, description="Filtrar por proveedor"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+    pallet_codigo: Optional[str] = Query(None, description="Buscar pallet por código")
 ):
     """
     Obtiene pallets disponibles que NO están en ninguna fabricación.
@@ -334,7 +337,8 @@ async def get_pallets_disponibles(
     try:
         from backend.services.pallets_disponibles_service import PalletsDisponiblesService
         service = PalletsDisponiblesService(username=username, password=password)
-        return service.get_pallets_disponibles(planta, producto_id, proveedor_id)
+        return service.get_pallets_disponibles(planta, producto_id, proveedor_id,
+                                                fecha_desde, fecha_hasta, pallet_codigo)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
