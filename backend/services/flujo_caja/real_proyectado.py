@@ -27,14 +27,15 @@ class RealProyectadoCalculator:
     # IDs conocidos de Odoo
     CUENTA_IVA_EXPORTADOR_CODE = '11060108'
     PARTNER_TESORERIA_ID = 10
+    DIARIO_PROYECCIONES_FUTURAS_ID = 130  # Diario "Proyecciones Futuras"
     
     # Mapeo de payment_state a etiqueta amigable
+    # NOTA: 'reversed' se reclasifica según el monto residual (paid, partial, not_paid)
     ESTADO_LABELS = {
         'paid': 'Facturas Pagadas',
         'partial': 'Facturas Parcialmente Pagadas',
         'in_payment': 'En Proceso de Pago',
-        'not_paid': 'Facturas No Pagadas',
-        'reversed': 'Facturas Revertidas'
+        'not_paid': 'Facturas No Pagadas'
     }
     
     # Iconos por estado
@@ -42,8 +43,7 @@ class RealProyectadoCalculator:
         'paid': '✅',
         'partial': '⏳',
         'in_payment': '🔄',
-        'not_paid': '❌',
-        'reversed': '↩️'
+        'not_paid': '❌'
     }
     
     def __init__(self, odoo_client):
@@ -204,6 +204,15 @@ class RealProyectadoCalculator:
                     'categorias': {},
                     'es_cuenta_cxp': True,
                     'orden': 4
+                },
+                'PROYECTADAS_CONTABILIDAD': {
+                    'codigo': 'proyectadas_contabilidad',
+                    'nombre': '📋 Facturas Proyectadas (Modulo Contabilidad)',
+                    'monto': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'categorias': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 5
                 }
             }
             
@@ -574,7 +583,136 @@ class RealProyectadoCalculator:
                 proveedor['monto'] += monto_proyectado
                 proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
-            # PASO 3: Convertir estructura a 4 NIVELES EXPANDIBLES
+            # PASO 5: Agregar proyecciones desde Módulo Contabilidad (diario Proyecciones Futuras)
+            facturas_proyecciones = self.odoo.search_read(
+                'account.move',
+                [
+                    ['journal_id', '=', self.DIARIO_PROYECCIONES_FUTURAS_ID],
+                    ['move_type', 'in', ['in_invoice', 'in_refund']]
+                ],
+                ['id', 'name', 'partner_id', 'amount_total', 'date', 'invoice_date',
+                 'invoice_date_due', 'state', 'payment_term_id', 'currency_id', 'move_type'],
+                limit=10000
+            )
+
+            # Cargar categorías de partners que no estén en cache
+            partner_ids_proyec = []
+            for fp in facturas_proyecciones:
+                partner_data = fp.get('partner_id')
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else partner_data
+                if partner_id and partner_id not in partners_info:
+                    partner_ids_proyec.append(partner_id)
+
+            if partner_ids_proyec:
+                partners_data_proyec = self.odoo.search_read(
+                    'res.partner',
+                    [['id', 'in', list(set(partner_ids_proyec))]],
+                    ['id', 'name', 'x_studio_categora_de_contacto'],
+                    limit=10000
+                )
+                for p in partners_data_proyec:
+                    categoria = p.get('x_studio_categora_de_contacto', False)
+                    if categoria and isinstance(categoria, (list, tuple)):
+                        categoria = categoria[1]
+                    elif not categoria or categoria == 'False':
+                        categoria = 'Sin Categoría'
+
+                    partners_info[p['id']] = {
+                        'name': p.get('name', 'Sin nombre'),
+                        'categoria': categoria
+                    }
+
+            for fp in facturas_proyecciones:
+                fecha_base = str(fp.get('date') or fp.get('invoice_date') or '')[:10]
+                if not fecha_base:
+                    continue
+
+                try:
+                    fecha_base_dt = datetime.strptime(fecha_base, '%Y-%m-%d').date()
+                except Exception:
+                    continue
+
+                # Usar invoice_date_due si existe, sino usar fecha_base
+                fecha_vencimiento = fp.get('invoice_date_due')
+                if fecha_vencimiento:
+                    fecha_proyectada = str(fecha_vencimiento)[:10]
+                    try:
+                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                    except Exception:
+                        fecha_proyectada_dt = fecha_base_dt
+                else:
+                    # Sin fecha de vencimiento, usar payment_term o fecha base
+                    pt_data = fp.get('payment_term_id')
+                    pt_id = pt_data[0] if isinstance(pt_data, (list, tuple)) and len(pt_data) > 0 else pt_data
+                    dias_plazo = payment_term_days.get(pt_id, 0) if pt_id else 0
+                    
+                    if dias_plazo and dias_plazo > 0:
+                        fecha_proyectada_dt = fecha_base_dt + timedelta(days=dias_plazo)
+                    else:
+                        fecha_proyectada_dt = fecha_base_dt
+                
+                fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
+
+                if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
+                    continue
+
+                periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
+                if not periodo_proyectado:
+                    continue
+
+                amount_total = float(fp.get('amount_total') or 0.0)
+                move_type = fp.get('move_type', 'in_invoice')
+                
+                # Convertir moneda si es necesario
+                currency_data = fp.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name and 'USD' in str(currency_name).upper():
+                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+
+                # N/C en módulo contabilidad invierten signo
+                signo = -1 if move_type == 'in_refund' else 1
+                monto_proyectado = -amount_total * signo
+                
+                if monto_proyectado == 0:
+                    continue
+
+                partner_data = fp.get('partner_id', [0, 'Sin proveedor'])
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
+                partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
+                partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
+                categoria_nombre = partner_info['categoria']
+
+                proyectado_total += monto_proyectado
+                proyectado_por_periodo[periodo_proyectado] += monto_proyectado
+
+                estado = estados['PROYECTADAS_CONTABILIDAD']
+                estado['monto'] += monto_proyectado
+                estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
+
+                if categoria_nombre not in estado['categorias']:
+                    estado['categorias'][categoria_nombre] = {
+                        'nombre': categoria_nombre,
+                        'monto': 0.0,
+                        'montos_por_mes': defaultdict(float),
+                        'proveedores': {}
+                    }
+
+                categoria = estado['categorias'][categoria_nombre]
+                categoria['monto'] += monto_proyectado
+                categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+
+                if partner_name not in categoria['proveedores']:
+                    categoria['proveedores'][partner_name] = {
+                        'nombre': partner_name[:50],
+                        'monto': 0.0,
+                        'montos_por_mes': defaultdict(float)
+                    }
+
+                proveedor = categoria['proveedores'][partner_name]
+                proveedor['monto'] += monto_proyectado
+                proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
+            
+            # PASO 6: Convertir estructura a 4 NIVELES EXPANDIBLES
             # Nivel 2 (cuentas): ESTADOS (expandible)
             # Nivel 3 (etiquetas): CATEGORÍAS (expandible con sub_etiquetas)
             # Nivel 4 (sub_etiquetas): PROVEEDORES (anidados bajo categoría)
@@ -583,7 +721,7 @@ class RealProyectadoCalculator:
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
             cuentas_resultado = []
-            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'PROYECTADAS_COMPRAS']
+            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'PROYECTADAS_COMPRAS', 'PROYECTADAS_CONTABILIDAD']
             
             for estado_key in orden_estados:
                 estado = estados[estado_key]
@@ -906,13 +1044,25 @@ class RealProyectadoCalculator:
                 proyectado_por_mes[periodo] += pendiente
                 
                 # Agrupar por estado de pago (Nivel 2)
-                estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
+                # Las facturas revertidas (N/C) se clasifican según su estado de pago real
+                if payment_state == 'reversed':
+                    # Reclasificar facturas revertidas según su residual
+                    if amount_residual == 0:
+                        payment_state_efectivo = 'paid'
+                    elif amount_residual < amount_total:
+                        payment_state_efectivo = 'partial'
+                    else:
+                        payment_state_efectivo = 'not_paid'
+                else:
+                    payment_state_efectivo = payment_state
+                    
+                estado_label = self.ESTADO_LABELS.get(payment_state_efectivo, 'Otros')
                 
                 if estado_label not in estados:
                     estados[estado_label] = {
-                        'codigo': f'estado_{payment_state}',
+                        'codigo': f'estado_{payment_state_efectivo}',
                         'nombre': estado_label,
-                        'icon': self.ESTADO_ICONS.get(payment_state, '📋'),
+                        'icon': self.ESTADO_ICONS.get(payment_state_efectivo, '📋'),
                         'monto': 0.0,
                         'real': 0.0,
                         'proyectado': 0.0,
@@ -921,7 +1071,7 @@ class RealProyectadoCalculator:
                         'proyectado_por_mes': defaultdict(float),
                         'etiquetas': {},  # Clientes
                         'es_cuenta_cxc': True,
-                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state) if payment_state in self.ESTADO_LABELS else 99
+                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state_efectivo) if payment_state_efectivo in self.ESTADO_LABELS else 99
                     }
                 
                 estado = estados[estado_label]
