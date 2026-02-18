@@ -1298,6 +1298,14 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
     if f'checkbox_version_{key_proveedor}' not in st.session_state:
         st.session_state[f'checkbox_version_{key_proveedor}'] = 0
     
+    # Limpiar OCs seleccionadas que ya no están en df_aprobables (aprobadas o filtradas)
+    ocs_actuales = set(df_aprobables['oc_id'].tolist())
+    ocs_seleccionadas_antiguas = st.session_state[f'selected_{key_proveedor}']
+    ocs_a_remover = ocs_seleccionadas_antiguas - ocs_actuales
+    if ocs_a_remover:
+        st.session_state[f'selected_{key_proveedor}'] = ocs_seleccionadas_antiguas & ocs_actuales
+        st.session_state[f'checkbox_version_{key_proveedor}'] += 1
+    
     # --- Fragment: solo la selección de checkboxes se re-renderiza al hacer click ---
     @st.fragment
     def _fragment_seleccion():
@@ -1577,7 +1585,11 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
+                        # Limpiar selección y forzar recreación de checkboxes
+                        st.session_state[f'selected_{key_proveedor}'] = set()
+                        st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
                         obtener_ocs_fletes_con_aprobaciones.clear()
+                        st.cache_data.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
             
@@ -1596,7 +1608,11 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.warning(f"{oc_name}: {msg}")
                         
+                        # Limpiar selección y forzar recreación de checkboxes
+                        st.session_state[f'selected_{key_proveedor}'] = set()
+                        st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
                         obtener_ocs_fletes_con_aprobaciones.clear()
+                        st.cache_data.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
             
@@ -1629,8 +1645,12 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                             else:
                                 st.error(f"{oc_name}: {msg}")
                         
+                        # Limpiar selección y forzar recreación de checkboxes
+                        st.session_state[f'selected_{key_proveedor}'] = set()
+                        st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
                         st.session_state[f'mostrar_motivo_rechazo_{key_proveedor}'] = False
                         obtener_ocs_fletes_con_aprobaciones.clear()
+                        st.cache_data.clear()
                         time.sleep(1)
                         st.rerun(scope="app")
             with col_cancelar:
