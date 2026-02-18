@@ -427,7 +427,10 @@ class RealProyectadoCalculator:
             ocs_compra = []
             ocs_compra = self.odoo.search_read(
                 'purchase.order',
-                [['state', '=', 'purchase']],
+                [
+                    ['state', '=', 'purchase'],
+                    ['invoice_ids', '=', False]
+                ],
                 campos_oc,
                 limit=10000
             )
@@ -495,8 +498,7 @@ class RealProyectadoCalculator:
 
             for oc in ocs_compra:
                 invoice_ids = oc.get('invoice_ids') or []
-                invoice_status = oc.get('invoice_status') or ''
-                if invoice_ids or invoice_status == 'invoiced':
+                if invoice_ids:
                     continue
 
                 fecha_base = str(oc.get('date_approve') or '')[:10]
