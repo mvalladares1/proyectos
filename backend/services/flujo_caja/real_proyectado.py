@@ -1000,7 +1000,8 @@ class RealProyectadoCalculator:
                     ['invoice_date', '>=', fecha_inicio],
                     ['invoice_date', '<=', fecha_fin]
                 ],
-                ['id', 'name', 'partner_id', 'invoice_date', 'amount_total', 'amount_residual', 'payment_state'],
+                ['id', 'name', 'partner_id', 'invoice_date', 'invoice_date_due',
+                 'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago'],
                 limit=5000
             )
             
@@ -1021,11 +1022,22 @@ class RealProyectadoCalculator:
                 if not fecha:
                     continue
                     
-                periodo = self._fecha_a_periodo(fecha, meses_lista)
+                periodo_real = self._fecha_a_periodo(fecha, meses_lista)
                 amount_total = f.get('amount_total', 0) or 0
                 amount_residual = f.get('amount_residual', 0) or 0
                 payment_state = f.get('payment_state', 'not_paid')
                 move_type = f.get('move_type', 'out_invoice')
+                
+                # Determinar período proyectado basado en fecha estimada de pago
+                fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
+                fecha_vencimiento = f.get('invoice_date_due')
+                
+                if fecha_estimada:
+                    periodo_proyectado = self._fecha_a_periodo(str(fecha_estimada)[:10], meses_lista)
+                elif fecha_vencimiento:
+                    periodo_proyectado = self._fecha_a_periodo(str(fecha_vencimiento)[:10], meses_lista)
+                else:
+                    periodo_proyectado = periodo_real  # Fallback
                 
                 # Calcular cobrado y pendiente (POSITIVO para ingresos)
                 cobrado = amount_total - amount_residual
@@ -1033,8 +1045,8 @@ class RealProyectadoCalculator:
                 
                 real_total += cobrado
                 proyectado_total += pendiente
-                real_por_mes[periodo] += cobrado
-                proyectado_por_mes[periodo] += pendiente
+                real_por_mes[periodo_real] += cobrado
+                proyectado_por_mes[periodo_proyectado] += pendiente
                 
                 # Agrupar por estado de pago (Nivel 2)
                 # Las facturas revertidas (N/C) se clasifican según su estado de pago real
@@ -1071,9 +1083,10 @@ class RealProyectadoCalculator:
                 estado['monto'] += cobrado + pendiente
                 estado['real'] += cobrado
                 estado['proyectado'] += pendiente
-                estado['montos_por_mes'][periodo] += cobrado + pendiente
-                estado['real_por_mes'][periodo] += cobrado
-                estado['proyectado_por_mes'][periodo] += pendiente
+                estado['montos_por_mes'][periodo_real] += cobrado
+                estado['montos_por_mes'][periodo_proyectado] += pendiente
+                estado['real_por_mes'][periodo_real] += cobrado
+                estado['proyectado_por_mes'][periodo_proyectado] += pendiente
                 
                 # Agrupar por cliente (Nivel 3)
                 if partner_name not in estado['etiquetas']:
@@ -1092,9 +1105,10 @@ class RealProyectadoCalculator:
                 cliente['monto'] += cobrado + pendiente
                 cliente['real'] += cobrado
                 cliente['proyectado'] += pendiente
-                cliente['montos_por_mes'][periodo] += cobrado + pendiente
-                cliente['real_por_mes'][periodo] += cobrado
-                cliente['proyectado_por_mes'][periodo] += pendiente
+                cliente['montos_por_mes'][periodo_real] += cobrado
+                cliente['montos_por_mes'][periodo_proyectado] += pendiente
+                cliente['real_por_mes'][periodo_real] += cobrado
+                cliente['proyectado_por_mes'][periodo_proyectado] += pendiente
                 
                 # Guardar factura para drill-down
                 if len(cliente['facturas']) < 50:
