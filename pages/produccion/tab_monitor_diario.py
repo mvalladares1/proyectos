@@ -132,6 +132,53 @@ def descargar_reporte_pdf(data: dict):
     return response.content
 
 
+# ===================== UTILIDADES =====================
+
+def _filtrar_procesos_por_fecha(procesos: list, fecha_inicio=None, fecha_fin=None) -> list:
+    """Filtra una lista de procesos por rango de fechas (fecha de inicio de proceso)."""
+    if not fecha_inicio and not fecha_fin:
+        return procesos
+
+    fi = str(fecha_inicio) if fecha_inicio else None
+    ff = str(fecha_fin) if fecha_fin else None
+
+    resultado = []
+    for p in procesos:
+        fecha_str = (p.get('x_studio_inicio_de_proceso', '') or
+                     p.get('date_planned_start', '') or
+                     p.get('date_start', ''))
+        if not fecha_str:
+            continue
+        try:
+            if isinstance(fecha_str, str):
+                fecha = fecha_str.split('T')[0] if 'T' in fecha_str else fecha_str.split(' ')[0]
+            else:
+                fecha = str(fecha_str)[:10]
+        except Exception:
+            continue
+
+        if fi and fecha < fi:
+            continue
+        if ff and fecha > ff:
+            continue
+        resultado.append(p)
+    return resultado
+
+
+def _calcular_estadisticas_local(procesos: list) -> dict:
+    """Recalcula estadísticas a partir de una lista de procesos filtrados."""
+    total = len(procesos)
+    kg_programados = sum(p.get('product_qty', 0) or 0 for p in procesos)
+    kg_producidos = sum(p.get('qty_produced', 0) or 0 for p in procesos)
+    kg_pendientes = kg_programados - kg_producidos
+    return {
+        "total_procesos": total,
+        "kg_programados": kg_programados,
+        "kg_producidos": kg_producidos,
+        "kg_pendientes": kg_pendientes,
+    }
+
+
 # ===================== COMPONENTES DE VISUALIZACIÓN =====================
 
 def render_kpis_resumen(stats_activos: dict, stats_cerrados: dict):
@@ -537,7 +584,7 @@ def render_grafico_pendientes_por_planta(procesos: list):
     st_echarts(options=options, height="320px", theme=theme_echarts)
 
 
-def render_grafico_pendientes_por_dia(procesos_pendientes: list):
+def render_grafico_pendientes_por_dia(procesos_pendientes: list, fecha_inicio=None, fecha_fin=None):
     """Renderiza gráfico de procesos pendientes agrupados por fecha de proceso."""
     if not procesos_pendientes:
         st.info("No hay procesos pendientes para mostrar")
@@ -545,6 +592,14 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
     
     from collections import defaultdict
     from datetime import datetime
+    
+    # Convertir fechas de filtro a string para comparar
+    fecha_inicio_str = None
+    fecha_fin_str = None
+    if fecha_inicio:
+        fecha_inicio_str = str(fecha_inicio)  # formato YYYY-MM-DD
+    if fecha_fin:
+        fecha_fin_str = str(fecha_fin)
     
     # Agrupar procesos pendientes por fecha de PROCESO (no de creación)
     pendientes_por_fecha = defaultdict(lambda: {"RIO FUTURO": 0, "VILKUN": 0})
@@ -564,6 +619,12 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
             else:
                 fecha = str(fecha_str)[:10]
         except:
+            continue
+        
+        # Filtrar por rango de fechas seleccionado
+        if fecha_inicio_str and fecha < fecha_inicio_str:
+            continue
+        if fecha_fin_str and fecha > fecha_fin_str:
             continue
         
         # Detectar planta
@@ -595,7 +656,7 @@ def render_grafico_pendientes_por_dia(procesos_pendientes: list):
         # Formatear fecha para mostrar (dd/mm)
         try:
             fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
-            fecha_display = fecha_obj.strftime('%d/%m')
+            fecha_display = fecha_obj.strftime('%d/%m/%y')
         except:
             fecha_display = fecha
         
@@ -1083,9 +1144,15 @@ def render(username: str, password: str):
         st.warning("No se encontraron datos para los filtros seleccionados")
         return
     
+    # Filtrar procesos activos por el rango de fechas seleccionado
+    procesos_activos_filtrados = _filtrar_procesos_por_fecha(
+        activos.get("procesos", []), fecha_inicio, fecha_fin
+    )
+    stats_activos_filtrados = _calcular_estadisticas_local(procesos_activos_filtrados)
+    
     # KPIs de resumen
     render_kpis_resumen(
-        activos.get("estadisticas", {}),
+        stats_activos_filtrados,
         cerrados.get("estadisticas", {})
     )
     
@@ -1094,14 +1161,14 @@ def render(username: str, password: str):
     # === GRÁFICO 1: PROCESOS PENDIENTES POR PLANTA ===
     st.markdown("### 🏭 ¿Cuántos procesos están pendientes en cada planta?")
     st.caption("Compara la cantidad de procesos y kilos pendientes entre **RIO FUTURO** y **VILKUN**")
-    render_grafico_pendientes_por_planta(activos.get("procesos", []))
+    render_grafico_pendientes_por_planta(procesos_activos_filtrados)
     
     st.markdown("---")
     
     # === GRÁFICO 2: PROCESOS PENDIENTES POR DÍA ===
     st.markdown("### 📅 Procesos Pendientes por Fecha de Proceso")
     st.caption("Muestra cuántos procesos pendientes hay en cada fecha, separados por planta")
-    render_grafico_pendientes_por_dia(activos.get("procesos", []))
+    render_grafico_pendientes_por_dia(procesos_activos_filtrados, fecha_inicio, fecha_fin)
     
     st.markdown("---")
     
@@ -1114,13 +1181,13 @@ def render(username: str, password: str):
     
     # === TABLA RESUMEN ===
     st.markdown("### 📋 Detalle de Procesos Pendientes por Tipo y Planta")
-    render_tabla_pendientes_por_proceso_planta(activos.get("procesos", []))
+    render_tabla_pendientes_por_proceso_planta(procesos_activos_filtrados)
     
     st.markdown("---")
     
     # === TABLAS DETALLADAS (colapsables) ===
-    with st.expander(f"📋 Ver Lista de Procesos Pendientes ({activos.get('estadisticas', {}).get('total_procesos', 0)})", expanded=False):
-        render_tabla_compacta(activos.get("procesos", []), "pendientes")
+    with st.expander(f"📋 Ver Lista de Procesos Pendientes ({stats_activos_filtrados['total_procesos']})", expanded=False):
+        render_tabla_compacta(procesos_activos_filtrados, "pendientes")
     
     with st.expander(f"✅ Ver Lista de Procesos Cerrados ({cerrados.get('estadisticas', {}).get('total_procesos', 0)})", expanded=False):
         render_tabla_compacta(cerrados.get("procesos", []), "cerrados")
