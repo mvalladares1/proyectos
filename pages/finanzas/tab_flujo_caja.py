@@ -574,8 +574,8 @@ def render(username: str, password: str):
                             'Facturas Pagadas': '✅',
                             'Facturas Parcialmente Pagadas': '⏳',
                             'En Proceso de Pago': '🔄',
-                            'Facturas No Pagadas': '❌',
-                            'Facturas Revertidas': '↩️'
+                            'Facturas No Pagadas': '❌'
+                            # 'Facturas Revertidas' se excluye completamente
                         }
                         
                         if has_etiquetas:

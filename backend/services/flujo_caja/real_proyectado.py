@@ -998,7 +998,8 @@ class RealProyectadoCalculator:
                     ['move_type', '=', 'out_invoice'],
                     ['state', '=', 'posted'],
                     ['invoice_date', '>=', fecha_inicio],
-                    ['invoice_date', '<=', fecha_fin]
+                    ['invoice_date', '<=', fecha_fin],
+                    ['payment_state', '!=', 'reversed']  # Excluir facturas revertidas completamente
                 ],
                 ['id', 'name', 'partner_id', 'invoice_date', 'invoice_date_due',
                  'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago',
@@ -1056,80 +1057,123 @@ class RealProyectadoCalculator:
                 real_por_mes[periodo_real] += cobrado
                 proyectado_por_mes[periodo_proyectado] += pendiente
                 
-                # Agrupar por estado de pago (Nivel 2)
-                # Las facturas revertidas (N/C) se clasifican según su estado de pago real
-                if payment_state == 'reversed':
-                    # Reclasificar facturas revertidas según su residual
-                    if amount_residual == 0:
-                        payment_state_efectivo = 'paid'
-                    elif amount_residual < amount_total:
-                        payment_state_efectivo = 'partial'
-                    else:
-                        payment_state_efectivo = 'not_paid'
-                else:
-                    payment_state_efectivo = payment_state
+                # Helper para agregar a un estado
+                def agregar_a_estado(estado_key, monto, periodo, es_real=True):
+                    estado_label = self.ESTADO_LABELS.get(estado_key, 'Otros')
                     
-                estado_label = self.ESTADO_LABELS.get(payment_state_efectivo, 'Otros')
+                    if estado_label not in estados:
+                        estados[estado_label] = {
+                            'codigo': f'estado_{estado_key}',
+                            'nombre': estado_label,
+                            'icon': self.ESTADO_ICONS.get(estado_key, '📋'),
+                            'monto': 0.0,
+                            'real': 0.0,
+                            'proyectado': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'real_por_mes': defaultdict(float),
+                            'proyectado_por_mes': defaultdict(float),
+                            'etiquetas': {},  # Clientes
+                            'es_cuenta_cxc': True,
+                            'orden': list(self.ESTADO_LABELS.keys()).index(estado_key) if estado_key in self.ESTADO_LABELS else 99
+                        }
+                    
+                    estado = estados[estado_label]
+                    estado['monto'] += monto
+                    estado['montos_por_mes'][periodo] += monto
+                    if es_real:
+                        estado['real'] += monto
+                        estado['real_por_mes'][periodo] += monto
+                    else:
+                        estado['proyectado'] += monto
+                        estado['proyectado_por_mes'][periodo] += monto
+                    
+                    # Cliente
+                    if partner_name not in estado['etiquetas']:
+                        estado['etiquetas'][partner_name] = {
+                            'nombre': partner_name[:50],
+                            'monto': 0.0,
+                            'real': 0.0,
+                            'proyectado': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'real_por_mes': defaultdict(float),
+                            'proyectado_por_mes': defaultdict(float),
+                            'facturas': []
+                        }
+                    
+                    cliente = estado['etiquetas'][partner_name]
+                    cliente['monto'] += monto
+                    cliente['montos_por_mes'][periodo] += monto
+                    if es_real:
+                        cliente['real'] += monto
+                        cliente['real_por_mes'][periodo] += monto
+                    else:
+                        cliente['proyectado'] += monto
+                        cliente['proyectado_por_mes'][periodo] += monto
+                    
+                    return estado, cliente
                 
-                if estado_label not in estados:
-                    estados[estado_label] = {
-                        'codigo': f'estado_{payment_state_efectivo}',
-                        'nombre': estado_label,
-                        'icon': self.ESTADO_ICONS.get(payment_state_efectivo, '📋'),
-                        'monto': 0.0,
-                        'real': 0.0,
-                        'proyectado': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float),
-                        'etiquetas': {},  # Clientes
-                        'es_cuenta_cxc': True,
-                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state_efectivo) if payment_state_efectivo in self.ESTADO_LABELS else 99
-                    }
+                # Lógica de asignación por estado de pago
+                factura_info = {
+                    'name': f['name'],
+                    'move_id': f['id'],
+                    'tipo': move_type,
+                    'total': amount_total,
+                    'cobrado': cobrado,
+                    'pendiente': pendiente,
+                    'fecha': fecha,
+                    'payment_state': payment_state
+                }
                 
-                estado = estados[estado_label]
-                estado['monto'] += cobrado + pendiente
-                estado['real'] += cobrado
-                estado['proyectado'] += pendiente
-                estado['montos_por_mes'][periodo_real] += cobrado
-                estado['montos_por_mes'][periodo_proyectado] += pendiente
-                estado['real_por_mes'][periodo_real] += cobrado
-                estado['proyectado_por_mes'][periodo_proyectado] += pendiente
-                
-                # Agrupar por cliente (Nivel 3)
-                if partner_name not in estado['etiquetas']:
-                    estado['etiquetas'][partner_name] = {
-                        'nombre': partner_name[:50],
-                        'monto': 0.0,
-                        'real': 0.0,
-                        'proyectado': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float),
-                        'facturas': []
-                    }
-                
-                cliente = estado['etiquetas'][partner_name]
-                cliente['monto'] += cobrado + pendiente
-                cliente['real'] += cobrado
-                cliente['proyectado'] += pendiente
-                cliente['montos_por_mes'][periodo_real] += cobrado
-                cliente['montos_por_mes'][periodo_proyectado] += pendiente
-                cliente['real_por_mes'][periodo_real] += cobrado
-                cliente['proyectado_por_mes'][periodo_proyectado] += pendiente
-                
-                # Guardar factura para drill-down
-                if len(cliente['facturas']) < 50:
-                    cliente['facturas'].append({
-                        'name': f['name'],
-                        'move_id': f['id'],
-                        'tipo': move_type,
-                        'total': amount_total,
-                        'cobrado': cobrado,
-                        'pendiente': pendiente,
-                        'fecha': fecha,
-                        'payment_state': payment_state
-                    })
+                if payment_state == 'paid':
+                    # Factura pagada: todo el cobrado va a "Pagadas"
+                    estado, cliente = agregar_a_estado('paid', cobrado, periodo_real, es_real=True)
+                    if len(cliente.get('facturas', [])) < 50:
+                        cliente['facturas'].append(factura_info)
+                    
+                elif payment_state == 'partial':
+                    # Factura parcialmente pagada:
+                    # - Cobrado va a "Parcialmente Pagadas"
+                    # - Pendiente (residual) va a "No Pagadas"
+                    if cobrado > 0:
+                        estado_parcial, cliente_parcial = agregar_a_estado('partial', cobrado, periodo_real, es_real=True)
+                        if len(cliente_parcial.get('facturas', [])) < 50:
+                            cliente_parcial['facturas'].append(factura_info.copy())
+                    if pendiente > 0:
+                        estado_nopaid, cliente_nopaid = agregar_a_estado('not_paid', pendiente, periodo_proyectado, es_real=False)
+                        # No duplicar la factura en no pagadas, ya está en parciales
+                    
+                elif payment_state == 'in_payment':
+                    # En proceso de pago: va a su categoría
+                    estado, cliente = agregar_a_estado('in_payment', cobrado + pendiente, periodo_real, es_real=True)
+                    # Guardar factura
+                    if len(cliente.get('facturas', [])) < 50:
+                        cliente['facturas'].append({
+                            'name': f['name'],
+                            'move_id': f['id'],
+                            'tipo': move_type,
+                            'total': amount_total,
+                            'cobrado': cobrado,
+                            'pendiente': pendiente,
+                            'fecha': fecha,
+                            'payment_state': payment_state
+                        })
+                    
+                else:  # not_paid u otros
+                    # No pagada: todo va a "No Pagadas" como proyectado
+                    if cobrado + pendiente > 0:
+                        estado, cliente = agregar_a_estado('not_paid', cobrado + pendiente, periodo_proyectado, es_real=False)
+                        # Guardar factura
+                        if len(cliente.get('facturas', [])) < 50:
+                            cliente['facturas'].append({
+                                'name': f['name'],
+                                'move_id': f['id'],
+                                'tipo': move_type,
+                                'total': amount_total,
+                                'cobrado': cobrado,
+                                'pendiente': pendiente,
+                                'fecha': fecha,
+                                'payment_state': payment_state
+                            })
             
             # Calcular montos_por_mes como suma de real + proyectado por período
             montos_por_mes_total = defaultdict(float)
