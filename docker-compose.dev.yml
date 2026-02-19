@@ -14,7 +14,8 @@ services:
       - MPLCONFIGDIR=/tmp/matplotlib
     volumes:
       - ./data:/app/data
-      - ./backend/data:/app/backend/data
+      - ./backend:/app/backend
+      - ./shared:/app/shared
     restart: unless-stopped
     networks:
       rio-network:
