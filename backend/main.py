@@ -29,7 +29,8 @@ from backend.routers import (
     odf_reconciliation,
     aprobaciones_fletes,
     etiquetas,
-    proformas
+    proformas,
+    buenobot
 )
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ app.include_router(odf_reconciliation.router)
 app.include_router(aprobaciones_fletes.router)
 app.include_router(etiquetas.router)
 app.include_router(proformas.router)
+app.include_router(buenobot.router)
 
 
 @app.get("/")

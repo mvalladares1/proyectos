@@ -73,7 +73,8 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
                                filter_tipo_fruta: List[str] = None,
                                filter_clasificacion: List[str] = None,
                                filter_manejo: List[str] = None,
-                               filter_productor: List[str] = None) -> bytes:
+                               filter_productor: List[str] = None,
+                               filter_origen: List[str] = None) -> bytes:
     """Genera un Excel con detalle de recepciones y productos desglosados.
 
     Retorna bytes del archivo .xlsx listo para enviar por StreamingResponse.
@@ -92,7 +93,7 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
     if total_days > MAX_DAYS_FETCH:
         raise Exception(f"Rango demasiado grande: {total_days} días. Límite = {MAX_DAYS_FETCH} días.")
 
-    recepciones_all = get_recepciones_mp(username, password, fetch_start.isoformat(), f_fin.isoformat(), solo_hechas=solo_hechas)
+    recepciones_all = get_recepciones_mp(username, password, fetch_start.isoformat(), f_fin.isoformat(), solo_hechas=solo_hechas, origen=filter_origen)
 
     # Helper to filter by date portion
     def _in_range(r, start_date: date, end_date: date) -> bool:

@@ -1,0 +1,207 @@
+# BUENOBOT v2.0 - Contratos de Output API
+# Define reglas de validación para respuestas de endpoints
+# 
+# Reglas disponibles:
+#   - date_in_range: fechas dentro de rango
+#   - no_future_dates: sin fechas futuras
+#   - allowed_values: valores en lista permitida
+#   - respects_filter: resultados respetan filtros enviados
+#   - no_credentials_in_output: sin credenciales en response
+#   - not_null: campos no nulos
+#   - no_negative_values: sin valores negativos
+#   - subset_of_param: valores subconjunto de param enviado
+#   - unique_values: sin duplicados
+
+contracts:
+  # === STOCK ENDPOINTS ===
+  - endpoint: /api/v1/stock/camaras
+    method: GET
+    description: Stock agrupado por cámaras
+    version: "1.0"
+    
+    rules:
+      # No deben aparecer fechas futuras
+      - rule_type: no_future_dates
+        field_path: "$.data[*].ultima_actualizacion"
+        severity: medium
+        
+      # Cantidades no deben ser negativas
+      - rule_type: no_negative_values
+        field_path: "$.data[*].cantidad_total"
+        severity: high
+        
+      # Sin credenciales en output (security)
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+    
+    # Validaciones de filtros
+    filter_validations:
+      - filter_param: fecha_desde
+        filter_type: gte
+        response_field: "$.data[*].fecha_ingreso"
+        
+      - filter_param: fecha_hasta
+        filter_type: lte
+        response_field: "$.data[*].fecha_ingreso"
+
+  - endpoint: /api/v1/stock/pallets
+    method: GET
+    description: Lista de pallets por ubicación
+    
+    rules:
+      - rule_type: no_negative_values
+        field_path: "$.pallets[*].cantidad"
+        severity: high
+        
+      - rule_type: not_null
+        field_path: "$.pallets[*].codigo"
+        severity: high
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+
+  # === RECEPCIONES ENDPOINTS ===
+  - endpoint: /api/v1/recepcion/list
+    method: GET
+    description: Lista de recepciones
+    
+    rules:
+      - rule_type: date_in_range
+        field_path: "$.recepciones[*].fecha"
+        params:
+          days_back: 365
+          days_forward: 1
+        severity: medium
+        message: "Fechas de recepción fuera del rango operativo"
+        
+      - rule_type: allowed_values
+        field_path: "$.recepciones[*].estado"
+        params:
+          values: ["borrador", "en_proceso", "recibido", "cancelado"]
+        severity: high
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+    
+    filter_validations:
+      - filter_param: estado
+        filter_type: equals
+        response_field: "$.recepciones[*].estado"
+
+  # === PRODUCCION ENDPOINTS ===
+  - endpoint: /api/v1/produccion/ordenes
+    method: GET
+    description: Órdenes de producción
+    
+    rules:
+      - rule_type: no_future_dates
+        field_path: "$.ordenes[*].fecha_inicio"
+        params:
+          tolerance_days: 1
+        severity: medium
+        
+      - rule_type: no_negative_values
+        field_path: "$.ordenes[*].cantidad_producida"
+        severity: high
+        
+      - rule_type: no_negative_values
+        field_path: "$.ordenes[*].rendimiento"
+        severity: high
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+
+  # === FINANZAS ENDPOINTS ===
+  - endpoint: /api/v1/estado_resultado/data
+    method: GET
+    description: Estado de resultados financiero
+    
+    rules:
+      - rule_type: not_null
+        field_path: "$.periodo"
+        severity: high
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+    
+    filter_validations:
+      - filter_param: fecha_desde
+        filter_type: gte
+        response_field: "$.movimientos[*].fecha"
+        
+      - filter_param: fecha_hasta
+        filter_type: lte
+        response_field: "$.movimientos[*].fecha"
+
+  # === BANDEJAS ENDPOINTS ===
+  - endpoint: /api/v1/bandejas/stock
+    method: GET
+    description: Stock de bandejas por ubicación
+    
+    rules:
+      - rule_type: no_negative_values
+        field_path: "$.bandejas[*].cantidad"
+        severity: high
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+
+  # === PERMISSIONS ENDPOINT ===
+  - endpoint: /api/v1/permissions/all
+    method: GET
+    description: Lista todos los permisos
+    
+    rules:
+      # CRÍTICO: No debe exponer passwords
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+        message: "Endpoint de permisos NO debe exponer credenciales"
+
+  # === AUTOMATIZACIONES ===
+  - endpoint: /api/v1/automatizaciones/jobs
+    method: GET
+    description: Lista de jobs de automatización
+    
+    rules:
+      - rule_type: allowed_values
+        field_path: "$.jobs[*].status"
+        params:
+          values: ["pending", "running", "completed", "failed", "cancelled"]
+        severity: medium
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+
+  # === COMPRAS ===
+  - endpoint: /api/v1/compras/ordenes
+    method: GET
+    description: Órdenes de compra
+    
+    rules:
+      - rule_type: no_negative_values
+        field_path: "$.ordenes[*].total"
+        severity: high
+        
+      - rule_type: date_in_range
+        field_path: "$.ordenes[*].fecha_orden"
+        params:
+          days_back: 730  # 2 años
+          days_forward: 30
+        severity: medium
+        
+      - rule_type: no_credentials_in_output
+        field_path: "$"
+        severity: critical
+    
+    filter_validations:
+      - filter_param: proveedor_id
+        filter_type: equals
+        response_field: "$.ordenes[*].proveedor_id"
