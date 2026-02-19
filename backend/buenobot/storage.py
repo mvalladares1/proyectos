@@ -42,6 +42,8 @@ class BuenoBotStorage:
         self.index_path = self.base_path / "index.json"
         self.config_path = self.base_path / "config.json"
         self.lock_path = self.base_path / ".lock"
+        # Singleton lock para evitar deadlocks
+        self._lock = FileLock(str(self.lock_path), is_singleton=True)
         
         # Crear directorios si no existen
         self._ensure_directories()
@@ -64,7 +66,7 @@ class BuenoBotStorage:
     
     def _write_json(self, path: Path, data: Dict[str, Any]):
         """Escribe JSON de forma segura con lock"""
-        with FileLock(str(self.lock_path)):
+        with self._lock:
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, default=str)
     
@@ -100,7 +102,7 @@ class BuenoBotStorage:
     
     def _update_index(self, report: ScanReport):
         """Actualiza el índice de scans"""
-        with FileLock(str(self.lock_path)):
+        with self._lock:
             index = self._read_json(self.index_path)
             scans = index.get("scans", [])
             
