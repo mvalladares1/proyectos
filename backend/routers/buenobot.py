@@ -569,20 +569,23 @@ async def reanalyze_with_ai(
         
         analysis_ms = int((time.time() - start_time) * 1000)
         
+        # Convertir AIEnrichedReport a dict y extraer datos
+        response_dict = ai_response.to_dict()
+        
         # Actualizar scan con nuevo AI analysis
         ai_result = {
             "enabled": True,
-            "engine_used": ai_response.get("engine_used"),
-            "engine_reason": ai_response.get("engine_reason"),
+            "engine_used": response_dict.get("engine_used"),
+            "engine_reason": response_dict.get("engine_reason", ai_response.ai_status),
             "analysis_ms": analysis_ms,
-            "cached": ai_response.get("cached", False),
-            "summary": ai_response.get("summary"),
-            "root_causes": ai_response.get("root_causes", []),
-            "recommendations": ai_response.get("recommendations", []),
-            "risk_score": ai_response.get("risk_score", 0),
-            "confidence": ai_response.get("confidence", 0.0),
-            "suggested_next_checks": ai_response.get("suggested_next_checks", []),
-            "notable_anomalies": ai_response.get("notable_anomalies", [])
+            "cached": response_dict.get("cached", False),
+            "summary": response_dict.get("summary"),
+            "root_causes": response_dict.get("root_causes", []),
+            "recommendations": response_dict.get("recommendations", []),
+            "risk_score": response_dict.get("risk_score", 0),
+            "confidence": response_dict.get("confidence", 0.0),
+            "suggested_next_checks": response_dict.get("suggested_next_checks", []),
+            "notable_anomalies": response_dict.get("notable_anomalies", [])
         }
         
         # Guardar actualización
