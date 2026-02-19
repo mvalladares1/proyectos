@@ -1860,7 +1860,7 @@ def _generar_informe_pdf(
         # Agregar valores numéricos en puntos beige
         for i, (x, y) in enumerate(zip(x_pos, kg_hh_vals)):
             if y > 0:
-                offset_y = max(max(kg_hh_vals + kg_hora_vals)) * 0.04
+                offset_y = max(kg_hh_vals + kg_hora_vals) * 0.04
                 ax.text(x, y - offset_y, f'{y:,.0f}', 
                        ha='center', va='top', fontsize=7.5, 
                        fontweight='bold', color='#A07D63',
