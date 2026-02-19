@@ -620,12 +620,12 @@ class FlujoCajaService:
                 estado_proyectadas = None
                 if incluir_proyecciones and concepto_id == '1.1.1':
                     # Buscar y guardar el estado "Facturas Proyectadas" antes de enriquecer
+                    # Los estados son las cuentas directamente en 1.1.1
                     for cuenta in concepto.get('cuentas', []):
-                        if cuenta.get('es_cuenta_cxc'):
-                            for etiqueta in cuenta.get('etiquetas', []):
-                                if 'estado_projected' in etiqueta.get('codigo', '') or 'Proyectadas' in etiqueta.get('nombre', ''):
-                                    estado_proyectadas = etiqueta.copy()
-                                    break
+                        if 'estado_projected' in cuenta.get('codigo', '') or 'Proyectadas' in cuenta.get('nombre', ''):
+                            estado_proyectadas = cuenta.copy()
+                            print(f"[FlujoCaja] Guardando Facturas Proyectadas: monto={estado_proyectadas.get('monto', 0)}")
+                            break
                 
                 # Enriquecer con datos calculados (nuevos períodos para cobrado/pendiente)
                 self.real_proyectado_calc.enriquecer_concepto(
@@ -634,19 +634,18 @@ class FlujoCajaService:
                 
                 # Para 1.1.1: re-agregar estado "Facturas Proyectadas" después de enriquecer
                 if estado_proyectadas and concepto_id == '1.1.1':
-                    for cuenta in concepto.get('cuentas', []):
-                        if cuenta.get('es_cuenta_cxc'):
-                            # Verificar si ya existe estado_projected
-                            tiene_proyectadas = any(
-                                'estado_projected' in et.get('codigo', '') or 'Proyectadas' in et.get('nombre', '')
-                                for et in cuenta.get('etiquetas', [])
-                            )
-                            if not tiene_proyectadas:
-                                cuenta['etiquetas'].append(estado_proyectadas)
-                                # Actualizar montos de la cuenta
-                                cuenta['monto'] = cuenta.get('monto', 0) + estado_proyectadas.get('monto', 0)
-                                for mes, val in estado_proyectadas.get('montos_por_mes', {}).items():
-                                    cuenta['montos_por_mes'][mes] = cuenta.get('montos_por_mes', {}).get(mes, 0) + val
+                    # Los estados son las cuentas directamente
+                    tiene_proyectadas = any(
+                        'estado_projected' in c.get('codigo', '') or 'Proyectadas' in c.get('nombre', '')
+                        for c in concepto.get('cuentas', [])
+                    )
+                    if not tiene_proyectadas:
+                        concepto['cuentas'].append(estado_proyectadas)
+                        # Actualizar montos del concepto
+                        concepto['total'] = concepto.get('total', 0) + estado_proyectadas.get('monto', 0)
+                        for mes, val in estado_proyectadas.get('montos_por_mes', {}).items():
+                            concepto['montos_por_mes'][mes] = concepto.get('montos_por_mes', {}).get(mes, 0) + val
+                        print(f"[FlujoCaja] Re-agregado Facturas Proyectadas al concepto 1.1.1")
         
         # RECALCULAR subtotales después de enriquecer (importante para 1.2.1 con estructura especial)
         subtotales_por_actividad = {

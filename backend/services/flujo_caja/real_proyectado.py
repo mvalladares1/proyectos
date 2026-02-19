@@ -1163,7 +1163,8 @@ class RealProyectadoCalculator:
                     'real_por_mes': dict(estado_data['real_por_mes']),
                     'proyectado_por_mes': dict(estado_data['proyectado_por_mes']),
                     'etiquetas': etiquetas_list,
-                    'es_cuenta_cxc': True
+                    'es_cuenta_cxc': True,
+                    '_orden_estado': estado_data['orden']  # Para ordenar igual que agregador
                 })
             
             return {
@@ -1174,7 +1175,7 @@ class RealProyectadoCalculator:
                 'proyectado_por_mes': dict(proyectado_por_mes),
                 'montos_por_mes': dict(montos_por_mes_total),
                 'total': real_total + proyectado_total,
-                'cuentas': cuentas_resultado,
+                'cuentas': cuentas_resultado,  # Los estados son cuentas directamente (igual que agregador)
                 'facturas_count': len(facturas)
             }
             
