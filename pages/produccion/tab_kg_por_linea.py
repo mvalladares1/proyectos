@@ -518,7 +518,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                                 }
                             ]
                         },
-                        "z": 2
+                        "z": 2,
                         "type": "line",
                         "yAxisIndex": 0,
                         "data": kg_hora_ef_vals,
