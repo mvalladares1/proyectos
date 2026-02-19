@@ -19,6 +19,7 @@ from produccion import shared
 from produccion import tab_reporteria
 from produccion import tab_detalle
 from produccion import tab_clasificacion
+from produccion import tab_pallets_por_sala
 from produccion import tab_etiquetas
 from produccion import tab_automatizacion_of
 
@@ -68,6 +69,10 @@ if _perm_clasificacion:
     tabs_nombres.append("📦 Clasificación")
     tabs_disponibles.append("clasificacion")
 
+if _perm_clasificacion:
+    tabs_nombres.append("🏢 Pallets por Sala")
+    tabs_disponibles.append("pallets_sala")
+
 # Etiquetas siempre disponible para usuarios de producción
 tabs_nombres.append("🏷️ Etiquetas")
 tabs_disponibles.append("etiquetas")
@@ -97,6 +102,11 @@ if "detalle" in tabs_disponibles:
 if "clasificacion" in tabs_disponibles:
     with tabs_ui[tab_index]:
         tab_clasificacion.render(username, password)
+    tab_index += 1
+
+if "pallets_sala" in tabs_disponibles:
+    with tabs_ui[tab_index]:
+        tab_pallets_por_sala.render(username, password)
     tab_index += 1
 
 if "etiquetas" in tabs_disponibles:
