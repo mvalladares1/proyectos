@@ -501,8 +501,8 @@ async def reanalyze_with_ai(
     # Si force, invalidar cache para este scan
     if force:
         cache = get_ai_cache()
-        metadata = scan_data.get("metadata", {})
-        git_info = metadata.get("git_info", {})
+        metadata = scan_data.get("metadata") or {}
+        git_info = metadata.get("git_info") or {}
         commit_sha = git_info.get("commit_sha")
         if commit_sha:
             cache.invalidate(commit_sha=commit_sha)
@@ -512,7 +512,7 @@ async def reanalyze_with_ai(
         
         # Reconstruir ScanReport desde datos
         # (simplificado - usamos los datos raw directamente)
-        metadata = scan_data.get("metadata", {})
+        metadata = scan_data.get("metadata") or {}
         
         # Construir EvidencePack desde datos raw
         builder = get_evidence_builder()
@@ -553,10 +553,10 @@ async def reanalyze_with_ai(
         
         mock_report = MockScanReport(scan_data)
         
-        git_info = metadata.get("git_info", {})
+        git_info = metadata.get("git_info") or {}
         evidence = builder.build(
             scan_report=mock_report,
-            environment=metadata.get("environment", "unknown"),
+            environment=metadata.get("environment") or "unknown",
             commit_sha=git_info.get("commit_sha")
         )
         
