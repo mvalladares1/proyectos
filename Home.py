@@ -106,7 +106,6 @@ if is_user_authenticated() and username:
         ],
         "Administración": [
             ("permisos", st.Page("pages/9_Permisos.py", title="Permisos", icon="⚙️")),
-            ("buenobot", st.Page("pages/13_BuenoBot.py", title="BuenoBot", icon="🤖")),
         ],
     }
     
