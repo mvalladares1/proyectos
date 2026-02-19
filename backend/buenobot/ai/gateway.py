@@ -150,18 +150,7 @@ class AIGateway:
             logger.info("AI disabled, skipping analysis")
             return AIEnrichedReport.skipped(evidence.scan_id, "AI disabled in config")
         
-        # Verificar cache
-        if self.config.cache_enabled:
-            evidence_hash = self._compute_evidence_hash(evidence)
-            cache_key = f"{evidence.commit_sha}_{evidence_hash}"
-            
-            cached_result = await self.cache.get(cache_key)
-            if cached_result:
-                logger.info(f"AI cache hit for {cache_key}")
-                cached_result["cached"] = True
-                return self._dict_to_report(evidence.scan_id, cached_result)
-        
-        # Determinar motor
+        # Determinar motor primero para usar en cache key
         if force_engine:
             engine_selection = EngineSelection(
                 engine=force_engine,
@@ -169,6 +158,19 @@ class AIGateway:
             )
         else:
             engine_selection = self.router.select_engine(evidence, analysis_mode)
+        
+        # Verificar cache
+        evidence_hash = self._compute_evidence_hash(evidence)
+        if self.config.cache_enabled:
+            cached_result = self.cache.get(
+                commit_sha=evidence.commit_sha,
+                evidence_hash=evidence_hash,
+                engine=engine_selection.engine
+            )
+            if cached_result:
+                logger.info(f"AI cache hit for {evidence.commit_sha}_{evidence_hash}")
+                cached_result["cached"] = True
+                return self._dict_to_report(evidence.scan_id, cached_result)
         
         logger.info(f"Selected engine: {engine_selection.engine} ({engine_selection.reason})")
         
@@ -187,7 +189,12 @@ class AIGateway:
             
             # Guardar en cache
             if self.config.cache_enabled and result.ai_status == "completed":
-                await self.cache.set(cache_key, result.to_dict())
+                self.cache.set(
+                    commit_sha=evidence.commit_sha,
+                    evidence_hash=evidence_hash,
+                    engine=engine_selection.engine,
+                    response=result.to_dict()
+                )
             
             result.processing_time_ms = processing_time
             return result
