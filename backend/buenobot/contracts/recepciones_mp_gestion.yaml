@@ -1,0 +1,123 @@
+# BUENOBOT v3.0 - Output Contract for recepciones-mp/gestion
+# Validates the gestion (management) endpoint for recepciones
+
+endpoint: /api/v1/recepciones-mp/gestion
+method: GET
+description: Get gestion data for recepciones management view
+
+# Response schema validation
+response:
+  type: object
+  required:
+    - recepciones
+    - totales
+  properties:
+    recepciones:
+      type: array
+      items:
+        type: object
+        required:
+          - id
+          - name
+          - state
+          - partner_id
+        properties:
+          id:
+            type: integer
+          name:
+            type: string
+          state:
+            type: string
+            enum: [draft, waiting, confirmed, assigned, done, cancel]
+          partner_id:
+            type: integer
+          partner_name:
+            type: string
+          date_done:
+            type: string
+            format: date
+          productos:
+            type: array
+            items:
+              type: object
+              properties:
+                product_id:
+                  type: integer
+                product_name:
+                  type: string
+                cantidad:
+                  type: number
+                  minimum: 0
+    totales:
+      type: object
+      properties:
+        total_recepciones:
+          type: integer
+          minimum: 0
+        total_kg:
+          type: number
+          minimum: 0
+        total_cajas:
+          type: integer
+          minimum: 0
+
+# Business rules validation
+rules:
+  - name: fields_present
+    description: All required fields must be present in each recepcion
+    severity: high
+    check: |
+      all(
+        'id' in r and 'name' in r and 'state' in r and 'partner_id' in r
+        for r in response.get('recepciones', [])
+      )
+  
+  - name: totales_consistency
+    description: Totales should match sum of individual recepciones
+    severity: medium
+    check: |
+      totales = response.get('totales', {})
+      recepciones = response.get('recepciones', [])
+      totales.get('total_recepciones', 0) == len(recepciones)
+  
+  - name: no_future_dates
+    description: date_done should not be in the future
+    severity: high
+    check: |
+      from datetime import datetime
+      today = datetime.now().date().isoformat()
+      all(
+        r.get('date_done', today) <= today
+        for r in response.get('recepciones', [])
+        if r.get('date_done')
+      )
+  
+  - name: valid_states
+    description: States should be valid Odoo picking states
+    severity: medium
+    check: |
+      valid_states = {'draft', 'waiting', 'confirmed', 'assigned', 'done', 'cancel'}
+      all(
+        r.get('state') in valid_states
+        for r in response.get('recepciones', [])
+      )
+  
+  - name: no_sensitive_data
+    description: Response should not contain credentials or sensitive fields
+    severity: critical
+    check: |
+      import json
+      response_str = json.dumps(response).lower()
+      'password' not in response_str and 'secret' not in response_str and 'api_key' not in response_str
+
+# Performance expectations
+performance:
+  max_response_time_ms: 8000
+  max_items_default: 500
+
+# Security checks
+security:
+  - name: no_credentials_in_query
+    description: Endpoint should not receive credentials in query params
+    severity: critical
+    note: Like recepciones-mp, this endpoint likely has password in Query - needs fix
