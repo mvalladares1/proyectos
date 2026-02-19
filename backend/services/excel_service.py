@@ -83,11 +83,16 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
     f_inicio = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
     f_fin = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
 
-    prev_end = f_inicio - timedelta(days=1)
-    delta = (f_fin - f_inicio) + timedelta(days=1)
-    prev_start = prev_end - (delta - timedelta(days=1))
-    month_start = date(f_fin.year, f_fin.month, 1)
-    fetch_start = min(month_start, prev_start)
+    # Si no se necesitan datos de semana anterior ni acumulado mensual, fetch exacto igual al dashboard.
+    # Esto evita discrepancias causadas por _in_range filtrando registros sin fecha.
+    if not include_prev_week and not include_month_accum:
+        fetch_start = f_inicio
+    else:
+        prev_end = f_inicio - timedelta(days=1)
+        delta = (f_fin - f_inicio) + timedelta(days=1)
+        prev_start = prev_end - (delta - timedelta(days=1))
+        month_start = date(f_fin.year, f_fin.month, 1)
+        fetch_start = min(month_start, prev_start)
 
     total_days = (f_fin - fetch_start).days + 1
     if total_days > MAX_DAYS_FETCH:
@@ -103,7 +108,8 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
             try:
                 rd = datetime.strptime(r.get('fecha', '')[:10], '%Y-%m-%d').date()
             except Exception:
-                return False
+                # Si no se puede parsear la fecha, incluir igual (Odoo ya filtra por fecha)
+                return True
         return start_date <= rd <= end_date
 
     # Helper para verificar manejo en lista de productos (para filtado nivel recepción si aplica)
