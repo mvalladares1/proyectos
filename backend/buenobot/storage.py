@@ -67,8 +67,12 @@ class BuenoBotStorage:
     def _write_json(self, path: Path, data: Dict[str, Any]):
         """Escribe JSON de forma segura con lock"""
         with self._lock:
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, default=str)
+            self._write_json_unlocked(path, data)
+    
+    def _write_json_unlocked(self, path: Path, data: Dict[str, Any]):
+        """Escribe JSON sin lock (usar cuando ya se tiene el lock)"""
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, default=str)
     
     def _read_json(self, path: Path) -> Dict[str, Any]:
         """Lee JSON de forma segura"""
@@ -133,7 +137,7 @@ class BuenoBotStorage:
             scans = scans[:max_history]
             
             index["scans"] = scans
-            self._write_json(self.index_path, index)
+            self._write_json_unlocked(self.index_path, index)
     
     def get_scan(self, scan_id: str) -> Optional[ScanReport]:
         """Obtiene un reporte de scan por ID"""
@@ -171,7 +175,7 @@ class BuenoBotStorage:
         if not scan_path.exists():
             return False
         
-        with FileLock(str(self.lock_path)):
+        with self._lock:
             data = self._read_json(scan_path)
             
             # Merge updates
@@ -181,7 +185,7 @@ class BuenoBotStorage:
                 else:
                     data[key] = value
             
-            self._write_json(scan_path, data)
+            self._write_json_unlocked(scan_path, data)
         
         return True
     
@@ -243,12 +247,12 @@ class BuenoBotStorage:
             scan_path.unlink()
         
         # Actualizar índice
-        with FileLock(str(self.lock_path)):
+        with self._lock:
             index = self._read_json(self.index_path)
             scans = index.get("scans", [])
             scans = [s for s in scans if s.get("scan_id") != scan_id]
             index["scans"] = scans
-            self._write_json(self.index_path, index)
+            self._write_json_unlocked(self.index_path, index)
         
         return True
     
