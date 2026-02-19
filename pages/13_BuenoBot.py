@@ -450,7 +450,7 @@ with tab_results:
         # Obtener último scan
         scans = api_request("GET", "/scans?limit=5")
         if isinstance(scans, list) and scans:
-            scan_options = {s["scan_id"]: f"{s['scan_id']} - {s.get('gate_status', '?').upper()} - {s.get('created_at', '')[:16]}" for s in scans}
+            scan_options = {s["scan_id"]: f"{s['scan_id']} - {s.get('gate_status', '?').upper()} - {(s.get('created_at') or '')[:16]}" for s in scans}
             selected = st.selectbox("Seleccionar scan:", options=list(scan_options.keys()), format_func=lambda x: scan_options[x])
             scan_to_view = selected
         else:
@@ -461,20 +461,21 @@ with tab_results:
         scan_data = api_request("GET", f"/scan/{scan_to_view}")
         
         if "error" not in scan_data:
-            metadata = scan_data.get("metadata", {})
-            git_info = metadata.get("git_info", {})
+            metadata = scan_data.get("metadata") or {}
+            git_info = metadata.get("git_info") or {}
             
             # Header con info del scan
             st.markdown(f"### Scan: `{scan_to_view}`")
             
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Entorno", metadata.get("environment", "?").upper())
-            col2.metric("Tipo", metadata.get("scan_type", "?"))
-            col3.metric("Duración", format_duration(scan_data.get("duration_seconds", 0)))
-            col4.metric("Commit", git_info.get("commit_sha", "N/A")[:8] if git_info.get("commit_sha") else "N/A")
+            col1.metric("Entorno", (metadata.get("environment") or "?").upper())
+            col2.metric("Tipo", metadata.get("scan_type") or "?")
+            col3.metric("Duración", format_duration(scan_data.get("duration_seconds") or 0))
+            commit_sha = git_info.get("commit_sha") if git_info else None
+            col4.metric("Commit", commit_sha[:8] if commit_sha else "N/A")
             
             # Gate Status
-            gate_status = scan_data.get("gate_status", "unknown")
+            gate_status = scan_data.get("gate_status") or "unknown"
             gate_reason = scan_data.get("gate_reason", "")
             st.markdown(get_gate_status_html(gate_status, gate_reason), unsafe_allow_html=True)
             
