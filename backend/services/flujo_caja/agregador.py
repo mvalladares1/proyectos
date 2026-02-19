@@ -399,7 +399,7 @@ class AgregadorFlujo:
         """
         print(f"[Agregador] procesar_presupuestos_ventas: {len(presupuestos)} presupuestos")
         
-        ESTADO_LABEL = '🔮 Facturas Proyectadas'
+        ESTADO_LABEL = '🔮 Facturas Proyectadas (Modulo de ventas)'
         ESTADO_CODE = 'estado_projected'
         ORDEN_ESTADO = 3.5  # Debajo de No Pagadas (3) y antes de Revertidas (4)
         
@@ -740,7 +740,7 @@ class AgregadorFlujo:
                     ('partial', '⏳ Facturas Parcialmente Pagadas', 'Facturas Parcialmente Pagadas', 2),
                     ('in_payment', '🔄 En Proceso de Pago', 'En Proceso de Pago', 3),
                     ('not_paid', '❌ Facturas No Pagadas', 'Facturas No Pagadas', 4),
-                    ('estado_projected', '🔮 Facturas Proyectadas', '🔮 Facturas Proyectadas', 4.5),
+                    ('estado_projected', '🔮 Facturas Proyectadas (Modulo de ventas)', '🔮 Facturas Proyectadas (Modulo de ventas)', 4.5),
                     ('reversed', '↩️ Facturas Revertidas', 'Facturas Revertidas', 5),
                 ]
 
@@ -841,7 +841,7 @@ class AgregadorFlujo:
                 'Facturas Parcialmente Pagadas': 'partial',
                 'En Proceso de Pago': 'in_payment',
                 'Facturas No Pagadas': 'not_paid',
-                '🔮 Facturas Proyectadas': 'estado_projected',
+                '🔮 Facturas Proyectadas (Modulo de ventas)': 'estado_projected',
                 'Facturas Revertidas': 'reversed'
             }
             
