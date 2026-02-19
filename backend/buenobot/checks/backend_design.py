@@ -515,8 +515,8 @@ class BackendDesignCheck(BaseCheck):
     description = "Análisis estático de diseño backend usando AST"
     quick_check = True  # Incluir en quick scan
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, working_dir: str = "/app", environment: str = "dev", api_base_url: str = None):
+        super().__init__(working_dir, environment, api_base_url)
         self.scan_dirs = ["backend/routers", "backend/services"]
     
     async def run(self, **kwargs) -> CheckResult:

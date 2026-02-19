@@ -34,9 +34,9 @@ class OutputContractCheck(BaseCheck):
     description = "Valida respuestas de API contra contratos de output definidos en YAML"
     quick_check = False  # Solo en FULL scan
     
-    def __init__(self):
-        super().__init__()
-        self.base_url = "http://localhost:8080"
+    def __init__(self, working_dir: str = "/app", environment: str = "dev", api_base_url: str = None):
+        super().__init__(working_dir, environment, api_base_url)
+        self.base_url = api_base_url or "http://localhost:8080"
         self.timeout = 30.0
         self.auth_credentials = {}
     
