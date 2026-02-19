@@ -1001,7 +1001,8 @@ class RealProyectadoCalculator:
                     ['invoice_date', '<=', fecha_fin]
                 ],
                 ['id', 'name', 'partner_id', 'invoice_date', 'invoice_date_due',
-                 'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago'],
+                 'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago',
+                 'currency_id'],
                 limit=5000
             )
             
@@ -1027,6 +1028,13 @@ class RealProyectadoCalculator:
                 amount_residual = f.get('amount_residual', 0) or 0
                 payment_state = f.get('payment_state', 'not_paid')
                 move_type = f.get('move_type', 'out_invoice')
+                
+                # Convertir moneda USD a CLP si es necesario
+                currency_data = f.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name and 'USD' in str(currency_name).upper():
+                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
                 
                 # Determinar período proyectado basado en fecha estimada de pago
                 fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
