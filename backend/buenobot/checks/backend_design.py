@@ -495,7 +495,7 @@ class BackendDesignAnalyzer:
         }
 
 
-@CheckRegistry.register
+@CheckRegistry.register("backend_design", quick=True, full=True)
 class BackendDesignCheck(BaseCheck):
     """
     Check BUENOBOT que ejecuta análisis de diseño de backend.

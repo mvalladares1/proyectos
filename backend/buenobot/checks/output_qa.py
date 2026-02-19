@@ -16,7 +16,7 @@ from .base import BaseCheck, CheckRegistry
 logger = logging.getLogger(__name__)
 
 
-@CheckRegistry.register
+@CheckRegistry.register("output_contract_check", quick=True, full=True)
 class OutputContractCheck(BaseCheck):
     """
     Valida respuestas de API contra contratos YAML definidos.
@@ -206,7 +206,7 @@ class OutputContractCheck(BaseCheck):
         return recommendations.get(rule_type, "Revisar lógica del endpoint.")
 
 
-@CheckRegistry.register
+@CheckRegistry.register("filter_validation", quick=True, full=True)
 class FilterValidationCheck(BaseCheck):
     """
     Check especializado en validación de filtros.
