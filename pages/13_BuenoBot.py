@@ -741,6 +741,71 @@ with tab_config:
             st.markdown(f"**Cache habilitado:** {'✓' if ai_config.get('cache_enabled') else '✗'}")
             st.markdown(f"**Max findings a IA:** {ai_config.get('max_findings_to_ai', 'N/A')}")
         
+        # === CONFIGURAR OpenAI ===
+        st.markdown("---")
+        st.markdown("#### 🔑 Configurar OpenAI API")
+        
+        with st.expander("⚙️ Habilitar/Configurar OpenAI", expanded=not ai_config.get("openai_configured", False)):
+            st.info("""
+            **¿Cómo obtener una API Key?**
+            1. Ve a [platform.openai.com](https://platform.openai.com)
+            2. Inicia sesión o crea cuenta
+            3. Ve a API Keys → Create new secret key
+            4. Copia la key aquí
+            """)
+            
+            with st.form("openai_config_form"):
+                new_api_key = st.text_input(
+                    "OpenAI API Key",
+                    type="password",
+                    placeholder="sk-...",
+                    help="Tu API key de OpenAI (sk-...)"
+                )
+                
+                new_model = st.selectbox(
+                    "Modelo",
+                    options=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+                    index=0,
+                    help="gpt-4o-mini es rápido y económico, gpt-4o es más potente"
+                )
+                
+                enable_ai = st.checkbox(
+                    "Habilitar AI Analysis automático",
+                    value=ai_enabled,
+                    help="Cuando está habilitado, cada scan ejecuta análisis IA automáticamente"
+                )
+                
+                submitted = st.form_submit_button("💾 Guardar Configuración", type="primary")
+                
+                if submitted:
+                    if new_api_key or enable_ai != ai_enabled:
+                        config_data = {
+                            "ai_enabled": enable_ai,
+                        }
+                        if new_api_key:
+                            config_data["openai_api_key"] = new_api_key
+                            config_data["openai_model"] = new_model
+                            config_data["default_engine"] = "openai"
+                        
+                        result = api_request("POST", "/ai/config", config_data)
+                        if "error" not in result:
+                            st.success("✅ Configuración guardada exitosamente")
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {result.get('error', result.get('detail', 'Unknown'))}")
+                    else:
+                        st.warning("No hay cambios para guardar")
+        
+        # Test OpenAI connection
+        if ai_config.get("openai_configured"):
+            if st.button("🧪 Probar conexión OpenAI"):
+                with st.spinner("Probando conexión..."):
+                    test_result = api_request("POST", "/ai/test")
+                    if "error" not in test_result and test_result.get("success"):
+                        st.success(f"✅ Conexión exitosa! Modelo: {test_result.get('model')}, Latencia: {test_result.get('latency_ms')}ms")
+                    else:
+                        st.error(f"❌ Error de conexión: {test_result.get('error', 'Unknown')}")
+        
         # Cache stats
         cache_stats = api_request("GET", "/ai/cache/stats")
         if isinstance(cache_stats, dict) and cache_stats.get("enabled"):

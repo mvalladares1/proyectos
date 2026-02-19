@@ -626,6 +626,92 @@ async def get_ai_config_endpoint():
     }
 
 
+@router.post("/ai/config")
+async def update_ai_config_endpoint(config_update: dict):
+    """
+    Actualiza configuración de IA en runtime.
+    
+    Acepta:
+    - ai_enabled: bool
+    - openai_api_key: str (sk-...)
+    - openai_model: str (gpt-4o-mini, gpt-4o, etc)
+    - default_engine: str (openai, local, mock)
+    - cache_enabled: bool
+    
+    NOTA: Los cambios NO persisten tras restart del servidor.
+    Para persistir, usar variables de entorno.
+    """
+    from backend.buenobot.config import update_ai_config, get_ai_config
+    
+    try:
+        updated_config = update_ai_config(
+            ai_enabled=config_update.get("ai_enabled"),
+            openai_api_key=config_update.get("openai_api_key"),
+            openai_model=config_update.get("openai_model"),
+            default_engine=config_update.get("default_engine"),
+            cache_enabled=config_update.get("cache_enabled")
+        )
+        
+        return {
+            "message": "Configuration updated successfully",
+            "ai_enabled": updated_config.ai_enabled,
+            "default_engine": updated_config.default_engine,
+            "openai_configured": bool(updated_config.openai_api_key),
+            "openai_model": updated_config.openai_model,
+            "cache_enabled": updated_config.cache_enabled
+        }
+    except Exception as e:
+        logger.exception(f"Error updating AI config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ai/test")
+async def test_ai_connection():
+    """
+    Prueba la conexión con el engine de IA configurado.
+    """
+    from backend.buenobot.config import get_ai_config
+    import time
+    
+    config = get_ai_config()
+    
+    if not config.openai_api_key:
+        return {"success": False, "error": "OpenAI API key not configured"}
+    
+    try:
+        import httpx
+        
+        start_time = time.time()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config.openai_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": config.openai_model,
+                    "messages": [{"role": "user", "content": "Say 'OK' in one word."}],
+                    "max_tokens": 5
+                }
+            )
+        
+        latency_ms = int((time.time() - start_time) * 1000)
+        
+        if response.status_code == 200:
+            return {
+                "success": True,
+                "model": config.openai_model,
+                "latency_ms": latency_ms
+            }
+        else:
+            error_detail = response.json().get("error", {}).get("message", response.text)
+            return {"success": False, "error": error_detail}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @router.get("/ai/cache/stats")
 async def get_ai_cache_stats():
     """

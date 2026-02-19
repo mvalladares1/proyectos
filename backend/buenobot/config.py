@@ -192,3 +192,37 @@ def reload_config() -> AIEngineConfig:
     global _config
     _config = None
     return get_ai_config()
+
+
+def update_ai_config(
+    ai_enabled: Optional[bool] = None,
+    openai_api_key: Optional[str] = None,
+    openai_model: Optional[str] = None,
+    default_engine: Optional[str] = None,
+    cache_enabled: Optional[bool] = None
+) -> AIEngineConfig:
+    """Actualiza configuración AI en runtime (no persiste tras restart)"""
+    global _config
+    
+    if _config is None:
+        get_ai_config()
+    
+    # Crear dict con valores actuales
+    current = _config.model_dump()
+    
+    # Actualizar solo los valores proporcionados
+    if ai_enabled is not None:
+        current["ai_enabled"] = ai_enabled
+    if openai_api_key is not None:
+        current["openai_api_key"] = openai_api_key
+    if openai_model is not None:
+        current["openai_model"] = openai_model
+    if default_engine is not None:
+        current["default_engine"] = default_engine
+    if cache_enabled is not None:
+        current["cache_enabled"] = cache_enabled
+    
+    # Crear nueva instancia con valores actualizados
+    _config = AIEngineConfig(**current)
+    
+    return _config
