@@ -143,7 +143,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         dt = mo.get('_inicio_dt')
         if not dt:
             continue
-        dia_key = dt.strftime('%d/%m')
+        dia_key = dt.strftime('%d/%m/%y')
         kg = mo.get('kg_pt', 0) or 0
         dia_sala_kg[dia_key][sala] += kg
         
@@ -155,7 +155,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     if not dia_sala_kg:
         return None
 
-    dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+    dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
     salas_sorted = sorted(todas_salas_set)
     color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
     
@@ -351,7 +351,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         dt = mo.get('_inicio_dt')
         if not dt:
             continue
-        dia_key = dt.strftime('%d/%m')
+        dia_key = dt.strftime('%d/%m/%y')
         turno = _clasificar_turno(dt, mo.get('_fin_dt'))
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
@@ -371,7 +371,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 st.info(f"No hay datos para Turno {turno_name}")
                 continue
             
-            dias_sorted = sorted(td['dia_kg'].keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+            dias_sorted = sorted(td['dia_kg'].keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
             kg_hora_vals = []
             kg_hora_ef_vals = []
             detenciones_vals = []
@@ -500,10 +500,25 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "distance": 8,
                             "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
                         },
+                        "markLine": {
+                            "silent": True,
+                            "symbol": "none",
+                            "data": [
+                                {
+                                    "yAxis": round(prom_kg_hora),
+                                    "lineStyle": {"color": "#6BA3C4", "width": 1.5, "type": "dashed"},
+                                    "label": {
+                                        "show": True,
+                                        "position": "insideEndTop",
+                                        "formatter": f"Prom: {prom_kg_hora:,.0f}",
+                                        "fontSize": 10,
+                                        "fontWeight": "bold",
+                                        "color": "#5A8FAD"
+                                    }
+                                }
+                            ]
+                        },
                         "z": 2
-                    },
-                    {
-                        "name": "KG/Hora Efectiva",
                         "type": "line",
                         "yAxisIndex": 0,
                         "data": kg_hora_ef_vals,
@@ -540,6 +555,24 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "color": "#B38967",
                             "distance": 8,
                             "formatter": JsCode("function(params){return params.value>0?Math.round(params.value):''}").js_code
+                        },
+                        "markLine": {
+                            "silent": True,
+                            "symbol": "none",
+                            "data": [
+                                {
+                                    "yAxis": round(prom_kg_hora_ef),
+                                    "lineStyle": {"color": "#C9997D", "width": 1.5, "type": "dashed"},
+                                    "label": {
+                                        "show": True,
+                                        "position": "insideEndBottom",
+                                        "formatter": f"Prom Ef: {prom_kg_hora_ef:,.0f}",
+                                        "fontSize": 10,
+                                        "fontWeight": "bold",
+                                        "color": "#B38967"
+                                    }
+                                }
+                            ]
                         },
                         "z": 3
                     },
@@ -604,7 +637,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             dt = orden.get('_inicio_dt')
             if not dt:
                 continue
-            dia_key = dt.strftime('%d/%m')
+            dia_key = dt.strftime('%d/%m/%y')
             kg = orden.get('kg_pt', 0) or 0
             horas = orden.get('duracion_horas', 0) or 0
             hh_ef = orden.get('hh_efectiva', 0) or 0
@@ -618,7 +651,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         if not sala_dia_kg:
             continue
         
-        dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+        dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
         kg_hora_efectiva_sala_vals = []  # kg_pt / duracion_horas
         kg_hh_efectiva_sala_vals = []    # kg_pt / hh_efectiva
         detenciones_sala_vals = []  # detenciones por día para tooltip
@@ -1660,7 +1693,7 @@ def _generar_informe_pdf(
         if len(dias_sorted) > 0:
             fechas_prod = [f for f, kg in dias_sorted]
             kg_prod = [kg for f, kg in dias_sorted]
-            labels_prod = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m') for f in fechas_prod]
+            labels_prod = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m/%y') for f in fechas_prod]
             dias_semana_prod = [DIAS_ES.get(datetime.strptime(f, '%Y-%m-%d').strftime('%a'), '') for f in fechas_prod]
             
             fig_prod, ax_prod = plt.subplots(figsize=(7.5, 3.5))
@@ -1792,7 +1825,7 @@ def _generar_informe_pdf(
         # === GRÁFICO KG/HORA EFECTIVA ===
         # Preparar datos para el gráfico
         fechas_graf = sorted(dia_kg_hora_data.keys())
-        dias_labels = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m') for f in fechas_graf]
+        dias_labels = [datetime.strptime(f, '%Y-%m-%d').strftime('%d/%m/%y') for f in fechas_graf]
         kg_hora_vals = []
         kg_hh_vals = []
         
@@ -1880,7 +1913,7 @@ def _generar_informe_pdf(
             dt_l = datetime.strptime(f, '%Y-%m-%d')
             dia_en = dt_l.strftime('%a')
             dia_esp = DIAS_ES.get(dia_en, dia_en)
-            dias_kgh_labels.append(f'{dia_esp}\n{dt_l.strftime("%d/%m")}')
+            dias_kgh_labels.append(f'{dia_esp}\n{dt_l.strftime("%d/%m/%y")}')
         ax.set_xticklabels(dias_kgh_labels, fontsize=7.5, color='#555', ha='center')
         ax.tick_params(axis='y', labelsize=9, colors='#888')
         ax.tick_params(axis='x', length=0)
@@ -2062,14 +2095,14 @@ def _generar_informe_pdf(
             dt = orden.get('_inicio_dt')
             if not dt:
                 continue
-            dia_key = dt.strftime('%d/%m')
+            dia_key = dt.strftime('%d/%m/%y')
             sala_dia_data[dia_key]['kg'] += orden.get('kg_pt', 0) or 0
             sala_dia_data[dia_key]['horas'] += orden.get('duracion_horas', 0) or 0
             sala_dia_data[dia_key]['det'] += orden.get('detenciones', 0) or 0
             sala_dia_data[dia_key]['hh_ef'] += orden.get('hh_efectiva', 0) or 0
         
         if len(sala_dia_data) > 1:  # Solo mostrar si hay más de un día
-            dias_sala = sorted(sala_dia_data.keys(), key=lambda d: datetime.strptime(d, '%d/%m'))
+            dias_sala = sorted(sala_dia_data.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
             kg_hora_sala_vals = []
             kg_hh_sala_vals = []
             
@@ -2312,8 +2345,8 @@ def _render_comparacion(
     salas_comp = _procesar_mos_a_salas(mos_comp)
 
     # === LABELS ===
-    lbl_a = f"{fecha_inicio_principal.strftime('%d/%m')} - {fecha_fin_principal.strftime('%d/%m')}"
-    lbl_b = f"{comp_inicio.strftime('%d/%m')} - {comp_fin.strftime('%d/%m')}"
+    lbl_a = f"{fecha_inicio_principal.strftime('%d/%m/%y')} - {fecha_fin_principal.strftime('%d/%m/%y')}"
+    lbl_b = f"{comp_inicio.strftime('%d/%m/%y')} - {comp_fin.strftime('%d/%m/%y')}"
 
     # === Traducción de días ===
     DIAS_ES = {'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié', 'Thu': 'Jue',
@@ -2324,7 +2357,7 @@ def _render_comparacion(
         dt = datetime.strptime(fecha_str, '%Y-%m-%d')
         dia_en = dt.strftime('%a')
         dia_esp = DIAS_ES.get(dia_en, dia_en)
-        return f"{dia_esp} {dt.strftime('%d/%m')}"
+        return f"{dia_esp} {dt.strftime('%d/%m/%y')}"
 
     # === AGRUPAR KG POR DÍA ===
     def _kg_por_dia(mos_list):
