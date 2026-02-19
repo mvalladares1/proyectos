@@ -614,6 +614,8 @@ async def get_ai_config_endpoint():
         "default_engine": config.default_engine,
         "openai_configured": bool(config.openai_api_key),
         "openai_model": config.openai_model,
+        "anthropic_configured": bool(config.anthropic_api_key),
+        "anthropic_model": config.anthropic_model,
         "local_engine_url": config.local_engine_url,
         "local_engine_mode": config.local_engine_mode,
         "local_engine_model": config.local_engine_model,
@@ -635,7 +637,9 @@ async def update_ai_config_endpoint(config_update: dict):
     - ai_enabled: bool
     - openai_api_key: str (sk-...)
     - openai_model: str (gpt-4o-mini, gpt-4o, etc)
-    - default_engine: str (openai, local, mock)
+    - anthropic_api_key: str (sk-ant-...)
+    - anthropic_model: str (claude-sonnet-4-20250514, etc)
+    - default_engine: str (openai, anthropic, local, mock)
     - cache_enabled: bool
     
     NOTA: Los cambios NO persisten tras restart del servidor.
@@ -648,6 +652,8 @@ async def update_ai_config_endpoint(config_update: dict):
             ai_enabled=config_update.get("ai_enabled"),
             openai_api_key=config_update.get("openai_api_key"),
             openai_model=config_update.get("openai_model"),
+            anthropic_api_key=config_update.get("anthropic_api_key"),
+            anthropic_model=config_update.get("anthropic_model"),
             default_engine=config_update.get("default_engine"),
             cache_enabled=config_update.get("cache_enabled")
         )
@@ -658,6 +664,8 @@ async def update_ai_config_endpoint(config_update: dict):
             "default_engine": updated_config.default_engine,
             "openai_configured": bool(updated_config.openai_api_key),
             "openai_model": updated_config.openai_model,
+            "anthropic_configured": bool(updated_config.anthropic_api_key),
+            "anthropic_model": updated_config.anthropic_model,
             "cache_enabled": updated_config.cache_enabled
         }
     except Exception as e:
@@ -675,41 +683,91 @@ async def test_ai_connection():
     
     config = get_ai_config()
     
-    if not config.openai_api_key:
-        return {"success": False, "error": "OpenAI API key not configured"}
+    # Determinar qué engine probar
+    engine = config.default_engine
     
-    try:
-        import httpx
+    if engine == "anthropic" or (engine == "mock" and config.anthropic_api_key):
+        # Probar Anthropic
+        if not config.anthropic_api_key:
+            return {"success": False, "error": "Anthropic API key not configured"}
         
-        start_time = time.time()
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {config.openai_api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": config.openai_model,
-                    "messages": [{"role": "user", "content": "Say 'OK' in one word."}],
-                    "max_tokens": 5
-                }
-            )
-        
-        latency_ms = int((time.time() - start_time) * 1000)
-        
-        if response.status_code == 200:
-            return {
-                "success": True,
-                "model": config.openai_model,
-                "latency_ms": latency_ms
-            }
-        else:
-            error_detail = response.json().get("error", {}).get("message", response.text)
-            return {"success": False, "error": error_detail}
+        try:
+            import httpx
             
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+            start_time = time.time()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": config.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": config.anthropic_model,
+                        "max_tokens": 10,
+                        "messages": [{"role": "user", "content": "Say 'OK' in one word."}]
+                    }
+                )
+            
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "engine": "anthropic",
+                    "model": config.anthropic_model,
+                    "latency_ms": latency_ms
+                }
+            else:
+                error_data = response.json()
+                error_detail = error_data.get("error", {}).get("message", response.text)
+                return {"success": False, "engine": "anthropic", "error": error_detail}
+                
+        except Exception as e:
+            return {"success": False, "engine": "anthropic", "error": str(e)}
+    
+    elif engine == "openai" or config.openai_api_key:
+        # Probar OpenAI
+        if not config.openai_api_key:
+            return {"success": False, "error": "OpenAI API key not configured"}
+        
+        try:
+            import httpx
+            
+            start_time = time.time()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {config.openai_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": config.openai_model,
+                        "messages": [{"role": "user", "content": "Say 'OK' in one word."}],
+                        "max_tokens": 5
+                    }
+                )
+            
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "engine": "openai",
+                    "model": config.openai_model,
+                    "latency_ms": latency_ms
+                }
+            else:
+                error_detail = response.json().get("error", {}).get("message", response.text)
+                return {"success": False, "engine": "openai", "error": error_detail}
+                
+        except Exception as e:
+            return {"success": False, "engine": "openai", "error": str(e)}
+    
+    else:
+        return {"success": False, "error": "No AI engine configured (need OpenAI or Anthropic API key)"}
 
 
 @router.get("/ai/cache/stats")

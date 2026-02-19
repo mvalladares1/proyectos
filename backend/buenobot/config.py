@@ -19,9 +19,9 @@ class AIEngineConfig(BaseSettings):
         description="Habilitar integración IA globalmente"
     )
     
-    default_engine: Literal["local", "openai", "mock"] = Field(
+    default_engine: Literal["local", "openai", "anthropic", "mock"] = Field(
         default="mock",
-        description="Motor por defecto: local, openai, mock"
+        description="Motor por defecto: local, openai, anthropic, mock"
     )
     
     analysis_mode: Literal["basic", "deep"] = Field(
@@ -67,6 +67,27 @@ class AIEngineConfig(BaseSettings):
     )
     
     openai_max_tokens: int = Field(
+        default=2000,
+        description="Máximo de tokens en respuesta"
+    )
+    
+    # === ANTHROPIC ENGINE ===
+    anthropic_api_key: Optional[str] = Field(
+        default=None,
+        description="API Key de Anthropic (env: ANTHROPIC_API_KEY)"
+    )
+    
+    anthropic_model: str = Field(
+        default="claude-sonnet-4-20250514",
+        description="Modelo Anthropic a usar"
+    )
+    
+    anthropic_timeout: int = Field(
+        default=60,
+        description="Timeout en segundos para Anthropic API"
+    )
+    
+    anthropic_max_tokens: int = Field(
         default=2000,
         description="Máximo de tokens en respuesta"
     )
@@ -181,6 +202,8 @@ def get_ai_config() -> AIEngineConfig:
             default_engine=os.getenv("BUENOBOT_DEFAULT_ENGINE", "mock"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
             local_engine_url=os.getenv("BUENOBOT_LOCAL_ENGINE_URL", "http://localhost:11434"),
             local_engine_mode=os.getenv("BUENOBOT_LOCAL_ENGINE_MODE", "mock"),
         )
@@ -198,6 +221,8 @@ def update_ai_config(
     ai_enabled: Optional[bool] = None,
     openai_api_key: Optional[str] = None,
     openai_model: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    anthropic_model: Optional[str] = None,
     default_engine: Optional[str] = None,
     cache_enabled: Optional[bool] = None
 ) -> AIEngineConfig:
@@ -217,6 +242,10 @@ def update_ai_config(
         current["openai_api_key"] = openai_api_key
     if openai_model is not None:
         current["openai_model"] = openai_model
+    if anthropic_api_key is not None:
+        current["anthropic_api_key"] = anthropic_api_key
+    if anthropic_model is not None:
+        current["anthropic_model"] = anthropic_model
     if default_engine is not None:
         current["default_engine"] = default_engine
     if cache_enabled is not None:

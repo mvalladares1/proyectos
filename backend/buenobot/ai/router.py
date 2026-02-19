@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EngineSelection:
     """Resultado de selección de motor"""
-    engine: str  # "local", "openai", "mock"
+    engine: str  # "local", "openai", "anthropic", "mock"
     reason: str
     complexity_score: int = 0
 
@@ -27,7 +27,7 @@ class AIRouter:
     
     Política por defecto:
     - Usar LOCAL siempre que sea posible (económico, rápido)
-    - Usar API (OpenAI) SOLO cuando:
+    - Usar API (OpenAI/Anthropic) SOLO cuando:
       a) Hay findings HIGH/CRITICAL
       b) Hay triggers de complejidad
       c) Usuario fuerza analysis_mode=deep
@@ -35,6 +35,19 @@ class AIRouter:
     
     def __init__(self):
         self.config = get_ai_config()
+    
+    def _get_preferred_api_engine(self) -> Optional[str]:
+        """Retorna el motor API preferido (anthropic > openai)"""
+        if self.config.default_engine == "anthropic" and self.config.anthropic_api_key:
+            return "anthropic"
+        if self.config.default_engine == "openai" and self.config.openai_api_key:
+            return "openai"
+        # Fallback: usar el que tenga key configurada
+        if self.config.anthropic_api_key:
+            return "anthropic"
+        if self.config.openai_api_key:
+            return "openai"
+        return None
     
     def select_engine(
         self,
@@ -58,11 +71,14 @@ class AIRouter:
                 reason="Development mode (mock)"
             )
         
-        # Si no hay API key de OpenAI, usar local
-        if not self.config.openai_api_key:
+        # Obtener motor API preferido
+        preferred_api = self._get_preferred_api_engine()
+        
+        # Si no hay API key de ningún tipo, usar local
+        if not preferred_api:
             return EngineSelection(
                 engine="local" if self.config.local_engine_mode == "http" else "mock",
-                reason="No OpenAI API key configured"
+                reason="No API key configured (OpenAI/Anthropic)"
             )
         
         # Calcular complejidad
@@ -71,8 +87,8 @@ class AIRouter:
         # Decisión forzada por modo deep
         if analysis_mode == "deep":
             return EngineSelection(
-                engine="openai",
-                reason="Deep analysis mode requested",
+                engine=preferred_api,
+                reason=f"Deep analysis mode requested (using {preferred_api})",
                 complexity_score=complexity_score
             )
         
@@ -80,8 +96,8 @@ class AIRouter:
         has_critical = self._has_critical_findings(evidence)
         if has_critical and self.config.use_api_for_critical:
             return EngineSelection(
-                engine="openai",
-                reason="Critical/High findings detected",
+                engine=preferred_api,
+                reason=f"Critical/High findings detected (using {preferred_api})",
                 complexity_score=complexity_score
             )
         
@@ -89,8 +105,8 @@ class AIRouter:
         complexity_triggers = self._get_complexity_triggers(evidence)
         if complexity_triggers and self.config.use_api_for_complex:
             return EngineSelection(
-                engine="openai",
-                reason=f"Complexity triggers: {', '.join(complexity_triggers)}",
+                engine=preferred_api,
+                reason=f"Complexity triggers: {', '.join(complexity_triggers)} (using {preferred_api})",
                 complexity_score=complexity_score
             )
         

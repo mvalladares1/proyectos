@@ -16,6 +16,7 @@ from ..evidence import EvidencePack
 from .router import AIRouter, EngineSelection
 from .local_engine import LocalEngine
 from .openai_engine import OpenAIEngine
+from .anthropic_engine import AnthropicEngine
 from ..cache_ai import AICache, get_ai_cache
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ class AIGateway:
         self.cache = get_ai_cache()
         self.local_engine = LocalEngine()
         self.openai_engine = OpenAIEngine()
+        self.anthropic_engine = AnthropicEngine()
     
     def _compute_evidence_hash(self, evidence: EvidencePack) -> str:
         """Genera hash único del EvidencePack para cache"""
@@ -174,6 +176,8 @@ class AIGateway:
         try:
             if engine_selection.engine == "openai":
                 result = await self._run_openai(evidence)
+            elif engine_selection.engine == "anthropic":
+                result = await self._run_anthropic(evidence)
             elif engine_selection.engine == "local":
                 result = await self._run_local(evidence)
             else:  # mock
@@ -191,8 +195,8 @@ class AIGateway:
         except Exception as e:
             logger.exception(f"AI analysis failed: {e}")
             
-            # Intentar fallback a local si falló OpenAI
-            if engine_selection.engine == "openai":
+            # Intentar fallback a local si falló API engine
+            if engine_selection.engine in ("openai", "anthropic"):
                 logger.info("Falling back to local engine")
                 try:
                     result = await self._run_local(evidence)
@@ -207,6 +211,11 @@ class AIGateway:
         """Ejecuta análisis con OpenAI"""
         response = await self.openai_engine.generate(evidence)
         return self._parse_ai_response(evidence.scan_id, response, "openai")
+    
+    async def _run_anthropic(self, evidence: EvidencePack) -> AIEnrichedReport:
+        """Ejecuta análisis con Anthropic Claude"""
+        response = await self.anthropic_engine.generate(evidence)
+        return self._parse_ai_response(evidence.scan_id, response, "anthropic")
     
     async def _run_local(self, evidence: EvidencePack) -> AIEnrichedReport:
         """Ejecuta análisis con motor local"""

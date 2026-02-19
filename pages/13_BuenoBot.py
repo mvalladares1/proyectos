@@ -737,16 +737,82 @@ with tab_config:
                 st.markdown(f"**Modelo OpenAI:** `{ai_config.get('openai_model', 'N/A')}`")
         
         with col_ai2:
-            st.markdown(f"**Motor local URL:** `{ai_config.get('local_engine_url', 'N/A')}`")
-            st.markdown(f"**Motor local modo:** `{ai_config.get('local_engine_mode', 'N/A')}`")
+            st.markdown(f"**Anthropic configurado:** {'✓' if ai_config.get('anthropic_configured') else '✗'}")
+            if ai_config.get("anthropic_configured"):
+                st.markdown(f"**Modelo Claude:** `{ai_config.get('anthropic_model', 'N/A')}`")
             st.markdown(f"**Cache habilitado:** {'✓' if ai_config.get('cache_enabled') else '✗'}")
             st.markdown(f"**Max findings a IA:** {ai_config.get('max_findings_to_ai', 'N/A')}")
         
-        # === CONFIGURAR OpenAI ===
+        # === CONFIGURAR Anthropic (Claude) ===
         st.markdown("---")
-        st.markdown("#### 🔑 Configurar OpenAI API")
+        st.markdown("#### 🧠 Configurar Anthropic Claude API")
         
-        with st.expander("⚙️ Habilitar/Configurar OpenAI", expanded=not ai_config.get("openai_configured", False)):
+        with st.expander("⚙️ Habilitar/Configurar Claude", expanded=not ai_config.get("anthropic_configured", False)):
+            st.info("""
+            **¿Cómo obtener una API Key de Anthropic?**
+            1. Ve a [console.anthropic.com](https://console.anthropic.com)
+            2. Inicia sesión o crea cuenta
+            3. Ve a API Keys → Create Key
+            4. Copia la key aquí (empieza con `sk-ant-`)
+            """)
+            
+            with st.form("anthropic_config_form"):
+                new_anthropic_key = st.text_input(
+                    "Anthropic API Key",
+                    type="password",
+                    placeholder="sk-ant-...",
+                    help="Tu API key de Anthropic (sk-ant-...)"
+                )
+                
+                new_anthropic_model = st.selectbox(
+                    "Modelo Claude",
+                    options=["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
+                    index=0,
+                    help="claude-sonnet-4-20250514 es el más reciente y potente"
+                )
+                
+                enable_ai_anthropic = st.checkbox(
+                    "Habilitar AI Analysis automático",
+                    value=ai_enabled,
+                    help="Cuando está habilitado, cada scan ejecuta análisis IA automáticamente"
+                )
+                
+                submitted_anthropic = st.form_submit_button("💾 Guardar Configuración Claude", type="primary")
+                
+                if submitted_anthropic:
+                    if new_anthropic_key or enable_ai_anthropic != ai_enabled:
+                        config_data = {
+                            "ai_enabled": enable_ai_anthropic,
+                        }
+                        if new_anthropic_key:
+                            config_data["anthropic_api_key"] = new_anthropic_key
+                            config_data["anthropic_model"] = new_anthropic_model
+                            config_data["default_engine"] = "anthropic"
+                        
+                        result = api_request("POST", "/ai/config", config_data)
+                        if "error" not in result:
+                            st.success("✅ Configuración Claude guardada exitosamente")
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {result.get('error', result.get('detail', 'Unknown'))}")
+                    else:
+                        st.warning("No hay cambios para guardar")
+        
+        # Test Anthropic connection
+        if ai_config.get("anthropic_configured") and ai_config.get("default_engine") == "anthropic":
+            if st.button("🧪 Probar conexión Claude"):
+                with st.spinner("Probando conexión..."):
+                    test_result = api_request("POST", "/ai/test")
+                    if "error" not in test_result and test_result.get("success"):
+                        st.success(f"✅ Conexión exitosa! Engine: {test_result.get('engine')}, Modelo: {test_result.get('model')}, Latencia: {test_result.get('latency_ms')}ms")
+                    else:
+                        st.error(f"❌ Error de conexión: {test_result.get('error', 'Unknown')}")
+        
+        # === CONFIGURAR OpenAI (alternativa) ===
+        st.markdown("---")
+        st.markdown("#### 🔑 Configurar OpenAI API (alternativa)")
+        
+        with st.expander("⚙️ Habilitar/Configurar OpenAI", expanded=False):
             st.info("""
             **¿Cómo obtener una API Key?**
             1. Ve a [platform.openai.com](https://platform.openai.com)
@@ -798,7 +864,7 @@ with tab_config:
                         st.warning("No hay cambios para guardar")
         
         # Test OpenAI connection
-        if ai_config.get("openai_configured"):
+        if ai_config.get("openai_configured") and ai_config.get("default_engine") == "openai":
             if st.button("🧪 Probar conexión OpenAI"):
                 with st.spinner("Probando conexión..."):
                     test_result = api_request("POST", "/ai/test")
