@@ -131,27 +131,136 @@ class ASTAnalyzer(ast.NodeVisitor):
         self.current_decorator = None
     
     def _check_query_params(self, node):
-        """Verifica parámetros Query() para issues de seguridad"""
-        for arg in node.args.args + node.args.kwonlyargs:
+        """
+        Verifica parámetros Query() para issues de seguridad.
+        
+        Detecta patrones como:
+            password: str = Query(...)
+            username: str = Query(...)
+        """
+        # Crear mapeo de argumentos a sus defaults
+        # args.args son los parámetros posicionales
+        # args.defaults son los valores default (alineados desde la derecha)
+        # args.kwonlyargs son los keyword-only args (después de *)
+        # args.kw_defaults son sus defaults
+        
+        sensitive_names = ['password', 'passwd', 'pwd', 'secret', 'api_key', 'apikey', 
+                          'token', 'credential', 'auth_key', 'private_key']
+        
+        # Procesar args posicionales con defaults
+        n_defaults = len(node.args.defaults)
+        n_args = len(node.args.args)
+        
+        # Los defaults se alinean desde la derecha
+        # Si hay 5 args y 3 defaults, los últimos 3 args tienen defaults
+        for i, arg in enumerate(node.args.args):
             arg_name = arg.arg.lower()
             
-            # RULE: password_in_query_params
-            if any(sensitive in arg_name for sensitive in ['password', 'passwd', 'pwd', 'secret', 'token']):
-                # Verificar si es Query param
-                if arg.annotation:
-                    ann_str = ast.unparse(arg.annotation) if hasattr(ast, 'unparse') else str(arg.annotation)
-                    if 'Query' in ann_str or (hasattr(arg, 'default') and 'Query' in str(type(arg.default))):
-                        self.issues.append(CodeIssue(
-                            issue_type=IssueType.SECURITY,
-                            rule="password_in_query_params",
-                            message=f"Parámetro sensible '{arg.arg}' expuesto en Query params (visible en URL/logs)",
-                            file_path=self.file_path,
-                            line_number=arg.lineno,
-                            column=arg.col_offset,
-                            severity=CheckSeverity.CRITICAL,
-                            code_snippet=self.get_code_snippet(arg.lineno),
-                            recommendation="Mover credenciales a Header o Body de request POST"
-                        ))
+            # Verificar si es nombre sensible
+            is_sensitive = any(sensitive in arg_name for sensitive in sensitive_names)
+            
+            if not is_sensitive:
+                continue
+            
+            # Obtener el default correspondiente (si existe)
+            default_index = i - (n_args - n_defaults)
+            has_query_default = False
+            
+            if default_index >= 0 and default_index < len(node.args.defaults):
+                default = node.args.defaults[default_index]
+                # Verificar si es Query(...)
+                if isinstance(default, ast.Call):
+                    func_name = self._get_call_name(default)
+                    if 'Query' in func_name or func_name == 'Query':
+                        has_query_default = True
+            
+            # También verificar anotación tipo Annotated[str, Query(...)]
+            if arg.annotation:
+                try:
+                    ann_str = ast.unparse(arg.annotation) if hasattr(ast, 'unparse') else ""
+                    if 'Query' in ann_str:
+                        has_query_default = True
+                except Exception:
+                    pass
+            
+            if has_query_default:
+                self.issues.append(CodeIssue(
+                    issue_type=IssueType.SECURITY,
+                    rule="password_in_query_params",
+                    message=f"CRÍTICO: Parámetro sensible '{arg.arg}' expuesto en Query params (visible en URL, logs, historial del navegador)",
+                    file_path=self.file_path,
+                    line_number=arg.lineno if hasattr(arg, 'lineno') else node.lineno,
+                    column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
+                    severity=CheckSeverity.CRITICAL,
+                    code_snippet=self.get_code_snippet(arg.lineno if hasattr(arg, 'lineno') else node.lineno),
+                    recommendation="Mover credenciales a HTTP Header (Authorization, X-API-Key) o Body de POST request"
+                ))
+        
+        # Procesar keyword-only args (params después de *)
+        for i, arg in enumerate(node.args.kwonlyargs):
+            arg_name = arg.arg.lower()
+            
+            is_sensitive = any(sensitive in arg_name for sensitive in sensitive_names)
+            
+            if not is_sensitive:
+                continue
+            
+            # Get kw_default
+            has_query_default = False
+            if i < len(node.args.kw_defaults) and node.args.kw_defaults[i] is not None:
+                default = node.args.kw_defaults[i]
+                if isinstance(default, ast.Call):
+                    func_name = self._get_call_name(default)
+                    if 'Query' in func_name or func_name == 'Query':
+                        has_query_default = True
+            
+            if has_query_default:
+                self.issues.append(CodeIssue(
+                    issue_type=IssueType.SECURITY,
+                    rule="password_in_query_params",
+                    message=f"CRÍTICO: Parámetro sensible '{arg.arg}' expuesto en Query params (visible en URL, logs, historial del navegador)",
+                    file_path=self.file_path,
+                    line_number=arg.lineno if hasattr(arg, 'lineno') else node.lineno,
+                    column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
+                    severity=CheckSeverity.CRITICAL,
+                    code_snippet=self.get_code_snippet(arg.lineno if hasattr(arg, 'lineno') else node.lineno),
+                    recommendation="Mover credenciales a HTTP Header (Authorization, X-API-Key) o Body de POST request"
+                ))
+        
+        # También detectar username en Query (aunque menos crítico que password)
+        # Solo reportar como HIGH, no CRITICAL
+        username_names = ['username', 'user', 'userid', 'user_id', 'login']
+        
+        for i, arg in enumerate(node.args.args):
+            arg_name = arg.arg.lower()
+            
+            is_username = any(uname == arg_name for uname in username_names)
+            
+            if not is_username:
+                continue
+            
+            default_index = i - (n_args - n_defaults)
+            has_query_default = False
+            
+            if default_index >= 0 and default_index < len(node.args.defaults):
+                default = node.args.defaults[default_index]
+                if isinstance(default, ast.Call):
+                    func_name = self._get_call_name(default)
+                    if 'Query' in func_name or func_name == 'Query':
+                        has_query_default = True
+            
+            if has_query_default:
+                self.issues.append(CodeIssue(
+                    issue_type=IssueType.SECURITY,
+                    rule="username_in_query_params",  
+                    message=f"Advertencia: Nombre de usuario '{arg.arg}' expuesto en Query params",
+                    file_path=self.file_path,
+                    line_number=arg.lineno if hasattr(arg, 'lineno') else node.lineno,
+                    column=arg.col_offset if hasattr(arg, 'col_offset') else 0,
+                    severity=CheckSeverity.HIGH,
+                    code_snippet=self.get_code_snippet(arg.lineno if hasattr(arg, 'lineno') else node.lineno),
+                    recommendation="Considerar mover a HTTP Header para mejor seguridad"
+                ))
     
     def _check_node(self, node, http_method: Optional[str]):
         """Verifica nodo individual por antipatrones"""

@@ -388,3 +388,169 @@ class EnhancedFinding(BaseModel):
             first_seen=datetime.utcnow(),
             last_seen=datetime.utcnow()
         )
+
+
+# === MODELOS v3.0 - AI ANALYSIS ===
+
+class AIRootCause(BaseModel):
+    """Root cause identificado por IA"""
+    cause: str
+    evidence_ids: List[str] = []
+    severity: str = "medium"
+    explanation: str = ""
+
+
+class AIRecommendation(BaseModel):
+    """Recomendación generada por IA"""
+    title: str
+    priority: str = "P2"  # P0-P4
+    effort: str = "medium"  # low, medium, high
+    description: str = ""
+    code_example: Optional[str] = None
+
+
+class AIAnalysisResult(BaseModel):
+    """
+    Resultado del análisis de IA v3.0
+    
+    Generado por el AI Gateway (local o OpenAI).
+    Complementa el análisis determinístico.
+    """
+    # Estado
+    enabled: bool = False
+    engine_used: Optional[str] = None  # "local", "openai", "mock"
+    engine_reason: Optional[str] = None
+    
+    # Tiempos
+    analysis_ms: int = 0
+    cached: bool = False
+    
+    # Resultados
+    summary: Optional[str] = None
+    root_causes: List[AIRootCause] = []
+    recommendations: List[AIRecommendation] = []
+    
+    # Métricas
+    risk_score: int = 0  # 0-100
+    confidence: float = 0.0  # 0.0-1.0
+    
+    # Insights adicionales
+    suggested_next_checks: List[str] = []
+    notable_anomalies: List[str] = []
+    
+    # Error handling
+    error: Optional[str] = None
+    skipped_reason: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializa a diccionario"""
+        return {
+            "enabled": self.enabled,
+            "engine_used": self.engine_used,
+            "engine_reason": self.engine_reason,
+            "analysis_ms": self.analysis_ms,
+            "cached": self.cached,
+            "summary": self.summary,
+            "root_causes": [rc.dict() for rc in self.root_causes],
+            "recommendations": [rec.dict() for rec in self.recommendations],
+            "risk_score": self.risk_score,
+            "confidence": self.confidence,
+            "suggested_next_checks": self.suggested_next_checks,
+            "notable_anomalies": self.notable_anomalies,
+            "error": self.error,
+            "skipped_reason": self.skipped_reason
+        }
+    
+    @classmethod
+    def from_gateway_response(cls, response: Dict[str, Any]) -> "AIAnalysisResult":
+        """Crea instancia desde respuesta del AIGateway"""
+        if response.get("skipped"):
+            return cls(
+                enabled=False,
+                skipped_reason=response.get("reason", "Unknown")
+            )
+        
+        if response.get("error"):
+            return cls(
+                enabled=True,
+                engine_used=response.get("engine_used"),
+                error=str(response.get("error"))
+            )
+        
+        # Parsear root causes
+        root_causes = []
+        for rc in response.get("root_causes", []):
+            root_causes.append(AIRootCause(
+                cause=rc.get("cause", ""),
+                evidence_ids=rc.get("evidence_ids", []),
+                severity=rc.get("severity", "medium"),
+                explanation=rc.get("explanation", "")
+            ))
+        
+        # Parsear recommendations
+        recommendations = []
+        for rec in response.get("recommendations", []):
+            recommendations.append(AIRecommendation(
+                title=rec.get("title", ""),
+                priority=rec.get("priority", "P2"),
+                effort=rec.get("effort", "medium"),
+                description=rec.get("description", ""),
+                code_example=rec.get("code_example")
+            ))
+        
+        return cls(
+            enabled=True,
+            engine_used=response.get("engine_used"),
+            engine_reason=response.get("engine_reason"),
+            analysis_ms=response.get("analysis_ms", 0),
+            cached=response.get("cached", False),
+            summary=response.get("summary"),
+            root_causes=root_causes,
+            recommendations=recommendations,
+            risk_score=response.get("risk_score", 0),
+            confidence=response.get("confidence", 0.0),
+            suggested_next_checks=response.get("suggested_next_checks", []),
+            notable_anomalies=response.get("notable_anomalies", [])
+        )
+
+
+class ScanReportV3(ScanReport):
+    """
+    Reporte de scan v3.0 con análisis de IA.
+    
+    Extiende ScanReport con campos de IA.
+    """
+    # AI Analysis
+    ai_analysis: Optional[AIAnalysisResult] = None
+    
+    # Evidence hash para cache
+    evidence_hash: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializa el reporte completo"""
+        base = {
+            "metadata": self.metadata.dict() if self.metadata else {},
+            "status": self.status.value if self.status else "unknown",
+            "gate_status": self.gate_status.value if self.gate_status else "unknown",
+            "gate_reason": self.gate_reason,
+            "results": {k: [r.dict() for r in v] for k, v in self.results.items()},
+            "summary": self.summary,
+            "top_findings": [f.dict() for f in self.top_findings],
+            "checklist": self.checklist,
+            "recommendations": self.recommendations,
+            "total_checks": self.total_checks,
+            "passed_checks": self.passed_checks,
+            "failed_checks": self.failed_checks,
+            "warning_checks": self.warning_checks,
+            "duration_seconds": self.duration_seconds
+        }
+        
+        # Añadir AI
+        if self.ai_analysis:
+            base["ai_analysis"] = self.ai_analysis.to_dict()
+        
+        if self.evidence_hash:
+            base["evidence_hash"] = self.evidence_hash
+        
+        return base
+

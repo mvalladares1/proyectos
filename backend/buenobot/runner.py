@@ -16,14 +16,19 @@ from .models import (
     ScanStatus,
     GateStatus,
     ScanReport,
+    ScanReportV3,
     ScanMetadata,
     ScanProgress,
     GitInfo,
     CheckResult,
-    CheckCategory
+    CheckCategory,
+    AIAnalysisResult
 )
 from .storage import get_storage
 from .checks.base import CheckRegistry, BaseCheck
+from .config import get_ai_config
+from .evidence import EvidencePack, get_evidence_builder
+from .ai import get_ai_gateway
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +248,12 @@ class ScanRunner:
             # Calcular gate status
             report.compute_gate_status()
             
+            # === v3.0 AI ANALYSIS ===
+            ai_analysis = await self._run_ai_analysis(
+                report=report,
+                environment=environment
+            )
+            
             # Generar checklist
             report.checklist = self._generate_checklist(report)
             
@@ -257,8 +268,15 @@ class ScanRunner:
                 "warnings": report.warning_checks,
                 "duration_seconds": report.duration_seconds,
                 "gate_status": report.gate_status.value,
-                "critical_findings": len([f for f in report.top_findings if f.severity.value in ["critical", "high"]])
+                "critical_findings": len([f for f in report.top_findings if f.severity.value in ["critical", "high"]]),
+                "ai_enabled": ai_analysis.enabled if ai_analysis else False,
+                "ai_engine": ai_analysis.engine_used if ai_analysis else None,
+                "ai_risk_score": ai_analysis.risk_score if ai_analysis and ai_analysis.enabled else None
             }
+            
+            # Añadir AI analysis al report si se ejecutó
+            if ai_analysis and hasattr(report, 'ai_analysis'):
+                report.ai_analysis = ai_analysis
             
             # Status final
             if report.status == ScanStatus.RUNNING:
@@ -412,6 +430,88 @@ class ScanRunner:
             })
         
         return recommendations
+    
+    async def _run_ai_analysis(
+        self,
+        report: ScanReport,
+        environment: str
+    ) -> Optional[AIAnalysisResult]:
+        """
+        Ejecuta análisis de IA v3.0.
+        
+        Args:
+            report: Reporte de scan completado
+            environment: Entorno del scan
+        
+        Returns:
+            AIAnalysisResult o None si IA está deshabilitada
+        """
+        config = get_ai_config()
+        
+        if not config.ai_enabled:
+            self._log(report, "AI analysis: disabled")
+            return AIAnalysisResult(
+                enabled=False,
+                skipped_reason="AI analysis disabled in configuration"
+            )
+        
+        try:
+            self._log(report, "AI analysis: starting...")
+            start_time = time.time()
+            
+            # Construir EvidencePack
+            builder = get_evidence_builder()
+            commit_sha = report.metadata.git_info.commit_sha if report.metadata.git_info else None
+            
+            evidence = builder.build(
+                scan_report=report,
+                environment=environment,
+                commit_sha=commit_sha
+            )
+            
+            # Llamar AI Gateway
+            gateway = get_ai_gateway()
+            
+            ai_response = await gateway.analyze(
+                evidence=evidence,
+                analysis_mode="basic"  # Could be configurable
+            )
+            
+            analysis_ms = int((time.time() - start_time) * 1000)
+            
+            # Construir resultado
+            if ai_response.get("skipped"):
+                result = AIAnalysisResult(
+                    enabled=True,
+                    skipped_reason=ai_response.get("reason")
+                )
+                self._log(report, f"AI analysis: skipped - {ai_response.get('reason')}")
+            elif ai_response.get("error"):
+                result = AIAnalysisResult(
+                    enabled=True,
+                    engine_used=ai_response.get("engine_used"),
+                    analysis_ms=analysis_ms,
+                    error=str(ai_response.get("error"))
+                )
+                self._log(report, f"AI analysis: error - {ai_response.get('error')}", "warning")
+            else:
+                result = AIAnalysisResult.from_gateway_response({
+                    **ai_response,
+                    "analysis_ms": analysis_ms
+                })
+                engine = ai_response.get("engine_used", "unknown")
+                cached = "cached" if ai_response.get("cached") else "fresh"
+                self._log(report, f"AI analysis: completed ({engine}, {cached}, {analysis_ms}ms)")
+            
+            return result
+            
+        except Exception as e:
+            logger.exception(f"AI analysis error: {e}")
+            self._log(report, f"AI analysis: error - {str(e)[:50]}", "error")
+            return AIAnalysisResult(
+                enabled=True,
+                error=str(e)
+            )
     
     def cancel(self):
         """Cancela el scan actual"""

@@ -562,6 +562,84 @@ with tab_results:
                     st.markdown(f"**{priority_color} [{priority}] {rec.get('title', '')}**")
                     st.write(rec.get("description", ""))
             
+            # === AI ANALYSIS v3.0 ===
+            ai_analysis = scan_data.get("ai_analysis", {})
+            summary_ai_enabled = scan_data.get("summary", {}).get("ai_enabled", False)
+            
+            if ai_analysis or summary_ai_enabled:
+                st.divider()
+                st.markdown("### 🤖 AI Analysis (v3.0)")
+                
+                if ai_analysis.get("enabled", False):
+                    # AI info header
+                    ai_cols = st.columns(4)
+                    ai_cols[0].metric("🔧 Motor", ai_analysis.get("engine_used", "N/A"))
+                    ai_cols[1].metric("📊 Risk Score", f"{ai_analysis.get('risk_score', 0)}/100")
+                    ai_cols[2].metric("🎯 Confianza", f"{ai_analysis.get('confidence', 0):.0%}")
+                    cached_str = "✓ Cache" if ai_analysis.get("cached") else "Fresh"
+                    ai_cols[3].metric("⏱️ Tiempo", f"{ai_analysis.get('analysis_ms', 0)}ms {cached_str}")
+                    
+                    # Summary
+                    if ai_analysis.get("summary"):
+                        st.info(f"**Resumen IA:** {ai_analysis.get('summary')}")
+                    
+                    # Root causes
+                    root_causes = ai_analysis.get("root_causes", [])
+                    if root_causes:
+                        st.markdown("#### 🔍 Root Causes")
+                        for rc in root_causes:
+                            severity_emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}.get(rc.get("severity", "medium"), "⚪")
+                            st.markdown(f"**{severity_emoji} {rc.get('cause', '')}**")
+                            if rc.get("explanation"):
+                                st.caption(rc.get("explanation"))
+                    
+                    # AI Recommendations
+                    ai_recs = ai_analysis.get("recommendations", [])
+                    if ai_recs:
+                        st.markdown("#### 💡 AI Recommendations")
+                        for rec in ai_recs:
+                            priority = rec.get("priority", "P2")
+                            effort = rec.get("effort", "medium")
+                            effort_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(effort, "⚪")
+                            
+                            with st.expander(f"**[{priority}]** {rec.get('title', '')} (Effort: {effort_emoji} {effort})"):
+                                st.write(rec.get("description", ""))
+                                if rec.get("code_example"):
+                                    st.code(rec.get("code_example"), language="python")
+                    
+                    # Anomalies
+                    anomalies = ai_analysis.get("notable_anomalies", [])
+                    if anomalies:
+                        st.markdown("#### ⚠️ Anomalías Detectadas")
+                        st.write(", ".join(f"`{a}`" for a in anomalies))
+                    
+                    # Re-analyze button
+                    col_ai_a, col_ai_b = st.columns(2)
+                    with col_ai_a:
+                        if st.button("🔄 Re-analizar con IA (Deep)"):
+                            with st.spinner("Ejecutando análisis profundo..."):
+                                result = api_request("POST", f"/scan/{scan_to_view}/ai/reanalyze?mode=deep&force=true")
+                                if "error" not in result:
+                                    st.success("Análisis completado. Recarga para ver resultados.")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error: {result.get('error', result.get('detail', 'Unknown'))}")
+                    
+                elif ai_analysis.get("skipped_reason"):
+                    st.warning(f"AI Analysis omitido: {ai_analysis.get('skipped_reason')}")
+                elif ai_analysis.get("error"):
+                    st.error(f"AI Analysis error: {ai_analysis.get('error')}")
+                else:
+                    st.info("AI Analysis no disponible para este scan. Puedes ejecutarlo manualmente:")
+                    if st.button("🤖 Ejecutar AI Analysis"):
+                        with st.spinner("Analizando con IA..."):
+                            result = api_request("POST", f"/scan/{scan_to_view}/ai/reanalyze?mode=basic")
+                            if "error" not in result:
+                                st.success("Análisis completado. Recarga para ver resultados.")
+                                st.rerun()
+                            else:
+                                st.error(f"Error: {result.get('error', result.get('detail', 'Unknown'))}")
+            
             # === DESCARGAR REPORTE ===
             st.divider()
             col1, col2 = st.columns(2)
@@ -638,8 +716,50 @@ with tab_config:
             
             **Checks disponibles:** {health.get('checks_available', 'N/A')}
             """)
+    
+    # === AI CONFIGURATION v3.0 ===
+    st.divider()
+    st.markdown("### 🤖 AI Engine Configuration (v3.0)")
+    
+    ai_config = api_request("GET", "/ai/config")
+    
+    if isinstance(ai_config, dict) and "error" not in ai_config:
+        col_ai1, col_ai2 = st.columns(2)
+        
+        with col_ai1:
+            ai_enabled = ai_config.get("ai_enabled", False)
+            status_emoji = "✅" if ai_enabled else "❌"
+            st.markdown(f"**Estado:** {status_emoji} {'Habilitado' if ai_enabled else 'Deshabilitado'}")
+            st.markdown(f"**Motor por defecto:** `{ai_config.get('default_engine', 'N/A')}`")
+            st.markdown(f"**OpenAI configurado:** {'✓' if ai_config.get('openai_configured') else '✗'}")
+            if ai_config.get("openai_configured"):
+                st.markdown(f"**Modelo OpenAI:** `{ai_config.get('openai_model', 'N/A')}`")
+        
+        with col_ai2:
+            st.markdown(f"**Motor local URL:** `{ai_config.get('local_engine_url', 'N/A')}`")
+            st.markdown(f"**Motor local modo:** `{ai_config.get('local_engine_mode', 'N/A')}`")
+            st.markdown(f"**Cache habilitado:** {'✓' if ai_config.get('cache_enabled') else '✗'}")
+            st.markdown(f"**Max findings a IA:** {ai_config.get('max_findings_to_ai', 'N/A')}")
+        
+        # Cache stats
+        cache_stats = api_request("GET", "/ai/cache/stats")
+        if isinstance(cache_stats, dict) and cache_stats.get("enabled"):
+            st.markdown("#### 📦 Cache Stats")
+            cache_cols = st.columns(4)
+            cache_cols[0].metric("Entradas", cache_stats.get("total_entries", 0))
+            cache_cols[1].metric("Tamaño", f"{cache_stats.get('total_size_kb', 0):.1f} KB")
+            cache_cols[2].metric("Expiradas", cache_stats.get("expired", 0))
+            cache_cols[3].metric("TTL", f"{cache_stats.get('ttl_hours', 0)}h")
+            
+            if st.button("🗑️ Limpiar Cache"):
+                result = api_request("POST", "/ai/cache/clear")
+                if "error" not in result:
+                    st.success(f"Cache limpiado: {result.get('cleared', 0)} entradas")
+                    st.rerun()
+    else:
+        st.warning("No se pudo obtener configuración de AI")
 
 
 # === FOOTER ===
 st.divider()
-st.caption("🤖 BUENOBOT v1.0.0 - Quality Assurance & Security para Rio Futuro Dashboards")
+st.caption("🤖 BUENOBOT v3.0.0 - Quality Assurance & Security con AI híbrida para Rio Futuro Dashboards")

@@ -411,3 +411,241 @@ async def buenobot_health():
             "status": "degraded",
             "error": str(e)
         }
+
+
+# === v3.0 AI ENDPOINTS ===
+
+@router.get("/scan/{scan_id}/ai")
+async def get_scan_ai_analysis(scan_id: str):
+    """
+    Obtiene el análisis de IA de un scan.
+    
+    v3.0: Motor híbrido Local/OpenAI con cache por commit.
+    Incluye: summary, root_causes, recommendations, risk_score.
+    """
+    storage = get_storage()
+    scan_data = storage.get_scan_raw(scan_id)
+    
+    if not scan_data:
+        raise HTTPException(status_code=404, detail=f"Scan {scan_id} no encontrado")
+    
+    # Obtener AI analysis del scan
+    ai_analysis = scan_data.get("ai_analysis")
+    summary = scan_data.get("summary", {})
+    
+    if ai_analysis:
+        return {
+            "scan_id": scan_id,
+            "ai_enabled": ai_analysis.get("enabled", False),
+            "engine_used": ai_analysis.get("engine_used"),
+            "engine_reason": ai_analysis.get("engine_reason"),
+            "cached": ai_analysis.get("cached", False),
+            "analysis_ms": ai_analysis.get("analysis_ms", 0),
+            "summary": ai_analysis.get("summary"),
+            "root_causes": ai_analysis.get("root_causes", []),
+            "recommendations": ai_analysis.get("recommendations", []),
+            "risk_score": ai_analysis.get("risk_score", 0),
+            "confidence": ai_analysis.get("confidence", 0.0),
+            "suggested_next_checks": ai_analysis.get("suggested_next_checks", []),
+            "notable_anomalies": ai_analysis.get("notable_anomalies", []),
+            "error": ai_analysis.get("error"),
+            "skipped_reason": ai_analysis.get("skipped_reason")
+        }
+    
+    # Si no hay AI analysis, retornar info del summary
+    return {
+        "scan_id": scan_id,
+        "ai_enabled": summary.get("ai_enabled", False),
+        "engine_used": summary.get("ai_engine"),
+        "risk_score": summary.get("ai_risk_score"),
+        "message": "AI analysis not available for this scan"
+    }
+
+
+@router.post("/scan/{scan_id}/ai/reanalyze")
+async def reanalyze_with_ai(
+    scan_id: str,
+    mode: str = Query(default="basic", description="Modo: basic o deep"),
+    force: bool = Query(default=False, description="Forzar re-análisis ignorando cache")
+):
+    """
+    Re-analiza un scan existente con IA.
+    
+    Útil cuando:
+    - El scan se hizo sin IA habilitada
+    - Se quiere análisis 'deep' con OpenAI
+    - Se quiere invalidar cache
+    """
+    from backend.buenobot.config import get_ai_config
+    from backend.buenobot.evidence import get_evidence_builder
+    from backend.buenobot.ai import get_ai_gateway
+    from backend.buenobot.cache_ai import get_ai_cache
+    from backend.buenobot.models import ScanReport, ScanMetadata, ScanType, ScanStatus, GateStatus
+    import time
+    
+    storage = get_storage()
+    scan_data = storage.get_scan_raw(scan_id)
+    
+    if not scan_data:
+        raise HTTPException(status_code=404, detail=f"Scan {scan_id} no encontrado")
+    
+    config = get_ai_config()
+    
+    if not config.ai_enabled:
+        raise HTTPException(status_code=400, detail="AI analysis is disabled")
+    
+    # Si force, invalidar cache para este scan
+    if force:
+        cache = get_ai_cache()
+        metadata = scan_data.get("metadata", {})
+        git_info = metadata.get("git_info", {})
+        commit_sha = git_info.get("commit_sha")
+        if commit_sha:
+            cache.invalidate(commit_sha=commit_sha)
+    
+    try:
+        start_time = time.time()
+        
+        # Reconstruir ScanReport desde datos
+        # (simplificado - usamos los datos raw directamente)
+        metadata = scan_data.get("metadata", {})
+        
+        # Construir EvidencePack desde datos raw
+        builder = get_evidence_builder()
+        
+        # Crear objeto minimal para builder
+        class MockScanReport:
+            def __init__(self, data):
+                self.scan_id = metadata.get("scan_id", scan_id)
+                self.gate_status = data.get("gate_status", "unknown")
+                self.findings = []
+                self.results = data.get("results", {})
+                
+                # Extraer findings de results
+                from backend.buenobot.models import Finding, CheckSeverity
+                for category_results in self.results.values():
+                    for check in category_results:
+                        for f in check.get("findings", []):
+                            finding = type('Finding', (), {
+                                'title': f.get('title', ''),
+                                'description': f.get('description', ''),
+                                'severity': CheckSeverity(f.get('severity', 'info').lower()),
+                                'location': f.get('location'),
+                                'evidence': f.get('evidence'),
+                                'recommendation': f.get('recommendation'),
+                                'priority': f.get('priority'),
+                                'check_name': check.get('check_name', ''),
+                                'is_gate_breaker': f.get('severity', '').lower() in ['critical', 'high'],
+                                'rule_id': f.get('rule_id', ''),
+                                'code': f.get('code', '')
+                            })()
+                            self.findings.append(finding)
+                
+                self.total_findings = len(self.findings)
+                self.findings_by_severity = data.get("findings_by_severity", {})
+            
+            def dict(self):
+                return {"scan_id": self.scan_id}
+        
+        mock_report = MockScanReport(scan_data)
+        
+        git_info = metadata.get("git_info", {})
+        evidence = builder.build(
+            scan_report=mock_report,
+            environment=metadata.get("environment", "unknown"),
+            commit_sha=git_info.get("commit_sha")
+        )
+        
+        # Ejecutar análisis
+        gateway = get_ai_gateway()
+        ai_response = await gateway.analyze(
+            evidence=evidence,
+            analysis_mode=mode
+        )
+        
+        analysis_ms = int((time.time() - start_time) * 1000)
+        
+        # Actualizar scan con nuevo AI analysis
+        ai_result = {
+            "enabled": True,
+            "engine_used": ai_response.get("engine_used"),
+            "engine_reason": ai_response.get("engine_reason"),
+            "analysis_ms": analysis_ms,
+            "cached": ai_response.get("cached", False),
+            "summary": ai_response.get("summary"),
+            "root_causes": ai_response.get("root_causes", []),
+            "recommendations": ai_response.get("recommendations", []),
+            "risk_score": ai_response.get("risk_score", 0),
+            "confidence": ai_response.get("confidence", 0.0),
+            "suggested_next_checks": ai_response.get("suggested_next_checks", []),
+            "notable_anomalies": ai_response.get("notable_anomalies", [])
+        }
+        
+        # Guardar actualización
+        storage.update_scan(scan_id, {"ai_analysis": ai_result})
+        
+        return {
+            "scan_id": scan_id,
+            "status": "completed",
+            "analysis_ms": analysis_ms,
+            "ai_analysis": ai_result
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error in AI reanalysis: {e}")
+        raise HTTPException(status_code=500, detail=f"AI analysis error: {str(e)}")
+
+
+@router.get("/ai/config")
+async def get_ai_config_endpoint():
+    """
+    Obtiene la configuración actual de IA (sin secretos).
+    """
+    from backend.buenobot.config import get_ai_config
+    
+    config = get_ai_config()
+    
+    return {
+        "ai_enabled": config.ai_enabled,
+        "default_engine": config.default_engine,
+        "openai_configured": bool(config.openai_api_key),
+        "openai_model": config.openai_model,
+        "local_engine_url": config.local_engine_url,
+        "local_engine_mode": config.local_engine_mode,
+        "local_engine_model": config.local_engine_model,
+        "cache_enabled": config.cache_enabled,
+        "cache_ttl_hours": config.cache_ttl_hours,
+        "use_api_for_critical": config.use_api_for_critical,
+        "use_api_for_complex": config.use_api_for_complex,
+        "complexity_triggers": config.complexity_triggers,
+        "max_findings_to_ai": config.max_findings_to_ai
+    }
+
+
+@router.get("/ai/cache/stats")
+async def get_ai_cache_stats():
+    """
+    Obtiene estadísticas del cache de IA.
+    """
+    from backend.buenobot.cache_ai import get_ai_cache
+    
+    cache = get_ai_cache()
+    return cache.get_stats()
+
+
+@router.post("/ai/cache/clear")
+async def clear_ai_cache():
+    """
+    Limpia todo el cache de IA.
+    
+    Útil para desarrollo o cuando se actualiza el modelo.
+    """
+    from backend.buenobot.cache_ai import get_ai_cache
+    
+    cache = get_ai_cache()
+    cleared = cache.clear()
+    
+    return {
+        "message": f"Cleared {cleared} cache entries",
+        "cleared": cleared
+    }

@@ -1,0 +1,89 @@
+# BUENOBOT v3.0 - Output Contract for recepciones-mp
+# Validates the structure and business rules of the recepciones-mp endpoint
+
+endpoint: /api/v1/recepciones-mp/
+method: GET
+description: Get recepciones de materia prima with quality data
+
+# Response schema validation
+response:
+  type: array
+  items:
+    type: object
+    required:
+      - id
+      - name
+      - state
+    properties:
+      id:
+        type: integer
+        description: Recepcion ID
+      name:
+        type: string
+        description: Reference name
+        pattern: "^(WH/IN|RFP|VLK)/.*"
+      state:
+        type: string
+        enum: [draft, waiting, confirmed, assigned, done, cancel]
+      partner_id:
+        type: integer
+        description: Producer ID
+      partner_name:
+        type: string
+        description: Producer name
+      date_done:
+        type: string
+        format: date
+      origin:
+        type: string
+        enum: [RFP, VILKUN, SAN JOSE]
+      total_kg:
+        type: number
+        minimum: 0
+      total_cajas:
+        type: integer
+        minimum: 0
+
+# Business rules validation
+rules:
+  - name: valid_date_range
+    description: Dates should be within requested range
+    severity: high
+    check: |
+      all(r['date_done'] >= fecha_inicio and r['date_done'] <= fecha_fin for r in response if r.get('date_done'))
+  
+  - name: state_filter_respected
+    description: State filter should be applied correctly
+    severity: critical
+    check: |
+      not estados or all(r['state'] in estados for r in response)
+  
+  - name: origen_filter_respected
+    description: Origin filter should be applied correctly
+    severity: critical
+    check: |
+      not origen or all(r['origin'] in origen for r in response if r.get('origin'))
+  
+  - name: positive_quantities
+    description: Quantities should be non-negative
+    severity: medium
+    check: |
+      all(r.get('total_kg', 0) >= 0 and r.get('total_cajas', 0) >= 0 for r in response)
+  
+  - name: no_sensitive_data_in_output
+    description: Response should not contain credentials
+    severity: critical
+    check: |
+      not any('password' in str(r).lower() or 'secret' in str(r).lower() for r in response)
+
+# Performance expectations
+performance:
+  max_response_time_ms: 5000
+  max_items_default: 1000
+  
+# Security checks
+security:
+  - name: no_credentials_in_query
+    description: Endpoint should not receive credentials in query params
+    severity: critical
+    note: This endpoint currently violates this rule - password is in Query params

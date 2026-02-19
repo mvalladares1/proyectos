@@ -92,39 +92,10 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     
     # No está en caché, calcular...
     
-    # Mapeo de origen a picking_type_id
-    ORIGEN_PICKING_MAP = {
-        "RFP": 1,
-        "VILKUN": 217,
-        "SAN JOSE": 164  # ID correcto verificado en Odoo
-    }
-    
-    # Determinar picking_type_ids a consultar
-    if origen and len(origen) > 0:
-        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
-        # IMPORTANTE: Si hay overrides que reclasifican pickings hacia un origen filtrado,
-        # debemos incluir también el picking_type_id original de esos pickings.
-        # Ejemplo: RF/RFP/IN/01151 tiene picking_type_id=1 (RFP) pero override→VILKUN.
-        # Si filtramos por VILKUN, debemos traer también picking_type_id=1 para no perderlos.
-        REVERSE_ORIGEN_MAP = {1: "RFP", 217: "VILKUN", 164: "SAN JOSE"}
-        for albaran_override, origen_override in OVERRIDE_ORIGEN_PICKING.items():
-            if origen_override in origen:
-                # Detectar el picking_type_id original del override por su prefijo
-                if albaran_override.startswith("RF/RFP/"):
-                    extra_id = 1
-                elif albaran_override.startswith("Vilk/"):
-                    extra_id = 217
-                elif "SNJ/" in albaran_override or "Sjose/" in albaran_override:
-                    extra_id = 164
-                else:
-                    continue
-                if extra_id not in picking_type_ids:
-                    picking_type_ids.append(extra_id)
-    else:
-        picking_type_ids = [1, 217, 164]  # Todos por defecto
-    
-    if not picking_type_ids:
-        picking_type_ids = [1, 217, 164]
+    # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
+    # (post-query). Esto garantiza que el resultado con filtro sea consistente con el resultado
+    # sin filtro, sin depender de que todos los picking_type_ids estén mapeados correctamente.
+    picking_type_ids = [1, 217, 164]
     
     
     # ============ PASO 0.5: Identificar devoluciones y calcular kg devueltos por recepción ============
@@ -882,34 +853,8 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     """
     client = OdooClient(username=username, password=password)
     
-    # Mapeo de origen a picking_type_id
-    ORIGEN_PICKING_MAP = {
-        "RFP": 1,
-        "VILKUN": 217,
-        "SAN JOSE": 164  # ID correcto verificado en Odoo
-    }
-    
-    # Determinar picking_type_ids a consultar
-    if origen_filtros:
-        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
-        # Incluir picking_type_ids extra de overrides que apuntan al origen filtrado
-        for albaran_override, origen_override in OVERRIDE_ORIGEN_PICKING.items():
-            if origen_override in origen_filtros:
-                if albaran_override.startswith("RF/RFP/"):
-                    extra_id = 1
-                elif albaran_override.startswith("Vilk/"):
-                    extra_id = 217
-                elif "SNJ/" in albaran_override or "Sjose/" in albaran_override:
-                    extra_id = 164
-                else:
-                    continue
-                if extra_id not in picking_type_ids:
-                    picking_type_ids.append(extra_id)
-    else:
-        picking_type_ids = [1, 217, 164]
-        
-    if not picking_type_ids:
-        picking_type_ids = [1, 217, 164]
+    # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
+    picking_type_ids = [1, 217, 164]
 
     # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
@@ -1137,36 +1082,10 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     """
     client = OdooClient(username=username, password=password)
     
-    # Mapeo de origen a picking_type_id
-    ORIGEN_PICKING_MAP = {
-        "RFP": 1,
-        "VILKUN": 217,
-        "SAN JOSE": 164  # ID correcto verificado en Odoo
-    }
-    
-    # Determinar picking_type_ids a consultar
-    if origen_filtros:
-        if isinstance(origen_filtros, str):
-            origen_filtros = [origen_filtros]
-        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
-        # Incluir picking_type_ids extra de overrides que apuntan al origen filtrado
-        for albaran_override, origen_override in OVERRIDE_ORIGEN_PICKING.items():
-            if origen_override in origen_filtros:
-                if albaran_override.startswith("RF/RFP/"):
-                    extra_id = 1
-                elif albaran_override.startswith("Vilk/"):
-                    extra_id = 217
-                elif "SNJ/" in albaran_override or "Sjose/" in albaran_override:
-                    extra_id = 164
-                else:
-                    continue
-                if extra_id not in picking_type_ids:
-                    picking_type_ids.append(extra_id)
-    else:
-        picking_type_ids = [1, 217, 164]
-        
-    if not picking_type_ids:
-        picking_type_ids = [1, 217, 164]
+    # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
+    if isinstance(origen_filtros, str):
+        origen_filtros = [origen_filtros]
+    picking_type_ids = [1, 217, 164]
 
     # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
