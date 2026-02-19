@@ -523,9 +523,8 @@ class BackendDesignCheck(BaseCheck):
         """Ejecuta análisis de diseño"""
         import asyncio
         start_time = asyncio.get_event_loop().time()
-        findings: List[Finding] = []
         
-        working_dir = kwargs.get("working_dir", "/app")
+        working_dir = kwargs.get("working_dir", self.working_dir)
         scan_dirs = kwargs.get("scan_dirs", self.scan_dirs)
         
         try:
@@ -538,14 +537,14 @@ class BackendDesignCheck(BaseCheck):
                     issues = analyzer.analyze_directory(full_path)
                     all_issues.extend(issues)
             
-            # Convertir issues a findings
+            # Convertir issues a findings (usar self.findings para que execute() lo preserve)
             for issue in all_issues:
                 # Hacer path relativo
                 rel_path = issue.file_path
                 if rel_path.startswith(working_dir):
                     rel_path = rel_path[len(working_dir):].lstrip('/')
                 
-                findings.append(Finding(
+                self.findings.append(Finding(
                     title=f"[{issue.rule}] {issue.message[:50]}",
                     description=issue.message,
                     severity=issue.severity,
@@ -559,8 +558,8 @@ class BackendDesignCheck(BaseCheck):
             summary = analyzer.get_summary()
             
             # Determinar status
-            has_critical = any(f.severity in [CheckSeverity.CRITICAL, CheckSeverity.HIGH] for f in findings)
-            status = "failed" if has_critical else ("passed" if len(findings) == 0 else "warning")
+            has_critical = any(f.severity in [CheckSeverity.CRITICAL, CheckSeverity.HIGH] for f in self.findings)
+            status = "failed" if has_critical else ("passed" if len(self.findings) == 0 else "warning")
             
             return CheckResult(
                 check_id=self.check_id,
@@ -568,7 +567,7 @@ class BackendDesignCheck(BaseCheck):
                 category=self.category,
                 status=status,
                 summary=f"{summary['total_issues']} issues: {summary.get('by_severity', {})}",
-                findings=findings,
+                findings=self.findings,
                 duration_ms=int((asyncio.get_event_loop().time() - start_time) * 1000),
                 raw_output=str(summary)
             )
