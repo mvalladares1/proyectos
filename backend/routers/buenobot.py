@@ -117,20 +117,24 @@ async def start_scan(
     # Crear runner y ejecutar en background
     runner = ScanRunner()
     
-    # Ejecutar directamente con asyncio (el runner maneja la persistencia)
-    async def run_scan_task():
-        try:
-            await runner.run_scan(
-                scan_type=scan_type,
-                environment=request.environment,
-                triggered_by=request.triggered_by,
-                specific_checks=request.checks
-            )
-        except Exception as e:
-            logger.exception(f"Error en scan: {e}")
+    # Wrapper síncrono que crea su propio event loop para el background task
+    def run_scan_sync():
+        async def run_scan_async():
+            try:
+                await runner.run_scan(
+                    scan_type=scan_type,
+                    environment=request.environment,
+                    triggered_by=request.triggered_by,
+                    specific_checks=request.checks
+                )
+            except Exception as e:
+                logger.exception(f"Error en scan: {e}")
+        
+        # Crear nuevo event loop para este thread
+        asyncio.run(run_scan_async())
     
-    # Iniciar scan en background
-    background_tasks.add_task(asyncio.create_task, run_scan_task())
+    # Iniciar scan en background (sync wrapper)
+    background_tasks.add_task(run_scan_sync)
     
     # Obtener el scan recién creado (el runner lo guarda inmediatamente)
     storage = get_storage()
