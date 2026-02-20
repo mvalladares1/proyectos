@@ -90,8 +90,11 @@ def render(comercial_service, username: str, password: str):
     # KPIs
     _render_kpis(kpis_data, currency)
     
-    # Gráficos de barras
+    # Gráficos de barras - Vendido
     _render_bar_charts(df_raw, metric_key, metric_label, val_format, prefix)
+    
+    # Gráficos de barras - Comprometido
+    _render_bar_charts_comprometido(df_raw, metric_key, metric_label, val_format, prefix)
     
     # Tabla
     _render_table(df_raw, metric_key, metric_label, val_format, prefix)
@@ -155,7 +158,7 @@ def _render_bar_charts(df_raw, metric_key, metric_label, val_format, prefix):
     chart_col1, chart_col2 = st.columns(2)
     
     with chart_col1:
-        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">VENTAS POR PROGRAMA ({metric_label})</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">VENDIDO POR PROGRAMA ({metric_label})</p>', unsafe_allow_html=True)
         
         if not df_raw.empty:
             has_time_filter = len(st.session_state.applied_filters.get('mes', [])) > 0 or len(st.session_state.applied_filters.get('trimestre', [])) > 0
@@ -198,7 +201,7 @@ def _render_bar_charts(df_raw, metric_key, metric_label, val_format, prefix):
                 st.plotly_chart(fig_m, use_container_width=True, config={'displayModeBar': False}, key="chart_programa")
     
     with chart_col2:
-        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">VENTAS POR MANEJO ({metric_label})</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">VENDIDO POR MANEJO ({metric_label})</p>', unsafe_allow_html=True)
         
         if not df_raw.empty:
             has_time_filter = len(st.session_state.applied_filters.get('mes', [])) > 0 or len(st.session_state.applied_filters.get('trimestre', [])) > 0
@@ -239,6 +242,105 @@ def _render_bar_charts(df_raw, metric_key, metric_label, val_format, prefix):
                     bargap=0.3, bargroupgap=0.1
                 )
                 st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False}, key="chart_manejo")
+
+
+def _render_bar_charts_comprometido(df_raw, metric_key, metric_label, val_format, prefix):
+    """Renderiza los gráficos de barras de comprometido."""
+    if df_raw.empty:
+        return
+    
+    df_comp = df_raw[df_raw['tipo'] == 'Comprometido'].copy()
+    if df_comp.empty:
+        return
+    
+    st.markdown('<div style="margin-top: 30px;"></div>', unsafe_allow_html=True)
+    chart_col1, chart_col2 = st.columns(2)
+    
+    with chart_col1:
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">COMPROMETIDO POR PROGRAMA ({metric_label})</p>', unsafe_allow_html=True)
+        
+        has_time_filter = len(st.session_state.applied_filters.get('mes', [])) > 0 or len(st.session_state.applied_filters.get('trimestre', [])) > 0
+        x_axis = 'mes_nombre' if has_time_filter else 'anio'
+        
+        df_m = df_comp.copy()
+        if has_time_filter:
+            df_m['mes_nombre'] = df_m['mes'].map(MONTH_MAP_SHORT)
+            df_m = df_m.sort_values('mes')
+        
+        group_cols = [x_axis, 'programa']
+        df_m_plot = df_m.groupby(group_cols)[[metric_key]].sum().reset_index()
+        if not has_time_filter:
+            df_m_plot['anio'] = df_m_plot['anio'].astype(str)
+        
+        if not df_m_plot.empty:
+            fig_m = px.bar(df_m_plot, x=x_axis, y=metric_key, color='programa', barmode='group',
+                           color_discrete_map=BAR_COLORS_PROGRAMA, text=metric_key)
+            fig_m.update_traces(
+                texttemplate=f'<b>%{{text:{val_format}}}</b>',
+                textposition='outside',
+                textfont=dict(size=11, color="#333", family="Inter"),
+                marker=dict(line=dict(width=0), cornerradius=5),
+                width=0.35
+            )
+            fig_m.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(t=40, b=20, l=20, r=20), height=380,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
+                           title=None, font=dict(color="#333", size=11),
+                           bgcolor='rgba(255,255,255,0.8)', bordercolor='#ddd', borderwidth=1),
+                xaxis=dict(title=None, showgrid=False, showline=True, linecolor="#ddd",
+                          tickfont=dict(color="#333", size=12, family="Inter"), type='category'),
+                yaxis=dict(title=None, showgrid=True, gridcolor="rgba(0,0,0,0.05)",
+                          tickfont=dict(color="#999", size=10), showline=False,
+                          range=[0, df_m_plot[metric_key].max() * 1.2]),
+                bargap=0.3, bargroupgap=0.1
+            )
+            st.plotly_chart(fig_m, use_container_width=True, config={'displayModeBar': False}, key="chart_programa_comp")
+        else:
+            st.info("No hay datos comprometidos por programa.")
+    
+    with chart_col2:
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">COMPROMETIDO POR MANEJO ({metric_label})</p>', unsafe_allow_html=True)
+        
+        has_time_filter = len(st.session_state.applied_filters.get('mes', [])) > 0 or len(st.session_state.applied_filters.get('trimestre', [])) > 0
+        x_axis = 'mes_nombre' if has_time_filter else 'anio'
+        
+        df_p = df_comp.copy()
+        if has_time_filter:
+            df_p['mes_nombre'] = df_p['mes'].map(MONTH_MAP_SHORT)
+            df_p = df_p.sort_values('mes')
+        
+        group_cols = [x_axis, 'manejo']
+        df_p_plot = df_p.groupby(group_cols)[[metric_key]].sum().reset_index()
+        if not has_time_filter:
+            df_p_plot['anio'] = df_p_plot['anio'].astype(str)
+        
+        if not df_p_plot.empty:
+            fig_p = px.bar(df_p_plot, x=x_axis, y=metric_key, color='manejo', barmode='group',
+                           color_discrete_map=BAR_COLORS_MANEJO, text=metric_key)
+            fig_p.update_traces(
+                texttemplate=f'<b>%{{text:{val_format}}}</b>',
+                textposition='outside',
+                textfont=dict(size=11, color="#333", family="Inter"),
+                marker=dict(line=dict(width=0), cornerradius=5),
+                width=0.35
+            )
+            fig_p.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(t=40, b=20, l=20, r=20), height=380,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
+                           title=None, font=dict(color="#333", size=11),
+                           bgcolor='rgba(255,255,255,0.8)', bordercolor='#ddd', borderwidth=1),
+                xaxis=dict(title=None, showgrid=False, showline=True, linecolor="#ddd",
+                          tickfont=dict(color="#333", size=12, family="Inter"), type='category'),
+                yaxis=dict(title=None, showgrid=True, gridcolor="rgba(0,0,0,0.05)",
+                          tickfont=dict(color="#999", size=10), showline=False,
+                          range=[0, df_p_plot[metric_key].max() * 1.2]),
+                bargap=0.3, bargroupgap=0.1
+            )
+            st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False}, key="chart_manejo_comp")
+        else:
+            st.info("No hay datos comprometidos por manejo.")
 
 
 def _render_table(df_raw, metric_key, metric_label, val_format, prefix):
@@ -320,20 +422,34 @@ def _render_pie_charts(df_raw, metric_key, metric_label, val_format, prefix):
     pie_col1, pie_col2 = st.columns(2)
     
     with pie_col1:
-        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">DISTRIBUCIÓN CONVENCIONAL ({metric_label})</p>', unsafe_allow_html=True)
-        _render_single_pie(df_raw, 'Convencional', metric_key, val_format, prefix, "pie_convencional")
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">VENDIDO CONVENCIONAL ({metric_label})</p>', unsafe_allow_html=True)
+        _render_single_pie(df_raw, 'Convencional', metric_key, val_format, prefix, "pie_convencional", tipo_filter=['Factura', 'Nota de Crédito'])
     
     with pie_col2:
-        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">DISTRIBUCIÓN ORGÁNICO ({metric_label})</p>', unsafe_allow_html=True)
-        _render_single_pie(df_raw, 'Orgánico', metric_key, val_format, prefix, "pie_organico")
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">VENDIDO ORGÁNICO ({metric_label})</p>', unsafe_allow_html=True)
+        _render_single_pie(df_raw, 'Orgánico', metric_key, val_format, prefix, "pie_organico", tipo_filter=['Factura', 'Nota de Crédito'])
+    
+    # Pie charts - Comprometido
+    st.markdown('<div style="margin-top: 30px;"></div>', unsafe_allow_html=True)
+    pie_col3, pie_col4 = st.columns(2)
+    
+    with pie_col3:
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">COMPROMETIDO CONVENCIONAL ({metric_label})</p>', unsafe_allow_html=True)
+        _render_single_pie(df_raw, 'Convencional', metric_key, val_format, prefix, "pie_conv_comp", tipo_filter=['Comprometido'])
+    
+    with pie_col4:
+        st.markdown(f'<p style="font-weight:800; color:#1b4f72; font-size:1.2rem; margin-bottom:15px;">COMPROMETIDO ORGÁNICO ({metric_label})</p>', unsafe_allow_html=True)
+        _render_single_pie(df_raw, 'Orgánico', metric_key, val_format, prefix, "pie_org_comp", tipo_filter=['Comprometido'])
 
 
-def _render_single_pie(df_raw, manejo, metric_key, val_format, prefix, key):
+def _render_single_pie(df_raw, manejo, metric_key, val_format, prefix, key, tipo_filter=None):
     """Renderiza un gráfico de pie individual."""
     if df_raw.empty:
         return
     
-    df_filtered = df_raw[(df_raw['manejo'] == manejo) & (df_raw['tipo'].isin(['Factura', 'Nota de Crédito']))]
+    if tipo_filter is None:
+        tipo_filter = ['Factura', 'Nota de Crédito']
+    df_filtered = df_raw[(df_raw['manejo'] == manejo) & (df_raw['tipo'].isin(tipo_filter))]
     if df_filtered.empty:
         st.info("No hay datos.")
         return
