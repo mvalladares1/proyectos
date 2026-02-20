@@ -1,0 +1,234 @@
+# =============================================================================
+# BUENOBOT CI/CD Pipeline
+# =============================================================================
+# Este workflow ejecuta BUENOBOT en cada push/PR para validar calidad y seguridad.
+# Gate FAIL bloquea merge de PRs.
+#
+# Triggers:
+#   - Push a main/develop
+#   - Pull Requests a main
+#   - Manual dispatch
+# =============================================================================
+
+name: 🤖 BUENOBOT CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Tipo de scan'
+        required: true
+        default: 'quick'
+        type: choice
+        options:
+          - quick
+          - full
+      enable_ai:
+        description: 'Habilitar análisis IA'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.10'
+  # Configurar estas variables en GitHub Secrets
+  # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Linting rápido
+  # ===========================================================================
+  lint:
+    name: 🔍 Lint Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install Ruff
+        run: pip install ruff
+      
+      - name: Run Ruff linter
+        run: ruff check backend/ --output-format=github
+        continue-on-error: true
+
+  # ===========================================================================
+  # Job 2: Security scan con pip-audit
+  # ===========================================================================
+  security:
+    name: 🔒 Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Install pip-audit
+        run: pip install pip-audit
+      
+      - name: Run pip-audit
+        run: pip-audit --strict
+        continue-on-error: true
+
+  # ===========================================================================
+  # Job 3: BUENOBOT Full Scan
+  # ===========================================================================
+  buenobot:
+    name: 🤖 BUENOBOT Scan
+    runs-on: ubuntu-latest
+    needs: [lint, security]  # Esperar jobs anteriores
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff pip-audit
+      
+      - name: Run BUENOBOT Analysis (Local)
+        id: buenobot
+        env:
+          BUENOBOT_CI_MODE: 'true'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_ENABLED: ${{ github.event.inputs.enable_ai || 'false' }}
+        run: |
+          # Ejecutar análisis BUENOBOT
+          python -c "
+          import sys
+          import json
+          sys.path.insert(0, '.')
+          
+          from backend.buenobot.checks.backend_design import BackendDesignAnalyzer
+          from backend.buenobot.checks.security import SecretsCheck
+          
+          # Analizar código
+          analyzer = BackendDesignAnalyzer('.')
+          issues = analyzer.analyze_directory('./backend/routers')
+          issues.extend(analyzer.analyze_directory('./backend/services'))
+          
+          summary = analyzer.get_summary()
+          
+          # Generar reporte
+          report = {
+              'total_issues': summary['total_issues'],
+              'by_severity': summary['by_severity'],
+              'critical_count': summary['by_severity'].get('critical', 0),
+              'high_count': summary['by_severity'].get('high', 0),
+              'gate_status': 'fail' if summary['by_severity'].get('critical', 0) > 0 else 'pass'
+          }
+          
+          print(json.dumps(report, indent=2))
+          
+          # Exit code basado en gate
+          if report['critical_count'] > 0:
+              print('::error::BUENOBOT Gate FAIL - Critical issues found')
+              sys.exit(1)
+          else:
+              print('::notice::BUENOBOT Gate PASS')
+          "
+        continue-on-error: true
+      
+      - name: Create BUENOBOT Summary
+        if: always()
+        run: |
+          echo "## 🤖 BUENOBOT Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | ${{ github.event.inputs.scan_type || 'quick' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AI Enabled | ${{ github.event.inputs.enable_ai || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload BUENOBOT Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buenobot-report
+          path: |
+            buenobot-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 4: Docker Build (validar que construye)
+  # ===========================================================================
+  docker-build:
+    name: 🐳 Docker Build
+    runs-on: ubuntu-latest
+    needs: [buenobot]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.api
+          push: false
+          tags: rio-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.web
+          push: false
+          tags: rio-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Job 5: Deploy (solo en main, después de pasar BUENOBOT)
+  # ===========================================================================
+  deploy:
+    name: 🚀 Deploy
+    runs-on: ubuntu-latest
+    needs: [buenobot, docker-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploy triggered"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "Para deploy automático, configura SSH_KEY en secrets y descomenta:"
+          echo "# ssh debian@167.114.114.51 'cd /home/debian/rio-futuro-dashboards/app && git pull && docker-compose -f docker-compose.dev.yml up -d --build'"

@@ -270,14 +270,14 @@ class AgregadorFlujo:
             'paid': 'Facturas Pagadas',
             'partial': 'Facturas Parcialmente Pagadas',
             'in_payment': 'En Proceso de Pago',
-            'not_paid': 'Facturas No Pagadas',
-            'reversed': 'Facturas Revertidas'
+            'not_paid': 'Facturas No Pagadas'
+            # 'reversed' se excluye completamente
         }
         
         # Orden de prioridad para mostrar estados
-        ESTADO_ORDEN = ['paid', 'partial', 'in_payment', 'not_paid', 'reversed']
+        ESTADO_ORDEN = ['paid', 'partial', 'in_payment', 'not_paid']
         
-        # Agrupar lÃ­neas por factura primero para tener info completa
+        # Agrupar líneas por factura primero para tener info completa
         facturas_por_move = {}  # {move_name: {payment_state, total, residual, fecha, lineas[]}}
         
         for linea in lineas:
@@ -288,6 +288,10 @@ class AgregadorFlujo:
             codigo_cuenta = acc_data[1].split(' ')[0] if ' ' in acc_data[1] else acc_data[1]
             balance = linea.get('balance', 0)
             payment_state = linea.get('payment_state', 'not_paid')
+            
+            # EXCLUIR facturas revertidas completamente
+            if payment_state == 'reversed':
+                continue
             
             # Obtener nombre de factura
             move_data = linea.get('move_id', [0, ''])
@@ -399,7 +403,7 @@ class AgregadorFlujo:
         """
         print(f"[Agregador] procesar_presupuestos_ventas: {len(presupuestos)} presupuestos")
         
-        ESTADO_LABEL = '🔮 Facturas Proyectadas'
+        ESTADO_LABEL = '🔮 Facturas Proyectadas (Modulo de ventas)'
         ESTADO_CODE = 'estado_projected'
         ORDEN_ESTADO = 3.5  # Debajo de No Pagadas (3) y antes de Revertidas (4)
         
@@ -740,8 +744,8 @@ class AgregadorFlujo:
                     ('partial', '⏳ Facturas Parcialmente Pagadas', 'Facturas Parcialmente Pagadas', 2),
                     ('in_payment', '🔄 En Proceso de Pago', 'En Proceso de Pago', 3),
                     ('not_paid', '❌ Facturas No Pagadas', 'Facturas No Pagadas', 4),
-                    ('estado_projected', '🔮 Facturas Proyectadas', '🔮 Facturas Proyectadas', 4.5),
-                    ('reversed', '↩️ Facturas Revertidas', 'Facturas Revertidas', 5),
+                    ('estado_projected', '🔮 Facturas Proyectadas (Modulo de ventas)', '🔮 Facturas Proyectadas (Modulo de ventas)', 4.5),
+                    # 'reversed' se excluye completamente
                 ]
 
                 resultado_estados = []
@@ -841,8 +845,8 @@ class AgregadorFlujo:
                 'Facturas Parcialmente Pagadas': 'partial',
                 'En Proceso de Pago': 'in_payment',
                 'Facturas No Pagadas': 'not_paid',
-                '🔮 Facturas Proyectadas': 'estado_projected',
-                'Facturas Revertidas': 'reversed'
+                '🔮 Facturas Proyectadas (Modulo de ventas)': 'estado_projected'
+                # 'Facturas Revertidas' se excluye completamente
             }
             
             etiquetas_lista = []

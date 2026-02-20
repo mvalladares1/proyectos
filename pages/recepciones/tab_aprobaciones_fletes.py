@@ -1652,7 +1652,6 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     
                     # Limpiar selección ANTES de empezar a aprobar
                     st.session_state[f'selected_{key_proveedor}'] = set()
-                    st.session_state[f'select_all_{key_proveedor}'] = False
                     st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
                     
                     with st.spinner("Aprobando..."):
@@ -1688,7 +1687,6 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     
                     # Limpiar selección ANTES de empezar a procesar
                     st.session_state[f'selected_{key_proveedor}'] = set()
-                    st.session_state[f'select_all_{key_proveedor}'] = False
                     st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
                     
                     with st.spinner("Quitando aprobaciones..."):
@@ -1738,7 +1736,6 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     
                     # Limpiar selección ANTES de empezar a rechazar
                     st.session_state[f'selected_{key_proveedor}'] = set()
-                    st.session_state[f'select_all_{key_proveedor}'] = False
                     st.session_state[f'checkbox_version_{key_proveedor}'] = st.session_state.get(f'checkbox_version_{key_proveedor}', 0) + 1
                     
                     with st.spinner("Rechazando..."):

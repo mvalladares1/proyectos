@@ -833,6 +833,11 @@ def render(username: str, password: str):
                                 if productor_filtro:
                                     params_excel['productor'] = ",".join(productor_filtro) if isinstance(productor_filtro, list) else productor_filtro
 
+                                # Pasar filtro de origen (planta) al Excel
+                                origen_filtro_usado = st.session_state.get('origen_filtro_usado', [])
+                                if origen_filtro_usado:
+                                    params_excel['origen'] = origen_filtro_usado
+
                                 resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/report.xlsx", params=params_excel, timeout=180)
 
                             if resp.status_code == 200:

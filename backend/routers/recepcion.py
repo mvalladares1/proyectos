@@ -95,6 +95,7 @@ async def get_recepciones_report_xlsx(
     clasificacion: Optional[List[str]] = Query(None),
     manejo: Optional[List[str]] = Query(None),
     productor: Optional[List[str]] = Query(None),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, SAN JOSE"),
 ):
     """Genera y entrega un Excel (.xlsx) con detalle de recepciones y productos desglosados."""
     try:
@@ -102,7 +103,8 @@ async def get_recepciones_report_xlsx(
             username, password, fecha_inicio, fecha_fin, 
             include_prev_week, include_month_accum, solo_hechas=solo_hechas,
             filter_tipo_fruta=tipo_fruta, filter_clasificacion=clasificacion,
-            filter_manejo=manejo, filter_productor=productor
+            filter_manejo=manejo, filter_productor=productor,
+            filter_origen=origen
         )
         buf = BytesIO(xlsx_bytes)
         filename = f"informe_recepciones_{fecha_inicio}_a_{fecha_fin}.xlsx"

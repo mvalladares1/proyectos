@@ -18,6 +18,7 @@ ESTRUCTURA JERÁRQUICA (igual que 1.1.1):
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from datetime import datetime, timedelta
+import json
 from backend.services.currency_service import CurrencyService
 
 
@@ -27,14 +28,15 @@ class RealProyectadoCalculator:
     # IDs conocidos de Odoo
     CUENTA_IVA_EXPORTADOR_CODE = '11060108'
     PARTNER_TESORERIA_ID = 10
+    DIARIO_PROYECCIONES_FUTURAS_ID = 130  # Diario "Proyecciones Futuras"
     
     # Mapeo de payment_state a etiqueta amigable
+    # NOTA: 'reversed' se reclasifica según el monto residual (paid, partial, not_paid)
     ESTADO_LABELS = {
         'paid': 'Facturas Pagadas',
         'partial': 'Facturas Parcialmente Pagadas',
         'in_payment': 'En Proceso de Pago',
-        'not_paid': 'Facturas No Pagadas',
-        'reversed': 'Facturas Revertidas'
+        'not_paid': 'Facturas No Pagadas'
     }
     
     # Iconos por estado
@@ -42,8 +44,7 @@ class RealProyectadoCalculator:
         'paid': '✅',
         'partial': '⏳',
         'in_payment': '🔄',
-        'not_paid': '❌',
-        'reversed': '↩️'
+        'not_paid': '❌'
     }
     
     def __init__(self, odoo_client):
@@ -204,6 +205,15 @@ class RealProyectadoCalculator:
                     'categorias': {},
                     'es_cuenta_cxp': True,
                     'orden': 4
+                },
+                'PROYECTADAS_CONTABILIDAD': {
+                    'codigo': 'proyectadas_contabilidad',
+                    'nombre': '📋 Facturas Proyectadas (Modulo Contabilidad)',
+                    'monto': 0.0,
+                    'montos_por_mes': defaultdict(float),
+                    'categorias': {},
+                    'es_cuenta_cxp': True,
+                    'orden': 5
                 }
             }
             
@@ -574,7 +584,216 @@ class RealProyectadoCalculator:
                 proveedor['monto'] += monto_proyectado
                 proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
-            # PASO 3: Convertir estructura a 4 NIVELES EXPANDIBLES
+            # PASO 5: Agregar proyecciones desde Módulo Contabilidad (diario Proyecciones Futuras)
+            facturas_proyecciones = self.odoo.search_read(
+                'account.move',
+                [
+                    ['journal_id', '=', self.DIARIO_PROYECCIONES_FUTURAS_ID],
+                    ['move_type', 'in', ['in_invoice', 'in_refund']]
+                ],
+                ['id', 'name', 'partner_id', 'amount_total', 'date', 'invoice_date',
+                 'invoice_date_due', 'state', 'currency_id', 'move_type'],
+                limit=10000
+            )
+
+            # Para Módulo Contabilidad: agrupar por Cat IFRS 3 (Nivel 2) y Analítico (Nivel 3)
+            # IFRS3 vacío no se considera.
+            moves_proyec_ids = [fp.get('id') for fp in facturas_proyecciones if fp.get('id')]
+            lineas_proyecciones = []
+            if moves_proyec_ids:
+                lineas_proyecciones = self.odoo.search_read(
+                    'account.move.line',
+                    [['move_id', 'in', moves_proyec_ids]],
+                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance'],
+                    limit=50000
+                )
+
+            # Mapear líneas por factura
+            lineas_proyec_por_move = defaultdict(list)
+            account_ids_proyec = set()
+            analytic_ids_proyec = set()
+            for linea in lineas_proyecciones:
+                move_data = linea.get('move_id')
+                move_id = move_data[0] if isinstance(move_data, (list, tuple)) and len(move_data) > 0 else move_data
+                if not move_id:
+                    continue
+                lineas_proyec_por_move[move_id].append(linea)
+
+                account_data = linea.get('account_id')
+                account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                if account_id:
+                    account_ids_proyec.add(account_id)
+
+                analytic_distribution = linea.get('analytic_distribution')
+                if isinstance(analytic_distribution, str):
+                    try:
+                        analytic_distribution = json.loads(analytic_distribution)
+                    except Exception:
+                        analytic_distribution = {}
+                if isinstance(analytic_distribution, dict):
+                    for key in analytic_distribution.keys():
+                        try:
+                            analytic_ids_proyec.add(int(str(key)))
+                        except Exception:
+                            continue
+
+            # Mapear account_id -> Cat IFRS 3
+            ifrs3_por_account = {}
+            if account_ids_proyec:
+                try:
+                    cuentas_proyec = self.odoo.read(
+                        'account.account',
+                        list(account_ids_proyec),
+                        ['id', 'x_studio_cat_ifrs_3']
+                    )
+                    for cuenta in cuentas_proyec:
+                        valor_ifrs3 = (cuenta.get('x_studio_cat_ifrs_3') or '').strip()
+                        ifrs3_por_account[cuenta.get('id')] = valor_ifrs3
+                except Exception:
+                    ifrs3_por_account = {}
+
+            # Mapear analytic_id -> nombre
+            nombre_analitico_por_id = {}
+            if analytic_ids_proyec:
+                try:
+                    cuentas_analiticas = self.odoo.read(
+                        'account.analytic.account',
+                        list(analytic_ids_proyec),
+                        ['id', 'name']
+                    )
+                    for cuenta_analitica in cuentas_analiticas:
+                        nombre_analitico_por_id[cuenta_analitica.get('id')] = cuenta_analitica.get('name') or 'Sin Analítico'
+                except Exception:
+                    nombre_analitico_por_id = {}
+
+            for fp in facturas_proyecciones:
+                fecha_base = str(fp.get('date') or fp.get('invoice_date') or '')[:10]
+                if not fecha_base:
+                    continue
+
+                try:
+                    fecha_base_dt = datetime.strptime(fecha_base, '%Y-%m-%d').date()
+                except Exception:
+                    continue
+
+                # Usar invoice_date_due si existe, sino usar fecha_base
+                fecha_vencimiento = fp.get('invoice_date_due')
+                if fecha_vencimiento:
+                    fecha_proyectada = str(fecha_vencimiento)[:10]
+                    try:
+                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                    except Exception:
+                        fecha_proyectada_dt = fecha_base_dt
+                else:
+                    # Sin fecha de vencimiento, usar fecha base directamente
+                    fecha_proyectada_dt = fecha_base_dt
+                
+                fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
+
+                if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
+                    continue
+
+                periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
+                if not periodo_proyectado:
+                    continue
+
+                amount_total = float(fp.get('amount_total') or 0.0)
+                move_type = fp.get('move_type', 'in_invoice')
+                
+                # Convertir moneda si es necesario
+                currency_data = fp.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name and 'USD' in str(currency_name).upper():
+                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+
+                # N/C en módulo contabilidad invierten signo
+                signo = -1 if move_type == 'in_refund' else 1
+                monto_proyectado = -amount_total * signo
+                
+                if monto_proyectado == 0:
+                    continue
+
+                # Distribución por Cat IFRS 3 (Nivel 2) y Analítico (Nivel 3)
+                # Si IFRS3 está vacío, no se considera esa línea.
+                lineas_move = lineas_proyec_por_move.get(fp.get('id'), [])
+                ponderadores = defaultdict(float)  # (ifrs3, analitico) -> peso
+
+                for linea in lineas_move:
+                    account_data = linea.get('account_id')
+                    account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                    ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
+                    if not ifrs3:
+                        continue
+
+                    balance = abs(float(linea.get('balance') or 0.0))
+                    peso_base = balance if balance > 0 else 1.0
+
+                    analytic_distribution = linea.get('analytic_distribution')
+                    if isinstance(analytic_distribution, str):
+                        try:
+                            analytic_distribution = json.loads(analytic_distribution)
+                        except Exception:
+                            analytic_distribution = {}
+
+                    if isinstance(analytic_distribution, dict) and len(analytic_distribution) > 0:
+                        for analytic_key, porcentaje in analytic_distribution.items():
+                            try:
+                                analytic_id = int(str(analytic_key))
+                            except Exception:
+                                analytic_id = None
+                            try:
+                                porcentaje_val = float(porcentaje)
+                            except Exception:
+                                porcentaje_val = 0.0
+                            if porcentaje_val <= 0:
+                                continue
+                            nombre_analitico = nombre_analitico_por_id.get(analytic_id, f'Analítico {analytic_key}') if analytic_id else 'Sin Analítico'
+                            ponderadores[(ifrs3, nombre_analitico)] += peso_base * (porcentaje_val / 100.0)
+                    else:
+                        nombre_analitico = 'Sin Analítico'
+                        ponderadores[(ifrs3, nombre_analitico)] += peso_base
+
+                # IFRS3 vacío no se considera en absoluto
+                total_peso = sum(ponderadores.values())
+                if total_peso <= 0:
+                    continue
+
+                estado = estados['PROYECTADAS_CONTABILIDAD']
+
+                for (categoria_ifrs3, nombre_analitico), peso in ponderadores.items():
+                    proporcion = peso / total_peso
+                    monto_parcial = monto_proyectado * proporcion
+
+                    proyectado_total += monto_parcial
+                    proyectado_por_periodo[periodo_proyectado] += monto_parcial
+
+                    estado['monto'] += monto_parcial
+                    estado['montos_por_mes'][periodo_proyectado] += monto_parcial
+
+                    if categoria_ifrs3 not in estado['categorias']:
+                        estado['categorias'][categoria_ifrs3] = {
+                            'nombre': categoria_ifrs3,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'proveedores': {}
+                        }
+
+                    categoria = estado['categorias'][categoria_ifrs3]
+                    categoria['monto'] += monto_parcial
+                    categoria['montos_por_mes'][periodo_proyectado] += monto_parcial
+
+                    if nombre_analitico not in categoria['proveedores']:
+                        categoria['proveedores'][nombre_analitico] = {
+                            'nombre': nombre_analitico[:50],
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float)
+                        }
+
+                    analitico = categoria['proveedores'][nombre_analitico]
+                    analitico['monto'] += monto_parcial
+                    analitico['montos_por_mes'][periodo_proyectado] += monto_parcial
+            
+            # PASO 6: Convertir estructura a 4 NIVELES EXPANDIBLES
             # Nivel 2 (cuentas): ESTADOS (expandible)
             # Nivel 3 (etiquetas): CATEGORÍAS (expandible con sub_etiquetas)
             # Nivel 4 (sub_etiquetas): PROVEEDORES (anidados bajo categoría)
@@ -583,7 +802,7 @@ class RealProyectadoCalculator:
                 montos_por_mes_total[periodo] = real_por_periodo.get(periodo, 0) + proyectado_por_periodo.get(periodo, 0)
             
             cuentas_resultado = []
-            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'PROYECTADAS_COMPRAS']
+            orden_estados = ['PAGADAS', 'PARCIALES', 'NO_PAGADAS', 'PROYECTADAS_COMPRAS', 'PROYECTADAS_CONTABILIDAD']
             
             for estado_key in orden_estados:
                 estado = estados[estado_key]
@@ -867,9 +1086,12 @@ class RealProyectadoCalculator:
                     ['move_type', '=', 'out_invoice'],
                     ['state', '=', 'posted'],
                     ['invoice_date', '>=', fecha_inicio],
-                    ['invoice_date', '<=', fecha_fin]
+                    ['invoice_date', '<=', fecha_fin],
+                    ['payment_state', '!=', 'reversed']  # Excluir facturas revertidas completamente
                 ],
-                ['id', 'name', 'partner_id', 'invoice_date', 'amount_total', 'amount_residual', 'payment_state'],
+                ['id', 'name', 'partner_id', 'invoice_date', 'invoice_date_due',
+                 'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago',
+                 'currency_id'],
                 limit=5000
             )
             
@@ -890,11 +1112,29 @@ class RealProyectadoCalculator:
                 if not fecha:
                     continue
                     
-                periodo = self._fecha_a_periodo(fecha, meses_lista)
+                periodo_real = self._fecha_a_periodo(fecha, meses_lista)
                 amount_total = f.get('amount_total', 0) or 0
                 amount_residual = f.get('amount_residual', 0) or 0
                 payment_state = f.get('payment_state', 'not_paid')
                 move_type = f.get('move_type', 'out_invoice')
+                
+                # Convertir moneda USD a CLP si es necesario
+                currency_data = f.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name and 'USD' in str(currency_name).upper():
+                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                
+                # Determinar período proyectado basado en fecha estimada de pago
+                fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
+                fecha_vencimiento = f.get('invoice_date_due')
+                
+                if fecha_estimada:
+                    periodo_proyectado = self._fecha_a_periodo(str(fecha_estimada)[:10], meses_lista)
+                elif fecha_vencimiento:
+                    periodo_proyectado = self._fecha_a_periodo(str(fecha_vencimiento)[:10], meses_lista)
+                else:
+                    periodo_proyectado = periodo_real  # Fallback
                 
                 # Calcular cobrado y pendiente (POSITIVO para ingresos)
                 cobrado = amount_total - amount_residual
@@ -902,69 +1142,126 @@ class RealProyectadoCalculator:
                 
                 real_total += cobrado
                 proyectado_total += pendiente
-                real_por_mes[periodo] += cobrado
-                proyectado_por_mes[periodo] += pendiente
+                real_por_mes[periodo_real] += cobrado
+                proyectado_por_mes[periodo_proyectado] += pendiente
                 
-                # Agrupar por estado de pago (Nivel 2)
-                estado_label = self.ESTADO_LABELS.get(payment_state, 'Otros')
+                # Helper para agregar a un estado
+                def agregar_a_estado(estado_key, monto, periodo, es_real=True):
+                    estado_label = self.ESTADO_LABELS.get(estado_key, 'Otros')
+                    
+                    if estado_label not in estados:
+                        estados[estado_label] = {
+                            'codigo': f'estado_{estado_key}',
+                            'nombre': estado_label,
+                            'icon': self.ESTADO_ICONS.get(estado_key, '📋'),
+                            'monto': 0.0,
+                            'real': 0.0,
+                            'proyectado': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'real_por_mes': defaultdict(float),
+                            'proyectado_por_mes': defaultdict(float),
+                            'etiquetas': {},  # Clientes
+                            'es_cuenta_cxc': True,
+                            'orden': list(self.ESTADO_LABELS.keys()).index(estado_key) if estado_key in self.ESTADO_LABELS else 99
+                        }
+                    
+                    estado = estados[estado_label]
+                    estado['monto'] += monto
+                    estado['montos_por_mes'][periodo] += monto
+                    if es_real:
+                        estado['real'] += monto
+                        estado['real_por_mes'][periodo] += monto
+                    else:
+                        estado['proyectado'] += monto
+                        estado['proyectado_por_mes'][periodo] += monto
+                    
+                    # Cliente
+                    if partner_name not in estado['etiquetas']:
+                        estado['etiquetas'][partner_name] = {
+                            'nombre': partner_name[:50],
+                            'monto': 0.0,
+                            'real': 0.0,
+                            'proyectado': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'real_por_mes': defaultdict(float),
+                            'proyectado_por_mes': defaultdict(float),
+                            'facturas': []
+                        }
+                    
+                    cliente = estado['etiquetas'][partner_name]
+                    cliente['monto'] += monto
+                    cliente['montos_por_mes'][periodo] += monto
+                    if es_real:
+                        cliente['real'] += monto
+                        cliente['real_por_mes'][periodo] += monto
+                    else:
+                        cliente['proyectado'] += monto
+                        cliente['proyectado_por_mes'][periodo] += monto
+                    
+                    return estado, cliente
                 
-                if estado_label not in estados:
-                    estados[estado_label] = {
-                        'codigo': f'estado_{payment_state}',
-                        'nombre': estado_label,
-                        'icon': self.ESTADO_ICONS.get(payment_state, '📋'),
-                        'monto': 0.0,
-                        'real': 0.0,
-                        'proyectado': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float),
-                        'etiquetas': {},  # Clientes
-                        'es_cuenta_cxc': True,
-                        'orden': list(self.ESTADO_LABELS.keys()).index(payment_state) if payment_state in self.ESTADO_LABELS else 99
-                    }
+                # Lógica de asignación por estado de pago
+                factura_info = {
+                    'name': f['name'],
+                    'move_id': f['id'],
+                    'tipo': move_type,
+                    'total': amount_total,
+                    'cobrado': cobrado,
+                    'pendiente': pendiente,
+                    'fecha': fecha,
+                    'payment_state': payment_state
+                }
                 
-                estado = estados[estado_label]
-                estado['monto'] += cobrado + pendiente
-                estado['real'] += cobrado
-                estado['proyectado'] += pendiente
-                estado['montos_por_mes'][periodo] += cobrado + pendiente
-                estado['real_por_mes'][periodo] += cobrado
-                estado['proyectado_por_mes'][periodo] += pendiente
-                
-                # Agrupar por cliente (Nivel 3)
-                if partner_name not in estado['etiquetas']:
-                    estado['etiquetas'][partner_name] = {
-                        'nombre': partner_name[:50],
-                        'monto': 0.0,
-                        'real': 0.0,
-                        'proyectado': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'real_por_mes': defaultdict(float),
-                        'proyectado_por_mes': defaultdict(float),
-                        'facturas': []
-                    }
-                
-                cliente = estado['etiquetas'][partner_name]
-                cliente['monto'] += cobrado + pendiente
-                cliente['real'] += cobrado
-                cliente['proyectado'] += pendiente
-                cliente['montos_por_mes'][periodo] += cobrado + pendiente
-                cliente['real_por_mes'][periodo] += cobrado
-                cliente['proyectado_por_mes'][periodo] += pendiente
-                
-                # Guardar factura para drill-down
-                if len(cliente['facturas']) < 50:
-                    cliente['facturas'].append({
-                        'name': f['name'],
-                        'move_id': f['id'],
-                        'tipo': move_type,
-                        'total': amount_total,
-                        'cobrado': cobrado,
-                        'pendiente': pendiente,
-                        'fecha': fecha,
-                        'payment_state': payment_state
-                    })
+                if payment_state == 'paid':
+                    # Factura pagada: todo el cobrado va a "Pagadas"
+                    estado, cliente = agregar_a_estado('paid', cobrado, periodo_real, es_real=True)
+                    if len(cliente.get('facturas', [])) < 50:
+                        cliente['facturas'].append(factura_info)
+                    
+                elif payment_state == 'partial':
+                    # Factura parcialmente pagada:
+                    # - Cobrado va a "Parcialmente Pagadas"
+                    # - Pendiente (residual) va a "No Pagadas"
+                    if cobrado > 0:
+                        estado_parcial, cliente_parcial = agregar_a_estado('partial', cobrado, periodo_real, es_real=True)
+                        if len(cliente_parcial.get('facturas', [])) < 50:
+                            cliente_parcial['facturas'].append(factura_info.copy())
+                    if pendiente > 0:
+                        estado_nopaid, cliente_nopaid = agregar_a_estado('not_paid', pendiente, periodo_proyectado, es_real=False)
+                        # No duplicar la factura en no pagadas, ya está en parciales
+                    
+                elif payment_state == 'in_payment':
+                    # En proceso de pago: va a su categoría
+                    estado, cliente = agregar_a_estado('in_payment', cobrado + pendiente, periodo_real, es_real=True)
+                    # Guardar factura
+                    if len(cliente.get('facturas', [])) < 50:
+                        cliente['facturas'].append({
+                            'name': f['name'],
+                            'move_id': f['id'],
+                            'tipo': move_type,
+                            'total': amount_total,
+                            'cobrado': cobrado,
+                            'pendiente': pendiente,
+                            'fecha': fecha,
+                            'payment_state': payment_state
+                        })
+                    
+                else:  # not_paid u otros
+                    # No pagada: todo va a "No Pagadas" como proyectado
+                    if cobrado + pendiente > 0:
+                        estado, cliente = agregar_a_estado('not_paid', cobrado + pendiente, periodo_proyectado, es_real=False)
+                        # Guardar factura
+                        if len(cliente.get('facturas', [])) < 50:
+                            cliente['facturas'].append({
+                                'name': f['name'],
+                                'move_id': f['id'],
+                                'tipo': move_type,
+                                'total': amount_total,
+                                'cobrado': cobrado,
+                                'pendiente': pendiente,
+                                'fecha': fecha,
+                                'payment_state': payment_state
+                            })
             
             # Calcular montos_por_mes como suma de real + proyectado por período
             montos_por_mes_total = defaultdict(float)
@@ -998,7 +1295,8 @@ class RealProyectadoCalculator:
                     'real_por_mes': dict(estado_data['real_por_mes']),
                     'proyectado_por_mes': dict(estado_data['proyectado_por_mes']),
                     'etiquetas': etiquetas_list,
-                    'es_cuenta_cxc': True
+                    'es_cuenta_cxc': True,
+                    '_orden_estado': estado_data['orden']  # Para ordenar igual que agregador
                 })
             
             return {
@@ -1009,7 +1307,7 @@ class RealProyectadoCalculator:
                 'proyectado_por_mes': dict(proyectado_por_mes),
                 'montos_por_mes': dict(montos_por_mes_total),
                 'total': real_total + proyectado_total,
-                'cuentas': cuentas_resultado,
+                'cuentas': cuentas_resultado,  # Los estados son cuentas directamente (igual que agregador)
                 'facturas_count': len(facturas)
             }
             

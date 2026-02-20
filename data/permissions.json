@@ -26,7 +26,11 @@
     "rendimiento": [],
     "containers": [],
     "pedidos_venta": [],
-    "reconciliacion": []
+    "reconciliacion": [],
+    "buenobot": [
+      "mvalladares@riofuturo.cl",
+      "jvidaurre@riofuturo.cl"
+    ]
   },
   "admins": [
     "mvalladares@riofuturo.cl",
@@ -80,7 +84,11 @@
     "rendimiento.diagrama_sankey": [],
     "rendimiento.trazabilidad_inventario": [],
     "reconciliacion.trigger_so": [],
-    "reconciliacion.reconciliar_kg": []
+    "reconciliacion.reconciliar_kg": [],
+    "buenobot.qa_scan": [
+      "mvalladares@riofuturo.cl",
+      "jvidaurre@riofuturo.cl"
+    ]
   },
   "maintenance": {
     "enabled": false,

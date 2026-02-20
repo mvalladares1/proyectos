@@ -92,21 +92,10 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     
     # No está en caché, calcular...
     
-    # Mapeo de origen a picking_type_id
-    ORIGEN_PICKING_MAP = {
-        "RFP": 1,
-        "VILKUN": 217,
-        "SAN JOSE": 164  # ID correcto verificado en Odoo
-    }
-    
-    # Determinar picking_type_ids a consultar
-    if origen and len(origen) > 0:
-        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen if o in ORIGEN_PICKING_MAP]
-    else:
-        picking_type_ids = [1, 217, 164]  # Todos por defecto
-    
-    if not picking_type_ids:
-        picking_type_ids = [1, 217, 164]
+    # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
+    # (post-query). Esto garantiza que el resultado con filtro sea consistente con el resultado
+    # sin filtro, sin depender de que todos los picking_type_ids estén mapeados correctamente.
+    picking_type_ids = [1, 217, 164]
     
     
     # ============ PASO 0.5: Identificar devoluciones y calcular kg devueltos por recepción ============
@@ -506,6 +495,12 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         else:
             origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
         
+        # Filtro post-query: si se pidió un origen específico, excluir recepciones que
+        # después del override no coincidan con el filtro solicitado.
+        # Esto es necesario porque trajimos picking_type_ids extra para capturar overrides.
+        if origen and len(origen) > 0 and origen_rec not in origen:
+            continue
+        
         fecha = rec.get("date_done") or rec.get("scheduled_date") or ""
         
         # Procesar movimientos de este picking (recepción)
@@ -858,21 +853,8 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     """
     client = OdooClient(username=username, password=password)
     
-    # Mapeo de origen a picking_type_id
-    ORIGEN_PICKING_MAP = {
-        "RFP": 1,
-        "VILKUN": 217,
-        "SAN JOSE": 164  # ID correcto verificado en Odoo
-    }
-    
-    # Determinar picking_type_ids a consultar
-    if origen_filtros:
-        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
-    else:
-        picking_type_ids = [1, 217, 164]
-        
-    if not picking_type_ids:
-        picking_type_ids = [1, 217, 164]
+    # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
+    picking_type_ids = [1, 217, 164]
 
     # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
@@ -1009,6 +991,10 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         else:
             origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
 
+        # Filtro post-query: excluir recepciones que no coincidan con el origen solicitado
+        if origen_filtros and len(origen_filtros) > 0 and origen_val not in origen_filtros:
+            continue
+
         # Enriquecer líneas con info de producto
         filtered_ml = []
         for ml in p_ml:
@@ -1096,23 +1082,10 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     """
     client = OdooClient(username=username, password=password)
     
-    # Mapeo de origen a picking_type_id
-    ORIGEN_PICKING_MAP = {
-        "RFP": 1,
-        "VILKUN": 217,
-        "SAN JOSE": 164  # ID correcto verificado en Odoo
-    }
-    
-    # Determinar picking_type_ids a consultar
-    if origen_filtros:
-        if isinstance(origen_filtros, str):
-            origen_filtros = [origen_filtros]
-        picking_type_ids = [ORIGEN_PICKING_MAP[o] for o in origen_filtros if o in ORIGEN_PICKING_MAP]
-    else:
-        picking_type_ids = [1, 217, 164]
-        
-    if not picking_type_ids:
-        picking_type_ids = [1, 217, 164]
+    # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
+    if isinstance(origen_filtros, str):
+        origen_filtros = [origen_filtros]
+    picking_type_ids = [1, 217, 164]
 
     # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
@@ -1254,6 +1227,10 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
             origen_val = OVERRIDE_ORIGEN_PICKING[albaran]
         else:
             origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
+        
+        # Filtro post-query: excluir recepciones que no coincidan con el origen solicitado
+        if origen_filtros and len(origen_filtros) > 0 and origen_val not in origen_filtros:
+            continue
         
         # Pallet (Package)
         pkg = ml.get("result_package_id")
