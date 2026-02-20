@@ -16,11 +16,9 @@ from . import compras
 from . import automatizaciones
 from . import comercial
 from . import flujo_caja
-from . import buenobot
 
 __all__ = [
 	'auth', 'produccion', 'bandejas', 'demo', 'containers',
 	'stock', 'estado_resultado', 'presupuesto', 'permissions', 'recepcion',
-	'rendimiento', 'compras', 'automatizaciones', 'comercial', 'flujo_caja',
-	'buenobot'
+	'rendimiento', 'compras', 'automatizaciones', 'comercial', 'flujo_caja'
 ]
