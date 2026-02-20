@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from threading import Lock
 
 from backend.config import settings
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PERMISSIONS_FILE = DATA_DIR / "permissions.json"
+PERMISSIONS_DB_FILE = DATA_DIR / "permissions.db"
 
 # Lista completa de dashboards disponibles en el sistema (slugs técnicos)
 ALL_DASHBOARDS = [
@@ -133,111 +136,178 @@ def _normalize_dashboard(slug: str) -> str:
     return slug.strip().lower()
 
 
-def _ensure_file() -> None:
+_DB_INIT_LOCK = Lock()
+_DB_READY = False
+
+
+def _read_permissions_file() -> Dict[str, Any]:
     if not PERMISSIONS_FILE.exists():
-        _write_permissions(DEFAULT_PERMISSIONS)
-
-
-import time
-from contextlib import contextmanager
-
-LOCK_FILE = DATA_DIR / "permissions.lock"
-
-class FileLock:
-    def __init__(self, lock_file: Path, timeout: float = 10.0, delay: float = 0.1):
-        self.lock_file = lock_file
-        self.timeout = timeout
-        self.delay = delay
-    
-    def acquire(self):
-        start_time = time.time()
-        while True:
-            try:
-                # Modos 'x' crea archivo exclusivo, falla si existe. Atomic en POSIX y Windows (Python 3)
-                with open(self.lock_file, "x"):
-                    return
-            except FileExistsError:
-                if time.time() - start_time > self.timeout:
-                    raise TimeoutError(f"Could not acquire lock on {self.lock_file}")
-                time.sleep(self.delay)
-
-    def release(self):
-        try:
-            self.lock_file.unlink()
-        except FileNotFoundError:
-            pass
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.release()
-
-@contextmanager
-def permission_transaction():
-    """Transaction context for read-modify-write operations."""
-    with FileLock(LOCK_FILE):
-        data = _read_permissions()
-        yield data
-        _write_permissions(data)
-
-def _read_permissions() -> Dict[str, Any]:
-    _ensure_file()
+        return DEFAULT_PERMISSIONS.copy()
     try:
         with PERMISSIONS_FILE.open("r", encoding="utf-8") as handler:
             data: Dict[str, Any] = json.load(handler)
     except json.JSONDecodeError:
         data = DEFAULT_PERMISSIONS.copy()
-    
-    # Ensure structure
+
     data.setdefault("dashboards", {})
     data.setdefault("pages", {})
     data.setdefault("admins", [])
-    data.setdefault("maintenance", DEFAULT_PERMISSIONS["maintenance"])
-    
+    data.setdefault("maintenance", DEFAULT_PERMISSIONS["maintenance"].copy())
     return data
 
 
-def _write_permissions(data: Dict[str, Any]) -> None:
-    # Atomic write pattern: write to temp file then rename
-    temp_file = PERMISSIONS_FILE.with_suffix(".tmp")
-    with temp_file.open("w", encoding="utf-8") as handler:
-        json.dump(data, handler, ensure_ascii=False, indent=2)
-    temp_file.replace(PERMISSIONS_FILE)
+def _get_connection() -> sqlite3.Connection:
+    return sqlite3.connect(PERMISSIONS_DB_FILE, timeout=15)
+
+
+def _init_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS permission_dashboards (
+            slug TEXT NOT NULL,
+            email TEXT NOT NULL,
+            PRIMARY KEY (slug, email)
+        );
+
+        CREATE TABLE IF NOT EXISTS permission_pages (
+            module_slug TEXT NOT NULL,
+            page_slug TEXT NOT NULL,
+            email TEXT NOT NULL,
+            PRIMARY KEY (module_slug, page_slug, email)
+        );
+
+        CREATE TABLE IF NOT EXISTS permission_admins (
+            email TEXT PRIMARY KEY
+        );
+
+        CREATE TABLE IF NOT EXISTS permission_maintenance (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            enabled INTEGER NOT NULL DEFAULT 0,
+            message TEXT NOT NULL DEFAULT 'El sistema está siendo ajustado en este momento.'
+        );
+        """
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO permission_maintenance (id, enabled, message) VALUES (1, 0, ?)",
+        (DEFAULT_PERMISSIONS["maintenance"]["message"],)
+    )
+
+
+def _is_db_empty(conn: sqlite3.Connection) -> bool:
+    dashboards_count = conn.execute("SELECT COUNT(*) FROM permission_dashboards").fetchone()[0]
+    pages_count = conn.execute("SELECT COUNT(*) FROM permission_pages").fetchone()[0]
+    admins_count = conn.execute("SELECT COUNT(*) FROM permission_admins").fetchone()[0]
+    return dashboards_count == 0 and pages_count == 0 and admins_count == 0
+
+
+def _migrate_json_to_db(conn: sqlite3.Connection) -> None:
+    source = _read_permissions_file()
+
+    dashboards = source.get("dashboards", {})
+    for slug, emails in dashboards.items():
+        slug_key = _normalize_dashboard(slug)
+        for email in emails or []:
+            conn.execute(
+                "INSERT OR IGNORE INTO permission_dashboards (slug, email) VALUES (?, ?)",
+                (slug_key, _normalize_email(email))
+            )
+
+    pages = source.get("pages", {})
+    for page_key, emails in pages.items():
+        if "." not in page_key:
+            continue
+        module_slug, page_slug = page_key.split(".", 1)
+        module_slug = _normalize_dashboard(module_slug)
+        page_slug = page_slug.strip().lower()
+        for email in emails or []:
+            conn.execute(
+                "INSERT OR IGNORE INTO permission_pages (module_slug, page_slug, email) VALUES (?, ?, ?)",
+                (module_slug, page_slug, _normalize_email(email))
+            )
+
+    for admin_email in source.get("admins", []):
+        conn.execute(
+            "INSERT OR IGNORE INTO permission_admins (email) VALUES (?)",
+            (_normalize_email(admin_email),)
+        )
+
+    maintenance = source.get("maintenance", DEFAULT_PERMISSIONS["maintenance"])
+    conn.execute(
+        "UPDATE permission_maintenance SET enabled = ?, message = ? WHERE id = 1",
+        (
+            1 if maintenance.get("enabled", False) else 0,
+            maintenance.get("message", DEFAULT_PERMISSIONS["maintenance"]["message"]),
+        )
+    )
+
+
+def _ensure_db() -> None:
+    global _DB_READY
+    if _DB_READY:
+        return
+
+    with _DB_INIT_LOCK:
+        if _DB_READY:
+            return
+
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with _get_connection() as conn:
+            _init_schema(conn)
+            if _is_db_empty(conn):
+                _migrate_json_to_db(conn)
+        _DB_READY = True
+
+
+def _build_permissions_payload() -> Dict[str, Any]:
+    _ensure_db()
+    with _get_connection() as conn:
+        dashboards: Dict[str, List[str]] = {slug: [] for slug in ALL_DASHBOARDS}
+        for slug, email in conn.execute(
+            "SELECT slug, email FROM permission_dashboards ORDER BY slug, email"
+        ).fetchall():
+            dashboards.setdefault(slug, []).append(email)
+
+        pages: Dict[str, List[str]] = {}
+        for module_slug, pages_data in MODULE_PAGES.items():
+            for page in pages_data:
+                pages[f"{module_slug}.{page['slug']}"] = []
+
+        for module_slug, page_slug, email in conn.execute(
+            "SELECT module_slug, page_slug, email FROM permission_pages ORDER BY module_slug, page_slug, email"
+        ).fetchall():
+            page_key = f"{module_slug}.{page_slug}"
+            pages.setdefault(page_key, []).append(email)
+
+        admins = [
+            row[0]
+            for row in conn.execute("SELECT email FROM permission_admins ORDER BY email").fetchall()
+        ]
+
+        maintenance_row = conn.execute(
+            "SELECT enabled, message FROM permission_maintenance WHERE id = 1"
+        ).fetchone()
+        if maintenance_row:
+            maintenance = {
+                "enabled": bool(maintenance_row[0]),
+                "message": maintenance_row[1],
+            }
+        else:
+            maintenance = DEFAULT_PERMISSIONS["maintenance"].copy()
+
+    return {
+        "dashboards": dashboards,
+        "pages": pages,
+        "admins": admins,
+        "maintenance": maintenance,
+    }
 
 
 def get_permissions_map() -> Dict[str, List[str]]:
-    """Retorna el mapa de permisos, asegurando consistencia."""
-    # Usamos lock para asegurar que la limpieza no colisione con otras escrituras
-    with FileLock(LOCK_FILE):
-        full_data = _read_permissions()
-        dashboards = full_data["dashboards"]
-        modified = False
-        
-        # Asegurar keys requeridas
-        for slug in ALL_DASHBOARDS:
-            if slug not in dashboards:
-                dashboards[slug] = []
-                modified = True
-        
-        # Limpiar keys viejas
-        stray_keys = [k for k in dashboards.keys() if k not in ALL_DASHBOARDS]
-        for key in stray_keys:
-            del dashboards[key]
-            modified = True
-        
-        if modified:
-            full_data["dashboards"] = dashboards
-            _write_permissions(full_data)
-        
-        return dashboards.copy()
+    return _build_permissions_payload()["dashboards"]
 
 
 def get_admins() -> List[str]:
-    # Read is safe enough without lock if we accept slightly stale data, 
-    # but strictly a shared lock would be better. For now simple read.
-    return _read_permissions().get("admins", [])
+    return _build_permissions_payload().get("admins", [])
 
 
 def is_admin(email: str) -> bool:
@@ -273,29 +343,27 @@ def get_restricted_modules() -> Dict[str, List[str]]:
 
 
 def assign_dashboard(slug: str, email: str) -> Dict[str, List[str]]:
-    with permission_transaction() as data:
-        slug_key = _normalize_dashboard(slug)
-        dashboards = data.setdefault("dashboards", {})
-        bucket = dashboards.setdefault(slug_key, [])
-        normalized_email = _normalize_email(email)
-        if normalized_email not in {_normalize_email(addr) for addr in bucket}:
-            bucket.append(email.strip())
-        # Triggers _write_permissions on exit
-    return data["dashboards"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO permission_dashboards (slug, email) VALUES (?, ?)",
+            (_normalize_dashboard(slug), _normalize_email(email)),
+        )
+    return get_permissions_map()
 
 
 def remove_dashboard(slug: str, email: str) -> Dict[str, List[str]]:
-    with permission_transaction() as data:
-        slug_key = _normalize_dashboard(slug)
-        dashboards = data.setdefault("dashboards", {})
-        bucket = dashboards.get(slug_key, [])
-        normalized_email = _normalize_email(email)
-        dashboards[slug_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
-    return data["dashboards"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM permission_dashboards WHERE slug = ? AND email = ?",
+            (_normalize_dashboard(slug), _normalize_email(email)),
+        )
+    return get_permissions_map()
 
 
 def get_full_permissions() -> Dict[str, Any]:
-    return _read_permissions()
+    return _build_permissions_payload()
 
 
 def get_dashboard_name(slug: str) -> str:
@@ -317,8 +385,7 @@ def get_all_module_pages() -> Dict[str, List[Dict[str, str]]]:
 
 
 def get_page_permissions() -> Dict[str, List[str]]:
-    data = _read_permissions()
-    return data.get("pages", {})
+    return _build_permissions_payload().get("pages", {})
 
 
 def get_allowed_pages(email: str, module: str) -> List[str]:
@@ -345,79 +412,86 @@ def get_allowed_pages(email: str, module: str) -> List[str]:
 
 
 def assign_page(module: str, page: str, email: str) -> Dict[str, List[str]]:
-    with permission_transaction() as data:
-        pages = data.setdefault("pages", {})
-        page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
-        bucket = pages.setdefault(page_key, [])
-        normalized_email = _normalize_email(email)
-        
-        if normalized_email not in {_normalize_email(addr) for addr in bucket}:
-            bucket.append(email.strip())
-    return data["pages"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO permission_pages (module_slug, page_slug, email) VALUES (?, ?, ?)",
+            (_normalize_dashboard(module), page.strip().lower(), _normalize_email(email)),
+        )
+    return get_page_permissions()
 
 
 def remove_page(module: str, page: str, email: str) -> Dict[str, List[str]]:
-    with permission_transaction() as data:
-        pages = data.setdefault("pages", {})
-        page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
-        bucket = pages.get(page_key, [])
-        normalized_email = _normalize_email(email)
-        
-        pages[page_key] = [addr for addr in bucket if _normalize_email(addr) != normalized_email]
-    return data["pages"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM permission_pages WHERE module_slug = ? AND page_slug = ? AND email = ?",
+            (_normalize_dashboard(module), page.strip().lower(), _normalize_email(email)),
+        )
+    return get_page_permissions()
 
 
 def clear_page_restriction(module: str, page: str) -> Dict[str, List[str]]:
-    with permission_transaction() as data:
-        pages = data.setdefault("pages", {})
-        page_key = f"{_normalize_dashboard(module)}.{page.strip().lower()}"
-        if page_key in pages:
-            del pages[page_key]
-    return data["pages"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM permission_pages WHERE module_slug = ? AND page_slug = ?",
+            (_normalize_dashboard(module), page.strip().lower()),
+        )
+    return get_page_permissions()
 
 
 # ============ ADMINISTRADORES ============
 
 def assign_admin(email: str) -> List[str]:
     """Agrega un email a la lista de administradores."""
-    with permission_transaction() as data:
-        admins = data.setdefault("admins", [])
-        normalized_email = _normalize_email(email)
-        
-        # Evitar duplicados
-        if not any(_normalize_email(existing) == normalized_email for existing in admins):
-            admins.append(email.strip())
-    return data["admins"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO permission_admins (email) VALUES (?)",
+            (_normalize_email(email),),
+        )
+    return get_admins()
 
 
 def remove_admin(email: str) -> List[str]:
     """Remueve un email de la lista de administradores."""
-    with permission_transaction() as data:
-        admins = data.setdefault("admins", [])
-        normalized_email = _normalize_email(email)
-        
-        # Filtrar el email
-        data["admins"] = [e for e in admins if _normalize_email(e) != normalized_email]
-    return data["admins"]
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM permission_admins WHERE email = ?",
+            (_normalize_email(email),),
+        )
+    return get_admins()
 
 
 # ============ BANNER DE MANTENIMIENTO ============
 
 def get_maintenance_config() -> Dict[str, Any]:
-    data = _read_permissions()
-    # Ensure maintenance key exists inside _read_permissions, so just get it
-    return data.get("maintenance", DEFAULT_PERMISSIONS["maintenance"])
+    _ensure_db()
+    with _get_connection() as conn:
+        row = conn.execute(
+            "SELECT enabled, message FROM permission_maintenance WHERE id = 1"
+        ).fetchone()
+        if not row:
+            return DEFAULT_PERMISSIONS["maintenance"].copy()
+        return {"enabled": bool(row[0]), "message": row[1]}
 
 
 def set_maintenance_mode(enabled: bool, message: Optional[str] = None) -> Dict[str, Any]:
-    with permission_transaction() as data:
-        if "maintenance" not in data:
-            data["maintenance"] = DEFAULT_PERMISSIONS["maintenance"].copy()
-        
-        data["maintenance"]["enabled"] = enabled
-        if message is not None:
-            data["maintenance"]["message"] = message
-    return data["maintenance"]
+    _ensure_db()
+    with _get_connection() as conn:
+        current = conn.execute(
+            "SELECT message FROM permission_maintenance WHERE id = 1"
+        ).fetchone()
+        final_message = message if message is not None else (
+            current[0] if current else DEFAULT_PERMISSIONS["maintenance"]["message"]
+        )
+        conn.execute(
+            "UPDATE permission_maintenance SET enabled = ?, message = ? WHERE id = 1",
+            (1 if enabled else 0, final_message),
+        )
+    return get_maintenance_config()
 
 
 def is_maintenance_mode() -> bool:
