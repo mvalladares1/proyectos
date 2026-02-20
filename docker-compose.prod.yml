@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    image: app-api-prod:latest
     container_name: rio-api-prod
     ports:
       - "8000:8000"
@@ -30,6 +31,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+    image: app-web-prod:latest
     container_name: rio-web-prod
     environment:
       - ENV=production
