@@ -16,7 +16,8 @@ from typing import Dict, List, Optional
 
 URL = 'https://riofuturo.server98c6e.oerpondemand.net'
 DB = 'riofuturo-master'
-API_LOGISTICA_RUTAS = 'https://riofuturoprocesos.com/api/logistica/db/rutas'
+API_LOGISTICA_RUTAS = 'https://riofuturoprocesos.com/api/logistica/rutas'
+API_LOGISTICA_ROUTE_OCS = 'https://riofuturoprocesos.com/api/logistica/route-ocs'
 API_LOGISTICA_COSTES = 'https://riofuturoprocesos.com/api/logistica/db/coste-rutas'
 API_MINDICADOR = 'https://mindicador.cl/api'
 
@@ -38,15 +39,36 @@ def get_odoo_connection(username, password):
 
 @st.cache_data(ttl=300)
 def obtener_rutas_logistica():
-    """Obtener rutas del sistema de logística"""
+    """Obtener rutas del sistema de logística desde /rutas, indexadas por nombre (RT correlativo)"""
     try:
-        response = requests.get(API_LOGISTICA_RUTAS, timeout=10)
+        response = requests.get(API_LOGISTICA_RUTAS, timeout=15)
         if response.status_code == 200:
-            return response.json()
-        return []
+            rutas = response.json()
+            # Devolver dict indexado por name (ej: 'RT00103')
+            return {r['name']: r for r in rutas if r.get('name')}
+        return {}
     except Exception as e:
-        st.warning(f"No se pudo conectar al sistema de logística: {e}")
-        return []
+        st.warning(f"No se pudo conectar al sistema de logística (/rutas): {e}")
+        return {}
+
+
+@st.cache_data(ttl=300)
+def obtener_route_ocs():
+    """Obtener tabla de relación OC ↔ Ruta desde /route-ocs, indexada por purchase_order_name"""
+    try:
+        response = requests.get(API_LOGISTICA_ROUTE_OCS, timeout=15)
+        if response.status_code == 200:
+            items = response.json()
+            # Devolver dict: {oc_name: route_name} ej: {'OC10775': 'RT00103'}
+            return {
+                item['purchase_order_name']: item['route_name']
+                for item in items
+                if item.get('purchase_order_name') and item.get('route_name')
+            }
+        return {}
+    except Exception as e:
+        st.warning(f"No se pudo conectar al sistema de logística (/route-ocs): {e}")
+        return {}
 
 
 @st.cache_data(ttl=300)
@@ -120,12 +142,23 @@ def get_tipo_cambio():
     return obtener_tipo_cambio_usd(_cache_key=_get_cache_key_fecha())
 
 
-def buscar_ruta_en_logistica(oc_name: str, rutas_logistica: List[Dict]) -> Optional[Dict]:
-    """Buscar ruta en sistema de logística por nombre de OC"""
-    for ruta in rutas_logistica:
-        if ruta.get('purchase_order_name') == oc_name:
-            return ruta
-    return None
+def buscar_ruta_en_logistica(oc_name: str, route_ocs_idx: Dict[str, str], rutas_idx: Dict[str, Dict]) -> Optional[Dict]:
+    """
+    Buscar ruta en sistema de logística para una OC dada.
+    
+    Paso 1: /route-ocs  → OC name → RT correlativo
+    Paso 2: /rutas      → RT correlativo → detalles de la ruta
+    """
+    if not oc_name:
+        return None
+    
+    # Buscar el RT correlativo asociado a esta OC
+    rt_name = route_ocs_idx.get(oc_name.strip())
+    if not rt_name:
+        return None
+    
+    # Buscar los detalles de la ruta por su correlativo
+    return rutas_idx.get(rt_name)
 
 
 def calcular_comparacion_presupuesto(oc_monto: float, costo_lineas_odoo: float, ruta_info: Optional[Dict], costes_rutas: List[Dict], tipo_cambio_usd: Optional[float] = None) -> Dict:
@@ -944,12 +977,13 @@ def render_tab(username, password):
     
     # Obtener datos de logística y tipo de cambio
     with st.spinner("Cargando datos de logística..."):
-        rutas_logistica = obtener_rutas_logistica()
+        rutas_idx = obtener_rutas_logistica()      # dict RT→detalle
+        route_ocs_idx = obtener_route_ocs()        # dict OC→RT
         costes_rutas = obtener_costes_rutas()
         tipo_cambio_usd = get_tipo_cambio()
         
         info_tc = f" | 💱 USD: ${tipo_cambio_usd:,.0f}" if tipo_cambio_usd else " | ⚠️ Sin TC"
-        st.caption(f"✅ {len(rutas_logistica)} rutas | {len(costes_rutas)} presupuestos{info_tc}")
+        st.caption(f"✅ {len(rutas_idx)} rutas | {len(route_ocs_idx)} OCs vinculadas | {len(costes_rutas)} presupuestos{info_tc}")
     
     # Obtener todas las OCs de fletes con información de aprobaciones
     with st.spinner("Cargando OCs de fletes..."):
@@ -967,8 +1001,8 @@ def render_tab(username, password):
         if area and isinstance(area, (list, tuple)):
             area = area[1]
         
-        # Buscar en logística
-        ruta_info = buscar_ruta_en_logistica(oc['name'], rutas_logistica)
+        # Buscar en logística via /route-ocs → /rutas
+        ruta_info = buscar_ruta_en_logistica(oc['name'], route_ocs_idx, rutas_idx)
         comparacion = calcular_comparacion_presupuesto(
             oc.get('amount_untaxed', 0), 
             oc.get('costo_lineas', 0),
@@ -1089,6 +1123,32 @@ def render_tab(username, password):
                 st.metric("Prom. $/Kg USD", "⚠️ Sin rutas vinculadas")
         else:
             st.metric("Prom. $/Kg USD", "⚠️ Sin datos")
+    
+    # Diagnóstico: OCs sin ruta
+    ocs_sin_ruta = df[df['route_correlativo'].isna() | (df['route_correlativo'] == '')]
+    if len(ocs_sin_ruta) > 0:
+        with st.expander(f"⚠️ Diagnóstico: {len(ocs_sin_ruta)} OCs sin correlativo de ruta", expanded=False):
+            st.warning(f"**{len(ocs_sin_ruta)} de {len(df)} OCs ({len(ocs_sin_ruta)/len(df)*100:.1f}%) no tienen ruta asignada en el sistema de logística**")
+            
+            st.markdown("**Posibles causas:**")
+            st.markdown("- La OC no tiene una ruta creada en el sistema de logística")
+            st.markdown("- El nombre de la OC en logística no coincide exactamente con el de Odoo")
+            st.markdown("- La ruta fue eliminada o está en borrador")
+            
+            # Mostrar tabla de OCs sin ruta
+            df_sin_ruta_display = ocs_sin_ruta[['oc_name', 'proveedor', 'monto', 'estado_oc', 'fecha_orden']].copy()
+            df_sin_ruta_display['monto'] = df_sin_ruta_display['monto'].apply(lambda x: f"${x:,.0f}")
+            df_sin_ruta_display = df_sin_ruta_display.rename(columns={
+                'oc_name': 'OC',
+                'proveedor': 'Proveedor',
+                'monto': 'Monto',
+                'estado_oc': 'Estado',
+                'fecha_orden': 'Fecha'
+            })
+            
+            st.dataframe(df_sin_ruta_display, use_container_width=True, hide_index=True)
+            
+            st.caption("💡 Para resolver: verifica que estas OCs tengan rutas creadas en el sistema de logística con el mismo nombre exacto")
     
     st.markdown("---")
     
