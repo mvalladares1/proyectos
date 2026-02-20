@@ -604,7 +604,7 @@ class RealProyectadoCalculator:
                 lineas_proyecciones = self.odoo.search_read(
                     'account.move.line',
                     [['move_id', 'in', moves_proyec_ids]],
-                    ['id', 'move_id', 'account_id', 'analytic_account_id', 'analytic_distribution', 'balance'],
+                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance'],
                     limit=50000
                 )
 
@@ -623,11 +623,6 @@ class RealProyectadoCalculator:
                 account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
                 if account_id:
                     account_ids_proyec.add(account_id)
-
-                analytic_data = linea.get('analytic_account_id')
-                analytic_id = analytic_data[0] if isinstance(analytic_data, (list, tuple)) and len(analytic_data) > 0 else analytic_data
-                if analytic_id:
-                    analytic_ids_proyec.add(analytic_id)
 
                 analytic_distribution = linea.get('analytic_distribution')
                 if isinstance(analytic_distribution, str):
@@ -755,12 +750,7 @@ class RealProyectadoCalculator:
                             nombre_analitico = nombre_analitico_por_id.get(analytic_id, f'Analítico {analytic_key}') if analytic_id else 'Sin Analítico'
                             ponderadores[(ifrs3, nombre_analitico)] += peso_base * (porcentaje_val / 100.0)
                     else:
-                        analytic_data = linea.get('analytic_account_id')
-                        analytic_id = analytic_data[0] if isinstance(analytic_data, (list, tuple)) and len(analytic_data) > 0 else analytic_data
-                        if analytic_id:
-                            nombre_analitico = nombre_analitico_por_id.get(analytic_id, f'Analítico {analytic_id}')
-                        else:
-                            nombre_analitico = 'Sin Analítico'
+                        nombre_analitico = 'Sin Analítico'
                         ponderadores[(ifrs3, nombre_analitico)] += peso_base
 
                 # IFRS3 vacío no se considera en absoluto
