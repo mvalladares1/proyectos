@@ -1124,32 +1124,6 @@ def render_tab(username, password):
         else:
             st.metric("Prom. $/Kg USD", "⚠️ Sin datos")
     
-    # Diagnóstico: OCs sin ruta
-    ocs_sin_ruta = df[df['route_correlativo'].isna() | (df['route_correlativo'] == '')]
-    if len(ocs_sin_ruta) > 0:
-        with st.expander(f"⚠️ Diagnóstico: {len(ocs_sin_ruta)} OCs sin correlativo de ruta", expanded=False):
-            st.warning(f"**{len(ocs_sin_ruta)} de {len(df)} OCs ({len(ocs_sin_ruta)/len(df)*100:.1f}%) no tienen ruta asignada en el sistema de logística**")
-            
-            st.markdown("**Posibles causas:**")
-            st.markdown("- La OC no tiene una ruta creada en el sistema de logística")
-            st.markdown("- El nombre de la OC en logística no coincide exactamente con el de Odoo")
-            st.markdown("- La ruta fue eliminada o está en borrador")
-            
-            # Mostrar tabla de OCs sin ruta
-            df_sin_ruta_display = ocs_sin_ruta[['oc_name', 'proveedor', 'monto', 'estado_oc', 'fecha_orden']].copy()
-            df_sin_ruta_display['monto'] = df_sin_ruta_display['monto'].apply(lambda x: f"${x:,.0f}")
-            df_sin_ruta_display = df_sin_ruta_display.rename(columns={
-                'oc_name': 'OC',
-                'proveedor': 'Proveedor',
-                'monto': 'Monto',
-                'estado_oc': 'Estado',
-                'fecha_orden': 'Fecha'
-            })
-            
-            st.dataframe(df_sin_ruta_display, use_container_width=True, hide_index=True)
-            
-            st.caption("💡 Para resolver: verifica que estas OCs tengan rutas creadas en el sistema de logística con el mismo nombre exacto")
-    
     st.markdown("---")
     
     # Filtros mejorados
