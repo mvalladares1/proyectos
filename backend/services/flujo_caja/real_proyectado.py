@@ -18,6 +18,7 @@ ESTRUCTURA JERÁRQUICA (igual que 1.1.1):
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from datetime import datetime, timedelta
+import json
 from backend.services.currency_service import CurrencyService
 
 
@@ -595,32 +596,80 @@ class RealProyectadoCalculator:
                 limit=10000
             )
 
-            # Cargar categorías de partners que no estén en cache
-            partner_ids_proyec = []
-            for fp in facturas_proyecciones:
-                partner_data = fp.get('partner_id')
-                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else partner_data
-                if partner_id and partner_id not in partners_info:
-                    partner_ids_proyec.append(partner_id)
-
-            if partner_ids_proyec:
-                partners_data_proyec = self.odoo.search_read(
-                    'res.partner',
-                    [['id', 'in', list(set(partner_ids_proyec))]],
-                    ['id', 'name', 'x_studio_categora_de_contacto'],
-                    limit=10000
+            # Para Módulo Contabilidad: agrupar por Cat IFRS 3 (Nivel 2) y Analítico (Nivel 3)
+            # IFRS3 vacío no se considera.
+            moves_proyec_ids = [fp.get('id') for fp in facturas_proyecciones if fp.get('id')]
+            lineas_proyecciones = []
+            if moves_proyec_ids:
+                lineas_proyecciones = self.odoo.search_read(
+                    'account.move.line',
+                    [['move_id', 'in', moves_proyec_ids]],
+                    ['id', 'move_id', 'account_id', 'analytic_account_id', 'analytic_distribution', 'balance'],
+                    limit=50000
                 )
-                for p in partners_data_proyec:
-                    categoria = p.get('x_studio_categora_de_contacto', False)
-                    if categoria and isinstance(categoria, (list, tuple)):
-                        categoria = categoria[1]
-                    elif not categoria or categoria == 'False':
-                        categoria = 'Sin Categoría'
 
-                    partners_info[p['id']] = {
-                        'name': p.get('name', 'Sin nombre'),
-                        'categoria': categoria
-                    }
+            # Mapear líneas por factura
+            lineas_proyec_por_move = defaultdict(list)
+            account_ids_proyec = set()
+            analytic_ids_proyec = set()
+            for linea in lineas_proyecciones:
+                move_data = linea.get('move_id')
+                move_id = move_data[0] if isinstance(move_data, (list, tuple)) and len(move_data) > 0 else move_data
+                if not move_id:
+                    continue
+                lineas_proyec_por_move[move_id].append(linea)
+
+                account_data = linea.get('account_id')
+                account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                if account_id:
+                    account_ids_proyec.add(account_id)
+
+                analytic_data = linea.get('analytic_account_id')
+                analytic_id = analytic_data[0] if isinstance(analytic_data, (list, tuple)) and len(analytic_data) > 0 else analytic_data
+                if analytic_id:
+                    analytic_ids_proyec.add(analytic_id)
+
+                analytic_distribution = linea.get('analytic_distribution')
+                if isinstance(analytic_distribution, str):
+                    try:
+                        analytic_distribution = json.loads(analytic_distribution)
+                    except Exception:
+                        analytic_distribution = {}
+                if isinstance(analytic_distribution, dict):
+                    for key in analytic_distribution.keys():
+                        try:
+                            analytic_ids_proyec.add(int(str(key)))
+                        except Exception:
+                            continue
+
+            # Mapear account_id -> Cat IFRS 3
+            ifrs3_por_account = {}
+            if account_ids_proyec:
+                try:
+                    cuentas_proyec = self.odoo.read(
+                        'account.account',
+                        list(account_ids_proyec),
+                        ['id', 'x_studio_cat_ifrs_3']
+                    )
+                    for cuenta in cuentas_proyec:
+                        valor_ifrs3 = (cuenta.get('x_studio_cat_ifrs_3') or '').strip()
+                        ifrs3_por_account[cuenta.get('id')] = valor_ifrs3
+                except Exception:
+                    ifrs3_por_account = {}
+
+            # Mapear analytic_id -> nombre
+            nombre_analitico_por_id = {}
+            if analytic_ids_proyec:
+                try:
+                    cuentas_analiticas = self.odoo.read(
+                        'account.analytic.account',
+                        list(analytic_ids_proyec),
+                        ['id', 'name']
+                    )
+                    for cuenta_analitica in cuentas_analiticas:
+                        nombre_analitico_por_id[cuenta_analitica.get('id')] = cuenta_analitica.get('name') or 'Sin Analítico'
+                except Exception:
+                    nombre_analitico_por_id = {}
 
             for fp in facturas_proyecciones:
                 fecha_base = str(fp.get('date') or fp.get('invoice_date') or '')[:10]
@@ -669,41 +718,90 @@ class RealProyectadoCalculator:
                 if monto_proyectado == 0:
                     continue
 
-                partner_data = fp.get('partner_id', [0, 'Sin proveedor'])
-                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
-                partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
-                partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
-                categoria_nombre = partner_info['categoria']
+                # Distribución por Cat IFRS 3 (Nivel 2) y Analítico (Nivel 3)
+                # Si IFRS3 está vacío, no se considera esa línea.
+                lineas_move = lineas_proyec_por_move.get(fp.get('id'), [])
+                ponderadores = defaultdict(float)  # (ifrs3, analitico) -> peso
 
-                proyectado_total += monto_proyectado
-                proyectado_por_periodo[periodo_proyectado] += monto_proyectado
+                for linea in lineas_move:
+                    account_data = linea.get('account_id')
+                    account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                    ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
+                    if not ifrs3:
+                        continue
+
+                    balance = abs(float(linea.get('balance') or 0.0))
+                    peso_base = balance if balance > 0 else 1.0
+
+                    analytic_distribution = linea.get('analytic_distribution')
+                    if isinstance(analytic_distribution, str):
+                        try:
+                            analytic_distribution = json.loads(analytic_distribution)
+                        except Exception:
+                            analytic_distribution = {}
+
+                    if isinstance(analytic_distribution, dict) and len(analytic_distribution) > 0:
+                        for analytic_key, porcentaje in analytic_distribution.items():
+                            try:
+                                analytic_id = int(str(analytic_key))
+                            except Exception:
+                                analytic_id = None
+                            try:
+                                porcentaje_val = float(porcentaje)
+                            except Exception:
+                                porcentaje_val = 0.0
+                            if porcentaje_val <= 0:
+                                continue
+                            nombre_analitico = nombre_analitico_por_id.get(analytic_id, f'Analítico {analytic_key}') if analytic_id else 'Sin Analítico'
+                            ponderadores[(ifrs3, nombre_analitico)] += peso_base * (porcentaje_val / 100.0)
+                    else:
+                        analytic_data = linea.get('analytic_account_id')
+                        analytic_id = analytic_data[0] if isinstance(analytic_data, (list, tuple)) and len(analytic_data) > 0 else analytic_data
+                        if analytic_id:
+                            nombre_analitico = nombre_analitico_por_id.get(analytic_id, f'Analítico {analytic_id}')
+                        else:
+                            nombre_analitico = 'Sin Analítico'
+                        ponderadores[(ifrs3, nombre_analitico)] += peso_base
+
+                # IFRS3 vacío no se considera en absoluto
+                total_peso = sum(ponderadores.values())
+                if total_peso <= 0:
+                    continue
 
                 estado = estados['PROYECTADAS_CONTABILIDAD']
-                estado['monto'] += monto_proyectado
-                estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
 
-                if categoria_nombre not in estado['categorias']:
-                    estado['categorias'][categoria_nombre] = {
-                        'nombre': categoria_nombre,
-                        'monto': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'proveedores': {}
-                    }
+                for (categoria_ifrs3, nombre_analitico), peso in ponderadores.items():
+                    proporcion = peso / total_peso
+                    monto_parcial = monto_proyectado * proporcion
 
-                categoria = estado['categorias'][categoria_nombre]
-                categoria['monto'] += monto_proyectado
-                categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    proyectado_total += monto_parcial
+                    proyectado_por_periodo[periodo_proyectado] += monto_parcial
 
-                if partner_name not in categoria['proveedores']:
-                    categoria['proveedores'][partner_name] = {
-                        'nombre': partner_name[:50],
-                        'monto': 0.0,
-                        'montos_por_mes': defaultdict(float)
-                    }
+                    estado['monto'] += monto_parcial
+                    estado['montos_por_mes'][periodo_proyectado] += monto_parcial
 
-                proveedor = categoria['proveedores'][partner_name]
-                proveedor['monto'] += monto_proyectado
-                proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    if categoria_ifrs3 not in estado['categorias']:
+                        estado['categorias'][categoria_ifrs3] = {
+                            'nombre': categoria_ifrs3,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'proveedores': {}
+                        }
+
+                    categoria = estado['categorias'][categoria_ifrs3]
+                    categoria['monto'] += monto_parcial
+                    categoria['montos_por_mes'][periodo_proyectado] += monto_parcial
+
+                    if nombre_analitico not in categoria['proveedores']:
+                        categoria['proveedores'][nombre_analitico] = {
+                            'nombre': nombre_analitico[:50],
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float)
+                        }
+
+                    analitico = categoria['proveedores'][nombre_analitico]
+                    analitico['monto'] += monto_parcial
+                    analitico['montos_por_mes'][periodo_proyectado] += monto_parcial
             
             # PASO 6: Convertir estructura a 4 NIVELES EXPANDIBLES
             # Nivel 2 (cuentas): ESTADOS (expandible)
