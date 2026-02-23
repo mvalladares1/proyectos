@@ -405,19 +405,53 @@ def render(username: str, password: str):
         with col_exp2:
             try:
                 import io
+                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                from openpyxl.utils import get_column_letter
+
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                     df_display.to_excel(writer, index=False, sheet_name='Pallets_por_Sala')
+                    ws = writer.sheets['Pallets_por_Sala']
 
-                    # Hoja de resumen por sala
-                    resumen_salas = (
-                        df.groupby('sala')
-                        .agg(kg_total=('kg', 'sum'), pallets=('pallet', 'nunique'), productos=('producto', 'nunique'))
-                        .reset_index()
-                        .sort_values('kg_total', ascending=False)
+                    # Autofiltro en todo el rango
+                    ws.auto_filter.ref = ws.dimensions
+
+                    # Estilos
+                    header_font = Font(bold=True, color="FFFFFF", size=11)
+                    header_fill = PatternFill(start_color="1F3A5F", end_color="1F3A5F", fill_type="solid")
+                    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                    thin_border = Border(
+                        left=Side(style='thin', color='D0D0D0'),
+                        right=Side(style='thin', color='D0D0D0'),
+                        top=Side(style='thin', color='D0D0D0'),
+                        bottom=Side(style='thin', color='D0D0D0')
                     )
-                    resumen_salas.columns = ['Sala', 'Kilos', 'Pallets', 'Productos']
-                    resumen_salas.to_excel(writer, index=False, sheet_name='Resumen_Salas')
+
+                    # Formatear encabezados
+                    for col_idx in range(1, ws.max_column + 1):
+                        cell = ws.cell(row=1, column=col_idx)
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_align
+                        cell.border = thin_border
+
+                    # Bordes en todas las celdas de datos
+                    for row in range(2, ws.max_row + 1):
+                        for col_idx in range(1, ws.max_column + 1):
+                            ws.cell(row=row, column=col_idx).border = thin_border
+
+                    # Ajustar ancho de columnas al contenido
+                    for col_idx in range(1, ws.max_column + 1):
+                        col_letter = get_column_letter(col_idx)
+                        max_len = len(str(ws.cell(row=1, column=col_idx).value or ""))
+                        for row in range(2, min(ws.max_row + 1, 200)):
+                            val = ws.cell(row=row, column=col_idx).value
+                            if val:
+                                max_len = max(max_len, len(str(val)))
+                        ws.column_dimensions[col_letter].width = min(max_len + 3, 50)
+
+                    # Congelar primera fila (encabezados siempre visibles)
+                    ws.freeze_panes = "A2"
 
                 st.download_button(
                     label="📊 Descargar Excel",
