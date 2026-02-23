@@ -276,20 +276,23 @@ def _render_calidad_pallet(registros_calidad: List[Dict], pallet_name: str):
         for label, val in sorted(defectos.items(), key=lambda x: x[1], reverse=True):
             width_pct = min(val / max_val * 100, 100) if max_val > 0 else 0
             bar_color = "#ef4444" if val > 4 else ("#f59e0b" if val > 2 else "#22c55e")
-            bars_html += f"""
-            <div style="display:flex; align-items:center; margin:3px 0; gap:8px;">
-                <span style="width:100px; font-size:0.75rem; color:#94a3b8; text-align:right;">{label}</span>
-                <div style="flex:1; background:#1e293b; border-radius:4px; height:18px; overflow:hidden;">
-                    <div style="width:{width_pct}%; background:{bar_color}; height:100%; border-radius:4px; min-width:2px;"></div>
-                </div>
-                <span style="width:50px; font-size:0.75rem; color:#e2e8f0; font-weight:600;">{val:.1f}%</span>
-            </div>"""
+            bars_html += (
+                '<div style="display:flex;align-items:center;margin:3px 0;gap:8px;">'
+                f'<span style="width:100px;font-size:0.75rem;color:#94a3b8;text-align:right;">{label}</span>'
+                '<div style="flex:1;background:#1e293b;border-radius:4px;height:18px;overflow:hidden;">'
+                f'<div style="width:{width_pct}%;background:{bar_color};height:100%;border-radius:4px;min-width:2px;"></div>'
+                '</div>'
+                f'<span style="width:50px;font-size:0.75rem;color:#e2e8f0;font-weight:600;">{val:.1f}%</span>'
+                '</div>'
+            )
 
-        st.markdown(f"""
-        <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:0.8rem; margin-top:0.5rem;">
-            <div style="font-size:0.7rem; color:#64748b; margin-bottom:6px; text-transform:uppercase; font-weight:600;">Desglose de Defectos (Promedio)</div>
-            {bars_html}
-        </div>""", unsafe_allow_html=True)
+        html_block = (
+            '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:0.8rem;margin-top:0.5rem;">'
+            '<div style="font-size:0.7rem;color:#64748b;margin-bottom:6px;text-transform:uppercase;font-weight:600;">Desglose de Defectos (Promedio)</div>'
+            f'{bars_html}'
+            '</div>'
+        )
+        st.markdown(html_block, unsafe_allow_html=True)
 
 
 def _generar_excel_con_calidad(df_display, calidad_dict):
