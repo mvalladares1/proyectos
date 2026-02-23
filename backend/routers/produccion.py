@@ -373,3 +373,34 @@ async def get_proveedores_compras(
         return {"proveedores": service.get_proveedores_compras()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/productos_pt")
+async def get_productos_pt(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+):
+    """
+    Obtiene la lista de productos terminados (códigos 3x/4x) de Odoo.
+    Retorna lista de {code, name} para usar en filtros.
+    """
+    try:
+        service = ProduccionService(username=username, password=password)
+        # Buscar productos con default_code que empiece con 3 o 4 (producto terminado)
+        domain = [
+            '|',
+            ('default_code', '=like', '3%'),
+            ('default_code', '=like', '4%'),
+        ]
+        product_ids = service.odoo.search('product.product', domain, limit=500)
+        products = service.odoo.read('product.product', product_ids, ['default_code', 'name'])
+        resultado = []
+        for p in products:
+            code = (p.get('default_code') or '').strip()
+            name = (p.get('name') or '').strip()
+            if code:
+                resultado.append({"code": code, "name": name})
+        resultado.sort(key=lambda x: x['code'])
+        return {"productos": resultado}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

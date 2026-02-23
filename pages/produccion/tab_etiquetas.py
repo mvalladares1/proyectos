@@ -8,7 +8,7 @@ import httpx
 import re
 import time
 from typing import List, Dict
-from produccion.shared import API_URL
+from .shared import API_URL
 
 
 def _throttle_rerun(key: str = "etiq", min_interval: float = 1.0) -> bool:

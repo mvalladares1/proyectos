@@ -25,6 +25,22 @@ def _throttle_rerun(key: str = "ps_last_rerun", min_interval: float = 2.0) -> bo
     return True
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _obtener_productos_pt(username: str, password: str) -> List[Dict]:
+    """Obtiene la lista de productos terminados de Odoo (cacheada 1 hora)."""
+    try:
+        resp = requests.get(
+            f"{API_URL}/api/v1/produccion/productos_pt",
+            params={"username": username, "password": password},
+            timeout=15
+        )
+        if resp.status_code == 200:
+            return resp.json().get('productos', [])
+    except Exception:
+        pass
+    return []
+
+
 # --- Constantes del módulo ---
 SALA_MAP_INTERNAL = {
     "Sala 1 - Línea Retail": "Sala 1 - Linea Retail",
@@ -695,19 +711,23 @@ def render(username: str, password: str):
                 key="ps_planta"
             )
 
-        # Filtro de productos (selectbox dinámico)
-        cached_data = st.session_state.get("ps_pallets_data")
-        if cached_data and cached_data.get('detalle'):
-            # Extraer productos únicos del cache: "código — nombre"
-            productos_unicos = {}
-            for d in cached_data['detalle']:
-                code = d.get('codigo_producto', '')
-                name = d.get('producto', '')
-                if code and code not in productos_unicos:
-                    productos_unicos[code] = f"{code} — {name}"
-            opciones_productos = ["Todos"] + sorted(productos_unicos.values())
-        else:
-            opciones_productos = ["Todos"]
+        # Filtro de productos (selectbox con datos de Odoo)
+        opciones_productos = ["Todos"]
+        try:
+            productos_odoo = _obtener_productos_pt(username, password)
+            if productos_odoo:
+                opciones_productos += [f"{p['code']} — {p['name']}" for p in productos_odoo]
+        except Exception:
+            # Fallback: usar datos del cache si existen
+            cached_data = st.session_state.get("ps_pallets_data")
+            if cached_data and cached_data.get('detalle'):
+                productos_unicos = {}
+                for d in cached_data['detalle']:
+                    code = d.get('codigo_producto', '')
+                    name = d.get('producto', '')
+                    if code and code not in productos_unicos:
+                        productos_unicos[code] = f"{code} — {name}"
+                opciones_productos = ["Todos"] + sorted(productos_unicos.values())
 
         producto_seleccionado = st.selectbox(
             "📦 Filtrar por Producto",
