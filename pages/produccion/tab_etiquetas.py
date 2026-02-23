@@ -181,7 +181,7 @@ def render(username: str, password: str):
     # Selector de tipo de etiqueta
     tipo_etiqueta = st.radio(
         "Tipo de etiqueta",
-        ["📦 ETIQUETAS POR PALLET", "🎁 ETIQUETAS POR CAJA"],
+        ["📦 ETIQUETAS POR PALLET", "🎁 ETIQUETAS POR CAJA", "🏷️ ETIQUETAS PRODUCTO"],
         horizontal=True,
         key="etiq_tipo"
     )
@@ -190,8 +190,10 @@ def render(username: str, password: str):
     
     if tipo_etiqueta == "📦 ETIQUETAS POR PALLET":
         render_etiquetas_pallet(username, password)
-    else:
+    elif tipo_etiqueta == "🎁 ETIQUETAS POR CAJA":
         render_etiquetas_caja(username, password)
+    else:
+        render_etiquetas_producto(username, password)
 
 
 # ==================== DISEÑOS DE ETIQUETAS POR CLIENTE ====================
@@ -285,6 +287,354 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
     </html>
     """
     return html
+
+
+# ==================== ETIQUETAS PRODUCTO (tipo LACO) ====================
+
+def generar_etiqueta_producto_html(datos: Dict, batch_no: int, carton_no: int, total_cajas: int = 0) -> str:
+    """
+    Genera HTML de etiqueta de producto estilo LACO.
+    Tamaño: 100mm x 100mm
+    carton_no ya viene calculado decrecientemente desde el caller.
+    """
+    lote_pallet = datos.get('lote_pallet', '')
+    batch_str = str(batch_no).zfill(7)
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 100mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 100mm;
+                    margin: 0;
+                    padding: 4mm;
+                }}
+                .etiqueta {{
+                    page-break-after: always;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 4mm;
+                margin: 0;
+                width: 92mm;
+                height: 92mm;
+            }}
+            .etiqueta {{
+                width: 100%;
+                border: 2px solid #000;
+                padding: 6px 10px;
+                box-sizing: border-box;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }}
+            .campo {{
+                font-size: 12px;
+                margin: 2px 0;
+                line-height: 1.4;
+            }}
+            .campo .label {{
+                font-weight: normal;
+            }}
+            .campo .valor {{
+                font-weight: bold;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="etiqueta">
+            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{datos.get('material_code', '')}</span></div>
+            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{datos.get('product_name', '')}</span></div>
+            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">{datos.get('net_weight', '10KG')}</span></div>
+            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{datos.get('production_date', '')}</span></div>
+            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{datos.get('best_before', '')}</span></div>
+            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{batch_str} / {lote_pallet}</span></div>
+            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">{datos.get('storage_temp', '-18°C')}</span></div>
+            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">{datos.get('origin', 'CHILE')}</span></div>
+            <div class="campo"><span class="label">CARTON NO: </span><span class="valor">{carton_no}</span></div>
+            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">{datos.get('client', 'LACO')}</span></div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+def generar_etiquetas_producto_multiple_html(datos: Dict, carton_inicio: int, carton_fin: int) -> str:
+    """
+    Genera HTML con múltiples etiquetas de producto para impresión.
+    Cada etiqueta en su propia página.
+    CARTON NO y BATCH NO van de carton_fin a carton_inicio (decreciente).
+    Ejemplo: carton_inicio=1, carton_fin=90 → imprime 90, 89, ..., 2, 1
+    """
+    lote_pallet = datos.get('lote_pallet', '')
+    
+    pages = []
+    for carton_no in range(carton_fin, carton_inicio - 1, -1):
+        batch_str = str(carton_no).zfill(7)
+        
+        page = f"""
+        <div class="etiqueta">
+            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{datos.get('material_code', '')}</span></div>
+            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{datos.get('product_name', '')}</span></div>
+            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">{datos.get('net_weight', '10KG')}</span></div>
+            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{datos.get('production_date', '')}</span></div>
+            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{datos.get('best_before', '')}</span></div>
+            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{batch_str} / {lote_pallet}</span></div>
+            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">{datos.get('storage_temp', '-18°C')}</span></div>
+            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">{datos.get('origin', 'CHILE')}</span></div>
+            <div class="campo"><span class="label">CARTON NO: </span><span class="valor">{carton_no}</span></div>
+            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">{datos.get('client', 'LACO')}</span></div>
+        </div>
+        """
+        pages.append(page)
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 100mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    margin: 0;
+                    padding: 0;
+                }}
+                .etiqueta {{
+                    page-break-after: always;
+                    width: 100mm;
+                    height: 100mm;
+                    padding: 4mm;
+                    box-sizing: border-box;
+                }}
+                .etiqueta:last-child {{
+                    page-break-after: auto;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+            }}
+            .etiqueta {{
+                width: 92mm;
+                height: 92mm;
+                padding: 6px 10px;
+                border: 2px solid #000;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                margin: 5px auto;
+            }}
+            .campo {{
+                font-size: 12px;
+                margin: 2px 0;
+                line-height: 1.4;
+            }}
+            .campo .label {{
+                font-weight: normal;
+            }}
+            .campo .valor {{
+                font-weight: bold;
+            }}
+        </style>
+    </head>
+    <body>
+        {''.join(pages)}
+    </body>
+    </html>
+    """
+    return html
+
+
+def render_etiquetas_producto(username: str, password: str):
+    """Renderiza la sección de etiquetas de producto (estilo LACO) con datos de Odoo."""
+    
+    # Inicializar estado
+    if "etiq_prod_orden_seleccionada" not in st.session_state:
+        st.session_state.etiq_prod_orden_seleccionada = None
+    if "etiq_prod_pallets_cargados" not in st.session_state:
+        st.session_state.etiq_prod_pallets_cargados = []
+    if "etiq_prod_ordenes_encontradas" not in st.session_state:
+        st.session_state.etiq_prod_ordenes_encontradas = []
+    
+    st.subheader("🏷️ Etiquetas de Producto")
+    st.caption("Genera etiquetas de 100x100mm con numeración secuencial de BATCH NO y CARTON NO")
+    
+    # ==================== PASO 1: BUSCAR ORDEN ====================
+    st.subheader("1️⃣ Buscar Orden de Producción")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        termino_busqueda = st.text_input(
+            "Buscar orden",
+            placeholder="Ej: WH/MO/12345",
+            help="Ingresa el nombre o referencia de la orden",
+            key="etiq_prod_termino_busqueda"
+        )
+    
+    with col2:
+        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="etiq_prod_btn_buscar")
+    
+    if btn_buscar and termino_busqueda:
+        with st.spinner("Buscando órdenes..."):
+            try:
+                ordenes = buscar_ordenes(username, password, termino_busqueda)
+                st.session_state.etiq_prod_ordenes_encontradas = ordenes
+                if ordenes:
+                    st.success(f"✅ Se encontraron {len(ordenes)} órdenes")
+                else:
+                    st.warning("⚠️ No se encontraron órdenes")
+            except Exception as e:
+                st.error(f"❌ Error al buscar órdenes: {e}")
+                st.session_state.etiq_prod_ordenes_encontradas = []
+    
+    # Mostrar órdenes encontradas
+    if st.session_state.etiq_prod_ordenes_encontradas:
+        st.write("**Órdenes encontradas:**")
+        for orden in st.session_state.etiq_prod_ordenes_encontradas:
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.write(f"**{orden.get('name', '')}**")
+            with col2:
+                product_name = orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else orden.get('product_name', '')
+                st.write(f"📦 {product_name[:40]}...")
+            with col3:
+                if st.button("Seleccionar", key=f"etiq_prod_sel_{orden.get('id')}"):
+                    st.session_state.etiq_prod_orden_seleccionada = orden
+                    st.session_state.etiq_prod_pallets_cargados = []
+                    st.rerun()
+    
+    # ==================== PASO 2: CARGAR PALLETS ====================
+    if st.session_state.etiq_prod_orden_seleccionada:
+        orden = st.session_state.etiq_prod_orden_seleccionada
+        
+        st.divider()
+        st.subheader("2️⃣ Orden Seleccionada")
+        
+        product_name = orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else orden.get('product_name', '')
+        cliente_nombre = orden.get('cliente_nombre', 'No especificado')
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.info(f"**{orden.get('name')}** - {product_name}")
+            st.write(f"👤 **Cliente:** {cliente_nombre}")
+        with col2:
+            if st.button("📥 Cargar Pallets", type="primary", use_container_width=True, key="etiq_prod_cargar"):
+                with st.spinner("Cargando pallets..."):
+                    try:
+                        pallets = obtener_pallets_orden(username, password, orden.get('name'))
+                        st.session_state.etiq_prod_pallets_cargados = pallets
+                        if pallets:
+                            st.success(f"✅ {len(pallets)} pallets cargados")
+                        else:
+                            st.warning("⚠️ No se encontraron pallets")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+        
+        if st.button("❌ Cambiar Orden", key="etiq_prod_cambiar"):
+            st.session_state.etiq_prod_orden_seleccionada = None
+            st.session_state.etiq_prod_pallets_cargados = []
+            st.session_state.etiq_prod_ordenes_encontradas = []
+            st.rerun()
+    
+    # ==================== PASO 3: GENERAR ETIQUETAS ====================
+    if st.session_state.etiq_prod_pallets_cargados:
+        st.divider()
+        st.subheader("3️⃣ Generar Etiquetas de Producto")
+        
+        pallets = st.session_state.etiq_prod_pallets_cargados
+        orden = st.session_state.etiq_prod_orden_seleccionada
+        cliente_nombre = orden.get('cliente_nombre', '')
+        
+        st.write(f"**{len(pallets)} pallets disponibles**")
+        
+        # Calcular numeración continua de CARTON NO entre pallets
+        carton_acumulado = 0  # Contador acumulado
+        
+        for idx_pallet, pallet in enumerate(pallets):
+            package_name = pallet.get('package_name', '')
+            codigo_prod, desc_prod = extraer_codigo_descripcion(pallet.get('producto_nombre', ''))
+            lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
+            cantidad_cajas = int(pallet.get('cantidad_cajas', 0)) or 90
+            peso_caja = extraer_peso_de_descripcion(desc_prod)
+            
+            # Rango de CARTON NO para este pallet (continuo)
+            carton_inicio = carton_acumulado + 1
+            carton_fin = carton_acumulado + cantidad_cajas
+            carton_acumulado = carton_fin
+            
+            # Datos automáticos de Odoo
+            material_code = codigo_prod  # Código producto
+            net_weight = f"{peso_caja}KG"  # Peso extraído de la descripción
+            client = cliente_nombre or "LACO"  # x_studio_clientes
+            
+            # Fechas desde Odoo
+            fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+            fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
+            # Convertir formato de DD.MM.YYYY a DD-MM-YYYY
+            fecha_elab_fmt = fecha_elab.replace('.', '-') if fecha_elab else ''
+            fecha_venc_fmt = fecha_venc.replace('.', '-') if fecha_venc else ''
+            
+            with st.expander(f"📦 Pallet {idx_pallet + 1}: {package_name} — {desc_prod} — CARTON {carton_inicio} al {carton_fin}"):
+                st.write(f"**Código:** {codigo_prod} | **Lote:** {lot_name} | **Peso caja:** {peso_caja}kg")
+                st.write(f"**Fecha elab.:** {fecha_elab} | **Fecha venc.:** {fecha_venc} | **Cliente:** {client}")
+                st.write(f"**Cajas:** {cantidad_cajas} | **CARTON NO:** {carton_inicio} → {carton_fin}")
+                st.caption(f"🖨️ Orden de impresión: {carton_fin}, {carton_fin-1}, {carton_fin-2}... {carton_inicio} (decreciente, el {carton_inicio} queda arriba)")
+                
+                datos = {
+                    'material_code': material_code,
+                    'product_name': desc_prod,
+                    'net_weight': net_weight,
+                    'production_date': fecha_elab_fmt,
+                    'best_before': fecha_venc_fmt,
+                    'lote_pallet': f"{lot_name}/{package_name}",
+                    'storage_temp': '-18°C',
+                    'origin': 'CHILE',
+                    'client': client,
+                }
+                
+                col_prev, col_print = st.columns(2)
+                
+                with col_prev:
+                    if st.button("👁️ Vista Previa (primera y última)", use_container_width=True, key=f"etiq_prod_prev_{pallet.get('package_id')}"):
+                        # Mostrar la primera que sale (carton_fin) y la última (carton_inicio)
+                        html_first = generar_etiqueta_producto_html(datos, carton_fin, carton_fin)
+                        st.write(f"**Primera etiqueta impresa (CARTON {carton_fin}):**")
+                        st.components.v1.html(html_first, height=420, scrolling=True)
+                        html_last = generar_etiqueta_producto_html(datos, carton_inicio, carton_inicio)
+                        st.write(f"**Última etiqueta impresa (CARTON {carton_inicio}):**")
+                        st.components.v1.html(html_last, height=420, scrolling=True)
+                
+                with col_print:
+                    if st.button("🖨️ Imprimir todas", type="primary", use_container_width=True, key=f"etiq_prod_print_{pallet.get('package_id')}"):
+                        html_all = generar_etiquetas_producto_multiple_html(datos, carton_inicio, carton_fin)
+                        html_con_print = html_all.replace('</body>', """
+                        <script>
+                            window.onload = function() {
+                                setTimeout(function() {
+                                    window.print();
+                                }, 500);
+                            };
+                        </script>
+                        </body>""")
+                        st.components.v1.html(html_con_print, height=450, scrolling=True)
+                        st.success(f"✅ {cantidad_cajas} etiquetas generadas (CARTON {carton_fin} → {carton_inicio}, decreciente)")
 
 
 # Mapeo de clientes a sus funciones de diseño
