@@ -152,6 +152,64 @@ def _parsear_excel_calidad(uploaded_file) -> Dict[str, List[Dict]]:
     return calidad_por_pallet
 
 
+def _cargar_calidad_servidor() -> Dict[str, List[Dict]]:
+    """
+    Carga automáticamente TODOS los Excel de calidad desde data/calidad/.
+    Busca en múltiples rutas posibles (local y container).
+    Cachea el resultado en session_state para no re-parsear cada refresh.
+    """
+    import os
+    import glob
+
+    # Si ya está cacheado y no se pidió recarga, retornar
+    if st.session_state.get('_qc_server_loaded') and st.session_state.get('ps_calidad_dict'):
+        return st.session_state['ps_calidad_dict']
+
+    # Buscar la carpeta data/calidad en rutas posibles
+    posibles_rutas = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data', 'calidad'),
+        '/app/data/calidad',
+        os.path.join(os.getcwd(), 'data', 'calidad'),
+    ]
+
+    carpeta_calidad = None
+    for ruta in posibles_rutas:
+        if os.path.isdir(ruta):
+            carpeta_calidad = ruta
+            break
+
+    if not carpeta_calidad:
+        return {}
+
+    archivos_excel = glob.glob(os.path.join(carpeta_calidad, '*.xlsx')) + \
+                     glob.glob(os.path.join(carpeta_calidad, '*.xls'))
+
+    if not archivos_excel:
+        return {}
+
+    calidad_total: Dict[str, List[Dict]] = {}
+    archivos_ok = []
+    archivos_error = []
+
+    for archivo in sorted(archivos_excel):
+        nombre = os.path.basename(archivo)
+        try:
+            resultado = _parsear_excel_calidad(archivo)
+            for pallet_num, registros in resultado.items():
+                calidad_total.setdefault(pallet_num, []).extend(registros)
+            archivos_ok.append(nombre)
+        except Exception as e:
+            archivos_error.append(f"{nombre}: {e}")
+
+    # Guardar en session_state
+    st.session_state['ps_calidad_dict'] = calidad_total
+    st.session_state['_qc_server_loaded'] = True
+    st.session_state['_qc_archivos_cargados'] = archivos_ok
+    st.session_state['_qc_archivos_error'] = archivos_error
+
+    return calidad_total
+
+
 def _render_calidad_pallet(registros_calidad: List[Dict], pallet_name: str):
     """Renderiza los datos de calidad de un pallet de forma visual e interactiva."""
     n = len(registros_calidad)
@@ -561,29 +619,46 @@ def render(username: str, password: str):
     st.markdown("### 🏢 PALLETS POR SALA DE PROCESO")
     st.caption("Detalle de pallets de producto terminado por sala, producto y grado — Temporada 2025 / 2026")
 
-    # === UPLOAD DE CALIDAD ===
-    with st.expander("📊 **Cargar Excel de Control de Calidad** (opcional)", expanded=False):
-        st.caption("Sube el Excel de calidad para enlazar análisis a cada pallet. "
-                   "Se aceptan archivos con hojas 'Base de Datos (R.F.)' y/o 'B.D.(Frío Food)'.")
-        uploaded_file = st.file_uploader(
-            "Seleccionar Excel de Calidad",
-            type=['xlsx', 'xls'],
-            key="ps_calidad_upload",
-            label_visibility="collapsed"
-        )
+    # === CARGA AUTOMÁTICA DE CALIDAD ===
+    calidad_dict = _cargar_calidad_servidor()
+
+    # Mostrar info de archivos cargados
+    archivos_ok = st.session_state.get('_qc_archivos_cargados', [])
+    archivos_error = st.session_state.get('_qc_archivos_error', [])
+    if archivos_ok:
+        total_pallets_qc = len(calidad_dict)
+        total_registros_qc = sum(len(v) for v in calidad_dict.values())
+        archivos_txt = ", ".join(archivos_ok)
+        st.info(f"📊 Calidad auto-cargada: **{total_registros_qc}** monitoreos / **{total_pallets_qc}** pallets — Archivos: {archivos_txt}")
+    if archivos_error:
+        for err in archivos_error:
+            st.warning(f"⚠️ Error en archivo: {err}")
+
+    # Upload manual adicional (opcional)
+    with st.expander("📤 **Cargar Excel de Calidad adicional** (opcional)", expanded=False):
+        st.caption("Si tienes un archivo que aún no está en el servidor, súbelo aquí para enlazar temporalmente.")
+        col_up, col_reload = st.columns([4, 1])
+        with col_reload:
+            if st.button("🔄 Recargar", key="ps_reload_qc", help="Recargar archivos del servidor"):
+                st.session_state['_qc_server_loaded'] = False
+                st.session_state['ps_calidad_dict'] = {}
+                st.rerun()
+        with col_up:
+            uploaded_file = st.file_uploader(
+                "Seleccionar Excel de Calidad",
+                type=['xlsx', 'xls'],
+                key="ps_calidad_upload",
+                label_visibility="collapsed"
+            )
         if uploaded_file:
             with st.spinner("📊 Procesando datos de calidad..."):
-                calidad_dict = _parsear_excel_calidad(uploaded_file)
+                extra_dict = _parsear_excel_calidad(uploaded_file)
+                # Merge con los ya cargados del servidor
+                for pallet_num, registros in extra_dict.items():
+                    calidad_dict.setdefault(pallet_num, []).extend(registros)
                 st.session_state.ps_calidad_dict = calidad_dict
-                total_pallets_qc = len(calidad_dict)
-                total_registros_qc = sum(len(v) for v in calidad_dict.values())
-                st.success(f"✅ Se cargaron **{total_registros_qc}** monitoreos para **{total_pallets_qc}** pallets")
-
-        if st.session_state.get('ps_calidad_dict'):
-            cd = st.session_state.ps_calidad_dict
-            st.info(f"📋 Datos de calidad activos: {sum(len(v) for v in cd.values())} monitoreos / {len(cd)} pallets")
-
-    calidad_dict = st.session_state.get('ps_calidad_dict', {})
+                total_extra = sum(len(v) for v in extra_dict.values())
+                st.success(f"✅ Se agregaron **{total_extra}** monitoreos adicionales")
 
     # === FILTROS ===
     with st.container():
