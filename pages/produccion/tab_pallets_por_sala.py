@@ -634,55 +634,6 @@ def render(username: str, password: str):
     </div>
     """, unsafe_allow_html=True)
 
-    # === CARGA AUTOMÁTICA DE CALIDAD ===
-    calidad_dict = _cargar_calidad_servidor()
-
-    # Banner de calidad auto-cargada
-    archivos_ok = st.session_state.get('_qc_archivos_cargados', [])
-    archivos_error = st.session_state.get('_qc_archivos_error', [])
-    if archivos_ok:
-        total_pallets_qc = len(calidad_dict)
-        total_registros_qc = sum(len(v) for v in calidad_dict.values())
-        archivos_txt = " &bull; ".join(archivos_ok)
-        st.markdown(f"""
-        <div class="qc-banner">
-            <div class="qc-icon">🔬</div>
-            <div>
-                <div class="qc-text">Control de calidad activo: <strong>{total_registros_qc}</strong> monitoreos enlazados a <strong>{total_pallets_qc}</strong> pallets</div>
-                <div class="qc-files">Archivos: {archivos_txt}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    if archivos_error:
-        for err in archivos_error:
-            st.warning(f"⚠️ Error en archivo: {err}")
-
-    # Upload manual adicional (opcional)
-    with st.expander("📤 **Cargar Excel de Calidad adicional** (opcional)", expanded=False):
-        st.caption("Si tienes un archivo que aún no está en el servidor, súbelo aquí para enlazar temporalmente.")
-        col_up, col_reload = st.columns([4, 1])
-        with col_reload:
-            if st.button("🔄 Recargar", key="ps_reload_qc", help="Recargar archivos del servidor"):
-                st.session_state['_qc_server_loaded'] = False
-                st.session_state['ps_calidad_dict'] = {}
-                st.rerun()
-        with col_up:
-            uploaded_file = st.file_uploader(
-                "Seleccionar Excel de Calidad",
-                type=['xlsx', 'xls'],
-                key="ps_calidad_upload",
-                label_visibility="collapsed"
-            )
-        if uploaded_file:
-            with st.spinner("📊 Procesando datos de calidad..."):
-                extra_dict = _parsear_excel_calidad(uploaded_file)
-                # Merge con los ya cargados del servidor
-                for pallet_num, registros in extra_dict.items():
-                    calidad_dict.setdefault(pallet_num, []).extend(registros)
-                st.session_state.ps_calidad_dict = calidad_dict
-                total_extra = sum(len(v) for v in extra_dict.values())
-                st.success(f"✅ Se agregaron **{total_extra}** monitoreos adicionales")
-
     # === FILTROS ===
     with st.container():
         col1, col2 = st.columns(2)
@@ -961,6 +912,9 @@ def render(username: str, password: str):
     </style>
     """, unsafe_allow_html=True)
 
+    # === CARGA AUTOMÁTICA DE CALIDAD (silenciosa, cacheada en session_state) ===
+    calidad_dict = _cargar_calidad_servidor()
+
     # === CONSULTA ===
     if consultar or st.session_state.get("ps_pallets_data"):
         if consultar:
@@ -1027,6 +981,27 @@ def render(username: str, password: str):
 
         # Convertir a DataFrame
         df = pd.DataFrame(detalle_filtrado)
+
+        # Banner de calidad auto-cargada (solo si hay datos QC)
+        if calidad_dict:
+            archivos_ok = st.session_state.get('_qc_archivos_cargados', [])
+            archivos_error = st.session_state.get('_qc_archivos_error', [])
+            if archivos_ok:
+                total_pallets_qc_loaded = len(calidad_dict)
+                total_registros_qc_loaded = sum(len(v) for v in calidad_dict.values())
+                archivos_txt = " &bull; ".join(archivos_ok)
+                st.markdown(f"""
+                <div class="qc-banner">
+                    <div class="qc-icon">🔬</div>
+                    <div>
+                        <div class="qc-text">Control de calidad activo: <strong>{total_registros_qc_loaded}</strong> monitoreos enlazados a <strong>{total_pallets_qc_loaded}</strong> pallets</div>
+                        <div class="qc-files">Archivos: {archivos_txt}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            if archivos_error:
+                for err in archivos_error:
+                    st.warning(f"⚠️ Error en archivo: {err}")
 
         # --- KPIs GENERALES ---
         total_pallets = df['pallet'].nunique()
