@@ -585,14 +585,10 @@ def _filtrar_detalle(detalle_raw, filtros):
                     filtered.append(d)
         resultado = filtered
 
-    # Filtrar por productos seleccionados (multiselect)
-    if filtros.get("productos_seleccionados"):
-        # Extraer códigos de las opciones seleccionadas (formato "código — nombre")
-        codigos_sel = set()
-        for opt in filtros["productos_seleccionados"]:
-            code = opt.split(" — ")[0].strip() if " — " in opt else opt.strip()
-            codigos_sel.add(code)
-        resultado = [d for d in resultado if d.get('codigo_producto', '') in codigos_sel]
+    # Filtrar por producto seleccionado (selectbox)
+    if filtros.get("producto_seleccionado") and filtros["producto_seleccionado"] != "Todos":
+        code_sel = filtros["producto_seleccionado"].split(" — ")[0].strip()
+        resultado = [d for d in resultado if d.get('codigo_producto', '') == code_sel]
 
     # Filtrar por texto libre (pallet, OF, lote, producto, código)
     if filtros.get("producto_texto"):
@@ -689,7 +685,7 @@ def render(username: str, password: str):
                 key="ps_planta"
             )
 
-        # Filtro de productos (multiselect dinámico)
+        # Filtro de productos (selectbox dinámico)
         cached_data = st.session_state.get("ps_pallets_data")
         if cached_data and cached_data.get('detalle'):
             # Extraer productos únicos del cache: "código — nombre"
@@ -699,22 +695,20 @@ def render(username: str, password: str):
                 name = d.get('producto', '')
                 if code and code not in productos_unicos:
                     productos_unicos[code] = f"{code} — {name}"
-            opciones_productos = sorted(productos_unicos.values())
+            opciones_productos = ["Todos"] + sorted(productos_unicos.values())
         else:
-            opciones_productos = []
+            opciones_productos = ["Todos"]
 
-        productos_seleccionados = st.multiselect(
-            "📦 Filtrar por Producto (escribí código o nombre)",
+        producto_seleccionado = st.selectbox(
+            "📦 Filtrar por Producto",
             options=opciones_productos,
-            default=[],
-            key="ps_productos_sel",
-            placeholder="Buscar producto... (podés seleccionar varios)",
+            index=0,
+            key="ps_producto_sel",
         )
 
         # Búsqueda libre adicional (pallet, OF, lote)
         producto_texto = st.text_input(
             "🔎 Buscar pallet, OF o lote",
-            value="",
             key="ps_producto_texto",
             placeholder="Ej: PACK0013713, WPF/00123..."
         )
@@ -970,7 +964,7 @@ def render(username: str, password: str):
             "tipo_fruta": tipo_fruta,
             "sala": sala_seleccionada,
             "tipo_manejo": tipo_manejo,
-            "productos_seleccionados": productos_seleccionados,
+            "producto_seleccionado": producto_seleccionado,
             "producto_texto": producto_texto,
         }
         detalle_filtrado = _filtrar_detalle(detalle_raw, filtros)
