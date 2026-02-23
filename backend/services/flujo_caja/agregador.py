@@ -762,7 +762,7 @@ class AgregadorFlujo:
                     etiquetas_partners = []
                     for partner_nombre, partner_datos in facturas_estado.items():
                         etiquetas_partners.append({
-                            'nombre': str(partner_nombre)[:60],
+                            'nombre': str(partner_nombre),  # Sin truncamiento para nombres completos
                             'monto': round(partner_datos.get('monto_total', 0), 0),
                             'montos_por_mes': {
                                 m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
@@ -853,7 +853,7 @@ class AgregadorFlujo:
             for nombre, datos in etiquetas_ordenadas:
                 if isinstance(datos, dict):
                     etiqueta_item = {
-                        "nombre": nombre[:60],
+                        "nombre": nombre,  # Sin truncamiento para nombres completos
                         "monto": round(datos.get("monto", 0), 0),
                         "montos_por_mes": {m: round(datos.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista}
                     }
@@ -885,7 +885,7 @@ class AgregadorFlujo:
                     etiquetas_lista.append(etiqueta_item)
                 else:
                     etiquetas_lista.append({
-                        "nombre": nombre[:60],
+                        "nombre": nombre,  # Sin truncamiento para nombres completos
                         "monto": round(datos, 0),
                         "montos_por_mes": {m: 0 for m in self.meses_lista}
                     })

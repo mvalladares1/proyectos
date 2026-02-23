@@ -490,13 +490,13 @@ def render(username: str, password: str):
                 tooltip_text = f"{c_id} - {c_nombre}"
                 if cuentas:
                     tooltip_text += f"<br><br><strong>{len(cuentas)} cuentas:</strong><br>"
-                    tooltip_text += "<br>".join([f"• {c.get('codigo', '')} - {c.get('nombre', '')[:30]}" for c in cuentas[:5]])
+                    tooltip_text += "<br>".join([f"• {c.get('codigo', '')} - {c.get('nombre', '')}" for c in cuentas[:5]])
                     if len(cuentas) > 5:
                         tooltip_text += f"<br>... y {len(cuentas)-5} más"
                 
                 tooltip_html = f'''
                 <div class="tooltip-wrapper">
-                    <span>{c_nombre[:50]}</span>
+                    <span>{c_nombre}</span>
                     <div class="tooltip-text">{tooltip_text}</div>
                 </div>
                 '''
@@ -524,7 +524,7 @@ def render(username: str, password: str):
                 if cuentas:
                     for idx_cu, cuenta in enumerate(cuentas[:15]):
                         cuenta_codigo = cuenta.get("codigo", "")
-                        cuenta_nombre = cuenta.get("nombre", "")[:40]
+                        cuenta_nombre = cuenta.get("nombre", "")  # Sin truncamiento para nombres completos
                         cuenta_monto = cuenta.get("monto", 0)
                         cu_montos_mes = cuenta.get("montos_por_mes", {})
                         etiquetas = cuenta.get("etiquetas", [])

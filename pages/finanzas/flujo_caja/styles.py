@@ -206,9 +206,11 @@ ENTERPRISE_CSS = """
     border-right: 3px solid #475569 !important;
     text-align: left !important;
     font-weight: 500;
-    min-width: 480px;
-    max-width: 480px;
+    min-width: 520px;
+    max-width: 520px;
     white-space: normal !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
