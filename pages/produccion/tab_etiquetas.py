@@ -420,7 +420,7 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
             <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
             <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
             <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
-            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18°C</span></div>
+            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18&deg;C</span></div>
             <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
             <div class="campo"><span class="label">CARTON NO.: </span><span class="valor">{i}</span></div>
             <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">LACO</span></div>
