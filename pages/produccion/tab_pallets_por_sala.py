@@ -51,9 +51,10 @@ def _filtrar_detalle(detalle_raw, filtros):
 
     # Filtrar por Planta
     if filtros.get("planta") and filtros["planta"] != "Todas":
-        resultado = [d for d in resultado if d.get('planta') == filtros["planta"]]
+        planta_val = filtros["planta"].upper()
+        resultado = [d for d in resultado if d.get('planta', '').upper() == planta_val]
 
-    # Filtrar por Fruta (usando código de producto, más robusto que nombre)
+    # Filtrar por Fruta (usando primeros 2 dígitos del código de producto)
     if filtros.get("tipo_fruta") and filtros["tipo_fruta"] != "Todas":
         fruta_lower = _normalize(filtros["tipo_fruta"])
         FRUTA_CODE_MAP = {
@@ -72,16 +73,29 @@ def _filtrar_detalle(detalle_raw, filtros):
                 filtered.append(d)
         resultado = filtered
 
-    # Filtrar por Sala de Proceso
+    # Filtrar por Sala de Proceso (normalizado, tolerante a acentos y variaciones)
     if filtros.get("sala") and filtros["sala"] != "Todas":
-        target_key = SALA_MAP_INTERNAL.get(filtros["sala"])
-        target_norm = _normalize(target_key or filtros["sala"])
-        resultado = [
-            d for d in resultado
-            if _normalize(d.get('sala')) == target_norm or target_norm in _normalize(d.get('sala'))
-        ]
+        target_key = SALA_MAP_INTERNAL.get(filtros["sala"], filtros["sala"])
+        target_norm = _normalize(target_key)
+        # Extraer solo la parte clave para matching parcial: "sala 1", "sala 2", etc.
+        target_parts = target_norm.split(" - ")
+        filtered = []
+        for d in resultado:
+            sala_dato = _normalize(d.get('sala', ''))
+            if not sala_dato:
+                continue
+            # Match exacto normalizado
+            if sala_dato == target_norm:
+                filtered.append(d)
+            # Match parcial: ambas partes del target deben estar presentes
+            elif all(part.strip() in sala_dato for part in target_parts):
+                filtered.append(d)
+            # Match solo por sala base (ej: "sala 1")
+            elif target_parts[0].strip() in sala_dato and (len(target_parts) < 2 or target_parts[1].strip() in sala_dato):
+                filtered.append(d)
+        resultado = filtered
 
-    # Filtrar por Manejo
+    # Filtrar por Manejo (usando dígito 4 del código de producto)
     if filtros.get("tipo_manejo") and filtros["tipo_manejo"] != "Todos":
         manejo = filtros["tipo_manejo"]
         filtered = []
@@ -95,19 +109,26 @@ def _filtrar_detalle(detalle_raw, filtros):
                     filtered.append(d)
         resultado = filtered
 
-    # Filtrar por Producto (texto libre)
+    # Filtrar por Producto (texto libre, normalizado)
     if filtros.get("producto_texto"):
-        texto = filtros["producto_texto"].lower().strip()
-        resultado = [d for d in resultado if texto in d.get('producto', '').lower() or texto in d.get('codigo_producto', '').lower()]
+        texto = _normalize(filtros["producto_texto"].strip())
+        resultado = [
+            d for d in resultado
+            if texto in _normalize(d.get('producto', '')) or texto in d.get('codigo_producto', '').lower()
+        ]
 
     # Filtrar por Temporada 2025/2026 basado en fecha
     resultado_temp = []
     for d in resultado:
         fecha = d.get('fecha', '')
         if fecha:
+            # Extraer año: soporta "2025-01-15", "2025-01-15 10:00:00", etc.
             year = str(fecha)[:4]
             if year in TEMPORADAS_VALIDAS:
                 resultado_temp.append(d)
+        else:
+            # Si no tiene fecha, incluirlo (no descartar datos válidos)
+            resultado_temp.append(d)
     resultado = resultado_temp
 
     return resultado
@@ -215,8 +236,8 @@ def render(username: str, password: str):
             fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d")
             fecha_fin_str = fecha_fin.strftime("%Y-%m-%d")
 
-            tipo_fruta_param = None if tipo_fruta == "Todas" else tipo_fruta
-            tipo_manejo_param = None if tipo_manejo == "Todos" else tipo_manejo
+            tipo_fruta_param = None  # Fruta se filtra en memoria (más robusto por códigos)
+            tipo_manejo_param = None  # Manejo se filtra en memoria (por dígito de código)
             sala_key = SALA_MAP_INTERNAL.get(sala_seleccionada)
             sala_param = sala_key if sala_key else None
 
