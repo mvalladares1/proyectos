@@ -385,9 +385,93 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
     return html
 
 
+def generar_etiqueta_caja_lanna(datos: Dict) -> str:
+    """
+    Genera HTML de etiqueta de caja para cliente LANNA AGRO INDUSTRY.
+    Tamaño: 100mm x 100mm — estilo LACO.
+    """
+    codigo = datos.get('codigo_producto', '')
+    nombre = datos.get('nombre_producto', '')
+    peso = datos.get('peso_caja_kg', 10)
+    fecha_elab = datos.get('fecha_elaboracion', '').replace('.', '-')
+    fecha_venc = datos.get('fecha_vencimiento', '').replace('.', '-')
+    lote = datos.get('lote_produccion', '')
+    pallet = datos.get('numero_pallet', '')
+    cliente = datos.get('cliente_nombre', 'LANNA AGRO INDUSTRY')
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 100mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 100mm;
+                    margin: 0;
+                    padding: 4mm;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 4mm;
+                margin: 0;
+                width: 92mm;
+                height: 92mm;
+            }}
+            .etiqueta {{
+                width: 100%;
+                border: 2px solid #000;
+                padding: 6px 10px;
+                box-sizing: border-box;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }}
+            .campo {{
+                font-size: 12px;
+                margin: 2px 0;
+                line-height: 1.4;
+            }}
+            .campo .label {{
+                font-weight: normal;
+            }}
+            .campo .valor {{
+                font-weight: bold;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="etiqueta">
+            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{codigo}</span></div>
+            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{nombre}</span></div>
+            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">{peso}KG</span></div>
+            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
+            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
+            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
+            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18°C</span></div>
+            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
+            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">{cliente}</span></div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
 DISEÑOS_ETIQUETAS_CAJA = {
     "TRONADOR": generar_etiqueta_caja_tronador,
     "TRONADOR SAC": generar_etiqueta_caja_tronador,
+    "LANNA": generar_etiqueta_caja_lanna,
+    "LANNA AGRO": generar_etiqueta_caja_lanna,
+    "LANNA AGRO INDUSTRY": generar_etiqueta_caja_lanna,
+    "LACO": generar_etiqueta_caja_lanna,
 }
 
 
@@ -432,6 +516,7 @@ def render_etiquetas_caja(username: str, password: str):
                 'fecha_vencimiento': fecha_venc,
                 'lote_produccion': lot_name,
                 'numero_pallet': pallet.get('package_name', ''),
+                'cliente_nombre': cliente_nombre,
             }
             
             col1, col2 = st.columns([1, 1])
