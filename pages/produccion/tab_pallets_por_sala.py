@@ -8,10 +8,21 @@ import streamlit as st
 import pandas as pd
 import requests
 import re
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, date
 from typing import Dict, List, Optional
 
 from .shared import API_URL, fmt_numero
+
+
+def _throttle_rerun(key: str = "ps_last_rerun", min_interval: float = 2.0) -> bool:
+    """Evita reruns infinitos limitando frecuencia."""
+    now = time.time()
+    last = st.session_state.get(key, 0)
+    if now - last < min_interval:
+        return False
+    st.session_state[key] = now
+    return True
 
 
 # --- Constantes del módulo ---
@@ -619,7 +630,6 @@ def _filtrar_detalle(detalle_raw, filtros):
     return resultado
 
 
-@st.fragment
 def render(username: str, password: str):
     """Renderiza el tab de Pallets por Sala."""
 
@@ -652,7 +662,7 @@ def render(username: str, password: str):
         with col2:
             fecha_fin = st.date_input(
                 "Fecha Fin",
-                value=datetime.now(),
+                value=date.today(),
                 key="ps_fecha_fin"
             )
 
@@ -937,10 +947,12 @@ def render(username: str, password: str):
                     if response.status_code == 200:
                         data = response.json()
                         st.session_state.ps_pallets_data = data
+                        st.session_state.ps_data_loaded = True
                         count = len(data.get('detalle', []))
                         if count > 0:
                             st.toast(f"✅ {count} pallets cargados")
-                            st.rerun(scope="fragment")
+                            if _throttle_rerun("ps_last_rerun"):
+                                st.rerun()
                         else:
                             st.info("ℹ️ No se encontraron pallets para los filtros seleccionados.")
                     else:

@@ -6,8 +6,20 @@ Cliente se obtiene automáticamente desde x_studio_clientes de la orden
 import streamlit as st
 import httpx
 import re
+import time
 from typing import List, Dict
 from produccion.shared import API_URL
+
+
+def _throttle_rerun(key: str = "etiq", min_interval: float = 1.0) -> bool:
+    """Limita la frecuencia de reruns. Retorna True si se puede hacer rerun."""
+    now = time.time()
+    last_key = f"_throttle_last_{key}"
+    last_time = st.session_state.get(last_key, 0)
+    if now - last_time < min_interval:
+        return False
+    st.session_state[last_key] = now
+    return True
 
 
 def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
@@ -189,6 +201,8 @@ def render(username: str, password: str):
         st.session_state.etiq_pallets_cargados = []
     if "etiq_ordenes_encontradas" not in st.session_state:
         st.session_state.etiq_ordenes_encontradas = []
+    if "etiq_pallets_carga_intentada" not in st.session_state:
+        st.session_state.etiq_pallets_carga_intentada = False
     
     # ==================== PASO 1: BUSCAR ORDEN (COMPARTIDO) ====================
     st.subheader("1️⃣ Buscar Orden de Producción")
@@ -235,13 +249,16 @@ def render(username: str, password: str):
                 if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
                     st.session_state.etiq_orden_seleccionada = orden
                     st.session_state.etiq_pallets_cargados = []
+                    st.session_state.etiq_pallets_carga_intentada = False
                     # Auto-cargar pallets
                     try:
                         pallets = obtener_pallets_orden(username, password, orden.get('name'))
                         st.session_state.etiq_pallets_cargados = pallets
+                        st.session_state.etiq_pallets_carga_intentada = True
                     except Exception:
-                        pass
-                    st.rerun()
+                        st.session_state.etiq_pallets_carga_intentada = True
+                    if _throttle_rerun("etiq_select"):
+                        st.rerun()
     
     # ==================== PASO 2: ORDEN SELECCIONADA (COMPARTIDO) ====================
     if st.session_state.etiq_orden_seleccionada:
@@ -258,24 +275,31 @@ def render(username: str, password: str):
         pallets = st.session_state.etiq_pallets_cargados
         if pallets:
             st.write(f"✅ **{len(pallets)} pallets cargados**")
+        elif st.session_state.etiq_pallets_carga_intentada:
+            # Ya se intentó cargar y no hay pallets
+            st.warning("⚠️ No se encontraron pallets para esta orden")
         else:
-            # Auto-cargar pallets si aún no se cargaron
+            # Auto-cargar pallets si aún no se intentó
             with st.spinner("Cargando pallets..."):
                 try:
                     pallets = obtener_pallets_orden(username, password, orden.get('name'))
                     st.session_state.etiq_pallets_cargados = pallets
-                    if pallets:
+                    st.session_state.etiq_pallets_carga_intentada = True
+                    if pallets and _throttle_rerun("etiq_load"):
                         st.rerun()
-                    else:
+                    elif not pallets:
                         st.warning("⚠️ No se encontraron pallets para esta orden")
                 except Exception as e:
+                    st.session_state.etiq_pallets_carga_intentada = True
                     st.error(f"❌ Error al cargar pallets: {e}")
         
         if st.button("❌ Cambiar Orden", use_container_width=False, key="etiq_btn_cambiar"):
             st.session_state.etiq_orden_seleccionada = None
             st.session_state.etiq_pallets_cargados = []
             st.session_state.etiq_ordenes_encontradas = []
-            st.rerun()
+            st.session_state.etiq_pallets_carga_intentada = False
+            if _throttle_rerun("etiq_cambiar"):
+                st.rerun()
         
         # ==================== PASO 3: TIPO DE ETIQUETA ====================
         if st.session_state.etiq_pallets_cargados:

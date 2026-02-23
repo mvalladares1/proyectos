@@ -5,12 +5,23 @@ Extrae automáticamente lote, paquete y kg de los pallets escaneados.
 """
 import streamlit as st
 import requests
+import time
 from typing import List, Dict
 
 from .shared import API_URL
 
 
-@st.fragment
+def _throttle_rerun(key: str = "of", min_interval: float = 1.0) -> bool:
+    """Limita la frecuencia de reruns. Retorna True si se puede hacer rerun."""
+    now = time.time()
+    last_key = f"_throttle_last_{key}"
+    last_time = st.session_state.get(last_key, 0)
+    if now - last_time < min_interval:
+        return False
+    st.session_state[last_key] = now
+    return True
+
+
 def render(username: str, password: str):
     """Renderiza el contenido del tab Automatización OF."""
     st.header("⚙️ Automatización OF")
@@ -42,7 +53,8 @@ def render(username: str, password: str):
             
             if st.button("✖️ Cerrar mensaje", key="close_of_result"):
                 st.session_state.of_last_result = None
-                st.rerun()
+                if _throttle_rerun("of_close"):
+                    st.rerun()
         st.divider()
     
     # === PASO 1: ORDEN DE FABRICACIÓN ===
@@ -146,7 +158,8 @@ def render(username: str, password: str):
                     with col_del:
                         if st.button("🗑️", key=f"del_of_pallet_{idx}", help="Eliminar pallet"):
                             st.session_state.of_pallets_list.pop(idx)
-                            st.rerun()
+                            if _throttle_rerun("of_del"):
+                                st.rerun()
             
             # Botones de acción
             st.divider()
@@ -155,7 +168,8 @@ def render(username: str, password: str):
             with col_clear:
                 if st.button("🗑️ Limpiar Lista", use_container_width=True, key="btn_clear_of"):
                     st.session_state.of_pallets_list = []
-                    st.rerun()
+                    if _throttle_rerun("of_clear"):
+                        st.rerun()
             
             with col_submit:
                 if st.button(f"✅ Agregar a {tipo_mov.upper()}", use_container_width=True, type="primary", key="btn_submit_of"):
@@ -189,7 +203,8 @@ def _buscar_orden(username: str, password: str, orden_input: str):
                 if data.get('success'):
                     st.session_state.of_orden_info = data['orden']
                     st.session_state.of_pallets_list = []  # Limpiar pallets
-                    st.rerun()
+                    if _throttle_rerun("of_buscar"):
+                        st.rerun()
                 else:
                     st.error(f"❌ {data.get('error', 'Orden no encontrada')}")
             else:
@@ -281,7 +296,8 @@ def _procesar_pallets(username: str, password: str, pallets_text: str, tipo_mov:
                 if 'of_pallets_input' in st.session_state:
                     st.session_state.of_pallets_input = ""
                 
-                st.rerun()
+                if _throttle_rerun("of_validar"):
+                    st.rerun()
             else:
                 st.error(f"❌ Error HTTP {response.status_code}: {response.text[:200]}")
         
@@ -336,7 +352,8 @@ def _agregar_a_orden(username: str, password: str, orden_id: int, tipo_mov: str)
                     # Refrescar info de orden
                     _buscar_orden(username, password, st.session_state.of_orden_info['nombre'])
                 
-                st.rerun()
+                if _throttle_rerun("of_agregar"):
+                    st.rerun()
             else:
                 st.error(f"❌ Error HTTP {response.status_code}: {response.text[:200]}")
         

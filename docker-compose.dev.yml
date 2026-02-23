@@ -45,6 +45,20 @@ services:
       api-dev:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8502/dashboards-dev/_stcore/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
 networks:
   rio-network:
