@@ -391,17 +391,41 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
 
 def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta de caja para cliente LANNA AGRO INDUSTRY.
+    Genera HTML de etiqueta(s) de caja para cliente LANNA AGRO INDUSTRY.
     Tamaño: 100mm x 100mm — estilo LACO.
+    Genera N etiquetas (una por caja/cartón) con CARTON NO enumerado.
+    NET WEIGHT fijo 10KG. Solo fecha, lote y pallet vienen de Odoo.
     """
     codigo = datos.get('codigo_producto', '')
     nombre = datos.get('nombre_producto', '')
-    peso = datos.get('peso_caja_kg', 10)
     fecha_elab = datos.get('fecha_elaboracion', '').replace('.', '-')
     fecha_venc = datos.get('fecha_vencimiento', '').replace('.', '-')
     lote = datos.get('lote_produccion', '')
     pallet = datos.get('numero_pallet', '')
-    cliente = datos.get('cliente_nombre', 'LANNA AGRO INDUSTRY')
+
+    # Calcular cantidad de cajas (cartones)
+    cantidad_cajas = datos.get('cantidad_cajas', 0)
+    if not cantidad_cajas:
+        peso_pallet = datos.get('peso_pallet_kg', 0)
+        cantidad_cajas = max(int(peso_pallet / 10), 1) if peso_pallet else 1
+
+    # Generar una etiqueta por cada cartón
+    labels_html = ""
+    for i in range(1, cantidad_cajas + 1):
+        labels_html += f"""
+        <div class="etiqueta">
+            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{codigo}</span></div>
+            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{nombre}</span></div>
+            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">10KG</span></div>
+            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
+            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
+            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
+            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18°C</span></div>
+            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
+            <div class="campo"><span class="label">CARTON NO.: </span><span class="valor">{i}</span></div>
+            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">LACO</span></div>
+        </div>
+        """
 
     html = f"""
     <!DOCTYPE html>
@@ -413,35 +437,33 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
                 size: 100mm 100mm;
                 margin: 0;
             }}
-            @media print {{
-                body {{
-                    width: 100mm;
-                    height: 100mm;
-                    margin: 0;
-                    padding: 4mm;
-                }}
+            * {{
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }}
-            body {{
-                font-family: Arial, sans-serif;
-                padding: 4mm;
+            html, body {{
                 margin: 0;
-                width: 92mm;
-                height: 92mm;
+                padding: 0;
+                font-family: Arial, sans-serif;
             }}
             .etiqueta {{
-                width: 100%;
-                border: 2px solid #000;
-                padding: 6px 10px;
+                width: 100mm;
+                height: 100mm;
+                padding: 5mm;
                 box-sizing: border-box;
-                height: 100%;
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
+                justify-content: center;
+                page-break-after: always;
+                page-break-inside: avoid;
+            }}
+            .etiqueta:last-child {{
+                page-break-after: auto;
             }}
             .campo {{
                 font-size: 12px;
                 margin: 2px 0;
-                line-height: 1.4;
+                line-height: 1.5;
             }}
             .campo .label {{
                 font-weight: normal;
@@ -452,17 +474,7 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
         </style>
     </head>
     <body>
-        <div class="etiqueta">
-            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{codigo}</span></div>
-            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{nombre}</span></div>
-            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">{peso}KG</span></div>
-            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
-            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
-            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
-            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18°C</span></div>
-            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
-            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">{cliente}</span></div>
-        </div>
+        {labels_html}
     </body>
     </html>
     """
@@ -521,6 +533,8 @@ def render_etiquetas_caja(username: str, password: str):
                 'lote_produccion': lot_name,
                 'numero_pallet': pallet.get('package_name', ''),
                 'cliente_nombre': cliente_nombre,
+                'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
+                'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
             }
             
             col1, col2 = st.columns([1, 1])
