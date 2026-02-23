@@ -400,26 +400,19 @@ class ProduccionService:
                 ('x_studio_inicio_de_proceso', '<=', fecha_fin + ' 23:59:59')
             ]
             
-            # FILTRO DE SALA: Lo integramos directamente en la búsqueda de producción
+            # FILTRO DE SALA: Buscar con ilike para tolerancia a acentos/espacios
             if sala_proceso and sala_proceso.strip() and sala_proceso != "Todas":
                 sala_busqueda = sala_proceso.strip()
-                if " - " in sala_busqueda:
-                    sala_short = sala_busqueda.split(" - ")[0]
-                    prod_domain.append('|')
-                    prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_busqueda))
-                    prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_short))
-                else:
-                    prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_busqueda))
+                # Usar solo ilike con el valor completo — Odoo ilike ya es case-insensitive
+                prod_domain.append(('x_studio_sala_de_proceso', 'ilike', sala_busqueda))
 
-            # FILTRO DE PLANTA: Integramos el filtro de Planta en la búsqueda de producción
+            # FILTRO DE PLANTA
             if tipo_operacion and tipo_operacion != "Todas":
                 if tipo_operacion == "VILKUN":
-                    prod_domain.append('|')
-                    prod_domain.append(('picking_type_id.name', 'ilike', 'VLK'))
-                    prod_domain.append(('name', 'ilike', 'VLK/'))
-                else: # RIO FUTURO
-                    prod_domain.append(('picking_type_id.name', 'not ilike', 'VLK'))
-                    prod_domain.append(('name', 'not ilike', 'VLK/'))
+                    # Buscar producciones que contengan VLK en el nombre
+                    prod_domain.append(('name', 'ilike', 'VLK'))
+                else: # RIO FUTURO — excluir VLK
+                    prod_domain.append(('name', 'not ilike', 'VLK'))
 
             # Obtener IDs de las producciones que cumplen el criterio
             prod_ids_filtrados = self.odoo.search('mrp.production', prod_domain)
@@ -547,7 +540,38 @@ class ProduccionService:
                 
                 # --- FILTROS DINÁMICOS RESTANTES (Fruta y Manejo) ---
                 if tipo_fruta:
-                    if tipo_fruta.lower() not in product_name.lower(): continue
+                    # Mapeo de nombres de fruta a códigos/abreviaturas usadas en Odoo
+                    FRUTA_KEYWORDS = {
+                        'arándano': ['arándano', 'arandano', ' ar ', ' ar\n', '[3', '[4'],
+                        'frambuesa': ['frambuesa', ' fb ', ' fb\n', '[3', '[4'],
+                        'frutilla': ['frutilla', ' ft ', ' ft\n'],
+                        'mora': ['mora', ' mr ', ' mr\n', ' mk ', ' mk\n'],
+                    }
+                    fruta_lower = tipo_fruta.lower().replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+                    keywords = FRUTA_KEYWORDS.get(fruta_lower, [tipo_fruta.lower()])
+                    # Filtro por código de fruta usando dígito 1-2 del código
+                    fruta_match = False
+                    name_lower = product_name.lower()
+                    if len(product_code) >= 2:
+                        fruta_digit = product_code[0:2]
+                        # 31/41 = Arándano, 32/42 = Frambuesa, 33/43 = Frutilla, 34/44 = Mora
+                        FRUTA_CODE_MAP = {
+                            'arandano': ['31', '41'],
+                            'frambuesa': ['32', '42'],
+                            'frutilla': ['33', '43'],
+                            'mora': ['34', '44'],
+                        }
+                        codes_esperados = FRUTA_CODE_MAP.get(fruta_lower, [])
+                        if codes_esperados and fruta_digit in codes_esperados:
+                            fruta_match = True
+                    # Fallback: buscar en nombre
+                    if not fruta_match:
+                        for kw in keywords:
+                            if kw.strip() in name_lower:
+                                fruta_match = True
+                                break
+                    if not fruta_match:
+                        continue
                 
                 if tipo_manejo:
                     if len(product_code) >= 4:

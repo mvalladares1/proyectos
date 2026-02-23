@@ -53,10 +53,24 @@ def _filtrar_detalle(detalle_raw, filtros):
     if filtros.get("planta") and filtros["planta"] != "Todas":
         resultado = [d for d in resultado if d.get('planta') == filtros["planta"]]
 
-    # Filtrar por Fruta
+    # Filtrar por Fruta (usando código de producto, más robusto que nombre)
     if filtros.get("tipo_fruta") and filtros["tipo_fruta"] != "Todas":
-        fruta = filtros["tipo_fruta"].lower()
-        resultado = [d for d in resultado if fruta in d.get('producto', '').lower()]
+        fruta_lower = _normalize(filtros["tipo_fruta"])
+        FRUTA_CODE_MAP = {
+            'arandano': ['31', '41'],
+            'frambuesa': ['32', '42'],
+            'frutilla': ['33', '43'],
+            'mora': ['34', '44'],
+        }
+        codes_esperados = FRUTA_CODE_MAP.get(fruta_lower, [])
+        filtered = []
+        for d in resultado:
+            code = d.get('codigo_producto', '')
+            if codes_esperados and len(code) >= 2 and code[:2] in codes_esperados:
+                filtered.append(d)
+            elif fruta_lower in _normalize(d.get('producto', '')):
+                filtered.append(d)
+        resultado = filtered
 
     # Filtrar por Sala de Proceso
     if filtros.get("sala") and filtros["sala"] != "Todas":
@@ -339,7 +353,7 @@ def render(username: str, password: str):
 
                 st.markdown("")
 
-                # Tabla de productos dentro de esta sala
+                # Resumen por producto
                 resumen_producto = (
                     df_sala.groupby(['producto', 'codigo_producto', 'grado'])
                     .agg(kg_total=('kg', 'sum'), pallets=('pallet', 'nunique'))
@@ -349,6 +363,7 @@ def render(username: str, password: str):
                 resumen_producto.columns = ['Producto', 'Código', 'Grado', 'Kilos', 'Pallets']
                 resumen_producto['Kilos'] = resumen_producto['Kilos'].apply(lambda x: round(x, 2))
 
+                st.caption("📊 Resumen por producto")
                 st.dataframe(
                     resumen_producto,
                     use_container_width=True,
@@ -356,6 +371,23 @@ def render(username: str, password: str):
                     column_config={
                         "Kilos": st.column_config.NumberColumn(format="%.2f"),
                         "Pallets": st.column_config.NumberColumn(format="%d"),
+                    }
+                )
+
+                # Detalle pallet por pallet
+                df_sala_detail = df_sala[['pallet', 'producto', 'codigo_producto', 'grado', 'kg', 'orden_fabricacion', 'fecha']].copy()
+                df_sala_detail['kg'] = df_sala_detail['kg'].apply(lambda x: round(x, 2))
+                df_sala_detail.columns = ['Pallet', 'Producto', 'Código', 'Grado', 'Kilos', 'OF', 'Inicio Proceso']
+                df_sala_detail = df_sala_detail.sort_values(['Producto', 'Grado', 'Pallet'], ascending=[True, True, True])
+
+                st.caption(f"📋 Detalle: {len(df_sala_detail)} pallets")
+                st.dataframe(
+                    df_sala_detail,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(400, 35 * len(df_sala_detail) + 38),
+                    column_config={
+                        "Kilos": st.column_config.NumberColumn(format="%.2f"),
                     }
                 )
 
