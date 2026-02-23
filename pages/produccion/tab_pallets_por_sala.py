@@ -89,11 +89,13 @@ def _normalize(text: str) -> str:
 
 
 def _extraer_numero_pallet(pallet_name: str) -> str:
-    """Extrae el número puro del nombre de pallet. PACK0013712 -> 13712"""
+    """Extrae el número puro del nombre de pallet.
+    PACK0013712 -> 13712, PACK0003567 -> 3567, 03567 -> 3567"""
     if not pallet_name:
         return ""
     num = re.sub(r'^PACK0*', '', str(pallet_name), flags=re.IGNORECASE)
-    return num.strip()
+    num = num.strip().lstrip('0') or '0'
+    return num
 
 
 def _fmt_pct(val):
@@ -138,7 +140,7 @@ def _parsear_excel_calidad(uploaded_file) -> Dict[str, List[Dict]]:
             if not pallet_val:
                 continue
 
-            pallet_num = str(int(pallet_val)) if isinstance(pallet_val, (int, float)) else str(pallet_val).strip()
+            pallet_num = str(int(pallet_val)) if isinstance(pallet_val, (int, float)) else str(pallet_val).strip().lstrip('0') or '0'
             if not pallet_num or pallet_num == '0':
                 continue
 
