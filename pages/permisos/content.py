@@ -177,47 +177,65 @@ def _fragment_override_origen(username: str, password: str):
     st.subheader("📦 Reclasificación de Origen de Recepciones")
     st.info("💡 Corrige recepciones que fueron ingresadas con el origen incorrecto en Odoo (ej: RFP → VILKUN)")
     
-    # Archivo de overrides
-    overrides_file = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-        "shared", "origen_overrides.json"
-    )
-    
-    # Cargar overrides actuales
+    # Cargar overrides desde API
     try:
-        with open(overrides_file, 'r') as f:
-            overrides = json.load(f)
+        resp_overrides = httpx.get(
+            f"{API_URL}/api/v1/permissions/overrides/origen/list",
+            params={"admin_username": username, "admin_password": password},
+            timeout=10.0
+        )
+        if resp_overrides.status_code == 200:
+            overrides_list = resp_overrides.json().get("overrides", [])
+        else:
+            overrides_list = []
     except:
-        overrides = {}
+        overrides_list = []
     
-    # Sincronizar con la constante del servicio (leer desde recepcion_service.py)
-    from backend.services.recepcion_service import OVERRIDE_ORIGEN_PICKING
+    # También cargar el mapa legacy para mostrar todos
+    from backend.services.recepcion_service import _LEGACY_OVERRIDE_ORIGEN_PICKING
     
     tabL, tabA = st.tabs(["📋 Overrides Actuales", "➕ Agregar Override"])
     
     with tabL:
         st.markdown("### Recepciones Reclasificadas")
-        if OVERRIDE_ORIGEN_PICKING:
-            for albaran, origen in OVERRIDE_ORIGEN_PICKING.items():
+        
+        # Mostrar overrides de DB (editables)
+        if overrides_list:
+            st.markdown("**🗄️ En Base de Datos (editables):**")
+            for ov in overrides_list:
+                cl, co, cd = st.columns([4, 2, 1])
+                cl.text(ov["picking_name"])
+                co.markdown(f"🏢 **{ov['origen']}**")
+                if cd.button("🗑️", key=f"ov_del_{ov['picking_name']}"):
+                    try:
+                        resp = httpx.post(
+                            f"{API_URL}/api/v1/permissions/overrides/origen/remove",
+                            params={
+                                "picking_name": ov["picking_name"],
+                                "admin_username": username,
+                                "admin_password": password
+                            },
+                            timeout=10.0
+                        )
+                        if resp.status_code == 200:
+                            st.toast(f"✅ Override eliminado")
+                            st.rerun()
+                        else:
+                            st.error("Error al eliminar")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        
+        # Mostrar overrides legacy (solo lectura)
+        if _LEGACY_OVERRIDE_ORIGEN_PICKING:
+            st.markdown("**📜 Legacy (fijos en código):**")
+            for albaran, origen in _LEGACY_OVERRIDE_ORIGEN_PICKING.items():
                 cl, co, cd = st.columns([4, 2, 1])
                 cl.text(albaran)
                 co.markdown(f"🏢 **{origen}**")
-                # Nota: La eliminación requiere modificar el código fuente
                 cd.caption("📌 Fijo")
-            st.caption(f"Total: {len(OVERRIDE_ORIGEN_PICKING)} overrides configurados")
-        else:
-            st.caption("No hay overrides configurados")
         
-        st.divider()
-        st.markdown("### 📝 Cómo agregar nuevos overrides:")
-        st.code('''
-# Editar: backend/services/recepcion_service.py
-
-OVERRIDE_ORIGEN_PICKING = {
-    "RF/RFP/IN/01151": "VILKUN",  # Agregar aquí
-    "RF/RFP/IN/XXXXX": "SAN JOSE",
-}
-        ''', language="python")
+        total = len(overrides_list) + len(_LEGACY_OVERRIDE_ORIGEN_PICKING)
+        st.caption(f"Total: {total} overrides ({len(overrides_list)} en DB, {len(_LEGACY_OVERRIDE_ORIGEN_PICKING)} legacy)")
     
     with tabA:
         st.markdown("### Buscar Recepciones para Reclasificar")
@@ -239,7 +257,6 @@ OVERRIDE_ORIGEN_PICKING = {
             st.write("")
             if st.button("🔍 Buscar Recepciones", key="btn_buscar_override"):
                 try:
-                    # Mapear origen a lista para API
                     origen_param = None if origen_filtro == "Todos" else [origen_filtro]
                     
                     resp = httpx.get(f"{API_URL}/api/v1/recepciones-mp/", params={
@@ -261,13 +278,15 @@ OVERRIDE_ORIGEN_PICKING = {
         if "r_list_override" in st.session_state and st.session_state.r_list_override:
             recepciones = st.session_state.r_list_override
             
-            # Filtrar las que ya tienen override
-            recepciones_sin_override = [r for r in recepciones if r.get('albaran') not in OVERRIDE_ORIGEN_PICKING]
+            # Obtener set de todos los overrides existentes
+            existing_overrides = set(ov["picking_name"] for ov in overrides_list)
+            existing_overrides.update(_LEGACY_OVERRIDE_ORIGEN_PICKING.keys())
+            
+            recepciones_sin_override = [r for r in recepciones if r.get('albaran') not in existing_overrides]
             
             st.markdown(f"**{len(recepciones_sin_override)} recepciones disponibles** (excluidas las que ya tienen override)")
             
             if recepciones_sin_override:
-                # Crear opciones para multiselect
                 options = [f"{r['albaran']} | {r.get('productor', 'N/A')[:30]} | {r.get('origen', '?')}" for r in recepciones_sin_override]
                 selected = st.multiselect("Seleccionar recepciones a reclasificar", options, key="override_multiselect")
                 
@@ -277,19 +296,29 @@ OVERRIDE_ORIGEN_PICKING = {
                     st.warning(f"⚠️ Esto cambiará {len(selected)} recepciones a **{nuevo_origen}**")
                     
                     if st.button("✅ Confirmar Reclasificación", type="primary"):
-                        # Mostrar código para agregar manualmente
-                        st.markdown("### 📝 Agregar al archivo `recepcion_service.py`:")
-                        codigo = "OVERRIDE_ORIGEN_PICKING = {\n"
-                        # Existentes
-                        for alb, orig in OVERRIDE_ORIGEN_PICKING.items():
-                            codigo += f'    "{alb}": "{orig}",\n'
-                        # Nuevos
+                        success_count = 0
                         for s in selected:
                             alb = s.split("|")[0].strip()
-                            codigo += f'    "{alb}": "{nuevo_origen}",  # NUEVO\n'
-                        codigo += "}"
-                        st.code(codigo, language="python")
-                        st.success("✅ Copia este código y reemplaza el diccionario OVERRIDE_ORIGEN_PICKING")
+                            try:
+                                resp = httpx.post(
+                                    f"{API_URL}/api/v1/permissions/overrides/origen/add",
+                                    json={
+                                        "picking_name": alb,
+                                        "origen": nuevo_origen,
+                                        "admin_username": username,
+                                        "admin_password": password
+                                    },
+                                    timeout=10.0
+                                )
+                                if resp.status_code == 200:
+                                    success_count += 1
+                            except:
+                                pass
+                        
+                        st.toast(f"✅ {success_count} overrides guardados en la base de datos")
+                        if "r_list_override" in st.session_state:
+                            del st.session_state.r_list_override
+                        st.rerun()
             else:
                 st.info("👍 Todas las recepciones en este rango ya tienen su origen correcto o ya están en overrides")
 
@@ -396,27 +425,47 @@ def _fragment_config(username: str, password: str):
     st.divider()
     st.markdown("### 🚫 Exclusiones de Valorización")
     
-    exclusions_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "shared", "exclusiones.json")
-    
+    # Cargar exclusiones desde API
     try:
-        with open(exclusions_file, 'r') as f:
-            exclusiones = json.load(f)
+        resp_excl = httpx.get(
+            f"{API_URL}/api/v1/permissions/exclusiones/list",
+            params={"admin_username": username, "admin_password": password},
+            timeout=10.0
+        )
+        if resp_excl.status_code == 200:
+            exclusiones_list = resp_excl.json().get("exclusiones", [])
+        else:
+            exclusiones_list = []
     except:
-        exclusiones = {"recepciones": []}
+        exclusiones_list = []
     
     tabL, tabA = st.tabs(["📋 Actuales", "➕ Agregar"])
     
     with tabL:
-        if exclusiones["recepciones"]:
-            for rid in exclusiones["recepciones"]:
-                cl, cd = st.columns([5, 1])
-                cl.text(rid)
-                if cd.button("🗑️", key=f"excl_del_{rid}"):
-                    exclusiones["recepciones"].remove(rid)
-                    with open(exclusions_file, 'w') as f:
-                        json.dump(exclusiones, f)
-                    st.toast(f"Recepción {rid} eliminada de exclusiones")
-                    st.rerun()
+        if exclusiones_list:
+            for excl in exclusiones_list:
+                cl, cm, cd = st.columns([4, 2, 1])
+                cl.text(excl["albaran"])
+                cm.caption(excl.get("motivo", ""))
+                if cd.button("🗑️", key=f"excl_del_{excl['albaran']}"):
+                    try:
+                        resp = httpx.post(
+                            f"{API_URL}/api/v1/permissions/exclusiones/remove",
+                            params={
+                                "albaran": excl["albaran"],
+                                "admin_username": username,
+                                "admin_password": password
+                            },
+                            timeout=10.0
+                        )
+                        if resp.status_code == 200:
+                            st.toast(f"✅ {excl['albaran']} eliminada de exclusiones")
+                            st.rerun()
+                        else:
+                            st.error("Error al eliminar exclusión")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            st.caption(f"Total: {len(exclusiones_list)} exclusiones")
         else:
             st.caption("No hay exclusiones")
     
@@ -461,17 +510,31 @@ def _fragment_config(username: str, password: str):
             selected = st.multiselect("Seleccionar recepciones a excluir", options, key="excl_multiselect")
             
             if selected:
+                motivo = st.text_input("Motivo (opcional):", placeholder="Ej: Recepción duplicada", key="excl_motivo")
+                
                 if st.button("✅ Confirmar Exclusión", type="primary", disabled=st.session_state.permisos_excluir_loading):
                     try:
                         st.session_state.permisos_excluir_loading = True
-                        current_excl = exclusiones["recepciones"]
+                        success_count = 0
                         for s in selected:
                             alb = s.split("|")[0].strip()
-                            if alb not in current_excl:
-                                current_excl.append(alb)
-                        with open(exclusions_file, 'w') as f:
-                            json.dump(exclusiones, f)
-                        st.toast("✅ Exclusiones guardadas")
+                            try:
+                                resp = httpx.post(
+                                    f"{API_URL}/api/v1/permissions/exclusiones/add",
+                                    json={
+                                        "albaran": alb,
+                                        "motivo": motivo or "Agregado desde panel",
+                                        "admin_username": username,
+                                        "admin_password": password
+                                    },
+                                    timeout=10.0
+                                )
+                                if resp.status_code == 200:
+                                    success_count += 1
+                            except:
+                                pass
+                        
+                        st.toast(f"✅ {success_count} exclusiones guardadas")
                         if "r_list_excl" in st.session_state:
                             del st.session_state.r_list_excl
                     finally:

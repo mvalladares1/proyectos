@@ -1,0 +1,94 @@
+<data>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]" position="after">
+    <th>
+      <span>Guía de Despacho</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[1]" position="after">
+    <td>
+      <span t-field="line.purchase_order_id.x_studio_many2one_field_gGTkD.order_id.x_studio_gua_de_despacho"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">102</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]" position="after">
+    <th>
+      <span>Guía de Despacho</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[1]" position="after">
+    <td>
+      <span t-field="line.purchase_order_id.x_studio_gua_de_despacho"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">103</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]" position="after">
+    <th>
+      <span>Referencia del pedido</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[1]" position="after">
+    <td>
+      <span t-field="line.purchase_order_id.name"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">104</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[2]" position="after">
+    <th>
+      <span>Folio (SII)</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[2]" position="after">
+    <td>
+      <span t-field="o.sii_number"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">105</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[4]" position="inside">
+    <td>
+      <span t-field="line.purchase_order_id.x_studio_many2one_field_ub1Cg.name"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table" position="after">
+    <div class="row">
+      <div class="col">
+        <span t-field="o.purchase_id.mail_reception_confirmed"/>
+      </div>
+    </div>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/div[1]" position="after">
+    <table class="table o_report_block_table">
+      <thead>
+        <tr>
+          <th>
+            <span>Name</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr t-foreach="line.purchase_order_id.picking_ids" t-as="table_line">
+          <td>
+            <span t-field="table_line.display_name"/>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th" position="before">
+    <th>
+      <span>Guía de Despacho</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/tbody/tr/td" position="before">
+    <td>
+      <span t-field="table_line.x_studio_gua_de_despacho"/>
+    </td>
+  </xpath>
+</data>

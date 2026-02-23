@@ -1,0 +1,322 @@
+<data>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]" position="after">
+    <th>
+      <span>Referencia del pedido</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[1]" position="after">
+    <td>
+      <span t-field="line.purchase_order_id.name"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">102</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/div" position="after">
+    <table class="table o_report_block_table">
+      <thead>
+        <tr>
+          <th>
+            <span>Name</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr t-foreach="line.purchase_order_id.picking_ids" t-as="table_line">
+          <td>
+            <span t-field="table_line.display_name"/>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th" position="before">
+    <th>
+      <span>Guía de Despacho</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/tbody/tr/td" position="before">
+    <td>
+      <span t-field="table_line.x_studio_gua_de_despacho"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/thead/tr/th[1]" position="before">
+    <th>
+      <span>Descripción</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/tbody/t[3]/tr/t[1]/td[1]" position="before">
+    <td>
+      <span t-field="line.purchase_line_id.name"/>
+    </td>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.x_studio_cantidad_de_bandeja</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.x_studio_kg_promedio_por_bandeja</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/thead/tr/th[1]" position="after">
+    <th>
+      <span>Referencia del pedido</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/tbody/t[3]/tr/t[1]/td[1]" position="after">
+    <td>
+      <span t-field="line.purchase_line_id.order_id"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">103</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.x_studio_gua_de_despacho</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids.date</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/thead[1]/tr[1]/th[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/thead[1]/tr[1]/th[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"text"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"html"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">""</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids.display_name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids.name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"qweb"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"many2many"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"many2one"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">""</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids.x_studio_gua_de_despacho</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/div" position="after">
+    <table class="table o_report_block_table">
+      <thead>
+        <tr>
+          <th>
+            <span>Name</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr t-foreach="lines" t-as="table_line">
+          <td>
+            <span t-field="table_line.display_name"/>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th" position="before">
+    <th>
+      <span>Nombre mostrado</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/tbody/tr/td" position="before">
+    <td>
+      <span t-field="table_line.purchase_order_id.display_name"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th[1]" position="after">
+    <th>
+      <span>Referencia del pedido</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/tbody/tr/td[1]" position="after">
+    <td>
+      <span t-field="line.purchase_order_id.name"/>
+    </td>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_order_id.name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids.display_name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_gGTkD.display_name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_gGTkD.display_name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_ZsQ5E</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_ub1Cg</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_ub1Cg.purchase_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/thead[1]/tr[1]/th[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids.display_name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids.x_studio_gua_de_despacho</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"text"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids.name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-options-widget">""</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.order_line</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_gGTkD</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_ZuZ1t</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_ZuZ1t</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9.default_code</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9.name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9.purchased_product_qty</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9.code</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.order_line</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_many2one_field_Ja0R9.code</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.ref</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"text"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"many2one"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-options-widget">""</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"many2many"</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/tbody/tr/td[2]/span" position="after">
+    <span t-field="table_line.purchase_order_id"/>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[2]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[2]" position="attributes">
+    <attribute name="t-field">table_line.purchase_order_id.x_studio_cantkg</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]/span[2]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[3]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/thead[1]/tr[1]/th[3]" position="replace"/>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th[1]/span" position="replace">
+    <span>N° Pedido de compra<br/></span>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th[2]/span" position="replace">
+    <span>Referencia recepcion<br/></span>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.display_name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.name</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-options-widget">""</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]" position="attributes">
+    <attribute name="groups">__export__.res_groups_229_7ba10522</attribute>
+  </xpath>
+</data>

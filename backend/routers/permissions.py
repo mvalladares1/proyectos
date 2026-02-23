@@ -213,3 +213,104 @@ def remove_admin_endpoint(
     _validate_admin(admin_username, admin_password)
     admins = remove_admin(email)
     return {"admins": admins}
+
+
+# ============ OVERRIDE DE ORIGEN ============
+
+class OverrideOrigenRequest(BaseModel):
+    picking_name: str
+    origen: str
+    admin_username: str
+    admin_password: str
+
+
+@router.get("/overrides/origen")
+def get_overrides_origen() -> Dict:
+    """Obtiene todos los overrides de origen (público para recepciones)."""
+    from backend.services.permissions_service import get_override_origen_map
+    return {"overrides": get_override_origen_map()}
+
+
+@router.get("/overrides/origen/list")
+def get_overrides_origen_list(
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Obtiene lista detallada de overrides (solo admins)."""
+    from backend.services.permissions_service import get_override_origen_list
+    _validate_admin(admin_username, admin_password)
+    return {"overrides": get_override_origen_list()}
+
+
+@router.post("/overrides/origen/add")
+def add_override_origen_endpoint(payload: OverrideOrigenRequest) -> Dict:
+    """Agrega un override de origen."""
+    from backend.services.permissions_service import add_override_origen
+    _validate_admin(payload.admin_username, payload.admin_password)
+    try:
+        overrides = add_override_origen(payload.picking_name, payload.origen)
+        return {"overrides": overrides}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/overrides/origen/remove")
+def remove_override_origen_endpoint(
+    picking_name: str = Query(...),
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Elimina un override de origen."""
+    from backend.services.permissions_service import remove_override_origen
+    _validate_admin(admin_username, admin_password)
+    overrides = remove_override_origen(picking_name)
+    return {"overrides": overrides}
+
+
+# ============ EXCLUSIONES DE VALORIZACIÓN ============
+
+class ExclusionRequest(BaseModel):
+    albaran: str
+    motivo: Optional[str] = ""
+    admin_username: str
+    admin_password: str
+
+
+@router.get("/exclusiones")
+def get_exclusiones_endpoint() -> Dict:
+    """Obtiene set de exclusiones (público para servicios)."""
+    from backend.services.permissions_service import get_exclusiones_set
+    return {"exclusiones": list(get_exclusiones_set())}
+
+
+@router.get("/exclusiones/list")
+def get_exclusiones_list_endpoint(
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Obtiene lista detallada de exclusiones (solo admins)."""
+    from backend.services.permissions_service import get_exclusiones_list
+    _validate_admin(admin_username, admin_password)
+    return {"exclusiones": get_exclusiones_list()}
+
+
+@router.post("/exclusiones/add")
+def add_exclusion_endpoint(payload: ExclusionRequest) -> Dict:
+    """Agrega una exclusión."""
+    from backend.services.permissions_service import add_exclusion
+    _validate_admin(payload.admin_username, payload.admin_password)
+    exclusiones = add_exclusion(payload.albaran, payload.motivo or "")
+    return {"exclusiones": exclusiones}
+
+
+@router.post("/exclusiones/remove")
+def remove_exclusion_endpoint(
+    albaran: str = Query(...),
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Elimina una exclusión."""
+    from backend.services.permissions_service import remove_exclusion
+    _validate_admin(admin_username, admin_password)
+    exclusiones = remove_exclusion(albaran)
+    return {"exclusiones": exclusiones}

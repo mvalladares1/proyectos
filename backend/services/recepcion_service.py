@@ -10,10 +10,10 @@ from backend.cache import get_cache, OdooCache
 # =============================================================================
 # OVERRIDE DE ORIGEN: Pickings que deben aparecer con origen diferente al de Odoo
 # Esto permite corregir recepciones mal ingresadas sin modificar Odoo
-# Formato: {"nombre_picking": "ORIGEN_CORRECTO"}
-# Valores válidos: "RFP", "VILKUN", "SAN JOSE"
+# LEGACY: Este diccionario se mantiene por compatibilidad. Los nuevos overrides
+# se almacenan en la base de datos (permissions.db tabla override_origen)
 # =============================================================================
-OVERRIDE_ORIGEN_PICKING = {
+_LEGACY_OVERRIDE_ORIGEN_PICKING = {
     "RF/RFP/IN/01151": "VILKUN",
     "RF/RFP/IN/01117": "VILKUN",
     "RF/RFP/IN/01155": "VILKUN",
@@ -28,6 +28,27 @@ OVERRIDE_ORIGEN_PICKING = {
     "RF/RFP/IN/00563": "VILKUN",
     "RF/RFP/IN/01849": "SAN JOSE",
 }
+
+
+def get_override_origen_picking() -> Dict[str, str]:
+    """
+    Obtiene los overrides de origen combinando legacy + DB.
+    DB tiene prioridad sobre legacy.
+    """
+    try:
+        from backend.services.permissions_service import get_override_origen_map
+        db_overrides = get_override_origen_map()
+    except Exception as e:
+        print(f"[WARNING] No se pudo cargar overrides de DB: {e}")
+        db_overrides = {}
+    
+    # Combinar: legacy primero, luego DB (DB tiene prioridad)
+    combined = {**_LEGACY_OVERRIDE_ORIGEN_PICKING, **db_overrides}
+    return combined
+
+
+# Alias para compatibilidad con código existente (pages/permisos/content.py)
+OVERRIDE_ORIGEN_PICKING = _LEGACY_OVERRIDE_ORIGEN_PICKING
 
 
 def _normalize_categoria(cat: str) -> str:
@@ -490,8 +511,10 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
         
         # Aplicar override si existe (para corregir recepciones mal ingresadas en Odoo)
-        if albaran in OVERRIDE_ORIGEN_PICKING:
-            origen_rec = OVERRIDE_ORIGEN_PICKING[albaran]
+        # Usa función dinámica que combina legacy + DB
+        override_map = get_override_origen_picking()
+        if albaran in override_map:
+            origen_rec = override_map[albaran]
         else:
             origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
         
@@ -986,8 +1009,9 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         albaran = p.get("name", "")
         
         # Aplicar override si existe (para corregir recepciones mal ingresadas en Odoo)
-        if albaran in OVERRIDE_ORIGEN_PICKING:
-            origen_val = OVERRIDE_ORIGEN_PICKING[albaran]
+        override_map = get_override_origen_picking()
+        if albaran in override_map:
+            origen_val = override_map[albaran]
         else:
             origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
 
@@ -1223,8 +1247,9 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
         albaran = p.get("name", "")
         
         # Aplicar override si existe (para corregir recepciones mal ingresadas en Odoo)
-        if albaran in OVERRIDE_ORIGEN_PICKING:
-            origen_val = OVERRIDE_ORIGEN_PICKING[albaran]
+        override_map = get_override_origen_picking()
+        if albaran in override_map:
+            origen_val = override_map[albaran]
         else:
             origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
         

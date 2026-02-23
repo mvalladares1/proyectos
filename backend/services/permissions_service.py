@@ -185,6 +185,20 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             enabled INTEGER NOT NULL DEFAULT 0,
             message TEXT NOT NULL DEFAULT 'El sistema está siendo ajustado en este momento.'
         );
+        
+        -- Overrides de origen para recepciones
+        CREATE TABLE IF NOT EXISTS override_origen (
+            picking_name TEXT PRIMARY KEY,
+            origen TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Exclusiones de valorización
+        CREATE TABLE IF NOT EXISTS exclusiones_valorizacion (
+            albaran TEXT PRIMARY KEY,
+            motivo TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     conn.execute(
@@ -497,3 +511,121 @@ def set_maintenance_mode(enabled: bool, message: Optional[str] = None) -> Dict[s
 def is_maintenance_mode() -> bool:
     config = get_maintenance_config()
     return config.get("enabled", False)
+
+
+# ============ OVERRIDE DE ORIGEN DE RECEPCIONES ============
+
+def get_override_origen_map() -> Dict[str, str]:
+    """Obtiene todos los overrides de origen como diccionario {picking: origen}."""
+    _ensure_db()
+    with _get_connection() as conn:
+        rows = conn.execute(
+            "SELECT picking_name, origen FROM override_origen ORDER BY picking_name"
+        ).fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
+def get_override_origen_list() -> List[Dict[str, str]]:
+    """Obtiene lista de overrides con fecha de creación."""
+    _ensure_db()
+    with _get_connection() as conn:
+        rows = conn.execute(
+            "SELECT picking_name, origen, created_at FROM override_origen ORDER BY created_at DESC"
+        ).fetchall()
+    return [{"picking_name": r[0], "origen": r[1], "created_at": r[2]} for r in rows]
+
+
+def add_override_origen(picking_name: str, origen: str) -> Dict[str, str]:
+    """Agrega o actualiza un override de origen."""
+    _ensure_db()
+    picking = picking_name.strip().upper()
+    orig = origen.strip().upper()
+    if orig not in ("RFP", "VILKUN", "SAN JOSE"):
+        raise ValueError(f"Origen inválido: {orig}. Debe ser RFP, VILKUN o SAN JOSE")
+    
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO override_origen (picking_name, origen, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+            (picking, orig),
+        )
+    return get_override_origen_map()
+
+
+def remove_override_origen(picking_name: str) -> Dict[str, str]:
+    """Elimina un override de origen."""
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM override_origen WHERE picking_name = ?",
+            (picking_name.strip().upper(),),
+        )
+    return get_override_origen_map()
+
+
+def bulk_add_override_origen(overrides: Dict[str, str]) -> Dict[str, str]:
+    """Agrega múltiples overrides de una vez (para migración)."""
+    _ensure_db()
+    with _get_connection() as conn:
+        for picking, origen in overrides.items():
+            picking = picking.strip().upper()
+            orig = origen.strip().upper()
+            if orig in ("RFP", "VILKUN", "SAN JOSE"):
+                conn.execute(
+                    "INSERT OR IGNORE INTO override_origen (picking_name, origen) VALUES (?, ?)",
+                    (picking, orig),
+                )
+    return get_override_origen_map()
+
+
+# ============ EXCLUSIONES DE VALORIZACIÓN ============
+
+def get_exclusiones_list() -> List[Dict[str, str]]:
+    """Obtiene lista de exclusiones con motivo y fecha."""
+    _ensure_db()
+    with _get_connection() as conn:
+        rows = conn.execute(
+            "SELECT albaran, motivo, created_at FROM exclusiones_valorizacion ORDER BY created_at DESC"
+        ).fetchall()
+    return [{"albaran": r[0], "motivo": r[1] or "", "created_at": r[2]} for r in rows]
+
+
+def get_exclusiones_set() -> set:
+    """Obtiene set de albaranes excluidos (para búsqueda rápida)."""
+    _ensure_db()
+    with _get_connection() as conn:
+        rows = conn.execute("SELECT albaran FROM exclusiones_valorizacion").fetchall()
+    return {r[0] for r in rows}
+
+
+def add_exclusion(albaran: str, motivo: str = "") -> List[Dict[str, str]]:
+    """Agrega una exclusión."""
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO exclusiones_valorizacion (albaran, motivo, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+            (albaran.strip(), motivo.strip()),
+        )
+    return get_exclusiones_list()
+
+
+def remove_exclusion(albaran: str) -> List[Dict[str, str]]:
+    """Elimina una exclusión."""
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM exclusiones_valorizacion WHERE albaran = ?",
+            (albaran.strip(),),
+        )
+    return get_exclusiones_list()
+
+
+def bulk_add_exclusiones(albaranes: List[str], motivo: str = "Migración desde JSON") -> List[Dict[str, str]]:
+    """Agrega múltiples exclusiones de una vez (para migración)."""
+    _ensure_db()
+    with _get_connection() as conn:
+        for albaran in albaranes:
+            conn.execute(
+                "INSERT OR IGNORE INTO exclusiones_valorizacion (albaran, motivo) VALUES (?, ?)",
+                (albaran.strip(), motivo),
+            )
+    return get_exclusiones_list()
