@@ -21,15 +21,19 @@ def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
     return '', nombre_producto
 
 
-def extraer_peso_de_descripcion(descripcion: str) -> int:
+def extraer_peso_de_descripcion(descripcion: str) -> str:
     """
     Extrae el peso en kg de la descripción del producto.
-    Ejemplo: "FB MK Conv. IQF A 10 kg en Caja" -> 10
+    Ejemplo: "FB MK Conv. IQF A 10 kg en Caja" -> "10"
+    Ejemplo: "AR HB Org. S/C PSP 13,61 kg en Caja" -> "13,61"
     """
+    match = re.search(r'(\d+[.,]\d+)\s*kg', descripcion, re.IGNORECASE)
+    if match:
+        return match.group(1)  # Devuelve con coma/punto tal cual
     match = re.search(r'(\d+)\s*kg', descripcion, re.IGNORECASE)
     if match:
-        return int(match.group(1))
-    return 10  # Por defecto 10 kg
+        return match.group(1)
+    return "10"  # Por defecto
 
 
 def calcular_fecha_vencimiento(fecha_elaboracion: str, años: int = 2) -> str:
