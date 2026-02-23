@@ -860,27 +860,28 @@ def render(username: str, password: str):
                     }
                 )
 
-                # === CONTROL DE CALIDAD INTERACTIVO POR PALLET ===
+                # === QC INLINE: expander por cada pallet con datos de calidad ===
                 if calidad_dict:
                     pallets_con_datos = [
-                        p for p in df_sala['pallet'].unique()
+                        p for p in df_sala_detail['Pallet'].unique()
                         if _extraer_numero_pallet(p) in calidad_dict
                     ]
-                    if pallets_con_datos:
-                        st.markdown("---")
-                        st.markdown("##### 🔬 Control de Calidad por Pallet")
-                        pallet_opciones = ["Seleccionar pallet..."] + sorted(pallets_con_datos)
-                        pallet_sel = st.selectbox(
-                            "Seleccionar pallet para ver análisis de calidad",
-                            options=pallet_opciones,
-                            key=f"ps_qc_pallet_{_normalize(sala_label)}",
-                            label_visibility="collapsed"
-                        )
-                        if pallet_sel and pallet_sel != "Seleccionar pallet...":
-                            pallet_num = _extraer_numero_pallet(pallet_sel)
-                            registros = calidad_dict.get(pallet_num, [])
-                            if registros:
-                                _render_calidad_pallet(registros, pallet_sel)
+                    for pallet_name in pallets_con_datos:
+                        pallet_num = _extraer_numero_pallet(pallet_name)
+                        registros = calidad_dict.get(pallet_num, [])
+                        if not registros:
+                            continue
+                        # Resumen rápido para el título del expander
+                        pi = [float(r.get('pct_iqf', 0) or 0) for r in registros if r.get('pct_iqf')]
+                        pd2 = [float(r.get('pct_defectos', 0) or 0) for r in registros if r.get('pct_defectos')]
+                        avg_i = sum(pi) / len(pi) * 100 if pi else 0
+                        avg_d = sum(pd2) / len(pd2) * 100 if pd2 else 0
+                        icon = "✅" if avg_d <= 4 else ("⚠️" if avg_d <= 7 else "❌")
+                        iqf_str = f"IQF {avg_i:.0f}%" if pi else ""
+                        def_str = f"Def {avg_d:.1f}%" if pd2 else ""
+                        resumen = " | ".join(filter(None, [iqf_str, def_str]))
+                        with st.expander(f"🔬 **{pallet_name}** — {icon} {resumen}", expanded=False):
+                            _render_calidad_pallet(registros, pallet_name)
 
         # --- TABLA DETALLADA COMPLETA ---
         st.markdown("---")
