@@ -936,8 +936,9 @@ def render(username: str, password: str):
     </style>
     """, unsafe_allow_html=True)
 
-    # === CARGA AUTOMÁTICA DE CALIDAD (silenciosa, cacheada en session_state) ===
-    calidad_dict = _cargar_calidad_servidor()
+    # === CARGA AUTOMÁTICA DE CALIDAD (desactivada temporalmente para diagnóstico) ===
+    # calidad_dict = _cargar_calidad_servidor()
+    calidad_dict = {}
 
     # === CONSULTA ===
     if consultar or st.session_state.get("ps_pallets_data"):
