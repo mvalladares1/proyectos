@@ -939,7 +939,8 @@ def render(username: str, password: str):
                         st.session_state.ps_pallets_data = data
                         count = len(data.get('detalle', []))
                         if count > 0:
-                            st.success(f"✅ Se cargaron {count} pallets correctamente")
+                            st.toast(f"✅ {count} pallets cargados")
+                            st.rerun(scope="fragment")
                         else:
                             st.info("ℹ️ No se encontraron pallets para los filtros seleccionados.")
                     else:
