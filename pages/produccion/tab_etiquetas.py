@@ -514,20 +514,23 @@ def render_etiquetas_caja(username: str, password: str):
     
     st.write(f"**{len(pallets)} pallets disponibles** — Diseño: {cliente_key}")
     
+    # MATERIAL CODE y PRODUCT NAME: valores fijos (NO se toman de Odoo)
+    material_code = "RIRASPBERRY"
+    product_name = "Frozen Raspberry 12-24 mm"
+    
+    st.divider()
+    
     for pallet in pallets:
         with st.expander(f"📦 {pallet.get('package_name', '')} - {pallet.get('cantidad_cajas', 0)} cajas"):
-            codigo_prod, desc_prod = extraer_codigo_descripcion(pallet.get('producto_nombre', ''))
             lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
-            
-            peso_caja = extraer_peso_de_descripcion(desc_prod)
             
             fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
             fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
             
             datos_etiqueta = {
-                'nombre_producto': desc_prod,
-                'codigo_producto': codigo_prod,
-                'peso_caja_kg': peso_caja,
+                'nombre_producto': product_name,
+                'codigo_producto': material_code,
+                'peso_caja_kg': '10',
                 'fecha_elaboracion': fecha_elab,
                 'fecha_vencimiento': fecha_venc,
                 'lote_produccion': lot_name,
