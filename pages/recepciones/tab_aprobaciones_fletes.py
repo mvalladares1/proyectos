@@ -1339,13 +1339,9 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
     if ocs_a_remover:
         st.session_state[f'selected_{key_proveedor}'] = ocs_seleccionadas_antiguas & ocs_actuales
         st.session_state[f'checkbox_version_{key_proveedor}'] += 1
-        # Si hay OCs que ya no están, desmarcar "Seleccionar todas"
-        if f'select_all_{key_proveedor}' in st.session_state:
-            st.session_state[f'select_all_{key_proveedor}'] = False
-    
-    # Si después de limpiar no quedan OCs seleccionadas, asegurar que "Seleccionar todas" esté desmarcada
-    if not st.session_state[f'selected_{key_proveedor}'] and f'select_all_{key_proveedor}' in st.session_state:
-        st.session_state[f'select_all_{key_proveedor}'] = False
+
+    # No escribir directamente sobre la key del checkbox "Seleccionar todas"
+    # después de su instanciación. El estado se actualiza desde su callback.
     
     # --- Fragment: solo la selección de checkboxes se re-renderiza al hacer click ---
     @st.fragment
