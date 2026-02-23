@@ -1,0 +1,87 @@
+<data inherit_id="account.report_invoice_document" primary="True">
+
+        <t t-set="o" position="after">
+            <t t-set="custom_header" t-value="'l10n_cl.custom_header'"/>
+        </t>
+
+        <!-- remove default partner address -->
+        <t t-set="address" position="replace"/>
+
+        <xpath expr="//h2" position="replace"/>
+
+        <t t-set="current_subtotal" t-value="current_subtotal + line.price_subtotal" position="before">
+            <t t-set="l10n_cl_values" t-value="line._l10n_cl_prices_and_taxes()"/>
+        </t>
+
+        <xpath expr="//span[@t-field='line.price_unit']" position="attributes">
+            <attribute name="t-field"/>
+            <attribute name="t-esc">line.price_unit</attribute>
+            <attribute name="t-options">{"widget": "monetary", "display_currency": o.currency_id}</attribute>
+        </xpath>
+
+        <xpath expr="//span[@id='line_tax_ids']" position="attributes">
+            <attribute name="t-esc">', '.join(map(lambda x: (x.description or x.name), line.tax_lines))</attribute>
+        </xpath>
+
+        <t t-set="current_subtotal" t-value="current_subtotal + line.price_subtotal" position="attributes">
+            <attribute name="t-value">current_subtotal + l10n_cl_values['price_subtotal']</attribute>
+        </t>
+
+        <xpath expr="//th[@name='th_subtotal']/span[@groups='account.group_show_line_subtotals_tax_included']" position="replace">
+            <span groups="account.group_show_line_subtotals_tax_included">Amount</span>
+        </xpath>
+
+        <span t-field="line.price_subtotal" position="attributes">
+            <attribute name="t-field"/>
+            <attribute name="t-esc">l10n_cl_values['price_subtotal']</attribute>
+            <attribute name="t-options">{"widget": "monetary", "display_currency": o.currency_id}</attribute>
+        </span>
+
+        <t t-set="tax_totals" position="attributes">
+            <attribute name="t-value">o._l10n_cl_get_invoice_totals_for_report()</attribute>
+        </t>
+
+        <xpath expr="//th[@name='th_taxes']" position="replace"/>
+        <xpath expr="//span[@id='line_tax_ids']/.." position="replace"/>
+
+        <div name="payment_term" position="replace"/>
+        <xpath expr="//span[@t-field='o.payment_reference']/../.." position="replace"/>
+
+        <!-- replace information section and usage chilean style -->
+        <div id="informations" position="replace">
+            <t t-call="l10n_cl.informations"/>
+        </div>
+
+        <!--  we remove the ml auto and also give more space to avoid multiple lines on tax detail -->
+        <xpath expr="//div[@id='total']/div" position="attributes">
+            <attribute name="t-attf-class">#{'col-6' if report_type != 'html' else 'col-sm-7 col-md-6'}</attribute>
+        </xpath>
+
+        <xpath expr="//div[@id='total']/div" position="before">
+            <div t-attf-class="#{'col-6' if report_type != 'html' else 'col-sm-7 col-md-6'}"/>
+        </xpath>
+
+        <xpath expr="//div[@id='total']" position="after">
+            <div class="row">
+                <div name="stamp" class="col-4 text-center"/>
+                <div name="transferable-table" class="col-4"/>
+                <div name="transferable-legend" class="col-4 float-end"/>
+            </div>
+        </xpath>
+        
+        <!-- Fila extra: suma de Precio unitario debajo de las líneas -->
+        <xpath expr="//table[                         .//th[@name='th_price_unit']                         or .//th[contains(translate(normalize-space(),'abcdefghijklmnopqrstuvwxyz','ABCDEFGHIJKLMNOPQRSTUVWXYZ'),'PRECIO UNITARIO')]                      ]//tbody/*[last()]" position="after">
+          <t t-set="total_unit" t-value="sum(o.invoice_line_ids.filtered(lambda l: not l.display_type).mapped('price_unit'))"/>
+          <t t-if="total_unit">
+            <tr class="o_total_line">
+              <!-- Ajusta el colspan según tus columnas: DESCRIPCIÓN | CANTIDAD | PRECIO UNITARIO | IMPUESTOS | IMPORTE -->
+              <td colspan="3" class="text-end"><strong>Total precio unitario</strong></td>
+              <td class="text-end">
+                <span t-esc="total_unit" t-options="{&quot;widget&quot;:&quot;monetary&quot;,&quot;display_currency&quot;: o.currency_id}"/>
+              </td>
+              <td/>
+            </tr>
+          </t>
+        </xpath>
+
+    <xpath expr="." position="attributes"><attribute name="t-name">l10n_cl.report_invoice_document</attribute></xpath></data>

@@ -1,0 +1,5 @@
+<data inherit_id="account.report_invoice_with_payments">
+        <xpath expr="//t[@t-call=&quot;account.report_invoice_document&quot;]" position="after">
+            <t t-if="o._get_name_invoice_report() == 'l10n_cl.report_invoice_document'" t-call="l10n_cl.report_invoice_document" t-lang="lang"/>
+        </xpath>
+    </data>

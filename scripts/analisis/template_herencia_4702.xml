@@ -1,0 +1,16 @@
+<data>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[6]" position="after">
+    <th>
+      <span>Subtotal</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[6]" position="after">
+    <td>
+      <span t-field="line.price_subtotal"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[3]/tr/td" position="attributes">
+    <attribute name="colspan">100</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[6]/span[1]" position="replace"/>
+</data>

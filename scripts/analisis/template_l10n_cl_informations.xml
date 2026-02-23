@@ -1,0 +1,47 @@
+<t t-name="l10n_cl.informations">
+        <div id="informations" class="row mt8 mb8">
+            <div class="col-6">
+                <strong>
+                    <span t-att-style="'color: %s;' % o.company_id.secondary_color">Date:</span>
+                </strong>
+                <span t-esc="o.invoice_date" t-options="{&quot;widget&quot;: &quot;date&quot;}"/>
+                <br/>
+
+                <strong>Customer:</strong>
+                <span t-field="o.partner_id.name"/>
+                <br/>
+
+                <t t-if="o.partner_id.vat and o.partner_id.l10n_latam_identification_type_id">
+                    <strong>
+                        <t t-esc="o.partner_id.l10n_latam_identification_type_id.name or o.company_id.account_fiscal_country_id.vat_label" id="inv_tax_id_label"/>:
+                    </strong>
+                    <span t-esc="o.partner_id.vat"/>
+                    <br/>
+                </t>
+                <strong>GIRO:</strong>
+                <span t-esc="o.partner_id.industry_id.name or ''"/>
+                <br/>
+            </div>
+            <div class="col-6">
+                <strong>Due Date:</strong>
+                <span t-esc="o.invoice_date_due" t-options="{&quot;widget&quot;: &quot;date&quot;}"/>
+                <br/>
+                <strong>Address:</strong>
+                <span t-field="o.partner_id" t-options="{'widget': 'contact', 'fields': ['address'], 'no_marker': True}"/>
+
+                <strong>Payment Terms:</strong>
+                <span t-esc="o.invoice_payment_term_id.name or ''"/>
+
+
+                <t t-if="o.invoice_incoterm_id">
+                    <br/>
+                    <strong>Incoterm:</strong>
+                    <span t-field="o.invoice_incoterm_id.name"/>
+                </t>
+
+            </div>
+        </div>
+        <div id="references" class="row">
+            <div name="references" class="col-12 text-center"/>
+        </div>
+    </t>
