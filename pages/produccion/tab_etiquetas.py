@@ -7,7 +7,7 @@ import streamlit as st
 import httpx
 import re
 from typing import List, Dict
-from produccion.shared import API_URL
+from .shared import API_URL
 
 
 def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
