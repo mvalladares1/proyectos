@@ -513,12 +513,16 @@ def _filtrar_detalle(detalle_raw, filtros):
                     filtered.append(d)
         resultado = filtered
 
-    # Filtrar por Producto (texto libre, normalizado)
+    # Filtrar por texto libre (producto, pallet, OF, lote, código)
     if filtros.get("producto_texto"):
         texto = _normalize(filtros["producto_texto"].strip())
         resultado = [
             d for d in resultado
-            if texto in _normalize(d.get('producto', '')) or texto in d.get('codigo_producto', '').lower()
+            if texto in _normalize(d.get('producto', ''))
+            or texto in d.get('codigo_producto', '').lower()
+            or texto in _normalize(d.get('pallet', ''))
+            or texto in _normalize(d.get('orden_fabricacion', ''))
+            or texto in _normalize(d.get('lote', ''))
         ]
 
     # Filtrar por Temporada 2025/2026 basado en fecha
@@ -626,10 +630,10 @@ def render(username: str, password: str):
 
         # Filtro de búsqueda de producto
         producto_texto = st.text_input(
-            "🔎 Buscar Producto (nombre o código)",
+            "🔎 Buscar (producto, pallet, OF o lote)",
             value="",
             key="ps_producto_texto",
-            placeholder="Ej: Arándano IQF, 3111..."
+            placeholder="Ej: PACK0013713, Arándano IQF, 3111, WPF/..."
         )
 
         consultar = st.button("🔍 Consultar Pallets", use_container_width=True, type="primary", key="ps_btn_consultar")
