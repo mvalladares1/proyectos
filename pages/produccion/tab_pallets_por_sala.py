@@ -244,51 +244,58 @@ def _render_calidad_pallet(registros_calidad: List[Dict], pallet_name: str):
         estado_color, estado_icon, estado_text = "#64748b", "❓", "SIN EVALUAR"
 
     # Header con estado
+    glow = f"0 0 15px {estado_color}33" if estado_text != "SIN EVALUAR" else "none"
     st.markdown(f"""
-    <div style="background:linear-gradient(135deg,{estado_color}22 0%,{estado_color}11 100%);
-        border-left:4px solid {estado_color}; border-radius:8px; padding:0.8rem 1rem; margin-bottom:0.8rem;">
+    <div style="background:linear-gradient(135deg,{estado_color}18 0%,{estado_color}08 100%);
+        border:1px solid {estado_color}44; border-left:4px solid {estado_color};
+        border-radius:10px; padding:0.8rem 1.2rem; margin-bottom:0.8rem;
+        box-shadow:{glow};">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-weight:700; color:{estado_color}; font-size:1rem;">
-                {estado_icon} Control de Calidad — {estado_text}
-            </span>
-            <span style="color:#94a3b8; font-size:0.8rem;">{n} monitoreo{'s' if n > 1 else ''}</span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.3rem;">{estado_icon}</span>
+                <div>
+                    <div style="font-weight:700; color:{estado_color}; font-size:0.95rem; letter-spacing:0.03em;">
+                        {estado_text}
+                    </div>
+                    <div style="font-size:0.7rem; color:#64748b;">Control de Calidad</div>
+                </div>
+            </div>
+            <span class="stat-chip" style="background:{estado_color}1a; color:{estado_color};">{n} monitoreo{'s' if n > 1 else ''}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # KPIs de calidad
+    # KPIs de calidad - mini gauges
+    qc_metrics = []
+    iqf_val = f"{avg_iqf:.1f}%" if avg_iqf is not None else "—"
+    iqf_color = "#22c55e" if avg_iqf and avg_iqf >= 90 else ("#f59e0b" if avg_iqf and avg_iqf >= 80 else "#ef4444")
+    qc_metrics.append(("% IQF Prom.", iqf_val, iqf_color, "🎯"))
+
+    def_val = f"{avg_defectos:.1f}%" if avg_defectos is not None else "—"
+    def_color = "#22c55e" if avg_defectos is not None and avg_defectos <= 4 else ("#f59e0b" if avg_defectos is not None and avg_defectos <= 7 else "#ef4444")
+    qc_metrics.append(("% Defectos", def_val, def_color, "⚠️"))
+
+    temp_val = f"{avg_temp:.1f}&deg;C" if avg_temp is not None else "—"
+    temp_color = "#22c55e" if avg_temp is not None and avg_temp <= -5 else ("#f59e0b" if avg_temp is not None and avg_temp <= 0 else "#ef4444")
+    qc_metrics.append(("Temperatura", temp_val, temp_color, "🌡️"))
+
+    sellados_b = [str(r.get('sellado_bolsa', '')).upper() for r in registros_calidad if r.get('sellado_bolsa')]
+    sellados_c = [str(r.get('sellado_caja', '')).upper() for r in registros_calidad if r.get('sellado_caja')]
+    todo_ok = all(s == 'C' for s in sellados_b + sellados_c) if (sellados_b or sellados_c) else None
+    sell_icon = "✅" if todo_ok else ("❌" if todo_ok is not None else "—")
+    sell_color = "#22c55e" if todo_ok else ("#ef4444" if todo_ok is not None else "#64748b")
+    qc_metrics.append(("Sellado", sell_icon, sell_color, "📦"))
+
     kpi_cols = st.columns(4)
-    with kpi_cols[0]:
-        iqf_val = f"{avg_iqf:.1f}%" if avg_iqf is not None else "—"
-        iqf_color = "#22c55e" if avg_iqf and avg_iqf >= 90 else ("#f59e0b" if avg_iqf and avg_iqf >= 80 else "#ef4444")
-        st.markdown(f"""<div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:0.6rem; text-align:center;">
-            <div style="font-size:0.65rem; color:#94a3b8; text-transform:uppercase;">% IQF Prom.</div>
-            <div style="font-size:1.2rem; font-weight:800; color:{iqf_color};">{iqf_val}</div>
-        </div>""", unsafe_allow_html=True)
-    with kpi_cols[1]:
-        def_val = f"{avg_defectos:.1f}%" if avg_defectos is not None else "—"
-        def_color = "#22c55e" if avg_defectos is not None and avg_defectos <= 4 else ("#f59e0b" if avg_defectos is not None and avg_defectos <= 7 else "#ef4444")
-        st.markdown(f"""<div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:0.6rem; text-align:center;">
-            <div style="font-size:0.65rem; color:#94a3b8; text-transform:uppercase;">% Defectos Prom.</div>
-            <div style="font-size:1.2rem; font-weight:800; color:{def_color};">{def_val}</div>
-        </div>""", unsafe_allow_html=True)
-    with kpi_cols[2]:
-        temp_val = f"{avg_temp:.1f}&deg;C" if avg_temp is not None else "—"
-        temp_color = "#22c55e" if avg_temp is not None and avg_temp <= -5 else ("#f59e0b" if avg_temp is not None and avg_temp <= 0 else "#ef4444")
-        st.markdown(f"""<div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:0.6rem; text-align:center;">
-            <div style="font-size:0.65rem; color:#94a3b8; text-transform:uppercase;">Temp. Prom.</div>
-            <div style="font-size:1.2rem; font-weight:800; color:{temp_color};">{temp_val}</div>
-        </div>""", unsafe_allow_html=True)
-    with kpi_cols[3]:
-        sellados_b = [str(r.get('sellado_bolsa', '')).upper() for r in registros_calidad if r.get('sellado_bolsa')]
-        sellados_c = [str(r.get('sellado_caja', '')).upper() for r in registros_calidad if r.get('sellado_caja')]
-        todo_ok = all(s == 'C' for s in sellados_b + sellados_c) if (sellados_b or sellados_c) else None
-        sell_icon = "✅" if todo_ok else ("❌" if todo_ok is not None else "—")
-        sell_color = "#22c55e" if todo_ok else ("#ef4444" if todo_ok is not None else "#64748b")
-        st.markdown(f"""<div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:0.6rem; text-align:center;">
-            <div style="font-size:0.65rem; color:#94a3b8; text-transform:uppercase;">Sellado</div>
-            <div style="font-size:1.2rem; font-weight:800; color:{sell_color};">{sell_icon}</div>
-        </div>""", unsafe_allow_html=True)
+    for i, (label, value, color, icon) in enumerate(qc_metrics):
+        with kpi_cols[i]:
+            st.markdown(f"""<div style="background:linear-gradient(145deg,#0f172a,#1e293b); border:1px solid {color}33;
+                border-radius:10px; padding:0.6rem; text-align:center; position:relative; overflow:hidden;">
+                <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{color};"></div>
+                <div style="font-size:0.9rem; margin-bottom:2px;">{icon}</div>
+                <div style="font-size:1.15rem; font-weight:800; color:{color};">{value}</div>
+                <div style="font-size:0.6rem; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">{label}</div>
+            </div>""", unsafe_allow_html=True)
 
     # Tabla de detalle por monitoreo
     rows = []
@@ -337,18 +344,20 @@ def _render_calidad_pallet(registros_calidad: List[Dict], pallet_name: str):
             width_pct = min(val / max_val * 100, 100) if max_val > 0 else 0
             bar_color = "#ef4444" if val > 4 else ("#f59e0b" if val > 2 else "#22c55e")
             bars_html += (
-                '<div style="display:flex;align-items:center;margin:3px 0;gap:8px;">'
-                f'<span style="width:100px;font-size:0.75rem;color:#94a3b8;text-align:right;">{label}</span>'
-                '<div style="flex:1;background:#1e293b;border-radius:4px;height:18px;overflow:hidden;">'
-                f'<div style="width:{width_pct}%;background:{bar_color};height:100%;border-radius:4px;min-width:2px;"></div>'
+                '<div style="display:flex;align-items:center;margin:4px 0;gap:8px;">'
+                f'<span style="width:100px;font-size:0.72rem;color:#94a3b8;text-align:right;font-weight:500;">{label}</span>'
+                '<div style="flex:1;background:#0f172a;border-radius:6px;height:20px;overflow:hidden;border:1px solid #1e293b;">'
+                f'<div style="width:{width_pct}%;background:linear-gradient(90deg,{bar_color},{bar_color}bb);height:100%;border-radius:5px;min-width:2px;'
+                f'transition:width 0.6s ease;"></div>'
                 '</div>'
-                f'<span style="width:50px;font-size:0.75rem;color:#e2e8f0;font-weight:600;">{val:.1f}%</span>'
+                f'<span style="width:50px;font-size:0.72rem;color:{bar_color};font-weight:700;">{val:.1f}%</span>'
                 '</div>'
             )
 
         html_block = (
-            '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:0.8rem;margin-top:0.5rem;">'
-            '<div style="font-size:0.7rem;color:#64748b;margin-bottom:6px;text-transform:uppercase;font-weight:600;">Desglose de Defectos (Promedio)</div>'
+            '<div style="background:linear-gradient(145deg,#0f172a,#1a1e2e);border:1px solid #1e293b;border-radius:10px;padding:0.9rem;margin-top:0.5rem;">'
+            '<div style="font-size:0.68rem;color:#64748b;margin-bottom:8px;text-transform:uppercase;font-weight:700;letter-spacing:0.06em;">'
+            '📊 Desglose de Defectos (Promedio)</div>'
             f'{bars_html}'
             '</div>'
         )
@@ -618,20 +627,32 @@ def _filtrar_detalle(detalle_raw, filtros):
 def render(username: str, password: str):
     """Renderiza el tab de Pallets por Sala."""
 
-    st.markdown("### 🏢 PALLETS POR SALA DE PROCESO")
-    st.caption("Detalle de pallets de producto terminado por sala, producto y grado — Temporada 2025 / 2026")
+    st.markdown("""
+    <div class="ps-hero">
+        <h2>🏭 Pallets por Sala de Proceso</h2>
+        <div class="subtitle">Detalle de pallets de producto terminado por sala, producto y grado &mdash; Temporada 2025 / 2026</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # === CARGA AUTOMÁTICA DE CALIDAD ===
     calidad_dict = _cargar_calidad_servidor()
 
-    # Mostrar info de archivos cargados
+    # Banner de calidad auto-cargada
     archivos_ok = st.session_state.get('_qc_archivos_cargados', [])
     archivos_error = st.session_state.get('_qc_archivos_error', [])
     if archivos_ok:
         total_pallets_qc = len(calidad_dict)
         total_registros_qc = sum(len(v) for v in calidad_dict.values())
-        archivos_txt = ", ".join(archivos_ok)
-        st.info(f"📊 Calidad auto-cargada: **{total_registros_qc}** monitoreos / **{total_pallets_qc}** pallets — Archivos: {archivos_txt}")
+        archivos_txt = " &bull; ".join(archivos_ok)
+        st.markdown(f"""
+        <div class="qc-banner">
+            <div class="qc-icon">🔬</div>
+            <div>
+                <div class="qc-text">Control de calidad activo: <strong>{total_registros_qc}</strong> monitoreos enlazados a <strong>{total_pallets_qc}</strong> pallets</div>
+                <div class="qc-files">Archivos: {archivos_txt}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     if archivos_error:
         for err in archivos_error:
             st.warning(f"⚠️ Error en archivo: {err}")
@@ -749,18 +770,194 @@ def render(username: str, password: str):
 
         consultar = st.button("🔍 Consultar Pallets", use_container_width=True, type="primary", key="ps_btn_consultar")
 
-    # === CSS ===
+    # === CSS PREMIUM ===
     st.markdown("""
     <style>
-        .kpi-mini {
-            background: #1e293b;
-            padding: 0.8rem;
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 8px rgba(99,102,241,0.15)} 50%{box-shadow:0 0 20px rgba(99,102,241,0.35)} }
+        @keyframes float-in { 0%{opacity:0;transform:translateY(12px)} 100%{opacity:1;transform:translateY(0)} }
+        @keyframes count-up { 0%{opacity:0;transform:scale(0.8)} 100%{opacity:1;transform:scale(1)} }
+        @keyframes gradient-shift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+        .ps-hero {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #312e81 70%, #1e1b4b 100%);
+            background-size: 300% 300%;
+            animation: gradient-shift 8s ease infinite;
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(99,102,241,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        .ps-hero::before {
+            content: '';
+            position: absolute;
+            top: -50%; right: -50%;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .ps-hero h2 {
+            margin: 0 0 0.3rem 0;
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #e0e7ff;
+            letter-spacing: -0.02em;
+        }
+        .ps-hero .subtitle {
+            color: #818cf8;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        .kpi-card {
+            background: linear-gradient(145deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.98) 100%);
+            border: 1px solid rgba(99,102,241,0.15);
+            border-radius: 14px;
+            padding: 1rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            animation: float-in 0.5s ease-out both;
+            transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+        }
+        .kpi-card:hover {
+            border-color: rgba(99,102,241,0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3), 0 0 15px rgba(99,102,241,0.1);
+        }
+        .kpi-card .icon-ring {
+            width: 40px; height: 40px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 0.5rem;
+            font-size: 1.1rem;
+        }
+        .kpi-card .value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #f1f5f9;
+            line-height: 1.1;
+            animation: count-up 0.6s ease-out both;
+        }
+        .kpi-card .label {
+            font-size: 0.65rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 0.25rem;
+            font-weight: 600;
+        }
+        .kpi-card .accent-bar {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            border-radius: 14px 14px 0 0;
+        }
+
+        .qc-banner {
+            background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,78,59,0.12) 100%);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 12px;
+            padding: 0.8rem 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 0.8rem;
+        }
+        .qc-banner .qc-icon {
+            width: 38px; height: 38px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .qc-banner .qc-text { color: #a7f3d0; font-size: 0.85rem; font-weight: 500; }
+        .qc-banner .qc-text strong { color: #ecfdf5; }
+        .qc-banner .qc-files { color: #6ee7b7; font-size: 0.72rem; margin-top: 2px; }
+
+        .sala-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0.4rem 0;
+        }
+        .sala-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(99,102,241,0.12);
+            color: #a5b4fc;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .grade-pill {
+            display: inline-block;
+            padding: 0.35rem 0.6rem;
             border-radius: 10px;
             text-align: center;
-            border: 1px solid #334155;
+            min-width: 80px;
+            transition: transform 0.2s;
         }
-        .kpi-mini .value { font-size: 1.3rem; font-weight: 800; color: #ffffff; }
-        .kpi-mini .label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; }
+        .grade-pill:hover { transform: scale(1.05); }
+        .grade-pill .g-name { font-size: 0.65rem; font-weight: 700; color: rgba(255,255,255,0.95); text-transform: uppercase; letter-spacing: 0.03em; }
+        .grade-pill .g-val { font-size: 1.15rem; font-weight: 800; color: #fff; line-height: 1.2; }
+        .grade-pill .g-unit { font-size: 0.55rem; color: rgba(255,255,255,0.7); }
+
+        .coverage-bar-outer {
+            background: #1e293b;
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+            margin: 6px 0;
+        }
+        .coverage-bar-inner {
+            height: 100%;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            transition: width 0.8s ease;
+        }
+
+        .export-card {
+            background: linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
+            border: 1px solid #334155;
+            border-radius: 14px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .export-card .ex-title {
+            font-size: 0.7rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.6rem;
+            font-weight: 600;
+        }
+
+        .section-divider {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(99,102,241,0.3), transparent);
+            margin: 1.5rem 0;
+        }
+
+        .stat-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(99,102,241,0.1);
+            color: #c7d2fe;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -844,47 +1041,56 @@ def render(username: str, password: str):
                 if _extraer_numero_pallet(pname) in calidad_dict:
                     pallets_con_qc += 1
 
-        st.markdown("---")
-        n_kpi = 5 if calidad_dict else 4
-        kpi_cols = st.columns(n_kpi)
-        with kpi_cols[0]:
-            st.markdown(f"""
-            <div class="kpi-mini">
-                <div class="label">📦 Pallets Únicos</div>
-                <div class="value">{fmt_numero(total_pallets)}</div>
-            </div>""", unsafe_allow_html=True)
-        with kpi_cols[1]:
-            st.markdown(f"""
-            <div class="kpi-mini">
-                <div class="label">⚖️ Total Kilogramos</div>
-                <div class="value">{fmt_numero(total_kg)}</div>
-            </div>""", unsafe_allow_html=True)
-        with kpi_cols[2]:
-            st.markdown(f"""
-            <div class="kpi-mini">
-                <div class="label">🍇 Productos</div>
-                <div class="value">{fmt_numero(total_productos)}</div>
-            </div>""", unsafe_allow_html=True)
-        with kpi_cols[3]:
-            st.markdown(f"""
-            <div class="kpi-mini">
-                <div class="label">🏢 Salas Activas</div>
-                <div class="value">{fmt_numero(salas_activas)}</div>
-            </div>""", unsafe_allow_html=True)
+        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+        kpi_data = [
+            ("📦", fmt_numero(total_pallets), "Pallets Únicos", "#6366f1", "linear-gradient(135deg,#6366f1,#818cf8)"),
+            ("⚖️", fmt_numero(total_kg), "Total Kilogramos", "#10b981", "linear-gradient(135deg,#10b981,#34d399)"),
+            ("🍇", fmt_numero(total_productos), "Productos", "#f59e0b", "linear-gradient(135deg,#f59e0b,#fbbf24)"),
+            ("🏢", fmt_numero(salas_activas), "Salas Activas", "#8b5cf6", "linear-gradient(135deg,#8b5cf6,#a78bfa)"),
+        ]
         if calidad_dict:
             pct_qc = round(pallets_con_qc / total_pallets * 100) if total_pallets > 0 else 0
             qc_color = "#22c55e" if pct_qc >= 80 else ("#f59e0b" if pct_qc >= 50 else "#ef4444")
-            with kpi_cols[4]:
+            qc_grad = f"linear-gradient(135deg,{qc_color},{qc_color}cc)"
+            kpi_data.append(("🔬", f"{pallets_con_qc}/{total_pallets}", f"Con Calidad ({pct_qc}%)", qc_color, qc_grad))
+
+        kpi_cols = st.columns(len(kpi_data))
+        for i, (icon, value, label, color, gradient) in enumerate(kpi_data):
+            with kpi_cols[i]:
+                delay = f"{i * 0.1}s"
                 st.markdown(f"""
-                <div class="kpi-mini" style="border-color:{qc_color};">
-                    <div class="label">🔬 Con Calidad</div>
-                    <div class="value" style="color:{qc_color};">{pallets_con_qc}/{total_pallets}</div>
+                <div class="kpi-card" style="animation-delay:{delay};">
+                    <div class="accent-bar" style="background:{gradient};"></div>
+                    <div class="icon-ring" style="background:{color}22;">{icon}</div>
+                    <div class="value">{value}</div>
+                    <div class="label">{label}</div>
                 </div>""", unsafe_allow_html=True)
 
-        st.markdown("---")
+        # --- COBERTURA QC ---
+        if calidad_dict and total_pallets > 0:
+            pct_coverage = round(pallets_con_qc / total_pallets * 100)
+            bar_color = "#22c55e" if pct_coverage >= 80 else ("#f59e0b" if pct_coverage >= 50 else "#ef4444")
+            st.markdown(f"""
+            <div style="background:rgba(30,41,59,0.6); border:1px solid #334155; border-radius:10px; padding:0.6rem 1rem; margin-top:0.8rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:0.72rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Cobertura de Calidad</span>
+                    <span style="font-size:0.8rem; color:{bar_color}; font-weight:700;">{pct_coverage}%</span>
+                </div>
+                <div class="coverage-bar-outer">
+                    <div class="coverage-bar-inner" style="width:{pct_coverage}%; background:linear-gradient(90deg,{bar_color},{bar_color}bb);"></div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
         # --- RESUMEN POR SALA ---
-        st.markdown("#### 🏢 Resumen por Sala de Proceso")
+        st.markdown("""
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:0.5rem;">
+            <span style="font-size:1.2rem;">🏢</span>
+            <span style="font-size:1.1rem; font-weight:700; color:#e0e7ff;">Resumen por Sala de Proceso</span>
+            <span class="stat-chip">%d salas</span>
+        </div>""" % salas_activas, unsafe_allow_html=True)
 
         # Agrupar pallets por sala
         salas_unicas = sorted(df['sala'].unique(), key=lambda x: x if x else "ZZZ")
@@ -902,14 +1108,18 @@ def render(username: str, password: str):
             if calidad_dict:
                 sala_con_qc = sum(1 for p in df_sala['pallet'].unique() if _extraer_numero_pallet(p) in calidad_dict)
                 if sala_con_qc > 0:
-                    qc_badge = f" | 🔬 {sala_con_qc} con QC"
+                    qc_pct_sala = round(sala_con_qc / pallets_sala * 100) if pallets_sala > 0 else 0
+                    qc_badge = f" | 🔬 {sala_con_qc}/{pallets_sala} QC ({qc_pct_sala}%)"
 
             # Desglose por grado
             grado_resumen = df_sala.groupby('grado')['kg'].sum().sort_values(ascending=False)
 
-            with st.expander(f"🏢 **{sala_label}** — {fmt_numero(kg_sala)} kg | {pallets_sala} pallets | {productos_sala} productos{qc_badge}", expanded=False):
+            # Porcentaje de kg respecto al total
+            pct_kg_total = round(kg_sala / total_kg * 100, 1) if total_kg > 0 else 0
 
-                # Mini KPIs de la sala
+            with st.expander(f"🏢 **{sala_label}** — {fmt_numero(kg_sala)} kg ({pct_kg_total}%) | {pallets_sala} pallets | {productos_sala} prod.{qc_badge}", expanded=False):
+
+                # Grade pills
                 gcols = st.columns(min(len(grado_resumen), 7))
                 for i, (grado, kg_g) in enumerate(grado_resumen.items()):
                     if i >= 7:
@@ -917,10 +1127,10 @@ def render(username: str, password: str):
                     color = GRADO_COLORES.get(grado, '#64748b')
                     with gcols[i]:
                         st.markdown(f"""
-                        <div style="background:{color}; padding:0.5rem; border-radius:8px; text-align:center;">
-                            <div style="font-size:0.7rem; color:rgba(255,255,255,0.9); font-weight:600;">{grado}</div>
-                            <div style="font-size:1.1rem; font-weight:800; color:#fff;">{fmt_numero(kg_g)}</div>
-                            <div style="font-size:0.6rem; color:rgba(255,255,255,0.8);">kg</div>
+                        <div class="grade-pill" style="background:linear-gradient(145deg,{color},{color}cc);">
+                            <div class="g-name">{grado}</div>
+                            <div class="g-val">{fmt_numero(kg_g)}</div>
+                            <div class="g-unit">kg</div>
                         </div>""", unsafe_allow_html=True)
 
                 st.markdown("")
@@ -993,8 +1203,13 @@ def render(username: str, password: str):
                             _render_calidad_pallet(registros, pallet_name)
 
         # --- TABLA DETALLADA COMPLETA ---
-        st.markdown("---")
-        st.markdown("#### 📋 Detalle Completo de Pallets")
+        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:0.5rem;">
+            <span style="font-size:1.2rem;">📋</span>
+            <span style="font-size:1.1rem; font-weight:700; color:#e0e7ff;">Detalle Completo de Pallets</span>
+            <span class="stat-chip">%d registros</span>
+        </div>""" % len(df), unsafe_allow_html=True)
 
         # Preparar DataFrame de display
         SALA_REVERSE = {v: k for k, v in SALA_MAP_INTERNAL.items()}
@@ -1028,10 +1243,17 @@ def render(username: str, password: str):
         )
 
         # --- EXPORTAR ---
-        st.markdown("---")
+        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:0.8rem;">
+            <span style="font-size:1.2rem;">💾</span>
+            <span style="font-size:1.1rem; font-weight:700; color:#e0e7ff;">Exportar Datos</span>
+        </div>""", unsafe_allow_html=True)
+
         col_exp1, col_exp2 = st.columns(2)
 
         with col_exp1:
+            st.markdown("""<div class="export-card"><div class="ex-title">Formato CSV</div></div>""", unsafe_allow_html=True)
             csv_data = df_display.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Descargar CSV",
@@ -1042,6 +1264,8 @@ def render(username: str, password: str):
             )
 
         with col_exp2:
+            qc_label = "con Calidad" if calidad_dict else ""
+            st.markdown(f"""<div class="export-card"><div class="ex-title">Formato Excel {qc_label}</div></div>""", unsafe_allow_html=True)
             try:
                 excel_bytes = _generar_excel_con_calidad(df_display, calidad_dict)
                 label_excel = "📊 Descargar Excel + Calidad" if calidad_dict else "📊 Descargar Excel"
@@ -1055,4 +1279,10 @@ def render(username: str, password: str):
             except Exception as e:
                 st.error(f"Error al preparar Excel: {e}")
     else:
-        st.info("👆 Selecciona los filtros y haz clic en **Consultar Pallets** para ver los datos")
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));
+            border:1px solid rgba(99,102,241,0.15); border-radius:14px; padding:2rem; text-align:center; margin:1rem 0;">
+            <div style="font-size:2.5rem; margin-bottom:0.5rem;">📊</div>
+            <div style="font-size:1rem; color:#a5b4fc; font-weight:600;">Selecciona los filtros y consultá</div>
+            <div style="font-size:0.8rem; color:#64748b; margin-top:0.3rem;">Usá el botón <strong style="color:#818cf8;">Consultar Pallets</strong> para cargar los datos</div>
+        </div>""", unsafe_allow_html=True)
