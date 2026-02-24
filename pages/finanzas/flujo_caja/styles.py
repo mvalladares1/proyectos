@@ -4,6 +4,14 @@ Estilos CSS para el Estado de Flujo de Efectivo
 
 ENTERPRISE_CSS = """
 <style>
+/* ============ IFRAME BODY RESET ============ */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
 /* ============ CUSTOM SCROLLBAR (Global - Celeste Unificado) ============ */
 /* Scrollbar Horizontal y Vertical para todo el documento */
 ::-webkit-scrollbar {
@@ -43,8 +51,8 @@ ENTERPRISE_CSS = """
 /* ============ CONTAINER & TABLE BASE ============ */
 .excel-container {
     width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto;
+    height: 100vh;
     border: 3px solid #334155;
     border-radius: 16px;
     background: linear-gradient(145deg, #0a0e1a 0%, #1e293b 100%);
@@ -81,25 +89,30 @@ ENTERPRISE_CSS = """
     position: relative;
 }
 
-/* ============ STICKY EXPORT TOOLBAR ============ */
-.excel-sticky-toolbar {
+/* ============ STICKY TOOLBAR ROW (inside <thead>) ============ */
+.excel-table thead tr.toolbar-row th {
     position: sticky;
     top: 0;
+    z-index: 310;
+    height: var(--sticky-toolbar-height);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%) !important;
+    border-bottom: 2px solid #334155;
+    padding: 4px 8px;
+    color: #ffffff;
+}
+
+.excel-table thead tr.toolbar-row th.toolbar-btn-cell {
+    position: sticky;
     left: 0;
     z-index: 320;
-    width: var(--frozen-area-width);
     min-width: var(--frozen-area-width);
-    max-width: var(--frozen-area-width);
-    height: var(--sticky-toolbar-height);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 10px;
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%);
     border-right: 3px solid #1e3a8a;
-    border-bottom: 2px solid #334155;
-    box-sizing: border-box;
+    text-align: center !important;
+}
+
+.excel-table thead tr.toolbar-row th.toolbar-spacer {
+    border-right: none;
+    border-left: none;
 }
 
 .excel-export-btn {
@@ -674,7 +687,7 @@ ENTERPRISE_CSS = """
 
 /* ============ DRAG & DROP ============ */
 .draggable {
-    cursor: move;
+    cursor: pointer;
 }
 
 .dragging {

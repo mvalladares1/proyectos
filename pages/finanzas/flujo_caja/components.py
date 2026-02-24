@@ -152,7 +152,7 @@ function exportVisibleTableToExcel() {
     };
 
     // Headers visibles (sin TOTAL izquierda)
-    const theadRows = Array.from(table.querySelectorAll('thead tr'));
+    const theadRows = Array.from(table.querySelectorAll('thead tr')).filter(tr => !tr.classList.contains('toolbar-row'));
     let headers = [];
     let headerRowsForCsv = [];
     if (theadRows.length >= 2) {

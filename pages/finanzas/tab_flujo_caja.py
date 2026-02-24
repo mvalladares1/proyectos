@@ -385,21 +385,26 @@ def render(username: str, password: str):
         
         # ========== GENERAR TABLA HTML ==========
         html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
-        html_parts.append('<div class="excel-sticky-toolbar"><button class="excel-export-btn" onclick="exportVisibleTableToExcel()">📥 Exportar Excel (Vista actual)</button></div>')
         html_parts.append('<table class="excel-table">')
         
         # HEADER
         if vista_semanal and semanas_por_mes:
-            # Vista semanal: Header de dos filas
-            # Fila 1: Meses con colspan
+            # Vista semanal: Header de tres filas (toolbar + meses + semanas)
+            num_weeks_total = sum(len(s) for s in semanas_por_mes.values())
             html_parts.append('<thead>')
+            # Toolbar row
+            html_parts.append('<tr class="toolbar-row">')
+            html_parts.append('<th class="toolbar-btn-cell" colspan="2"><button class="excel-export-btn" onclick="exportVisibleTableToExcel()">📥 Exportar Excel (Vista actual)</button></th>')
+            html_parts.append(f'<th class="toolbar-spacer" colspan="{num_weeks_total + 1}"></th>')
+            html_parts.append('</tr>')
+            # Fila 1: Meses con colspan
             html_parts.append('<tr class="header-meses">')
             html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
             html_parts.append('<th class="frozen-total-left" rowspan="2"><strong>TOTAL</strong></th>')
             
             for mes in meses_ordenados:
                 num_semanas = len(semanas_por_mes[mes])
-                html_parts.append(f'<th colspan="{num_semanas}" class="mes-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center; font-size: 14px; font-weight: 700; border-bottom: none;">{mes}</th>')
+                html_parts.append(f'<th colspan="{num_semanas}" class="mes-header" style="text-align: center; font-size: 14px; font-weight: 700; border-bottom: none;">{mes}</th>')
             
             html_parts.append('<th rowspan="2"><strong>TOTAL</strong></th>')
             html_parts.append('</tr>')
@@ -410,18 +415,25 @@ def render(username: str, password: str):
                 for semana in semanas_por_mes[mes]:
                     # Extraer número de semana del formato 2026-W05
                     num_semana = semana.split('-W')[1] if '-W' in semana else semana
-                    html_parts.append(f'<th style="font-size: 11px; background: #2d3748; padding: 4px 8px;">S{int(num_semana)}</th>')
+                    html_parts.append(f'<th style="font-size: 11px; padding: 4px 8px;">S{int(num_semana)}</th>')
             html_parts.append('</tr>')
             html_parts.append('</thead>')
         else:
-            # Vista mensual: Header simple
-            html_parts.append('<thead><tr>')
+            # Vista mensual: Header con toolbar
+            html_parts.append('<thead>')
+            # Toolbar row
+            html_parts.append('<tr class="toolbar-row">')
+            html_parts.append('<th class="toolbar-btn-cell" colspan="2"><button class="excel-export-btn" onclick="exportVisibleTableToExcel()">📥 Exportar Excel (Vista actual)</button></th>')
+            html_parts.append(f'<th class="toolbar-spacer" colspan="{len(meses_lista) + 1}"></th>')
+            html_parts.append('</tr>')
+            html_parts.append('<tr>')
             html_parts.append('<th class="frozen">CONCEPTO</th>')
             html_parts.append('<th class="frozen-total-left"><strong>TOTAL</strong></th>')
             for mes in meses_lista:
                 html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
             html_parts.append('<th><strong>TOTAL</strong></th>')
-            html_parts.append('</tr></thead>')
+            html_parts.append('</tr>')
+            html_parts.append('</thead>')
         
         # BODY
         html_parts.append('<tbody>')
@@ -486,12 +498,8 @@ def render(username: str, password: str):
                 row_classes = [row_class]
                 if has_details:
                     row_classes.extend(["expandable", f"parent-{c_id_safe}"])
-                if c_tipo == "LINEA":
-                    row_classes.append("draggable")
 
                 attrs = []
-                if c_tipo == "LINEA":
-                    attrs.append('draggable="true"')
                 if has_details:
                     attrs.append(f'onclick="toggleConcept(\'{c_id_safe}\')"')
 
