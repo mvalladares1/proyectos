@@ -1113,20 +1113,55 @@ class RealProyectadoCalculator:
                 partners_data = self.odoo.search_read(
                     'res.partner',
                     [['id', 'in', partner_ids]],
-                    ['id', 'name', 'x_studio_categora_de_contacto'],
+                    ['id', 'name', 'x_studio_categora_de_contacto', 'parent_id'],
                     limit=10000
                 )
+                
+                # Separar partners con parent_id para buscar categoría del padre
+                partners_con_padre = {}
                 for p in partners_data:
-                    categoria = p.get('x_studio_categora_de_contacto', False)
-                    if categoria and isinstance(categoria, (list, tuple)):
-                        categoria = categoria[1]
-                    elif not categoria or categoria == 'False':
-                        categoria = 'Sin Categoría'
-
-                    partners_info[p['id']] = {
-                        'name': p.get('name', 'Desconocido'),
-                        'categoria': categoria
-                    }
+                    pid = p['id']
+                    parent_data = p.get('parent_id')
+                    parent_id = parent_data[0] if isinstance(parent_data, (list, tuple)) and parent_data else None
+                    
+                    if parent_id:
+                        partners_con_padre[pid] = parent_id
+                    else:
+                        categoria = p.get('x_studio_categora_de_contacto', False)
+                        if categoria and isinstance(categoria, (list, tuple)):
+                            categoria = categoria[1]
+                        elif not categoria or categoria == 'False':
+                            categoria = 'Sin Categoría'
+                        partners_info[pid] = {
+                            'name': p.get('name', 'Desconocido'),
+                            'categoria': categoria
+                        }
+                
+                # Para partners hijos, buscar categoría del padre
+                if partners_con_padre:
+                    parent_ids_unicos = list(set(partners_con_padre.values()))
+                    padres_data = self.odoo.search_read(
+                        'res.partner',
+                        [['id', 'in', parent_ids_unicos]],
+                        ['id', 'x_studio_categora_de_contacto'],
+                        limit=10000
+                    )
+                    padres_categorias = {}
+                    for padre in padres_data:
+                        cat = padre.get('x_studio_categora_de_contacto', False)
+                        if cat and isinstance(cat, (list, tuple)):
+                            cat = cat[1]
+                        elif not cat or cat == 'False':
+                            cat = 'Sin Categoría'
+                        padres_categorias[padre['id']] = cat
+                    
+                    # Asignar a cada hijo la categoría del padre
+                    for pid, parent_id in partners_con_padre.items():
+                        child_data = next((p for p in partners_data if p['id'] == pid), {})
+                        partners_info[pid] = {
+                            'name': child_data.get('name', 'Desconocido'),
+                            'categoria': padres_categorias.get(parent_id, 'Sin Categoría')
+                        }
             
             # Estructura jerárquica: Estados -> Categorías -> Clientes
             estados = {}
@@ -1274,15 +1309,15 @@ class RealProyectadoCalculator:
                     
                 elif payment_state == 'partial':
                     # Factura parcialmente pagada:
-                    # - Cobrado va a "Parcialmente Pagadas"
-                    # - Pendiente (residual) va a "No Pagadas"
+                    # - Cobrado va a "Parcialmente Pagadas" como REAL
+                    # - Pendiente (residual) TAMBIÉN va a "Parcialmente Pagadas" como PROYECTADO
+                    #   (NO a "No Pagadas", ya que la factura SÍ tiene pagos parciales)
                     if cobrado > 0:
                         estado_parcial, categoria_parcial, cliente_parcial = agregar_a_estado('partial', cobrado, periodo_real, es_real=True)
                         if len(cliente_parcial.get('facturas', [])) < 50:
                             cliente_parcial['facturas'].append(factura_info.copy())
                     if pendiente > 0:
-                        estado_nopaid, categoria_nopaid, cliente_nopaid = agregar_a_estado('not_paid', pendiente, periodo_proyectado, es_real=False)
-                        # No duplicar la factura en no pagadas, ya está en parciales
+                        estado_parcial2, categoria_parcial2, cliente_parcial2 = agregar_a_estado('partial', pendiente, periodo_proyectado, es_real=False)
                     
                 elif payment_state == 'in_payment':
                     # En proceso de pago: va a su categoría
