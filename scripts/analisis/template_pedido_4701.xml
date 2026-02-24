@@ -1,0 +1,174 @@
+<data>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[5]" position="after">
+    <th>
+      <span>Subtotal</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[5]" position="after">
+    <td>
+      <span t-field="line.price_subtotal"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">100</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/thead[1]/tr[1]/th[5]/span[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[5]/span[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/thead[1]/tr[1]/th[5]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[5]" position="replace"/>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]/span" position="replace">
+    <span>Descripcion</span>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[3]/span" position="replace">
+    <span>Precio<br/></span>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]" position="before">
+    <th>
+      <span>Origen</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[1]" position="before">
+    <td>
+      <span t-field="line.invoice_origin"/>
+    </td>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"integer"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-options-precision_digits">2</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"float"</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-options-precision">2</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[4]/span[1]" position="attributes">
+    <attribute name="t-options-precision">2</attribute>
+    <attribute name="t-options-widget">"float"</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[1]" position="after">
+    <th>
+      <span>Folio (SII)</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[1]" position="after">
+    <td>
+      <span t-field="line.sii_number"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">101</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[2]" position="replace">
+    <th>
+      <span>Guia SII</span>
+      <br/>
+    </th>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]/span[1]" position="attributes">
+    <attribute name="t-field">o.sii_number</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/thead[1]/tr[1]/th[2]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[2]" position="replace"/>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[2]/span" position="replace">
+    <span>Origen / Descripcion</span>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[2]/span" position="replace">
+    <span>Pedido de Origen / Descripcion</span>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/thead[1]/tr[1]/th[1]" position="replace"/>
+  <xpath expr="/t/t/div[2]/div[1]/div" position="after">
+    <table class="table o_report_block_table">
+      <thead>
+        <tr>
+          <th>
+            <span>Name</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr t-foreach="line.purchase_order_id.picking_ids" t-as="table_line">
+          <td>
+            <span t-field="table_line.display_name"/>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th" position="before">
+    <th>
+      <span>Guía de Despacho</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/tbody/tr/td" position="before">
+    <td>
+      <span t-field="table_line.x_studio_gua_de_despacho"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[2]/thead/tr/th[2]/span" position="replace">
+    <span>Recepcion<br/></span>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/thead/tr/th[1]" position="before">
+    <th>
+      <span>Línea de pedido de compra</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/tbody/t[3]/tr/t[1]/td[1]" position="before">
+    <td>
+      <span t-field="line.purchase_line_id"/>
+    </td>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[1]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids.x_studio_gua_de_despacho</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table[1]/thead/tr/th[1]/span" position="replace">
+    <span>GUIAS<br/></span>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]/tr[1]/td[2]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/thead[1]/tr[1]/th[2]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]/tbody[1]" position="replace"/>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[2]" position="replace"/>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[2]" position="after">
+    <th>
+      <span>Referencia del pedido</span>
+    </th>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/tr/t[1]/td[2]" position="after">
+    <td>
+      <span t-field="line.purchase_line_id.order_id"/>
+    </td>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/tbody/t[3]/t[4]/tr/td" position="attributes">
+    <attribute name="colspan">102</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.x_studio_gua_de_despacho</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-field">line.purchase_line_id.order_id.picking_ids.date</attribute>
+  </xpath>
+  <xpath expr="/t[1]/t[1]/div[2]/div[1]/table[1]/tbody[1]/t[3]/tr[1]/t[1]/td[3]/span[1]" position="attributes">
+    <attribute name="t-options-widget">"date"</attribute>
+  </xpath>
+  <xpath expr="/t/t/div[2]/div[1]/table/thead/tr/th[3]/span" position="replace">
+    <span>Fecha de Recepción<br/></span>
+  </xpath>
+</data>

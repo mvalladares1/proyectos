@@ -38,11 +38,27 @@ services:
       - API_URL=http://127.0.0.1:8002
       - STREAMLIT_SERVER_PORT=8502
       - STREAMLIT_SERVER_BASE_URL_PATH=/dashboards-dev
+    volumes:
+      - ./data/calidad:/app/data/calidad
     network_mode: "host"
     depends_on:
       api-dev:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8502/dashboards-dev/_stcore/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
 networks:
   rio-network:

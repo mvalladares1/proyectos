@@ -6,8 +6,20 @@ Cliente se obtiene automáticamente desde x_studio_clientes de la orden
 import streamlit as st
 import httpx
 import re
+import time
 from typing import List, Dict
-from produccion.shared import API_URL
+from .shared import API_URL
+
+
+def _throttle_rerun(key: str = "etiq", min_interval: float = 1.0) -> bool:
+    """Limita la frecuencia de reruns. Retorna True si se puede hacer rerun."""
+    now = time.time()
+    last_key = f"_throttle_last_{key}"
+    last_time = st.session_state.get(last_key, 0)
+    if now - last_time < min_interval:
+        return False
+    st.session_state[last_key] = now
+    return True
 
 
 def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
@@ -21,15 +33,19 @@ def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
     return '', nombre_producto
 
 
-def extraer_peso_de_descripcion(descripcion: str) -> int:
+def extraer_peso_de_descripcion(descripcion: str) -> str:
     """
     Extrae el peso en kg de la descripción del producto.
-    Ejemplo: "FB MK Conv. IQF A 10 kg en Caja" -> 10
+    Ejemplo: "FB MK Conv. IQF A 10 kg en Caja" -> "10"
+    Ejemplo: "AR HB Org. S/C PSP 13,61 kg en Caja" -> "13,61"
     """
+    match = re.search(r'(\d+[.,]\d+)\s*kg', descripcion, re.IGNORECASE)
+    if match:
+        return match.group(1)  # Devuelve con coma/punto tal cual
     match = re.search(r'(\d+)\s*kg', descripcion, re.IGNORECASE)
     if match:
-        return int(match.group(1))
-    return 10  # Por defecto 10 kg
+        return match.group(1)
+    return "10"  # Por defecto
 
 
 def calcular_fecha_vencimiento(fecha_elaboracion: str, años: int = 2) -> str:
@@ -51,6 +67,41 @@ def calcular_fecha_vencimiento(fecha_elaboracion: str, años: int = 2) -> str:
         return fecha_elaboracion  # Si no se puede parsear, devolver la misma
     except Exception:
         return fecha_elaboracion
+
+
+def imprimir_etiqueta(html_etiqueta: str, height: int = 300):
+    """
+    Renderiza la etiqueta en un iframe con botón de imprimir.
+    Usa window.print() directamente en el iframe (no window.open que los
+    navegadores bloquean como popup).
+    """
+    import base64
+    b64 = base64.b64encode(html_etiqueta.encode('utf-8')).decode()
+    wrapper = f"""
+    <html><head><style>
+        body {{ margin:0; font-family:Arial,sans-serif; }}
+        .btn-print {{
+            display:block; width:100%; padding:8px; margin-bottom:6px;
+            background:#2563eb; color:#fff; border:none; border-radius:6px;
+            font-size:14px; font-weight:600; cursor:pointer;
+        }}
+        .btn-print:hover {{ background:#1d4ed8; }}
+        iframe {{ border:1px solid #ddd; border-radius:4px; }}
+    </style></head><body>
+    <button class="btn-print" onclick="printLabel()">&#128424; Imprimir etiqueta</button>
+    <iframe id="labelFrame" srcdoc="" style="width:100%;height:{height - 50}px;"></iframe>
+    <script>
+        var html = atob("{b64}");
+        document.getElementById('labelFrame').srcdoc = html;
+        function printLabel() {{
+            var f = document.getElementById('labelFrame');
+            f.contentWindow.focus();
+            f.contentWindow.print();
+        }}
+    </script>
+    </body></html>
+    """
+    st.components.v1.html(wrapper, height=height, scrolling=False)
 
 
 def buscar_ordenes(username: str, password: str, termino: str):
@@ -369,24 +420,160 @@ def generar_etiqueta_pallet_generica(datos: Dict) -> str:
 
 
 def render(username: str, password: str):
-    """Renderiza el tab de etiquetas (pallets y cajas)."""
+    """Renderiza el tab de etiquetas (tarjas pallet y etiquetas caja)."""
     
     st.header("🏷️ Generación de Etiquetas")
     
-    # Selector de tipo de etiqueta
-    tipo_etiqueta = st.radio(
-        "Tipo de etiqueta",
-        ["📦 ETIQUETAS POR PALLET", "🎁 ETIQUETAS POR CAJA"],
-        horizontal=True,
-        key="etiq_tipo"
-    )
+    # ==================== ESTADO COMPARTIDO ====================
+    if "etiq_orden_seleccionada" not in st.session_state:
+        st.session_state.etiq_orden_seleccionada = None
+    if "etiq_pallets_cargados" not in st.session_state:
+        st.session_state.etiq_pallets_cargados = []
+    if "etiq_ordenes_encontradas" not in st.session_state:
+        st.session_state.etiq_ordenes_encontradas = []
+    if "etiq_pallets_carga_intentada" not in st.session_state:
+        st.session_state.etiq_pallets_carga_intentada = False
     
-    st.divider()
+    # ==================== PASO 1: BUSCAR ORDEN (COMPARTIDO) ====================
+    st.subheader("1️⃣ Buscar Orden de Producción")
     
-    if tipo_etiqueta == "📦 ETIQUETAS POR PALLET":
-        render_etiquetas_pallet(username, password)
-    else:
-        render_etiquetas_caja(username, password)
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        termino_busqueda = st.text_input(
+            "Buscar orden",
+            placeholder="Ej: WH/MO/12345",
+            help="Ingresa el nombre o referencia de la orden",
+            key="etiq_termino_busqueda"
+        )
+    with col2:
+        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="etiq_btn_buscar")
+    
+    if btn_buscar and termino_busqueda:
+        with st.spinner("Buscando órdenes..."):
+            try:
+                ordenes = buscar_ordenes(username, password, termino_busqueda)
+                st.session_state.etiq_ordenes_encontradas = ordenes
+                if ordenes:
+                    st.success(f"✅ Se encontraron {len(ordenes)} órdenes")
+                else:
+                    st.warning("⚠️ No se encontraron órdenes")
+            except Exception as e:
+                st.error(f"❌ Error al buscar órdenes: {e}")
+                st.session_state.etiq_ordenes_encontradas = []
+    
+    # Mostrar órdenes encontradas
+    if st.session_state.etiq_ordenes_encontradas:
+        st.write("**Órdenes encontradas:**")
+        for orden in st.session_state.etiq_ordenes_encontradas:
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.write(f"**{orden.get('name', '')}**")
+                product_name = orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else orden.get('product_name', '')
+                st.caption(f"Producto: {product_name}")
+            with col2:
+                st.write(f"Estado: {orden.get('state', '')}")
+                cliente_auto = orden.get('cliente_nombre', '')
+                if cliente_auto:
+                    st.caption(f"👤 Cliente: {cliente_auto}")
+            with col3:
+                if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
+                    st.session_state.etiq_orden_seleccionada = orden
+                    st.session_state.etiq_pallets_cargados = []
+                    st.session_state.etiq_pallets_carga_intentada = False
+                    # Auto-cargar pallets
+                    try:
+                        pallets = obtener_pallets_orden(username, password, orden.get('name'))
+                        st.session_state.etiq_pallets_cargados = pallets
+                        st.session_state.etiq_pallets_carga_intentada = True
+                    except Exception:
+                        st.session_state.etiq_pallets_carga_intentada = True
+                    if _throttle_rerun("etiq_select"):
+                        st.rerun()
+    
+    # ==================== PASO 2: ORDEN SELECCIONADA (COMPARTIDO) ====================
+    if st.session_state.etiq_orden_seleccionada:
+        orden = st.session_state.etiq_orden_seleccionada
+        product_name = orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else orden.get('product_name', '')
+        cliente_nombre = orden.get('cliente_nombre', '')
+        
+        st.divider()
+        st.subheader("2️⃣ Orden Seleccionada")
+        st.info(f"📦 **{orden.get('name')}** — {product_name}")
+        if cliente_nombre:
+            st.success(f"👤 Cliente: **{cliente_nombre}**")
+        
+        pallets = st.session_state.etiq_pallets_cargados
+        if pallets:
+            st.write(f"✅ **{len(pallets)} pallets cargados**")
+        elif st.session_state.etiq_pallets_carga_intentada:
+            # Ya se intentó cargar y no hay pallets
+            st.warning("⚠️ No se encontraron pallets para esta orden")
+        else:
+            # Auto-cargar pallets si aún no se intentó
+            with st.spinner("Cargando pallets..."):
+                try:
+                    pallets = obtener_pallets_orden(username, password, orden.get('name'))
+                    st.session_state.etiq_pallets_cargados = pallets
+                    st.session_state.etiq_pallets_carga_intentada = True
+                    if pallets and _throttle_rerun("etiq_load"):
+                        st.rerun()
+                    elif not pallets:
+                        st.warning("⚠️ No se encontraron pallets para esta orden")
+                except Exception as e:
+                    st.session_state.etiq_pallets_carga_intentada = True
+                    st.error(f"❌ Error al cargar pallets: {e}")
+        
+        if st.button("❌ Cambiar Orden", use_container_width=False, key="etiq_btn_cambiar"):
+            st.session_state.etiq_orden_seleccionada = None
+            st.session_state.etiq_pallets_cargados = []
+            st.session_state.etiq_ordenes_encontradas = []
+            st.session_state.etiq_pallets_carga_intentada = False
+            if _throttle_rerun("etiq_cambiar"):
+                st.rerun()
+        
+        # ==================== PASO 3: SECCIONES DE ETIQUETAS ====================
+        if st.session_state.etiq_pallets_cargados:
+            st.divider()
+            
+            # Clasificar pallets en IQF (cliente) vs Subproductos
+            pallets_iqf = []
+            pallets_sub = []
+            
+            _SUBPRODUCTO_KEYWORDS = ['PSP', 'Whole', 'Broken', 'W&B', 'Desecho', 'Jugo']
+            
+            for p in st.session_state.etiq_pallets_cargados:
+                pid = p.get('product_id')
+                pname = pid[1] if isinstance(pid, list) else str(pid or '')
+                _, desc = extraer_codigo_descripcion(pname)
+                desc_upper = desc.upper()
+                
+                if any(kw.upper() in desc_upper for kw in _SUBPRODUCTO_KEYWORDS):
+                    pallets_sub.append(p)
+                else:
+                    pallets_iqf.append(p)
+            
+            # ---------- Tarja por Pallet (siempre disponible) ----------
+            tipo_etiqueta = st.radio(
+                "Tipo de etiqueta",
+                ["📦 Tarja por Pallet", "🏷️ Etiquetas por Caja"],
+                horizontal=True,
+                key="etiq_tipo"
+            )
+            
+            st.divider()
+            
+            if tipo_etiqueta == "📦 Tarja por Pallet":
+                render_etiquetas_pallet(username, password)
+            else:
+                # ---------- ETIQUETAS POR CAJA: 2 secciones ----------
+                if pallets_iqf:
+                    render_seccion_iqf(username, password, pallets_iqf)
+                
+                if pallets_sub:
+                    render_seccion_subproductos(username, password, pallets_sub)
+                
+                if not pallets_iqf and not pallets_sub:
+                    st.warning("No se encontraron pallets para generar etiquetas.")
 
 
 # ==================== DISEÑOS DE ETIQUETAS POR CLIENTE ====================
@@ -484,279 +671,381 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
 
 def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta de caja para cliente LANNA AGRO INDUSTRY.
-    Tamaño: 100mm x 50mm. Checkbox MD marcado.
+    Genera HTML de etiqueta(s) de caja para cliente LANNA AGRO INDUSTRY.
+    Tamaño: 100mm x 100mm — estilo LACO.
+    Genera N etiquetas (una por caja/cartón) con CARTON NO enumerado.
+    NET WEIGHT fijo 10KG. Solo fecha, lote y pallet vienen de Odoo.
     """
-    return _generar_etiqueta_100x50(datos, mostrar_md=True, md_checked=True)
+    codigo = datos.get('codigo_producto', '')
+    nombre = datos.get('nombre_producto', '')
+    fecha_elab = datos.get('fecha_elaboracion', '').replace('.', '-')
+    fecha_venc = datos.get('fecha_vencimiento', '').replace('.', '-')
+    lote = datos.get('lote_produccion', '')
+    pallet = datos.get('numero_pallet', '')
+
+    # Calcular cantidad de cajas (cartones)
+    cantidad_cajas = datos.get('cantidad_cajas', 0)
+    if not cantidad_cajas:
+        peso_pallet = datos.get('peso_pallet_kg', 0)
+        cantidad_cajas = max(int(peso_pallet / 10), 1) if peso_pallet else 1
+
+    # Generar una etiqueta por cada cartón
+    labels_html = ""
+    for i in range(1, cantidad_cajas + 1):
+        labels_html += f"""
+        <div class="etiqueta">
+            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{codigo}</span></div>
+            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{nombre}</span></div>
+            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">10KG</span></div>
+            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
+            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
+            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
+            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18&deg;C</span></div>
+            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
+            <div class="campo"><span class="label">CARTON NO.: </span><span class="valor">{i}</span></div>
+            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">LACO</span></div>
+        </div>
+        """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 100mm;
+                margin: 0;
+            }}
+            * {{
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }}
+            html, body {{
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+            }}
+            .etiqueta {{
+                width: 100mm;
+                height: 100mm;
+                padding: 5mm;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                page-break-after: always;
+                page-break-inside: avoid;
+            }}
+            .etiqueta:last-child {{
+                page-break-after: auto;
+            }}
+            .campo {{
+                font-size: 12px;
+                margin: 2px 0;
+                line-height: 1.5;
+            }}
+            .campo .label {{
+                font-weight: normal;
+            }}
+            .campo .valor {{
+                font-weight: bold;
+            }}
+        </style>
+    </head>
+    <body>
+        {labels_html}
+    </body>
+    </html>
+    """
+    return html
 
 
-# Mapeo de clientes a sus funciones de diseño
 DISEÑOS_ETIQUETAS_CAJA = {
     "TRONADOR": generar_etiqueta_caja_tronador,
     "TRONADOR SAC": generar_etiqueta_caja_tronador,
     "LANNA": generar_etiqueta_caja_lanna,
     "LANNA AGRO": generar_etiqueta_caja_lanna,
     "LANNA AGRO INDUSTRY": generar_etiqueta_caja_lanna,
+    "LACO": generar_etiqueta_caja_lanna,
 }
 
 
-def render_etiquetas_caja(username: str, password: str):
-    """Renderiza la sección de etiquetas por caja."""
+def generar_etiqueta_caja_generica(datos: Dict) -> str:
+    """
+    Genera HTML de etiqueta genérica (sin cliente).
+    Tamaño: 100mm x 50mm, sin borde.
+    """
+    nombre = datos.get('nombre_producto', '')
+    fecha_elab = datos.get('fecha_elaboracion', '')
+    fecha_venc = datos.get('fecha_vencimiento', '')
+    lote = datos.get('lote_produccion', '')
+    pallet = datos.get('numero_pallet', '')
+    peso = datos.get('peso_neto_kg', '10')
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 50mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 50mm;
+                    margin: 0;
+                    padding: 2mm 3mm;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 2mm 3mm;
+                margin: 0;
+                width: 94mm;
+                height: 46mm;
+                font-size: 9px;
+                line-height: 1.35;
+            }}
+            .titulo {{
+                font-size: 12px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 3px;
+            }}
+            .linea {{
+                margin: 1px 0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="titulo">{nombre}</div>
+        <div class="linea">Fecha de elaboraci&oacute;n: {fecha_elab} /  Fecha de vencimiento: {fecha_venc}</div>
+        <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
+        <div class="linea">Peso Neto: {peso} kg</div>
+        <div class="linea">PRODUCTO CONGELADO</div>
+        <div class="linea">Planta: Rio Futuro Procesos Spa</div>
+        <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+        <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+        <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
+        <div class="linea">C&oacute;digo SAG Planta: 105721</div>
+    </body>
+    </html>
+    """
+    return html
+
+
+def _get_lot_name(pallet: Dict) -> str:
+    """Extrae nombre de lote del pallet."""
+    lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
+    if not lot_name:
+        lot_id = pallet.get('lot_id')
+        lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
+    return lot_name
+
+
+def _agrupar_pallets_por_producto(pallets: List[Dict]) -> Dict:
+    """Agrupa pallets por product_id, devuelve dict {product_key: {descripcion, codigo, pallets}}."""
+    grupos = {}
+    for p in pallets:
+        pid = p.get('product_id')
+        if not pid:
+            continue
+        pkey = pid[0] if isinstance(pid, list) else pid
+        pname = pid[1] if isinstance(pid, list) else str(pid)
+        codigo, desc = extraer_codigo_descripcion(pname)
+        if pkey not in grupos:
+            grupos[pkey] = {'codigo': codigo, 'descripcion': desc, 'pallets': []}
+        grupos[pkey]['pallets'].append(p)
+    return grupos
+
+
+def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
+    """Sección ETIQUETAS CLIENTES (IQF) — etiquetas por caja con diseño de cliente."""
     
-    # Inicializar estado
-    if "etiq_caja_orden_seleccionada" not in st.session_state:
-        st.session_state.etiq_caja_orden_seleccionada = None
-    if "etiq_caja_pallets_cargados" not in st.session_state:
-        st.session_state.etiq_caja_pallets_cargados = []
-    if "etiq_caja_ordenes_encontradas" not in st.session_state:
-        st.session_state.etiq_caja_ordenes_encontradas = []
+    orden = st.session_state.etiq_orden_seleccionada
+    cliente_nombre = orden.get('cliente_nombre', '')
     
-    # ==================== PASO 1: BUSCAR ORDEN ====================
-    st.subheader("1️⃣ Buscar Orden de Producción")
+    st.subheader("📋 ETIQUETAS CLIENTES (IQF)")
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        termino_busqueda = st.text_input(
-            "Buscar orden",
-            placeholder="Ej: WH/MO/12345",
-            help="Ingresa el nombre o referencia de la orden",
-            key="etiq_caja_termino_busqueda"
-        )
+    # Buscar diseño del cliente
+    cliente_key = None
+    for key in DISEÑOS_ETIQUETAS_CAJA.keys():
+        if key.upper() in cliente_nombre.upper():
+            cliente_key = key
+            break
     
-    with col2:
-        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="etiq_caja_btn_buscar")
+    if not cliente_key:
+        st.warning(f"⚠️ No hay diseño de etiqueta de cliente para: **{cliente_nombre or '(sin cliente)'}**")
+        st.info("Clientes con diseño disponible: " + ", ".join(set(DISEÑOS_ETIQUETAS_CAJA.keys())))
+        st.caption("Se usará la etiqueta genérica para estos productos IQF.")
+        # Fallback: usar genérica
+        render_seccion_subproductos(username, password, pallets_iqf, titulo="📋 IQF (Etiqueta Genérica)")
+        return
     
-    if btn_buscar and termino_busqueda:
-        with st.spinner("Buscando órdenes..."):
-            try:
-                ordenes = buscar_ordenes(username, password, termino_busqueda)
-                st.session_state.etiq_caja_ordenes_encontradas = ordenes
-                
-                if ordenes:
-                    st.success(f"✅ Se encontraron {len(ordenes)} órdenes")
-                else:
-                    st.warning("⚠️ No se encontraron órdenes")
-                    
-            except Exception as e:
-                st.error(f"❌ Error al buscar órdenes: {e}")
-                st.session_state.etiq_caja_ordenes_encontradas = []
+    funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
     
-    # Mostrar órdenes encontradas
-    if st.session_state.etiq_caja_ordenes_encontradas:
-        st.write("**Órdenes encontradas:**")
-        
-        for orden in st.session_state.etiq_caja_ordenes_encontradas:
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                st.write(f"**{orden.get('name', '')}**")
-            with col2:
-                st.write(f"📦 {orden.get('product_name', '')[:40]}...")
-            with col3:
-                if st.button("Seleccionar", key=f"etiq_caja_sel_{orden.get('id')}"):
-                    st.session_state.etiq_caja_orden_seleccionada = orden
-                    st.session_state.etiq_caja_pallets_cargados = []
-                    st.rerun()
+    grupos = _agrupar_pallets_por_producto(pallets_iqf)
     
-    # ==================== PASO 2: CARGAR PALLETS ====================
-    if st.session_state.etiq_caja_orden_seleccionada:
-        orden = st.session_state.etiq_caja_orden_seleccionada
+    for pkey, grupo in grupos.items():
+        desc = grupo['descripcion']
+        pallets = grupo['pallets']
         
-        st.divider()
-        st.subheader("2️⃣ Orden Seleccionada")
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.info(f"**{orden.get('name')}** - {orden.get('product_name', '')}")
-            cliente_nombre = orden.get('cliente_nombre', 'No especificado')
-            st.write(f"👤 **Cliente:** {cliente_nombre}")
-            
-            # Verificar si hay diseño para este cliente
-            cliente_key = None
-            for key in DISEÑOS_ETIQUETAS_CAJA.keys():
-                if key.upper() in cliente_nombre.upper():
-                    cliente_key = key
-                    break
-            
-            if cliente_key:
-                st.success(f"✅ Diseño de etiqueta disponible para: {cliente_key}")
-            else:
-                st.warning(f"⚠️ No hay diseño configurado para el cliente: {cliente_nombre}")
-        
-        with col2:
-            if st.button("📥 Cargar Pallets", type="primary", use_container_width=True, key="etiq_caja_cargar"):
-                with st.spinner("Cargando pallets..."):
-                    try:
-                        pallets = obtener_pallets_orden(username, password, orden.get('name'))
-                        st.session_state.etiq_caja_pallets_cargados = pallets
-                        if pallets:
-                            st.success(f"✅ {len(pallets)} pallets cargados")
-                        else:
-                            st.warning("⚠️ No se encontraron pallets")
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
-    
-    # ==================== PASO 3: GENERAR ETIQUETAS ====================
-    if st.session_state.etiq_caja_pallets_cargados:
-        st.divider()
-        st.subheader("3️⃣ Generar Etiquetas de Cajas")
-        
-        pallets = st.session_state.etiq_caja_pallets_cargados
-        orden = st.session_state.etiq_caja_orden_seleccionada
-        cliente_nombre = orden.get('cliente_nombre', '')
-        
-        # Buscar diseño del cliente
-        cliente_key = None
-        for key in DISEÑOS_ETIQUETAS_CAJA.keys():
-            if key.upper() in cliente_nombre.upper():
-                cliente_key = key
-                break
-        
-        if not cliente_key:
-            st.error(f"❌ No hay diseño de etiqueta configurado para el cliente: {cliente_nombre}")
-            st.info("Clientes con diseño disponible: " + ", ".join(DISEÑOS_ETIQUETAS_CAJA.keys()))
-            return
-        
-        funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
-        
-        st.write(f"**{len(pallets)} pallets disponibles** - Genera etiquetas para las cajas de cada pallet")
+        st.markdown(f"#### 📦 {desc}")
+        st.caption(f"{len(pallets)} pallets — Diseño: {cliente_key}")
         
         for pallet in pallets:
-            with st.expander(f"📦 {pallet.get('package_name', '')} - {pallet.get('cantidad_cajas', 0)} cajas"):
-                codigo_prod, desc_prod = extraer_codigo_descripcion(pallet.get('producto_nombre', ''))
-                lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
-                
-                # Extraer peso de la descripción del producto
-                peso_caja = extraer_peso_de_descripcion(desc_prod)
-                
-                # Calcular fecha de vencimiento (2 años después de elaboración)
+            with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
+                lot_name = _get_lot_name(pallet)
                 fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
                 fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
                 
                 datos_etiqueta = {
-                    'nombre_producto': desc_prod,
-                    'codigo_producto': codigo_prod,
-                    'peso_caja_kg': peso_caja,
+                    'nombre_producto': desc,
+                    'codigo_producto': grupo['codigo'],
+                    'peso_caja_kg': extraer_peso_de_descripcion(desc),
+                    'fecha_elaboracion': fecha_elab,
+                    'fecha_vencimiento': fecha_venc,
+                    'lote_produccion': lot_name,
+                    'numero_pallet': pallet.get('package_name', ''),
+                    'cliente_nombre': cliente_nombre,
+                    'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
+                    'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
+                }
+                
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pallet.get('package_id')}", use_container_width=True):
+                    html_print = funcion_diseño(datos_etiqueta)
+                    imprimir_etiqueta(html_print, height=420)
+    
+    st.divider()
+
+
+def render_seccion_subproductos(username: str, password: str, pallets_sub: List[Dict], titulo: str = "📋 ETIQUETAS SUBPRODUCTOS"):
+    """Sección ETIQUETAS SUBPRODUCTOS — etiqueta genérica 100×50mm."""
+    
+    st.subheader(titulo)
+    
+    grupos = _agrupar_pallets_por_producto(pallets_sub)
+    
+    for pkey, grupo in grupos.items():
+        desc = grupo['descripcion']
+        peso_neto = extraer_peso_de_descripcion(desc)
+        pallets = grupo['pallets']
+        
+        st.markdown(f"#### 📦 {desc}")
+        st.caption(f"{len(pallets)} pallets — Etiqueta genérica 100×50mm")
+        
+        for pallet in pallets:
+            with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
+                lot_name = _get_lot_name(pallet)
+                fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+                fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
+                
+                datos_etiqueta = {
+                    'nombre_producto': desc,
+                    'peso_neto_kg': peso_neto,
                     'fecha_elaboracion': fecha_elab,
                     'fecha_vencimiento': fecha_venc,
                     'lote_produccion': lot_name,
                     'numero_pallet': pallet.get('package_name', ''),
                 }
                 
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    if st.button("🖨️ Imprimir", key=f"etiq_caja_print_{pallet.get('package_id')}", use_container_width=True):
-                        html_print = funcion_diseño(datos_etiqueta)
-                        html_con_print = html_print.replace('</body>', '''
-                        <script>
-                            window.onload = function() {
-                                setTimeout(function() {
-                                    window.print();
-                                }, 500);
-                            };
-                        </script>
-                        </body>''')
-                        st.components.v1.html(html_con_print, height=450, scrolling=True)
-                
-                with col2:
-                    if st.button("👁️ Vista", key=f"etiq_caja_preview_{pallet.get('package_id')}", use_container_width=True):
-                        html_etiqueta = funcion_diseño(datos_etiqueta)
-                        st.components.v1.html(html_etiqueta, height=450, scrolling=True)
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_sub_{pallet.get('package_id')}", use_container_width=True):
+                    html_print = generar_etiqueta_caja_generica(datos_etiqueta)
+                    imprimir_etiqueta(html_print, height=280)
+    
+    st.divider()
 
 
 def render_etiquetas_pallet(username: str, password: str):
-    """Renderiza la sección de etiquetas por pallet."""
+    """Renderiza etiquetas por pallet — usa estado compartido."""
     
-    # Inicializar estado
-    if "etiq_orden_seleccionada" not in st.session_state:
-        st.session_state.etiq_orden_seleccionada = None
-    if "etiq_pallets_cargados" not in st.session_state:
-        st.session_state.etiq_pallets_cargados = []
-    if "etiq_ordenes_encontradas" not in st.session_state:
-        st.session_state.etiq_ordenes_encontradas = []
-    if "etiq_cargando_pallets" not in st.session_state:
-        st.session_state.etiq_cargando_pallets = False
+    st.write(f"**Total de pallets:** {len(st.session_state.etiq_pallets_cargados)}")
     
-    # ==================== PASO 1: BUSCAR ORDEN ====================
-    st.subheader("1️⃣ Buscar Orden de Producción")
+    vista_opcion = st.radio(
+        "Mostrar:",
+        ["🆕 Solo último pallet", "📋 Todos los pallets"],
+        horizontal=True,
+        key="etiq_vista_opcion"
+    )
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        termino_busqueda = st.text_input(
-            "Buscar orden",
-            placeholder="Ej: WH/MO/12345",
-            help="Ingresa el nombre o referencia de la orden",
-            key="etiq_termino_busqueda"
-        )
+    st.divider()
     
-    with col2:
-        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="etiq_btn_buscar")
+    # Agrupar pallets por producto
+    pallets_por_producto = {}
+    for pallet in st.session_state.etiq_pallets_cargados:
+        product_id = pallet.get('product_id')
+        if product_id:
+            product_key = product_id[0] if isinstance(product_id, list) else product_id
+            product_name = product_id[1] if isinstance(product_id, list) else str(product_id)
+            
+            codigo, descripcion = extraer_codigo_descripcion(product_name)
+            
+            if product_key not in pallets_por_producto:
+                pallets_por_producto[product_key] = {
+                    'nombre': product_name,
+                    'codigo': codigo,
+                    'descripcion': descripcion,
+                    'pallets': []
+                }
+            pallets_por_producto[product_key]['pallets'].append(pallet)
     
-    if btn_buscar and termino_busqueda:
-        with st.spinner("Buscando órdenes..."):
-            try:
-                ordenes = buscar_ordenes(username, password, termino_busqueda)
-                st.session_state.etiq_ordenes_encontradas = ordenes
-                
-                if ordenes:
-                    st.success(f"✅ Se encontraron {len(ordenes)} órdenes")
-                else:
-                    st.warning("⚠️ No se encontraron órdenes")
-                    
-            except Exception as e:
-                st.error(f"❌ Error al buscar órdenes: {e}")
-                st.session_state.etiq_ordenes_encontradas = []
+    if vista_opcion == "🆕 Solo último pallet":
+        for product_key in pallets_por_producto:
+            pallets_por_producto[product_key]['pallets'] = [pallets_por_producto[product_key]['pallets'][-1]]
     
-    # Mostrar órdenes encontradas
-    if st.session_state.etiq_ordenes_encontradas:
-        st.write("**Órdenes encontradas:**")
+    for product_key, producto_data in pallets_por_producto.items():
+        st.markdown(f"### 📦 {producto_data['descripcion']}")
+        cantidad_mostrados = len(producto_data['pallets'])
+        if vista_opcion == "🆕 Solo último pallet":
+            st.caption("Último pallet ingresado")
+        else:
+            st.caption(f"{cantidad_mostrados} pallets")
         
-        for orden in st.session_state.etiq_ordenes_encontradas:
-            col1, col2, col3 = st.columns([2, 2, 1])
+        for pallet in producto_data['pallets']:
+            col1, col2, col3 = st.columns([3, 1, 1])
             
             with col1:
-                st.write(f"**{orden.get('name')}**")
-                st.caption(f"Producto: {orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else ''}")
+                st.write(f"**{pallet.get('package_name', 'Sin nombre')}**")
+            
+            product_id = pallet.get('product_id')
+            product_name = product_id[1] if isinstance(product_id, (list, tuple)) else 'Producto desconocido'
+            
+            codigo_prod, descripcion_prod = extraer_codigo_descripcion(product_name)
+            
+            lot_id = pallet.get('lot_id')
+            lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else 'Sin lote'
+            
+            barcode_odoo = pallet.get('barcode', pallet.get('package_name', ''))
+            cliente_pallet = pallet.get('cliente_nombre', '')
+            
+            datos_etiqueta = {
+                'cliente': cliente_pallet,
+                'nombre_producto': descripcion_prod,
+                'codigo_producto': codigo_prod,
+                'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
+                'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
+                'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
+                'fecha_vencimiento': pallet.get('fecha_vencimiento', ''),
+                'lote_produccion': lot_name,
+                'numero_pallet': pallet.get('package_name', ''),
+                'barcode': barcode_odoo
+            }
             
             with col2:
-                st.write(f"Estado: {orden.get('state', '')}")
-                cliente_auto = orden.get('cliente_nombre', '')
-                if cliente_auto:
-                    st.caption(f"👤 Cliente: {cliente_auto}")
-            
-            with col3:
-                if st.button("Seleccionar", key=f"etiq_sel_{orden.get('id')}", use_container_width=True):
-                    st.session_state.etiq_orden_seleccionada = orden
-                    st.session_state.etiq_cargando_pallets = True
-                    st.rerun()
-    
-    # Auto-cargar pallets si se acaba de seleccionar una orden
-    if st.session_state.etiq_cargando_pallets and st.session_state.etiq_orden_seleccionada:
-        with st.spinner(f"🔄 Cargando pallets de {st.session_state.etiq_orden_seleccionada.get('name')}..."):
-            try:
-                pallets = obtener_pallets_orden(username, password, st.session_state.etiq_orden_seleccionada.get('name'))
-                st.session_state.etiq_pallets_cargados = pallets
-                st.session_state.etiq_cargando_pallets = False
-                
-                if pallets:
-                    st.success(f"✅ Se cargaron {len(pallets)} pallets")
-                else:
-                    st.warning("⚠️ No se encontraron pallets para esta orden")
-                    
-            except Exception as e:
-                st.error(f"❌ Error al cargar pallets: {e}")
-                st.session_state.etiq_cargando_pallets = False
-    
-    # ==================== PASO 2: ORDEN SELECCIONADA ====================
-    if st.session_state.etiq_orden_seleccionada:
-        orden = st.session_state.etiq_orden_seleccionada
-        cliente_orden = orden.get('cliente_nombre', '')
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
+                    html_print = generar_etiqueta_html(datos_etiqueta)
+                    imprimir_etiqueta(html_print, height=550)
         
         st.divider()
         st.subheader("2️⃣ Orden Seleccionada")
         st.info(f"📦 **{orden.get('name')}** - {orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else ''}")
-        if cliente_orden:
-            st.success(f"👤 Cliente: **{cliente_orden}**")
+        cliente_nombre = st.session_state.etiq_orden_seleccionada.get('cliente_nombre', '')
+        if cliente_nombre:
+            st.success(f"👤 Cliente: **{cliente_nombre}**")
         
         if st.button("❌ Cambiar Orden", use_container_width=False, key="etiq_btn_cambiar"):
             st.session_state.etiq_orden_seleccionada = None
@@ -895,3 +1184,4 @@ def render_etiquetas_pallet(username: str, password: str):
     else:
         if st.session_state.etiq_orden_seleccionada:
             st.info("👆 Haz clic en 'Cargar Pallets' para ver los pallets de esta orden")
+

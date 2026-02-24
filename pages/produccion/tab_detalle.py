@@ -20,7 +20,6 @@ from . import tab_kg_por_linea
 from . import tab_pallets_disponibles
 
 
-@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Detalle de OF con sub-tabs."""
     

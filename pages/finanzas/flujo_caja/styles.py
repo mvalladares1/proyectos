@@ -4,6 +4,14 @@ Estilos CSS para el Estado de Flujo de Efectivo
 
 ENTERPRISE_CSS = """
 <style>
+/* ============ IFRAME BODY RESET ============ */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
 /* ============ CUSTOM SCROLLBAR (Global - Celeste Unificado) ============ */
 /* Scrollbar Horizontal y Vertical para todo el documento */
 ::-webkit-scrollbar {
@@ -43,8 +51,8 @@ ENTERPRISE_CSS = """
 /* ============ CONTAINER & TABLE BASE ============ */
 .excel-container {
     width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto;
+    height: 100vh;
     border: 3px solid #334155;
     border-radius: 16px;
     background: linear-gradient(145deg, #0a0e1a 0%, #1e293b 100%);
@@ -52,9 +60,15 @@ ENTERPRISE_CSS = """
         0 20px 60px rgba(0, 0, 0, 0.5),
         inset 0 1px 2px rgba(255,255,255,0.05);
     position: relative;
+    isolation: isolate;
 }
 
 .excel-table {
+    --frozen-concept-width: 560px;
+    --frozen-total-left-width: 180px;
+    --frozen-area-width: calc(var(--frozen-concept-width) + var(--frozen-total-left-width));
+    --sticky-toolbar-height: 48px;
+    --weekly-month-header-height: 64px;
     width: max-content;
     min-width: 100%;
     border-collapse: separate;
@@ -62,6 +76,7 @@ ENTERPRISE_CSS = """
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'SF Pro Display', sans-serif;
     font-size: 0.875rem;
     color: #e2e8f0;
+    position: relative;
 }
 
 .excel-table th,
@@ -72,6 +87,50 @@ ENTERPRISE_CSS = """
     text-align: right;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
+}
+
+/* ============ STICKY TOOLBAR ROW (inside <thead>) ============ */
+.excel-table thead tr.toolbar-row th {
+    position: sticky;
+    top: 0;
+    z-index: 310;
+    height: var(--sticky-toolbar-height);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%) !important;
+    border-bottom: 2px solid #334155;
+    padding: 4px 8px;
+    color: #ffffff;
+}
+
+.excel-table thead tr.toolbar-row th.toolbar-btn-cell {
+    position: sticky;
+    left: 0;
+    z-index: 320;
+    min-width: var(--frozen-area-width);
+    border-right: 3px solid #1e3a8a;
+    text-align: center !important;
+}
+
+.excel-table thead tr.toolbar-row th.toolbar-spacer {
+    border-right: none;
+    border-left: none;
+}
+
+.excel-export-btn {
+    width: 100%;
+    height: 32px;
+    border: 1px solid #3b82f6;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: filter 0.2s ease;
+}
+
+.excel-export-btn:hover {
+    filter: brightness(1.08);
 }
 
 /* ============ TOOLTIPS ============ */
@@ -159,13 +218,22 @@ ENTERPRISE_CSS = """
     letter-spacing: 1.5px;
     padding: 18px 24px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    top: var(--sticky-toolbar-height);
 }
 
 /* Vista Semanal: Header de Meses (fila superior) */
 .excel-table thead tr.header-meses th {
     position: sticky;
-    top: 0;
-    z-index: 51;
+    top: var(--sticky-toolbar-height);
+    z-index: 210;
+}
+
+/* Frozen headers inside header-meses need higher specificity to beat the rule above */
+.excel-table thead tr.header-meses th.frozen {
+    z-index: 260;
+}
+.excel-table thead tr.header-meses th.frozen-total-left {
+    z-index: 261;
 }
 
 .excel-table thead tr.header-meses th.mes-header {
@@ -180,8 +248,8 @@ ENTERPRISE_CSS = """
 /* Vista Semanal: Header de Semanas (fila inferior) */
 .excel-table thead tr.header-semanas th {
     position: sticky;
-    top: 52px;  /* Altura de la fila de meses */
-    z-index: 50;
+    top: calc(var(--sticky-toolbar-height) + var(--weekly-month-header-height));
+    z-index: 205;
     background: linear-gradient(180deg, #2d3748 0%, #1e293b 100%) !important;
     font-size: 11px !important;
     padding: 8px 12px !important;
@@ -191,24 +259,60 @@ ENTERPRISE_CSS = """
 }
 
 .excel-table thead th.frozen {
-    z-index: 150;
+    position: sticky;
+    left: 0;
+    top: var(--sticky-toolbar-height);
+    z-index: 260;
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
     border-right: 3px solid #1e3a8a;
     text-align: left !important;
     font-size: 0.85rem;
+    min-width: var(--frozen-concept-width);
+    max-width: var(--frozen-concept-width);
+    box-sizing: border-box;
+}
+
+.excel-table thead th.frozen-total-left {
+    position: sticky;
+    left: var(--frozen-concept-width);
+    top: var(--sticky-toolbar-height);
+    z-index: 261;
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
+    border-right: 3px solid #1e3a8a;
+    text-align: right !important;
+    min-width: 180px;
+    max-width: 180px;
+    box-sizing: border-box;
 }
 
 /* ============ FROZEN COLUMN ============ */
 .excel-table td.frozen {
     position: sticky;
     left: 0;
-    z-index: 10;
+    z-index: 120;
     border-right: 3px solid #475569 !important;
     text-align: left !important;
     font-weight: 500;
-    min-width: 480px;
-    max-width: 480px;
+    min-width: var(--frozen-concept-width);
+    max-width: var(--frozen-concept-width);
+    box-sizing: border-box;
     white-space: normal !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
+    background: #1e293b !important;
+}
+
+.excel-table td.frozen-total-left {
+    position: sticky;
+    left: var(--frozen-concept-width);
+    z-index: 121;
+    min-width: 180px;
+    max-width: 180px;
+    border-right: 3px solid #475569 !important;
+    text-align: right !important;
+    font-weight: 600;
+    background: #0f172a;
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
@@ -217,6 +321,11 @@ ENTERPRISE_CSS = """
     color: #ffffff !important;
     font-weight: 700;
     font-size: 1rem;
+}
+
+.excel-table tr.activity-header td.frozen-total-left {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
+    color: #ffffff !important;
 }
 
 /* ============ COLUMNAS REAL/PROYECTADO/PPTO ============ */
@@ -263,7 +372,17 @@ ENTERPRISE_CSS = """
     color: #dbeafe !important;
 }
 
+.excel-table tr.subtotal-interno td.frozen-total-left {
+    background: linear-gradient(135deg, #1e3a5f 0%, rgba(37, 99, 235, 0.3) 100%) !important;
+    color: #dbeafe !important;
+}
+
 .excel-table tr.subtotal td.frozen {
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
+    color: #ffffff !important;
+}
+
+.excel-table tr.subtotal td.frozen-total-left {
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
     color: #ffffff !important;
 }
@@ -273,8 +392,18 @@ ENTERPRISE_CSS = """
     color: #ffffff !important;
 }
 
+.excel-table tr.grand-total td.frozen-total-left {
+    background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
+    color: #ffffff !important;
+}
+
 .excel-table tr.data-row td.frozen {
     background: #1e293b !important;
+    color: #cbd5e1 !important;
+}
+
+.excel-table tr.data-row td.frozen-total-left {
+    background: #0f172a !important;
     color: #cbd5e1 !important;
 }
 
@@ -385,12 +514,15 @@ ENTERPRISE_CSS = """
 /* ============ HOVER EFFECTS ============ */
 .excel-table tr.data-row:hover td {
     background: rgba(59, 130, 246, 0.15) !important;
-    transform: scale(1.001);
     box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
 }
 
 .excel-table tr.data-row:hover td.frozen {
     background: rgba(37, 99, 235, 0.3) !important;
+}
+
+.excel-table tr.data-row:hover td.frozen-total-left {
+    background: rgba(37, 99, 235, 0.28) !important;
 }
 
 .excel-table td.clickable {
@@ -400,7 +532,6 @@ ENTERPRISE_CSS = """
 
 .excel-table td.clickable:hover {
     background: rgba(59, 130, 246, 0.35) !important;
-    transform: scale(1.05);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
     z-index: 5;
 }
@@ -467,6 +598,11 @@ ENTERPRISE_CSS = """
     color: #cbd5e1;
 }
 
+.detail-row td.frozen-total-left {
+    background: #0a0e1a !important;
+    color: #cbd5e1;
+}
+
 /* ============ TOTAL COLUMN HIGHLIGHT ============ */
 .excel-table td:last-child,
 .excel-table th:last-child {
@@ -504,6 +640,14 @@ ENTERPRISE_CSS = """
 
 .excel-table tr.data-row:nth-child(odd) td.frozen {
     background: #1e293b !important;
+}
+
+.excel-table tr.data-row:nth-child(even) td.frozen-total-left {
+    background: #1a2332 !important;
+}
+
+.excel-table tr.data-row:nth-child(odd) td.frozen-total-left {
+    background: #0f172a !important;
 }
 
 /* ============ FONTS ============ */
@@ -551,7 +695,7 @@ ENTERPRISE_CSS = """
 
 /* ============ DRAG & DROP ============ */
 .draggable {
-    cursor: move;
+    cursor: pointer;
 }
 
 .dragging {

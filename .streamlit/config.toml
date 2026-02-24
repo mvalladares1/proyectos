@@ -1,5 +1,7 @@
 [server]
 headless = true
+runOnSave = false
+fileWatcherType = "none"
 
 [theme]
 base = "dark"

@@ -5,6 +5,16 @@ Procesa y agrega movimientos por concepto y perÃ­odo.
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
+import unicodedata
+
+
+def _texto_orden_alfabetico(valor: str) -> str:
+    """Normaliza texto para orden alfabético estable (sin acentos/símbolos)."""
+    texto = str(valor or '').strip()
+    texto = texto.replace('📁', '').replace('↳', '').strip()
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = ''.join(ch for ch in texto if not unicodedata.combining(ch))
+    return texto.casefold()
 
 
 class AgregadorFlujo:
@@ -406,6 +416,33 @@ class AgregadorFlujo:
         ESTADO_LABEL = '🔮 Facturas Proyectadas (Modulo de ventas)'
         ESTADO_CODE = 'estado_projected'
         ORDEN_ESTADO = 3.5  # Debajo de No Pagadas (3) y antes de Revertidas (4)
+
+        # Precargar categoría de contacto por partner para agrupar nivel adicional
+        partner_ids = []
+        for presu in presupuestos:
+            partner_data = presu.get('partner_id', [])
+            partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else None
+            if partner_id:
+                partner_ids.append(partner_id)
+
+        categoria_por_partner = {}
+        if partner_ids:
+            try:
+                partners_data = self.odoo.search_read(
+                    'res.partner',
+                    [['id', 'in', list(set(partner_ids))]],
+                    ['id', 'x_studio_categora_de_contacto'],
+                    limit=10000
+                )
+                for partner in partners_data:
+                    categoria = partner.get('x_studio_categora_de_contacto', False)
+                    if categoria and isinstance(categoria, (list, tuple)):
+                        categoria = categoria[1]
+                    elif not categoria or categoria == 'False':
+                        categoria = 'Sin Categoría'
+                    categoria_por_partner[partner['id']] = categoria
+            except Exception:
+                categoria_por_partner = {}
         
         # Buscar cuentas CxC existentes en el concepto 1.1.1
         concepto_id = '1.1.1'
@@ -515,7 +552,9 @@ class AgregadorFlujo:
             
             # Obtener cliente
             partner_data = presu.get('partner_id', [])
+            partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else None
             cliente_nombre = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Cliente Desconocido'
+            categoria_contacto = categoria_por_partner.get(partner_id, 'Sin Categoría')
             
             # Nombre del presupuesto
             presu_name = presu.get('name', 'SO-???')
@@ -535,9 +574,19 @@ class AgregadorFlujo:
             cuenta_cxc['etiquetas'][ESTADO_LABEL]['montos_por_mes'][mes_str] += monto_clp
             
             # Guardar detalle del presupuesto para modal
-            # Agrupar por cliente para drill-down
-            if cliente_nombre not in cuenta_cxc['facturas_por_estado'][ESTADO_CODE]:
-                cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre] = {
+            # Agrupar por categoría de contacto (nivel 3) y luego cliente (nivel 4)
+            if categoria_contacto not in cuenta_cxc['facturas_por_estado'][ESTADO_CODE]:
+                cuenta_cxc['facturas_por_estado'][ESTADO_CODE][categoria_contacto] = {
+                    'nombre': categoria_contacto,
+                    'monto_total': 0.0,
+                    'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                    'clientes': {}
+                }
+
+            categoria_entry = cuenta_cxc['facturas_por_estado'][ESTADO_CODE][categoria_contacto]
+
+            if cliente_nombre not in categoria_entry['clientes']:
+                categoria_entry['clientes'][cliente_nombre] = {
                     'nombre': cliente_nombre,
                     'move_id': None,  # No es una factura, es un presupuesto
                     'monto_total': 0.0,
@@ -546,11 +595,14 @@ class AgregadorFlujo:
                     'payment_state': ESTADO_CODE,
                     'presupuestos': []  # Lista de presupuestos de este cliente
                 }
-            
-            # Agregar presupuesto al cliente
-            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['monto_total'] += monto_clp
-            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['montos_por_mes'][mes_str] += monto_clp
-            cuenta_cxc['facturas_por_estado'][ESTADO_CODE][cliente_nombre]['presupuestos'].append({
+
+            # Agregar presupuesto en categoría y cliente
+            categoria_entry['monto_total'] += monto_clp
+            categoria_entry['montos_por_mes'][mes_str] += monto_clp
+
+            categoria_entry['clientes'][cliente_nombre]['monto_total'] += monto_clp
+            categoria_entry['clientes'][cliente_nombre]['montos_por_mes'][mes_str] += monto_clp
+            categoria_entry['clientes'][cliente_nombre]['presupuestos'].append({
                 'nombre': presu_name,
                 'monto': round(monto_clp, 0),
                 'fecha': fecha,
@@ -760,23 +812,84 @@ class AgregadorFlujo:
                     monto_estado = etiqueta_estado.get('monto', 0) if isinstance(etiqueta_estado, dict) else 0
 
                     etiquetas_partners = []
-                    for partner_nombre, partner_datos in facturas_estado.items():
-                        etiquetas_partners.append({
-                            'nombre': str(partner_nombre)[:60],
-                            'monto': round(partner_datos.get('monto_total', 0), 0),
-                            'montos_por_mes': {
-                                m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
-                                for m in self.meses_lista
-                            }
-                        })
+                    cantidad_estado = len(facturas_estado)
 
-                    etiquetas_partners.sort(key=lambda x: abs(x.get('monto', 0)), reverse=True)
+                    if estado_codigo == 'estado_projected':
+                        # Facturas proyectadas ventas: nivel adicional por categoría de contacto
+                        categorias_formateadas = []
+
+                        for categoria_nombre, categoria_datos in facturas_estado.items():
+                            if not isinstance(categoria_datos, dict):
+                                continue
+
+                            clientes = categoria_datos.get('clientes', {}) if isinstance(categoria_datos.get('clientes', {}), dict) else {}
+
+                            # Compatibilidad hacia atrás: si no viene estructura por categoría, tratar item como cliente plano
+                            if not clientes:
+                                categorias_formateadas.append({
+                                    'nombre': str(categoria_nombre),
+                                    'monto': round(categoria_datos.get('monto_total', 0), 0),
+                                    'montos_por_mes': {
+                                        m: round(categoria_datos.get('montos_por_mes', {}).get(m, 0), 0)
+                                        for m in self.meses_lista
+                                    }
+                                })
+                                continue
+
+                            sub_etiquetas = []
+                            for partner_nombre, partner_datos in sorted(
+                                clientes.items(),
+                                key=lambda x: _texto_orden_alfabetico(x[0])
+                            ):
+                                sub_etiquetas.append({
+                                    'nombre': str(partner_nombre),
+                                    'monto': round(partner_datos.get('monto_total', 0), 0),
+                                    'montos_por_mes': {
+                                        m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
+                                        for m in self.meses_lista
+                                    },
+                                    'tipo': 'cliente',
+                                    'nivel': 4,
+                                    'activo': True
+                                })
+
+                            categorias_formateadas.append({
+                                'nombre': f"📁 {str(categoria_nombre)}",
+                                'monto': round(categoria_datos.get('monto_total', 0), 0),
+                                'montos_por_mes': {
+                                    m: round(categoria_datos.get('montos_por_mes', {}).get(m, 0), 0)
+                                    for m in self.meses_lista
+                                },
+                                'tipo': 'categoria',
+                                'nivel': 3,
+                                'activo': True,
+                                'sub_etiquetas': sub_etiquetas
+                            })
+
+                        categorias_formateadas.sort(key=lambda x: _texto_orden_alfabetico(x.get('nombre', '')))
+                        etiquetas_partners = categorias_formateadas
+                        cantidad_estado = sum(
+                            len(v.get('clientes', {})) if isinstance(v, dict) and isinstance(v.get('clientes', {}), dict) and v.get('clientes') else 1
+                            for v in facturas_estado.values()
+                        )
+                    else:
+                        for partner_nombre, partner_datos in facturas_estado.items():
+                            etiquetas_partners.append({
+                                'nombre': str(partner_nombre),  # Sin truncamiento para nombres completos
+                                'monto': round(partner_datos.get('monto_total', 0), 0),
+                                'montos_por_mes': {
+                                    m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
+                                    for m in self.meses_lista
+                                }
+                            })
+
+                        etiquetas_partners.sort(key=lambda x: _texto_orden_alfabetico(x.get('nombre', '')))
 
                     resultado_estados.append({
                         'codigo': f'estado_{estado_codigo}' if not str(estado_codigo).startswith('estado_') else estado_codigo,
                         'nombre': estado_nombre,
                         'monto': round(monto_estado, 0),
-                        'cantidad': len(facturas_estado),
+                        'cantidad': cantidad_estado,
                         'montos_por_mes': {m: round(montos_por_mes_estado.get(m, 0), 0) for m in self.meses_lista},
                         'etiquetas': etiquetas_partners,
                         'es_cuenta_cxc': True,
@@ -827,17 +940,11 @@ class AgregadorFlujo:
                 
                 etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_estado)
             else:
-                # Ordenar por monto absoluto total (comportamiento original)
-                def orden_etiqueta(item):
-                    nombre, datos = item
-                    if not isinstance(datos, dict):
-                        return -abs(datos) if datos else 0
-                    # Sumar montos absolutos de todos los meses
-                    montos_mes = datos.get("montos_por_mes", {})
-                    total = sum(abs(montos_mes.get(m, 0)) for m in self.meses_lista)
-                    return -total  # Negativo para orden descendente
-                
-                etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:200]
+                # Ordenar alfabéticamente por nombre de etiqueta
+                etiquetas_ordenadas = sorted(
+                    etiquetas_filtradas,
+                    key=lambda item: _texto_orden_alfabetico(item[0])
+                )[:200]
             
             # Mapeo de etiqueta a payment_state para enlazar facturas
             LABEL_TO_STATE = {
@@ -853,7 +960,7 @@ class AgregadorFlujo:
             for nombre, datos in etiquetas_ordenadas:
                 if isinstance(datos, dict):
                     etiqueta_item = {
-                        "nombre": nombre[:60],
+                        "nombre": nombre,  # Sin truncamiento para nombres completos
                         "monto": round(datos.get("monto", 0), 0),
                         "montos_por_mes": {m: round(datos.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista}
                     }
@@ -875,8 +982,8 @@ class AgregadorFlujo:
                                 "payment_state": fact_datos.get("payment_state", "")
                             })
                         
-                        # Ordenar facturas por monto absoluto
-                        facturas_lista.sort(key=lambda x: abs(x.get("monto", 0)), reverse=True)
+                        # Ordenar facturas alfabéticamente por nombre
+                        facturas_lista.sort(key=lambda x: _texto_orden_alfabetico(x.get("nombre", "")))
                         
                         # Incluir solo las primeras 200 para no sobrecargar
                         etiqueta_item["facturas"] = facturas_lista[:200]
@@ -885,7 +992,7 @@ class AgregadorFlujo:
                     etiquetas_lista.append(etiqueta_item)
                 else:
                     etiquetas_lista.append({
-                        "nombre": nombre[:60],
+                        "nombre": nombre,  # Sin truncamiento para nombres completos
                         "monto": round(datos, 0),
                         "montos_por_mes": {m: 0 for m in self.meses_lista}
                     })

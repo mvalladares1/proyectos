@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+  # ── React SPA (Vite dev server) ────────────────────────────────────────────
+  rio-web-react:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8002
+    networks:
+      - rio-net
+    depends_on:
+      - rio-api
+
+  # ── FastAPI backend (existing) ─────────────────────────────────────────────
+  rio-api:
+    image: rio-api:latest          # built separately from Dockerfile.api
+    ports:
+      - "8002:8000"
+    environment:
+      - ENV=development
+    networks:
+      - rio-net
+    restart: unless-stopped
+
+networks:
+  rio-net:
+    driver: bridge

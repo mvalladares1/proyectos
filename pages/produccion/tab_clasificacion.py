@@ -6,14 +6,13 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 import plotly.graph_objects as go
 from streamlit_echarts import st_echarts
 from .shared import API_URL, fmt_numero
 
 
-@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del tab Clasificación."""
     
@@ -39,7 +38,7 @@ def render(username: str, password: str):
             # Filtro de fechas
             fecha_inicio_clas = st.date_input(
                 "Fecha Inicio",
-                value=datetime.now() - timedelta(days=30),
+                value=date.today() - timedelta(days=30),
                 key="fecha_inicio_clasificacion"
             )
             
@@ -56,7 +55,7 @@ def render(username: str, password: str):
         with col_filtros2:
             fecha_fin_clas = st.date_input(
                 "Fecha Fin",
-                value=datetime.now(),
+                value=date.today(),
                 key="fecha_fin_clasificacion"
             )
             

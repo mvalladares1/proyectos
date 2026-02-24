@@ -520,14 +520,18 @@ class FlujoCajaService:
                             ('state', 'in', ['draft', 'sent', 'sale']),
                             ('invoice_status', '!=', 'invoiced')
                         ],
-                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state', 'invoice_status', 'invoice_ids'],
+                        ['name', 'partner_id', 'amount_total', 'currency_id', 'x_studio_fecha_tentativa_de_pago', 'date_order', 'state', 'invoice_status', 'invoice_ids', 'x_studio_son_muestras'],
                         limit=10000
                     )
 
-                    # Filtro robusto: excluir cualquier SO efectivamente facturado
+                    # Filtro robusto: excluir cualquier SO efectivamente facturado o marcado como muestra
                     presupuestos = []
                     for p in (presupuestos_raw or []):
                         if str(p.get('invoice_status', '')).lower() == 'invoiced':
+                            continue
+                        
+                        # Excluir SO marcados como muestras (no se valorizan)
+                        if p.get('x_studio_son_muestras'):
                             continue
 
                         fecha_ref = p.get('x_studio_fecha_tentativa_de_pago') or p.get('date_order')

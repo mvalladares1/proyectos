@@ -1,0 +1,38 @@
+version: '3.8'
+
+# ===========================================
+# AMBIENTE DE TESTING AISLADO - proyectos
+# ===========================================
+# Este archivo es EXCLUSIVO para tests automatizados
+# NO afecta la base de datos de desarrollo ni producción
+# 
+# Puertos aislados:
+#   - API: 8203 (dev usa 8002/8001)
+
+services:
+  test-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: proyectos-test-api
+    ports:
+      - "8203:8000"
+    environment:
+      - ENV=test
+      - ENVIRONMENT=test
+      - PYTHONPATH=/app
+      - MPLCONFIGDIR=/tmp/matplotlib
+      - SECRET_KEY=test-secret-key
+      - ODOO_URL=http://mock-odoo:8069
+      - ODOO_DB=test_db
+      - ODOO_API_USER=test@test.com
+      - ODOO_API_KEY=test_api_key
+    volumes:
+      - ./data:/app/data
+      - ./backend:/app/backend
+      - ./shared:/app/shared
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

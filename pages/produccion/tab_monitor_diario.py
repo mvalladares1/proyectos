@@ -949,7 +949,6 @@ def render_kanban_por_sala(procesos: list, stats_por_sala: dict):
 
 # ===================== RENDER PRINCIPAL =====================
 
-@st.fragment
 def render(username: str, password: str):
     """Renderiza el contenido del sub-tab Monitor Diario."""
     

@@ -1,0 +1,230 @@
+<t t-name="stock.report_delivery_document_copy_3_copy_1_no_packages">
+    <t t-call="web.html_container">
+        <t t-call="web.external_layout">
+            <t t-set="o" t-value="o.with_context(lang=o.partner_id.lang)"/>
+            <t t-set="partner" t-value="o.partner_id or (o.move_ids and o.move_ids[0].partner_id) or False"/>
+            <t t-set="address">
+                <div name="div_outgoing_address"/>
+            </t>
+            <t t-set="information_block"/>
+            <div class="page">
+                <h1 class="text-center" style="font-size: 30px; text-decoration: underline; margin-bottom: 15px;">Reporte Recepción</h1>
+                <div class="row mt32 mb32">
+                    <div class="col-3" t-if="o.partner_id">
+                        <strong>Proveedor:</strong>
+                        <p t-field="o.partner_id.display_name"/>
+                    </div>
+                    <div class="col-3" t-if="o.partner_id.vat">
+                        <strong>RUT Proveedor:</strong>
+                        <p t-field="o.partner_id.vat"/>
+                    </div>
+                    <div class="col-3" t-if="o.origin">
+                        <strong>Orden:</strong>
+                        <p t-field="o.origin"/>
+                    </div>
+                    <div class="col-3" name="div_sched_date">
+                        <strong>Fecha Recepción:</strong>
+                        <t t-if="o.state == 'done'">
+                            <p t-field="o.date_done" t-options="{&quot;widget&quot;: &quot;datetime&quot;}"/>
+                        </t>
+                        <t t-else="">
+                            <p t-field="o.scheduled_date" t-options="{&quot;widget&quot;: &quot;datetime&quot;}"/>
+                        </t>
+                    </div>
+                </div>
+                <div class="row mb32 border-bottom pb-3">
+                    <div class="col-3" t-if="o.x_studio_gua_de_despacho">
+                        <strong>G. Despacho:</strong>
+                        <p>
+                            <span t-field="o.x_studio_gua_de_despacho"/>
+                        </p>
+                    </div>
+                    <div class="col-3" t-if="o.x_studio_fecha_de_emisin_gdd">
+                        <strong>Fecha Guia:</strong>
+                        <p>
+                            <span t-field="o.x_studio_fecha_de_emisin_gdd"/>
+                        </p>
+                    </div>
+                    <div class="col-3">
+                        <strong>N° Palet:</strong>
+                        <p>
+                            <t t-esc="len(o.move_line_ids.mapped('result_package_id'))"/>
+                        </p>
+                    </div>
+                    <div class="col-3">
+                        <t t-set="qc_kgs" t-value="o.x_studio_one2many_field_C8TiY and o.x_studio_one2many_field_C8TiY[0]"/>
+                        <div t-if="qc_kgs and qc_kgs.x_studio_kg_recepcionados">
+                            <strong>Kgs Recibido:</strong>
+                            <p>
+                                <span t-field="qc_kgs.x_studio_kg_recepcionados"/> Kg
+        
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-3" t-if="o.sudo().sale_id.client_order_ref">
+                        <strong>Referencia Cliente:</strong>
+                        <p t-field="o.sudo().sale_id.client_order_ref"/>
+                    </div>
+                </div>
+                <t t-set="moves" t-value="o.move_ids.filtered(lambda x: x.state != 'cancel' and x.quantity_done &gt; 0)"/>
+                <h3 class="mt32 mb16">Detalle de Productos Recibidos</h3>
+                <div class="row">
+                    <div class="col-12">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr style="background-color: #EFEFEF !important; color: #000000 !important;">
+                                    <th>Producto</th>
+                                    <th class="text-right">Cantidad Recibida</th>
+                                    <th class="text-right">Precio Unitario</th>
+                                    <th>Moneda</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="moves" t-as="move">
+                                    <t t-if="move.purchase_line_id" t-set="purchase_line" t-value="move.purchase_line_id"/>
+                                    <t t-else="" t-set="purchase_line" t-value="False"/>
+                                    <tr style="background-color: white !important; color: black !important;">
+                                        <td>
+                                            <span t-field="move.product_id.name"/>
+                                        </td>
+                                        <td class="text-right">
+                                            <span t-esc="move.quantity_done"/>
+                                            <span t-field="move.product_uom" groups="uom.group_uom"/>
+                                        </td>
+                                        <td class="text-right">
+                                            <t t-if="purchase_line">
+                                                <span t-field="purchase_line.price_unit" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: purchase_line.currency_id}"/>
+                                            </t>
+                                            <t t-else="">
+                                N/A
+                            </t>
+                                        </td>
+                                        <td>
+                                            <t t-if="purchase_line">
+                                                <span t-field="purchase_line.currency_id"/>
+                                            </t>
+                                            <t t-else="">
+                                N/A
+                            </t>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <tr/>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <h3 class="mt32 mb16">Detalles de Transporte</h3>
+                <div class="row">
+                    <div class="col-12">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr style="background-color: #EFEFEF !important; color: #000000 !important;">
+                                    <th style="width: 33%;">Transportista</th>
+                                    <th style="width: 33%;">RUT Transportista</th>
+                                    <th style="width: 33%;">Patente Camión</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="background-color: white !important; color: black !important;">
+                                    <td>
+                                        <span t-field="o.x_studio_many2one_field_f1eVZ"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="o.x_studio_rut_transportista"/>
+                                    </td>
+                                    <td>
+                                        <span t-field="o.x_studio_patente_camion"/>
+                                    </td>
+                                </tr>
+                                <tr/>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <h3 class="mt32 mb16">Control de Calidad</h3>
+                <div class="row">
+                    <div class="col-12">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr style="background-color: #EFEFEF !important; color: #000000 !important;">
+                                    <th style="width: 33%;">Analista</th>
+                                    <th style="width: 33%;">Rut</th>
+                                    <th style="width: 33%;">Jefe Calidad</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-if="o.x_studio_one2many_field_C8TiY">
+                                    <t t-set="qc" t-value="o.x_studio_one2many_field_C8TiY[0]"/>
+                                    <tr style="background-color: white !important; color: black !important;">
+                                        <td>
+                                            <span t-field="qc.user_id"/>
+                                        </td>
+                                        <td>
+                                            <span t-field="qc.user_id.vat"/>
+                                        </td>
+                                        <td>
+                                            <span t-field="qc.x_studio_jefe_de_calidad_y_aseguramiento_"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <t t-else="">
+                                    <tr style="background-color: white !important; color: black !important;">
+                                        <td colspan="3" class="text-center">No hay registros de Control de Calidad asociados.</td>
+                                    </tr>
+                                </t>
+                                <tr/>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <h3 class="mt32 mb16">Resultados de Recepción</h3>
+                <div class="row">
+                    <div class="col-12">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr style="background-color: #EFEFEF !important; color: #000000 !important;">
+                                    <th style="width: 33%;">Resultado General</th>
+                                    <th style="width: 33%;">IQF (Resultado)</th>
+                                    <th style="width: 33%;">BLOCK (Resultado)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-if="o.x_studio_one2many_field_C8TiY">
+                                    <t t-set="qc" t-value="o.x_studio_one2many_field_C8TiY[0]"/>
+                                    <tr style="background-color: white !important; color: black !important;">
+                                        <td>
+                                            <span t-field="qc.x_studio_calific_final"/>
+                                        </td>
+                                        <td>
+                                            <span t-field="qc.x_studio_total_iqf_"/>
+                                        </td>
+                                        <td>
+                                            <span t-field="qc.x_studio_total_block_"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <t t-else="">
+                                    <tr style="background-color: white !important; color: black !important;">
+                                        <td colspan="3" class="text-center">No hay registros de Control de Calidad asociados.</td>
+                                    </tr>
+                                </t>
+                                <tr/>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <t t-set="backorders" t-value="o.backorder_ids.filtered(lambda x: x.state not in ('done', 'cancel'))"/>
+                <div t-if="o.signature" class="mt64" name="signature">
+                    <div class="row">
+                        <div class="col-4 offset-8 text-center">
+                            <strong>Firma</strong>
+                            <img t-att-src="image_data_uri(o.signature)" style="max-height: 4cm; max-width: 8cm; display: block; margin: 0 auto;"/>
+                            <p t-field="o.partner_id.name"/>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </t>
+    </t>
+</t>

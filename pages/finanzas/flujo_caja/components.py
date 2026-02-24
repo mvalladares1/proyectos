@@ -140,6 +140,108 @@ function collapseAll() {
     });
 }
 
+// ============ EXPORT VISTA ACTUAL ============
+function exportVisibleTableToExcel() {
+    const table = document.querySelector('.excel-table');
+    if (!table) return;
+
+    const cleanText = (el) => {
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('.icon-expand, .tooltip-text, svg').forEach(n => n.remove());
+        return (clone.textContent || '').replace(/\\s+/g, ' ').trim();
+    };
+
+    // Headers visibles (sin TOTAL izquierda)
+    const theadRows = Array.from(table.querySelectorAll('thead tr')).filter(tr => !tr.classList.contains('toolbar-row'));
+    let headers = [];
+    let headerRowsForCsv = [];
+    if (theadRows.length >= 2) {
+        // Semanal: exportar dos filas de encabezado (Meses + Semanas)
+        const monthRow = ['CONCEPTO'];
+        const monthCells = Array.from(theadRows[0].querySelectorAll('th'));
+        monthCells.forEach(th => {
+            if (th.classList.contains('frozen') || th.classList.contains('frozen-total-left')) {
+                return;
+            }
+            const text = cleanText(th);
+            const span = parseInt(th.getAttribute('colspan') || '1', 10);
+            if (!text) return;
+
+            if (text.toUpperCase() === 'TOTAL') {
+                monthRow.push('TOTAL');
+            } else {
+                monthRow.push(text);
+                for (let i = 1; i < span; i++) monthRow.push('');
+            }
+        });
+
+        const weekCells = Array.from(theadRows[1].querySelectorAll('th'));
+        const weeks = weekCells.map(cleanText).filter(Boolean);
+        const weekRow = ['CONCEPTO', ...weeks, 'TOTAL'];
+
+        headers = weekRow;
+        headerRowsForCsv = [monthRow, weekRow];
+    } else {
+        // Mensual
+        const ths = Array.from(table.querySelectorAll('thead tr th'));
+        const raw = ths.map(cleanText).filter(Boolean);
+        // raw esperado: CONCEPTO, TOTAL(izq), mes..., TOTAL(der)
+        if (raw.length >= 3) {
+            headers = [raw[0], ...raw.slice(2)]; // quitar TOTAL izquierda
+        } else {
+            headers = raw;
+        }
+        headerRowsForCsv = [headers];
+    }
+
+    const csvRows = [];
+    headerRowsForCsv.forEach(row => csvRows.push(row));
+
+    // Filas visibles del body (sin TOTAL izquierda)
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr')).filter(row => {
+        const style = row.getAttribute('style') || '';
+        return !style.includes('display:none');
+    });
+
+    bodyRows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td'));
+        if (!cells.length) return;
+
+        const values = cells.map(cleanText);
+        if (values.length >= 3) {
+            const exportValues = [values[0], ...values.slice(2)]; // omitir TOTAL izquierda
+            csvRows.push(exportValues);
+        } else {
+            csvRows.push(values);
+        }
+    });
+
+    const escapeCsv = (val) => {
+        const s = (val ?? '').toString();
+        if (s.includes(';') || s.includes('"') || s.includes('\\n')) {
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+    };
+
+    const csvContent = csvRows.map(r => r.map(escapeCsv).join(';')).join('\\n');
+    const bom = '\\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const filename = `flujo_caja_vista_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.csv`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
 // ============ SEARCH ============
 function searchTable(term) {
     searchTerm = term.toLowerCase();
