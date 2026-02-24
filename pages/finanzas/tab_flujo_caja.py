@@ -58,10 +58,17 @@ def render(username: str, password: str):
     # ========== CONTROLES SUPERIORES ==========
     col_search, col_filters, col_actions = st.columns([2, 3, 2])
     
+    # Obtener categorías disponibles de datos cacheados
+    categorias_disponibles = sorted(st.session_state.get("flujo_categorias_lista", []))
+    
     with col_search:
-        search_query = st.text_input("🔍 Búsqueda en tiempo real", 
-                                     placeholder="Buscar concepto, cuenta...",
-                                     key="search_flujo")
+        categorias_seleccionadas = st.multiselect(
+            "📁 Filtrar por Categoría de Contacto",
+            options=categorias_disponibles,
+            default=[],
+            key="filtro_categorias_flujo",
+            placeholder="Seleccionar categorías (afecta 1.1.1 y 1.2.1)..."
+        )
     
     with col_filters:
         st.write("**Filtrar por actividad:**")
@@ -197,6 +204,148 @@ def render(username: str, password: str):
         efectivo_por_mes = flujo_data.get("efectivo_por_mes", {})
         cuentas_nc = flujo_data.get("cuentas_sin_clasificar", [])
         
+        # ========== EXTRAER CATEGORÍAS DISPONIBLES PARA EL FILTRO ==========
+        categorias_set = set()
+        for act_data_tmp in actividades.values():
+            if not isinstance(act_data_tmp, dict):
+                continue
+            for concepto_tmp in act_data_tmp.get("conceptos", []):
+                c_id_tmp = concepto_tmp.get("id", "")
+                if c_id_tmp not in ("1.1.1", "1.2.1"):
+                    continue
+                for cuenta_tmp in concepto_tmp.get("cuentas", []):
+                    for etiqueta_tmp in cuenta_tmp.get("etiquetas", []):
+                        if etiqueta_tmp.get("tipo") == "categoria":
+                            # CxP categorías (📁 NombreCat)
+                            cat_name = etiqueta_tmp.get("nombre", "").replace("📁 ", "")
+                            if cat_name:
+                                categorias_set.add(cat_name)
+                        elif etiqueta_tmp.get("categoria"):
+                            # CxC partners con categoría (etiqueta-level)
+                            categorias_set.add(etiqueta_tmp["categoria"])
+                        # CxC facturas dentro de estados (Pagadas, Parciales, etc.)
+                        for fact_tmp in etiqueta_tmp.get("facturas", []):
+                            if fact_tmp.get("categoria"):
+                                categorias_set.add(fact_tmp["categoria"])
+                        # CxC sub_etiquetas (partners dentro de categorías proyectadas)
+                        for sub_tmp in etiqueta_tmp.get("sub_etiquetas", []):
+                            if sub_tmp.get("tipo") == "categoria":
+                                cat_name = sub_tmp.get("nombre", "").replace("📁 ", "")
+                                if cat_name:
+                                    categorias_set.add(cat_name)
+        nuevas_categorias = sorted(categorias_set)
+        old_categorias = st.session_state.get("flujo_categorias_lista", [])
+        st.session_state["flujo_categorias_lista"] = nuevas_categorias
+        
+        # Si las categorías cambiaron (primera carga), refrescar para que el multiselect las muestre
+        if nuevas_categorias and nuevas_categorias != old_categorias:
+            st.rerun()
+        
+        # ========== FILTRO POR CATEGORÍA DE CONTACTO (1.1.1 y 1.2.1) ==========
+        if categorias_seleccionadas:
+            import copy
+            actividades = copy.deepcopy(actividades)
+            for act_name, act_data_filt in actividades.items():
+                if not isinstance(act_data_filt, dict):
+                    continue
+                for concepto in act_data_filt.get("conceptos", []):
+                    c_id_filt = concepto.get("id", "")
+                    if c_id_filt not in ("1.1.1", "1.2.1"):
+                        continue
+                    
+                    tiene_cxp = any(c.get("es_cuenta_cxp") for c in concepto.get("cuentas", []))
+                    tiene_cxc = any(c.get("es_cuenta_cxc") for c in concepto.get("cuentas", []))
+                    
+                    for cuenta_filt in concepto.get("cuentas", []):
+                        # Guardar montos originales antes del filtro
+                        old_cuenta_monto = cuenta_filt.get("monto", 0)
+                        old_cuenta_montos_mes = dict(cuenta_filt.get("montos_por_mes", {}))
+                        
+                        if tiene_cxp and cuenta_filt.get("es_cuenta_cxp"):
+                            # CxP: Filtrar etiquetas (categorías nivel 3)
+                            etiquetas_filtradas = []
+                            for etq in cuenta_filt.get("etiquetas", []):
+                                if etq.get("tipo") == "categoria":
+                                    cat_name = etq.get("nombre", "").replace("📁 ", "")
+                                    if cat_name in categorias_seleccionadas:
+                                        etiquetas_filtradas.append(etq)
+                                else:
+                                    etiquetas_filtradas.append(etq)
+                            
+                            # Recalcular monto de la cuenta basado en las etiquetas filtradas
+                            nuevo_monto = sum(e.get("monto", 0) for e in etiquetas_filtradas)
+                            
+                            nuevos_montos_mes = {}
+                            for e in etiquetas_filtradas:
+                                for m, v in e.get("montos_por_mes", {}).items():
+                                    nuevos_montos_mes[m] = nuevos_montos_mes.get(m, 0) + v
+                            
+                            cuenta_filt["etiquetas"] = etiquetas_filtradas
+                            cuenta_filt["monto"] = nuevo_monto
+                            cuenta_filt["montos_por_mes"] = nuevos_montos_mes
+                        
+                        elif tiene_cxc and cuenta_filt.get("es_cuenta_cxc"):
+                            # CxC: Las etiquetas de cada estado pueden ser:
+                            # A) Categorías (tipo="categoria", nombre="📁 Cliente") con sub_etiquetas de partners
+                            # B) Partners directos con campo "categoria"
+                            # C) Facturas agrupadas por partner con campo "categoria"
+                            etiquetas_filtradas = []
+                            for etq in cuenta_filt.get("etiquetas", []):
+                                if etq.get("tipo") == "categoria":
+                                    # Es una categoría (📁 Cliente, 📁 Empleado, etc.)
+                                    cat_name = etq.get("nombre", "").replace("📁 ", "")
+                                    if cat_name in categorias_seleccionadas:
+                                        etiquetas_filtradas.append(etq)
+                                elif etq.get("facturas"):
+                                    # Partners con facturas detalladas → filtrar por categoría
+                                    facturas_ok = [f for f in etq["facturas"] if f.get("categoria", "") in categorias_seleccionadas]
+                                    if facturas_ok:
+                                        etq_copy = dict(etq)
+                                        etq_copy["facturas"] = facturas_ok
+                                        etq_copy["monto"] = sum(f.get("monto", 0) for f in facturas_ok)
+                                        etq_copy["montos_por_mes"] = {}
+                                        for f in facturas_ok:
+                                            for m, v in f.get("montos_por_mes", {}).items():
+                                                etq_copy["montos_por_mes"][m] = etq_copy["montos_por_mes"].get(m, 0) + v
+                                        etiquetas_filtradas.append(etq_copy)
+                                elif etq.get("categoria"):
+                                    # Partner directo con categoría
+                                    if etq["categoria"] in categorias_seleccionadas:
+                                        etiquetas_filtradas.append(etq)
+                                else:
+                                    # Etiqueta sin categoría ni facturas → mantener
+                                    etiquetas_filtradas.append(etq)
+                            
+                            nuevo_monto = sum(e.get("monto", 0) for e in etiquetas_filtradas)
+                            
+                            nuevos_montos_mes = {}
+                            for e in etiquetas_filtradas:
+                                for m, v in e.get("montos_por_mes", {}).items():
+                                    nuevos_montos_mes[m] = nuevos_montos_mes.get(m, 0) + v
+                            
+                            cuenta_filt["etiquetas"] = etiquetas_filtradas
+                            cuenta_filt["monto"] = nuevo_monto
+                            cuenta_filt["montos_por_mes"] = nuevos_montos_mes
+                        else:
+                            continue  # No es CxP ni CxC, no filtrar
+                        
+                        # Ajustar totales padre con la diferencia
+                        diff_monto = old_cuenta_monto - cuenta_filt["monto"]
+                        if diff_monto != 0:
+                            concepto["total"] = concepto.get("total", 0) - diff_monto
+                            for m, old_v in old_cuenta_montos_mes.items():
+                                new_v = cuenta_filt["montos_por_mes"].get(m, 0)
+                                diff_m = old_v - new_v
+                                if diff_m != 0 and m in concepto.get("montos_por_mes", {}):
+                                    concepto["montos_por_mes"][m] -= diff_m
+                            act_data_filt["subtotal"] = act_data_filt.get("subtotal", 0) - diff_monto
+                            if "subtotales_por_mes" in act_data_filt:
+                                for m, old_v in old_cuenta_montos_mes.items():
+                                    new_v = cuenta_filt["montos_por_mes"].get(m, 0)
+                                    diff_m = old_v - new_v
+                                    if diff_m != 0 and m in act_data_filt["subtotales_por_mes"]:
+                                        act_data_filt["subtotales_por_mes"][m] -= diff_m
+        
         # ========== FILTRO: Solo pendiente (excluir todo lo ya pagado/cobrado) ==========
         if solo_pendiente:
             import copy
@@ -233,31 +382,10 @@ def render(username: str, password: str):
                                         sub["monto"] = 0
                                         sub["montos_por_mes"] = {}
                             
-                            elif cuenta.get("codigo") == "parciales" and "montos_real_por_mes" in cuenta:
-                                # PARCIALES: Quitar la parte ya pagada
-                                monto_real_estado = cuenta.get("monto_real", 0)
-                                cuenta["monto"] = cuenta.get("monto", 0) - monto_real_estado
-                                for mes, val in cuenta.get("montos_real_por_mes", {}).items():
-                                    cuenta["montos_por_mes"][mes] = cuenta.get("montos_por_mes", {}).get(mes, 0) - val
-                                concepto["total"] = concepto.get("total", 0) - monto_real_estado
-                                for mes, val in cuenta.get("montos_real_por_mes", {}).items():
-                                    concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
-                                act_data["subtotal"] = act_data.get("subtotal", 0) - monto_real_estado
-                                if "subtotales_por_mes" in act_data:
-                                    for mes, val in cuenta.get("montos_real_por_mes", {}).items():
-                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
-                                for etiqueta in cuenta.get("etiquetas", []):
-                                    if "montos_real_por_mes" in etiqueta:
-                                        et_real = etiqueta.get("monto_real", 0)
-                                        etiqueta["monto"] = etiqueta.get("monto", 0) - et_real
-                                        for mes, val in etiqueta.get("montos_real_por_mes", {}).items():
-                                            etiqueta["montos_por_mes"][mes] = etiqueta.get("montos_por_mes", {}).get(mes, 0) - val
-                                    for sub in etiqueta.get("sub_etiquetas", []):
-                                        if "montos_real_por_mes" in sub:
-                                            sub_real = sub.get("monto_real", 0)
-                                            sub["monto"] = sub.get("monto", 0) - sub_real
-                                            for mes, val in sub.get("montos_real_por_mes", {}).items():
-                                                sub["montos_por_mes"][mes] = sub.get("montos_por_mes", {}).get(mes, 0) - val
+                            elif cuenta.get("codigo") == "parciales":
+                                # PARCIALES: ya solo contiene el residual
+                                # (la parte pagada fue movida a PAGADAS en el backend)
+                                pass
                     
                     elif tiene_cxc:
                         # === CxC (1.1.1): Estados son cuentas con codigo (igual que CxP) ===

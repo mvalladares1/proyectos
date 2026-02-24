@@ -136,7 +136,7 @@ class EtiquetasPalletService:
             pickings = self.odoo.search_read(
                 'stock.picking',
                 domain_picking,
-                ['name', 'origin', 'state', 'date_done', 'picking_type_id'],
+                ['name', 'origin', 'state', 'date_done', 'picking_type_id', 'partner_id'],
                 limit=25
             )
             
@@ -144,6 +144,12 @@ class EtiquetasPalletService:
                 p['_modelo'] = 'stock.picking'
                 # Ajustar formato para compatibilidad
                 p['product_id'] = ['', p.get('picking_type_id', ['', ''])[1] if isinstance(p.get('picking_type_id'), list) else '']
+                # Extraer nombre del cliente desde partner_id
+                partner = p.get('partner_id')
+                if partner and isinstance(partner, (list, tuple)) and len(partner) > 1:
+                    p['cliente_nombre'] = partner[1]
+                else:
+                    p['cliente_nombre'] = ''
                 resultados.append(clean_record(p))
             
             return resultados
@@ -201,15 +207,29 @@ class EtiquetasPalletService:
                 pickings = self.odoo.search_read(
                     'stock.picking',
                     [('name', '=', orden_name)],
-                    ['id', 'name', 'date_done', 'move_ids_without_package'],
+                    ['id', 'name', 'date_done', 'partner_id'],
                     limit=1
                 )
                 
                 if pickings:
                     picking = pickings[0]
                     fecha_proceso = picking.get('date_done')
-                    move_ids = picking.get('move_ids_without_package', [])
-                    logger.info(f"Picking {orden_name}: {len(move_ids)} moves")
+                    
+                    # Extraer cliente desde partner_id del picking
+                    partner = picking.get('partner_id')
+                    if partner and isinstance(partner, (list, tuple)) and len(partner) > 1:
+                        cliente_nombre = partner[1]
+                    
+                    # Buscar stock.move directamente por picking_id
+                    # (no usar move_ids_without_package que excluye operaciones con paquetes)
+                    moves = self.odoo.search_read(
+                        'stock.move',
+                        [('picking_id', '=', picking['id'])],
+                        ['id'],
+                        limit=500
+                    )
+                    move_ids = [m['id'] for m in moves]
+                    logger.info(f"Picking {orden_name}: {len(move_ids)} moves (búsqueda directa)")
                 else:
                     logger.warning(f"No se encontró orden/picking {orden_name}")
                     return []
@@ -234,6 +254,28 @@ class EtiquetasPalletService:
                 ],
                 limit=500
             )
+            
+            # Fallback: si no encontramos move_lines por move_id, buscar directamente por picking_id
+            if not move_lines and not ordenes:
+                # Para stock.picking, buscar move_lines directamente por picking_id
+                picking_id = pickings[0]['id'] if pickings else None
+                if picking_id:
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line',
+                        [
+                            ('picking_id', '=', picking_id),
+                            ('result_package_id', '!=', False)
+                        ],
+                        [
+                            'result_package_id',
+                            'product_id',
+                            'qty_done',
+                            'lot_id',
+                            'date'
+                        ],
+                        limit=500
+                    )
+                    logger.info(f"Fallback picking_id: {len(move_lines)} move_lines para {orden_name}")
             
             logger.info(f"Encontrados {len(move_lines)} move_lines con pallets para {orden_name}")
             

@@ -481,7 +481,7 @@ class OdooQueryManager:
             moves = self.odoo.search_read(
                 'account.move',
                 domain_moves,
-                ['id', 'name', 'x_studio_fecha_de_pago', 'date', 'move_type', 'state', 'payment_state', 'partner_id']
+                ['id', 'name', 'x_studio_fecha_de_pago', 'date', 'move_type', 'state', 'payment_state', 'partner_id', 'amount_total', 'amount_residual']
             )
             
             # Crear diccionario de move_id -> (fecha_efectiva, es_proyeccion)
@@ -494,26 +494,93 @@ class OdooQueryManager:
             
             ESTADOS_PROYECCION = ['not_paid', 'in_payment', 'partial']
             
+            # Recopilar partner_ids para consulta de categorías
+            partner_ids_set = set()
+            
             for m in moves:
                 fecha_pago = m.get('x_studio_fecha_de_pago')
                 fecha_contable = m.get('date')
                 payment_state = m.get('payment_state', 'not_paid')
                 es_proyeccion = payment_state in ESTADOS_PROYECCION
                 
+                partner_data = m.get('partner_id', [0, 'Sin partner'])
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
+                partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin partner'
+                
+                if partner_id:
+                    partner_ids_set.add(partner_id)
+                
                 move_fecha_efectiva[m['id']] = fecha_pago if fecha_pago else fecha_contable
                 move_info[m['id']] = {
                     'name': m.get('name'),
                     'payment_state': payment_state,
                     'es_proyeccion': es_proyeccion,
-                    'partner_name': (m.get('partner_id', [0, 'Sin partner'])[1]
-                                    if isinstance(m.get('partner_id'), (list, tuple)) and len(m.get('partner_id')) > 1
-                                    else 'Sin partner')
+                    'partner_name': partner_name,
+                    'partner_id': partner_id,
+                    'amount_total': float(m.get('amount_total') or 0.0),
+                    'amount_residual': float(m.get('amount_residual') or 0.0)
                 }
                 
                 if es_proyeccion:
                     proyeccion_count += 1
                 else:
                     cobradas_count += 1
+            
+            # Consultar categorías de contacto por partner (batch)
+            # IMPORTANTE: Si el partner es un contacto hijo (invoice address, etc.),
+            # buscar la categoría del PADRE
+            partners_categorias = {}
+            if partner_ids_set:
+                try:
+                    partners_data = self.odoo.search_read(
+                        'res.partner',
+                        [['id', 'in', list(partner_ids_set)]],
+                        ['id', 'x_studio_categora_de_contacto', 'parent_id'],
+                    )
+                    
+                    # Primera pasada: separar partners con padre y sin padre
+                    # REGLA: Si tiene parent_id → SIEMPRE usar categoría del padre (el contacto hijo
+                    # puede tener una categoría diferente pero el padre es el que define la clasificación)
+                    partners_con_padre = []  # (child_id, parent_id)
+                    for p in partners_data:
+                        cat = p.get('x_studio_categora_de_contacto', False)
+                        parent = p.get('parent_id', False)
+                        
+                        if parent and isinstance(parent, (list, tuple)) and parent[0]:
+                            # Tiene padre → siempre buscar del padre
+                            partners_con_padre.append((p['id'], parent[0]))
+                        elif isinstance(cat, (list, tuple)) and len(cat) > 1:
+                            partners_categorias[p['id']] = cat[1]
+                        elif isinstance(cat, str) and cat:
+                            partners_categorias[p['id']] = cat
+                        else:
+                            partners_categorias[p['id']] = 'Sin Categoría'
+                    
+                    # Segunda pasada: buscar categorías de padres
+                    if partners_con_padre:
+                        parent_ids = list(set(pid for _, pid in partners_con_padre))
+                        parents_data = self.odoo.search_read(
+                            'res.partner',
+                            [['id', 'in', parent_ids]],
+                            ['id', 'x_studio_categora_de_contacto'],
+                        )
+                        parent_cats = {}
+                        for pp in parents_data:
+                            pcat = pp.get('x_studio_categora_de_contacto', False)
+                            if isinstance(pcat, (list, tuple)) and len(pcat) > 1:
+                                parent_cats[pp['id']] = pcat[1]
+                            elif isinstance(pcat, str) and pcat:
+                                parent_cats[pp['id']] = pcat
+                        
+                        for child_id, parent_id in partners_con_padre:
+                            partners_categorias[child_id] = parent_cats.get(parent_id, 'Sin Categoría')
+                    
+                except Exception as e:
+                    print(f"[CxC Query] Error obteniendo categorías de partners: {e}")
+            
+            # Enriquecer move_info con categoría
+            for mid, info in move_info.items():
+                info['partner_categoria'] = partners_categorias.get(info.get('partner_id', 0), 'Sin Categoría')
             
             move_ids = list(move_fecha_efectiva.keys())
             
@@ -569,6 +636,9 @@ class OdooQueryManager:
                 linea['es_proyeccion'] = info.get('es_proyeccion', False)
                 linea['payment_state'] = info.get('payment_state', 'not_paid')
                 linea['partner_name'] = info.get('partner_name', 'Sin partner')
+                linea['partner_categoria'] = info.get('partner_categoria', 'Sin Categoría')
+                linea['amount_total'] = float(info.get('amount_total') or 0.0)
+                linea['amount_residual'] = float(info.get('amount_residual') or 0.0)
             
             return lineas
         except Exception as e:
