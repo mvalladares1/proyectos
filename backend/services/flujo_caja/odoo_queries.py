@@ -526,6 +526,16 @@ class OdooQueryManager:
                 else:
                     cobradas_count += 1
             
+            # DEBUG: Verificar amount_total/amount_residual para parciales
+            partial_moves = {mid: info for mid, info in move_info.items() if info['payment_state'] == 'partial'}
+            partial_with_total = sum(1 for info in partial_moves.values() if info['amount_total'] > 0)
+            partial_without_total = sum(1 for info in partial_moves.values() if info['amount_total'] == 0)
+            print(f"[CxC Query DEBUG] Total moves: {len(move_info)}, Parciales: {len(partial_moves)}, con amount_total>0: {partial_with_total}, con amount_total=0: {partial_without_total}")
+            if partial_moves:
+                sample = list(partial_moves.values())[:3]
+                for s in sample:
+                    print(f"[CxC Query DEBUG SAMPLE] name={s['name']}, payment_state={s['payment_state']}, amount_total={s['amount_total']}, amount_residual={s['amount_residual']}")
+            
             # Consultar categorías de contacto por partner (batch)
             partners_categorias = {}
             if partner_ids_set:

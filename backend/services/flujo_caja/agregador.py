@@ -347,6 +347,9 @@ class AgregadorFlujo:
                 monto_residual = balance * residual_ratio
                 monto_pagado_parcial = balance - monto_residual  # Parte ya cobrada
                 monto_efectivo = monto_residual  # Solo el residual va a PARCIALES
+                print(f"[CxC SPLIT] partner={partner_name[:30]}, balance={balance}, amount_total={amount_total_move}, amount_residual={amount_residual_move}, ratio={residual_ratio:.3f}, residual→PARCIALES={monto_residual:.0f}, pagado→PAGADAS={monto_pagado_parcial:.0f}")
+            elif payment_state == 'partial':
+                print(f"[CxC SPLIT WARNING] partial pero amount_total=0! partner={partner_name[:30]}, balance={balance}, amount_total={amount_total_move}, amount_residual={amount_residual_move}")
             
             # Acumular
             if concepto_id not in self.montos_por_concepto_mes:
