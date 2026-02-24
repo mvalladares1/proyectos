@@ -281,7 +281,6 @@ def _generar_etiqueta_100x50(datos: Dict, mostrar_md: bool = False, md_checked: 
                 margin-bottom: 4px;
                 text-transform: uppercase;
                 line-height: 1.2;
-                border-bottom: 1px solid #999;
                 padding-bottom: 3px;
             }}
             .contenido {{
@@ -311,15 +310,15 @@ def _generar_etiqueta_100x50(datos: Dict, mostrar_md: bool = False, md_checked: 
         <div class="titulo">{nombre}</div>
 
         <div class="contenido">
-            <div class="linea">Fecha de elaboración: {fecha_elab} / Fecha de vencimiento: {fecha_venc}</div>
+            <div class="linea">Fecha de elaboraci&oacute;n: {fecha_elab} / Fecha de vencimiento: {fecha_venc}</div>
             <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
             <div class="linea">Peso Neto: {peso} kg</div>
             <div class="linea">PRODUCTO CONGELADO</div>
             <div class="linea">Planta: Rio Futuro Procesos Spa</div>
             <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
             <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
-            <div class="linea">XIV Región, N° 2214585504 del 30-11-2022</div>
-            <div class="linea">Código SAG Planta: 105721</div>
+            <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
+            <div class="linea">C&oacute;digo SAG Planta: 105721</div>
         </div>
 
         {md_html}
@@ -610,61 +609,60 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
                 height: 100mm;
             }}
             .recuadro {{
-                border: 1.5px solid black;
-                padding: 3mm 4mm;
-                margin: 1mm;
-                height: calc(100mm - 4mm);
+                padding: 4mm 5mm;
+                margin: 2mm;
+                height: calc(100mm - 6mm);
                 box-sizing: border-box;
-                font-size: 11px;
+                font-size: 13px;
+                line-height: 1.55;
             }}
             .titulo {{
-                font-size: 15px;
+                font-size: 18px;
                 font-weight: bold;
                 text-align: center;
-                text-transform: uppercase;
-                margin-bottom: 5px;
+                margin-bottom: 4px;
                 padding-bottom: 4px;
-                border-bottom: 1.5px solid black;
                 line-height: 1.2;
             }}
             .linea {{
-                margin: 2px 0;
+                margin: 1px 0;
             }}
             .md-box {{
-                margin-top: 5px;
+                margin-top: 8px;
                 display: flex;
                 align-items: center;
-                gap: 5px;
+                gap: 6px;
+                font-size: 14px;
             }}
             .checkbox {{
-                width: 20px;
-                height: 20px;
-                border: 1px solid black;
+                width: 22px;
+                height: 22px;
+                border: 2px solid #333;
+                border-radius: 3px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 16px;
+                font-size: 18px;
+                font-weight: bold;
             }}
         </style>
     </head>
     <body>
         <div class="recuadro">
             <div class="titulo">{datos.get('nombre_producto', '')}</div>
-            <div class="linea">Fecha de elaboración: {datos.get('fecha_elaboracion', '')}</div>
-            <div class="linea">Fecha de vencimiento: {datos.get('fecha_vencimiento', '')}</div>
-            <div class="linea">Lote: {datos.get('lote_produccion', '')}</div>
-            <div class="linea">Pallet: {datos.get('numero_pallet', '')}</div>
+            <div class="linea">Fecha de elaboraci&oacute;n: {datos.get('fecha_elaboracion', '')} / Fecha de vencimiento: {datos.get('fecha_vencimiento', '')}</div>
+            <div class="linea">Lote: {datos.get('lote_produccion', '')} / Pallet: {datos.get('numero_pallet', '')}</div>
             <div class="linea">Peso Neto: {datos.get('peso_caja_kg', 10)} kg</div>
             <div class="linea">PRODUCTO CONGELADO</div>
-            <div class="linea">Planta Cocule: Rio Futuro Procesos Spa</div>
+            <div class="linea">Planta: Rio Futuro Procesos Spa</div>
             <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
             <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
-            <div class="linea">XIV Región, N° 2214585504 del 30-11-2022</div>
-            <div class="linea">Código SAG Planta: 105721</div>
+            <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
+            <div class="linea">C&oacute;digo SAG Planta: 105721</div>
             
             <div class="md-box">
                 <span>MD</span>
-                <div class="checkbox">✓</div>
+                <div class="checkbox">✔</div>
             </div>
         </div>
     </body>
@@ -802,22 +800,15 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
                     width: 100mm;
                     height: 50mm;
                     margin: 0;
-                    padding: 0;
+                    padding: 2mm 3mm;
                 }}
             }}
             body {{
                 font-family: Arial, sans-serif;
-                padding: 0;
-                margin: 0;
-                width: 100mm;
-                height: 50mm;
-            }}
-            .recuadro {{
-                border: 1.5px solid black;
                 padding: 2mm 3mm;
-                margin: 1mm;
-                height: calc(50mm - 4mm);
-                box-sizing: border-box;
+                margin: 0;
+                width: 94mm;
+                height: 46mm;
                 font-size: 9px;
                 line-height: 1.35;
             }}
@@ -826,9 +817,8 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
                 font-weight: bold;
                 text-align: center;
                 text-transform: uppercase;
-                margin-bottom: 2px;
-                padding-bottom: 2px;
-                border-bottom: 1.5px solid black;
+                margin-bottom: 3px;
+                padding-bottom: 3px;
                 line-height: 1.2;
             }}
             .linea {{
@@ -837,18 +827,16 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
         </style>
     </head>
     <body>
-        <div class="recuadro">
-            <div class="titulo">{nombre}</div>
-            <div class="linea">Fecha de elaboración: {fecha_elab} / Fecha de vencimiento: {fecha_venc}</div>
-            <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
-            <div class="linea">Peso Neto: {peso} kg</div>
-            <div class="linea">PRODUCTO CONGELADO</div>
-            <div class="linea">Planta Cocule: Rio Futuro Procesos Spa</div>
-            <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
-            <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
-            <div class="linea">XIV Región, N° 2214585504 del 30-11-2022</div>
-            <div class="linea">Código SAG Planta: 105721</div>
-        </div>
+        <div class="titulo">{nombre}</div>
+        <div class="linea">Fecha de elaboraci&oacute;n: {fecha_elab} / Fecha de vencimiento: {fecha_venc}</div>
+        <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
+        <div class="linea">Peso Neto: {peso} kg</div>
+        <div class="linea">PRODUCTO CONGELADO</div>
+        <div class="linea">Planta: Rio Futuro Procesos Spa</div>
+        <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+        <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+        <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
+        <div class="linea">C&oacute;digo SAG Planta: 105721</div>
     </body>
     </html>
     """
@@ -888,7 +876,7 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
     
     st.subheader("📋 ETIQUETAS CLIENTES (IQF)")
     
-    # Buscar diseño del cliente
+    # Buscar diseño del cliente — si no hay, usar LACO como default para IQF
     cliente_key = None
     for key in DISEÑOS_ETIQUETAS_CAJA.keys():
         if key.upper() in cliente_nombre.upper():
@@ -896,12 +884,7 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
             break
     
     if not cliente_key:
-        st.warning(f"⚠️ No hay diseño de etiqueta de cliente para: **{cliente_nombre or '(sin cliente)'}**")
-        st.info("Clientes con diseño disponible: " + ", ".join(set(DISEÑOS_ETIQUETAS_CAJA.keys())))
-        st.caption("Se usará la etiqueta genérica para estos productos IQF.")
-        # Fallback: usar genérica
-        render_seccion_subproductos(username, password, pallets_iqf, titulo="📋 IQF (Etiqueta Genérica)")
-        return
+        cliente_key = "LACO"  # Default para IQF A
     
     funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
     
