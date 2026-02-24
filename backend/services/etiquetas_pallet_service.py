@@ -255,6 +255,28 @@ class EtiquetasPalletService:
                 limit=500
             )
             
+            # Fallback: si no encontramos move_lines por move_id, buscar directamente por picking_id
+            if not move_lines and not ordenes:
+                # Para stock.picking, buscar move_lines directamente por picking_id
+                picking_id = pickings[0]['id'] if pickings else None
+                if picking_id:
+                    move_lines = self.odoo.search_read(
+                        'stock.move.line',
+                        [
+                            ('picking_id', '=', picking_id),
+                            ('result_package_id', '!=', False)
+                        ],
+                        [
+                            'result_package_id',
+                            'product_id',
+                            'qty_done',
+                            'lot_id',
+                            'date'
+                        ],
+                        limit=500
+                    )
+                    logger.info(f"Fallback picking_id: {len(move_lines)} move_lines para {orden_name}")
+            
             logger.info(f"Encontrados {len(move_lines)} move_lines con pallets para {orden_name}")
             
             # Agrupar por result_package_id (solo los que tengan kg > 0)
