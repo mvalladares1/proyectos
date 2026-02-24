@@ -336,13 +336,31 @@ def render(username: str, password: str):
             if _throttle_rerun("etiq_cambiar"):
                 st.rerun()
         
-        # ==================== PASO 3: TIPO DE ETIQUETA ====================
+        # ==================== PASO 3: SECCIONES DE ETIQUETAS ====================
         if st.session_state.etiq_pallets_cargados:
             st.divider()
             
+            # Clasificar pallets en IQF (cliente) vs Subproductos
+            pallets_iqf = []
+            pallets_sub = []
+            
+            _SUBPRODUCTO_KEYWORDS = ['PSP', 'Whole', 'Broken', 'W&B', 'Desecho', 'Jugo']
+            
+            for p in st.session_state.etiq_pallets_cargados:
+                pid = p.get('product_id')
+                pname = pid[1] if isinstance(pid, list) else str(pid or '')
+                _, desc = extraer_codigo_descripcion(pname)
+                desc_upper = desc.upper()
+                
+                if any(kw.upper() in desc_upper for kw in _SUBPRODUCTO_KEYWORDS):
+                    pallets_sub.append(p)
+                else:
+                    pallets_iqf.append(p)
+            
+            # ---------- Tarja por Pallet (siempre disponible) ----------
             tipo_etiqueta = st.radio(
                 "Tipo de etiqueta",
-                ["📦 Tarja por Pallet", "🎁 Etiqueta por Caja", "🏷️ Etiqueta Genérica"],
+                ["📦 Tarja por Pallet", "🏷️ Etiquetas por Caja"],
                 horizontal=True,
                 key="etiq_tipo"
             )
@@ -351,10 +369,16 @@ def render(username: str, password: str):
             
             if tipo_etiqueta == "📦 Tarja por Pallet":
                 render_etiquetas_pallet(username, password)
-            elif tipo_etiqueta == "🎁 Etiqueta por Caja":
-                render_etiquetas_caja(username, password)
             else:
-                render_etiquetas_generica(username, password)
+                # ---------- ETIQUETAS POR CAJA: 2 secciones ----------
+                if pallets_iqf:
+                    render_seccion_iqf(username, password, pallets_iqf)
+                
+                if pallets_sub:
+                    render_seccion_subproductos(username, password, pallets_sub)
+                
+                if not pallets_iqf and not pallets_sub:
+                    st.warning("No se encontraron pallets para generar etiquetas.")
 
 
 # ==================== DISEÑOS DE ETIQUETAS POR CLIENTE ====================
@@ -619,12 +643,38 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
     return html
 
 
-def render_etiquetas_caja(username: str, password: str):
-    """Renderiza etiquetas por caja — usa estado compartido."""
+def _get_lot_name(pallet: Dict) -> str:
+    """Extrae nombre de lote del pallet."""
+    lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
+    if not lot_name:
+        lot_id = pallet.get('lot_id')
+        lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
+    return lot_name
+
+
+def _agrupar_pallets_por_producto(pallets: List[Dict]) -> Dict:
+    """Agrupa pallets por product_id, devuelve dict {product_key: {descripcion, codigo, pallets}}."""
+    grupos = {}
+    for p in pallets:
+        pid = p.get('product_id')
+        if not pid:
+            continue
+        pkey = pid[0] if isinstance(pid, list) else pid
+        pname = pid[1] if isinstance(pid, list) else str(pid)
+        codigo, desc = extraer_codigo_descripcion(pname)
+        if pkey not in grupos:
+            grupos[pkey] = {'codigo': codigo, 'descripcion': desc, 'pallets': []}
+        grupos[pkey]['pallets'].append(p)
+    return grupos
+
+
+def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
+    """Sección ETIQUETAS CLIENTES (IQF) — etiquetas por caja con diseño de cliente."""
     
-    pallets = st.session_state.etiq_pallets_cargados
     orden = st.session_state.etiq_orden_seleccionada
     cliente_nombre = orden.get('cliente_nombre', '')
+    
+    st.subheader("📋 ETIQUETAS CLIENTES (IQF)")
     
     # Buscar diseño del cliente
     cliente_key = None
@@ -634,81 +684,85 @@ def render_etiquetas_caja(username: str, password: str):
             break
     
     if not cliente_key:
-        st.error(f"❌ No hay diseño de etiqueta configurado para el cliente: {cliente_nombre}")
-        st.info("Clientes con diseño disponible: " + ", ".join(DISEÑOS_ETIQUETAS_CAJA.keys()))
+        st.warning(f"⚠️ No hay diseño de etiqueta de cliente para: **{cliente_nombre or '(sin cliente)'}**")
+        st.info("Clientes con diseño disponible: " + ", ".join(set(DISEÑOS_ETIQUETAS_CAJA.keys())))
+        st.caption("Se usará la etiqueta genérica para estos productos IQF.")
+        # Fallback: usar genérica
+        render_seccion_subproductos(username, password, pallets_iqf, titulo="📋 IQF (Etiqueta Genérica)")
         return
     
     funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
     
-    st.write(f"**{len(pallets)} pallets disponibles** — Diseño: {cliente_key}")
+    grupos = _agrupar_pallets_por_producto(pallets_iqf)
     
-    # MATERIAL CODE y PRODUCT NAME: valores fijos (NO se toman de Odoo)
-    material_code = "RIRASPBERRY"
-    product_name = "Frozen Raspberry 12-24 mm"
+    for pkey, grupo in grupos.items():
+        desc = grupo['descripcion']
+        pallets = grupo['pallets']
+        
+        st.markdown(f"#### 📦 {desc}")
+        st.caption(f"{len(pallets)} pallets — Diseño: {cliente_key}")
+        
+        for pallet in pallets:
+            with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
+                lot_name = _get_lot_name(pallet)
+                fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+                fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
+                
+                datos_etiqueta = {
+                    'nombre_producto': desc,
+                    'codigo_producto': grupo['codigo'],
+                    'peso_caja_kg': extraer_peso_de_descripcion(desc),
+                    'fecha_elaboracion': fecha_elab,
+                    'fecha_vencimiento': fecha_venc,
+                    'lote_produccion': lot_name,
+                    'numero_pallet': pallet.get('package_name', ''),
+                    'cliente_nombre': cliente_nombre,
+                    'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
+                    'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
+                }
+                
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pallet.get('package_id')}", use_container_width=True):
+                    html_print = funcion_diseño(datos_etiqueta)
+                    imprimir_etiqueta(html_print, height=420)
     
     st.divider()
+
+
+def render_seccion_subproductos(username: str, password: str, pallets_sub: List[Dict], titulo: str = "📋 ETIQUETAS SUBPRODUCTOS"):
+    """Sección ETIQUETAS SUBPRODUCTOS — etiqueta genérica 100×50mm."""
     
-    for pallet in pallets:
-        with st.expander(f"📦 {pallet.get('package_name', '')} - {pallet.get('cantidad_cajas', 0)} cajas"):
-            lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
-            
-            fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
-            fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
-            
-            datos_etiqueta = {
-                'nombre_producto': product_name,
-                'codigo_producto': material_code,
-                'peso_caja_kg': '10',
-                'fecha_elaboracion': fecha_elab,
-                'fecha_vencimiento': fecha_venc,
-                'lote_produccion': lot_name,
-                'numero_pallet': pallet.get('package_name', ''),
-                'cliente_nombre': cliente_nombre,
-                'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
-                'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
-            }
-            
-            if st.button("🖨️ Imprimir / Vista", key=f"etiq_caja_print_{pallet.get('package_id')}", use_container_width=True):
-                html_print = funcion_diseño(datos_etiqueta)
-                imprimir_etiqueta(html_print, height=420)
-
-
-
-
-def render_etiquetas_generica(username: str, password: str):
-    """Renderiza etiquetas genéricas 100x50mm — no requiere cliente."""
-
-    pallets = st.session_state.etiq_pallets_cargados
-    orden = st.session_state.etiq_orden_seleccionada
-    product_name = orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else orden.get('product_name', '')
-    _, descripcion = extraer_codigo_descripcion(product_name)
-    peso_neto = extraer_peso_de_descripcion(descripcion)
-
-    st.write(f"**{len(pallets)} pallets disponibles** — Etiqueta genérica 100×50mm")
+    st.subheader(titulo)
+    
+    grupos = _agrupar_pallets_por_producto(pallets_sub)
+    
+    for pkey, grupo in grupos.items():
+        desc = grupo['descripcion']
+        peso_neto = extraer_peso_de_descripcion(desc)
+        pallets = grupo['pallets']
+        
+        st.markdown(f"#### 📦 {desc}")
+        st.caption(f"{len(pallets)} pallets — Etiqueta genérica 100×50mm")
+        
+        for pallet in pallets:
+            with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
+                lot_name = _get_lot_name(pallet)
+                fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+                fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
+                
+                datos_etiqueta = {
+                    'nombre_producto': desc,
+                    'peso_neto_kg': peso_neto,
+                    'fecha_elaboracion': fecha_elab,
+                    'fecha_vencimiento': fecha_venc,
+                    'lote_produccion': lot_name,
+                    'numero_pallet': pallet.get('package_name', ''),
+                }
+                
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_sub_{pallet.get('package_id')}", use_container_width=True):
+                    html_print = generar_etiqueta_caja_generica(datos_etiqueta)
+                    imprimir_etiqueta(html_print, height=280)
+    
     st.divider()
-
-    for pallet in pallets:
-        with st.expander(f"📦 {pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
-            lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
-            if not lot_name:
-                lot_id = pallet.get('lot_id')
-                lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
-
-            fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
-            fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
-
-            datos_etiqueta = {
-                'nombre_producto': descripcion,
-                'peso_neto_kg': peso_neto,
-                'fecha_elaboracion': fecha_elab,
-                'fecha_vencimiento': fecha_venc,
-                'lote_produccion': lot_name,
-                'numero_pallet': pallet.get('package_name', ''),
-            }
-
-            if st.button("🖨️ Imprimir / Vista", key=f"etiq_gen_print_{pallet.get('package_id')}", use_container_width=True):
-                html_print = generar_etiqueta_caja_generica(datos_etiqueta)
-                imprimir_etiqueta(html_print, height=280)
 
 
 def render_etiquetas_pallet(username: str, password: str):
