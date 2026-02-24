@@ -572,13 +572,18 @@ class OdooQueryManager:
                         for child_id, parent_id in partners_sin_cat:
                             partners_categorias[child_id] = parent_cats.get(parent_id, 'Sin Categoría')
                     
+                    # DEBUG: Mostrar categorías asignadas para diagnóstico
                     print(f"[CxC Query] Categorías asignadas: {len(partners_categorias)} partners, {len(partners_sin_cat)} heredaron del padre")
+                    for pid, cat in partners_categorias.items():
+                        print(f"[CxC Query CAT] partner_id={pid} → categoría='{cat}'")
                 except Exception as e:
                     print(f"[CxC Query] Error obteniendo categorías de partners: {e}")
             
             # Enriquecer move_info con categoría
             for mid, info in move_info.items():
                 info['partner_categoria'] = partners_categorias.get(info.get('partner_id', 0), 'Sin Categoría')
+                # DEBUG: mostrar info cada move
+                print(f"[CxC Query MOVE] id={mid}, name={info.get('name')}, partner_name={info.get('partner_name')}, partner_id={info.get('partner_id')}, payment_state={info.get('payment_state')}, categoria={info.get('partner_categoria')}, amount_total={info.get('amount_total')}, amount_residual={info.get('amount_residual')}")
             
             move_ids = list(move_fecha_efectiva.keys())
             
