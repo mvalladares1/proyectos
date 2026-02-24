@@ -163,7 +163,7 @@ class EtiquetasPalletService:
             ordenes = self.odoo.search_read(
                 'mrp.production',
                 [('name', '=', orden_name)],
-                ['id', 'name', 'date_finished', 'move_finished_ids', 'x_studio_clientes', 'x_studio_fecha_inicio'],
+                ['id', 'name', 'date_finished', 'move_finished_ids', 'x_studio_clientes', 'x_studio_inicio_de_proceso'],
                 limit=1
             )
             
@@ -175,7 +175,7 @@ class EtiquetasPalletService:
                 # Es una orden de producción
                 orden = ordenes[0]
                 fecha_proceso = orden.get('date_finished')
-                fecha_inicio = orden.get('x_studio_fecha_inicio')
+                fecha_inicio = orden.get('x_studio_inicio_de_proceso')
                 
                 # Extraer cliente
                 cliente = orden.get('x_studio_clientes')
