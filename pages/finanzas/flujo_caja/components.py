@@ -154,10 +154,33 @@ function exportVisibleTableToExcel() {
     // Headers visibles (sin TOTAL izquierda)
     const theadRows = Array.from(table.querySelectorAll('thead tr'));
     let headers = [];
+    let headerRowsForCsv = [];
     if (theadRows.length >= 2) {
-        // Semanal: usar segunda fila (S1, S2, ...) + concepto + total derecha
-        const weeks = Array.from(theadRows[1].querySelectorAll('th')).map(cleanText).filter(Boolean);
-        headers = ['CONCEPTO', ...weeks, 'TOTAL'];
+        // Semanal: exportar dos filas de encabezado (Meses + Semanas)
+        const monthRow = ['CONCEPTO'];
+        const monthCells = Array.from(theadRows[0].querySelectorAll('th'));
+        monthCells.forEach(th => {
+            if (th.classList.contains('frozen') || th.classList.contains('frozen-total-left')) {
+                return;
+            }
+            const text = cleanText(th);
+            const span = parseInt(th.getAttribute('colspan') || '1', 10);
+            if (!text) return;
+
+            if (text.toUpperCase() === 'TOTAL') {
+                monthRow.push('TOTAL');
+            } else {
+                monthRow.push(text);
+                for (let i = 1; i < span; i++) monthRow.push('');
+            }
+        });
+
+        const weekCells = Array.from(theadRows[1].querySelectorAll('th'));
+        const weeks = weekCells.map(cleanText).filter(Boolean);
+        const weekRow = ['CONCEPTO', ...weeks, 'TOTAL'];
+
+        headers = weekRow;
+        headerRowsForCsv = [monthRow, weekRow];
     } else {
         // Mensual
         const ths = Array.from(table.querySelectorAll('thead tr th'));
@@ -168,10 +191,11 @@ function exportVisibleTableToExcel() {
         } else {
             headers = raw;
         }
+        headerRowsForCsv = [headers];
     }
 
     const csvRows = [];
-    csvRows.push(headers);
+    headerRowsForCsv.forEach(row => csvRows.push(row));
 
     // Filas visibles del body (sin TOTAL izquierda)
     const bodyRows = Array.from(table.querySelectorAll('tbody tr')).filter(row => {

@@ -385,7 +385,7 @@ def render(username: str, password: str):
         
         # ========== GENERAR TABLA HTML ==========
         html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
-        html_parts.append('<div style="display:flex;justify-content:flex-end;padding:10px 12px 0 12px;"><button onclick="exportVisibleTableToExcel()" style="background:#1d4ed8;color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;">📥 Exportar Excel (Vista actual)</button></div>')
+        html_parts.append('<div class="excel-sticky-toolbar"><button class="excel-export-btn" onclick="exportVisibleTableToExcel()">📥 Exportar Excel (Vista actual)</button></div>')
         html_parts.append('<table class="excel-table">')
         
         # HEADER
