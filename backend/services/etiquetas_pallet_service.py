@@ -136,7 +136,7 @@ class EtiquetasPalletService:
             pickings = self.odoo.search_read(
                 'stock.picking',
                 domain_picking,
-                ['name', 'origin', 'state', 'date_done', 'picking_type_id'],
+                ['name', 'origin', 'state', 'date_done', 'picking_type_id', 'partner_id'],
                 limit=25
             )
             
@@ -144,6 +144,12 @@ class EtiquetasPalletService:
                 p['_modelo'] = 'stock.picking'
                 # Ajustar formato para compatibilidad
                 p['product_id'] = ['', p.get('picking_type_id', ['', ''])[1] if isinstance(p.get('picking_type_id'), list) else '']
+                # Extraer nombre del cliente desde partner_id
+                partner = p.get('partner_id')
+                if partner and isinstance(partner, (list, tuple)) and len(partner) > 1:
+                    p['cliente_nombre'] = partner[1]
+                else:
+                    p['cliente_nombre'] = ''
                 resultados.append(clean_record(p))
             
             return resultados
@@ -201,15 +207,29 @@ class EtiquetasPalletService:
                 pickings = self.odoo.search_read(
                     'stock.picking',
                     [('name', '=', orden_name)],
-                    ['id', 'name', 'date_done', 'move_ids_without_package'],
+                    ['id', 'name', 'date_done', 'partner_id'],
                     limit=1
                 )
                 
                 if pickings:
                     picking = pickings[0]
                     fecha_proceso = picking.get('date_done')
-                    move_ids = picking.get('move_ids_without_package', [])
-                    logger.info(f"Picking {orden_name}: {len(move_ids)} moves")
+                    
+                    # Extraer cliente desde partner_id del picking
+                    partner = picking.get('partner_id')
+                    if partner and isinstance(partner, (list, tuple)) and len(partner) > 1:
+                        cliente_nombre = partner[1]
+                    
+                    # Buscar stock.move directamente por picking_id
+                    # (no usar move_ids_without_package que excluye operaciones con paquetes)
+                    moves = self.odoo.search_read(
+                        'stock.move',
+                        [('picking_id', '=', picking['id'])],
+                        ['id'],
+                        limit=500
+                    )
+                    move_ids = [m['id'] for m in moves]
+                    logger.info(f"Picking {orden_name}: {len(move_ids)} moves (búsqueda directa)")
                 else:
                     logger.warning(f"No se encontró orden/picking {orden_name}")
                     return []
