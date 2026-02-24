@@ -538,24 +538,27 @@ class OdooQueryManager:
                         ['id', 'x_studio_categora_de_contacto', 'parent_id'],
                     )
                     
-                    # Primera pasada: asignar categorías directas
-                    partners_sin_cat = []  # Partners sin categoría que tienen parent
+                    # Primera pasada: separar partners con padre y sin padre
+                    # REGLA: Si tiene parent_id → SIEMPRE usar categoría del padre (el contacto hijo
+                    # puede tener una categoría diferente pero el padre es el que define la clasificación)
+                    partners_con_padre = []  # (child_id, parent_id)
                     for p in partners_data:
                         cat = p.get('x_studio_categora_de_contacto', False)
                         parent = p.get('parent_id', False)
-                        if isinstance(cat, (list, tuple)) and len(cat) > 1:
+                        
+                        if parent and isinstance(parent, (list, tuple)) and parent[0]:
+                            # Tiene padre → siempre buscar del padre
+                            partners_con_padre.append((p['id'], parent[0]))
+                        elif isinstance(cat, (list, tuple)) and len(cat) > 1:
                             partners_categorias[p['id']] = cat[1]
                         elif isinstance(cat, str) and cat:
                             partners_categorias[p['id']] = cat
-                        elif parent and isinstance(parent, (list, tuple)) and parent[0]:
-                            # Sin categoría pero tiene padre → buscar del padre
-                            partners_sin_cat.append((p['id'], parent[0]))
                         else:
                             partners_categorias[p['id']] = 'Sin Categoría'
                     
                     # Segunda pasada: buscar categorías de padres
-                    if partners_sin_cat:
-                        parent_ids = list(set(pid for _, pid in partners_sin_cat))
+                    if partners_con_padre:
+                        parent_ids = list(set(pid for _, pid in partners_con_padre))
                         parents_data = self.odoo.search_read(
                             'res.partner',
                             [['id', 'in', parent_ids]],
@@ -569,11 +572,11 @@ class OdooQueryManager:
                             elif isinstance(pcat, str) and pcat:
                                 parent_cats[pp['id']] = pcat
                         
-                        for child_id, parent_id in partners_sin_cat:
+                        for child_id, parent_id in partners_con_padre:
                             partners_categorias[child_id] = parent_cats.get(parent_id, 'Sin Categoría')
                     
                     # DEBUG: Mostrar categorías asignadas para diagnóstico
-                    print(f"[CxC Query] Categorías asignadas: {len(partners_categorias)} partners, {len(partners_sin_cat)} heredaron del padre")
+                    print(f"[CxC Query] Categorías asignadas: {len(partners_categorias)} partners, {len(partners_con_padre)} heredaron del padre")
                     for pid, cat in partners_categorias.items():
                         print(f"[CxC Query CAT] partner_id={pid} → categoría='{cat}'")
                 except Exception as e:
