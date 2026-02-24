@@ -329,7 +329,7 @@ def render(username: str, password: str):
                         else:
                             continue  # No es CxP ni CxC, no filtrar
                         
-                        # Ajustar totales padre con la diferencia
+                        # Ajustar totales del concepto padre con la diferencia
                         diff_monto = old_cuenta_monto - cuenta_filt["monto"]
                         if diff_monto != 0:
                             concepto["total"] = concepto.get("total", 0) - diff_monto
@@ -338,13 +338,7 @@ def render(username: str, password: str):
                                 diff_m = old_v - new_v
                                 if diff_m != 0 and m in concepto.get("montos_por_mes", {}):
                                     concepto["montos_por_mes"][m] -= diff_m
-                            act_data_filt["subtotal"] = act_data_filt.get("subtotal", 0) - diff_monto
-                            if "subtotales_por_mes" in act_data_filt:
-                                for m, old_v in old_cuenta_montos_mes.items():
-                                    new_v = cuenta_filt["montos_por_mes"].get(m, 0)
-                                    diff_m = old_v - new_v
-                                    if diff_m != 0 and m in act_data_filt["subtotales_por_mes"]:
-                                        act_data_filt["subtotales_por_mes"][m] -= diff_m
+                            # Subtotales de actividad se recalculan automáticamente después de los filtros
         
         # ========== FILTRO: Solo pendiente (excluir todo lo ya pagado/cobrado) ==========
         if solo_pendiente:
@@ -369,10 +363,6 @@ def render(username: str, password: str):
                                 concepto["total"] = concepto.get("total", 0) - monto_pagadas
                                 for mes, val in cuenta.get("montos_por_mes", {}).items():
                                     concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
-                                act_data["subtotal"] = act_data.get("subtotal", 0) - monto_pagadas
-                                if "subtotales_por_mes" in act_data:
-                                    for mes, val in cuenta.get("montos_por_mes", {}).items():
-                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
                                 cuenta["monto"] = 0
                                 cuenta["montos_por_mes"] = {}
                                 for etiqueta in cuenta.get("etiquetas", []):
@@ -404,12 +394,6 @@ def render(username: str, password: str):
                                 for mes, val in cuenta.get("montos_por_mes", {}).items():
                                     concepto["montos_por_mes"][mes] = concepto.get("montos_por_mes", {}).get(mes, 0) - val
                                 
-                                # Restar de operacion
-                                act_data["subtotal"] = act_data.get("subtotal", 0) - cuenta_monto
-                                if "subtotales_por_mes" in act_data:
-                                    for mes, val in cuenta.get("montos_por_mes", {}).items():
-                                        act_data["subtotales_por_mes"][mes] = act_data["subtotales_por_mes"].get(mes, 0) - val
-                                
                                 # Poner cuenta en 0
                                 cuenta["monto"] = 0
                                 cuenta["montos_por_mes"] = {}
@@ -419,12 +403,36 @@ def render(username: str, password: str):
                                     etiqueta["monto"] = 0
                                     etiqueta["montos_por_mes"] = {}
         
+        # ========== RECALCULAR SUBTOTALES DINÁMICAMENTE ==========
+        # Recalcular subtotales de cada actividad a partir de los conceptos (filtrados o no)
+        # Esto garantiza que los subtotales reflejen fielmente lo que muestra la tabla,
+        # independientemente de filtros de categoría, solo pendiente, o proyecciones.
+        # Deepcopy si no se hizo antes (para no alterar datos cacheados)
+        if not categorias_seleccionadas and not solo_pendiente:
+            import copy
+            actividades = copy.deepcopy(actividades)
+        for _act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
+            _act = actividades.get(_act_key, {})
+            if not isinstance(_act, dict):
+                continue
+            _new_sub = 0
+            _new_sub_mes = {}
+            for _concepto in _act.get("conceptos", []):
+                _c_tipo = _concepto.get("tipo", "LINEA")
+                if _c_tipo in ("SUBTOTAL", "TOTAL", "HEADER"):
+                    continue
+                _new_sub += _concepto.get("total", 0)
+                for _m, _v in _concepto.get("montos_por_mes", {}).items():
+                    _new_sub_mes[_m] = _new_sub_mes.get(_m, 0) + _v
+            _act["subtotal"] = _new_sub
+            _act["subtotal_por_mes"] = _new_sub_mes
+        
         op = actividades.get("OPERACION", {}).get("subtotal", 0)
         inv = actividades.get("INVERSION", {}).get("subtotal", 0)
         fin = actividades.get("FINANCIAMIENTO", {}).get("subtotal", 0)
         ef_ini = conciliacion.get("efectivo_inicial", 0)
-        ef_fin = conciliacion.get("efectivo_final", 0)
         variacion = op + inv + fin
+        ef_fin = ef_ini + variacion
         
         # ========== DASHBOARD KPIs ANIMADO ==========
         st.markdown("""
@@ -835,7 +843,10 @@ def render(username: str, password: str):
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
         html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(variacion)}</strong></td>')
         for mes in meses_lista:
-            variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
+            variacion_mes = sum(
+                actividades.get(ak, {}).get("subtotal_por_mes", {}).get(mes, 0)
+                for ak in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]
+            )
             html_parts.append(f'<td>{fmt_monto_html(variacion_mes)}</td>')
         html_parts.append(f'<td><strong>{fmt_monto_html(variacion)}</strong></td>')
         html_parts.append('</tr>')
@@ -843,18 +854,28 @@ def render(username: str, password: str):
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
         html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(ef_ini)}</strong></td>')
+        _ef_acum = ef_ini
         for mes in meses_lista:
-            ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
-            html_parts.append(f'<td>{fmt_monto_html(ef_ini_mes)}</td>')
+            html_parts.append(f'<td>{fmt_monto_html(_ef_acum)}</td>')
+            _var_mes = sum(
+                actividades.get(ak, {}).get("subtotal_por_mes", {}).get(mes, 0)
+                for ak in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]
+            )
+            _ef_acum += _var_mes
         html_parts.append(f'<td><strong>{fmt_monto_html(ef_ini)}</strong></td>')
         html_parts.append('</tr>')
         
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append('<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
         html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(ef_fin)}</strong></td>')
+        _ef_acum2 = ef_ini
         for mes in meses_lista:
-            ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
-            html_parts.append(f'<td>{fmt_monto_html(ef_fin_mes)}</td>')
+            _var_mes2 = sum(
+                actividades.get(ak, {}).get("subtotal_por_mes", {}).get(mes, 0)
+                for ak in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]
+            )
+            _ef_acum2 += _var_mes2
+            html_parts.append(f'<td>{fmt_monto_html(_ef_acum2)}</td>')
         html_parts.append(f'<td><strong>{fmt_monto_html(ef_fin)}</strong></td>')
         html_parts.append('</tr>')
         
