@@ -738,31 +738,114 @@ def render(username: str, password: str):
         # ========== EXPORT MEJORADO ==========
         with export_placeholder:
             if st.button("📥 Exportar Excel", use_container_width=True):
-                # Crear Excel con formato
+                # Crear Excel tipo "foto" con toda la jerarquía expandida
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    # Sheet 1: Datos
+                    period_labels = []
+                    for periodo in meses_lista:
+                        if vista_semanal:
+                            period_labels.append(nombre_semana_corto(periodo))
+                        else:
+                            period_labels.append(f"{nombre_mes_corto(periodo)} ({periodo})")
+
+                    def build_row(nombre: str, montos_por_mes: dict, total: float, nivel: int, tipo_fila: str):
+                        row = {
+                            "Nivel": nivel,
+                            "Tipo": tipo_fila,
+                            "Concepto": nombre
+                        }
+                        for periodo, label in zip(meses_lista, period_labels):
+                            row[label] = montos_por_mes.get(periodo, 0) if isinstance(montos_por_mes, dict) else 0
+                        row["TOTAL"] = total
+                        return row
+
                     rows = []
                     for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
                         act_data = actividades.get(act_key, {})
                         if not act_data:
                             continue
-                        
-                        rows.append({"Concepto": act_data.get("nombre", act_key), "Monto": ""})
-                        
-                        for concepto in act_data.get("conceptos", []):
+
+                        rows.append(build_row(
+                            act_data.get("nombre", act_key),
+                            {},
+                            "",
+                            0,
+                            "ACTIVIDAD"
+                        ))
+
+                        conceptos_ordenados = sorted(
+                            act_data.get("conceptos", []),
+                            key=lambda x: x.get("order", x.get("id", ""))
+                        )
+
+                        for concepto in conceptos_ordenados:
+                            if concepto.get("tipo") == "HEADER":
+                                continue
+
                             c_id = concepto.get("id") or concepto.get("codigo")
                             c_nombre = concepto.get("nombre", "")
-                            c_monto = concepto.get("total", 0)
-                            rows.append({
-                                "Concepto": f"  {c_id} - {c_nombre}",
-                                "Monto": c_monto
-                            })
-                        
-                        rows.append({
-                            "Concepto": f"Subtotal {act_key}",
-                            "Monto": act_data.get("subtotal", 0)
-                        })
+                            cuentas = concepto.get("cuentas", [])
+
+                            rows.append(build_row(
+                                f"{c_id} - {c_nombre}",
+                                concepto.get("montos_por_mes", {}),
+                                concepto.get("total", 0),
+                                1,
+                                "CONCEPTO"
+                            ))
+
+                            for cuenta in cuentas[:15]:
+                                cuenta_codigo = cuenta.get("codigo", "")
+                                cuenta_nombre = cuenta.get("nombre", "")
+                                es_estructura_especial = (
+                                    cuenta.get("es_cuenta_cxp", False)
+                                    or cuenta.get("es_cuenta_cxc", False)
+                                    or cuenta.get("es_cuenta_iva", False)
+                                )
+
+                                cuenta_display = cuenta_nombre if es_estructura_especial else f"📄 {cuenta_codigo} - {cuenta_nombre}"
+                                rows.append(build_row(
+                                    f"  {cuenta_display}",
+                                    cuenta.get("montos_por_mes", {}),
+                                    cuenta.get("monto", 0),
+                                    2,
+                                    "CUENTA"
+                                ))
+
+                                for etiqueta in cuenta.get("etiquetas", []):
+                                    rows.append(build_row(
+                                        f"    {etiqueta.get('nombre', '')}",
+                                        etiqueta.get("montos_por_mes", {}),
+                                        etiqueta.get("monto", 0),
+                                        3,
+                                        "ETIQUETA"
+                                    ))
+
+                                    for sub in etiqueta.get("sub_etiquetas", []):
+                                        rows.append(build_row(
+                                            f"      {sub.get('nombre', '')}",
+                                            sub.get("montos_por_mes", {}),
+                                            sub.get("monto", 0),
+                                            4,
+                                            "SUB_ETIQUETA"
+                                        ))
+
+                        subtotal_por_mes = act_data.get("subtotal_por_mes", act_data.get("subtotales_por_mes", {}))
+                        rows.append(build_row(
+                            f"Subtotal {act_key}",
+                            subtotal_por_mes,
+                            act_data.get("subtotal", 0),
+                            0,
+                            "SUBTOTAL_ACTIVIDAD"
+                        ))
+
+                    variacion_por_mes = {m: efectivo_por_mes.get(m, {}).get("variacion", 0) for m in meses_lista}
+                    efectivo_ini_por_mes = {m: efectivo_por_mes.get(m, {}).get("inicial", ef_ini) for m in meses_lista}
+                    efectivo_fin_por_mes = {m: efectivo_por_mes.get(m, {}).get("final", ef_fin) for m in meses_lista}
+
+                    rows.append(build_row("VARIACIÓN NETA DEL EFECTIVO", variacion_por_mes, variacion, 0, "TOTAL"))
+                    rows.append(build_row("EFECTIVO al inicio del período", efectivo_ini_por_mes, ef_ini, 0, "TOTAL"))
+                    rows.append(build_row("EFECTIVO AL FINAL DEL PERÍODO", efectivo_fin_por_mes, ef_fin, 0, "TOTAL"))
                     
                     df = pd.DataFrame(rows)
                     df.to_excel(writer, sheet_name='Flujo de Caja', index=False)
