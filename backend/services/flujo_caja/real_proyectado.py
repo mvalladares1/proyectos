@@ -1309,15 +1309,20 @@ class RealProyectadoCalculator:
                     
                 elif payment_state == 'partial':
                     # Factura parcialmente pagada:
-                    # - Cobrado va a "Parcialmente Pagadas" como REAL
-                    # - Pendiente (residual) TAMBIÉN va a "Parcialmente Pagadas" como PROYECTADO
-                    #   (NO a "No Pagadas", ya que la factura SÍ tiene pagos parciales)
+                    # - Cobrado (lo ya pagado) va a "Facturas Pagadas" como REAL
+                    # - Pendiente (residual) va a "Parcialmente Pagadas" como PROYECTADO
                     if cobrado > 0:
-                        estado_parcial, categoria_parcial, cliente_parcial = agregar_a_estado('partial', cobrado, periodo_real, es_real=True)
-                        if len(cliente_parcial.get('facturas', [])) < 50:
-                            cliente_parcial['facturas'].append(factura_info.copy())
+                        estado_pagado, categoria_pagado, cliente_pagado = agregar_a_estado('paid', cobrado, periodo_real, es_real=True)
+                        if len(cliente_pagado.get('facturas', [])) < 50:
+                            factura_pagada = factura_info.copy()
+                            factura_pagada['nota'] = 'cobrado de parcial'
+                            cliente_pagado['facturas'].append(factura_pagada)
                     if pendiente > 0:
-                        estado_parcial2, categoria_parcial2, cliente_parcial2 = agregar_a_estado('partial', pendiente, periodo_proyectado, es_real=False)
+                        estado_parcial, categoria_parcial, cliente_parcial = agregar_a_estado('partial', pendiente, periodo_proyectado, es_real=False)
+                        if len(cliente_parcial.get('facturas', [])) < 50:
+                            factura_pend = factura_info.copy()
+                            factura_pend['nota'] = 'residual pendiente'
+                            cliente_parcial['facturas'].append(factura_pend)
                     
                 elif payment_state == 'in_payment':
                     # En proceso de pago: va a su categoría
