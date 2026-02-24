@@ -145,46 +145,69 @@ function exportVisibleTableToExcel() {
     const table = document.querySelector('.excel-table');
     if (!table) return;
 
-    const clonedTable = table.cloneNode(true);
+    const cleanText = (el) => {
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('.icon-expand, .tooltip-text, svg').forEach(n => n.remove());
+        return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    };
 
-    // Eliminar filas ocultas (colapsadas)
-    clonedTable.querySelectorAll('tr').forEach(row => {
+    // Headers visibles (sin TOTAL izquierda)
+    const theadRows = Array.from(table.querySelectorAll('thead tr'));
+    let headers = [];
+    if (theadRows.length >= 2) {
+        // Semanal: usar segunda fila (S1, S2, ...) + concepto + total derecha
+        const weeks = Array.from(theadRows[1].querySelectorAll('th')).map(cleanText).filter(Boolean);
+        headers = ['CONCEPTO', ...weeks, 'TOTAL'];
+    } else {
+        // Mensual
+        const ths = Array.from(table.querySelectorAll('thead tr th'));
+        const raw = ths.map(cleanText).filter(Boolean);
+        // raw esperado: CONCEPTO, TOTAL(izq), mes..., TOTAL(der)
+        if (raw.length >= 3) {
+            headers = [raw[0], ...raw.slice(2)]; // quitar TOTAL izquierda
+        } else {
+            headers = raw;
+        }
+    }
+
+    const csvRows = [];
+    csvRows.push(headers);
+
+    // Filas visibles del body (sin TOTAL izquierda)
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr')).filter(row => {
         const style = row.getAttribute('style') || '';
-        if (style.includes('display:none')) {
-            row.remove();
+        return !style.includes('display:none');
+    });
+
+    bodyRows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td'));
+        if (!cells.length) return;
+
+        const values = cells.map(cleanText);
+        if (values.length >= 3) {
+            const exportValues = [values[0], ...values.slice(2)]; // omitir TOTAL izquierda
+            csvRows.push(exportValues);
+        } else {
+            csvRows.push(values);
         }
     });
 
-    // Limpiar elementos interactivos
-    clonedTable.querySelectorAll('.icon-expand').forEach(el => el.remove());
-    clonedTable.querySelectorAll('.tooltip-text').forEach(el => el.remove());
-    clonedTable.querySelectorAll('*').forEach(el => {
-        el.removeAttribute('onclick');
-        el.removeAttribute('oncontextmenu');
-        el.removeAttribute('draggable');
-        el.removeAttribute('id');
-        el.removeAttribute('class');
-        if (el.tagName !== 'TH' && el.tagName !== 'TD') {
-            el.removeAttribute('style');
+    const escapeCsv = (val) => {
+        const s = (val ?? '').toString();
+        if (s.includes(';') || s.includes('"') || s.includes('\n')) {
+            return '"' + s.replace(/"/g, '""') + '"';
         }
-    });
+        return s;
+    };
 
-    const html = `
-<html>
-<head>
-  <meta charset="UTF-8" />
-</head>
-<body>
-  ${clonedTable.outerHTML}
-</body>
-</html>`;
-
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const csvContent = csvRows.map(r => r.map(escapeCsv).join(';')).join('\n');
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    const filename = `flujo_caja_vista_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xls`;
+    const filename = `flujo_caja_vista_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.csv`;
 
     const link = document.createElement('a');
     link.href = url;

@@ -195,22 +195,30 @@ ENTERPRISE_CSS = """
 }
 
 .excel-table thead th.frozen {
+    position: sticky;
+    left: 0;
+    top: 0;
     z-index: 150;
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
     border-right: 3px solid #1e3a8a;
     text-align: left !important;
     font-size: 0.85rem;
+    min-width: var(--frozen-concept-width);
+    max-width: var(--frozen-concept-width);
+    box-sizing: border-box;
 }
 
 .excel-table thead th.frozen-total-left {
     position: sticky;
     left: var(--frozen-concept-width);
-    z-index: 149;
+    top: 0;
+    z-index: 151;
     background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
     border-right: 3px solid #1e3a8a;
     text-align: right !important;
     min-width: 180px;
     max-width: 180px;
+    box-sizing: border-box;
 }
 
 /* ============ FROZEN COLUMN ============ */
@@ -233,13 +241,13 @@ ENTERPRISE_CSS = """
 .excel-table td.frozen-total-left {
     position: sticky;
     left: var(--frozen-concept-width);
-    z-index: 9;
+    z-index: 11;
     min-width: 180px;
     max-width: 180px;
     border-right: 3px solid #475569 !important;
     text-align: right !important;
     font-weight: 600;
-    background: rgba(15, 23, 42, 0.98);
+    background: #0f172a;
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
