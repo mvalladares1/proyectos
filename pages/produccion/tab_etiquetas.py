@@ -69,6 +69,41 @@ def calcular_fecha_vencimiento(fecha_elaboracion: str, años: int = 2) -> str:
         return fecha_elaboracion
 
 
+def imprimir_etiqueta(html_etiqueta: str, height: int = 300):
+    """
+    Renderiza la etiqueta en un iframe con botón de imprimir.
+    Usa window.print() directamente en el iframe (no window.open que los
+    navegadores bloquean como popup).
+    """
+    import base64
+    b64 = base64.b64encode(html_etiqueta.encode('utf-8')).decode()
+    wrapper = f"""
+    <html><head><style>
+        body {{ margin:0; font-family:Arial,sans-serif; }}
+        .btn-print {{
+            display:block; width:100%; padding:8px; margin-bottom:6px;
+            background:#2563eb; color:#fff; border:none; border-radius:6px;
+            font-size:14px; font-weight:600; cursor:pointer;
+        }}
+        .btn-print:hover {{ background:#1d4ed8; }}
+        iframe {{ border:1px solid #ddd; border-radius:4px; }}
+    </style></head><body>
+    <button class="btn-print" onclick="printLabel()">\u{1F5A8}\uFE0F Imprimir etiqueta</button>
+    <iframe id="labelFrame" srcdoc="" style="width:100%;height:{height - 50}px;"></iframe>
+    <script>
+        var html = atob("{b64}");
+        document.getElementById('labelFrame').srcdoc = html;
+        function printLabel() {{
+            var f = document.getElementById('labelFrame');
+            f.contentWindow.focus();
+            f.contentWindow.print();
+        }}
+    </script>
+    </body></html>
+    """
+    st.components.v1.html(wrapper, height=height, scrolling=False)
+
+
 def buscar_ordenes(username: str, password: str, termino: str):
     """Busca órdenes de producción."""
     params = {
@@ -633,37 +668,9 @@ def render_etiquetas_caja(username: str, password: str):
                 'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
             }
             
-            col1, col2 = st.columns([1, 1])
-            
-            with col1:
-                if st.button("🖨️ Imprimir", key=f"etiq_caja_print_{pallet.get('package_id')}", use_container_width=True):
-                    html_print = funcion_diseño(datos_etiqueta)
-                    # Abrir en ventana nueva para que window.print() funcione fuera del iframe
-                    import base64
-                    html_bytes = html_print.encode('utf-8')
-                    b64 = base64.b64encode(html_bytes).decode()
-                    print_script = f'''
-                    <script>
-                        var win = window.open('', '_blank');
-                        if (win) {{
-                            win.document.write(atob("{b64}"));
-                            win.document.close();
-                            win.onload = function() {{
-                                setTimeout(function() {{
-                                    win.print();
-                                }}, 500);
-                            }};
-                        }} else {{
-                            alert("Permite ventanas emergentes para imprimir");
-                        }}
-                    </script>
-                    '''
-                    st.components.v1.html(print_script, height=0)
-            
-            with col2:
-                if st.button("👁️ Vista", key=f"etiq_caja_preview_{pallet.get('package_id')}", use_container_width=True):
-                    html_etiqueta = funcion_diseño(datos_etiqueta)
-                    st.components.v1.html(html_etiqueta, height=450, scrolling=True)
+            if st.button("🖨️ Imprimir / Vista", key=f"etiq_caja_print_{pallet.get('package_id')}", use_container_width=True):
+                html_print = funcion_diseño(datos_etiqueta)
+                imprimir_etiqueta(html_print, height=420)
 
 
 
@@ -699,36 +706,9 @@ def render_etiquetas_generica(username: str, password: str):
                 'numero_pallet': pallet.get('package_name', ''),
             }
 
-            col1, col2 = st.columns([1, 1])
-
-            with col1:
-                if st.button("🖨️ Imprimir", key=f"etiq_gen_print_{pallet.get('package_id')}", use_container_width=True):
-                    html_print = generar_etiqueta_caja_generica(datos_etiqueta)
-                    import base64
-                    html_bytes = html_print.encode('utf-8')
-                    b64 = base64.b64encode(html_bytes).decode()
-                    print_script = f'''
-                    <script>
-                        var win = window.open('', '_blank');
-                        if (win) {{
-                            win.document.write(atob("{b64}"));
-                            win.document.close();
-                            win.onload = function() {{
-                                setTimeout(function() {{
-                                    win.print();
-                                }}, 500);
-                            }};
-                        }} else {{
-                            alert("Permite ventanas emergentes para imprimir");
-                        }}
-                    </script>
-                    '''
-                    st.components.v1.html(print_script, height=0)
-
-            with col2:
-                if st.button("👁️ Vista", key=f"etiq_gen_preview_{pallet.get('package_id')}", use_container_width=True):
-                    html_etiqueta = generar_etiqueta_caja_generica(datos_etiqueta)
-                    st.components.v1.html(html_etiqueta, height=220, scrolling=True)
+            if st.button("🖨️ Imprimir / Vista", key=f"etiq_gen_print_{pallet.get('package_id')}", use_container_width=True):
+                html_print = generar_etiqueta_caja_generica(datos_etiqueta)
+                imprimir_etiqueta(html_print, height=280)
 
 
 def render_etiquetas_pallet(username: str, password: str):
@@ -807,33 +787,9 @@ def render_etiquetas_pallet(username: str, password: str):
             }
             
             with col2:
-                if st.button("🖨️ Imprimir", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
                     html_print = generar_etiqueta_html(datos_etiqueta)
-                    import base64
-                    html_bytes = html_print.encode('utf-8')
-                    b64 = base64.b64encode(html_bytes).decode()
-                    print_script = f'''
-                    <script>
-                        var win = window.open('', '_blank');
-                        if (win) {{
-                            win.document.write(atob("{b64}"));
-                            win.document.close();
-                            win.onload = function() {{
-                                setTimeout(function() {{
-                                    win.print();
-                                }}, 500);
-                            }};
-                        }} else {{
-                            alert("Permite ventanas emergentes para imprimir");
-                        }}
-                    </script>
-                    '''
-                    st.components.v1.html(print_script, height=0)
-            
-            with col3:
-                if st.button("👁️ Vista", key=f"etiq_preview_{pallet.get('package_id')}", use_container_width=True):
-                    html_etiqueta = generar_etiqueta_html(datos_etiqueta)
-                    st.components.v1.html(html_etiqueta, height=600, scrolling=True)
+                    imprimir_etiqueta(html_print, height=550)
         
         st.divider()
 
