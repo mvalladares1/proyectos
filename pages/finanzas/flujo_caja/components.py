@@ -3,6 +3,7 @@ Componentes JavaScript y SVG para el Estado de Flujo de Efectivo
 """
 
 ENTERPRISE_JS = """
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
 // ============ GLOBAL STATE ============
 let expandedConcepts = new Set();
@@ -140,7 +141,7 @@ function collapseAll() {
     });
 }
 
-// ============ EXPORT VISTA ACTUAL ============
+// ============ EXPORT VISTA ACTUAL (XLSX) ============
 function exportVisibleTableToExcel() {
     const table = document.querySelector('.excel-table');
     if (!table) return;
@@ -151,22 +152,34 @@ function exportVisibleTableToExcel() {
         return (clone.textContent || '').replace(/\\s+/g, ' ').trim();
     };
 
+    // Parsear número (quitar separadores de miles, manejar negativos con paréntesis)
+    const parseNum = (s) => {
+        if (!s) return s;
+        let clean = s.replace(/\\s/g, '');
+        let neg = false;
+        if (clean.startsWith('(') && clean.endsWith(')')) {
+            neg = true;
+            clean = clean.slice(1, -1);
+        }
+        // Quitar puntos de miles y cambiar coma decimal
+        clean = clean.replace(/\\./g, '').replace(',', '.');
+        const n = parseFloat(clean);
+        if (isNaN(n)) return s;
+        return neg ? -n : n;
+    };
+
     // Headers visibles (sin TOTAL izquierda)
     const theadRows = Array.from(table.querySelectorAll('thead tr')).filter(tr => !tr.classList.contains('toolbar-row'));
-    let headers = [];
-    let headerRowsForCsv = [];
+    let headerRowsForXlsx = [];
     if (theadRows.length >= 2) {
-        // Semanal: exportar dos filas de encabezado (Meses + Semanas)
+        // Semanal: dos filas de encabezado (Meses + Semanas)
         const monthRow = ['CONCEPTO'];
         const monthCells = Array.from(theadRows[0].querySelectorAll('th'));
         monthCells.forEach(th => {
-            if (th.classList.contains('frozen') || th.classList.contains('frozen-total-left')) {
-                return;
-            }
+            if (th.classList.contains('frozen') || th.classList.contains('frozen-total-left')) return;
             const text = cleanText(th);
             const span = parseInt(th.getAttribute('colspan') || '1', 10);
             if (!text) return;
-
             if (text.toUpperCase() === 'TOTAL') {
                 monthRow.push('TOTAL');
             } else {
@@ -174,30 +187,26 @@ function exportVisibleTableToExcel() {
                 for (let i = 1; i < span; i++) monthRow.push('');
             }
         });
-
         const weekCells = Array.from(theadRows[1].querySelectorAll('th'));
         const weeks = weekCells.map(cleanText).filter(Boolean);
         const weekRow = ['CONCEPTO', ...weeks, 'TOTAL'];
-
-        headers = weekRow;
-        headerRowsForCsv = [monthRow, weekRow];
+        headerRowsForXlsx = [monthRow, weekRow];
     } else {
         // Mensual
         const ths = Array.from(table.querySelectorAll('thead tr th'));
         const raw = ths.map(cleanText).filter(Boolean);
-        // raw esperado: CONCEPTO, TOTAL(izq), mes..., TOTAL(der)
         if (raw.length >= 3) {
-            headers = [raw[0], ...raw.slice(2)]; // quitar TOTAL izquierda
+            headerRowsForXlsx = [[raw[0], ...raw.slice(2)]];
         } else {
-            headers = raw;
+            headerRowsForXlsx = [raw];
         }
-        headerRowsForCsv = [headers];
     }
 
-    const csvRows = [];
-    headerRowsForCsv.forEach(row => csvRows.push(row));
+    // Construir datos (array de arrays)
+    const allRows = [];
+    headerRowsForXlsx.forEach(row => allRows.push(row));
 
-    // Filas visibles del body (sin TOTAL izquierda)
+    // Filas visibles del body
     const bodyRows = Array.from(table.querySelectorAll('tbody tr')).filter(row => {
         const style = row.getAttribute('style') || '';
         return !style.includes('display:none');
@@ -206,40 +215,59 @@ function exportVisibleTableToExcel() {
     bodyRows.forEach(row => {
         const cells = Array.from(row.querySelectorAll('td'));
         if (!cells.length) return;
-
         const values = cells.map(cleanText);
+        let exportValues;
         if (values.length >= 3) {
-            const exportValues = [values[0], ...values.slice(2)]; // omitir TOTAL izquierda
-            csvRows.push(exportValues);
+            exportValues = [values[0], ...values.slice(2)];
         } else {
-            csvRows.push(values);
+            exportValues = values;
         }
+        // Convertir valores numéricos
+        const parsed = exportValues.map((v, i) => i === 0 ? v : parseNum(v));
+        allRows.push(parsed);
     });
 
-    const escapeCsv = (val) => {
-        const s = (val ?? '').toString();
-        if (s.includes(';') || s.includes('"') || s.includes('\\n')) {
-            return '"' + s.replace(/"/g, '""') + '"';
+    // Crear workbook con SheetJS
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+    // Aplicar formato de número a celdas numéricas
+    const numFmt = '#,##0';
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    const headerCount = headerRowsForXlsx.length;
+    for (let r = headerCount; r <= range.e.r; r++) {
+        for (let c = 1; c <= range.e.c; c++) {
+            const cell = ws[XLSX.utils.encode_cell({r, c})];
+            if (cell && typeof cell.v === 'number') {
+                cell.z = numFmt;
+                cell.t = 'n';
+            }
         }
-        return s;
-    };
+    }
 
-    const csvContent = csvRows.map(r => r.map(escapeCsv).join(';')).join('\\n');
-    const bom = '\\uFEFF';
-    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    // Ajustar anchos de columna
+    const colWidths = [];
+    for (let c = 0; c <= range.e.c; c++) {
+        let maxLen = 10;
+        for (let r = 0; r <= Math.min(range.e.r, 100); r++) {
+            const cell = ws[XLSX.utils.encode_cell({r, c})];
+            if (cell) {
+                const len = String(cell.v || '').length;
+                if (len > maxLen) maxLen = len;
+            }
+        }
+        colWidths.push({wch: Math.min(maxLen + 2, 30)});
+    }
+    ws['!cols'] = colWidths;
 
+    XLSX.utils.book_append_sheet(wb, ws, 'Flujo de Caja');
+
+    // Generar y descargar
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    const filename = `flujo_caja_vista_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.csv`;
+    const filename = `flujo_caja_vista_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`;
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    XLSX.writeFile(wb, filename);
 }
 
 // ============ SEARCH ============

@@ -193,8 +193,6 @@ class RealProyectadoCalculator:
                     'nombre': '⏳ Facturas Parcialmente Pagadas',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'monto_real': 0.0,
-                    'montos_real_por_mes': defaultdict(float),
                     'categorias': {},  # Nivel 3: Categorías de contacto
                     'es_cuenta_cxp': True,
                     'orden': 2
@@ -372,82 +370,84 @@ class RealProyectadoCalculator:
                 if periodo_proyectado:
                     proyectado_por_periodo[periodo_proyectado] += monto_proyectado
                 
-                # Acumular por estado (Nivel 2)
-                estado = estados[estado_key]
-                estado['monto'] += monto_real + monto_proyectado
+                # ===== NUEVA LÓGICA: parte pagada de PARCIALES va a PAGADAS =====
+                # Para PARCIALES, la parte pagada (monto_real) se acumula en PAGADAS
+                # y solo el residual (monto_proyectado) se acumula en PARCIALES.
+                # Así "Facturas Pagadas" muestra todo lo ya pagado y
+                # "Facturas Parcialmente Pagadas" muestra solo lo que falta.
                 
-                if periodo_real:
-                    estado['montos_por_mes'][periodo_real] += monto_real
-                if periodo_proyectado:
-                    estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
-                
-                # Para PARCIALES: guardar montos reales por separado
-                if estado_key == 'PARCIALES':
-                    estado['monto_real'] += monto_real
+                if estado_key == 'PARCIALES' and monto_real != 0:
+                    # Parte pagada → PAGADAS
+                    estado_pagadas = estados['PAGADAS']
+                    estado_pagadas['monto'] += monto_real
                     if periodo_real:
-                        estado['montos_real_por_mes'][periodo_real] += monto_real
+                        estado_pagadas['montos_por_mes'][periodo_real] += monto_real
+                    
+                    # Residual → PARCIALES (sin monto_real)
+                    estado_parciales = estados['PARCIALES']
+                    estado_parciales['monto'] += monto_proyectado
+                    if periodo_proyectado:
+                        estado_parciales['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                else:
+                    # PAGADAS o NO_PAGADAS: acumular normalmente
+                    estado = estados[estado_key]
+                    estado['monto'] += monto_real + monto_proyectado
+                    if periodo_real:
+                        estado['montos_por_mes'][periodo_real] += monto_real
+                    if periodo_proyectado:
+                        estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
                 
                 # Obtener información del partner
                 partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
                 partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
                 categoria_nombre = partner_info['categoria']
                 
-                # Nivel 3: Agrupar por categoría de contacto
-                if categoria_nombre not in estado['categorias']:
-                    cat_init = {
-                        'nombre': categoria_nombre,
-                        'monto': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'proveedores': {}  # Nivel 4: Proveedores individuales
-                    }
-                    if estado_key == 'PARCIALES':
-                        cat_init['monto_real'] = 0.0
-                        cat_init['montos_real_por_mes'] = defaultdict(float)
-                    estado['categorias'][categoria_nombre] = cat_init
+                # ===== ACUMULAR EN CATEGORÍAS Y PROVEEDORES =====
+                # Para PARCIALES con parte pagada, acumular en dos estados:
                 
-                categoria = estado['categorias'][categoria_nombre]
-                categoria['monto'] += monto_real + monto_proyectado
+                acumulaciones = []
+                if estado_key == 'PARCIALES' and monto_real != 0:
+                    # Parte pagada → PAGADAS
+                    acumulaciones.append(('PAGADAS', monto_real, 0, periodo_real, None))
+                    # Residual → PARCIALES
+                    acumulaciones.append(('PARCIALES', 0, monto_proyectado, None, periodo_proyectado))
+                else:
+                    acumulaciones.append((estado_key, monto_real, monto_proyectado, periodo_real, periodo_proyectado))
                 
-                if periodo_real:
-                    categoria['montos_por_mes'][periodo_real] += monto_real
-                if periodo_proyectado:
-                    categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
-                
-                # Para PARCIALES: guardar montos reales por separado en categoría
-                if estado_key == 'PARCIALES':
-                    categoria['monto_real'] = categoria.get('monto_real', 0.0) + monto_real
-                    if periodo_real:
-                        if 'montos_real_por_mes' not in categoria:
-                            categoria['montos_real_por_mes'] = defaultdict(float)
-                        categoria['montos_real_por_mes'][periodo_real] += monto_real
-                
-                # Nivel 4: Agrupar por proveedor individual
-                if partner_name not in categoria['proveedores']:
-                    prov_init = {
-                        'nombre': partner_name[:50],
-                        'monto': 0.0,
-                        'montos_por_mes': defaultdict(float)
-                    }
-                    if estado_key == 'PARCIALES':
-                        prov_init['monto_real'] = 0.0
-                        prov_init['montos_real_por_mes'] = defaultdict(float)
-                    categoria['proveedores'][partner_name] = prov_init
-                
-                proveedor = categoria['proveedores'][partner_name]
-                proveedor['monto'] += monto_real + monto_proyectado
-                
-                if periodo_real:
-                    proveedor['montos_por_mes'][periodo_real] += monto_real
-                if periodo_proyectado:
-                    proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
-                
-                # Para PARCIALES: guardar montos reales por separado en proveedor
-                if estado_key == 'PARCIALES':
-                    proveedor['monto_real'] = proveedor.get('monto_real', 0.0) + monto_real
-                    if periodo_real:
-                        if 'montos_real_por_mes' not in proveedor:
-                            proveedor['montos_real_por_mes'] = defaultdict(float)
-                        proveedor['montos_real_por_mes'][periodo_real] += monto_real
+                for acum_estado_key, acum_real, acum_proy, acum_per_real, acum_per_proy in acumulaciones:
+                    acum_estado = estados[acum_estado_key]
+                    acum_monto_total = acum_real + acum_proy
+                    
+                    # Nivel 3: Agrupar por categoría de contacto
+                    if categoria_nombre not in acum_estado['categorias']:
+                        acum_estado['categorias'][categoria_nombre] = {
+                            'nombre': categoria_nombre,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'proveedores': {}
+                        }
+                    
+                    categoria = acum_estado['categorias'][categoria_nombre]
+                    categoria['monto'] += acum_monto_total
+                    if acum_per_real:
+                        categoria['montos_por_mes'][acum_per_real] += acum_real
+                    if acum_per_proy:
+                        categoria['montos_por_mes'][acum_per_proy] += acum_proy
+                    
+                    # Nivel 4: Agrupar por proveedor individual
+                    if partner_name not in categoria['proveedores']:
+                        categoria['proveedores'][partner_name] = {
+                            'nombre': partner_name[:50],
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float)
+                        }
+                    
+                    proveedor = categoria['proveedores'][partner_name]
+                    proveedor['monto'] += acum_monto_total
+                    if acum_per_real:
+                        proveedor['montos_por_mes'][acum_per_real] += acum_real
+                    if acum_per_proy:
+                        proveedor['montos_por_mes'][acum_per_proy] += acum_proy
 
             # PASO 4: Agregar proyecciones desde Módulo Compras (purchase.order)
             campos_oc = [
@@ -860,9 +860,6 @@ class RealProyectadoCalculator:
                             'nivel': 4,
                             'activo': True
                         }
-                        if estado_key == 'PARCIALES' and 'montos_real_por_mes' in prov_data:
-                            prov_entry['monto_real'] = prov_data.get('monto_real', 0.0)
-                            prov_entry['montos_real_por_mes'] = dict(prov_data['montos_real_por_mes'])
                         sub_etiquetas_proveedores.append(prov_entry)
                     
                     # Agregar fila "Otros proveedores" con los montos restantes
@@ -880,15 +877,6 @@ class RealProyectadoCalculator:
                             'nivel': 4,
                             'activo': True
                         }
-                        if estado_key == 'PARCIALES':
-                            otros_real = sum(p[1].get('monto_real', 0) for p in resto_proveedores)
-                            otros_real_por_mes = {}
-                            for _, p_data in resto_proveedores:
-                                for mes, val in p_data.get('montos_real_por_mes', {}).items():
-                                    otros_real_por_mes[mes] = otros_real_por_mes.get(mes, 0) + val
-                            if otros_real != 0 or otros_real_por_mes:
-                                otros_entry['monto_real'] = otros_real
-                                otros_entry['montos_real_por_mes'] = otros_real_por_mes
                         sub_etiquetas_proveedores.append(otros_entry)
                     
                     cat_entry = {
@@ -900,9 +888,6 @@ class RealProyectadoCalculator:
                         'activo': True,
                         'sub_etiquetas': sub_etiquetas_proveedores  # ANIDADOS
                     }
-                    if estado_key == 'PARCIALES' and 'montos_real_por_mes' in categoria_data:
-                        cat_entry['monto_real'] = categoria_data.get('monto_real', 0.0)
-                        cat_entry['montos_real_por_mes'] = dict(categoria_data['montos_real_por_mes'])
                     etiquetas_list.append(cat_entry)
                 
                 cuenta_entry = {
@@ -914,9 +899,6 @@ class RealProyectadoCalculator:
                     'es_cuenta_cxp': True,
                     'activo': True
                 }
-                if estado_key == 'PARCIALES':
-                    cuenta_entry['monto_real'] = estado.get('monto_real', 0.0)
-                    cuenta_entry['montos_real_por_mes'] = dict(estado.get('montos_real_por_mes', {}))
                 cuentas_resultado.append(cuenta_entry)
             
             return {

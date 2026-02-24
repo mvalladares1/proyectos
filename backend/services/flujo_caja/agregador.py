@@ -333,6 +333,21 @@ class AgregadorFlujo:
             # SIGNO PARA CxC en Flujo Proyectado
             monto_efectivo = balance
             
+            # ===== NUEVA LÓGICA: Para PARCIALES, separar parte pagada y residual =====
+            # Para facturas parcialmente pagadas: la parte ya cobrada va a "Pagadas"
+            # y solo el residual queda en "Parcialmente Pagadas"
+            amount_total_move = linea.get('amount_total', 0.0)
+            amount_residual_move = linea.get('amount_residual', 0.0)
+            
+            monto_pagado_parcial = 0.0  # Parte pagada de facturas parciales → va a Pagadas
+            
+            if payment_state == 'partial' and amount_total_move > 0:
+                # Calcular ratio para esta línea
+                residual_ratio = amount_residual_move / amount_total_move
+                monto_residual = balance * residual_ratio
+                monto_pagado_parcial = balance - monto_residual  # Parte ya cobrada
+                monto_efectivo = monto_residual  # Solo el residual va a PARCIALES
+            
             # Acumular
             if concepto_id not in self.montos_por_concepto_mes:
                 self.montos_por_concepto_mes[concepto_id] = {m: 0.0 for m in self.meses_lista}
@@ -372,6 +387,9 @@ class AgregadorFlujo:
             # Obtener move_id para link a Odoo
             move_id = move_data[0] if isinstance(move_data, (list, tuple)) and len(move_data) > 0 else None
             
+            # Obtener categoría del partner
+            partner_categoria = linea.get('partner_categoria', 'Sin Categoría')
+            
             # Agrupar por PARTNER y mes (nivel 3)
             if partner_name not in cuenta['facturas_por_estado'][payment_state]:
                 cuenta['facturas_por_estado'][payment_state][partner_name] = {
@@ -381,6 +399,7 @@ class AgregadorFlujo:
                     'montos_por_mes': {m: 0.0 for m in self.meses_lista},
                     'fecha': fecha,
                     'payment_state': payment_state,
+                    'categoria': partner_categoria,
                     'facturas': []
                 }
 
@@ -395,6 +414,53 @@ class AgregadorFlujo:
             cuenta['facturas_por_estado'][payment_state][partner_name]['monto_total'] += monto_efectivo
             if mes_str in self.meses_lista:
                 cuenta['facturas_por_estado'][payment_state][partner_name]['montos_por_mes'][mes_str] += monto_efectivo
+            
+            # ===== ACUMULAR PARTE PAGADA DE PARCIALES EN "Facturas Pagadas" =====
+            if monto_pagado_parcial != 0:
+                pagadas_label = ESTADO_LABELS['paid']  # "Facturas Pagadas"
+                
+                # Acumular en totales generales
+                self.montos_por_concepto_mes[concepto_id][mes_str] += monto_pagado_parcial
+                self._agregar_cuenta(concepto_id, codigo_cuenta, acc_data[1], monto_pagado_parcial, mes_str, acc_data[0])
+                
+                # Crear estructura para Pagadas si no existe
+                if pagadas_label not in cuenta['etiquetas']:
+                    cuenta['etiquetas'][pagadas_label] = {
+                        'monto': 0.0,
+                        'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                        'orden': ESTADO_ORDEN.index('paid')
+                    }
+                
+                cuenta['etiquetas'][pagadas_label]['monto'] += monto_pagado_parcial
+                if mes_str in self.meses_lista:
+                    cuenta['etiquetas'][pagadas_label]['montos_por_mes'][mes_str] += monto_pagado_parcial
+                
+                # También guardar en facturas_por_estado para trazabilidad
+                if 'paid' not in cuenta['facturas_por_estado']:
+                    cuenta['facturas_por_estado']['paid'] = {}
+                
+                if partner_name not in cuenta['facturas_por_estado']['paid']:
+                    cuenta['facturas_por_estado']['paid'][partner_name] = {
+                        'nombre': partner_name,
+                        'move_id': move_id,
+                        'monto_total': 0.0,
+                        'montos_por_mes': {m: 0.0 for m in self.meses_lista},
+                        'fecha': fecha,
+                        'payment_state': 'paid',
+                        'categoria': partner_categoria,
+                        'facturas': []
+                    }
+                
+                cuenta['facturas_por_estado']['paid'][partner_name]['facturas'].append({
+                    'nombre': f"{move_name} (cobrado de parcial)",
+                    'move_id': move_id,
+                    'monto': monto_pagado_parcial,
+                    'fecha': fecha
+                })
+                
+                cuenta['facturas_por_estado']['paid'][partner_name]['monto_total'] += monto_pagado_parcial
+                if mes_str in self.meses_lista:
+                    cuenta['facturas_por_estado']['paid'][partner_name]['montos_por_mes'][mes_str] += monto_pagado_parcial
 
     def procesar_presupuestos_ventas(self, presupuestos: List[Dict], 
                                     clasificar_fn,
@@ -880,7 +946,8 @@ class AgregadorFlujo:
                                 'montos_por_mes': {
                                     m: round(partner_datos.get('montos_por_mes', {}).get(m, 0), 0)
                                     for m in self.meses_lista
-                                }
+                                },
+                                'categoria': partner_datos.get('categoria', 'Sin Categoría')
                             })
 
                         etiquetas_partners.sort(key=lambda x: _texto_orden_alfabetico(x.get('nombre', '')))
