@@ -1072,7 +1072,8 @@ class RealProyectadoCalculator:
         
         ESTRUCTURA JERÁRQUICA (igual que 1.2.1):
         - Nivel 2: Por estado de pago (Pagadas, Parciales, No Pagadas)
-        - Nivel 3: Por cliente/deudor
+        - Nivel 3: Por categoría de contacto
+        - Nivel 4: Por cliente/deudor
         
         LÓGICA:
         - REAL = Monto cobrado (amount_total - amount_residual)
@@ -1099,14 +1100,42 @@ class RealProyectadoCalculator:
             proyectado_total = 0.0
             real_por_mes = defaultdict(float)
             proyectado_por_mes = defaultdict(float)
+
+            # Cargar categoría de contacto por partner para agregar nivel intermedio
+            partner_ids = list(set([
+                f.get('partner_id')[0] if isinstance(f.get('partner_id'), (list, tuple)) else f.get('partner_id')
+                for f in facturas if f.get('partner_id')
+            ]))
+            partners_info = {}
+            if partner_ids:
+                partners_data = self.odoo.search_read(
+                    'res.partner',
+                    [['id', 'in', partner_ids]],
+                    ['id', 'name', 'x_studio_categora_de_contacto'],
+                    limit=10000
+                )
+                for p in partners_data:
+                    categoria = p.get('x_studio_categora_de_contacto', False)
+                    if categoria and isinstance(categoria, (list, tuple)):
+                        categoria = categoria[1]
+                    elif not categoria or categoria == 'False':
+                        categoria = 'Sin Categoría'
+
+                    partners_info[p['id']] = {
+                        'name': p.get('name', 'Desconocido'),
+                        'categoria': categoria
+                    }
             
-            # Estructura jerárquica: Estados -> Clientes
+            # Estructura jerárquica: Estados -> Categorías -> Clientes
             estados = {}
             
             for f in facturas:
                 # Datos básicos
                 partner_data = f.get('partner_id', [0, 'Desconocido'])
                 partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Desconocido'
+                partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
+                partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
+                categoria_contacto = partner_info.get('categoria', 'Sin Categoría')
                 
                 fecha = f.get('invoice_date', '')
                 if not fecha:
@@ -1160,7 +1189,7 @@ class RealProyectadoCalculator:
                             'montos_por_mes': defaultdict(float),
                             'real_por_mes': defaultdict(float),
                             'proyectado_por_mes': defaultdict(float),
-                            'etiquetas': {},  # Clientes
+                            'etiquetas': {},  # Categorías de contacto
                             'es_cuenta_cxc': True,
                             'orden': list(self.ESTADO_LABELS.keys()).index(estado_key) if estado_key in self.ESTADO_LABELS else 99
                         }
@@ -1175,9 +1204,32 @@ class RealProyectadoCalculator:
                         estado['proyectado'] += monto
                         estado['proyectado_por_mes'][periodo] += monto
                     
-                    # Cliente
-                    if partner_name not in estado['etiquetas']:
-                        estado['etiquetas'][partner_name] = {
+                    # Categoría de contacto (Nivel 3)
+                    if categoria_contacto not in estado['etiquetas']:
+                        estado['etiquetas'][categoria_contacto] = {
+                            'nombre': categoria_contacto,
+                            'monto': 0.0,
+                            'real': 0.0,
+                            'proyectado': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'real_por_mes': defaultdict(float),
+                            'proyectado_por_mes': defaultdict(float),
+                            'clientes': {}
+                        }
+
+                    categoria = estado['etiquetas'][categoria_contacto]
+                    categoria['monto'] += monto
+                    categoria['montos_por_mes'][periodo] += monto
+                    if es_real:
+                        categoria['real'] += monto
+                        categoria['real_por_mes'][periodo] += monto
+                    else:
+                        categoria['proyectado'] += monto
+                        categoria['proyectado_por_mes'][periodo] += monto
+
+                    # Cliente (Nivel 4)
+                    if partner_name not in categoria['clientes']:
+                        categoria['clientes'][partner_name] = {
                             'nombre': partner_name[:50],
                             'monto': 0.0,
                             'real': 0.0,
@@ -1187,8 +1239,8 @@ class RealProyectadoCalculator:
                             'proyectado_por_mes': defaultdict(float),
                             'facturas': []
                         }
-                    
-                    cliente = estado['etiquetas'][partner_name]
+
+                    cliente = categoria['clientes'][partner_name]
                     cliente['monto'] += monto
                     cliente['montos_por_mes'][periodo] += monto
                     if es_real:
@@ -1198,7 +1250,7 @@ class RealProyectadoCalculator:
                         cliente['proyectado'] += monto
                         cliente['proyectado_por_mes'][periodo] += monto
                     
-                    return estado, cliente
+                    return estado, categoria, cliente
                 
                 # Lógica de asignación por estado de pago
                 factura_info = {
@@ -1214,7 +1266,7 @@ class RealProyectadoCalculator:
                 
                 if payment_state == 'paid':
                     # Factura pagada: todo el cobrado va a "Pagadas"
-                    estado, cliente = agregar_a_estado('paid', cobrado, periodo_real, es_real=True)
+                    estado, categoria, cliente = agregar_a_estado('paid', cobrado, periodo_real, es_real=True)
                     if len(cliente.get('facturas', [])) < 50:
                         cliente['facturas'].append(factura_info)
                     
@@ -1223,16 +1275,16 @@ class RealProyectadoCalculator:
                     # - Cobrado va a "Parcialmente Pagadas"
                     # - Pendiente (residual) va a "No Pagadas"
                     if cobrado > 0:
-                        estado_parcial, cliente_parcial = agregar_a_estado('partial', cobrado, periodo_real, es_real=True)
+                        estado_parcial, categoria_parcial, cliente_parcial = agregar_a_estado('partial', cobrado, periodo_real, es_real=True)
                         if len(cliente_parcial.get('facturas', [])) < 50:
                             cliente_parcial['facturas'].append(factura_info.copy())
                     if pendiente > 0:
-                        estado_nopaid, cliente_nopaid = agregar_a_estado('not_paid', pendiente, periodo_proyectado, es_real=False)
+                        estado_nopaid, categoria_nopaid, cliente_nopaid = agregar_a_estado('not_paid', pendiente, periodo_proyectado, es_real=False)
                         # No duplicar la factura en no pagadas, ya está en parciales
                     
                 elif payment_state == 'in_payment':
                     # En proceso de pago: va a su categoría
-                    estado, cliente = agregar_a_estado('in_payment', cobrado + pendiente, periodo_real, es_real=True)
+                    estado, categoria, cliente = agregar_a_estado('in_payment', cobrado + pendiente, periodo_real, es_real=True)
                     # Guardar factura
                     if len(cliente.get('facturas', [])) < 50:
                         cliente['facturas'].append({
@@ -1249,7 +1301,7 @@ class RealProyectadoCalculator:
                 else:  # not_paid u otros
                     # No pagada: todo va a "No Pagadas" como proyectado
                     if cobrado + pendiente > 0:
-                        estado, cliente = agregar_a_estado('not_paid', cobrado + pendiente, periodo_proyectado, es_real=False)
+                        estado, categoria, cliente = agregar_a_estado('not_paid', cobrado + pendiente, periodo_proyectado, es_real=False)
                         # Guardar factura
                         if len(cliente.get('facturas', [])) < 50:
                             cliente['facturas'].append({
@@ -1272,17 +1324,43 @@ class RealProyectadoCalculator:
             cuentas_resultado = []
             for estado_label, estado_data in sorted(estados.items(), key=lambda x: x[1]['orden']):
                 etiquetas_list = []
-                for cliente_name, cliente_data in sorted(estado_data['etiquetas'].items(), key=lambda x: x[1]['monto'], reverse=True):
+
+                categorias_ordenadas = sorted(
+                    estado_data['etiquetas'].items(),
+                    key=lambda x: x[1]['monto'],
+                    reverse=True
+                )
+
+                for categoria_name, categoria_data in categorias_ordenadas:
+                    clientes_list = []
+                    for cliente_name, cliente_data in sorted(categoria_data['clientes'].items(), key=lambda x: x[1]['monto'], reverse=True):
+                        clientes_list.append({
+                            'nombre': f"↳ {cliente_data['nombre']}",
+                            'monto': cliente_data['monto'],
+                            'real': cliente_data['real'],
+                            'proyectado': cliente_data['proyectado'],
+                            'montos_por_mes': dict(cliente_data['montos_por_mes']),
+                            'real_por_mes': dict(cliente_data['real_por_mes']),
+                            'proyectado_por_mes': dict(cliente_data['proyectado_por_mes']),
+                            'facturas': cliente_data['facturas'],
+                            'total_facturas': len(cliente_data['facturas']),
+                            'tipo': 'cliente',
+                            'nivel': 4,
+                            'activo': True
+                        })
+
                     etiquetas_list.append({
-                        'nombre': cliente_data['nombre'],
-                        'monto': cliente_data['monto'],
-                        'real': cliente_data['real'],
-                        'proyectado': cliente_data['proyectado'],
-                        'montos_por_mes': dict(cliente_data['montos_por_mes']),
-                        'real_por_mes': dict(cliente_data['real_por_mes']),
-                        'proyectado_por_mes': dict(cliente_data['proyectado_por_mes']),
-                        'facturas': cliente_data['facturas'],
-                        'total_facturas': len(cliente_data['facturas'])
+                        'nombre': f'📁 {categoria_name}',
+                        'monto': categoria_data['monto'],
+                        'real': categoria_data['real'],
+                        'proyectado': categoria_data['proyectado'],
+                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
+                        'real_por_mes': dict(categoria_data['real_por_mes']),
+                        'proyectado_por_mes': dict(categoria_data['proyectado_por_mes']),
+                        'tipo': 'categoria',
+                        'nivel': 3,
+                        'activo': True,
+                        'sub_etiquetas': clientes_list
                     })
                 
                 cuentas_resultado.append({
