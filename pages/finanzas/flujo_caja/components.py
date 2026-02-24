@@ -148,7 +148,7 @@ function exportVisibleTableToExcel() {
     const cleanText = (el) => {
         const clone = el.cloneNode(true);
         clone.querySelectorAll('.icon-expand, .tooltip-text, svg').forEach(n => n.remove());
-        return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+        return (clone.textContent || '').replace(/\\s+/g, ' ').trim();
     };
 
     // Headers visibles (sin TOTAL izquierda)
@@ -218,14 +218,14 @@ function exportVisibleTableToExcel() {
 
     const escapeCsv = (val) => {
         const s = (val ?? '').toString();
-        if (s.includes(';') || s.includes('"') || s.includes('\n')) {
+        if (s.includes(';') || s.includes('"') || s.includes('\\n')) {
             return '"' + s.replace(/"/g, '""') + '"';
         }
         return s;
     };
 
-    const csvContent = csvRows.map(r => r.map(escapeCsv).join(';')).join('\n');
-    const bom = '\uFEFF';
+    const csvContent = csvRows.map(r => r.map(escapeCsv).join(';')).join('\\n');
+    const bom = '\\uFEFF';
     const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
