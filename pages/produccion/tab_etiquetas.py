@@ -33,6 +33,58 @@ def extraer_codigo_descripcion(nombre_producto: str) -> tuple:
     return '', nombre_producto
 
 
+# Mapeo de abreviaturas Odoo → nombres legibles para etiquetas
+_FRUTAS = {
+    'FB': 'FRAMBUESA', 'AR': 'ARÁNDANO', 'FR': 'FRUTILLA', 'MR': 'MORA',
+}
+_TIPOS_PRODUCTO = [
+    ('IQF A',           'IQF A'),
+    ('IQF Retail',      'IQF RETAIL'),
+    ('IQF RTL',         'IQF RETAIL'),
+    ('Whole',           'WHOLE & BROKEN'),
+    ('W&B',             'WHOLE & BROKEN'),
+    ('Broken',          'WHOLE & BROKEN'),
+    ('PSP',             'PSP'),
+    ('Desecho Vegetal', 'DESECHO VEGETAL'),
+    ('Desecho',         'DESECHO VEGETAL'),
+    ('Calidad Jugo',    'CALIDAD JUGO'),
+    ('Jugo',            'CALIDAD JUGO'),
+]
+_MANEJOS = [
+    ('Conv', 'CONVENCIONAL'),
+    ('Org',  'ORGÁNICO'),
+]
+
+
+def titulo_etiqueta(descripcion: str) -> str:
+    """
+    Convierte descripción Odoo en título legible para etiqueta.
+    Ej: 'FB MK Conv. W&B 12 kg en Caja' → 'FRAMBUESA WHOLE & BROKEN CONVENCIONAL'
+    Ej: 'FB S/V Conv. S/C Calidad Jugo 12 kg en Caja' → 'FRAMBUESA CALIDAD JUGO CONVENCIONAL'
+    """
+    desc_upper = descripcion.upper()
+    # Fruta
+    fruta = ''
+    for abrev, nombre in _FRUTAS.items():
+        if desc_upper.startswith(abrev.upper()):
+            fruta = nombre
+            break
+    # Tipo de producto
+    tipo = ''
+    for keyword, label in _TIPOS_PRODUCTO:
+        if keyword.upper() in desc_upper:
+            tipo = label
+            break
+    # Manejo
+    manejo = ''
+    for keyword, label in _MANEJOS:
+        if keyword.upper() in desc_upper:
+            manejo = label
+            break
+    parts = [p for p in [fruta, tipo, manejo] if p]
+    return ' '.join(parts) if parts else descripcion.upper()
+
+
 def extraer_peso_de_descripcion(descripcion: str) -> str:
     """
     Extrae el peso en kg de la descripción del producto.
@@ -776,7 +828,8 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
     Genera HTML de etiqueta genérica (sin cliente).
     Tamaño: 100mm x 50mm, sin borde.
     """
-    nombre = datos.get('nombre_producto', '')
+    nombre_raw = datos.get('nombre_producto', '')
+    nombre = datos.get('titulo_etiqueta', '') or titulo_etiqueta(nombre_raw)
     fecha_elab = datos.get('fecha_elaboracion', '')
     fecha_venc = datos.get('fecha_vencimiento', '')
     lote = datos.get('lote_produccion', '')
