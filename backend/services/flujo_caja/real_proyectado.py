@@ -19,6 +19,7 @@ from typing import Dict, List, Tuple
 from collections import defaultdict
 from datetime import datetime, timedelta
 import json
+import unicodedata
 from backend.services.currency_service import CurrencyService
 
 
@@ -46,6 +47,15 @@ class RealProyectadoCalculator:
         'in_payment': '🔄',
         'not_paid': '❌'
     }
+
+    @staticmethod
+    def _texto_orden_alfabetico(valor: str) -> str:
+        """Normaliza texto para orden alfabético estable (sin acentos/símbolos)."""
+        texto = str(valor or '').strip()
+        texto = texto.replace('📁', '').replace('↳', '').strip()
+        texto = unicodedata.normalize('NFKD', texto)
+        texto = ''.join(ch for ch in texto if not unicodedata.combining(ch))
+        return texto.casefold()
     
     def __init__(self, odoo_client):
         """
@@ -129,7 +139,8 @@ class RealProyectadoCalculator:
                     ['journal_id', '=', 2],  # Facturas de Proveedores
                     ['date', '>=', fecha_inicio],
                     ['date', '<=', fecha_fin],
-                    ['state', '=', 'posted']
+                    ['state', '=', 'posted'],
+                    ['payment_state', '!=', 'reversed']
                 ],
                 ['id', 'name', 'move_type', 'date', 'invoice_date', 'invoice_date_due',
                  'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago'],
@@ -259,9 +270,20 @@ class RealProyectadoCalculator:
                 signo = -1 if move_type == 'in_refund' else 1
                 es_nc = (move_type == 'in_refund')
                 
-                # CLASIFICACIÓN POR MATCHING_NUMBER
+                # CLASIFICACIÓN ROBUSTA (payment_state + residual)
+                # IMPORTANTE: matching_number puede venir como 'P' incluso en facturas pagadas al 100%.
+                # Para evitar falsos "parcialmente pagadas", priorizamos estado y saldos.
+                payment_state = (f.get('payment_state') or '').strip()
+                total_abs = abs(float(amount_total or 0.0))
+                residual_abs = abs(float(amount_residual or 0.0))
+                pagado_abs = max(total_abs - residual_abs, 0.0)
+                tolerancia = 0.01
+
+                es_pagada = (payment_state == 'paid') or (residual_abs <= tolerancia)
+                es_no_pagada = pagado_abs <= tolerancia
+
                 # Las N/C se clasifican en las mismas categorías que facturas, pero con signo invertido
-                if matching_number and str(matching_number).startswith('A'):
+                if es_pagada:
                     # ===== CASO 1: PAGADAS CON MATCHING AXXXXX =====
                     estado_key = 'PAGADAS'
                     
@@ -279,7 +301,7 @@ class RealProyectadoCalculator:
                     periodo_real = self._fecha_a_periodo(fecha_real, meses_lista)
                     periodo_proyectado = None
                     
-                elif matching_number == 'P':
+                elif not es_no_pagada:
                     # ===== CASO 2: PARCIALES CON MATCHING P =====
                     estado_key = 'PARCIALES'
                     
@@ -317,8 +339,8 @@ class RealProyectadoCalculator:
                     
                     # Monto REAL = 0 (no hay pagos/devoluciones)
                     monto_real = 0
-                    # Monto PROYECTADO = todo el monto
-                    monto_proyectado = -amount_total * signo
+                    # Monto PROYECTADO = saldo pendiente real
+                    monto_proyectado = -amount_residual * signo
                     
                     periodo_real = None
                     
@@ -810,20 +832,18 @@ class RealProyectadoCalculator:
                 # Nivel 2: ESTADO como cuenta
                 etiquetas_list = []
                 
-                # Ordenar categorías por monto (descendente)
+                # Ordenar categorías alfabéticamente
                 categorias_ordenadas = sorted(
                     estado['categorias'].items(),
-                    key=lambda x: abs(x[1]['monto']),
-                    reverse=True
+                    key=lambda x: self._texto_orden_alfabetico(x[0])
                 )
                 
                 for categoria_nombre, categoria_data in categorias_ordenadas:
                     # Nivel 3: CATEGORÍA como etiqueta EXPANDIBLE con sub_etiquetas
-                    # Ordenar proveedores por monto
+                    # Ordenar proveedores alfabéticamente
                     proveedores_ordenados = sorted(
                         categoria_data['proveedores'].items(),
-                        key=lambda x: abs(x[1]['monto']),
-                        reverse=True
+                        key=lambda x: self._texto_orden_alfabetico(x[0])
                     )
                     
                     # Nivel 4: PROVEEDORES como sub_etiquetas anidadas

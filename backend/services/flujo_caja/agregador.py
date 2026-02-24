@@ -5,6 +5,16 @@ Procesa y agrega movimientos por concepto y perÃ­odo.
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
+import unicodedata
+
+
+def _texto_orden_alfabetico(valor: str) -> str:
+    """Normaliza texto para orden alfabético estable (sin acentos/símbolos)."""
+    texto = str(valor or '').strip()
+    texto = texto.replace('📁', '').replace('↳', '').strip()
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = ''.join(ch for ch in texto if not unicodedata.combining(ch))
+    return texto.casefold()
 
 
 class AgregadorFlujo:
@@ -829,8 +839,7 @@ class AgregadorFlujo:
                             sub_etiquetas = []
                             for partner_nombre, partner_datos in sorted(
                                 clientes.items(),
-                                key=lambda x: abs(x[1].get('monto_total', 0)),
-                                reverse=True
+                                key=lambda x: _texto_orden_alfabetico(x[0])
                             ):
                                 sub_etiquetas.append({
                                     'nombre': str(partner_nombre),
@@ -857,7 +866,7 @@ class AgregadorFlujo:
                                 'sub_etiquetas': sub_etiquetas
                             })
 
-                        categorias_formateadas.sort(key=lambda x: abs(x.get('monto', 0)), reverse=True)
+                        categorias_formateadas.sort(key=lambda x: _texto_orden_alfabetico(x.get('nombre', '')))
                         etiquetas_partners = categorias_formateadas
                         cantidad_estado = sum(
                             len(v.get('clientes', {})) if isinstance(v, dict) and isinstance(v.get('clientes', {}), dict) and v.get('clientes') else 1
@@ -874,7 +883,7 @@ class AgregadorFlujo:
                                 }
                             })
 
-                        etiquetas_partners.sort(key=lambda x: abs(x.get('monto', 0)), reverse=True)
+                        etiquetas_partners.sort(key=lambda x: _texto_orden_alfabetico(x.get('nombre', '')))
 
                     resultado_estados.append({
                         'codigo': f'estado_{estado_codigo}' if not str(estado_codigo).startswith('estado_') else estado_codigo,
@@ -931,17 +940,11 @@ class AgregadorFlujo:
                 
                 etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_estado)
             else:
-                # Ordenar por monto absoluto total (comportamiento original)
-                def orden_etiqueta(item):
-                    nombre, datos = item
-                    if not isinstance(datos, dict):
-                        return -abs(datos) if datos else 0
-                    # Sumar montos absolutos de todos los meses
-                    montos_mes = datos.get("montos_por_mes", {})
-                    total = sum(abs(montos_mes.get(m, 0)) for m in self.meses_lista)
-                    return -total  # Negativo para orden descendente
-                
-                etiquetas_ordenadas = sorted(etiquetas_filtradas, key=orden_etiqueta)[:200]
+                # Ordenar alfabéticamente por nombre de etiqueta
+                etiquetas_ordenadas = sorted(
+                    etiquetas_filtradas,
+                    key=lambda item: _texto_orden_alfabetico(item[0])
+                )[:200]
             
             # Mapeo de etiqueta a payment_state para enlazar facturas
             LABEL_TO_STATE = {
@@ -979,8 +982,8 @@ class AgregadorFlujo:
                                 "payment_state": fact_datos.get("payment_state", "")
                             })
                         
-                        # Ordenar facturas por monto absoluto
-                        facturas_lista.sort(key=lambda x: abs(x.get("monto", 0)), reverse=True)
+                        # Ordenar facturas alfabéticamente por nombre
+                        facturas_lista.sort(key=lambda x: _texto_orden_alfabetico(x.get("nombre", "")))
                         
                         # Incluir solo las primeras 200 para no sobrecargar
                         etiqueta_item["facturas"] = facturas_lista[:200]
