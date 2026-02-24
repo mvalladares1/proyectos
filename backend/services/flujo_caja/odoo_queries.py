@@ -526,33 +526,53 @@ class OdooQueryManager:
                 else:
                     cobradas_count += 1
             
-            # DEBUG: Verificar amount_total/amount_residual para parciales
-            partial_moves = {mid: info for mid, info in move_info.items() if info['payment_state'] == 'partial'}
-            partial_with_total = sum(1 for info in partial_moves.values() if info['amount_total'] > 0)
-            partial_without_total = sum(1 for info in partial_moves.values() if info['amount_total'] == 0)
-            print(f"[CxC Query DEBUG] Total moves: {len(move_info)}, Parciales: {len(partial_moves)}, con amount_total>0: {partial_with_total}, con amount_total=0: {partial_without_total}")
-            if partial_moves:
-                sample = list(partial_moves.values())[:3]
-                for s in sample:
-                    print(f"[CxC Query DEBUG SAMPLE] name={s['name']}, payment_state={s['payment_state']}, amount_total={s['amount_total']}, amount_residual={s['amount_residual']}")
-            
             # Consultar categorías de contacto por partner (batch)
+            # IMPORTANTE: Si el partner es un contacto hijo (invoice address, etc.),
+            # buscar la categoría del PADRE
             partners_categorias = {}
             if partner_ids_set:
                 try:
                     partners_data = self.odoo.search_read(
                         'res.partner',
                         [['id', 'in', list(partner_ids_set)]],
-                        ['id', 'x_studio_categora_de_contacto'],
+                        ['id', 'x_studio_categora_de_contacto', 'parent_id'],
                     )
+                    
+                    # Primera pasada: asignar categorías directas
+                    partners_sin_cat = []  # Partners sin categoría que tienen parent
                     for p in partners_data:
                         cat = p.get('x_studio_categora_de_contacto', False)
+                        parent = p.get('parent_id', False)
                         if isinstance(cat, (list, tuple)) and len(cat) > 1:
                             partners_categorias[p['id']] = cat[1]
                         elif isinstance(cat, str) and cat:
                             partners_categorias[p['id']] = cat
+                        elif parent and isinstance(parent, (list, tuple)) and parent[0]:
+                            # Sin categoría pero tiene padre → buscar del padre
+                            partners_sin_cat.append((p['id'], parent[0]))
                         else:
                             partners_categorias[p['id']] = 'Sin Categoría'
+                    
+                    # Segunda pasada: buscar categorías de padres
+                    if partners_sin_cat:
+                        parent_ids = list(set(pid for _, pid in partners_sin_cat))
+                        parents_data = self.odoo.search_read(
+                            'res.partner',
+                            [['id', 'in', parent_ids]],
+                            ['id', 'x_studio_categora_de_contacto'],
+                        )
+                        parent_cats = {}
+                        for pp in parents_data:
+                            pcat = pp.get('x_studio_categora_de_contacto', False)
+                            if isinstance(pcat, (list, tuple)) and len(pcat) > 1:
+                                parent_cats[pp['id']] = pcat[1]
+                            elif isinstance(pcat, str) and pcat:
+                                parent_cats[pp['id']] = pcat
+                        
+                        for child_id, parent_id in partners_sin_cat:
+                            partners_categorias[child_id] = parent_cats.get(parent_id, 'Sin Categoría')
+                    
+                    print(f"[CxC Query] Categorías asignadas: {len(partners_categorias)} partners, {len(partners_sin_cat)} heredaron del padre")
                 except Exception as e:
                     print(f"[CxC Query] Error obteniendo categorías de partners: {e}")
             

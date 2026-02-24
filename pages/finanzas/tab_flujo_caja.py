@@ -221,8 +221,12 @@ def render(username: str, password: str):
                             if cat_name:
                                 categorias_set.add(cat_name)
                         elif etiqueta_tmp.get("categoria"):
-                            # CxC partners con categoría
+                            # CxC partners con categoría (etiqueta-level)
                             categorias_set.add(etiqueta_tmp["categoria"])
+                        # CxC facturas dentro de estados (Pagadas, Parciales, etc.)
+                        for fact_tmp in etiqueta_tmp.get("facturas", []):
+                            if fact_tmp.get("categoria"):
+                                categorias_set.add(fact_tmp["categoria"])
                         # CxC sub_etiquetas (partners dentro de categorías proyectadas)
                         for sub_tmp in etiqueta_tmp.get("sub_etiquetas", []):
                             if sub_tmp.get("tipo") == "categoria":
@@ -281,14 +285,27 @@ def render(username: str, password: str):
                             cuenta_filt["montos_por_mes"] = nuevos_montos_mes
                         
                         elif tiene_cxc and cuenta_filt.get("es_cuenta_cxc"):
-                            # CxC: Filtrar partners que tienen la categoría
+                            # CxC: Filtrar DENTRO de cada estado (etiqueta) por categoría de facturas
+                            # Las etiquetas CxC son estados: "Facturas Pagadas", "Parcialmente Pagadas", etc.
+                            # Dentro de cada estado hay "facturas" (agrupadas por partner) con campo "categoria"
                             etiquetas_filtradas = []
                             for etq in cuenta_filt.get("etiquetas", []):
-                                cat = etq.get("categoria", "")
-                                if cat and cat in categorias_seleccionadas:
-                                    etiquetas_filtradas.append(etq)
-                                elif not cat:
-                                    # Sin categoría → mantener (ej. sub_etiquetas de proyecciones)
+                                facturas = etq.get("facturas", [])
+                                if facturas:
+                                    # Filtrar facturas por categoría
+                                    facturas_ok = [f for f in facturas if f.get("categoria", "") in categorias_seleccionadas]
+                                    if facturas_ok:
+                                        etq_copy = dict(etq)
+                                        etq_copy["facturas"] = facturas_ok
+                                        # Recalcular montos del estado con solo las facturas filtradas
+                                        etq_copy["monto"] = sum(f.get("monto", 0) for f in facturas_ok)
+                                        etq_copy["montos_por_mes"] = {}
+                                        for f in facturas_ok:
+                                            for m, v in f.get("montos_por_mes", {}).items():
+                                                etq_copy["montos_por_mes"][m] = etq_copy["montos_por_mes"].get(m, 0) + v
+                                        etiquetas_filtradas.append(etq_copy)
+                                else:
+                                    # Etiqueta sin facturas (ej. proyecciones, sub_etiquetas) → mantener
                                     etiquetas_filtradas.append(etq)
                             
                             nuevo_monto = sum(e.get("monto", 0) for e in etiquetas_filtradas)

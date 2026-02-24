@@ -348,9 +348,6 @@ class AgregadorFlujo:
                 monto_residual = balance * residual_ratio
                 monto_pagado_parcial = balance - monto_residual  # Parte ya cobrada
                 monto_efectivo = monto_residual  # Solo el residual va a PARCIALES
-                print(f"[CxC SPLIT] partner={partner_name[:30]}, balance={balance}, amount_total={amount_total_move}, amount_residual={amount_residual_move}, ratio={residual_ratio:.3f}, residual→PARCIALES={monto_residual:.0f}, pagado→PAGADAS={monto_pagado_parcial:.0f}")
-            elif payment_state == 'partial':
-                print(f"[CxC SPLIT WARNING] partial pero amount_total=0! partner={partner_name[:30]}, balance={balance}, amount_total_raw={linea.get('amount_total')}, amount_residual_raw={linea.get('amount_residual')}")
             
             # Acumular
             if concepto_id not in self.montos_por_concepto_mes:
@@ -1050,7 +1047,8 @@ class AgregadorFlujo:
                                 "monto": round(fact_datos.get("monto_total", 0), 0),
                                 "montos_por_mes": {m: round(fact_datos.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista},
                                 "fecha": fact_datos.get("fecha", ""),
-                                "payment_state": fact_datos.get("payment_state", "")
+                                "payment_state": fact_datos.get("payment_state", ""),
+                                "categoria": fact_datos.get("categoria", "Sin Categoría")
                             })
                         
                         # Ordenar facturas alfabéticamente por nombre
