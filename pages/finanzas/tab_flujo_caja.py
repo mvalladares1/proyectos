@@ -229,7 +229,13 @@ def render(username: str, password: str):
                                 cat_name = sub_tmp.get("nombre", "").replace("📁 ", "")
                                 if cat_name:
                                     categorias_set.add(cat_name)
-        st.session_state["flujo_categorias_lista"] = sorted(categorias_set)
+        nuevas_categorias = sorted(categorias_set)
+        old_categorias = st.session_state.get("flujo_categorias_lista", [])
+        st.session_state["flujo_categorias_lista"] = nuevas_categorias
+        
+        # Si las categorías cambiaron (primera carga), refrescar para que el multiselect las muestre
+        if nuevas_categorias and nuevas_categorias != old_categorias:
+            st.rerun()
         
         # ========== FILTRO POR CATEGORÍA DE CONTACTO (1.1.1 y 1.2.1) ==========
         if categorias_seleccionadas:

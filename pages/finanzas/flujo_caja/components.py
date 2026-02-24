@@ -192,8 +192,9 @@ function exportVisibleTableToExcel() {
         const weekRow = ['CONCEPTO', ...weeks, 'TOTAL'];
         headerRowsForXlsx = [monthRow, weekRow];
     } else {
-        // Mensual
-        const ths = Array.from(table.querySelectorAll('thead tr th'));
+        // Mensual: only use the non-toolbar header row
+        const headerRow = theadRows[0];
+        const ths = Array.from(headerRow.querySelectorAll('th'));
         const raw = ths.map(cleanText).filter(Boolean);
         if (raw.length >= 3) {
             headerRowsForXlsx = [[raw[0], ...raw.slice(2)]];
@@ -206,10 +207,13 @@ function exportVisibleTableToExcel() {
     const allRows = [];
     headerRowsForXlsx.forEach(row => allRows.push(row));
 
-    // Filas visibles del body
+    // Filas visibles del body (solo las que están realmente visibles en pantalla)
     const bodyRows = Array.from(table.querySelectorAll('tbody tr')).filter(row => {
-        const style = row.getAttribute('style') || '';
-        return !style.includes('display:none');
+        // Usar la propiedad style.display que refleja el estado actual (JS-toggled)
+        if (row.style.display === 'none') return false;
+        // También verificar computedStyle para CSS classes
+        const computed = window.getComputedStyle(row);
+        return computed.display !== 'none';
     });
 
     bodyRows.forEach(row => {
