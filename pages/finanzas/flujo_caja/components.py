@@ -140,6 +140,61 @@ function collapseAll() {
     });
 }
 
+// ============ EXPORT VISTA ACTUAL ============
+function exportVisibleTableToExcel() {
+    const table = document.querySelector('.excel-table');
+    if (!table) return;
+
+    const clonedTable = table.cloneNode(true);
+
+    // Eliminar filas ocultas (colapsadas)
+    clonedTable.querySelectorAll('tr').forEach(row => {
+        const style = row.getAttribute('style') || '';
+        if (style.includes('display:none')) {
+            row.remove();
+        }
+    });
+
+    // Limpiar elementos interactivos
+    clonedTable.querySelectorAll('.icon-expand').forEach(el => el.remove());
+    clonedTable.querySelectorAll('.tooltip-text').forEach(el => el.remove());
+    clonedTable.querySelectorAll('*').forEach(el => {
+        el.removeAttribute('onclick');
+        el.removeAttribute('oncontextmenu');
+        el.removeAttribute('draggable');
+        el.removeAttribute('id');
+        el.removeAttribute('class');
+        if (el.tagName !== 'TH' && el.tagName !== 'TD') {
+            el.removeAttribute('style');
+        }
+    });
+
+    const html = `
+<html>
+<head>
+  <meta charset="UTF-8" />
+</head>
+<body>
+  ${clonedTable.outerHTML}
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const filename = `flujo_caja_vista_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xls`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
 // ============ SEARCH ============
 function searchTable(term) {
     searchTerm = term.toLowerCase();

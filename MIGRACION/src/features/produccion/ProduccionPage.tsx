@@ -66,6 +66,8 @@ import {
 
   useAgregarPalletsProcesos,
 
+  useReporteriaDashboard,
+
   type PalletValidadoProceso,
 
 } from '@/api/produccion'
@@ -108,6 +110,163 @@ function CredentialsForm({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// ─── Reportería General Tab ────────────────────────────────────────────────────
+
+function ReporteriaTab() {
+  const today = new Date().toISOString().slice(0, 10)
+  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10)
+  const seasonStart = `${new Date().getFullYear()}-11-20`
+
+  const [modo, setModo] = useState<'semana' | 'acumulado' | 'personalizado'>('semana')
+  const [fechaInicio, setFechaInicio] = useState(weekAgo)
+  const [fechaFin, setFechaFin] = useState(today)
+  const [plantasActivas, setPlantasActivas] = useState<Set<string>>(new Set(['RFP', 'VILKUN']))
+  const [enabled, setEnabled] = useState(false)
+
+  function getRange() {
+    if (modo === 'semana') return { fi: weekAgo, ff: today }
+    if (modo === 'acumulado') return { fi: seasonStart, ff: today }
+    return { fi: fechaInicio, ff: fechaFin }
+  }
+
+  const { fi, ff } = getRange()
+  const { data, isLoading, isError, error } = useReporteriaDashboard(fi, ff, true, enabled)
+
+  const togglePlanta = (p: string) =>
+    setPlantasActivas(prev => {
+      const next = new Set(prev)
+      next.has(p) ? next.delete(p) : next.add(p)
+      return next
+    })
+
+  const mos = data?.mos?.filter(m => {
+    if (!m.planta) return true
+    return plantasActivas.has(m.planta.toUpperCase())
+  }) ?? []
+
+  const salas = data?.salas ?? []
+  const overview = data?.overview ?? {}
+
+  const moColumns: ColumnDef<typeof mos[number]>[] = [
+    { accessorKey: 'mo_name', header: 'Orden', cell: ({ row }) => <span className="font-mono text-xs">{row.original.mo_name}</span> },
+    { accessorKey: 'producto', header: 'Producto' },
+    { accessorKey: 'sala', header: 'Sala' },
+    { accessorKey: 'planta', header: 'Planta', cell: ({ row }) => row.original.planta ?? '─' },
+    { accessorKey: 'kg_entrada', header: 'Kg Entrada', cell: ({ row }) => formatNumber(row.original.kg_entrada) },
+    { accessorKey: 'rendimiento', header: 'Rendimiento', cell: ({ row }) => `${formatNumber(row.original.rendimiento, 1)}%` },
+    { accessorKey: 'estado', header: 'Estado', cell: ({ row }) => <Badge variant={row.original.estado === 'done' ? 'default' : 'secondary'}>{row.original.estado}</Badge> },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* Filtros */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">📊 Reportería General de Producción</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Modo período */}
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Período</label>
+              <div className="flex gap-2">
+                {(['semana', 'acumulado', 'personalizado'] as const).map(m => (
+                  <Button
+                    key={m}
+                    size="sm"
+                    variant={modo === m ? 'default' : 'outline'}
+                    onClick={() => setModo(m)}
+                  >
+                    {m === 'semana' ? 'Última Semana' : m === 'acumulado' ? 'Acumulado Temporada' : 'Personalizado'}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {modo === 'personalizado' && (
+              <div className="flex items-end gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Desde</label>
+                  <Input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="w-36" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Hasta</label>
+                  <Input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="w-36" />
+                </div>
+              </div>
+            )}
+
+            {/* Planta filter */}
+            <div className="space-y-1">
+              <label className="text-sm text-muted-foreground">Planta</label>
+              <div className="flex gap-2">
+                {['RFP', 'VILKUN'].map(p => (
+                  <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={plantasActivas.has(p)}
+                      onChange={() => togglePlanta(p)}
+                      className="rounded"
+                    />
+                    <span className="text-sm">{p}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <Button onClick={() => setEnabled(true)}>Consultar Reportería</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isLoading && <LoadingSpinner />}
+      {isError && <p className="text-destructive text-sm">Error: {String((error as Error)?.message ?? error)}</p>}
+
+      {data && !isLoading && (
+        <>
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KPICard label="Kg en Proceso" value={overview.total_kg_proceso ?? overview.kg_entrada_total} loading={false} format="number" />
+            <KPICard label="Kg Congelado" value={overview.total_kg_congelado ?? overview.kg_salida_total} loading={false} format="number" />
+            <KPICard label="Rendimiento Prom." value={overview.rendimiento_prom} unit="%" format="number" loading={false} />
+            <KPICard label="N° de OTs" value={overview.num_mos ?? mos.length} loading={false} />
+          </div>
+
+          {/* Salas chart */}
+          {salas.length > 0 && (
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Kg/Hora por Sala</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <BarChart
+                  data={salas.map(s => ({ name: s.sala, value: s.kg_por_hora }))}
+                  dataKey="value"
+                  nameKey="name"
+                  height={280}
+                  color="#3b82f6"
+                  unit=" kg/h"
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* MOs table */}
+          <Card>
+            <CardHeader className="py-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm">Órdenes de Trabajo ({mos.length})</CardTitle>
+              <ExportButton data={mos} filename={`reporteria_${fi}_${ff}`} />
+            </CardHeader>
+            <CardContent>
+              <DataTable columns={moColumns} data={mos} />
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -722,6 +881,8 @@ export function ProduccionPage() {
 
           <TabsTrigger value="automatizacion-of">⚙️ Automatización OF</TabsTrigger>
 
+          <TabsTrigger value="reporteria">📊 Reportería</TabsTrigger>
+
         </TabsList>
 
         {/* Monitor Diario */}
@@ -1059,6 +1220,12 @@ export function ProduccionPage() {
         <TabsContent value="automatizacion-of" className="mt-4">
 
           <AutomatizacionOfTab />
+
+        </TabsContent>
+
+        <TabsContent value="reporteria" className="mt-4">
+
+          <ReporteriaTab />
 
         </TabsContent>
 

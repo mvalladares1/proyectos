@@ -312,3 +312,64 @@ export function useAgregarPalletsProcesos() {
         .then(r => r.data as { success: boolean; pallets_agregados: number; kg_total: number; errores: string[]; mensaje?: string }),
   })
 }
+
+// ─── Reportería General ──────────────────────────────────────────────────────
+
+export interface ReporteriaSala {
+  sala: string
+  kg_por_hora: number
+  rendimiento: number
+  kg_entrada: number
+  kg_salida?: number
+}
+
+export interface ReporteriaMO {
+  mo_name: string
+  producto: string
+  sala: string
+  kg_entrada: number
+  rendimiento: number
+  estado: string
+  fecha?: string
+  planta?: string
+}
+
+export interface ReporteriaConsolidado {
+  fruta: string
+  manejo: string
+  kg: number
+  rendimiento: number
+}
+
+export interface ReporteriaDashboard {
+  overview: {
+    total_kg_proceso?: number
+    total_kg_congelado?: number
+    rendimiento_prom?: number
+    num_mos?: number
+    kg_entrada_total?: number
+    kg_salida_total?: number
+  }
+  salas: ReporteriaSala[]
+  mos: ReporteriaMO[]
+  consolidado: ReporteriaConsolidado[]
+}
+
+export function useReporteriaDashboard(
+  fechaInicio: string,
+  fechaFin: string,
+  soloTerminadas: boolean,
+  enabled = true,
+) {
+  return useQuery<ReporteriaDashboard>({
+    queryKey: ['produccion', 'reporteria', fechaInicio, fechaFin, soloTerminadas],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/rendimiento/dashboard', {
+        params: { fecha_inicio: fechaInicio, fecha_fin: fechaFin, solo_terminadas: soloTerminadas },
+      })
+      return data
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  })
+}

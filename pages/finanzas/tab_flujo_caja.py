@@ -385,6 +385,7 @@ def render(username: str, password: str):
         
         # ========== GENERAR TABLA HTML ==========
         html_parts = [ENTERPRISE_CSS, '<div class="excel-container">']
+        html_parts.append('<div style="display:flex;justify-content:flex-end;padding:10px 12px 0 12px;"><button onclick="exportVisibleTableToExcel()" style="background:#1d4ed8;color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;">📥 Exportar Excel (Vista actual)</button></div>')
         html_parts.append('<table class="excel-table">')
         
         # HEADER
@@ -394,6 +395,7 @@ def render(username: str, password: str):
             html_parts.append('<thead>')
             html_parts.append('<tr class="header-meses">')
             html_parts.append('<th class="frozen" rowspan="2">CONCEPTO</th>')
+            html_parts.append('<th class="frozen-total-left" rowspan="2"><strong>TOTAL</strong></th>')
             
             for mes in meses_ordenados:
                 num_semanas = len(semanas_por_mes[mes])
@@ -415,6 +417,7 @@ def render(username: str, password: str):
             # Vista mensual: Header simple
             html_parts.append('<thead><tr>')
             html_parts.append('<th class="frozen">CONCEPTO</th>')
+            html_parts.append('<th class="frozen-total-left"><strong>TOTAL</strong></th>')
             for mes in meses_lista:
                 html_parts.append(f'<th>{nombre_mes_corto(mes)}</th>')
             html_parts.append('<th><strong>TOTAL</strong></th>')
@@ -450,6 +453,7 @@ def render(username: str, password: str):
             # Activity Header
             html_parts.append(f'<tr class="activity-header">')
             html_parts.append(f'<td class="frozen">{config["icon"]} {act_nombre}</td>')
+            html_parts.append('<td class="frozen-total-left"></td>')
             for _ in meses_lista:
                 html_parts.append('<td></td>')
             html_parts.append('<td></td>')
@@ -479,9 +483,20 @@ def render(username: str, password: str):
                 
                 c_id_safe = c_id.replace(".", "_")
                 has_details = len(cuentas) > 0
-                expandable_class = f"expandable parent-{c_id_safe}" if has_details else ""
-                draggable = 'draggable="true" class="draggable"' if c_tipo == "LINEA" else ""
-                onclick = f'onclick="toggleConcept(\'{c_id_safe}\')"' if has_details else ""
+                row_classes = [row_class]
+                if has_details:
+                    row_classes.extend(["expandable", f"parent-{c_id_safe}"])
+                if c_tipo == "LINEA":
+                    row_classes.append("draggable")
+
+                attrs = []
+                if c_tipo == "LINEA":
+                    attrs.append('draggable="true"')
+                if has_details:
+                    attrs.append(f'onclick="toggleConcept(\'{c_id_safe}\')"')
+
+                row_class_attr = " ".join(row_classes)
+                extra_attrs = " ".join(attrs)
                 
                 # SVG Icon
                 icon_svg = f'<span class="icon-expand">{SVG_ICONS["chevron"]}</span>' if has_details else '<span style="width:24px;display:inline-block;"></span>'
@@ -501,8 +516,9 @@ def render(username: str, password: str):
                 </div>
                 '''
                 
-                html_parts.append(f'<tr class="{row_class} {expandable_class}" {draggable} {onclick}>')
+                html_parts.append(f'<tr class="{row_class_attr}" {extra_attrs}>')
                 html_parts.append(f'<td class="frozen {indent_class}">{icon_svg}{c_id} - {tooltip_html}</td>')
+                html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(c_total)}</strong></td>')
                 
                 # Valores mensuales con HEATMAP y click para composición
                 valores_lista = []
@@ -556,6 +572,7 @@ def render(username: str, password: str):
                         else:
                             # Mostrar código + nombre normal
                             html_parts.append(f'<td class="frozen">{cuenta_icon}📄 {cuenta_codigo} - {cuenta_nombre}</td>')
+                        html_parts.append(f'<td class="frozen-total-left">{fmt_monto_html(cuenta_monto)}</td>')
                         
                         # Celdas mensuales del nivel 2
                         for mes in meses_lista:
@@ -607,6 +624,7 @@ def render(username: str, password: str):
                                     # Fila de CATEGORÍA (nivel 3) - indentación 140px
                                     html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
                                     html_parts.append(f'<td class="frozen" style="padding-left: 140px; font-size: 13px; font-weight: bold; color: #e0e0e0; background-color: #1a1a2e; border-left: 3px solid #667eea;">{categoria_icon}{et_nombre}</td>')
+                                    html_parts.append(f'<td class="frozen-total-left" style="background-color: #1a1a2e; font-size: 13px; font-weight: bold;">{fmt_monto_html(et_monto)}</td>')
                                     
                                     # Montos por mes de la categoría
                                     for mes in meses_lista:
@@ -627,6 +645,7 @@ def render(username: str, password: str):
                                         # Fila de PROVEEDOR (nivel 4) - ID único por cuenta+categoría
                                         html_parts.append(f'<tr class="sub-etiqueta-row sub-etiqueta-{unique_cat_id} sub-etiqueta-of-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
                                         html_parts.append(f'<td class="frozen" style="padding-left: 180px; font-size: 12px; font-weight: normal; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{sub_nombre}</td>')
+                                        html_parts.append(f'<td class="frozen-total-left" style="background-color: #1a1a2e; font-size: 12px;">{fmt_monto_html(sub_monto)}</td>')
                                         
                                         # Montos por mes del proveedor
                                         for mes in meses_lista:
@@ -653,6 +672,7 @@ def render(username: str, password: str):
                                     
                                     html_parts.append(f'<tr class="etiqueta-row etiqueta-{cuenta_id_safe}" style="display:none; background-color: #1a1a2e;">')
                                     html_parts.append(f'<td class="frozen" style="padding-left: {padding_left_etiqueta}px; font-size: 12px; color: #ccc; background-color: #1a1a2e; border-left: 3px solid #4a5568;">{nombre_display}</td>')
+                                    html_parts.append(f'<td class="frozen-total-left" style="background-color: #1a1a2e; font-size: 12px;">{fmt_monto_html(et_monto)}</td>')
                                     
                                     # Montos por mes
                                     for mes in meses_lista:
@@ -667,6 +687,7 @@ def render(username: str, password: str):
             # Subtotal de actividad
             html_parts.append(f'<tr class="subtotal">')
             html_parts.append(f'<td class="frozen"><strong>Subtotal {act_key}</strong></td>')
+            html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(act_subtotal)}</strong></td>')
             for mes in meses_lista:
                 monto_mes_sub = act_subtotal_por_mes.get(mes, 0)
                 html_parts.append(f'<td>{fmt_monto_html(monto_mes_sub)}</td>')
@@ -676,6 +697,7 @@ def render(username: str, password: str):
         # Grand Totals
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append(f'<td class="frozen"><strong>VARIACIÓN NETA DEL EFECTIVO</strong></td>')
+        html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(variacion)}</strong></td>')
         for mes in meses_lista:
             variacion_mes = efectivo_por_mes.get(mes, {}).get("variacion", 0)
             html_parts.append(f'<td>{fmt_monto_html(variacion_mes)}</td>')
@@ -684,6 +706,7 @@ def render(username: str, password: str):
         
         html_parts.append(f'<tr class="data-row">')
         html_parts.append(f'<td class="frozen">EFECTIVO al inicio del período</td>')
+        html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(ef_ini)}</strong></td>')
         for mes in meses_lista:
             ef_ini_mes = efectivo_por_mes.get(mes, {}).get("inicial", ef_ini)
             html_parts.append(f'<td>{fmt_monto_html(ef_ini_mes)}</td>')
@@ -692,6 +715,7 @@ def render(username: str, password: str):
         
         html_parts.append(f'<tr class="grand-total">')
         html_parts.append('<td class="frozen"><strong>EFECTIVO AL FINAL DEL PERÍODO</strong></td>')
+        html_parts.append(f'<td class="frozen-total-left"><strong>{fmt_monto_html(ef_fin)}</strong></td>')
         for mes in meses_lista:
             ef_fin_mes = efectivo_por_mes.get(mes, {}).get("final", ef_fin)
             html_parts.append(f'<td>{fmt_monto_html(ef_fin_mes)}</td>')
@@ -735,128 +759,9 @@ def render(username: str, password: str):
         
         components.html(full_html, height=altura_final, scrolling=True)  # scrolling=True permite scroll interno
         
-        # ========== EXPORT MEJORADO ==========
+        # Export dinámico se realiza desde el botón dentro de la tabla HTML
         with export_placeholder:
-            if st.button("📥 Exportar Excel", use_container_width=True):
-                # Crear Excel tipo "foto" con toda la jerarquía expandida
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    period_labels = []
-                    for periodo in meses_lista:
-                        if vista_semanal:
-                            period_labels.append(nombre_semana_corto(periodo))
-                        else:
-                            period_labels.append(f"{nombre_mes_corto(periodo)} ({periodo})")
-
-                    def build_row(nombre: str, montos_por_mes: dict, total: float, nivel: int, tipo_fila: str):
-                        row = {
-                            "Nivel": nivel,
-                            "Tipo": tipo_fila,
-                            "Concepto": nombre
-                        }
-                        for periodo, label in zip(meses_lista, period_labels):
-                            row[label] = montos_por_mes.get(periodo, 0) if isinstance(montos_por_mes, dict) else 0
-                        row["TOTAL"] = total
-                        return row
-
-                    rows = []
-                    for act_key in ["OPERACION", "INVERSION", "FINANCIAMIENTO"]:
-                        act_data = actividades.get(act_key, {})
-                        if not act_data:
-                            continue
-
-                        rows.append(build_row(
-                            act_data.get("nombre", act_key),
-                            {},
-                            "",
-                            0,
-                            "ACTIVIDAD"
-                        ))
-
-                        conceptos_ordenados = sorted(
-                            act_data.get("conceptos", []),
-                            key=lambda x: x.get("order", x.get("id", ""))
-                        )
-
-                        for concepto in conceptos_ordenados:
-                            if concepto.get("tipo") == "HEADER":
-                                continue
-
-                            c_id = concepto.get("id") or concepto.get("codigo")
-                            c_nombre = concepto.get("nombre", "")
-                            cuentas = concepto.get("cuentas", [])
-
-                            rows.append(build_row(
-                                f"{c_id} - {c_nombre}",
-                                concepto.get("montos_por_mes", {}),
-                                concepto.get("total", 0),
-                                1,
-                                "CONCEPTO"
-                            ))
-
-                            for cuenta in cuentas[:15]:
-                                cuenta_codigo = cuenta.get("codigo", "")
-                                cuenta_nombre = cuenta.get("nombre", "")
-                                es_estructura_especial = (
-                                    cuenta.get("es_cuenta_cxp", False)
-                                    or cuenta.get("es_cuenta_cxc", False)
-                                    or cuenta.get("es_cuenta_iva", False)
-                                )
-
-                                cuenta_display = cuenta_nombre if es_estructura_especial else f"📄 {cuenta_codigo} - {cuenta_nombre}"
-                                rows.append(build_row(
-                                    f"  {cuenta_display}",
-                                    cuenta.get("montos_por_mes", {}),
-                                    cuenta.get("monto", 0),
-                                    2,
-                                    "CUENTA"
-                                ))
-
-                                for etiqueta in cuenta.get("etiquetas", []):
-                                    rows.append(build_row(
-                                        f"    {etiqueta.get('nombre', '')}",
-                                        etiqueta.get("montos_por_mes", {}),
-                                        etiqueta.get("monto", 0),
-                                        3,
-                                        "ETIQUETA"
-                                    ))
-
-                                    for sub in etiqueta.get("sub_etiquetas", []):
-                                        rows.append(build_row(
-                                            f"      {sub.get('nombre', '')}",
-                                            sub.get("montos_por_mes", {}),
-                                            sub.get("monto", 0),
-                                            4,
-                                            "SUB_ETIQUETA"
-                                        ))
-
-                        subtotal_por_mes = act_data.get("subtotal_por_mes", act_data.get("subtotales_por_mes", {}))
-                        rows.append(build_row(
-                            f"Subtotal {act_key}",
-                            subtotal_por_mes,
-                            act_data.get("subtotal", 0),
-                            0,
-                            "SUBTOTAL_ACTIVIDAD"
-                        ))
-
-                    variacion_por_mes = {m: efectivo_por_mes.get(m, {}).get("variacion", 0) for m in meses_lista}
-                    efectivo_ini_por_mes = {m: efectivo_por_mes.get(m, {}).get("inicial", ef_ini) for m in meses_lista}
-                    efectivo_fin_por_mes = {m: efectivo_por_mes.get(m, {}).get("final", ef_fin) for m in meses_lista}
-
-                    rows.append(build_row("VARIACIÓN NETA DEL EFECTIVO", variacion_por_mes, variacion, 0, "TOTAL"))
-                    rows.append(build_row("EFECTIVO al inicio del período", efectivo_ini_por_mes, ef_ini, 0, "TOTAL"))
-                    rows.append(build_row("EFECTIVO AL FINAL DEL PERÍODO", efectivo_fin_por_mes, ef_fin, 0, "TOTAL"))
-                    
-                    df = pd.DataFrame(rows)
-                    df.to_excel(writer, sheet_name='Flujo de Caja', index=False)
-                
-                st.download_button(
-                    "⬇️ Descargar",
-                    output.getvalue(),
-                    f"flujo_caja_{fecha_inicio_str}_{fecha_fin_str}.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+            st.caption("ℹ️ Usa 'Exportar Excel (Vista actual)' dentro de la tabla para descargar según niveles abiertos.")
         
         # ========== CUENTAS SIN CLASIFICAR CON AUDITORÍA ==========
         if cuentas_nc and len(cuentas_nc) > 0:

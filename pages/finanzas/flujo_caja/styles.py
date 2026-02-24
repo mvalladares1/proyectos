@@ -74,6 +74,10 @@ ENTERPRISE_CSS = """
     position: relative;
 }
 
+.excel-table {
+    --frozen-concept-width: 560px;
+}
+
 /* ============ TOOLTIPS ============ */
 .tooltip-wrapper {
     position: relative;
@@ -180,7 +184,7 @@ ENTERPRISE_CSS = """
 /* Vista Semanal: Header de Semanas (fila inferior) */
 .excel-table thead tr.header-semanas th {
     position: sticky;
-    top: 52px;  /* Altura de la fila de meses */
+    top: 64px;  /* Altura de la fila de meses */
     z-index: 50;
     background: linear-gradient(180deg, #2d3748 0%, #1e293b 100%) !important;
     font-size: 11px !important;
@@ -198,6 +202,17 @@ ENTERPRISE_CSS = """
     font-size: 0.85rem;
 }
 
+.excel-table thead th.frozen-total-left {
+    position: sticky;
+    left: var(--frozen-concept-width);
+    z-index: 149;
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
+    border-right: 3px solid #1e3a8a;
+    text-align: right !important;
+    min-width: 180px;
+    max-width: 180px;
+}
+
 /* ============ FROZEN COLUMN ============ */
 .excel-table td.frozen {
     position: sticky;
@@ -206,11 +221,25 @@ ENTERPRISE_CSS = """
     border-right: 3px solid #475569 !important;
     text-align: left !important;
     font-weight: 500;
-    min-width: 520px;
-    max-width: 520px;
+    min-width: var(--frozen-concept-width);
+    max-width: var(--frozen-concept-width);
+    box-sizing: border-box;
     white-space: normal !important;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
+}
+
+.excel-table td.frozen-total-left {
+    position: sticky;
+    left: var(--frozen-concept-width);
+    z-index: 9;
+    min-width: 180px;
+    max-width: 180px;
+    border-right: 3px solid #475569 !important;
+    text-align: right !important;
+    font-weight: 600;
+    background: rgba(15, 23, 42, 0.98);
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
 }
 
@@ -219,6 +248,11 @@ ENTERPRISE_CSS = """
     color: #ffffff !important;
     font-weight: 700;
     font-size: 1rem;
+}
+
+.excel-table tr.activity-header td.frozen-total-left {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
+    color: #ffffff !important;
 }
 
 /* ============ COLUMNAS REAL/PROYECTADO/PPTO ============ */

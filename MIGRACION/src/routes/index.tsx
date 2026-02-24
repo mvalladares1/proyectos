@@ -19,6 +19,7 @@ const RelacionComercialPage = lazy(() => import('@/features/relacion-comercial/R
 const ReconciliacionPage = lazy(() => import('@/features/reconciliacion/ReconciliacionPage'))
 const AutomatizacionesPage = lazy(() => import('@/features/automatizaciones/AutomatizacionesPage'))
 const PermisosPage = lazy(() => import('@/features/permisos/PermisosPage'))
+const TrazabilidadPage = lazy(() => import('@/features/trazabilidad/TrazabilidadPage'))
 
 const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<LoadingSpinner fullScreen />}>{children}</Suspense>
@@ -134,6 +135,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute dashboard="permisos">
             <SuspenseWrapper><PermisosPage /></SuspenseWrapper>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'trazabilidad',
+        element: (
+          <ProtectedRoute dashboard="rendimiento">
+            <SuspenseWrapper><TrazabilidadPage /></SuspenseWrapper>
           </ProtectedRoute>
         ),
       },

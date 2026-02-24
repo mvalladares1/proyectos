@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Truck, Factory, Package, Warehouse,
   ShoppingCart, BarChart2, TrendingUp, ShoppingBag,
-  Handshake, RefreshCw, Bot, Shield, X, ChevronLeft,
+  Handshake, RefreshCw, Bot, Shield, Search, X, ChevronLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS } from '@/lib/constants'
@@ -12,7 +12,7 @@ import { useAuthContext } from '@/providers/AuthProvider'
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Truck, Factory, Package, Warehouse,
   ShoppingCart, BarChart2, TrendingUp, ShoppingBag,
-  Handshake, RefreshCw, Bot, Shield,
+  Handshake, RefreshCw, Bot, Shield, Search,
 }
 
 interface SidebarProps {
