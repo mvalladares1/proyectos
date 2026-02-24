@@ -577,11 +577,10 @@ def render(username: str, password: str):
 
 # ==================== DISEÑOS DE ETIQUETAS POR CLIENTE ====================
 
-def generar_etiqueta_caja_tronador(datos: Dict) -> str:
+def generar_etiqueta_caja_retail(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta de caja para cliente TRONADOR SAC.
-    Tamaño: 100mm x 100mm
-    Solo para productos IQF A
+    Genera HTML de etiqueta de caja para productos IQF Retail.
+    Tamaño: 100mm x 100mm — con checkbox MD.
     """
     html = f"""
     <!DOCTYPE html>
@@ -727,15 +726,13 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
                 margin: 0;
                 padding: 0;
                 font-family: Arial, sans-serif;
+                width: 100mm;
             }}
             .etiqueta {{
                 width: 100mm;
                 height: 100mm;
-                padding: 5mm;
+                padding: 3mm 4mm;
                 box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
                 page-break-after: always;
                 page-break-inside: avoid;
             }}
@@ -743,9 +740,9 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
                 page-break-after: auto;
             }}
             .campo {{
-                font-size: 12px;
-                margin: 2px 0;
-                line-height: 1.5;
+                font-size: 11px;
+                margin: 1px 0;
+                line-height: 1.4;
             }}
             .campo .label {{
                 font-weight: normal;
@@ -763,20 +760,17 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     return html
 
 
+# Diseños por tipo de producto (no por cliente)
 DISEÑOS_ETIQUETAS_CAJA = {
-    "TRONADOR": generar_etiqueta_caja_tronador,
-    "TRONADOR SAC": generar_etiqueta_caja_tronador,
-    "LANNA": generar_etiqueta_caja_lanna,
-    "LANNA AGRO": generar_etiqueta_caja_lanna,
-    "LANNA AGRO INDUSTRY": generar_etiqueta_caja_lanna,
-    "LACO": generar_etiqueta_caja_lanna,
+    "RETAIL": generar_etiqueta_caja_retail,    # IQF Retail -> con MD
+    "LACO": generar_etiqueta_caja_lanna,        # IQF A -> estilo LACO
 }
 
 
 def generar_etiqueta_caja_generica(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta genérica (sin cliente).
-    Tamaño: 100mm x 50mm, con borde.
+    Genera HTML de etiqueta gen&eacute;rica (subproductos).
+    Tama&ntilde;o: 100mm x 100mm, sin MD.
     """
     nombre = datos.get('nombre_producto', '')
     fecha_elab = datos.get('fecha_elaboracion', '')
@@ -792,33 +786,38 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 100mm 50mm;
+                size: 100mm 100mm;
                 margin: 0;
             }}
             @media print {{
                 body {{
                     width: 100mm;
-                    height: 50mm;
+                    height: 100mm;
                     margin: 0;
-                    padding: 2mm 3mm;
+                    padding: 0;
                 }}
             }}
             body {{
                 font-family: Arial, sans-serif;
-                padding: 2mm 3mm;
+                padding: 0;
                 margin: 0;
-                width: 94mm;
-                height: 46mm;
-                font-size: 9px;
-                line-height: 1.35;
+                width: 100mm;
+                height: 100mm;
+            }}
+            .recuadro {{
+                padding: 4mm 5mm;
+                margin: 2mm;
+                height: calc(100mm - 6mm);
+                box-sizing: border-box;
+                font-size: 13px;
+                line-height: 1.55;
             }}
             .titulo {{
-                font-size: 12px;
+                font-size: 18px;
                 font-weight: bold;
                 text-align: center;
-                text-transform: uppercase;
-                margin-bottom: 3px;
-                padding-bottom: 3px;
+                margin-bottom: 4px;
+                padding-bottom: 4px;
                 line-height: 1.2;
             }}
             .linea {{
@@ -827,16 +826,18 @@ def generar_etiqueta_caja_generica(datos: Dict) -> str:
         </style>
     </head>
     <body>
-        <div class="titulo">{nombre}</div>
-        <div class="linea">Fecha de elaboraci&oacute;n: {fecha_elab} / Fecha de vencimiento: {fecha_venc}</div>
-        <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
-        <div class="linea">Peso Neto: {peso} kg</div>
-        <div class="linea">PRODUCTO CONGELADO</div>
-        <div class="linea">Planta: Rio Futuro Procesos Spa</div>
-        <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
-        <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
-        <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
-        <div class="linea">C&oacute;digo SAG Planta: 105721</div>
+        <div class="recuadro">
+            <div class="titulo">{nombre}</div>
+            <div class="linea">Fecha de elaboraci&oacute;n: {fecha_elab} &nbsp; / &nbsp; Fecha de vencimiento: {fecha_venc}</div>
+            <div class="linea">Lote: {lote}/ Pallet: {pallet}</div>
+            <div class="linea">Peso Neto: {peso} kg</div>
+            <div class="linea">PRODUCTO CONGELADO</div>
+            <div class="linea">Planta: Rio Futuro Procesos Spa</div>
+            <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+            <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+            <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
+            <div class="linea">C&oacute;digo SAG Planta: 105721</div>
+        </div>
     </body>
     </html>
     """
@@ -869,24 +870,12 @@ def _agrupar_pallets_por_producto(pallets: List[Dict]) -> Dict:
 
 
 def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
-    """Sección ETIQUETAS CLIENTES (IQF) — etiquetas por caja con diseño de cliente."""
+    """Sección ETIQUETAS IQF — clasifica por tipo de producto (Retail vs IQF A)."""
     
     orden = st.session_state.etiq_orden_seleccionada
     cliente_nombre = orden.get('cliente_nombre', '')
     
-    st.subheader("📋 ETIQUETAS CLIENTES (IQF)")
-    
-    # Buscar diseño del cliente — si no hay, usar LACO como default para IQF
-    cliente_key = None
-    for key in DISEÑOS_ETIQUETAS_CAJA.keys():
-        if key.upper() in cliente_nombre.upper():
-            cliente_key = key
-            break
-    
-    if not cliente_key:
-        cliente_key = "LACO"  # Default para IQF A
-    
-    funcion_diseño = DISEÑOS_ETIQUETAS_CAJA[cliente_key]
+    st.subheader("📋 ETIQUETAS IQF")
     
     grupos = _agrupar_pallets_por_producto(pallets_iqf)
     
@@ -894,8 +883,17 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
         desc = grupo['descripcion']
         pallets = grupo['pallets']
         
+        # Determinar diseño por nombre del producto
+        desc_upper = desc.upper()
+        if 'RETAIL' in desc_upper:
+            funcion_diseño = generar_etiqueta_caja_retail
+            tipo_label = "Retail (MD)"
+        else:
+            funcion_diseño = generar_etiqueta_caja_lanna
+            tipo_label = "LACO"
+        
         st.markdown(f"#### 📦 {desc}")
-        st.caption(f"{len(pallets)} pallets — Diseño: {cliente_key}")
+        st.caption(f"{len(pallets)} pallets — Etiqueta: {tipo_label}")
         
         for pallet in pallets:
             with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
@@ -955,7 +953,7 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
                 
                 if st.button("🖨️ Imprimir / Vista", key=f"etiq_sub_{pallet.get('package_id')}", use_container_width=True):
                     html_print = generar_etiqueta_caja_generica(datos_etiqueta)
-                    imprimir_etiqueta(html_print, height=280)
+                    imprimir_etiqueta(html_print, height=420)
     
     st.divider()
 
