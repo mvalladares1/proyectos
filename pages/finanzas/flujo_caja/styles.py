@@ -228,6 +228,14 @@ html, body {
     z-index: 210;
 }
 
+/* Frozen headers inside header-meses need higher specificity to beat the rule above */
+.excel-table thead tr.header-meses th.frozen {
+    z-index: 260;
+}
+.excel-table thead tr.header-meses th.frozen-total-left {
+    z-index: 261;
+}
+
 .excel-table thead tr.header-meses th.mes-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
     border-bottom: 2px solid #764ba2;
