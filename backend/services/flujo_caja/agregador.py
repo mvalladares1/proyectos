@@ -336,8 +336,9 @@ class AgregadorFlujo:
             # ===== NUEVA LÓGICA: Para PARCIALES, separar parte pagada y residual =====
             # Para facturas parcialmente pagadas: la parte ya cobrada va a "Pagadas"
             # y solo el residual queda en "Parcialmente Pagadas"
-            amount_total_move = linea.get('amount_total', 0.0)
-            amount_residual_move = linea.get('amount_residual', 0.0)
+            # NOTA: Usar float() para proteger contra False de Odoo
+            amount_total_move = float(linea.get('amount_total') or 0.0)
+            amount_residual_move = float(linea.get('amount_residual') or 0.0)
             
             monto_pagado_parcial = 0.0  # Parte pagada de facturas parciales → va a Pagadas
             
@@ -349,7 +350,7 @@ class AgregadorFlujo:
                 monto_efectivo = monto_residual  # Solo el residual va a PARCIALES
                 print(f"[CxC SPLIT] partner={partner_name[:30]}, balance={balance}, amount_total={amount_total_move}, amount_residual={amount_residual_move}, ratio={residual_ratio:.3f}, residual→PARCIALES={monto_residual:.0f}, pagado→PAGADAS={monto_pagado_parcial:.0f}")
             elif payment_state == 'partial':
-                print(f"[CxC SPLIT WARNING] partial pero amount_total=0! partner={partner_name[:30]}, balance={balance}, amount_total={amount_total_move}, amount_residual={amount_residual_move}")
+                print(f"[CxC SPLIT WARNING] partial pero amount_total=0! partner={partner_name[:30]}, balance={balance}, amount_total_raw={linea.get('amount_total')}, amount_residual_raw={linea.get('amount_residual')}")
             
             # Acumular
             if concepto_id not in self.montos_por_concepto_mes:

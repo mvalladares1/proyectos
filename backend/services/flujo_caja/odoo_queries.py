@@ -517,8 +517,8 @@ class OdooQueryManager:
                     'es_proyeccion': es_proyeccion,
                     'partner_name': partner_name,
                     'partner_id': partner_id,
-                    'amount_total': m.get('amount_total', 0.0),
-                    'amount_residual': m.get('amount_residual', 0.0)
+                    'amount_total': float(m.get('amount_total') or 0.0),
+                    'amount_residual': float(m.get('amount_residual') or 0.0)
                 }
                 
                 if es_proyeccion:
@@ -615,8 +615,8 @@ class OdooQueryManager:
                 linea['payment_state'] = info.get('payment_state', 'not_paid')
                 linea['partner_name'] = info.get('partner_name', 'Sin partner')
                 linea['partner_categoria'] = info.get('partner_categoria', 'Sin Categoría')
-                linea['amount_total'] = info.get('amount_total', 0.0)
-                linea['amount_residual'] = info.get('amount_residual', 0.0)
+                linea['amount_total'] = float(info.get('amount_total') or 0.0)
+                linea['amount_residual'] = float(info.get('amount_residual') or 0.0)
             
             return lineas
         except Exception as e:
