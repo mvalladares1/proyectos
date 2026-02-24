@@ -88,7 +88,7 @@ def imprimir_etiqueta(html_etiqueta: str, height: int = 300):
         .btn-print:hover {{ background:#1d4ed8; }}
         iframe {{ border:1px solid #ddd; border-radius:4px; }}
     </style></head><body>
-    <button class="btn-print" onclick="printLabel()">\u{1F5A8}\uFE0F Imprimir etiqueta</button>
+    <button class="btn-print" onclick="printLabel()">&#128424; Imprimir etiqueta</button>
     <iframe id="labelFrame" srcdoc="" style="width:100%;height:{height - 50}px;"></iframe>
     <script>
         var html = atob("{b64}");
