@@ -307,7 +307,7 @@ def render(username: str, password: str):
             
             tipo_etiqueta = st.radio(
                 "Tipo de etiqueta",
-                ["📦 Tarja por Pallet", "🎁 Etiqueta por Caja"],
+                ["📦 Tarja por Pallet", "🎁 Etiqueta por Caja", "🏷️ Etiqueta Genérica"],
                 horizontal=True,
                 key="etiq_tipo"
             )
@@ -316,8 +316,10 @@ def render(username: str, password: str):
             
             if tipo_etiqueta == "📦 Tarja por Pallet":
                 render_etiquetas_pallet(username, password)
-            else:
+            elif tipo_etiqueta == "🎁 Etiqueta por Caja":
                 render_etiquetas_caja(username, password)
+            else:
+                render_etiquetas_generica(username, password)
 
 
 # ==================== DISEÑOS DE ETIQUETAS POR CLIENTE ====================
@@ -515,6 +517,73 @@ DISEÑOS_ETIQUETAS_CAJA = {
 }
 
 
+def generar_etiqueta_caja_generica(datos: Dict) -> str:
+    """
+    Genera HTML de etiqueta genérica (sin cliente).
+    Tamaño: 100mm x 50mm, sin borde.
+    """
+    nombre = datos.get('nombre_producto', '')
+    fecha_elab = datos.get('fecha_elaboracion', '')
+    fecha_venc = datos.get('fecha_vencimiento', '')
+    lote = datos.get('lote_produccion', '')
+    pallet = datos.get('numero_pallet', '')
+    peso = datos.get('peso_neto_kg', '10')
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 50mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 50mm;
+                    margin: 0;
+                    padding: 2mm 3mm;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 2mm 3mm;
+                margin: 0;
+                width: 94mm;
+                height: 46mm;
+                font-size: 9px;
+                line-height: 1.35;
+            }}
+            .titulo {{
+                font-size: 12px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 3px;
+            }}
+            .linea {{
+                margin: 1px 0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="titulo">{nombre}</div>
+        <div class="linea">Fecha de elaboraci&oacute;n: {fecha_elab} /  Fecha de vencimiento: {fecha_venc}</div>
+        <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
+        <div class="linea">Peso Neto: {peso} kg</div>
+        <div class="linea">PRODUCTO CONGELADO</div>
+        <div class="linea">Planta: Rio Futuro Procesos Spa</div>
+        <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+        <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+        <div class="linea">XIV Regi&oacute;n, N&deg; 2214585504 del 30-11-2022</div>
+        <div class="linea">C&oacute;digo SAG Planta: 105721</div>
+    </body>
+    </html>
+    """
+    return html
+
+
 def render_etiquetas_caja(username: str, password: str):
     """Renderiza etiquetas por caja — usa estado compartido."""
     
@@ -597,6 +666,69 @@ def render_etiquetas_caja(username: str, password: str):
                     st.components.v1.html(html_etiqueta, height=450, scrolling=True)
 
 
+
+
+def render_etiquetas_generica(username: str, password: str):
+    """Renderiza etiquetas genéricas 100x50mm — no requiere cliente."""
+
+    pallets = st.session_state.etiq_pallets_cargados
+    orden = st.session_state.etiq_orden_seleccionada
+    product_name = orden.get('product_id', ['', ''])[1] if isinstance(orden.get('product_id'), list) else orden.get('product_name', '')
+    _, descripcion = extraer_codigo_descripcion(product_name)
+    peso_neto = extraer_peso_de_descripcion(descripcion)
+
+    st.write(f"**{len(pallets)} pallets disponibles** — Etiqueta genérica 100×50mm")
+    st.divider()
+
+    for pallet in pallets:
+        with st.expander(f"📦 {pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
+            lot_name = pallet.get('lot_name', '') or pallet.get('lote_produccion', '') or ''
+            if not lot_name:
+                lot_id = pallet.get('lot_id')
+                lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
+
+            fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+            fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
+
+            datos_etiqueta = {
+                'nombre_producto': descripcion,
+                'peso_neto_kg': peso_neto,
+                'fecha_elaboracion': fecha_elab,
+                'fecha_vencimiento': fecha_venc,
+                'lote_produccion': lot_name,
+                'numero_pallet': pallet.get('package_name', ''),
+            }
+
+            col1, col2 = st.columns([1, 1])
+
+            with col1:
+                if st.button("🖨️ Imprimir", key=f"etiq_gen_print_{pallet.get('package_id')}", use_container_width=True):
+                    html_print = generar_etiqueta_caja_generica(datos_etiqueta)
+                    import base64
+                    html_bytes = html_print.encode('utf-8')
+                    b64 = base64.b64encode(html_bytes).decode()
+                    print_script = f'''
+                    <script>
+                        var win = window.open('', '_blank');
+                        if (win) {{
+                            win.document.write(atob("{b64}"));
+                            win.document.close();
+                            win.onload = function() {{
+                                setTimeout(function() {{
+                                    win.print();
+                                }}, 500);
+                            }};
+                        }} else {{
+                            alert("Permite ventanas emergentes para imprimir");
+                        }}
+                    </script>
+                    '''
+                    st.components.v1.html(print_script, height=0)
+
+            with col2:
+                if st.button("👁️ Vista", key=f"etiq_gen_preview_{pallet.get('package_id')}", use_container_width=True):
+                    html_etiqueta = generar_etiqueta_caja_generica(datos_etiqueta)
+                    st.components.v1.html(html_etiqueta, height=220, scrolling=True)
 
 
 def render_etiquetas_pallet(username: str, password: str):
