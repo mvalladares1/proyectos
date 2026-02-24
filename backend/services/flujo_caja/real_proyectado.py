@@ -846,12 +846,10 @@ class RealProyectadoCalculator:
                         key=lambda x: self._texto_orden_alfabetico(x[0])
                     )
                     
-                    # Nivel 4: PROVEEDORES como sub_etiquetas anidadas
+                    # Nivel 4: PROVEEDORES como sub_etiquetas anidadas (sin límite)
                     sub_etiquetas_proveedores = []
-                    top_proveedores = proveedores_ordenados[:30]
-                    resto_proveedores = proveedores_ordenados[30:]
                     
-                    for prov_nombre, prov_data in top_proveedores:
+                    for prov_nombre, prov_data in proveedores_ordenados:
                         prov_entry = {
                             'nombre': f"↳ {prov_data['nombre']}",
                             'monto': prov_data['monto'],
@@ -861,23 +859,6 @@ class RealProyectadoCalculator:
                             'activo': True
                         }
                         sub_etiquetas_proveedores.append(prov_entry)
-                    
-                    # Agregar fila "Otros proveedores" con los montos restantes
-                    if resto_proveedores:
-                        otros_monto = sum(p[1]['monto'] for p in resto_proveedores)
-                        otros_montos_por_mes = {}
-                        for _, p_data in resto_proveedores:
-                            for mes, val in p_data['montos_por_mes'].items():
-                                otros_montos_por_mes[mes] = otros_montos_por_mes.get(mes, 0) + val
-                        otros_entry = {
-                            'nombre': f"↳ Otros proveedores ({len(resto_proveedores)})",
-                            'monto': otros_monto,
-                            'montos_por_mes': otros_montos_por_mes,
-                            'tipo': 'proveedor',
-                            'nivel': 4,
-                            'activo': True
-                        }
-                        sub_etiquetas_proveedores.append(otros_entry)
                     
                     cat_entry = {
                         'nombre': f"📁 {categoria_nombre}",
