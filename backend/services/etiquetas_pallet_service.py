@@ -163,16 +163,19 @@ class EtiquetasPalletService:
             ordenes = self.odoo.search_read(
                 'mrp.production',
                 [('name', '=', orden_name)],
-                ['id', 'name', 'date_finished', 'move_finished_ids', 'x_studio_clientes'],
+                ['id', 'name', 'date_finished', 'move_finished_ids', 'x_studio_clientes', 'x_studio_fecha_inicio'],
                 limit=1
             )
             
             cliente_nombre = ''
             
+            fecha_inicio = None
+            
             if ordenes:
                 # Es una orden de producción
                 orden = ordenes[0]
                 fecha_proceso = orden.get('date_finished')
+                fecha_inicio = orden.get('x_studio_fecha_inicio')
                 
                 # Extraer cliente
                 cliente = orden.get('x_studio_clientes')
@@ -313,6 +316,19 @@ class EtiquetasPalletService:
                 
                 # Agregar cliente de la orden
                 pallet_info['cliente_nombre'] = cliente_nombre
+                
+                # Formatear x_studio_fecha_inicio para etiquetas 100x50
+                if fecha_inicio:
+                    try:
+                        if isinstance(fecha_inicio, str):
+                            fi_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00'))
+                        else:
+                            fi_dt = fecha_inicio
+                        pallet_info['fecha_inicio_fmt'] = fi_dt.strftime('%d.%m.%Y')
+                    except:
+                        pallet_info['fecha_inicio_fmt'] = ''
+                else:
+                    pallet_info['fecha_inicio_fmt'] = ''
                 
                 # Usar la fecha del proceso para elaboración y vencimiento (ambas iguales)
                 if fecha_elab:

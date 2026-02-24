@@ -173,6 +173,201 @@ def generar_etiqueta_html(datos: Dict) -> str:
     return html
 
 
+def _generar_etiqueta_100x50(datos: Dict, mostrar_md: bool = False, md_checked: bool = False) -> str:
+    """
+    Genera HTML de etiqueta de producto 100mm x 50mm.
+    Layout común para etiquetas genéricas de pallet y etiquetas de caja por cliente.
+    """
+    nombre = datos.get('nombre_producto', '')
+    # Para etiquetas 100x50 usar x_studio_fecha_inicio; fallback a fecha_elaboracion
+    fecha_elab = datos.get('fecha_inicio', '') or datos.get('fecha_elaboracion', '')
+    fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2) if fecha_elab else ''
+    lote = datos.get('lote_produccion', '')
+    pallet = datos.get('numero_pallet', '')
+    peso = datos.get('peso_caja_kg', extraer_peso_de_descripcion(nombre))
+
+    md_html = ''
+    if mostrar_md:
+        check_mark = '✓' if md_checked else ''
+        md_html = f'''
+        <div class="md-box">
+            <span>MD</span>
+            <div class="checkbox">{check_mark}</div>
+        </div>
+        '''
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 100mm 50mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 50mm;
+                    margin: 0;
+                    padding: 2mm 3mm;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 2mm 3mm;
+                margin: 0;
+                width: 94mm;
+                height: 46mm;
+                font-size: 10px;
+                line-height: 1.4;
+            }}
+            .titulo {{
+                font-size: 13px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+                line-height: 1.2;
+                border-bottom: 1px solid #999;
+                padding-bottom: 3px;
+            }}
+            .contenido {{
+                padding: 2px 0;
+            }}
+            .linea {{
+                margin: 1px 0;
+            }}
+            .md-box {{
+                margin-top: 4px;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }}
+            .checkbox {{
+                width: 16px;
+                height: 16px;
+                border: 1px solid black;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="titulo">{nombre}</div>
+
+        <div class="contenido">
+            <div class="linea">Fecha de elaboración: {fecha_elab} / Fecha de vencimiento: {fecha_venc}</div>
+            <div class="linea">Lote: {lote} / Pallet: {pallet}</div>
+            <div class="linea">Peso Neto: {peso} kg</div>
+            <div class="linea">PRODUCTO CONGELADO</div>
+            <div class="linea">Planta: Rio Futuro Procesos Spa</div>
+            <div class="linea">Camino Contra Coronel Lote 4, Cocule, Rio Bueno, Chile</div>
+            <div class="linea">Res Servicio Salud Valdivia Dpto. del Ambiente</div>
+            <div class="linea">XIV Región, N° 2214585504 del 30-11-2022</div>
+            <div class="linea">Código SAG Planta: 105721</div>
+        </div>
+
+        {md_html}
+    </body>
+    </html>
+    """
+    return html
+
+
+def generar_etiqueta_pallet_generica(datos: Dict) -> str:
+    """
+    Genera etiqueta genérica de pallet en 100x50mm.
+    Mismo diseño que la estándar (campos + código de barras) pero más compacto.
+    Usa x_studio_fecha_inicio como fecha de elaboración.
+    """
+    barcode_value = datos.get('barcode', datos.get('numero_pallet', ''))
+    fecha_elab = datos.get('fecha_inicio', '') or datos.get('fecha_elaboracion', '')
+    fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2) if fecha_elab else ''
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+        <style>
+            @page {{
+                size: 100mm 50mm;
+                margin: 0;
+            }}
+            @media print {{
+                body {{
+                    width: 100mm;
+                    height: 50mm;
+                    margin: 0;
+                    padding: 2mm 3mm;
+                }}
+            }}
+            body {{
+                font-family: Arial, sans-serif;
+                padding: 2mm 3mm;
+                margin: 0;
+                width: 94mm;
+                height: 46mm;
+            }}
+            .etiqueta {{
+                width: 100%;
+            }}
+            .titulo {{
+                font-size: 10px;
+                font-weight: bold;
+                margin-bottom: 3px;
+            }}
+            .campo {{
+                font-size: 9px;
+                font-weight: bold;
+                margin: 2px 0;
+            }}
+            .barcode-container {{
+                margin-top: 4px;
+            }}
+            #barcode {{
+                width: 100%;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="etiqueta">
+            <div class="titulo">{datos.get('nombre_producto', '')}</div>
+
+            <div class="campo">CODIGO PRODUCTO: {datos.get('codigo_producto', '')}</div>
+            <div class="campo">PESO PALLET: {datos.get('peso_pallet_kg', 0)} KG</div>
+            <div class="campo">CANTIDAD CAJAS: {datos.get('cantidad_cajas', 0)}</div>
+            <div class="campo">FECHA ELABORACION: {fecha_elab}</div>
+            <div class="campo">FECHA VENCIMIENTO: {fecha_venc}</div>
+            <div class="campo">LOTE PRODUCCION: {datos.get('lote_produccion', '')}</div>
+            <div class="campo">NUMERO DE PALLET: {datos.get('numero_pallet', '')}</div>
+
+            <div class="barcode-container">
+                <svg id="barcode"></svg>
+            </div>
+        </div>
+        <script>
+            JsBarcode("#barcode", "{barcode_value}", {{
+                format: "CODE128",
+                width: 1.5,
+                height: 30,
+                displayValue: true,
+                fontSize: 10,
+                margin: 4,
+                background: "transparent"
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+
 def render(username: str, password: str):
     """Renderiza el tab de etiquetas (pallets y cajas)."""
     
@@ -287,10 +482,21 @@ def generar_etiqueta_caja_tronador(datos: Dict) -> str:
     return html
 
 
+def generar_etiqueta_caja_lanna(datos: Dict) -> str:
+    """
+    Genera HTML de etiqueta de caja para cliente LANNA AGRO INDUSTRY.
+    Tamaño: 100mm x 50mm. Checkbox MD marcado.
+    """
+    return _generar_etiqueta_100x50(datos, mostrar_md=True, md_checked=True)
+
+
 # Mapeo de clientes a sus funciones de diseño
 DISEÑOS_ETIQUETAS_CAJA = {
     "TRONADOR": generar_etiqueta_caja_tronador,
     "TRONADOR SAC": generar_etiqueta_caja_tronador,
+    "LANNA": generar_etiqueta_caja_lanna,
+    "LANNA AGRO": generar_etiqueta_caja_lanna,
+    "LANNA AGRO INDUSTRY": generar_etiqueta_caja_lanna,
 }
 
 
@@ -572,6 +778,14 @@ def render_etiquetas_pallet(username: str, password: str):
             key="etiq_vista_opcion"
         )
         
+        # Selector de formato de etiqueta
+        formato_etiqueta = st.radio(
+            "Formato de etiqueta:",
+            ["📊 Estándar (código de barras)", "📋 Producto (100x50mm)"],
+            horizontal=True,
+            key="etiq_formato"
+        )
+        
         st.divider()
         
         # Agrupar pallets por producto
@@ -639,17 +853,22 @@ def render_etiquetas_pallet(username: str, password: str):
                     'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                     'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
                     'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
+                    'fecha_inicio': pallet.get('fecha_inicio_fmt', ''),
                     'fecha_vencimiento': pallet.get('fecha_vencimiento', ''),
                     'lote_produccion': lot_name,
                     'numero_pallet': pallet.get('package_name', ''),
-                    'barcode': barcode_odoo
+                    'barcode': barcode_odoo,
+                    'peso_caja_kg': extraer_peso_de_descripcion(descripcion_prod),
                 }
                 
                 with col2:
                     if st.button("🖨️ Imprimir", key=f"etiq_print_{pallet.get('package_id')}", use_container_width=True):
-                        # Generar HTML con auto-print (abre diálogo de impresión del navegador)
-                        html_print = generar_etiqueta_html(datos_etiqueta)
-                        # Agregar script de auto-impresión
+                        if formato_etiqueta == "📋 Producto (100x50mm)":
+                            html_print = generar_etiqueta_pallet_generica(datos_etiqueta)
+                            comp_height = 300
+                        else:
+                            html_print = generar_etiqueta_html(datos_etiqueta)
+                            comp_height = 600
                         html_con_print = html_print.replace('</body>', '''
                         <script>
                             window.onload = function() {
@@ -659,13 +878,17 @@ def render_etiquetas_pallet(username: str, password: str):
                             };
                         </script>
                         </body>''')
-                        st.components.v1.html(html_con_print, height=600, scrolling=True)
+                        st.components.v1.html(html_con_print, height=comp_height, scrolling=True)
                 
                 with col3:
                     if st.button("👁️ Vista", key=f"etiq_preview_{pallet.get('package_id')}", use_container_width=True):
-                        # Generar HTML para vista previa
-                        html_etiqueta = generar_etiqueta_html(datos_etiqueta)
-                        st.components.v1.html(html_etiqueta, height=600, scrolling=True)
+                        if formato_etiqueta == "📋 Producto (100x50mm)":
+                            html_etiqueta = generar_etiqueta_pallet_generica(datos_etiqueta)
+                            comp_height = 300
+                        else:
+                            html_etiqueta = generar_etiqueta_html(datos_etiqueta)
+                            comp_height = 600
+                        st.components.v1.html(html_etiqueta, height=comp_height, scrolling=True)
             
             st.divider()
     
