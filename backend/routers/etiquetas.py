@@ -139,7 +139,8 @@ async def reservar_cartones(datos: Dict = Body(...)):
                     out_path = os.path.join(data_dir, f'etiquetas_block_{package_id}.pdf')
                     with open(out_path, 'wb') as f:
                         f.write(pdf_bytes)
-                    return {'start_carton': 1, 'qty': int(block_size), 'pdf_path': out_path}
+                    # DEVOLVER TAMBIÉN EL ARREGLO DE ETIQUETAS EN EL JSON
+                    return {'start_carton': 1, 'qty': int(block_size), 'pdf_path': out_path, 'etiquetas': lista}
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=f"Error generando etiquetas NUA: {e}")
             # Si no es IQF A, usar la lógica normal
