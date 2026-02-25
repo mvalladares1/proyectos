@@ -105,7 +105,8 @@ async def reservar_cartones(datos: Dict = Body(...)):
         service = EtiquetasPalletService(username=username, password=password)
         ensure_block_size = int(datos.get('ensure_block_size') or 0)
         if ensure_block_size > 0:
-            # Solo generar bloque de 90 si el producto es IQF A (NUA)
+            # Permitir que el usuario indique el número inicial del correlativo
+            start_carton = int(datos.get('start_carton', 1))
             try:
                 info = service.obtener_info_etiqueta(package_id=package_id, cliente='', fecha_inicio_proceso=None, orden_actual=orden_actual)
             except Exception:
@@ -125,7 +126,7 @@ async def reservar_cartones(datos: Dict = Body(...)):
                         'fecha_vencimiento': info.get('fecha_vencimiento') if info else '',
                         'lote_produccion': info.get('lote_produccion') if info else '',
                         'numero_pallet': info.get('numero_pallet') if info else package_name,
-                        'carton_no': i + 1
+                        'carton_no': start_carton + i
                     }
                     lista.append(item)
                 # Generar PDF con todas las etiquetas y guardarlo
@@ -140,7 +141,7 @@ async def reservar_cartones(datos: Dict = Body(...)):
                     with open(out_path, 'wb') as f:
                         f.write(pdf_bytes)
                     # DEVOLVER TAMBIÉN EL ARREGLO DE ETIQUETAS EN EL JSON
-                    return {'start_carton': 1, 'qty': int(block_size), 'pdf_path': out_path, 'etiquetas': lista}
+                    return {'start_carton': start_carton, 'qty': int(block_size), 'pdf_path': out_path, 'etiquetas': lista}
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=f"Error generando etiquetas NUA: {e}")
             # Si no es IQF A, usar la lógica normal
