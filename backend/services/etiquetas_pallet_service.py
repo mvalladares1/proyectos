@@ -305,6 +305,13 @@ class EtiquetasPalletService:
                         'qty_total': 0,
                         'move_lines': []
                     }
+                else:
+                    # Siempre conservar la fecha más antigua (inicio del pallet)
+                    line_date = line.get('date')
+                    existing_date = pallets_dict[package_key].get('fecha_elaboracion')
+                    if line_date and existing_date and str(line_date) < str(existing_date):
+                        pallets_dict[package_key]['fecha_elaboracion'] = line_date
+                        logger.info(f"Pallet {package_key}: fecha actualizada a {line_date} (más antigua que {existing_date})")
                 
                 pallets_dict[package_key]['qty_total'] += qty_done
                 pallets_dict[package_key]['move_lines'].append(clean_record(line))

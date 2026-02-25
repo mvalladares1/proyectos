@@ -661,7 +661,7 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
             
             <div class="md-box">
                 <span>MD</span>
-                <div class="checkbox">X</div>
+                <div class="checkbox">✓</div>
             </div>
         </div>
     </body>
@@ -895,7 +895,8 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
         for pallet in pallets:
             with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
                 lot_name = _get_lot_name(pallet)
-                fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+                # Usar fecha de inicio del pallet (la más antigua), no la de última actualización
+                fecha_elab = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
                 fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
                 
                 datos_etiqueta = {
@@ -936,7 +937,8 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
         for pallet in pallets:
             with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
                 lot_name = _get_lot_name(pallet)
-                fecha_elab = pallet.get('fecha_elaboracion_fmt', '')
+                # Usar fecha de inicio del pallet (la más antigua), no la de última actualización
+                fecha_elab = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
                 fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
                 
                 datos_etiqueta = {
@@ -1017,13 +1019,15 @@ def render_etiquetas_pallet(username: str, password: str):
             barcode_odoo = pallet.get('barcode', pallet.get('package_name', ''))
             cliente_pallet = pallet.get('cliente_nombre', '')
             
+            # Usar fecha de inicio del pallet (la más antigua), no la de última actualización
+            fecha_elab_pallet = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
             datos_etiqueta = {
                 'cliente': cliente_pallet,
                 'nombre_producto': descripcion_prod,
                 'codigo_producto': codigo_prod,
                 'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                 'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
-                'fecha_elaboracion': pallet.get('fecha_elaboracion_fmt', ''),
+                'fecha_elaboracion': fecha_elab_pallet,
                 'fecha_vencimiento': pallet.get('fecha_vencimiento', ''),
                 'lote_produccion': lot_name,
                 'numero_pallet': pallet.get('package_name', ''),
