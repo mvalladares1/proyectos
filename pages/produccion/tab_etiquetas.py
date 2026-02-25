@@ -977,45 +977,20 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                     'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                 }
                 
-                if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pallet.get('package_id')}", use_container_width=True):
-                    # Reservar los cartones de forma atómica en el backend antes de imprimir
-                    orden = st.session_state.etiq_orden_seleccionada
-                    orden_actual = orden.get('name', '')
-                    package_id = pallet.get('package_id')
-                    package_name = pallet.get('package_name', '')
-                    qty = int(pallet.get('cantidad_cajas', 0)) or int(pallet.get('peso_pallet_kg', 0) / 10) or 1
-
-                    payload = {
-                        "username": username,
-                        "password": password,
-                        "package_id": package_id,
-                        "package_name": package_name,
-                        "qty": qty,
-                        "orden_actual": orden_actual,
-                        "usuario": username
-                    }
-                    try:
-                        if 'IQF A' in desc_upper or tipo_label == 'LACO':
-                            payload['ensure_block_size'] = 90
-                            resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
-                            resp.raise_for_status()
-                            reserva = resp.json()
-                            # Recibe 90 etiquetas con carton_no del backend
-                            etiquetas = reserva.get('etiquetas', None)
-                            if etiquetas:
-                                datos_etiqueta['etiquetas'] = etiquetas
-                                datos_etiqueta['cantidad_cajas'] = len(etiquetas)
-                            else:
-                                datos_etiqueta['carton_no_inicio'] = reserva.get('start_carton', 1)
-                                datos_etiqueta['cantidad_cajas'] = reserva.get('qty', 90)
-                        else:
-                            resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
-                            resp.raise_for_status()
-                            reserva = resp.json()
-                            datos_etiqueta['carton_no_inicio'] = reserva.get('start_carton', 1)
-                            datos_etiqueta['cantidad_cajas'] = reserva.get('qty', datos_etiqueta['cantidad_cajas'])
-                    except Exception as e:
-                        st.error(f"Error reservando cartones: {e}")
+                # Rango manual de etiquetas
+                pkg_id = pallet.get('package_id')
+                r_col1, r_col2 = st.columns(2)
+                with r_col1:
+                    inicio_etiq = st.number_input("Inicio etiquetas", min_value=1, value=1, step=1, key=f"etiq_iqf_inicio_{pkg_id}")
+                with r_col2:
+                    fin_etiq = st.number_input("Fin etiquetas", min_value=1, value=90, step=1, key=f"etiq_iqf_fin_{pkg_id}")
+                
+                total_etiq = max(fin_etiq - inicio_etiq + 1, 0)
+                st.caption(f"Se imprimirán **{total_etiq}** etiquetas (cartón {inicio_etiq} a {fin_etiq})")
+                
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pkg_id}", use_container_width=True):
+                    datos_etiqueta['carton_no_inicio'] = inicio_etiq
+                    datos_etiqueta['cantidad_cajas'] = total_etiq
                     html_print = funcion_diseño(datos_etiqueta)
                     imprimir_etiqueta(html_print, height=420)
     
@@ -1071,10 +1046,26 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
                     'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                 }
                 
-                if st.button("🖨️ Imprimir / Vista", key=f"etiq_sub_{pallet.get('package_id')}", use_container_width=True):
+                # Rango manual de etiquetas (solo para LACO y Retail que usan carton_no)
+                pkg_id = pallet.get('package_id')
+                if tipo_diseño in ('LACO', 'RETAIL'):
+                    r_col1, r_col2 = st.columns(2)
+                    with r_col1:
+                        inicio_etiq = st.number_input("Inicio etiquetas", min_value=1, value=1, step=1, key=f"etiq_sub_inicio_{pkg_id}")
+                    with r_col2:
+                        fin_etiq = st.number_input("Fin etiquetas", min_value=1, value=90, step=1, key=f"etiq_sub_fin_{pkg_id}")
+                    
+                    total_etiq = max(fin_etiq - inicio_etiq + 1, 0)
+                    st.caption(f"Se imprimirán **{total_etiq}** etiquetas (cartón {inicio_etiq} a {fin_etiq})")
+                
+                if st.button("🖨️ Imprimir / Vista", key=f"etiq_sub_{pkg_id}", use_container_width=True):
                     if tipo_diseño == 'RETAIL':
+                        datos_etiqueta['carton_no_inicio'] = inicio_etiq
+                        datos_etiqueta['cantidad_cajas'] = total_etiq
                         html_print = generar_etiqueta_caja_retail(datos_etiqueta)
                     elif tipo_diseño == 'LACO':
+                        datos_etiqueta['carton_no_inicio'] = inicio_etiq
+                        datos_etiqueta['cantidad_cajas'] = total_etiq
                         html_print = generar_etiqueta_caja_lanna(datos_etiqueta)
                     else:
                         html_print = generar_etiqueta_caja_generica(datos_etiqueta)
