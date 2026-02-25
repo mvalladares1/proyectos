@@ -362,6 +362,39 @@ class EtiquetasPalletService:
             
             # Obtener información adicional de cada package
             pallets_resultado = []
+            
+            # Para cada pallet, buscar la fecha más antigua de TODOS sus move lines
+            # (no solo los de esta orden, porque un pallet puede haberse iniciado en otra)
+            package_ids = [p['package_id'] for p in pallets_dict.values()]
+            if package_ids:
+                all_move_lines_fechas = self.odoo.search_read(
+                    'stock.move.line',
+                    [
+                        ('result_package_id', 'in', package_ids),
+                        ('qty_done', '>', 0),
+                        ('date', '!=', False)
+                    ],
+                    ['result_package_id', 'date'],
+                    limit=2000,
+                    order='date asc'
+                )
+                # Mapear package_id → fecha más antigua
+                fecha_inicio_pallet = {}
+                for ml in all_move_lines_fechas:
+                    rpid = ml.get('result_package_id')
+                    pk = rpid[0] if isinstance(rpid, (list, tuple)) else rpid
+                    ml_date = ml.get('date')
+                    if pk not in fecha_inicio_pallet and ml_date:
+                        fecha_inicio_pallet[pk] = ml_date  # Ya viene ordenado asc, el primero es el más antiguo
+                
+                # Actualizar fecha_elaboracion de cada pallet con la fecha global más antigua
+                for pk, fecha_antigua in fecha_inicio_pallet.items():
+                    if pk in pallets_dict:
+                        current = pallets_dict[pk].get('fecha_elaboracion')
+                        if not current or (fecha_antigua and str(fecha_antigua) < str(current)):
+                            pallets_dict[pk]['fecha_elaboracion'] = fecha_antigua
+                            logger.info(f"Pallet {pk}: fecha corregida a {fecha_antigua} (más antigua global, antes: {current})")
+            
             for pallet_info in pallets_dict.values():
                 # Obtener detalles del package (incluir barcode/qr)
                 try:
