@@ -149,12 +149,13 @@ def render(username: str, password: str):
             # Export Excel
             st.markdown("---")
             buffer = io.BytesIO()
-            try:
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, sheet_name='Ordenes_Compra', index=False)
-            except ImportError:
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, sheet_name='Ordenes_Compra', index=False)
+            df_export = df.copy()
+            # Convertir columnas con listas/objetos a texto para compatibilidad Excel
+            for col in df_export.columns:
+                if df_export[col].apply(lambda x: isinstance(x, (list, dict))).any():
+                    df_export[col] = df_export[col].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x) if isinstance(x, dict) else x)
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_export.to_excel(writer, sheet_name='Ordenes_Compra', index=False)
             st.download_button(
                 "📥 Descargar Excel", 
                 buffer.getvalue(), 
