@@ -100,12 +100,12 @@ class EtiquetasPalletService:
         Calcula el número inicial de cartón (CARTON NO.) para un pallet basado en procesos previos.
         """
         try:
-            # Buscar todas las líneas de movimiento asociadas al pallet
+            # Buscar todas las líneas de movimiento asociadas al pallet en todas las órdenes
             move_lines = self.odoo.search_read(
                 'stock.move.line',
                 [('result_package_id', '=', package_id), ('qty_done', '>', 0)],
                 ['qty_done'],
-                limit=1000
+                limit=2000  # Asegurarse de incluir todas las líneas relevantes
             )
 
             # Sumar todas las cajas previas
