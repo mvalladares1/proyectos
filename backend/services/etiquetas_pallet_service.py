@@ -502,14 +502,9 @@ class EtiquetasPalletService:
             logger.error(f"Error obteniendo pallets de orden {orden_name}: {e}")
             return []
     
-    def obtener_info_etiqueta(self, package_id: int, cliente: str = "") -> Optional[Dict]:
+    def obtener_info_etiqueta(self, package_id: int, cliente: str = "", fecha_inicio_proceso: str = None) -> Optional[Dict]:
         """
         Obtiene toda la información necesaria para una etiqueta de pallet.
-        
-        Returns:
-            Dict con campos: nombre_producto, codigo_producto, peso_pallet_kg,
-            cantidad_cajas, fecha_elaboracion, fecha_vencimiento, lote_produccion,
-            numero_pallet, cliente
         """
         try:
             # Obtener package
@@ -580,6 +575,9 @@ class EtiquetasPalletService:
             # Nombre del lote
             lote_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
             
+            # Calcular correlativo inicial de cartón
+            carton_no_inicio = self._calcular_carton_no_inicio(package_id, fecha_inicio_proceso)
+            
             return {
                 'cliente': cliente,
                 'nombre_producto': producto.get('name', ''),
@@ -590,6 +588,7 @@ class EtiquetasPalletService:
                 'fecha_vencimiento': fecha_vencimiento_fmt,
                 'lote_produccion': lote_name,
                 'numero_pallet': package.get('name', ''),
+                'carton_no_inicio': carton_no_inicio,
             }
             
         except Exception as e:

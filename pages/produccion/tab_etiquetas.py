@@ -961,6 +961,25 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                 }
                 
                 if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pallet.get('package_id')}", use_container_width=True):
+                    # Obtener correlativo correcto desde backend
+                    package_id = pallet.get('package_id')
+                    fecha_inicio_proceso = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
+                    params = {
+                        "username": username,
+                        "password": password,
+                        "fecha_inicio_proceso": fecha_inicio_proceso
+                    }
+                    url = f"{API_URL}/api/v1/etiquetas/info_etiqueta/{package_id}"
+                    try:
+                        response = httpx.get(url, params=params, timeout=30.0)
+                        response.raise_for_status()
+                        datos_backend = response.json()
+                        datos_etiqueta.update({
+                            'carton_no_inicio': datos_backend.get('carton_no_inicio', 1),
+                            'cantidad_cajas': datos_backend.get('cantidad_cajas', datos_etiqueta['cantidad_cajas'])
+                        })
+                    except Exception as e:
+                        st.error(f"No se pudo obtener correlativo de cartón: {e}")
                     html_print = funcion_diseño(datos_etiqueta)
                     imprimir_etiqueta(html_print, height=420)
     
