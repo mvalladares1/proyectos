@@ -612,11 +612,11 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
                 margin: 2mm;
                 height: calc(100mm - 6mm);
                 box-sizing: border-box;
-                font-size: 13px;
-                line-height: 1.55;
+                font-size: 12px;
+                line-height: 1.5;
             }}
             .titulo {{
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: bold;
                 text-align: center;
                 margin-bottom: 4px;
@@ -632,16 +632,16 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
                 align-items: center;
                 gap: 6px;
                 font-size: 14px;
+                font-weight: bold;
             }}
             .checkbox {{
                 width: 22px;
                 height: 22px;
                 border: 2px solid #333;
-                border-radius: 3px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: bold;
             }}
         </style>
@@ -661,7 +661,7 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
             
             <div class="md-box">
                 <span>MD</span>
-                <div class="checkbox">✔</div>
+                <div class="checkbox">X</div>
             </div>
         </div>
     </body>
@@ -672,13 +672,10 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
 
 def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     """
-    Genera HTML de etiqueta(s) de caja para cliente LANNA AGRO INDUSTRY.
-    Tamaño: 100mm x 100mm — estilo LACO.
-    Genera N etiquetas (una por caja/cartón) con CARTON NO enumerado.
-    NET WEIGHT fijo 10KG. Solo fecha, lote y pallet vienen de Odoo.
+    Genera HTML de etiqueta(s) de caja para IQF A — estilo LACO.
+    Genera N etiquetas (una por caja/cart&oacute;n) con CARTON NO enumerado.
+    MATERIAL CODE y PRODUCT NAME fijos. Solo fecha, lote y pallet vienen de Odoo.
     """
-    codigo = datos.get('codigo_producto', '')
-    nombre = datos.get('nombre_producto', '')
     fecha_elab = datos.get('fecha_elaboracion', '').replace('.', '-')
     fecha_venc = datos.get('fecha_vencimiento', '').replace('.', '-')
     lote = datos.get('lote_produccion', '')
@@ -695,8 +692,8 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     for i in range(1, cantidad_cajas + 1):
         labels_html += f"""
         <div class="etiqueta">
-            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">{codigo}</span></div>
-            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">{nombre}</span></div>
+            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">RIRASPBERRY</span></div>
+            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">Frozen Raspberry 12-24 mm</span></div>
             <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">10KG</span></div>
             <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
             <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
