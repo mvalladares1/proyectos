@@ -125,6 +125,7 @@ async def reservar_cartones(datos: Dict = Body(...)):
                         'fecha_vencimiento': info.get('fecha_vencimiento') if info else '',
                         'lote_produccion': info.get('lote_produccion') if info else '',
                         'numero_pallet': info.get('numero_pallet') if info else package_name,
+                        'carton_no': i + 1
                     }
                     lista.append(item)
                 # Generar PDF con todas las etiquetas y guardarlo

@@ -725,31 +725,48 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     pallet = datos.get('numero_pallet', '')
 
     # Obtener el número inicial de cartón
-    carton_no_inicio = datos.get('carton_no_inicio', 1)
-
-    # Calcular cantidad de cajas (cartones)
-    cantidad_cajas = datos.get('cantidad_cajas', 0)
-    if not cantidad_cajas:
-        peso_pallet = datos.get('peso_pallet_kg', 0)
-        cantidad_cajas = max(int(peso_pallet / 10), 1) if peso_pallet else 1
-
-    # Generar una etiqueta por cada cartón
-    labels_html = ""
-    for i in range(carton_no_inicio, carton_no_inicio + cantidad_cajas):
-        labels_html += f"""
-        <div class="etiqueta">
-            <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">RIRASPBERRY</span></div>
-            <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">Frozen Raspberry 12-24 mm</span></div>
-            <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">10KG</span></div>
-            <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
-            <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
-            <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
-            <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18&deg;C</span></div>
-            <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
-            <div class="campo"><span class="label">CARTON NO.: </span><span class="valor">{i}</span></div>
-            <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">LACO</span></div>
-        </div>
-        """
+    # Si viene un arreglo de etiquetas con 'carton_no', usar ese correlativo
+    etiquetas = datos.get('etiquetas', None)
+    if etiquetas and isinstance(etiquetas, list):
+        labels_html = ""
+        for et in etiquetas:
+            carton_no = et.get('carton_no', 1)
+            labels_html += f"""
+            <div class="etiqueta">
+                <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">RIRASPBERRY</span></div>
+                <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">Frozen Raspberry 12-24 mm</span></div>
+                <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">10KG</span></div>
+                <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
+                <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
+                <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
+                <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18&deg;C</span></div>
+                <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
+                <div class="campo"><span class="label">CARTON NO.: </span><span class="valor">{carton_no}</span></div>
+                <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">LACO</span></div>
+            </div>
+            """
+    else:
+        carton_no_inicio = datos.get('carton_no_inicio', 1)
+        cantidad_cajas = datos.get('cantidad_cajas', 0)
+        if not cantidad_cajas:
+            peso_pallet = datos.get('peso_pallet_kg', 0)
+            cantidad_cajas = max(int(peso_pallet / 10), 1) if peso_pallet else 1
+        labels_html = ""
+        for i in range(carton_no_inicio, carton_no_inicio + cantidad_cajas):
+            labels_html += f"""
+            <div class="etiqueta">
+                <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">RIRASPBERRY</span></div>
+                <div class="campo"><span class="label">PRODUCT NAME: </span><span class="valor">Frozen Raspberry 12-24 mm</span></div>
+                <div class="campo"><span class="label">NET WEIGHT: </span><span class="valor">10KG</span></div>
+                <div class="campo"><span class="label">PRODUCTION DATE: </span><span class="valor">{fecha_elab}</span></div>
+                <div class="campo"><span class="label">BEST BEFORE: </span><span class="valor">{fecha_venc}</span></div>
+                <div class="campo"><span class="label">BATCH NO.: </span><span class="valor">{lote} / {pallet}</span></div>
+                <div class="campo"><span class="label">STORAGE TEMPERATURE: </span><span class="valor">-18&deg;C</span></div>
+                <div class="campo"><span class="label">ORIGIN: </span><span class="valor">CHILE</span></div>
+                <div class="campo"><span class="label">CARTON NO.: </span><span class="valor">{i}</span></div>
+                <div class="campo"><span class="label">PRODUCT FOR </span><span class="valor">LACO</span></div>
+            </div>
+            """
 
     html = f"""
     <!DOCTYPE html>
@@ -968,7 +985,6 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                     package_name = pallet.get('package_name', '')
                     qty = int(pallet.get('cantidad_cajas', 0)) or int(pallet.get('peso_pallet_kg', 0) / 10) or 1
 
-                    # Si es IQF A (LACO), asegurar un bloque fijo (p.ej. 90) y usar su start_carton
                     payload = {
                         "username": username,
                         "password": password,
@@ -980,25 +996,24 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                     }
                     try:
                         if 'IQF A' in desc_upper or tipo_label == 'LACO':
-                            # asegurar bloque fijo de 90 etiquetas y usar su start
                             payload['ensure_block_size'] = 90
                             resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
                             resp.raise_for_status()
                             reserva = resp.json()
-                            # Usar el start_carton del bloque pero mantener cantidad real a imprimir
-                            datos_etiqueta.update({
-                                'carton_no_inicio': reserva.get('start_carton', 1),
-                                # cantidad_cajas se deja como la cantidad real del pallet/proceso
-                            })
+                            # Recibe 90 etiquetas con carton_no del backend
+                            etiquetas = reserva.get('etiquetas', None)
+                            if etiquetas:
+                                datos_etiqueta['etiquetas'] = etiquetas
+                                datos_etiqueta['cantidad_cajas'] = len(etiquetas)
+                            else:
+                                datos_etiqueta['carton_no_inicio'] = reserva.get('start_carton', 1)
+                                datos_etiqueta['cantidad_cajas'] = reserva.get('qty', 90)
                         else:
-                            # comportamiento normal: reservar solo los N cartones necesarios
                             resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
                             resp.raise_for_status()
                             reserva = resp.json()
-                            datos_etiqueta.update({
-                                'carton_no_inicio': reserva.get('start_carton', 1),
-                                'cantidad_cajas': reserva.get('qty', datos_etiqueta['cantidad_cajas'])
-                            })
+                            datos_etiqueta['carton_no_inicio'] = reserva.get('start_carton', 1)
+                            datos_etiqueta['cantidad_cajas'] = reserva.get('qty', datos_etiqueta['cantidad_cajas'])
                     except Exception as e:
                         st.error(f"Error reservando cartones: {e}")
                     html_print = funcion_diseño(datos_etiqueta)
