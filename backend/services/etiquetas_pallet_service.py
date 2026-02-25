@@ -152,7 +152,7 @@ class EtiquetasPalletService:
     def asegurar_bloque_labels(self, package_id: int, package_name: str, block_size: int = 90, orden_actual: str = '', usuario: str = '') -> Dict:
         """
         Al sacar un pallet NUA, genera 90 etiquetas sin guardar reservas ni usar DB.
-        Devuelve start_carton=1, qty=block_size, y pdf_path.
+        Devuelve start_carton=1, qty=block_size, pdf_path y lista de etiquetas con carton_no correlativo.
         """
         try:
             from backend.utils.generador_etiquetas import GeneradorEtiquetasPDF
@@ -169,6 +169,7 @@ class EtiquetasPalletService:
                     'fecha_vencimiento': info.get('fecha_vencimiento') if info else '',
                     'lote_produccion': info.get('lote_produccion') if info else '',
                     'numero_pallet': info.get('numero_pallet') if info else package_name,
+                    'carton_no': i + 1
                 }
                 lista.append(item)
             import os
@@ -179,7 +180,7 @@ class EtiquetasPalletService:
             out_path = os.path.join(base_dir, f'etiquetas_block_{package_id}.pdf')
             with open(out_path, 'wb') as f:
                 f.write(pdf_bytes)
-            return {"start_carton": 1, "qty": int(block_size), "pdf_path": out_path}
+            return {"start_carton": 1, "qty": int(block_size), "pdf_path": out_path, "etiquetas": lista}
         except Exception as e:
             logger.error(f"Error generando etiquetas NUA para package {package_id}: {e}")
             raise
