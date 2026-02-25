@@ -724,6 +724,9 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
     lote = datos.get('lote_produccion', '')
     pallet = datos.get('numero_pallet', '')
 
+    # Obtener el número inicial de cartón
+    carton_no_inicio = datos.get('carton_no_inicio', 1)
+
     # Calcular cantidad de cajas (cartones)
     cantidad_cajas = datos.get('cantidad_cajas', 0)
     if not cantidad_cajas:
@@ -732,7 +735,7 @@ def generar_etiqueta_caja_lanna(datos: Dict) -> str:
 
     # Generar una etiqueta por cada cartón
     labels_html = ""
-    for i in range(1, cantidad_cajas + 1):
+    for i in range(carton_no_inicio, carton_no_inicio + cantidad_cajas):
         labels_html += f"""
         <div class="etiqueta">
             <div class="campo"><span class="label">MATERIAL CODE: </span><span class="valor">RIRASPBERRY</span></div>
@@ -946,13 +949,13 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                 
                 datos_etiqueta = {
                     'nombre_producto': desc,
-                    'codigo_producto': grupo['codigo'],
+                    'codigo_producto': codigo,
                     'peso_caja_kg': extraer_peso_de_descripcion(desc),
+                    'peso_neto_kg': extraer_peso_de_descripcion(desc),
                     'fecha_elaboracion': fecha_elab,
                     'fecha_vencimiento': fecha_venc,
                     'lote_produccion': lot_name,
                     'numero_pallet': pallet.get('package_name', ''),
-                    'cliente_nombre': cliente_nombre,
                     'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
                     'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                 }
