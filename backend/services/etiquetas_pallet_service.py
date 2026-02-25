@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any
 
 from shared.odoo_client import OdooClient
 from backend.utils import clean_record
-from backend.utils.etiquetas_cache import reserve_cartones, get_last_used_carton
+# Removed DB cache: no persistent reservations. Simple in-memory/no-op behaviors below.
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +143,45 @@ class EtiquetasPalletService:
         Devuelve dict con `start_carton` y `qty`.
         """
         try:
-            res = reserve_cartones(package_id=package_id, package_name=package_name or '', qty=int(qty), orden_name=orden_actual or '', usuario=usuario or '')
-            return res
+            # DB-less behavior: do not persist, return start 1 for simplicity
+            return {"start_carton": 1, "qty": int(qty)}
         except Exception as e:
             logger.error(f"Error reservando cartones para package {package_id}: {e}")
+            raise
+
+    def asegurar_bloque_labels(self, package_id: int, package_name: str, block_size: int = 90, orden_actual: str = '', usuario: str = '') -> Dict:
+        """
+        Al sacar un pallet NUA, genera 90 etiquetas sin guardar reservas ni usar DB.
+        Devuelve start_carton=1, qty=block_size, y pdf_path.
+        """
+        try:
+            from backend.utils.generador_etiquetas import GeneradorEtiquetasPDF
+            # Obtener datos base para las etiquetas
+            info = self.obtener_info_etiqueta(package_id=package_id, cliente='', fecha_inicio_proceso=None, orden_actual=orden_actual)
+            lista = []
+            for i in range(int(block_size)):
+                item = {
+                    'nombre_producto': info.get('nombre_producto') if info else package_name,
+                    'codigo_producto': info.get('codigo_producto') if info else '',
+                    'peso_pallet_kg': info.get('peso_pallet_kg') if info else 0,
+                    'cantidad_cajas': info.get('cantidad_cajas') if info else 0,
+                    'fecha_elaboracion': info.get('fecha_elaboracion') if info else '',
+                    'fecha_vencimiento': info.get('fecha_vencimiento') if info else '',
+                    'lote_produccion': info.get('lote_produccion') if info else '',
+                    'numero_pallet': info.get('numero_pallet') if info else package_name,
+                }
+                lista.append(item)
+            import os
+            base_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+            os.makedirs(base_dir, exist_ok=True)
+            generador = GeneradorEtiquetasPDF()
+            pdf_bytes = generador.generar_etiquetas_multiples(lista)
+            out_path = os.path.join(base_dir, f'etiquetas_block_{package_id}.pdf')
+            with open(out_path, 'wb') as f:
+                f.write(pdf_bytes)
+            return {"start_carton": 1, "qty": int(block_size), "pdf_path": out_path}
+        except Exception as e:
+            logger.error(f"Error generando etiquetas NUA para package {package_id}: {e}")
             raise
     
     def buscar_ordenes(self, termino_busqueda: str) -> List[Dict]:

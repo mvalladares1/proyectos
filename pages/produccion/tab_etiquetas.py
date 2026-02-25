@@ -968,6 +968,7 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                     package_name = pallet.get('package_name', '')
                     qty = int(pallet.get('cantidad_cajas', 0)) or int(pallet.get('peso_pallet_kg', 0) / 10) or 1
 
+                    # Si es IQF A (LACO), asegurar un bloque fijo (p.ej. 90) y usar su start_carton
                     payload = {
                         "username": username,
                         "password": password,
@@ -978,13 +979,26 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                         "usuario": username
                     }
                     try:
-                        resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
-                        resp.raise_for_status()
-                        reserva = resp.json()
-                        datos_etiqueta.update({
-                            'carton_no_inicio': reserva.get('start_carton', 1),
-                            'cantidad_cajas': reserva.get('qty', datos_etiqueta['cantidad_cajas'])
-                        })
+                        if 'IQF A' in desc_upper or tipo_label == 'LACO':
+                            # asegurar bloque fijo de 90 etiquetas y usar su start
+                            payload['ensure_block_size'] = 90
+                            resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
+                            resp.raise_for_status()
+                            reserva = resp.json()
+                            # Usar el start_carton del bloque pero mantener cantidad real a imprimir
+                            datos_etiqueta.update({
+                                'carton_no_inicio': reserva.get('start_carton', 1),
+                                # cantidad_cajas se deja como la cantidad real del pallet/proceso
+                            })
+                        else:
+                            # comportamiento normal: reservar solo los N cartones necesarios
+                            resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
+                            resp.raise_for_status()
+                            reserva = resp.json()
+                            datos_etiqueta.update({
+                                'carton_no_inicio': reserva.get('start_carton', 1),
+                                'cantidad_cajas': reserva.get('qty', datos_etiqueta['cantidad_cajas'])
+                            })
                     except Exception as e:
                         st.error(f"Error reservando cartones: {e}")
                     html_print = funcion_diseño(datos_etiqueta)
