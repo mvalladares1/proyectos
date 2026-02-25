@@ -239,11 +239,11 @@ def _generar_etiqueta_100x50(datos: Dict, mostrar_md: bool = False, md_checked: 
 
     md_html = ''
     if mostrar_md:
-        check_mark = '✓' if md_checked else ''
+        check_inner = '<span class="tick"></span>' if md_checked else ''
         md_html = f'''
         <div class="md-box">
             <span>MD</span>
-            <div class="checkbox">{check_mark}</div>
+            <div class="checkbox">{check_inner}</div>
         </div>
         '''
 
@@ -302,7 +302,16 @@ def _generar_etiqueta_100x50(datos: Dict, mostrar_md: bool = False, md_checked: 
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 14px;
+                position: relative;
+            }}
+            .checkbox .tick {{
+                display: inline-block;
+                width: 4px;
+                height: 9px;
+                border: solid black;
+                border-width: 0 2px 2px 0;
+                transform: rotate(45deg);
+                margin-bottom: 2px;
             }}
         </style>
     </head>
@@ -641,8 +650,16 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 16px;
-                font-weight: bold;
+                position: relative;
+            }}
+            .checkbox .tick {{
+                display: inline-block;
+                width: 6px;
+                height: 12px;
+                border: solid #333;
+                border-width: 0 2.5px 2.5px 0;
+                transform: rotate(45deg);
+                margin-bottom: 2px;
             }}
         </style>
     </head>
@@ -661,7 +678,7 @@ def generar_etiqueta_caja_retail(datos: Dict) -> str:
             
             <div class="md-box">
                 <span>MD</span>
-                <div class="checkbox">✓</div>
+                <div class="checkbox"><span class="tick"></span></div>
             </div>
         </div>
     </body>
