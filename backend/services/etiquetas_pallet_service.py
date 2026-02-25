@@ -164,6 +164,7 @@ class EtiquetasPalletService:
         try:
             fecha_proceso = None
             move_ids = []
+            move_product_map = {}  # move_id → product_id del stock.move
             
             # Intentar buscar como mrp.production primero
             ordenes = self.odoo.search_read(
@@ -197,6 +198,11 @@ class EtiquetasPalletService:
                     limit=500
                 )
                 move_ids = [m['id'] for m in moves]
+                # Mapeo move_id → product_id del stock.move (producto real de la orden)
+                move_product_map = {}
+                for m in moves:
+                    pid = m.get('product_id')
+                    move_product_map[m['id']] = pid
                 logger.info(f"Orden producción {orden_name}: {len(move_ids)} moves de salida encontrados")
             else:
                 # Buscar como stock.picking
@@ -217,14 +223,18 @@ class EtiquetasPalletService:
                         cliente_nombre = partner[1]
                     
                     # Buscar stock.move directamente por picking_id
-                    # (no usar move_ids_without_package que excluye operaciones con paquetes)
                     moves = self.odoo.search_read(
                         'stock.move',
                         [('picking_id', '=', picking['id'])],
-                        ['id'],
+                        ['id', 'product_id'],
                         limit=500
                     )
                     move_ids = [m['id'] for m in moves]
+                    # Mapeo move_id → product_id del stock.move
+                    move_product_map = {}
+                    for m in moves:
+                        pid = m.get('product_id')
+                        move_product_map[m['id']] = pid
                     logger.info(f"Picking {orden_name}: {len(move_ids)} moves (búsqueda directa)")
                 else:
                     logger.warning(f"No se encontró orden/picking {orden_name}")
@@ -242,6 +252,7 @@ class EtiquetasPalletService:
                     ('result_package_id', '!=', False)
                 ],
                 [
+                    'move_id',
                     'result_package_id',
                     'product_id',
                     'qty_done',
@@ -263,6 +274,7 @@ class EtiquetasPalletService:
                             ('result_package_id', '!=', False)
                         ],
                         [
+                            'move_id',
                             'result_package_id',
                             'product_id',
                             'qty_done',
@@ -276,8 +288,8 @@ class EtiquetasPalletService:
             logger.info(f"Encontrados {len(move_lines)} move_lines con pallets para {orden_name}")
             
             # Agrupar por result_package_id (solo los que tengan kg > 0)
-            # Para cada pallet se rastrean todos los productos y sus cantidades
-            # para luego asignar el producto con mayor cantidad (el principal)
+            # Se usa el product_id del stock.move padre (producto real de la orden),
+            # NO el del move_line (que puede diferir por temas internos de Odoo)
             pallets_dict = {}
             # {package_key: {product_key: {'product_id': ..., 'lot_id': ..., 'qty': float}}}
             pallets_product_qty = {}
@@ -292,6 +304,12 @@ class EtiquetasPalletService:
                 
                 package_key = package_id[0] if isinstance(package_id, (list, tuple)) else package_id
                 
+                # Obtener product_id del stock.move padre (el correcto de la orden)
+                line_move_id = line.get('move_id')
+                move_id_key = line_move_id[0] if isinstance(line_move_id, (list, tuple)) else line_move_id
+                # Usar producto del move si existe en el map, sino caer al del move_line
+                real_product = move_product_map.get(move_id_key, line.get('product_id')) if move_product_map else line.get('product_id')
+                
                 if package_key not in pallets_dict:
                     lot_id = line.get('lot_id')
                     lot_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and len(lot_id) > 1 else ''
@@ -299,7 +317,7 @@ class EtiquetasPalletService:
                     pallets_dict[package_key] = {
                         'package_id': package_id[0] if isinstance(package_id, (list, tuple)) else package_id,
                         'package_name': package_id[1] if isinstance(package_id, (list, tuple)) else str(package_id),
-                        'product_id': line.get('product_id'),
+                        'product_id': real_product,
                         'lot_id': lot_id,
                         'lot_name': lot_name,
                         'fecha_elaboracion': line.get('date') or fecha_proceso,
@@ -316,15 +334,14 @@ class EtiquetasPalletService:
                         logger.info(f"Pallet {package_key}: fecha actualizada a {line_date} (más antigua que {existing_date})")
                 
                 # Rastrear cantidad por producto para determinar el principal
-                line_product = line.get('product_id')
-                line_product_key = line_product[0] if isinstance(line_product, (list, tuple)) else line_product
-                if line_product_key not in pallets_product_qty[package_key]:
-                    pallets_product_qty[package_key][line_product_key] = {
-                        'product_id': line_product,
+                real_product_key = real_product[0] if isinstance(real_product, (list, tuple)) else real_product
+                if real_product_key not in pallets_product_qty[package_key]:
+                    pallets_product_qty[package_key][real_product_key] = {
+                        'product_id': real_product,
                         'lot_id': line.get('lot_id'),
                         'qty': 0
                     }
-                pallets_product_qty[package_key][line_product_key]['qty'] += qty_done
+                pallets_product_qty[package_key][real_product_key]['qty'] += qty_done
                 
                 pallets_dict[package_key]['qty_total'] += qty_done
                 pallets_dict[package_key]['move_lines'].append(clean_record(line))

@@ -543,24 +543,7 @@ def render(username: str, password: str):
         if st.session_state.etiq_pallets_cargados:
             st.divider()
             
-            # Clasificar pallets en IQF (cliente) vs Subproductos
-            pallets_iqf = []
-            pallets_sub = []
-            
-            _SUBPRODUCTO_KEYWORDS = ['PSP', 'Whole', 'Broken', 'W&B', 'Desecho', 'Jugo']
-            
-            for p in st.session_state.etiq_pallets_cargados:
-                pid = p.get('product_id')
-                pname = pid[1] if isinstance(pid, list) else str(pid or '')
-                _, desc = extraer_codigo_descripcion(pname)
-                desc_upper = desc.upper()
-                
-                if any(kw.upper() in desc_upper for kw in _SUBPRODUCTO_KEYWORDS):
-                    pallets_sub.append(p)
-                else:
-                    pallets_iqf.append(p)
-            
-            # ---------- Tarja por Pallet (siempre disponible) ----------
+            # ---------- Tarja por Pallet o Etiquetas por Caja ----------
             tipo_etiqueta = st.radio(
                 "Tipo de etiqueta",
                 ["📦 Tarja por Pallet", "🏷️ Etiquetas por Caja"],
@@ -573,14 +556,13 @@ def render(username: str, password: str):
             if tipo_etiqueta == "📦 Tarja por Pallet":
                 render_etiquetas_pallet(username, password)
             else:
-                # ---------- ETIQUETAS POR CAJA: 2 secciones ----------
-                if pallets_iqf:
-                    render_seccion_iqf(username, password, pallets_iqf)
-                
-                if pallets_sub:
-                    render_seccion_subproductos(username, password, pallets_sub)
-                
-                if not pallets_iqf and not pallets_sub:
+                # ---------- ETIQUETAS POR CAJA ----------
+                # Todos los pallets usan etiqueta genérica con los datos del producto
+                # exactamente como está registrado en Odoo (subproductos de la orden)
+                all_pallets = st.session_state.etiq_pallets_cargados
+                if all_pallets:
+                    render_seccion_subproductos(username, password, all_pallets, titulo="📋 ETIQUETAS POR CAJA")
+                else:
                     st.warning("No se encontraron pallets para generar etiquetas.")
 
 
@@ -895,6 +877,7 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
     
     for pkey, grupo in grupos.items():
         desc = grupo['descripcion']
+        codigo = grupo['codigo']
         pallets = grupo['pallets']
         
         # Determinar diseño por nombre del producto
@@ -906,7 +889,8 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
             funcion_diseño = generar_etiqueta_caja_lanna
             tipo_label = "LACO"
         
-        st.markdown(f"#### 📦 {desc}")
+        titulo_producto = f"[{codigo}] {desc}" if codigo else desc
+        st.markdown(f"#### 📦 {titulo_producto}")
         st.caption(f"{len(pallets)} pallets — Etiqueta: {tipo_label}")
         
         for pallet in pallets:
@@ -945,10 +929,12 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
     
     for pkey, grupo in grupos.items():
         desc = grupo['descripcion']
+        codigo = grupo['codigo']
         peso_neto = extraer_peso_de_descripcion(desc)
         pallets = grupo['pallets']
         
-        st.markdown(f"#### 📦 {desc}")
+        titulo_producto = f"[{codigo}] {desc}" if codigo else desc
+        st.markdown(f"#### 📦 {titulo_producto}")
         st.caption(f"{len(pallets)} pallets — Etiqueta genérica 100×50mm")
         
         for pallet in pallets:
