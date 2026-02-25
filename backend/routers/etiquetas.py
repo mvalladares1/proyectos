@@ -64,7 +64,8 @@ async def obtener_info_etiqueta(
     cliente: str = Query("", description="Nombre del cliente"),
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
-    fecha_inicio_proceso: Optional[str] = Query(None, description="Fecha de inicio del proceso actual (ISO 8601)")
+    fecha_inicio_proceso: Optional[str] = Query(None, description="Fecha de inicio del proceso actual (ISO 8601)"),
+    orden_actual: Optional[str] = Query(None, description="Nombre de la orden actual (para correlativo robusto)")
 ):
     """
     Obtiene la información completa para generar una etiqueta de pallet.
@@ -72,7 +73,7 @@ async def obtener_info_etiqueta(
     try:
         from backend.services.etiquetas_pallet_service import EtiquetasPalletService
         service = EtiquetasPalletService(username=username, password=password)
-        info = service.obtener_info_etiqueta(package_id, cliente, fecha_inicio_proceso=fecha_inicio_proceso)
+        info = service.obtener_info_etiqueta(package_id, cliente, fecha_inicio_proceso=fecha_inicio_proceso, orden_actual=orden_actual)
         
         if not info:
             raise HTTPException(status_code=404, detail="No se encontró información del pallet")

@@ -964,11 +964,13 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                     # Usar la fecha de inicio de la orden seleccionada
                     orden = st.session_state.etiq_orden_seleccionada
                     fecha_inicio_proceso = orden.get('fecha_inicio_fmt', '') or orden.get('fecha_elaboracion_fmt', '')
+                    orden_actual = orden.get('name', '')
                     package_id = pallet.get('package_id')
                     params = {
                         "username": username,
                         "password": password,
-                        "fecha_inicio_proceso": fecha_inicio_proceso
+                        "fecha_inicio_proceso": fecha_inicio_proceso,
+                        "orden_actual": orden_actual
                     }
                     url = f"{API_URL}/api/v1/etiquetas/info_etiqueta/{package_id}"
                     try:

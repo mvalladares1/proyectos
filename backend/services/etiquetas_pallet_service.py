@@ -95,22 +95,42 @@ class EtiquetasPalletService:
             logger.warning(f"No se pudo extraer kg por caja de: {nombre_producto}")
             return 0
     
-    def _calcular_carton_no_inicio(self, package_id: int, fecha_inicio_proceso: str = None) -> int:
+    def _calcular_carton_no_inicio(self, package_id: int, fecha_inicio_proceso: str = None, orden_actual: str = None) -> int:
         """
         Calcula el número inicial de cartón (CARTON NO.) para un pallet basado en procesos previos.
-        Solo suma las cajas de movimientos anteriores al proceso actual.
+        Si se pasa orden_actual, suma solo movimientos de órdenes anteriores (por nombre).
         """
         try:
             domain = [('result_package_id', '=', package_id), ('qty_done', '>', 0)]
-            if fecha_inicio_proceso:
-                domain.append(('date', '<', fecha_inicio_proceso))
             move_lines = self.odoo.search_read(
                 'stock.move.line',
                 domain,
-                ['qty_done'],
+                ['qty_done', 'move_id'],
                 limit=2000
             )
-            total_cajas_previas = sum(int(ml.get('qty_done', 0)) for ml in move_lines)
+            total_cajas_previas = 0
+            if orden_actual:
+                # Buscar el id de la orden actual
+                move_ids = [ml['move_id'][0] if isinstance(ml['move_id'], (list, tuple)) else ml['move_id'] for ml in move_lines if ml.get('move_id')]
+                if move_ids:
+                    moves = self.odoo.search_read(
+                        'stock.move',
+                        [('id', 'in', list(set(move_ids)))],
+                        ['id', 'origin', 'picking_id', 'reference', 'name'],
+                        limit=2000
+                    )
+                    # Mapear move_id a nombre de orden
+                    moveid_to_orden = {m['id']: (m.get('origin') or m.get('reference') or m.get('name') or '') for m in moves}
+                    for ml in move_lines:
+                        mid = ml.get('move_id')
+                        mid_val = mid[0] if isinstance(mid, (list, tuple)) else mid
+                        orden_ml = moveid_to_orden.get(mid_val, '')
+                        if orden_ml and orden_ml < orden_actual:
+                            total_cajas_previas += int(ml.get('qty_done', 0))
+                else:
+                    total_cajas_previas = 0
+            else:
+                total_cajas_previas = sum(int(ml.get('qty_done', 0)) for ml in move_lines)
             return total_cajas_previas + 1  # El siguiente número de cartón
         except Exception as e:
             logger.error(f"Error calculando CARTON NO. inicial para package {package_id}: {e}")
@@ -502,7 +522,7 @@ class EtiquetasPalletService:
             logger.error(f"Error obteniendo pallets de orden {orden_name}: {e}")
             return []
     
-    def obtener_info_etiqueta(self, package_id: int, cliente: str = "", fecha_inicio_proceso: str = None) -> Optional[Dict]:
+    def obtener_info_etiqueta(self, package_id: int, cliente: str = "", fecha_inicio_proceso: str = None, orden_actual: str = None) -> Optional[Dict]:
         """
         Obtiene toda la información necesaria para una etiqueta de pallet.
         """
@@ -576,7 +596,7 @@ class EtiquetasPalletService:
             lote_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
             
             # Calcular correlativo inicial de cartón
-            carton_no_inicio = self._calcular_carton_no_inicio(package_id, fecha_inicio_proceso)
+            carton_no_inicio = self._calcular_carton_no_inicio(package_id, fecha_inicio_proceso, orden_actual)
             
             return {
                 'cliente': cliente,
