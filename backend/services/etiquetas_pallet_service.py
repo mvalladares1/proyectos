@@ -188,20 +188,16 @@ class EtiquetasPalletService:
                 if cliente and isinstance(cliente, (list, tuple)):
                     cliente_nombre = cliente[1] if len(cliente) > 1 else ''
                 
-                # Buscar TODOS los stock.move asociados a esta orden (no solo finished)
-                # Los pallets pueden estar en raw_material_production_id o production_id
+                # Buscar stock.move de SALIDA (producto terminado + subproductos)
+                # Solo production_id — NO raw_material_production_id (eso es materia prima/consumo)
                 moves = self.odoo.search_read(
                     'stock.move',
-                    [
-                        '|',
-                        ('production_id', '=', orden['id']),
-                        ('raw_material_production_id', '=', orden['id'])
-                    ],
-                    ['id'],
+                    [('production_id', '=', orden['id'])],
+                    ['id', 'product_id'],
                     limit=500
                 )
                 move_ids = [m['id'] for m in moves]
-                logger.info(f"Orden producción {orden_name}: {len(move_ids)} moves encontrados")
+                logger.info(f"Orden producción {orden_name}: {len(move_ids)} moves de salida encontrados")
             else:
                 # Buscar como stock.picking
                 pickings = self.odoo.search_read(
@@ -280,7 +276,12 @@ class EtiquetasPalletService:
             logger.info(f"Encontrados {len(move_lines)} move_lines con pallets para {orden_name}")
             
             # Agrupar por result_package_id (solo los que tengan kg > 0)
+            # Para cada pallet se rastrean todos los productos y sus cantidades
+            # para luego asignar el producto con mayor cantidad (el principal)
             pallets_dict = {}
+            # {package_key: {product_key: {'product_id': ..., 'lot_id': ..., 'qty': float}}}
+            pallets_product_qty = {}
+            
             for line in move_lines:
                 package_id = line.get('result_package_id')
                 qty_done = line.get('qty_done', 0)
@@ -305,6 +306,7 @@ class EtiquetasPalletService:
                         'qty_total': 0,
                         'move_lines': []
                     }
+                    pallets_product_qty[package_key] = {}
                 else:
                     # Siempre conservar la fecha más antigua (inicio del pallet)
                     line_date = line.get('date')
@@ -313,8 +315,33 @@ class EtiquetasPalletService:
                         pallets_dict[package_key]['fecha_elaboracion'] = line_date
                         logger.info(f"Pallet {package_key}: fecha actualizada a {line_date} (más antigua que {existing_date})")
                 
+                # Rastrear cantidad por producto para determinar el principal
+                line_product = line.get('product_id')
+                line_product_key = line_product[0] if isinstance(line_product, (list, tuple)) else line_product
+                if line_product_key not in pallets_product_qty[package_key]:
+                    pallets_product_qty[package_key][line_product_key] = {
+                        'product_id': line_product,
+                        'lot_id': line.get('lot_id'),
+                        'qty': 0
+                    }
+                pallets_product_qty[package_key][line_product_key]['qty'] += qty_done
+                
                 pallets_dict[package_key]['qty_total'] += qty_done
                 pallets_dict[package_key]['move_lines'].append(clean_record(line))
+            
+            # Asignar el producto con mayor cantidad a cada pallet
+            for package_key, products in pallets_product_qty.items():
+                if len(products) > 1:
+                    # Hay múltiples productos en este pallet — usar el de mayor cantidad
+                    best = max(products.values(), key=lambda x: x['qty'])
+                    old_pid = pallets_dict[package_key]['product_id']
+                    old_name = old_pid[1] if isinstance(old_pid, (list, tuple)) else str(old_pid)
+                    new_name = best['product_id'][1] if isinstance(best['product_id'], (list, tuple)) else str(best['product_id'])
+                    pallets_dict[package_key]['product_id'] = best['product_id']
+                    lot_id = best['lot_id']
+                    pallets_dict[package_key]['lot_id'] = lot_id
+                    pallets_dict[package_key]['lot_name'] = lot_id[1] if isinstance(lot_id, (list, tuple)) and len(lot_id) > 1 else ''
+                    logger.info(f"Pallet {package_key}: producto corregido de '{old_name}' a '{new_name}' (mayor qty: {best['qty']} kg)")
             
             # Obtener información adicional de cada package
             pallets_resultado = []
