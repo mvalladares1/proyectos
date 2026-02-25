@@ -961,28 +961,32 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                 }
                 
                 if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pallet.get('package_id')}", use_container_width=True):
-                    # Usar la fecha de inicio de la orden seleccionada
+                    # Reservar los cartones de forma atómica en el backend antes de imprimir
                     orden = st.session_state.etiq_orden_seleccionada
-                    fecha_inicio_proceso = orden.get('fecha_inicio_fmt', '') or orden.get('fecha_elaboracion_fmt', '')
                     orden_actual = orden.get('name', '')
                     package_id = pallet.get('package_id')
-                    params = {
+                    package_name = pallet.get('package_name', '')
+                    qty = int(pallet.get('cantidad_cajas', 0)) or int(pallet.get('peso_pallet_kg', 0) / 10) or 1
+
+                    payload = {
                         "username": username,
                         "password": password,
-                        "fecha_inicio_proceso": fecha_inicio_proceso,
-                        "orden_actual": orden_actual
+                        "package_id": package_id,
+                        "package_name": package_name,
+                        "qty": qty,
+                        "orden_actual": orden_actual,
+                        "usuario": username
                     }
-                    url = f"{API_URL}/api/v1/etiquetas/info_etiqueta/{package_id}"
                     try:
-                        response = httpx.get(url, params=params, timeout=30.0)
-                        response.raise_for_status()
-                        datos_backend = response.json()
+                        resp = httpx.post(f"{API_URL}/api/v1/etiquetas/reservar", json=payload, timeout=30.0)
+                        resp.raise_for_status()
+                        reserva = resp.json()
                         datos_etiqueta.update({
-                            'carton_no_inicio': datos_backend.get('carton_no_inicio', 1),
-                            'cantidad_cajas': datos_backend.get('cantidad_cajas', datos_etiqueta['cantidad_cajas'])
+                            'carton_no_inicio': reserva.get('start_carton', 1),
+                            'cantidad_cajas': reserva.get('qty', datos_etiqueta['cantidad_cajas'])
                         })
                     except Exception as e:
-                        st.error(f"No se pudo obtener correlativo de cartón: {e}")
+                        st.error(f"Error reservando cartones: {e}")
                     html_print = funcion_diseño(datos_etiqueta)
                     imprimir_etiqueta(html_print, height=420)
     

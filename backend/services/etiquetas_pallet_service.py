@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 
 from shared.odoo_client import OdooClient
 from backend.utils import clean_record
+from backend.utils.etiquetas_cache import reserve_cartones, get_last_used_carton
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,18 @@ class EtiquetasPalletService:
         except Exception as e:
             logger.error(f"Error calculando CARTON NO. inicial para package {package_id}: {e}")
             return 1  # Por defecto, empezar en 1
+
+    def reservar_cartones(self, package_id: int, package_name: str, qty: int, orden_actual: str = '', usuario: str = '') -> Dict:
+        """
+        Reserva atómica de `qty` cartones para un pallet usando la caché SQLite.
+        Devuelve dict con `start_carton` y `qty`.
+        """
+        try:
+            res = reserve_cartones(package_id=package_id, package_name=package_name or '', qty=int(qty), orden_name=orden_actual or '', usuario=usuario or '')
+            return res
+        except Exception as e:
+            logger.error(f"Error reservando cartones para package {package_id}: {e}")
+            raise
     
     def buscar_ordenes(self, termino_busqueda: str) -> List[Dict]:
         """

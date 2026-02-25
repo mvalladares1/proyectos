@@ -4,6 +4,7 @@ Router para gestión de etiquetas de pallets
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from typing import List, Dict, Optional
+from fastapi import Body
 
 router = APIRouter(prefix="/api/v1/etiquetas", tags=["Etiquetas Pallet"])
 
@@ -81,6 +82,29 @@ async def obtener_info_etiqueta(
         return info
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reservar")
+async def reservar_cartones(datos: Dict = Body(...)):
+    """
+    Reserva N cartones para un pallet de forma atómica y devuelve el inicio reservado.
+    Body JSON esperado: {username, password, package_id, package_name, qty, orden_actual, usuario}
+    """
+    try:
+        username = datos.get('username')
+        password = datos.get('password')
+        package_id = int(datos.get('package_id'))
+        package_name = datos.get('package_name', '')
+        qty = int(datos.get('qty', 0))
+        orden_actual = datos.get('orden_actual', '')
+        usuario = datos.get('usuario', '')
+
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+        res = service.reservar_cartones(package_id=package_id, package_name=package_name, qty=qty, orden_actual=orden_actual, usuario=usuario)
+        return res
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
