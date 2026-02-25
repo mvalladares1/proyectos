@@ -961,9 +961,10 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
                 }
                 
                 if st.button("🖨️ Imprimir / Vista", key=f"etiq_iqf_{pallet.get('package_id')}", use_container_width=True):
-                    # Obtener correlativo correcto desde backend
+                    # Usar la fecha de inicio de la orden seleccionada
+                    orden = st.session_state.etiq_orden_seleccionada
+                    fecha_inicio_proceso = orden.get('fecha_inicio_fmt', '') or orden.get('fecha_elaboracion_fmt', '')
                     package_id = pallet.get('package_id')
-                    fecha_inicio_proceso = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
                     params = {
                         "username": username,
                         "password": password,
