@@ -95,20 +95,21 @@ class EtiquetasPalletService:
             logger.warning(f"No se pudo extraer kg por caja de: {nombre_producto}")
             return 0
     
-    def _calcular_carton_no_inicio(self, package_id: int) -> int:
+    def _calcular_carton_no_inicio(self, package_id: int, fecha_inicio_proceso: str = None) -> int:
         """
         Calcula el número inicial de cartón (CARTON NO.) para un pallet basado en procesos previos.
+        Solo suma las cajas de movimientos anteriores al proceso actual.
         """
         try:
-            # Buscar todas las líneas de movimiento asociadas al pallet en todas las órdenes
+            domain = [('result_package_id', '=', package_id), ('qty_done', '>', 0)]
+            if fecha_inicio_proceso:
+                domain.append(('date', '<', fecha_inicio_proceso))
             move_lines = self.odoo.search_read(
                 'stock.move.line',
-                [('result_package_id', '=', package_id), ('qty_done', '>', 0)],
+                domain,
                 ['qty_done'],
-                limit=2000  # Asegurarse de incluir todas las líneas relevantes
+                limit=2000
             )
-
-            # Sumar todas las cajas previas
             total_cajas_previas = sum(int(ml.get('qty_done', 0)) for ml in move_lines)
             return total_cajas_previas + 1  # El siguiente número de cartón
         except Exception as e:
