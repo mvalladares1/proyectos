@@ -921,7 +921,7 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
 
 
 def render_seccion_subproductos(username: str, password: str, pallets_sub: List[Dict], titulo: str = "📋 ETIQUETAS SUBPRODUCTOS"):
-    """Sección ETIQUETAS SUBPRODUCTOS — etiqueta genérica 100×50mm."""
+    """Sección ETIQUETAS — detecta tipo de producto y usa el diseño correcto."""
     
     st.subheader(titulo)
     
@@ -933,9 +933,21 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
         peso_neto = extraer_peso_de_descripcion(desc)
         pallets = grupo['pallets']
         
+        # Detectar tipo de producto → diseño correcto
+        desc_upper = desc.upper()
+        if 'RETAIL' in desc_upper:
+            tipo_diseño = 'RETAIL'
+            tipo_label = "Retail 100×100mm (MD)"
+        elif 'IQF A' in desc_upper:
+            tipo_diseño = 'LACO'
+            tipo_label = "LACO 100×100mm"
+        else:
+            tipo_diseño = 'GENERICA'
+            tipo_label = "Genérica 100×50mm"
+        
         titulo_producto = f"[{codigo}] {desc}" if codigo else desc
         st.markdown(f"#### 📦 {titulo_producto}")
-        st.caption(f"{len(pallets)} pallets — Etiqueta genérica 100×50mm")
+        st.caption(f"{len(pallets)} pallets — Etiqueta: {tipo_label}")
         
         for pallet in pallets:
             with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
@@ -946,15 +958,24 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
                 
                 datos_etiqueta = {
                     'nombre_producto': desc,
+                    'codigo_producto': codigo,
+                    'peso_caja_kg': peso_neto,
                     'peso_neto_kg': peso_neto,
                     'fecha_elaboracion': fecha_elab,
                     'fecha_vencimiento': fecha_venc,
                     'lote_produccion': lot_name,
                     'numero_pallet': pallet.get('package_name', ''),
+                    'cantidad_cajas': int(pallet.get('cantidad_cajas', 0)),
+                    'peso_pallet_kg': int(pallet.get('peso_pallet_kg', 0)),
                 }
                 
                 if st.button("🖨️ Imprimir / Vista", key=f"etiq_sub_{pallet.get('package_id')}", use_container_width=True):
-                    html_print = generar_etiqueta_caja_generica(datos_etiqueta)
+                    if tipo_diseño == 'RETAIL':
+                        html_print = generar_etiqueta_caja_retail(datos_etiqueta)
+                    elif tipo_diseño == 'LACO':
+                        html_print = generar_etiqueta_caja_lanna(datos_etiqueta)
+                    else:
+                        html_print = generar_etiqueta_caja_generica(datos_etiqueta)
                     imprimir_etiqueta(html_print, height=420)
     
     st.divider()
