@@ -105,43 +105,45 @@ async def reservar_cartones(datos: Dict = Body(...)):
         service = EtiquetasPalletService(username=username, password=password)
         ensure_block_size = int(datos.get('ensure_block_size') or 0)
         if ensure_block_size > 0:
-            # Nuevo flujo simple: generar BLOCK_SIZE etiquetas NUA sin mantener reserva en DB
-            block_size = ensure_block_size
+            # Solo generar bloque de 90 si el producto es IQF A (NUA)
             try:
                 info = service.obtener_info_etiqueta(package_id=package_id, cliente='', fecha_inicio_proceso=None, orden_actual=orden_actual)
             except Exception:
                 info = None
 
-            lista = []
-            for i in range(int(block_size)):
-                item = {
-                    'nombre_producto': info.get('nombre_producto') if info else package_name,
-                    'codigo_producto': info.get('codigo_producto') if info else '',
-                    'peso_pallet_kg': info.get('peso_pallet_kg') if info else 0,
-                    'cantidad_cajas': info.get('cantidad_cajas') if info else 0,
-                    'fecha_elaboracion': info.get('fecha_elaboracion') if info else '',
-                    'fecha_vencimiento': info.get('fecha_vencimiento') if info else '',
-                    'lote_produccion': info.get('lote_produccion') if info else '',
-                    'numero_pallet': info.get('numero_pallet') if info else package_name,
-                }
-                lista.append(item)
-
-            # Generar PDF con todas las etiquetas y guardarlo
-            try:
-                import os
-                from backend.utils.generador_etiquetas import GeneradorEtiquetasPDF
-
-                generador = GeneradorEtiquetasPDF()
-                pdf_bytes = generador.generar_etiquetas_multiples(lista)
-
-                data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-                os.makedirs(data_dir, exist_ok=True)
-                out_path = os.path.join(data_dir, f'etiquetas_block_{package_id}.pdf')
-                with open(out_path, 'wb') as f:
-                    f.write(pdf_bytes)
-                return {'start_carton': 1, 'qty': int(block_size), 'pdf_path': out_path}
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error generando etiquetas NUA: {e}")
+            nombre_prod = (info.get('nombre_producto') if info else package_name or '').upper()
+            if 'IQF A' in nombre_prod or 'LACO' in nombre_prod:
+                block_size = ensure_block_size
+                lista = []
+                for i in range(int(block_size)):
+                    item = {
+                        'nombre_producto': info.get('nombre_producto') if info else package_name,
+                        'codigo_producto': info.get('codigo_producto') if info else '',
+                        'peso_pallet_kg': info.get('peso_pallet_kg') if info else 0,
+                        'cantidad_cajas': info.get('cantidad_cajas') if info else 0,
+                        'fecha_elaboracion': info.get('fecha_elaboracion') if info else '',
+                        'fecha_vencimiento': info.get('fecha_vencimiento') if info else '',
+                        'lote_produccion': info.get('lote_produccion') if info else '',
+                        'numero_pallet': info.get('numero_pallet') if info else package_name,
+                    }
+                    lista.append(item)
+                # Generar PDF con todas las etiquetas y guardarlo
+                try:
+                    import os
+                    from backend.utils.generador_etiquetas import GeneradorEtiquetasPDF
+                    generador = GeneradorEtiquetasPDF()
+                    pdf_bytes = generador.generar_etiquetas_multiples(lista)
+                    data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+                    os.makedirs(data_dir, exist_ok=True)
+                    out_path = os.path.join(data_dir, f'etiquetas_block_{package_id}.pdf')
+                    with open(out_path, 'wb') as f:
+                        f.write(pdf_bytes)
+                    return {'start_carton': 1, 'qty': int(block_size), 'pdf_path': out_path}
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Error generando etiquetas NUA: {e}")
+            # Si no es IQF A, usar la lógica normal
+            res = service.reservar_cartones(package_id=package_id, package_name=package_name, qty=qty, orden_actual=orden_actual, usuario=usuario)
+            return res
         else:
             res = service.reservar_cartones(package_id=package_id, package_name=package_name, qty=qty, orden_actual=orden_actual, usuario=usuario)
             return res
