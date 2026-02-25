@@ -153,7 +153,9 @@ def render(username: str, password: str):
             # Convertir columnas con listas/objetos a texto para compatibilidad Excel
             for col in df_export.columns:
                 if df_export[col].apply(lambda x: isinstance(x, (list, dict))).any():
-                    df_export[col] = df_export[col].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x) if isinstance(x, dict) else x)
+                    df_export[col] = df_export[col].apply(
+                        lambda x: ', '.join(str(i) for i in x) if isinstance(x, list) else str(x) if isinstance(x, dict) else x
+                    )
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 df_export.to_excel(writer, sheet_name='Ordenes_Compra', index=False)
             st.download_button(
