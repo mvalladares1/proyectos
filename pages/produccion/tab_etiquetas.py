@@ -69,6 +69,50 @@ def calcular_fecha_vencimiento(fecha_elaboracion: str, años: int = 2) -> str:
         return fecha_elaboracion
 
 
+def _fecha_elaboracion_pallet(pallet: Dict) -> str:
+    """
+    Determina la fecha de elaboración para la etiqueta de un pallet.
+    - Usa la fecha de inicio de la orden (fecha_inicio_fmt) por defecto.
+    - Si el pallet se usó en un proceso anterior (fecha_elaboracion_fmt es más antigua),
+      usa esa fecha para respetar cuándo se creó realmente el pallet.
+    """
+    fecha_orden = pallet.get('fecha_inicio_fmt', '')
+    fecha_pallet = pallet.get('fecha_elaboracion_fmt', '')
+    
+    if not fecha_orden:
+        return fecha_pallet
+    if not fecha_pallet:
+        return fecha_orden
+    
+    # Comparar ambas fechas (formato DD.MM.YYYY)
+    try:
+        from datetime import datetime
+        for fmt in ['%d.%m.%Y', '%d/%m/%Y', '%Y-%m-%d']:
+            try:
+                dt_orden = datetime.strptime(fecha_orden, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return fecha_orden
+        
+        for fmt in ['%d.%m.%Y', '%d/%m/%Y', '%Y-%m-%d']:
+            try:
+                dt_pallet = datetime.strptime(fecha_pallet, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return fecha_orden
+        
+        # Si el pallet se inició antes que esta orden, usar la fecha del pallet
+        if dt_pallet < dt_orden:
+            return fecha_pallet
+        return fecha_orden
+    except Exception:
+        return fecha_orden
+
+
 def imprimir_etiqueta(html_etiqueta: str, height: int = 300):
     """
     Renderiza la etiqueta en un iframe con botón de imprimir.
@@ -896,8 +940,8 @@ def render_seccion_iqf(username: str, password: str, pallets_iqf: List[Dict]):
         for pallet in pallets:
             with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
                 lot_name = _get_lot_name(pallet)
-                # Usar fecha de inicio del pallet (la más antigua), no la de última actualización
-                fecha_elab = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
+                # Fecha de la orden, o del pallet si se inició en un proceso anterior
+                fecha_elab = _fecha_elaboracion_pallet(pallet)
                 fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
                 
                 datos_etiqueta = {
@@ -952,8 +996,8 @@ def render_seccion_subproductos(username: str, password: str, pallets_sub: List[
         for pallet in pallets:
             with st.expander(f"{pallet.get('package_name', '')} — {pallet.get('cantidad_cajas', 0)} cajas"):
                 lot_name = _get_lot_name(pallet)
-                # Usar fecha de inicio del pallet (la más antigua), no la de última actualización
-                fecha_elab = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
+                # Fecha de la orden, o del pallet si se inició en un proceso anterior
+                fecha_elab = _fecha_elaboracion_pallet(pallet)
                 fecha_venc = calcular_fecha_vencimiento(fecha_elab, años=2)
                 
                 datos_etiqueta = {
@@ -1043,8 +1087,8 @@ def render_etiquetas_pallet(username: str, password: str):
             barcode_odoo = pallet.get('barcode', pallet.get('package_name', ''))
             cliente_pallet = pallet.get('cliente_nombre', '')
             
-            # Usar fecha de inicio del pallet (la más antigua), no la de última actualización
-            fecha_elab_pallet = pallet.get('fecha_inicio_fmt', '') or pallet.get('fecha_elaboracion_fmt', '')
+            # Fecha de la orden, o del pallet si se inició en un proceso anterior
+            fecha_elab_pallet = _fecha_elaboracion_pallet(pallet)
             datos_etiqueta = {
                 'cliente': cliente_pallet,
                 'nombre_producto': descripcion_prod,
