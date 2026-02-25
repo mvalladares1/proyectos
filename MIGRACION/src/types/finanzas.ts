@@ -112,3 +112,46 @@ export interface CurvaAbastecimientoData {
   cumplimiento_promedio: number
   plantas: string[]
 }
+
+// ─── Flujo de Caja V2 (IAS 7 con endpoints /mensual y /semanal) ─────────────
+
+export interface FlujoCajaConceptoCuenta {
+  cuenta_id: number
+  nombre: string
+  monto: number
+  etiquetas?: Array<{ tipo: string; nombre: string }>
+}
+
+export interface FlujoCajaConcepto {
+  id: string
+  nombre: string
+  montos_por_mes: Record<string, number>
+  total: number
+  tipo: string
+  cuentas?: FlujoCajaConceptoCuenta[]
+}
+
+export interface FlujoCajaActividadData {
+  conceptos: FlujoCajaConcepto[]
+  subtotal: number
+  subtotal_por_mes: Record<string, number>
+}
+
+export interface FlujoCajaConciliacion {
+  efectivo_inicial: number
+  variacion: number
+  efectivo_final: number
+}
+
+export interface FlujoCajaMensualData {
+  meses: string[]
+  actividades: {
+    OPERACION?: FlujoCajaActividadData
+    INVERSION?: FlujoCajaActividadData
+    FINANCIAMIENTO?: FlujoCajaActividadData
+    [key: string]: FlujoCajaActividadData | undefined
+  }
+  conciliacion: FlujoCajaConciliacion
+  efectivo_por_mes: Record<string, { inicial: number; variacion: number; final: number }>
+  cuentas_sin_clasificar?: string[]
+}

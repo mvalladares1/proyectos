@@ -851,7 +851,7 @@ class RealProyectadoCalculator:
                     
                     for prov_nombre, prov_data in proveedores_ordenados:
                         prov_entry = {
-                            'nombre': f"↳ {prov_data['nombre']}",
+                            'nombre': prov_data['nombre'],
                             'monto': prov_data['monto'],
                             'montos_por_mes': dict(prov_data['montos_por_mes']),
                             'tipo': 'proveedor',
@@ -1358,7 +1358,7 @@ class RealProyectadoCalculator:
                     clientes_list = []
                     for cliente_name, cliente_data in sorted(categoria_data['clientes'].items(), key=lambda x: x[1]['monto'], reverse=True):
                         clientes_list.append({
-                            'nombre': f"↳ {cliente_data['nombre']}",
+                            'nombre': cliente_data['nombre'],
                             'monto': cliente_data['monto'],
                             'real': cliente_data['real'],
                             'proyectado': cliente_data['proyectado'],

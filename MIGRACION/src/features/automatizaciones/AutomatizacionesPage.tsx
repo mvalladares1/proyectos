@@ -5,16 +5,251 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { KPICard } from '@/components/shared/KPICard'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn, formatDateTime, formatNumber } from '@/lib/utils'
 import {
   useAutomatizaciones, useEjecutarAutomatizacion,
   useTuneles, useCrearOrdenFabricacion,
   useMovimientosStock, useProcesosAutomatizacion, useToggleProcesoActivo,
+  usePreviewRevertirConsumo, useRevertirConsumo,
+  type ComponentePreview, type SubproductoPreview, type RevertirPreviewResult, type RevertirConsumoResult,
 } from '@/api/automatizaciones'
 import toast from 'react-hot-toast'
+
+// ─── Revertir Consumo Tab ────────────────────────────────────────────────────
+
+function RevertirConsumoTab() {
+  const [odooUser, setOdooUser] = useState('')
+  const [odooKey, setOdooKey] = useState('')
+  const [odfName, setOdfName] = useState('')
+  const [preview, setPreview] = useState<RevertirPreviewResult | null>(null)
+  const [result, setResult] = useState<RevertirConsumoResult | null>(null)
+  const [confirmado, setConfirmado] = useState(false)
+
+  const previewMut = usePreviewRevertirConsumo()
+  const revertirMut = useRevertirConsumo()
+
+  const hasCredentials = !!odooUser && !!odooKey
+  const odfTrimmed = odfName.trim()
+
+  const handlePreview = () => {
+    setPreview(null)
+    setResult(null)
+    setConfirmado(false)
+    previewMut.mutate(
+      { odfName: odfTrimmed, odooUser, odooKey },
+      {
+        onSuccess: (data) => {
+          setPreview(data)
+          if (!data.success) toast.error(data.message)
+        },
+        onError: () => toast.error('Error al obtener preview'),
+      },
+    )
+  }
+
+  const handleRevertir = () => {
+    revertirMut.mutate(
+      { odfName: odfTrimmed, odooUser, odooKey },
+      {
+        onSuccess: (data) => {
+          setResult(data)
+          setConfirmado(false)
+          if (data.success) toast.success(data.message)
+          else toast.error(data.message)
+        },
+        onError: () => toast.error('Error al revertir consumo'),
+      },
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Credentials */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">🔑 Credenciales Odoo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">Usuario (email)</label>
+              <Input type="email" placeholder="usuario@riofuturo.cl" value={odooUser} onChange={e => setOdooUser(e.target.value)} className="w-56" />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">API Key</label>
+              <Input type="password" placeholder="Odoo API key" value={odooKey} onChange={e => setOdooKey(e.target.value)} className="w-56" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Paso 1: ODF input */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">🔄 Revertir Consumo de ODF</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Recupera componentes (MP) a sus paquetes originales y elimina subproductos de una orden de desmontaje.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground block mb-1">Código de la ODF</label>
+              <Input
+                placeholder="VLK/CongTE109"
+                value={odfName}
+                onChange={e => setOdfName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && odfTrimmed && hasCredentials && handlePreview()}
+              />
+            </div>
+            <Button
+              variant="secondary"
+              onClick={handlePreview}
+              disabled={!odfTrimmed || !hasCredentials || previewMut.isPending}
+            >
+              {previewMut.isPending ? <><RefreshCw className="mr-2 h-3 w-3 animate-spin" />Analizando…</> : '🔍 Ver Detalle'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Paso 2: Preview */}
+      {previewMut.isPending && <LoadingSpinner />}
+
+      {preview && preview.success && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Componentes a recuperar */}
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">📦 Componentes a Recuperar ({preview.componentes_preview.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {preview.componentes_preview.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin componentes</p>
+                ) : preview.componentes_preview.map((c, i) => (
+                  <div key={i} className="rounded border p-2 text-xs space-y-0.5">
+                    <p className="font-medium">{c.paquete}</p>
+                    <p className="text-muted-foreground">{c.producto} · Lote: {c.lote}</p>
+                    <p className="text-blue-400">{formatNumber(c.cantidad, 2)} kg · {c.ubicacion}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Subproductos a eliminar */}
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">🧊 Subproductos a Eliminar ({preview.subproductos_preview.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {preview.subproductos_preview.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin subproductos</p>
+                ) : preview.subproductos_preview.map((s, i) => (
+                  <div key={i} className="rounded border border-red-500/20 bg-red-500/5 p-2 text-xs space-y-0.5">
+                    <p className="font-medium">{s.producto}</p>
+                    <p className="text-muted-foreground">{formatNumber(s.cantidad_actual, 2)} kg → 0 · {s.ubicacion}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Paso 3: Confirmar */}
+          {!result && (
+            <Card className="border-orange-500/30">
+              <CardContent className="pt-4 space-y-3">
+                <div className="rounded bg-orange-500/10 border border-orange-500/30 p-3 text-sm">
+                  <p className="font-medium text-orange-400">⚠️ Confirmación requerida</p>
+                  <ul className="mt-1 text-xs text-muted-foreground list-disc list-inside space-y-0.5">
+                    <li>Esta acción NO se puede deshacer automáticamente</li>
+                    <li>Se crearán transferencias reales en Odoo</li>
+                    <li>Revisa el detalle antes de continuar</li>
+                  </ul>
+                </div>
+                {!confirmado ? (
+                  <Button variant="destructive" className="w-full" onClick={() => setConfirmado(true)}>
+                    Entiendo — Mostrar botón de Reversión
+                  </Button>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    disabled={revertirMut.isPending}
+                    onClick={handleRevertir}
+                  >
+                    {revertirMut.isPending
+                      ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Revirtiendo…</>
+                      : '🔄 CONFIRMAR Y REVERTIR'}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {preview && !preview.success && (
+        <Card className="border-red-500/30">
+          <CardContent className="pt-4">
+            <p className="text-destructive text-sm">❌ {preview.message}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resultado */}
+      {result && (
+        <Card className={result.success ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30'}>
+          <CardHeader className="py-3">
+            <CardTitle className={`text-base ${result.success ? 'text-green-400' : 'text-destructive'}`}>
+              {result.success ? '✅' : '❌'} {result.message}
+            </CardTitle>
+          </CardHeader>
+          {result.success && (
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div className="rounded border p-2 text-center">
+                  <p className="text-xs text-muted-foreground">Componentes revertidos</p>
+                  <p className="font-bold text-lg">{result.componentes_revertidos.length}</p>
+                </div>
+                <div className="rounded border p-2 text-center">
+                  <p className="text-xs text-muted-foreground">Subproductos eliminados</p>
+                  <p className="font-bold text-lg">{result.subproductos_eliminados.length}</p>
+                </div>
+                <div className="rounded border p-2 text-center">
+                  <p className="text-xs text-muted-foreground">Transferencias creadas</p>
+                  <p className="font-bold text-lg">{result.transferencias_creadas.length}</p>
+                </div>
+              </div>
+              {result.transferencias_creadas.length > 0 && (
+                <div className="text-xs space-y-1">
+                  {result.transferencias_creadas.map(t => (
+                    <p key={t.id} className="font-mono text-green-400">• {t.name} (ID: {t.id})</p>
+                  ))}
+                </div>
+              )}
+              {result.errores && result.errores.length > 0 && (
+                <div className="text-xs space-y-0.5">
+                  <p className="font-medium text-orange-400">Advertencias:</p>
+                  {result.errores.map((e, i) => <p key={i} className="text-muted-foreground">• {e}</p>)}
+                </div>
+              )}
+              <Button variant="outline" size="sm" className="w-full" onClick={() => { setResult(null); setPreview(null); setOdfName(''); setConfirmado(false) }}>
+                Nueva reversión
+              </Button>
+            </CardContent>
+          )}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const estadoConfig: Record<string, { color: string; icon: React.ElementType; badge: 'success' | 'warning' | 'destructive' | 'default' }> = {
   activo:     { color: 'text-green-400',           icon: CheckCircle, badge: 'success'     },
@@ -88,6 +323,7 @@ export function AutomatizacionesPage() {
           <TabsTrigger value="movimientos">📦 Movimientos</TabsTrigger>
           <TabsTrigger value="monitor-mov">📈 Monitor Mov.</TabsTrigger>
           <TabsTrigger value="procesos">⚙️ Procesos</TabsTrigger>
+          <TabsTrigger value="revertir">🔄 Revertir Consumo</TabsTrigger>
         </TabsList>
 
         {/* Monitor tab */}
@@ -422,6 +658,12 @@ export function AutomatizacionesPage() {
             </div>
           )}
         </TabsContent>
+
+        {/* Revertir Consumo tab */}
+        <TabsContent value="revertir" className="mt-4">
+          <RevertirConsumoTab />
+        </TabsContent>
+
       </Tabs>
     </div>
   )

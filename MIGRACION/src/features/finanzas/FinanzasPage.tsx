@@ -2,69 +2,265 @@ import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { FilterBar } from '@/components/forms/FilterBar'
-import { EnterpriseTable } from '@/components/tables/EnterpriseTable'
 import { ExportButton } from '@/components/tables/ExportButton'
+import { DataTable } from '@/components/tables/DataTable'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DataTable } from '@/components/tables/DataTable'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { CURRENT_YEAR } from '@/lib/constants'
 import { formatCurrency } from '@/lib/utils'
-import { useFlujoCaja, useComposicion, useEERR, useEERRYTD, useEERRMensualizado, useCuentas, useEERRAgrupado, useEERRDetalle } from '@/api/finanzas'
-import type { FlujoCajaRow, EERRYTDRow } from '@/types/finanzas'
+import { useEERR, useEERRYTD, useEERRMensualizado, useCuentas, useEERRAgrupado, useEERRDetalle, useFlujoCajaMensual, useFlujoCajaSemanal } from '@/api/finanzas'
+import type { EERRYTDRow } from '@/types/finanzas'
 import type { ColumnDef } from '@tanstack/react-table'
 import { KPICard } from '@/components/shared/KPICard'
 import { BarChart } from '@/components/charts/BarChart'
 
-interface ModalState {
-  open: boolean
-  row?: FlujoCajaRow
-  periodo?: string
-  value?: number
+const ACTIVITY_KEYS = ['OPERACION', 'INVERSION', 'FINANCIAMIENTO'] as const
+const ACTIVITY_LABELS: Record<string, string> = {
+  OPERACION: '🟢 Actividades de Operación',
+  INVERSION: '🔵 Actividades de Inversión',
+  FINANCIAMIENTO: '🟣 Actividades de Financiamiento',
+}
+
+function FlujoCajaTab() {
+  const [odooUser, setOdooUser] = useState('')
+  const [odooKey, setOdooKey] = useState('')
+  const [fechaInicio, setFechaInicio] = useState(`${CURRENT_YEAR}-01-01`)
+  const [fechaFin, setFechaFin] = useState(new Date().toISOString().split('T')[0])
+  const [agrupacion, setAgrupacion] = useState<'mensual' | 'semanal'>('mensual')
+  const [incluirProyecciones, setIncluirProyecciones] = useState(false)
+  const [shouldLoad, setShouldLoad] = useState(false)
+  const [filtroOp, setFiltroOp] = useState(true)
+  const [filtroInv, setFiltroInv] = useState(true)
+  const [filtroFin, setFiltroFin] = useState(true)
+
+  const baseParams = { fechaInicio, fechaFin, odooUser, odooKey, incluirProyecciones }
+  const mensualQuery = useFlujoCajaMensual({ ...baseParams, enabled: shouldLoad && agrupacion === 'mensual' })
+  const semanalQuery = useFlujoCajaSemanal({ ...baseParams, enabled: shouldLoad && agrupacion === 'semanal' })
+  const { data, isLoading, error } = agrupacion === 'mensual' ? mensualQuery : semanalQuery
+
+  const hasCredentials = !!odooUser && !!odooKey
+
+  const handleGenerar = () => {
+    setShouldLoad(false)
+    requestAnimationFrame(() => setShouldLoad(true))
+  }
+
+  const activityVisible: Record<string, boolean> = {
+    OPERACION: filtroOp,
+    INVERSION: filtroInv,
+    FINANCIAMIENTO: filtroFin,
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Credentials */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">🔐 Credenciales Odoo</CardTitle></CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-3 items-center">
+            <Input type="email" placeholder="usuario@riofuturo.cl" value={odooUser} onChange={e => setOdooUser(e.target.value)} className="w-56" />
+            <Input type="password" placeholder="Odoo API key" value={odooKey} onChange={e => setOdooKey(e.target.value)} className="w-56" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Controls */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Desde</label>
+              <Input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="w-40" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Hasta</label>
+              <Input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="w-40" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Agrupación</label>
+              <div className="flex gap-1">
+                <Button size="sm" variant={agrupacion === 'mensual' ? 'default' : 'outline'} onClick={() => setAgrupacion('mensual')}>Mensual</Button>
+                <Button size="sm" variant={agrupacion === 'semanal' ? 'default' : 'outline'} onClick={() => setAgrupacion('semanal')}>Semanal</Button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-muted-foreground">Opciones</label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={incluirProyecciones} onChange={e => setIncluirProyecciones(e.target.checked)} className="accent-primary" />
+                🔮 Incluir proyecciones
+              </label>
+            </div>
+            <Button onClick={handleGenerar} disabled={!hasCredentials || isLoading} className="self-end">
+              {isLoading ? '⏳ Cargando...' : '🔄 Generar'}
+            </Button>
+          </div>
+          {/* Activity filters */}
+          <div className="flex gap-4 mt-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={filtroOp} onChange={e => setFiltroOp(e.target.checked)} className="accent-green-500" />🟢 Operación
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={filtroInv} onChange={e => setFiltroInv(e.target.checked)} className="accent-blue-500" />🔵 Inversión
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={filtroFin} onChange={e => setFiltroFin(e.target.checked)} className="accent-purple-500" />🟣 Financiamiento
+            </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isLoading && <LoadingSpinner />}
+
+      {error && (
+        <Card className="border-red-500/30 bg-red-500/10">
+          <CardContent className="pt-4 text-sm text-red-400">
+            ❌ {(error as Error).message}
+          </CardContent>
+        </Card>
+      )}
+
+      {data && (
+        <>
+          {/* KPIs */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <KPICard label="Efectivo Inicial" value={data.conciliacion.efectivo_inicial} format="currency" />
+            <KPICard label="Variación Neta" value={data.conciliacion.variacion} format="currency" change_type={data.conciliacion.variacion >= 0 ? 'increase' : 'decrease'} />
+            <KPICard label="Efectivo Final" value={data.conciliacion.efectivo_final} format="currency" />
+          </div>
+
+          {/* Flujo Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Flujo de Caja IAS 7 — {agrupacion === 'mensual' ? 'Mensual' : 'Semanal'}</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-auto">
+              <table className="w-full text-sm min-w-max">
+                <thead>
+                  <tr className="border-b bg-muted/40">
+                    <th className="px-3 py-2 text-left sticky left-0 bg-muted/40 min-w-[240px]">Concepto</th>
+                    {data.meses.map(m => (
+                      <th key={m} className="px-3 py-2 text-right whitespace-nowrap">{m}</th>
+                    ))}
+                    <th className="px-3 py-2 text-right font-bold">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ACTIVITY_KEYS.map(actKey => {
+                    if (!activityVisible[actKey]) return null
+                    const actData = data.actividades[actKey]
+                    if (!actData) return null
+                    return (
+                      <>
+                        {/* Activity header */}
+                        <tr key={`hdr-${actKey}`} className="bg-muted/60">
+                          <td colSpan={data.meses.length + 2} className="px-3 py-2 font-bold text-foreground">
+                            {ACTIVITY_LABELS[actKey]}
+                          </td>
+                        </tr>
+                        {/* Conceptos */}
+                        {actData.conceptos.map(c => (
+                          <tr key={c.id} className="border-b border-border/30 hover:bg-muted/20">
+                            <td className="px-3 py-1.5 sticky left-0 bg-background pl-6 truncate max-w-[240px]" title={c.nombre}>{c.nombre}</td>
+                            {data.meses.map(m => {
+                              const v = c.montos_por_mes[m] ?? 0
+                              return (
+                                <td key={m} className={`px-3 py-1.5 text-right tabular-nums ${v < 0 ? 'text-red-400' : v > 0 ? 'text-green-400' : 'text-muted-foreground'}`}>
+                                  {v !== 0 ? formatCurrency(v) : '—'}
+                                </td>
+                              )
+                            })}
+                            <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${c.total < 0 ? 'text-red-400' : c.total > 0 ? 'text-green-400' : 'text-muted-foreground'}`}>
+                              {formatCurrency(c.total)}
+                            </td>
+                          </tr>
+                        ))}
+                        {/* Subtotal row */}
+                        <tr key={`sub-${actKey}`} className="border-t-2 border-border bg-muted/30">
+                          <td className="px-3 py-2 font-semibold sticky left-0 bg-muted/30">Subtotal {actKey.charAt(0) + actKey.slice(1).toLowerCase()}</td>
+                          {data.meses.map(m => {
+                            const v = actData.subtotal_por_mes[m] ?? 0
+                            return (
+                              <td key={m} className={`px-3 py-2 text-right tabular-nums font-semibold ${v < 0 ? 'text-red-400' : v > 0 ? 'text-green-400' : 'text-muted-foreground'}`}>
+                                {formatCurrency(v)}
+                              </td>
+                            )
+                          })}
+                          <td className={`px-3 py-2 text-right tabular-nums font-bold ${actData.subtotal < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                            {formatCurrency(actData.subtotal)}
+                          </td>
+                        </tr>
+                      </>
+                    )
+                  })}
+                  {/* Conciliación */}
+                  <tr className="border-t-2 border-primary/40 bg-primary/10">
+                    <td className="px-3 py-2 font-bold sticky left-0 bg-primary/10">💧 Efectivo Inicial</td>
+                    {data.meses.map(m => (
+                      <td key={m} className="px-3 py-2 text-right tabular-nums">
+                        {data.efectivo_por_mes[m] ? formatCurrency(data.efectivo_por_mes[m].inicial) : '—'}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-bold">{formatCurrency(data.conciliacion.efectivo_inicial)}</td>
+                  </tr>
+                  <tr className="bg-primary/5">
+                    <td className="px-3 py-2 font-bold sticky left-0 bg-primary/5">📈 Variación</td>
+                    {data.meses.map(m => {
+                      const v = data.efectivo_por_mes[m]?.variacion ?? 0
+                      return (
+                        <td key={m} className={`px-3 py-2 text-right tabular-nums font-medium ${v < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          {data.efectivo_por_mes[m] ? formatCurrency(v) : '—'}
+                        </td>
+                      )
+                    })}
+                    <td className={`px-3 py-2 text-right font-bold ${data.conciliacion.variacion < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      {formatCurrency(data.conciliacion.variacion)}
+                    </td>
+                  </tr>
+                  <tr className="border-t border-primary/40 bg-primary/10">
+                    <td className="px-3 py-2 font-bold sticky left-0 bg-primary/10">💰 Efectivo Final</td>
+                    {data.meses.map(m => (
+                      <td key={m} className="px-3 py-2 text-right tabular-nums">
+                        {data.efectivo_por_mes[m] ? formatCurrency(data.efectivo_por_mes[m].final) : '—'}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-bold text-primary">{formatCurrency(data.conciliacion.efectivo_final)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          {data.cuentas_sin_clasificar && data.cuentas_sin_clasificar.length > 0 && (
+            <Card className="border-yellow-500/30 bg-yellow-500/10">
+              <CardContent className="pt-4">
+                <p className="text-sm font-medium text-yellow-400 mb-2">⚠️ {data.cuentas_sin_clasificar.length} cuentas sin clasificar</p>
+                <p className="text-xs text-muted-foreground">{data.cuentas_sin_clasificar.slice(0, 5).join(', ')}{data.cuentas_sin_clasificar.length > 5 ? ` y ${data.cuentas_sin_clasificar.length - 5} más...` : ''}</p>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  )
 }
 
 export function FinanzasPage() {
   const [year, setYear] = useState(CURRENT_YEAR)
   const [months, setMonths] = useState<number[]>([])
-  const [modal, setModal] = useState<ModalState>({ open: false })
   const [agrupMeses, setAgrupMeses] = useState<number[]>([])
 
   const filters = { year, months: months.length ? months : undefined }
 
-  const { data: flujoCaja, isLoading: loadingFC } = useFlujoCaja(filters)
   const { data: eerr, isLoading: loadingEERR } = useEERR(filters)
   const { data: ytd, isLoading: loadingYTD } = useEERRYTD(filters)
   const { data: mensualizado, isLoading: loadingMens } = useEERRMensualizado(filters)
   const { data: cuentas = [], isLoading: loadingCuentas } = useCuentas(filters)
-  const { data: composicion = [], isLoading: loadingComp } = useComposicion(
-    { cuenta_id: modal.row?.id ?? '', periodo: modal.periodo ?? '' },
-    modal.open && !!modal.row,
-  )
   const { data: agrupado = [], isLoading: loadingAgrup } = useEERRAgrupado(year, agrupMeses)
   const { data: detalle = [], isLoading: loadingDetalle } = useEERRDetalle(year, months)
-
-  const handleCellClick = (row: FlujoCajaRow, periodo: string, value: number) => {
-    if (row.nivel < 2) return // Only show detail for leaf/near-leaf rows
-    setModal({ open: true, row, periodo, value })
-  }
-
-  const composicionCols: ColumnDef<typeof composicion[0]>[] = [
-    { accessorKey: 'descripcion', header: 'Descripción' },
-    { accessorKey: 'cuenta', header: 'Cuenta' },
-    {
-      accessorKey: 'monto',
-      header: 'Monto',
-      cell: ({ getValue }) => formatCurrency(Number(getValue())),
-    },
-    {
-      accessorKey: 'porcentaje',
-      header: '%',
-      cell: ({ getValue }) => `${Number(getValue()).toFixed(1)}%`,
-    },
-    { accessorKey: 'documento', header: 'Documento' },
-  ]
 
   return (
     <div className="space-y-4">
@@ -149,17 +345,7 @@ export function FinanzasPage() {
 
         {/* Flujo de Caja Tab */}
         <TabsContent value="flujo-caja" className="mt-4">
-          {loadingFC ? (
-            <LoadingSpinner />
-          ) : !flujoCaja ? (
-            <EmptyState title="Sin datos" description="No hay datos de flujo de caja para el período seleccionado." />
-          ) : (
-            <EnterpriseTable
-              data={flujoCaja}
-              onCellClick={handleCellClick}
-              heatmapConfig={{ enabled: true, type: 'blue' }}
-            />
-          )}
+          <FlujoCajaTab />
         </TabsContent>
 
         {/* YTD Tab */}
@@ -449,24 +635,7 @@ export function FinanzasPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Composición Modal */}
-      <Dialog open={modal.open} onOpenChange={(o) => !o && setModal({ open: false })}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              Composición — {modal.row?.cuenta} / {modal.periodo}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-2">
-            Total: <span className="text-foreground font-medium">{modal.value !== undefined ? formatCurrency(modal.value) : '—'}</span>
-          </p>
-          {loadingComp ? (
-            <LoadingSpinner />
-          ) : (
-            <DataTable columns={composicionCols} data={composicion} searchable={false} />
-          )}
-        </DialogContent>
-      </Dialog>
+
     </div>
   )
 }

@@ -159,7 +159,7 @@ function LotePTTab({ odooUser, odooKey }: { odooUser: string; odooKey: string })
               <Card>
                 <CardHeader className="py-3 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm">📦 Lotes MP Utilizados ({lotes.length})</CardTitle>
-                  <ExportButton data={lotes} filename={`trazabilidad_${lotePT}`} />
+                  <ExportButton data={lotes as unknown as Record<string, unknown>[]} filename={`trazabilidad_${lotePT}`} />
                 </CardHeader>
                 <CardContent>
                   <DataTable columns={columns} data={lotes} />
