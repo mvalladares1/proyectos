@@ -88,7 +88,7 @@ def fetch_compras_overview(_username, _password, fecha_inicio, fecha_fin):
                 "fecha_inicio": fecha_inicio,
                 "fecha_fin": fecha_fin
             },
-            timeout=30
+            timeout=120
         )
         if resp.status_code == 200:
             return resp.json()
