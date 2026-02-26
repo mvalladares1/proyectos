@@ -1,4 +1,4 @@
-"""
+﻿"""
 Servicio de Trazabilidad de Pallets
 Traza un pallet hacia atras mostrando cadenas de composicion en formato tabla:
   Pallet Origen | Cadena de Trazabilidad         | Guia Despacho | Productor
@@ -50,8 +50,8 @@ class TrazabilidadPalletService:
         if not all_consumidos:
             return self._err(pkg_name, "La orden no tiene pallets consumidos")
 
-        consumidos_str = " - ".join(self._short(n) for _, n in all_consumidos)
         muestra = self._sample(all_consumidos, SAMPLE_FIRST)
+        consumidos_str = " - ".join(self._short(n) for _, n in muestra)
 
         # Trazar cada pallet consumido
         cadenas: List[Dict] = []
@@ -93,14 +93,14 @@ class TrazabilidadPalletService:
             recep = self._buscar_recepcion(pkg_id)
             if recep:
                 result.append({
-                    "pallet_origen": path[0],
+                    "pallet_origen": path[-1],
                     "cadena": " \u2192 ".join(path),
                     "guia_despacho": recep.get("guia_despacho", ""),
                     "productor": recep.get("proveedor", ""),
                 })
             else:
                 result.append({
-                    "pallet_origen": path[0],
+                    "pallet_origen": path[-1],
                     "cadena": "NO TIENE TRAZABILIDAD",
                     "guia_despacho": "",
                     "productor": "",
@@ -112,7 +112,7 @@ class TrazabilidadPalletService:
         if not consumidos:
             recep = self._buscar_recepcion(pkg_id)
             result.append({
-                "pallet_origen": path[0],
+                "pallet_origen": path[-1],
                 "cadena": " \u2192 ".join(path),
                 "guia_despacho": recep.get("guia_despacho", "") if recep else "",
                 "productor": recep.get("proveedor", "") if recep else "",
