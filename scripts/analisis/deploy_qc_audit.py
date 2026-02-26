@@ -1,8 +1,11 @@
 """
-Fix v3: Columnas reales + mensajes no-borrables
-================================================
-1. Valida columnas vs information_schema antes de SQL
-2. Usa sudo().message_post() para que el autor sea OdooBot (no borrable)
+Fix v6: Snapshot de valores actuales (safe_eval compatible)
+============================================================
+safe_eval de Odoo bloquea env.registry.cursor() e imports.
+No es posible leer valores anteriores desde la automation.
+
+Solución: Registra TODOS los valores actuales del registro modificado
+como snapshot. Comparando snapshots consecutivos se puede ver qué cambió.
 """
 import sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -23,6 +26,27 @@ def search_read(model, domain, fields, limit=500, order=None):
     if order:
         kwargs['order'] = order
     return models_proxy.execute_kw(db, uid, password, model, 'search_read', [domain], kwargs)
+
+def get_editable_fields(child_model):
+    child_fields = models_proxy.execute_kw(db, uid, password, child_model, 'fields_get', [],
+        {'attributes': ['string', 'type', 'readonly', 'store']})
+    if 'x_quality_check_id' not in child_fields:
+        return None, []
+    candidates = {}
+    for fname, finfo in child_fields.items():
+        if not fname.startswith('x_studio'):
+            continue
+        if finfo.get('readonly', False):
+            continue
+        if not finfo.get('store', True):
+            continue
+        ftype = finfo.get('type', '')
+        if ftype in ('one2many', 'many2many', 'binary'):
+            continue
+        # Solo tipos con valores simples que se puedan mostrar
+        if ftype in ('float', 'integer', 'char', 'text', 'selection', 'boolean', 'date', 'datetime'):
+            candidates[fname] = {'label': finfo['string'], 'type': ftype}
+    return candidates, list(candidates.keys())
 
 ALL_CHILD_MODELS = {
     'x_quality_check_line_35406': 'Arandano',
@@ -47,52 +71,39 @@ for child_model, label in ALL_CHILD_MODELS.items():
     
     model_info = search_read('ir.model', [['model', '=', child_model]], ['id'], limit=1)
     if not model_info:
-        print(f"  SKIP: Modelo no encontrado")
+        print(f"  SKIP: No encontrado")
         continue
     child_model_id = model_info[0]['id']
     
-    child_fields = models_proxy.execute_kw(db, uid, password, child_model, 'fields_get', [],
-        {'attributes': ['string', 'type', 'readonly', 'store', 'related', 'compute']})
-    if 'x_quality_check_id' not in child_fields:
+    field_info, trigger_field_names = get_editable_fields(child_model)
+    if field_info is None:
         print(f"  SKIP: Sin campo padre")
         continue
-    
-    # Solo campos que son STORED, NO readonly, NO computed, NO related
-    editable_fields = {}
-    trigger_field_names = []
-    for fname, finfo in child_fields.items():
-        if not fname.startswith('x_studio'):
-            continue
-        if finfo.get('readonly', False):
-            continue
-        if not finfo.get('store', True):
-            continue
-        ftype = finfo.get('type', '')
-        if ftype in ('one2many', 'many2many', 'binary'):
-            continue
-        # Excluir campos computed y related (no son columnas reales)
-        if finfo.get('compute') or finfo.get('related'):
-            continue
-        editable_fields[fname] = finfo['string']
-        trigger_field_names.append(fname)
-    
-    if not editable_fields:
-        print(f"  SKIP: Sin campos editables")
+    if not field_info:
+        print(f"  SKIP: Sin campos")
         continue
+    
+    print(f"  Campos: {len(field_info)}")
     
     field_records = search_read('ir.model.fields',
         [['model', '=', child_model], ['name', 'in', trigger_field_names]],
         ['id'], limit=100)
     trigger_ids = [f['id'] for f in field_records]
     
-    labels_dict_str = repr(editable_fields)
-    campos_list_str = repr(list(editable_fields.keys()))
+    # Separar campos numéricos (float/int) de texto para mejor presentación
+    numeric_fields = {k: v for k, v in field_info.items() if v['type'] in ('float', 'integer')}
+    other_fields = {k: v for k, v in field_info.items() if v['type'] not in ('float', 'integer')}
     
-    # Código mejorado: valida columnas reales + sudo() para no-borrable
-    audit_code = f'''# RF: Audit detallado - {label}
-TABLE = '{child_model}'
+    campos_list_str = repr(list(field_info.keys()))
+    labels_dict_str = repr({k: v['label'] for k, v in field_info.items()})
+    numeric_list_str = repr(list(numeric_fields.keys()))
+    
+    # Código simple, safe_eval compatible
+    # Muestra snapshot de valores numéricos (que son los importantes en QC)
+    audit_code = f'''# RF: Audit v6 - {label}
 CAMPOS = {campos_list_str}
 LABELS = {labels_dict_str}
+NUMERICOS = {numeric_list_str}
 
 for rec in records:
     parent = rec.x_quality_check_id
@@ -101,46 +112,26 @@ for rec in records:
     if parent.x_studio_titulo_control_calidad != 'Control de calidad Recepcion MP':
         continue
 
-    changes = []
-    try:
-        new_cr = env.registry.cursor()
-        try:
-            # Obtener columnas REALES de la tabla
-            new_cr.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
-                (TABLE,)
-            )
-            real_cols = set(r[0] for r in new_cr.fetchall())
-            valid = [c for c in CAMPOS if c in real_cols]
-
-            if valid:
-                cols_sql = ', '.join(valid)
-                new_cr.execute("SELECT " + cols_sql + " FROM " + TABLE + " WHERE id = %s", (rec.id,))
-                old_row = new_cr.fetchone()
-                if old_row:
-                    for i, fname in enumerate(valid):
-                        old_val = old_row[i]
-                        new_val = rec[fname]
-                        if str(old_val or '') != str(new_val or ''):
-                            lbl = LABELS.get(fname, fname)
-                            changes.append(
-                                "<li><b>" + lbl + "</b>: " +
-                                str(old_val if old_val is not None else '') +
-                                " &#8594; " +
-                                str(new_val if new_val is not None else '') +
-                                "</li>"
-                            )
-        finally:
-            new_cr.close()
-    except Exception as e:
-        changes = ["<li>Linea modificada (error: " + str(e)[:60] + ")</li>"]
-
-    if changes:
-        linea = rec.x_name or str(rec.id)
-        body = "<p><b>&#9998; Linea {label} [" + str(linea) + "] modificada por " + env.user.name + ":</b></p>"
-        body += "<ul>" + "".join(changes) + "</ul>"
-        # sudo() para que el autor sea OdooBot -> no borrable por usuarios
-        parent.sudo().message_post(body=body, message_type='notification', subtype_xmlid='mail.mt_note')
+    linea = rec.x_name or str(rec.id)
+    
+    # Construir tabla con valores actuales (solo los que tienen valor)
+    rows = []
+    for fname in CAMPOS:
+        val = rec[fname]
+        if val is not None and val is not False and str(val).strip() and str(val) != '0' and str(val) != '0.0':
+            lbl = LABELS.get(fname, fname)
+            rows.append("<tr><td><b>" + lbl + "</b></td><td>" + str(val) + "</td></tr>")
+    
+    if rows:
+        body = "<p><b>&#9998; Linea {label} [" + str(linea) + "] modificada por " + env.user.name + "</b></p>"
+        body += "<table border='1' style='border-collapse:collapse;font-size:12px;'>"
+        body += "<tr><th>Campo</th><th>Valor actual</th></tr>"
+        body += "".join(rows)
+        body += "</table>"
+    else:
+        body = "<p><b>&#9998; Linea {label} [" + str(linea) + "] modificada por " + env.user.name + "</b></p>"
+    
+    parent.sudo().message_post(body=body, message_type='notification', subtype_xmlid='mail.mt_note')
 '''
     
     existing = search_read('base.automation', [['name', '=', automation_name]], ['id'], limit=1)
@@ -151,7 +142,7 @@ for rec in records:
             'code': audit_code,
             'trigger_field_ids': [(6, 0, trigger_ids)],
         }])
-        print(f"  ACTUALIZADA: ID={auto_id} | {len(trigger_ids)} triggers | {len(editable_fields)} labels")
+        print(f"  ACTUALIZADA: ID={auto_id}")
     else:
         auto_id = models_proxy.execute_kw(db, uid, password, 'base.automation', 'create', [{
             'name': automation_name,
@@ -162,38 +153,10 @@ for rec in records:
             'active': True,
             'trigger_field_ids': [(6, 0, trigger_ids)],
         }])
-        print(f"  CREADA: ID={auto_id} | {len(trigger_ids)} triggers | {len(editable_fields)} labels")
-
-# También actualizar las automations ON CREATE para usar sudo()
-print(f"\n{'='*60}")
-print("  Actualizando ON CREATE para usar sudo() (no-borrable)")
-print(f"{'='*60}")
-
-for child_model, label in ALL_CHILD_MODELS.items():
-    automation_name = f"RF: Audit nueva linea {label}"
-    existing = search_read('base.automation', [['name', '=', automation_name]], ['id'], limit=1)
-    if not existing:
-        continue
-    
-    create_code = f'''# RF: Audit nueva linea {label}
-for rec in records:
-    parent = rec.x_quality_check_id
-    if not parent:
-        continue
-    if parent.x_studio_titulo_control_calidad != 'Control de calidad Recepcion MP':
-        continue
-    linea = rec.x_name or str(rec.id)
-    body = "<p><b>&#10010; Nueva linea {label} [" + str(linea) + "] creada por " + env.user.name + "</b></p>"
-    parent.sudo().message_post(body=body, message_type='notification', subtype_xmlid='mail.mt_note')
-'''
-    models_proxy.execute_kw(db, uid, password, 'base.automation', 'write', 
-        [[existing[0]['id']], {'code': create_code}])
-    print(f"  {label}: actualizada (sudo)")
+        print(f"  CREADA: ID={auto_id}")
 
 print(f"\n{'='*70}")
-print("DESPLIEGUE v3 COMPLETADO")
+print("DESPLIEGUE v6 COMPLETADO")
 print(f"{'='*70}")
-print(f"\nCambios:")
-print(f"  1. Solo usa columnas REALES de la BD (evita error information_schema)")
-print(f"  2. sudo().message_post() -> autor es OdooBot -> NO borrable por usuarios")
-print(f"  3. message_type='notification' -> protegido contra eliminacion")
+print(f"\nCambio: Muestra tabla con valores actuales despues de cada edicion")
+print(f"Comparando dos entradas consecutivas se puede ver que cambio")

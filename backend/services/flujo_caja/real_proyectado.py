@@ -626,7 +626,7 @@ class RealProyectadoCalculator:
                 lineas_proyecciones = self.odoo.search_read(
                     'account.move.line',
                     [['move_id', 'in', moves_proyec_ids]],
-                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance'],
+                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance', 'display_type'],
                     limit=50000
                 )
 
@@ -741,6 +741,10 @@ class RealProyectadoCalculator:
                 ponderadores = defaultdict(float)  # (ifrs3, analitico) -> peso
 
                 for linea in lineas_move:
+                    # Excluir línea de contrapartida (payable/receivable) para no diluir pesos
+                    if linea.get('display_type') == 'payment_term':
+                        continue
+
                     account_data = linea.get('account_id')
                     account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
                     ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()

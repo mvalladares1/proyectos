@@ -1,6 +1,7 @@
 """
-Debug v2: Identificar el modelo correcto y probar la automation
-===============================================================
+Diagnostico: Probar lectura de valores anteriores via nueva transaccion
+=======================================================================
+Simula lo que la automation haría: abre cursor nuevo, lee valores con ORM.
 """
 import sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -23,163 +24,83 @@ def search_read(model, domain, fields, limit=100, order=None):
     return models.execute_kw(db, uid, password, model, 'search_read', [domain], kwargs)
 
 # =============================================
-# 1. Buscar QC16101 (el que el usuario está editando)
+# 1. Obtener el codigo actual de la automation
 # =============================================
 print("=" * 70)
-print("1. BUSCAR QC16101")
+print("1. CODIGO ACTUAL DE LA AUTOMATION")
 print("=" * 70)
 
-qc = search_read('quality.check', [['name', '=', 'QC16101']], 
-    ['id', 'name', 'quality_state', 'x_studio_titulo_control_calidad',
-     'x_studio_frambuesa', 'x_studio_frutilla', 'x_studio_mp',
-     'x_studio_one2many_field_ipdDS', 'x_studio_one2many_field_rgA7I',
-     'x_studio_one2many_field_RdQtm', 'x_studio_one2many_field_eNeCg',
-     'x_studio_one2many_field_nsxt0', 'x_studio_one2many_field_vloaS',
-     'x_studio_one2many_field_3jSXq', 'x_studio_one2many_field_mZmK2'],
-    limit=1)
-
-if qc:
-    q = qc[0]
-    print(f"  QC: {q['name']} (ID={q['id']}) | state={q['quality_state']}")
-    print(f"  Tipo: {q['x_studio_titulo_control_calidad']}")
-    
-    # Mostrar cada one2many y cuantas lineas tiene
-    o2m_fields = {
-        'x_studio_frambuesa': 'x_quality_check_line_14b00',
-        'x_studio_frutilla': 'x_quality_check_line_89a53',
-        'x_studio_mp': 'x_quality_check_line_19657',
-        'x_studio_one2many_field_ipdDS': 'x_quality_check_line_35406 (Arandano)',
-        'x_studio_one2many_field_rgA7I': 'x_quality_check_line_1d183 (Frambuesa/Mora)',
-        'x_studio_one2many_field_RdQtm': 'x_quality_check_line_2efd1 (Lineas nuevas)',
-        'x_studio_one2many_field_eNeCg': 'x_quality_check_line_0d011 (Lineas nuevas)',
-        'x_studio_one2many_field_nsxt0': 'x_quality_check_line_17bfb (Lineas nuevas)',
-        'x_studio_one2many_field_vloaS': 'x_quality_check_line_f0f7b (Lineas nuevas)',
-        'x_studio_one2many_field_3jSXq': 'x_quality_check_line_2a594 (Despacho)',
-        'x_studio_one2many_field_mZmK2': 'x_quality_check_line_46726',
-    }
-    
-    for field_name, model_name in o2m_fields.items():
-        ids = q.get(field_name, [])
-        if ids:
-            print(f"  {field_name} -> {model_name}: {len(ids)} lineas (IDs: {ids[:5]})")
+auto = search_read('base.automation', 
+    [['name', '=', 'RF: Audit linea Lineas nuevas Frambuesa']],
+    ['id', 'code'], limit=1)
+if auto:
+    print(f"  ID: {auto[0]['id']}")
+    print(f"  Code:\n{auto[0]['code']}")
 
 # =============================================
-# 2. Buscar campos de los modelos con "dao_mecanico" o "inmadura"
+# 2. Actualizar para mostrar error real
 # =============================================
 print(f"\n{'='*70}")
-print("2. BUSCAR CAMPOS 'dao_mecanico' e 'inmadura' EN TODOS LOS MODELOS HIJOS")
+print("2. ACTUALIZANDO PARA MOSTRAR ERROR REAL")
 print(f"{'='*70}")
 
-child_model_names = [
-    'x_quality_check_line_14b00',
-    'x_quality_check_line_89a53',
-    'x_quality_check_line_19657',
-    'x_quality_check_line_35406',
-    'x_quality_check_line_1d183',
-    'x_quality_check_line_2efd1',
-    'x_quality_check_line_0d011',
-    'x_quality_check_line_17bfb',
-    'x_quality_check_line_f0f7b',
-    'x_quality_check_line_2a594',
-    'x_quality_check_line_46726',
-]
+# Código temporal que muestra el error completo
+debug_code = '''# RF: Audit DEBUG - Lineas nuevas Frambuesa
+import traceback as tb
 
-for cm in child_model_names:
+MODEL = 'x_quality_check_line_46726'
+CAMPOS = ['x_studio_frutos_inmaduros', 'x_studio_dao_mecanico', 'x_studio_frutos_sobre_maduros', 'x_studio_drupeolos_blancos']
+LABELS = {'x_studio_frutos_inmaduros': 'Inmadura(grs)', 'x_studio_dao_mecanico': 'Daño Mecanico', 'x_studio_frutos_sobre_maduros': 'Sobremaduros(grs)', 'x_studio_drupeolos_blancos': 'Drupeolos blancos'}
+
+for rec in records:
+    parent = rec.x_quality_check_id
+    if not parent:
+        continue
+    if parent.x_studio_titulo_control_calidad != 'Control de calidad Recepcion MP':
+        continue
+
+    changes = []
+    error_msg = ''
     try:
-        cf = models.execute_kw(db, uid, password, cm, 'fields_get', [],
-            {'attributes': ['string', 'type']})
-        
-        # Buscar campos específicos
-        relevant = {k: v for k, v in cf.items() 
-                    if 'mecanico' in k.lower() or 'mecanico' in v.get('string', '').lower()
-                    or 'inmadu' in k.lower() or 'inmadu' in v.get('string', '').lower()
-                    or 'dao_mec' in k.lower()
-                    or k == 'x_studio_inmadura_1' or k == 'x_studio_inmadura'}
-        
-        if relevant:
-            print(f"\n  {cm}:")
-            for k, v in relevant.items():
-                print(f"    {k}: {v['type']} | '{v['string']}'")
-    except Exception as e:
-        print(f"\n  {cm}: ERROR - {str(e)[:60]}")
-
-# =============================================
-# 3. Verificar cuál modelo corresponde a "Líneas nuevas Frambuesa"
-# =============================================
-print(f"\n{'='*70}")
-print("3. MODELO QUE CORRESPONDE A 'Lineas nuevas Frambuesa'")
-print(f"{'='*70}")
-
-# Buscar por el campo x_studio_one2many que tiene los records del QC16101
-if qc:
-    qc_id = qc[0]['id']
-    
-    # Probar cada modelo con registros del QC16101
-    for cm in child_model_names:
+        new_cr = env.registry.cursor()
         try:
-            recs = search_read(cm, [['x_quality_check_id', '=', qc_id]], ['id', 'x_name'], limit=5)
-            if recs:
-                # Intentar leer campos específicos que aparecen en el screenshot
-                fields_to_check = []
-                cf = models.execute_kw(db, uid, password, cm, 'fields_get', [],
-                    {'attributes': ['string', 'type']})
-                
-                for fname, finfo in cf.items():
-                    label_lower = finfo.get('string', '').lower()
-                    if 'inmadura' in label_lower or 'daño mecanico' in label_lower or 'sobremaduros' in label_lower or 'drupeolo' in label_lower:
-                        fields_to_check.append(fname)
-                
-                if fields_to_check:
-                    print(f"\n  {cm}: {len(recs)} registros con parent QC16101")
-                    print(f"    Campos relevantes encontrados: {fields_to_check}")
-                    # Leer primer registro con esos campos
-                    sample = search_read(cm, [['x_quality_check_id', '=', qc_id]], 
-                        ['id', 'x_name'] + fields_to_check, limit=1)
-                    if sample:
-                        print(f"    Sample: {sample[0]}")
-        except Exception as e:
-            pass
+            new_env = env(cr=new_cr)
+            old_rec = new_env[MODEL].browse(rec.id)
+            old_vals = old_rec.read(CAMPOS)
+            if old_vals:
+                old_data = old_vals[0]
+                for fname in CAMPOS:
+                    old_val = old_data.get(fname)
+                    new_val = rec[fname]
+                    if isinstance(old_val, (list, tuple)):
+                        old_val = old_val[0] if old_val else False
+                    old_s = str(old_val) if old_val is not None and old_val is not False else ''
+                    new_s = str(new_val) if new_val is not None and new_val is not False else ''
+                    if old_s != new_s:
+                        lbl = LABELS.get(fname, fname)
+                        changes.append("<li><b>" + lbl + "</b>: " + old_s + " &#8594; " + new_s + "</li>")
+            else:
+                error_msg = 'read() retorno vacio'
+        finally:
+            new_cr.close()
+    except Exception as e:
+        error_msg = str(e) + " | " + tb.format_exc()[-200:]
 
-# =============================================
-# 4. Probar si la automation tiene error de runtime
-# =============================================
-print(f"\n{'='*70}")
-print("4. VERIFICAR ERRORES DE LA AUTOMATION")
-print(f"{'='*70}")
-
-# Buscar errores recientes
-try:
-    errors = search_read('ir.logging',
-        [['type', '=', 'server'], ['level', 'in', ['ERROR', 'WARNING']]],
-        ['name', 'message', 'create_date', 'func', 'path', 'line'],
-        limit=15, order='id desc')
-    
-    if errors:
-        for e in errors:
-            msg = str(e.get('message', ''))[:200]
-            if 'audit' in msg.lower() or 'automation' in msg.lower() or 'datetime' in msg.lower() or 'quality' in msg.lower() or 'RF:' in msg:
-                print(f"  [{e.get('create_date')}] {e.get('name')}")
-                print(f"    {msg}")
-                print()
+    linea = rec.x_name or str(rec.id)
+    if changes:
+        body = "<p><b>&#9998; Linea [" + str(linea) + "] modificada por " + env.user.name + ":</b></p>"
+        body += "<ul>" + "".join(changes) + "</ul>"
+    elif error_msg:
+        body = "<p><b>&#9998; DEBUG ERROR [" + str(linea) + "]:</b></p><pre>" + error_msg + "</pre>"
     else:
-        print("  No hay errores recientes")
-except Exception as ex:
-    # Try looking for traceback in another way
-    print(f"  No se puede acceder a ir.logging: {str(ex)[:100]}")
+        body = "<p><b>&#9998; Linea [" + str(linea) + "] modificada por " + env.user.name + " (sin cambios detectados en campos monitoreados)</b></p>"
     
-    # Check mail.mail for error notifications
-    try:
-        mail_errors = search_read('mail.mail', 
-            [['state', '=', 'exception']],
-            ['email_to', 'subject', 'body_html', 'failure_reason'],
-            limit=5, order='id desc')
-        if mail_errors:
-            print(f"\n  Correos con error: {len(mail_errors)}")
-            for m in mail_errors:
-                print(f"    Subject: {m.get('subject', '')[:80]}")
-    except:
-        pass
+    parent.sudo().message_post(body=body, message_type='notification', subtype_xmlid='mail.mt_note')
+'''
 
-print(f"\n{'='*70}")
-print("DEBUG v2 COMPLETADO")
-print(f"{'='*70}")
+auto_id = auto[0]['id']
+result = models.execute_kw(db, uid, password, 'base.automation', 'write', 
+    [[auto_id], {'code': debug_code}])
+print(f"  Actualizada ID={auto_id}: {result}")
+print(f"\nAhora edita un campo en Lineas nuevas Frambuesa y mira el chatter")
+print(f"Mostrara el error completo para diagnosticar")
