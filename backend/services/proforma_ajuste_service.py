@@ -2,6 +2,7 @@
 Servicio para gestionar facturas de proveedor en borrador (Proformas)
 Permite consultar, comparar y ajustar moneda USD → CLP, y gestionar proformas CLP directas.
 """
+import re
 from typing import List, Dict, Any, Optional
 from shared.odoo_client import OdooClient
 
@@ -303,7 +304,10 @@ def get_facturas_borrador(
                     # Guardar en cache solo los pickings sin devolución
                     for p in pickings_data:
                         if p["id"] not in pickings_con_devolucion:
-                            picking_guia_cache[p["id"]] = p.get("x_studio_gua_de_despacho", "") or ""
+                            # Extraer solo números de la guía (ej: "72a" -> "72")
+                            guia_raw = p.get("x_studio_gua_de_despacho", "") or ""
+                            guia_numeros = re.sub(r'[^0-9]', '', str(guia_raw))
+                            picking_guia_cache[p["id"]] = guia_numeros
                 except:
                     pass
             
