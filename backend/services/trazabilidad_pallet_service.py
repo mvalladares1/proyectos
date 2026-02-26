@@ -1,95 +1,117 @@
 """
-Servicio de Trazabilidad de Pallets v3
-Muestra jerarquia de composicion:
-  PACK X se conforma por A, B, C
-    A se conforma por D, E
-      D viene de recepcion (guia, productor)
+Servicio de Trazabilidad de Pallets v4
+Genera Excel con formato:
+  Pack | Pallets Consumidos | Pallet Origen | Cadena de Trazabilidad | Guía Despacho | Productor
+
+Algoritmo:
+  1. Encontrar la OP del pack ingresado
+  2. Obtener TODOS los pallets consumidos por esa OP
+  3. Para CADA pallet consumido, trazar recursivamente:
+     - Si no tiene OP  → buscar recepción → fin de cadena
+     - Si tiene OP     → obtener sus consumidos → seguir trazando
+  4. Cada camino que termine en recepción = 1 fila del Excel
 """
 import logging
-import random
 from typing import Dict, List, Tuple, Optional, Any
 from shared.odoo_client import OdooClient
 
 logger = logging.getLogger(__name__)
 
-MAX_DEPTH = 10
-SAMPLE_N = 3
+MAX_DEPTH = 15
 
 
 class TrazabilidadPalletService:
 
     def __init__(self, username: str, password: str):
         self.odoo = OdooClient(username=username, password=password)
-        self._visited: set = set()
+
+    # ── API pública ──────────────────────────────────────────────
 
     def trazar_pallet(self, pallet_name: str) -> Dict[str, Any]:
-        self._visited = set()
-
         pkg = self._find_package(pallet_name)
         if not pkg:
-            return {"error": f"No se encontro el pallet '{pallet_name}'", "filas": []}
+            return {"error": f"No se encontró el pallet '{pallet_name}'", "filas": []}
 
-        filas: List[Dict] = []
-        self._trazar_jerarquia(pkg["id"], pkg["name"], 0, filas)
-
-        return {"error": None, "pack": pkg["name"], "filas": filas}
-
-    def _trazar_jerarquia(self, pkg_id: int, pkg_name: str, nivel: int, filas: List[Dict]):
-        if pkg_id in self._visited or nivel > MAX_DEPTH:
-            return
-        self._visited.add(pkg_id)
-
-        short_name = self._short(pkg_name)
-        mo = self._find_mo(pkg_id)
-
+        mo = self._find_mo(pkg["id"])
         if not mo:
-            # HOJA: no fue producido, es recepcion
-            recep = self._buscar_recepcion(pkg_id)
-            producto = self._get_product(pkg_id)
-            filas.append({
-                "nivel": nivel,
-                "pallet": short_name,
-                "se_conforma_por": "(RECEPCION)",
-                "producto": producto,
-                "guia_despacho": recep.get("guia_despacho", "") if recep else "",
-                "productor": recep.get("proveedor", "") if recep else "",
-                "fecha_recepcion": recep.get("fecha", "") if recep else "",
-            })
-            return
+            return {"error": f"'{pallet_name}' no tiene orden de producción", "filas": []}
 
-        # Tiene orden de produccion
         consumidos = self._get_consumidos(mo["id"])
         if not consumidos:
+            return {"error": f"La OP de '{pallet_name}' no tiene pallets consumidos", "filas": []}
+
+        consumidos_str = " - ".join(self._short(n) for _, n in consumidos)
+
+        filas: List[Dict] = []
+        for c_id, c_name in consumidos:
+            visited: set = set()
+            paths = self._trazar_caminos(c_id, c_name, [self._short(c_name)], visited, 0)
+
+            if not paths:
+                filas.append({
+                    "pallet_origen": self._short(c_name),
+                    "cadena": "NO TIENE TRAZABILIDAD",
+                    "guia_despacho": "",
+                    "productor": "",
+                })
+            else:
+                for p in paths:
+                    filas.append({
+                        "pallet_origen": self._short(c_name),
+                        "cadena": " \u2192 ".join(p["chain"]),
+                        "guia_despacho": p["guia"],
+                        "productor": p["productor"],
+                    })
+
+        return {
+            "error": None,
+            "pack": pkg["name"],
+            "pallets_consumidos": consumidos_str,
+            "filas": filas,
+        }
+
+    # ── Recursión ────────────────────────────────────────────────
+
+    def _trazar_caminos(
+        self,
+        pkg_id: int,
+        pkg_name: str,
+        chain: List[str],
+        visited: set,
+        depth: int,
+    ) -> List[Dict]:
+        """Traza recursivamente un pallet hacia atrás.
+        Retorna lista de {chain: [str,...], guia: str, productor: str}.
+        Cada elemento = un camino que termina en recepción."""
+        if pkg_id in visited or depth > MAX_DEPTH:
+            return []
+        visited.add(pkg_id)
+
+        mo = self._find_mo(pkg_id)
+        if not mo:
+            # Sin OP → buscar recepción (hoja del árbol)
             recep = self._buscar_recepcion(pkg_id)
-            producto = self._get_product(pkg_id)
-            filas.append({
-                "nivel": nivel,
-                "pallet": short_name,
-                "se_conforma_por": "(SIN CONSUMIDOSY",
-                "producto": producto,
-                "guia_despacho": recep.get("guia_despacho", "") if recep else "",
-                "productor": recep.get("proveedor", "") if recep else "",
-                "fecha_recepcion": "",
-            })
-            return
+            if recep:
+                return [{"chain": chain, "guia": recep["guia_despacho"], "productor": recep["proveedor"]}]
+            return []  # sin trazabilidad
 
-        muestra = self._sample(consumidos, SAMPLE_N)
-        consumidos_str = ", ".join(self._short(n) for _, n in muestra)
-        producto = self._m2o_name(mo.get("product_id"))
+        # Tiene OP → buscar qué pallets consumió
+        consumidos = self._get_consumidos(mo["id"])
+        if not consumidos:
+            # OP sin consumos visibles → tratar como hoja
+            recep = self._buscar_recepcion(pkg_id)
+            if recep:
+                return [{"chain": chain, "guia": recep["guia_despacho"], "productor": recep["proveedor"]}]
+            return []
 
-        filas.append({
-            "nivel": nivel,
-            "pallet": short_name,
-            "se_conforma_por": consumidos_str,
-            "producto": producto,
-            "guia_despacho": "",
-            "productor": "",
-            "fecha_recepcion": "",
-        })
+        results: List[Dict] = []
+        for c_id, c_name in consumidos:
+            new_chain = chain + [self._short(c_name)]
+            sub = self._trazar_caminos(c_id, c_name, new_chain, visited, depth + 1)
+            results.extend(sub)
+        return results
 
-        # Trazar cada consumido
-        for c_id, c_name in muestra:
-            self._trazar_jerarquia(c_id, c_name, nivel + 1, filas)
+    # ── Helpers Odoo ─────────────────────────────────────────────
 
     def _find_package(self, name: str) -> Optional[Dict]:
         recs = self.odoo.search_read(
@@ -101,6 +123,7 @@ class TrazabilidadPalletService:
         return recs[0] if recs else None
 
     def _find_mo(self, pkg_id: int) -> Optional[Dict]:
+        """Encuentra la OP que produjo un pallet (result_package_id → move → production_id)."""
         sml = self.odoo.search_read(
             'stock.move.line',
             [['result_package_id', '=', pkg_id]],
@@ -132,16 +155,29 @@ class TrazabilidadPalletService:
         return mos[0] if mos else None
 
     def _get_consumidos(self, mo_id: int) -> List[Tuple[int, str]]:
+        """Obtiene TODOS los pallets consumidos por una OP (via raw_material_production_id)."""
+        moves = self.odoo.search_read(
+            'stock.move',
+            [
+                ['raw_material_production_id', '=', mo_id],
+                ['state', '=', 'done'],
+            ],
+            ['id'],
+        )
+        if not moves:
+            return []
+
+        move_ids = [m['id'] for m in moves]
         smls = self.odoo.search_read(
             'stock.move.line',
             [
-                ['production_id', '=', mo_id],
+                ['move_id', 'in', move_ids],
                 ['package_id', '!=', False],
-                ['state', '=', 'done'],
             ],
             ['package_id'],
         )
-        seen = {}
+
+        seen: Dict[int, str] = {}
         for s in smls:
             pid = self._m2o_id(s.get('package_id'))
             pname = self._m2o_name(s.get('package_id'))
@@ -149,23 +185,12 @@ class TrazabilidadPalletService:
                 seen[pid] = pname or str(pid)
         return [(k, v) for k, v in seen.items()]
 
-    def _get_product(self, pkg_id: int) -> str:
-        quants = self.odoo.search_read(
-            'stock.quant',
-            [['package_id', '=', pkg_id]],
-            ['product_id'],
-            limit=1,
-        )
-        if not quants:
-            return ''
-        return self._m2o_name(quants[0].get('product_id')) or ''
-
     def _buscar_recepcion(self, pkg_id: int) -> Optional[Dict]:
+        """Busca el picking de recepción donde llegó un pallet."""
         smls = self.odoo.search_read(
             'stock.move.line',
             [
                 ['result_package_id', '=', pkg_id],
-                ['state', '=', 'done'],
             ],
             ['picking_id'],
             limit=5,
@@ -192,6 +217,8 @@ class TrazabilidadPalletService:
                 }
         return None
 
+    # ── Utilidades ───────────────────────────────────────────────
+
     @staticmethod
     def _m2o_id(val) -> Optional[int]:
         if isinstance(val, (list, tuple)) and len(val) >= 1:
@@ -208,11 +235,12 @@ class TrazabilidadPalletService:
 
     @staticmethod
     def _short(name: str) -> str:
-        return name
-
-    @staticmethod
-    def _sample(lst: list, n: int) -> list:
-        if len(lst) <= n:
-            return lst
-        return random.sample(lst, n)
+        """Acorta nombre de pallet: PACK0048229 → 048229."""
+        if not name:
+            return ""
+        n = name.strip()
+        if n.upper().startswith("PACK"):
+            rest = n[4:].strip()
+            return rest if rest else n
+        return n
 
