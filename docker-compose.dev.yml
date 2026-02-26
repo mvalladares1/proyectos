@@ -40,6 +40,8 @@ services:
       - STREAMLIT_SERVER_BASE_URL_PATH=/dashboards-dev
     volumes:
       - ./data/calidad:/app/data/calidad
+      - ./pages:/app/pages
+      - ./components:/app/components
     network_mode: "host"
     depends_on:
       api-dev:

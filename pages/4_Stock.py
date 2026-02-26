@@ -169,6 +169,8 @@ if "trazabilidad" in tabs_disponibles:
         tab_trazabilidad.render(username, password, camaras_data)
     tab_index += 1
 
+# (trazabilidad_pallet integration removed)
+
 # Footer
 st.divider()
 st.caption("Rio Futuro - Sistema de Gestión de Stock y Cámaras")

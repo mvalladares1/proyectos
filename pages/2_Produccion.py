@@ -21,6 +21,7 @@ from produccion import tab_detalle
 from produccion import tab_clasificacion
 from produccion import tab_pallets_por_sala
 from produccion import tab_etiquetas
+from produccion import tab_trazabilidad_pallet
 from produccion import tab_automatizacion_of
 
 # Configuración de página
@@ -77,6 +78,10 @@ if _perm_clasificacion:
 tabs_nombres.append("🏷️ Etiquetas")
 tabs_disponibles.append("etiquetas")
 
+# Trazabilidad siempre disponible para usuarios de producción
+tabs_nombres.append("🔍 Trazabilidad")
+tabs_disponibles.append("trazabilidad")
+
 if _perm_automatizacion:
     tabs_nombres.append("⚙️ Automatización OF")
     tabs_disponibles.append("automatizacion")
@@ -112,6 +117,11 @@ if "pallets_sala" in tabs_disponibles:
 if "etiquetas" in tabs_disponibles:
     with tabs_ui[tab_index]:
         tab_etiquetas.render(username, password)
+    tab_index += 1
+
+if "trazabilidad" in tabs_disponibles:
+    with tabs_ui[tab_index]:
+        tab_trazabilidad_pallet.render(username, password)
     tab_index += 1
 
 if "automatizacion" in tabs_disponibles:

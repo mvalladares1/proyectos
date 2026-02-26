@@ -404,3 +404,27 @@ async def get_productos_pt(
         return {"productos": resultado}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================================
+# TRAZABILIDAD DE PALLETS
+# =====================================================================
+
+@router.get("/trazabilidad")
+async def trazar_pallet(
+    pallet_name: str = Query(..., description="Nombre del pallet a trazar (ej: PACK0012345)"),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+):
+    """
+    Traza un pallet hacia atrás a través de órdenes de fabricación
+    hasta llegar a materia prima (MP/fresco) y sus recepciones.
+    """
+    try:
+        from backend.services.trazabilidad_pallet_service import TrazabilidadPalletService
+        service = TrazabilidadPalletService(username=username, password=password)
+        return service.trazar_pallet(pallet_name)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
