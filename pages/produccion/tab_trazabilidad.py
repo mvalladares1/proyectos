@@ -1,17 +1,17 @@
 """
-Tab Trazabilidad de Pallets - formato tabla con cadenas de composicion.
+Tab Trazabilidad de Pallets - formato jerarquico.
 """
 import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 import httpx
 from .shared import API_URL
 
 
 def render(username: str, password: str):
-    st.subheader("\U0001f50d Trazabilidad de Pallets")
+    st.subheader("\ud83d\udd0d Trazabilidad de Pallets")
     st.caption(
         "Ingresa un pallet y rastrea su cadena productiva hasta la recepcion "
         "de materia prima (guia de despacho y productor)."
@@ -25,7 +25,7 @@ def render(username: str, password: str):
         )
     with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
-        buscar = st.button("\U0001f50d Trazar", type="primary", key="traz_btn")
+        buscar = st.button("\ud83d\udd0d Trazar", type="primary", key="traz_btn")
 
     if not buscar and "traz_res" not in st.session_state:
         st.info("Ingresa un pallet y presiona **Trazar**.")
@@ -67,35 +67,39 @@ def render(username: str, password: str):
         return
 
     pack = res.get("pack", "")
-    consumidos = res.get("pallets_consumidos", "")
-    cadenas = res.get("cadenas", [])
+    filas = res.get("filas", [])
 
-    # --- Header info ---
-    st.markdown(f"**Pack:** {pack}")
-    st.markdown(f"**Pallets Consumidos:** {consumidos}")
+    st.markdown(f"### Trazabilidad de **{pack}**")
     st.divider()
 
-    # --- Tabla principal ---
-    if cadenas:
-        rows = []
-        for c in cadenas:
-            rows.append({
-                "Pallet Origen": c.get("pallet_origen", ""),
-                "Cadena de Trazabilidad": c.get("cadena", ""),
-                "Guia Despacho": c.get("guia_despacho", ""),
-                "Productor": c.get("productor", ""),
-            })
-        df = pd.DataFrame(rows)
-
-        def _highlight(row):
-            if row["Cadena de Trazabilidad"] == "NO TIENE TRAZABILIDAD":
-                return ["color: red; font-style: italic"] * len(row)
-            return [""] * len(row)
-
-        styled = df.style.apply(_highlight, axis=1)
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+    if filas:
+        for f in filas:
+            nivel = f.get("nivel", 0)
+            pallet = f.get("pallet", "")
+            conforma = f.get("se_conforma_por", "")
+            producto = f.get("producto", "")
+            guia = f.get("guia_despacho", "")
+            productor = f.get("productor", "")
+            fecha = f.get("fecha_recepcion", "")
+            indent = "\u2003" * nivel
+            arrow = "\u2192"
+            if conforma == "(RECEPCION)":
+                st.markdown(
+                    f"{indent}**{pallet}** {arrow} :green[RECEPCION] "
+                    f"{producto} "
+                    f"Guia: **{guia}** "
+                    f"Productor: **{productor}** "
+                    f"Fecha: {fecha}"
+                )
+            elif conforma == "(SIN CONSUMIDOS)":
+                st.markdown(f"{indent}**{pallet}**  {arrow} :red[SIN CONSUMIDOS]")
+            else:
+                st.markdown(
+                    f"{indent}**{pallet}** se conforma por: {conforma} "
+                    f"{producto}"
+                )
     else:
-        st.warning("No se encontraron cadenas de trazabilidad.")
+        st.warning("No se encontraron datos.")
 
     st.divider()
 
@@ -113,22 +117,23 @@ def render(username: str, password: str):
 
 
 def _generar_excel(res: Dict) -> bytes:
-    """Genera Excel con formato identico al screenshot del usuario."""
+    """Genera Excel con formato jerarquico."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         pack = res.get("pack", "")
-        consumidos = res.get("pallets_consumidos", "")
-        cadenas = res.get("cadenas", [])
+        filas = res.get("filas", [])
 
         rows = []
-        for c in cadenas:
+        for f in filas:
             rows.append({
                 "Pack": pack,
-                "Pallets Consumidos": consumidos,
-                "Pallet Origen": c.get("pallet_origen", ""),
-                "Cadena de Trazabilidad": c.get("cadena", ""),
-                "Guia Despacho": c.get("guia_despacho", ""),
-                "Productor": c.get("productor", ""),
+                "Nivel": f.get("nivel", 0),
+                "Pallet": ("  " * f.get("nivel", 0)) + f.get("pallet", ""),
+                "Se Conforma Por": f.get("se_conforma_por", ""),
+                "Producto": f.get("producto", ""),
+                "Guia Despacho": f.get("guia_despacho", ""),
+                "Productor": f.get("productor", ""),
+                "Fecha Recepcion": f.get("fecha_recepcion", ""),
             })
 
         df = pd.DataFrame(rows) if rows else pd.DataFrame({"Info": ["Sin datos"]})
