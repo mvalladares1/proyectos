@@ -450,21 +450,52 @@ def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list,
     
     # Mapear seleccionadas a facturas completas usando el diccionario
     facturas_enviar = []
+    facturas_ya_enviadas = []
+    
     if factura_map:
         for sel in facturas_seleccionadas:
             if sel in factura_map:
                 f = factura_map[sel]
                 if f.get('proveedor_email'):
-                    facturas_enviar.append(f)
+                    # Verificar si ya fue enviada
+                    if f.get('enviada'):
+                        facturas_ya_enviadas.append(f)
+                    else:
+                        facturas_enviar.append(f)
     else:
         for sel in facturas_seleccionadas:
             for f in facturas_todas:
                 if f.get('id') and sel and str(f['id']) in sel and f.get('proveedor_email'):
-                    facturas_enviar.append(f)
+                    if f.get('enviada'):
+                        facturas_ya_enviadas.append(f)
+                    else:
+                        facturas_enviar.append(f)
                     break
     
+    # Mostrar advertencia si hay proformas ya enviadas
+    if facturas_ya_enviadas:
+        st.warning(f"⚠️ **{len(facturas_ya_enviadas)} proformas** ya fueron enviadas anteriormente y no se reenviarán:")
+        for f in facturas_ya_enviadas[:5]:
+            fecha_envio = f.get("fecha_envio", "")
+            if fecha_envio:
+                try:
+                    from datetime import datetime
+                    fecha_dt = datetime.fromisoformat(fecha_envio.replace('Z', '+00:00'))
+                    fecha_str = fecha_dt.strftime("%d/%m/%Y")
+                except:
+                    fecha_str = fecha_envio[:10] if len(fecha_envio) >= 10 else fecha_envio
+                st.caption(f"  - {f['nombre']} - {f['proveedor_nombre']} (enviada el {fecha_str})")
+            else:
+                st.caption(f"  - {f['nombre']} - {f['proveedor_nombre']}")
+        if len(facturas_ya_enviadas) > 5:
+            st.caption(f"  ... y {len(facturas_ya_enviadas) - 5} más")
+        st.info("💡 Si necesita reenviar alguna, descargue el PDF y envíelo manualmente.")
+    
     if not facturas_enviar:
-        st.error("❌ No hay proformas válidas para enviar (todos los proveedores sin email)")
+        if facturas_ya_enviadas:
+            st.error("❌ Todas las proformas seleccionadas ya fueron enviadas anteriormente")
+        else:
+            st.error("❌ No hay proformas válidas para enviar (todos los proveedores sin email)")
         return
     
     st.markdown("---")
@@ -634,15 +665,27 @@ def _agregar_estado_envio(facturas: list, username: str, password: str) -> list:
                 ('res_id', 'in', factura_ids),
                 ('body', 'ilike', 'Proforma enviada por correo electrónico')
             ]],
-            {'fields': ['res_id']}
+            {'fields': ['res_id', 'date'], 'order': 'date asc'}  # Obtener fecha del primer envío
         )
         
-        # Crear set de IDs de facturas que tienen envío
-        facturas_con_envio = {msg['res_id'] for msg in mensajes}
+        # Crear diccionario de IDs de facturas con su fecha de primer envío
+        facturas_con_envio = {}
+        for msg in mensajes:
+            res_id = msg['res_id']
+            fecha = msg.get('date', '')
+            # Solo guardar la primera fecha (el más antiguo)
+            if res_id not in facturas_con_envio:
+                facturas_con_envio[res_id] = fecha
         
-        # Agregar campo 'enviada' a cada factura
+        # Agregar campos 'enviada' y 'fecha_envio' a cada factura
         for factura in facturas:
-            factura['enviada'] = factura.get('id') in facturas_con_envio
+            fac_id = factura.get('id')
+            if fac_id in facturas_con_envio:
+                factura['enviada'] = True
+                factura['fecha_envio'] = facturas_con_envio[fac_id]
+            else:
+                factura['enviada'] = False
+                factura['fecha_envio'] = None
         
         return facturas
         
@@ -1609,6 +1652,23 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
 
 def _enviar_proforma_individual(factura: dict, username: str, password: str):
     """Envía una proforma individual por correo."""
+    
+    # Verificar si ya fue enviada
+    if factura.get("enviada"):
+        fecha_envio = factura.get("fecha_envio", "")
+        if fecha_envio:
+            # Formatear fecha a formato legible
+            try:
+                from datetime import datetime
+                fecha_dt = datetime.fromisoformat(fecha_envio.replace('Z', '+00:00'))
+                fecha_str = fecha_dt.strftime("%d/%m/%Y a las %H:%M")
+            except:
+                fecha_str = fecha_envio[:16] if len(fecha_envio) >= 16 else fecha_envio
+            st.warning(f"⚠️ **Esta proforma ya fue enviada el {fecha_str}.**")
+        else:
+            st.warning("⚠️ **Esta proforma ya fue enviada anteriormente.**")
+        st.info("💡 Si necesita reenviarla, descargue el PDF y envíelo manualmente con las explicaciones correspondientes al proveedor.")
+        return
     
     email_destino = factura.get("proveedor_email", "")
     

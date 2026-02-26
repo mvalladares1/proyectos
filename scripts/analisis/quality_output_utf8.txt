@@ -1,0 +1,517 @@
+﻿Conectado como UID=217
+
+================================================================================
+1. CAMPOS DEL MODELO quality.check
+================================================================================
+  company_id: type=many2one | label='Company' | relation=res.company
+  control_date: type=datetime | label='Control Date'
+  create_date: type=datetime | label='Created on' | READONLY
+  create_uid: type=many2one | label='Created by' | relation=res.users | READONLY
+  lot_id: type=many2one | label='Lot/Serial' | relation=stock.lot
+  measure: type=float | label='Measure'
+  measure_on: type=selection | label='Control per' | selection=[['operation', 'Operation'], ['product', 'Product'], ['move_line', 'Quantity']]
+  measure_success: type=selection | label='Measure Success' | selection=[['none', 'No measure'], ['pass', 'Pass'], ['fail', 'Fail']] | READONLY
+  name: type=char | label='Reference'
+  picking_id: type=many2one | label='Picking' | relation=stock.picking
+  point_id: type=many2one | label='Control Point' | relation=quality.point
+  product_id: type=many2one | label='Product' | relation=product.product
+  quality_state: type=selection | label='Status' | selection=[['none', 'To do'], ['pass', 'Passed'], ['fail', 'Failed']]
+  team_id: type=many2one | label='Team' | relation=quality.alert.team
+  test_type: type=char | label='Technical name' | READONLY
+  test_type_id: type=many2one | label='Test Type' | relation=quality.point.test_type
+  title: type=char | label='Title'
+  user_id: type=many2one | label='Responsible' | relation=res.users
+  write_date: type=datetime | label='Last Updated on' | READONLY
+  write_uid: type=many2one | label='Last Updated by' | relation=res.users | READONLY
+  x_check_ids_quality_check_wizard_count: type=integer | label='Check count'
+  x_disable_wizard: type=boolean | label='disable_wizard'
+  x_fruta_verde_1_porcentaje: type=float | label='% Fruta verde' | READONLY
+  x_studio_acopio: type=selection | label='Acopio' | selection=[['FREIRE', 'FREIRE'], ['TRAIGUEN', 'TRAIGUEN'], ['PITRUFQUEN', 'PITRUFQUEN'], ['LONCOCHE', 'LONCOCHE'], ['CHOROICO', 'CHOROICO'], ['ROFUCO', 'ROFUCO'], ['RIO FUTURO PROCESOS', 'RIO FUTURO PROCESOS']] | READONLY
+  x_studio_acopio_1: type=selection | label='Acopio' | selection=[['FREIRE', 'FREIRE'], ['TRAIGUEN', 'TRAIGUEN'], ['PITRUFQUEN', 'PITRUFQUEN'], ['LONCOCHE', 'LONCOCHE'], ['CHOROICO', 'CHOROICO'], ['ROFUCO', 'ROFUCO'], ['RIO FUTURO PROCESOS', 'RIO FUTURO PROCESOS']] | READONLY
+  x_studio_albinismo: type=float | label='Albinismo'
+  x_studio_aplastado: type=float | label='Aplastado'
+  x_studio_aprovado: type=selection | label='Aprobado?' | selection=[['Aprobado', 'Aprovado'], ['No aprobado', 'No aprovado']]
+  x_studio_blando: type=integer | label='Blando'
+  x_studio_blando_1: type=float | label='Blando(grs)'
+  x_studio_blando_1_porcentaje: type=float | label='% Blando' | READONLY
+  x_studio_block_1: type=float | label='Block'
+  x_studio_calibre12: type=float | label='Calibre>=12'
+  x_studio_calibre_11mm_2: type=float | label='Cantidad sobre calibre requerido'
+  x_studio_calibre_11mm_3: type=float | label='Cantidad bajo calibre requerido'
+  x_studio_calibre_12: type=float | label='Calibre <12'
+  x_studio_calidad_producto: type=selection | label='Calidad producto' | selection=[['PREMIUN', 'PREMIUN'], ['NORMAL', 'NORMAL']]
+  x_studio_calific_final: type=char | label='Calific. Final ' | READONLY
+  x_studio_calificacin_final: type=selection | label='Calificaci├│n Final' | selection=[['IQF', 'IQF'], ['Block', 'Block'], ['Aprobado', 'Aprobado'], ['Rechazado', 'Rechazado'], ['NA', 'NA']] | READONLY
+  x_studio_cantidad_bandejas: type=integer | label='Cantidad Bandejas'
+  x_studio_cantidad_de_insumos: type=selection | label='Cantidad de Insumos' | selection=[['Correcto', 'Correcto'], ['Incorrecto', 'Incorrecto']]
+  x_studio_categoria: type=selection | label='Categoria' | selection=[['IQF A', 'IQF A'], ['IQF B', 'IQF B']]
+  x_studio_char_field_9S1mq: type=char | label='X Studio Char Field 9S1Mq'
+  x_studio_char_field_ietD3: type=char | label='X Studio Char Field Ietd3'
+  x_studio_codigo_etiqueta: type=char | label='Codigo Etiqueta'
+  x_studio_concentracion_ppm: type=float | label='Concentracion PPM'
+  x_studio_crumble: type=float | label='Crumble'
+  x_studio_dao_mecanico: type=float | label='Da├▒o Mecanico(grs)'
+  x_studio_dao_mecanico_1: type=float | label='Da├▒o Mecanico'
+  x_studio_dao_mecanico_porcentaje: type=float | label='% Da├▒o Mecanico' | READONLY
+  x_studio_dao_mecnico: type=integer | label='Da├▒o Mec├ínico'
+  x_studio_deshidratado: type=float | label='Deshidratado(grs)'
+  x_studio_deshidratado_leve: type=integer | label='Deshidratado Leve'
+  x_studio_deshidratado_leve_1: type=float | label='Deshidratado Leve(grs)'
+  x_studio_deshidratado_leve_1_porcentaje: type=float | label='% Deshidratado Leve' | READONLY
+  x_studio_deshidratado_porcentaje: type=float | label='% Deshidratado' | READONLY
+  x_studio_deshidratado_severo: type=integer | label='Deshidratado Severo'
+  x_studio_deshidratado_severo_1: type=float | label='Deshidratado Severo(grs)'
+  x_studio_deshidratado_severo_1_porcentaje: type=float | label='% Deshidratado Severo' | READONLY
+  x_studio_desviacion_de_colorfruta_roja: type=float | label='Desviacion de color/fruta Roja'
+  x_studio_estado_de_los_insumos: type=selection | label='Estado de los Insumos' | selection=[['Aprobado', 'Aprobado'], ['Rechazado', 'Rechazado']]
+  x_studio_estado_limpieza_transporte: type=selection | label='Estado limpieza Transporte(Visual)' | selection=[['Limpio', 'Limpio'], ['Sucio', 'Sucio']]
+  x_studio_estado_limpieza_transporteolfativo: type=selection | label='Estado limpieza Transporte(Olfativo)' | selection=[['Con olores extra├▒os', 'Con olores extra├▒os'], ['Sin olores extra├▒os', 'Sin olores extra├▒os']]
+  x_studio_estado_mp: type=char | label='Estado MP'
+  x_studio_estado_mp_1: type=selection | label='Estado del Producto' | selection=[['Fresco', 'Fresco'], ['Congelado', 'Congelado']]
+  x_studio_fecha_recepcion: type=datetime | label='Fecha recepcion' | READONLY
+  x_studio_ficha_control_recepcion: type=binary | label='Ficha control Recepcion' | READONLY
+  x_studio_formato: type=selection | label='Formato' | selection=[['1x10kg', '1x10kg']]
+  x_studio_foto_1_1_filename: type=char | label='Filename for x_studio_binary_field_fwX6d'
+  x_studio_foto_1_filename: type=char | label='Filename for x_studio_binary_field_NXAVW'
+  x_studio_foto_1_samh: type=binary | label='Foto 1'
+  x_studio_foto_2_1_filename: type=char | label='Filename for x_studio_binary_field_8nnGT'
+  x_studio_foto_2_filename: type=char | label='Filename for x_studio_binary_field_euMuZ'
+  x_studio_foto_2_samh: type=binary | label='Foto 2'
+  x_studio_foto_3_filename: type=char | label='Filename for x_studio_binary_field_vFL68'
+  x_studio_foto_3_samh: type=binary | label='Foto 3'
+  x_studio_foto_4_filename: type=char | label='Filename for x_studio_binary_field_rcf43'
+  x_studio_foto_4_samh: type=binary | label='Foto 4'
+  x_studio_foto_5_filename: type=char | label='Filename for x_studio_binary_field_XqcWq'
+  x_studio_frambuesa: type=one2many | label='Frambuesa' | relation=x_quality_check_line_14b00
+  x_studio_fruta_verde: type=integer | label='Fruta Verde'
+  x_studio_fruta_verde_1: type=float | label='Fruta Verde(grs)'
+  x_studio_frutilla: type=one2many | label='Frutilla' | relation=x_quality_check_line_89a53
+  x_studio_frutos_con_decoloracin: type=integer | label='Frutos con Decoloraci├│n'
+  x_studio_frutos_con_decoloracion: type=float | label='Frutos con Decoloracion(grs)'
+  x_studio_frutos_con_decoloracion_porcentaje: type=float | label='% Frutos con Decoloracion' | READONLY
+  x_studio_frutos_con_pedicelo: type=integer | label='Frutos con Pedicelo(Un)'
+  x_studio_frutos_con_pedicelo_1: type=float | label='Frutos con Pedicelo'
+  x_studio_frutos_con_restos_florales: type=integer | label='Frutos con Restos Florales'
+  x_studio_frutos_con_restos_florales_1: type=float | label='Frutos con Restos Florales(grs)'
+  x_studio_frutos_con_restos_florales_1_porcentaje: type=float | label='% Frutos con Restos Florales' | READONLY
+  x_studio_frutos_deformes: type=integer | label='Frutos Deformes'
+  x_studio_frutos_deformes_1: type=float | label='Frutos Deformes'
+  x_studio_golpe_de_sol: type=integer | label='Golpe de Sol'
+  x_studio_golpe_de_sol_1: type=float | label='Golpe de Sol(grs)'
+  x_studio_golpe_de_sol_1_porcentaje: type=float | label='% Golpe de Sol' | READONLY
+  x_studio_golpe_de_sol_2: type=float | label='Golpe de Sol '
+  x_studio_gramos_de_la_muestra: type=integer | label='Gramos de la Muestra'
+  x_studio_gramos_de_la_muestra_1: type=float | label='Gramos de la muestra'
+  x_studio_gua_de_despacho: type=char | label='Gu├¡a de Despacho' | READONLY
+  x_studio_heridapartidamolida: type=float | label='Herida/Partida/Molida(grs)'
+  x_studio_heridapartidamolida_porcentaje: type=float | label='% Herida/Partida/Molida' | READONLY
+  x_studio_heridapartiduramolida: type=integer | label='Herida/Partidura/Molida'
+  x_studio_hongos: type=integer | label='Hongos'
+  x_studio_hongos_1: type=float | label='Hongos(grs)'
+  x_studio_hongos_1_porcentaje: type=float | label='% Hongos' | READONLY
+  x_studio_hora_fin: type=datetime | label='Hora fin'
+  x_studio_hora_final: type=datetime | label='Hora Final'
+  x_studio_hora_incio: type=datetime | label='Hora Incio'
+  x_studio_hora_toma_de_control_de_calidad: type=datetime | label='Hora toma de control de calidad'
+  x_studio_horafecha_control: type=datetime | label='Hora/Fecha Control'
+  x_studio_indicio_de_pudricin: type=integer | label='Indicio de Pudrici├│n'
+  x_studio_indicio_de_pudricion: type=float | label='Indicio de Pudricion(grs)'
+  x_studio_indicio_de_pudricion_porcentaje: type=float | label='% Indicio de Pudricion' | READONLY
+  x_studio_inmadura: type=integer | label='Inmadura'
+  x_studio_inmadura_1: type=float | label='Inmadura(grs)'
+  x_studio_inmadura_1_porcentaje: type=float | label='% Inmadura' | READONLY
+  x_studio_inmaduraverde: type=float | label='Inmadura/Verde'
+  x_studio_jefe_calidad_y_aseguramiento_: type=many2one | label='Jefe Calidad y Aseguramiento :' | relation=res.users
+  x_studio_jefe_de_calidad_y_aseguramiento_: type=char | label='Responsable Depto:' | READONLY
+  x_studio_kg_brutos: type=float | label='Kg'
+  x_studio_kg_brutos_1: type=float | label='Kg brutos' | READONLY
+  x_studio_kg_recepcionados: type=float | label='Kg' | READONLY
+  x_studio_larvas: type=float | label='Larvas(un)'
+  x_studio_linea_de_produccion: type=integer | label='Linea de Produccion'
+  x_studio_many2many_field_3IgmX: type=many2many | label='Contact' | relation=res.partner
+  x_studio_many2many_field_QonKy: type=many2many | label='Control de calidad' | relation=quality.check
+  x_studio_many2many_field_S8gTE: type=many2many | label='Contacto' | relation=res.partner
+  x_studio_many2many_field_mQUKA: type=many2many | label='Albar├ín' | relation=stock.picking
+  x_studio_many2many_field_wqxf5: type=many2many | label='Contacto' | relation=res.partner
+  x_studio_many2one_field_9pP0l: type=many2one | label='Producto' | relation=product.template
+  x_studio_many2one_field_IDSox: type=many2one | label='Movimientos de Producto (Stock Move Line)' | relation=stock.move.line
+  x_studio_many2one_field_dXiL5: type=many2one | label='Albar├ín' | relation=stock.picking
+  x_studio_many2one_field_i5IZ5: type=many2one | label='Punto de Control de Calidad' | relation=quality.point
+  x_studio_many2one_field_s7ZJZ: type=many2one | label='Control de calidad' | relation=quality.check
+  x_studio_many2one_field_wqxf5: type=many2one | label='Contacto' | relation=res.partner
+  x_studio_many2one_field_xfEyu: type=many2one | label='Control de calidad' | relation=quality.check
+  x_studio_materia_extraa_endogena_1: type=float | label='Materia Extra├▒a Endogena'
+  x_studio_materia_extraa_exogena_1: type=float | label='Materia Extra├▒a Exogena'
+  x_studio_materias_extraas: type=integer | label='Materias Extra├▒as'
+  x_studio_materias_extraas_1: type=float | label='Materias Extra├▒as(grs)'
+  x_studio_materias_extraas_1_porcentaje: type=float | label='% Materias Extra├▒as' | READONLY
+  x_studio_mohos_visibles: type=float | label='Mohos Visibles'
+  x_studio_mp: type=one2many | label='MP' | relation=x_quality_check_line_19657
+  x_studio_n_de_palet_o_paquete: type=char | label='N┬░ de Palet o Paquete'
+  x_studio_n_de_sello: type=char | label='N┬░ de sello'
+  x_studio_n_de_termografos: type=char | label='N┬░ de Termografos'
+  x_studio_n_lote: type=char | label='N┬░ Lote'
+  x_studio_observaciones: type=text | label='Observaciones'
+  x_studio_olor_: type=selection | label='Olor Ok? : ' | selection=[['Conforme', 'Conforme'], ['No Conforme', 'No Conforme']]
+  x_studio_olor_c_nc: type=boolean | label='Olor (Conforme)'
+  x_studio_one2many_field_3jSXq: type=one2many | label='L├¡neas nuevas despacho producto' | relation=x_quality_check_line_2a594
+  x_studio_one2many_field_RdQtm: type=one2many | label='L├¡neas nuevas' | relation=x_quality_check_line_2efd1
+  x_studio_one2many_field_eNeCg: type=one2many | label='L├¡neas nuevas' | relation=x_quality_check_line_0d011
+  x_studio_one2many_field_ipdDS: type=one2many | label='Arandano' | relation=x_quality_check_line_35406
+  x_studio_one2many_field_mZmK2: type=one2many | label='X Studio One2Many Field Mzmk2' | relation=x_quality_check_line_46726
+  x_studio_one2many_field_nsxt0: type=one2many | label='L├¡neas nuevas' | relation=x_quality_check_line_17bfb
+  x_studio_one2many_field_rgA7I: type=one2many | label='Frambuesa o Mora' | relation=x_quality_check_line_1d183
+  x_studio_one2many_field_vloaS: type=one2many | label='L├¡neas nuevas' | relation=x_quality_check_line_f0f7b
+  x_studio_otros_daosinsectosdeformesetc: type=float | label='Otros Da├▒os(insectos,deformes,etc)'
+  x_studio_parametros_de_evaluacion: type=char | label='Parametros de Evaluacion'
+  x_studio_partidas: type=float | label='Partidas'
+  x_studio_peso_bolsa: type=selection | label='Peso Bolsa' | selection=[['CUMPLE', 'CUMPLE'], ['NO CUMPLE', 'NO CUMPLE']]
+  x_studio_peso_bolsa_1: type=float | label='Peso Bolsa'
+  x_studio_peso_caja: type=float | label='Peso Caja'
+  x_studio_peso_caja_pt: type=selection | label='Peso Caja P.T' | selection=[['CUMPLE', 'CUMPLE'], ['NO CUMPLE', 'NO CUMPLE']]
+  x_studio_presencia_de_insectos: type=integer | label='Presencia de Insectos'
+  x_studio_presencia_de_insectos_1: type=float | label='Presencia de Insectos(grs)'
+  x_studio_presencia_de_insectos_1_porcentaje: type=float | label='% Presencia de Insectos' | READONLY
+  x_studio_productor: type=char | label='Productor'
+  x_studio_productor_1: type=char | label='Productor'
+  x_studio_pudricin: type=integer | label='Pudrici├│n'
+  x_studio_pudricion: type=float | label='Pudricion(grs)'
+  x_studio_pudricion_porcentaje: type=float | label='% Pudricion' | READONLY
+  x_studio_related_field_DuBi8: type=char | label='New Campo relacionado' | READONLY
+  x_studio_related_field_clMwF: type=datetime | label='New Campo relacionado' | READONLY
+  x_studio_related_field_j9bxJ: type=char | label='New Campo relacionado' | READONLY
+  x_studio_related_field_qRMS8: type=many2one | label='New Campo relacionado' | relation=quality.point | READONLY
+  x_studio_requerimiento_de_calibre: type=selection | label='Requerimiento de Calibre' | selection=[['Calibre > 11mm', 'Calibre > 11mm'], ['Calibre > 12mm', 'Calibre > 12mm'], ['Calibre > 13mm', 'Calibre > 13mm'], ['Calibre > 14mm', 'Calibre > 14mm']]
+  x_studio_roya: type=float | label='Roya(grs)'
+  x_studio_roya_porcentaje: type=float | label='% Roya' | READONLY
+  x_studio_russet_daos_de_insectos_1: type=float | label='Russet, Da├▒os de insectos'
+  x_studio_sabor_: type=selection | label='Sabor Ok? : ' | selection=[['Conforme', 'Conforme'], ['No Conforme', 'No Conforme']]
+  x_studio_sabor_c_nc_: type=boolean | label='Sabor (Conforme?) : '
+  x_studio_selection_field_BXJGP: type=selection | label='Indice Calibre' | selection=[['11', '11'], ['12', '12'], ['13', '13'], ['14', '14'], ['15', '15']]
+  x_studio_selection_field_SG5wZ: type=selection | label='New Prioridad' | selection=[['0', 'Normal'], ['1', 'Low'], ['2', 'High'], ['3', 'Very High']]
+  x_studio_selection_field_k7hRE: type=selection | label='New Prioridad' | selection=[['0', 'Normal'], ['1', 'Low'], ['2', 'High'], ['3', 'Very High']]
+  x_studio_sellado_bolsa: type=selection | label='Sellado Bolsa' | selection=[['CUMPLE', 'CUMPLE'], ['NO CUMPLE', 'NO CUMPLE']]
+  x_studio_sellado_caja: type=selection | label='Sellado Caja' | selection=[['CUMPLE', 'CUMPLE'], ['NO CUMPLE', 'NO CUMPLE']]
+  x_studio_sobremadura: type=float | label='Sobremadura'
+  x_studio_sobremadurez: type=integer | label='Sobremadurez'
+  x_studio_sobremadurez_1: type=float | label='Sobremadurez(grs)'
+  x_studio_sobremadurez_1_porcentaje: type=float | label='% Sobremadurez' | READONLY
+  x_studio_team_id: type=char | label='team id'
+  x_studio_temperatura: type=float | label='Temperatura ┬░C'
+  x_studio_temperatura_final_container: type=float | label='Temperatura Final Container'
+  x_studio_temperatura_inical_container: type=float | label='Temperatura Inical Container'
+  x_studio_temperatura_promedio_producto: type=integer | label='Temperatura promedio Producto'
+  x_studio_temperatura_promedio_producto_1: type=float | label='Temperatura promedio producto'
+  x_studio_text_field_U5X0d: type=text | label='New Texto de l├¡neas m├║ltiples'
+  x_studio_text_field_tHqCn: type=text | label='New Texto de l├¡neas m├║ltiples'
+  x_studio_tipo_bandeja: type=selection | label='Tipo Bandeja' | selection=[['BANDEJA 3/4', 'BANDEJA 3/4'], ['BANDEJA AZUL 50X30', 'BANDEJA AZUL 50X30'], ['BANDEJA 1/8 50X30', 'BANDEJA 1/8 50X30'], ['BANDEJA NEGRA 50X30', 'BANDEJA NEGRA 50X30'], ['BANDEJA IQF 60X40', 'BANDEJA IQF 60X40'], ['BANDEJA VERDE 45X34', 'BANDEJA VERDE 45X34']]
+  x_studio_tipo_de_fruta: type=selection | label='Tipo de Fruta' | selection=[['Frambuesa', 'Frambuesa'], ['Ar├índano', 'Ar├índano'], ['Mora', 'Mora'], ['Frutilla', 'Frutilla'], ['Mix', 'Mix'], ['Cereza', 'Cereza']] | READONLY
+  x_studio_titulo_control_calidad: type=char | label='Control' | READONLY
+  x_studio_togolpesol: type=float | label='toGolpeSol' | READONLY
+  x_studio_total_block_: type=float | label='Total Block (%)' | READONLY
+  x_studio_total_def_calidad: type=integer | label='Total Def. Calidad' | READONLY
+  x_studio_total_def_calidad_1: type=float | label='Total Def. Calidad' | READONLY
+  x_studio_total_def_condicin: type=integer | label='Total Def. Condici├│n' | READONLY
+  x_studio_total_def_condicion: type=float | label='Total Def. Condicion' | READONLY
+  x_studio_total_iqf_: type=float | label='Total IQF (%)' | READONLY
+  x_studio_totalbinismomora: type=float | label='totAlbinismoMora' | READONLY
+  x_studio_totbajocalibre: type=float | label='totBajoCalibre' | READONLY
+  x_studio_totcicatrices: type=float | label='totCicatrices' | READONLY
+  x_studio_totdaoinsecto: type=float | label='totDa├▒oInsecto' | READONLY
+  x_studio_totdaoinsecto_1: type=float | label='totDa├▒oInsecto' | READONLY
+  x_studio_totdaoinsecto_2: type=float | label='Totda├▒oinsecto'
+  x_studio_totdaoinsectomora: type=float | label='Totda├▒oinsectomora' | READONLY
+  x_studio_totdaomecanico: type=float | label='totDa├▒oMecanico' | READONLY
+  x_studio_totdaomecanico_1: type=float | label='TotDa├▒omecanico'
+  x_studio_totdaomecanicofram: type=float | label='TotDa├▒omecanicofram' | READONLY
+  x_studio_totdaomecanicomora: type=float | label='Totda├▒omecanicomora' | READONLY
+  x_studio_totdaosinsectosframb: type=float | label='totDa├▒osInsectosFramb' | READONLY
+  x_studio_totdefectmora: type=float | label='totDefectMora' | READONLY
+  x_studio_totdefectoarandano: type=float | label='totDefectoArandano' | READONLY
+  x_studio_totdefectofram: type=float | label='totDefectoFram' | READONLY
+  x_studio_totdefectofrutilla: type=float | label='TotDefectoFrutilla' | READONLY
+  x_studio_totdeshidratacionmora: type=float | label='totDeshidratacionMora' | READONLY
+  x_studio_totdeshidratado: type=float | label='totDeshidratado' | READONLY
+  x_studio_totdeteriororoturamora: type=float | label='totDeterioroRoturaMora da├▒o mecanico' | READONLY
+  x_studio_totdrupeolosblancosframb: type=float | label='totDrupeolosBlancosFramb' | READONLY
+  x_studio_totexudacionmora: type=float | label='totExudacionMora' | READONLY
+  x_studio_totframmuestra: type=float | label='totFramMuestra' | READONLY
+  x_studio_totfrutaverde: type=float | label='totFrutaVerde' | READONLY
+  x_studio_totfrutoconcaliz: type=float | label='TotFrutoconCaliz' | READONLY
+  x_studio_totfrutosbajocalibreframb: type=float | label='totFrutosBajoCalibreFramb' | READONLY
+  x_studio_totfrutoscalizmora: type=float | label='totFrutosCalizMora' | READONLY
+  x_studio_totfrutoscondecoloracion: type=float | label='totFrutosconDecoloracion' | READONLY
+  x_studio_totfrutosdeformes: type=float | label='totFrutosDeformes' | READONLY
+  x_studio_totfrutosinmadurosframb: type=float | label='totFrutosInmadurosFramb' | READONLY
+  x_studio_totfrutosmenoslongitudmora: type=float | label='totFrutosmenoslongitudMora' | READONLY
+  x_studio_totfrutospedicelos: type=float | label='totFrutosPedicelos' | READONLY
+  x_studio_totfrutosrotosframb: type=float | label='totFrutosRotosFramb' | READONLY
+  x_studio_totfrutossobremadurosframb: type=float | label='totFrutosSobreMadurosFramb' | READONLY
+  x_studio_totfutroscalizframb: type=float | label='totFutrosCalizFramb' | READONLY
+  x_studio_totfutrosconroyaframb: type=float | label='totFutrosConRoyaFramb' | READONLY
+  x_studio_totgolpesolframb: type=float | label='totGolpeSolFramb' | READONLY
+  x_studio_totheridapartidamolida: type=float | label='TotHeridaPartidaMolida' | READONLY
+  x_studio_tothongofram: type=float | label='TotHongoFram' | READONLY
+  x_studio_tothongomora: type=float | label='Tothongomora'
+  x_studio_tothongos: type=float | label='totHongos' | READONLY
+  x_studio_tothongos_1: type=float | label='TotHongos' | READONLY
+  x_studio_tothongos_2: type=float | label='TotHongos'
+  x_studio_tothuevosinsectosmora: type=float | label='totpresenciainsectomora' | READONLY
+  x_studio_totinmadura: type=float | label='totInmadura' | READONLY
+  x_studio_totinmaduramora: type=float | label='Totinmaduramora'
+  x_studio_totinmaduramora_1: type=float | label='Totinmaduramora' | READONLY
+  x_studio_totinsectosframb: type=float | label='totInsectosFramb' | READONLY
+  x_studio_totlarvasframb: type=float | label='totLarvasFramb' | READONLY
+  x_studio_totmateriaextraa: type=float | label='totMateriaExtra├▒a' | READONLY
+  x_studio_totmateriaextraa_1: type=float | label='TotMateriaExtra├▒a' | READONLY
+  x_studio_totmateriaextraaframb: type=float | label='totMateriaExtra├▒aFramb' | READONLY
+  x_studio_totmateriaextraamora: type=float | label='totMateriaExtra├▒aMora' | READONLY
+  x_studio_totmateriavegetal: type=float | label='totMateriaVegetal' | READONLY
+  x_studio_totporcentajemuestraarandano: type=float | label='totporcentajemuestraarandano' | READONLY
+  x_studio_totporcentajemuestramora: type=float | label='totporcentajemuestramora' | READONLY
+  x_studio_totporcentajemuestras: type=float | label='totporcentajemuestras' | READONLY
+  x_studio_totpresenciainsecto: type=float | label='TotPresenciaInsecto' | READONLY
+  x_studio_totpresenciainsecto_1: type=integer | label='TotPresenciaInsecto' | READONLY
+  x_studio_totpresenciainsecto_2: type=float | label='Totpresenciainsecto'
+  x_studio_totpudricion: type=float | label='totPudricionhongo' | READONLY
+  x_studio_totpudricionframb: type=float | label='totPudricionFramb' | READONLY
+  x_studio_totrestosflorales: type=float | label='totRestosFlorales' | READONLY
+  x_studio_totsobremadura: type=float | label='totSobremadura' | READONLY
+  x_studio_totsobremadura_1: type=float | label='Totsobremadura'
+  x_studio_totsobremaduramora: type=float | label='Totsobremaduramora' | READONLY
+  x_studio_totsobremadurez: type=float | label='totSobreMadurez' | READONLY
+  x_studio_turno: type=selection | label='Turno' | selection=[['Ma├▒ana', 'Ma├▒ana'], ['Tarde', 'Tarde']]
+
+================================================================================
+2. REGLAS DE ACCESO (ir.model.access) para quality.check
+================================================================================
+  quality.check: grupo=Quality / Administrator | R=True W=True C=True D=True
+  quality.check.manager: grupo=Quality / Administrator | R=True W=True C=True D=True
+  quality.check: grupo=Quality / User | R=True W=True C=True D=False
+  quality.check: grupo=Inventory / User | R=True W=True C=True D=False
+
+================================================================================
+3. REGLAS DE REGISTRO (ir.rule) para quality.check
+================================================================================
+  Regla: Quality check company rule
+    domain=['|', '|', ('company_id','=',False),('company_id', 'in', company_ids), ('point_id.company_id', 'in', company_ids)]
+    grupos=[]
+    R=True W=True C=True D=True active=True
+
+================================================================================
+4. GRUPOS DE CALIDAD Y PERMISOS
+================================================================================
+  [87] Quality / Administrator | users=6
+      -> AMANDA SOLEDAD FERREIRA GONZ├üLEZ (aferreira@riofuturo.cl)
+      -> DIEGO EUDALDO SAAVEDRA ALBARRAC├ìN (dsaavedra@riofuturo.cl)
+      -> FELIPE ANTONIO BRAVO OLIVARES (fbravo@riofuturo.cl)
+      -> JOS├ë LUIS VIDAURRE WAEGER (jvidaurre@riofuturo.cl)
+      -> MIGUEL VALLADARES (mvalladares@riofuturo.cl)
+      -> PAULINA SOLANGE RODR├ìGUEZ VARGAS (prodriguez@riofuturo.cl)
+  [163] Quality / Jefa de Calidad y Aseguramiento | users=1
+      -> AMANDA SOLEDAD FERREIRA GONZ├üLEZ (aferreira@riofuturo.cl)
+  [86] Quality / User | users=76
+  [240] Quality Control / usuarios Calidad acopo | users=11
+      -> ALEXANDRA CATALINA MELIN TRAMOLAO (amelin@riofuturo.cl)
+      -> BARBARA SIEGMUND (bsiegmund@riofuturo.cl)
+      -> DANIELA DEL CARMEN MARTINEZ SAEZ (dmartinez@riofuturo.cl)
+      -> DANIELA ZU├æIGA (dzuniga@riofuturo.cl)
+      -> JAVIERA ALEJANDRA CHERQUIAN FIERRO (jcherquean@riofuturo.cl)
+      -> Kalajann fuentes valenzuela (kfuentes@riofuturo.cl)
+      -> LUZ HORTENSIA MU├æOZ CHICAHUAL (lmunoz@riofuturo.cl)
+      -> MIGUEL VALLADARES (mvalladares@riofuturo.cl)
+      -> ROMINA MARTINEZ (rmartinez@riofuturo.cl)
+      -> Roxana Lorena Carvajal de la fuente (rcarvajal@riofuturo.cl)
+      -> Sandra morales (smorales@riofuturo.cl)
+
+================================================================================
+5. EJEMPLO DE QUALITY CHECKS CERRADOS (aprobados/fallidos)
+================================================================================
+  [16165] QC16101 | state=pass | product=[102221000] FB S/V Org. IQF en
+      ultimo_edit=GUISSELA JEANNETTE TORRES DUARTE | write_date=2026-02-25 18:36:23
+  [15658] QC15594 | state=pass | product=[1.4] PROCESO CONGELADO T├ÜNEL 
+      ultimo_edit=MARCELO JARAMILLO CADEGAN | write_date=2026-02-25 18:11:11
+  [15949] QC15885 | state=pass | product=[101252000] AR HB Org. Block e
+      ultimo_edit=AMANDA SOLEDAD FERREIRA GONZ├üLEZ | write_date=2026-02-25 18:01:51
+  [16162] QC16098 | state=pass | product=[101223000] AR RY Org. IQF en 
+      ultimo_edit=MARCELO JARAMILLO CADEGAN | write_date=2026-02-25 17:33:37
+  [15906] QC15842 | state=pass | product=[101122000] AR HB Conv. IQF en
+      ultimo_edit=GUISSELA JEANNETTE TORRES DUARTE | write_date=2026-02-25 16:10:44
+
+================================================================================
+6. MODULOS DE CALIDAD INSTALADOS
+================================================================================
+  quality_control: Quality [installed]
+  purchase_mrp_workorder_quality: Full Traceability Report Demo Data [installed]
+  quality: Quality Base [installed]
+  quality_mrp: MRP features for Quality Control [installed]
+  quality_mrp_workorder: MRP features for Quality Control [installed]
+  quality_control_picking_batch: Quality - Batch Transfer [installed]
+  quality_control_worksheet: Worksheet for Quality Control [installed]
+  quality_mrp_workorder_worksheet: Quality Worksheet for Workorder [installed]
+  stock_barcode_quality_control: Barcode Quality bridge module [installed]
+  stock_barcode_quality_control_picking_batch: Barcode/Quality/Batch Transfer bridge module [installed]
+
+================================================================================
+7. VISTAS DEL MODELO quality.check
+================================================================================
+  [4151] quality.check.view.form | type=form | mode=primary | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <form>
+                <header>
+                    <button name="do_pass" type="object" class="btn-primary" attrs="{'invisible': [('quality_state', '!=', 'none')]}" string="Pass" data-hotkey="q"/>
+  
+  [4888] quality.check.view.form.inherit.worksheet | type=form | mode=extension | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <data><xpath expr="//button[@name='do_measure']" position="after">
+                <button string="Check Worksheet" data-hotkey="z" name="action_worksheet_check" type="object" attrs="{'invisible': ['|
+  [5424] mrp.workorder.view.form.inherit.quality.tablet | type=form | mode=extension | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <data><xpath expr="//field[@name='production_id']" position="after">
+                <field name="measure_success" invisible="1"/>
+            </xpath>
+            <xpath expr="//button[@name='action_
+  [5422] quality.check.view.form.inherit.mrp.workorder | type=form | mode=extension | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <data><field name="lot_id" position="after">
+                <field name="workorder_id" invisible="1"/>
+                <field name="production_id" invisible="1"/>
+                <field name="finishe
+  [5429] quality.check.view.form.inherit.quality.worksheet.tablet | type=form | mode=extension | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <xpath expr="//button[@name='do_measure']" position="after">
+                <div attrs="{'invisible': [('test_type', '!=', 'worksheet')]}">
+                    <button name="action_fill_sheet" type="
+  [5410] quality.check.tablet.view.form.inherit.expiry | type=form | mode=extension | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <xpath expr="//div[hasclass('o_workorder_lot')]" position="inside">
+                <field name="is_expired" invisible="1"/>
+                <div class="o_expired_alert" attrs="{'invisible': [('is_exp
+  [4178] quality.check.view.form.inherit.mrp | type=form | mode=extension | priority=16 | active=True
+      TIENE attrs/readonly/invisible: <xpath expr="//field[@name='picking_id']" position="after">
+                <field name="production_id" attrs="{'invisible': [('quality_state', 'in', ('pass', 'fail')), ('production_id', '=', False)]}
+  [5382] quality.check.workorder.form | type=form | mode=primary | priority=100 | active=True
+  [4181] Odoo Studio: quality.check.view.form customization | type=form | mode=extension | priority=160 | active=True
+      TIENE attrs/readonly/invisible: <data>
+  <xpath expr="//field[@name='measure']" position="replace">
+    <field name="x_studio_estado_mp_1" attrs="{&quot;invisible&quot;: [[&quot;point_id&quot;,&quot;=&quot;,3]]}"/>
+    <field name="
+  [5381] quality.check.view.form.tablet | type=form | mode=primary | priority=200 | active=True
+      TIENE attrs/readonly/invisible: <form class="o_workorder_tablet_form">
+                <field name="test_type" invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <field name="component_tracking"
+  [5383] add.quality.check.from.tablet | type=form | mode=primary | priority=200 | active=True
+      TIENE attrs/readonly/invisible: <form>
+                <group>
+                    <field name="company_id" invisible="1"/>
+                    <field name="product_id" invisible="1"/>
+                    <field name="workorder_id" 
+  [4889] quality.check.view.form.failure.worksheet | type=form | mode=primary | priority=1000 | active=True
+      TIENE attrs/readonly/invisible: <form string="Quality Check Failed">
+                <field name="test_type" invisible="1"/>
+                <div>
+                    <field name="failure_message"/>
+                </div>
+          
+  [4154] quality.check.view.graph | type=graph | mode=primary | priority=16 | active=True
+  [4152] quality.check.view.kanban | type=kanban | mode=primary | priority=16 | active=True
+  [4155] quality.check.view.pivot | type=pivot | mode=primary | priority=16 | active=True
+  [4156] quality.check.view.search | type=search | mode=primary | priority=16 | active=True
+  [5421] quality.check.view.search.inherit.quality.mrp.workorder | type=search | mode=extension | priority=16 | active=True
+  [5426] quality.check.view.search.inherit.mrp.workorder | type=search | mode=extension | priority=16 | active=True
+  [4777] Odoo Studio: quality.check.view.search customization | type=search | mode=extension | priority=99 | active=True
+  [4153] quality.check.view.tree | type=tree | mode=primary | priority=16 | active=True
+  [5423] quality.check.view.tree.inherit.mrp.workorder | type=tree | mode=extension | priority=16 | active=True
+  [4182] Odoo Studio: quality.check.view.tree customization | type=tree | mode=extension | priority=99 | active=True
+      TIENE attrs/readonly/invisible: <data>
+  <xpath expr="//field[@name='lot_id']" position="replace">
+    <field name="x_studio_kg_brutos_1" optional="show" attrs="{}" invisible="1"/>
+    <field name="x_studio_total_iqf_" optional="sho
+
+================================================================================
+8. SERVER ACTIONS / AUTOMATED ACTIONS para quality.check
+================================================================================
+  [1522] Actualizar Registro | state=object_write
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1263] Asignar aprobaci├│n | state=next_activity
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1264] Asignar aprobaci├│n | state=next_activity
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1508] Asignar el tipo de medido de control | state=code
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1631] Asignar QC aprobado al albar├ín | state=code
+      code: # 1. Definimos los tipos v├ílidos (Considera usar IDs si los nombres cambian mucho)
+tipos_validos = ['Recepciones MP RFP', 'Recepciones MP Vilkun']
+
+for qc in records:
+    picking = qc.picking_id
+    
+
+  [1507] Asignar Referencia al Control de calidad | state=code
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1374] Cerrar Asistente control calidad recepcion | state=object_write
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1621] Crear actividad para validar al aprobar Calidad | state=code
+      code: TARGET_USER_ID = 159
+
+# Ejecutar solo cuando el albar├ín se asigna por primera vez
+if not (record._origin and record._origin.picking_id) and record.picking_id:
+
+    picking = record.picking_id
+
+    # E
+  [1519] Crear Nueva OC | state=object_create
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1518] enviar correo a | state=mail_post
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1371] Enviar Correo Jefe abastecimiento control de calidad aprobado | state=mail_post
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1627] Notificaci├│n de Aprobaci├│n de Recepci├│n | state=code
+      code: # Available variables:
+#  - env: Odoo Environment on which the action is triggered
+#  - model: Odoo Model of the record on which the action is triggered; is a void recordset
+#  - record: record on whi
+  [1632] Reprocesar QC aprobados (asignar a albar├ín) | state=code
+      code: for qc in records:
+    picking = qc.picking_id
+    if not picking:
+        continue
+
+    if picking.picking_type_id.name not in (
+        'Recepciones MP RFP',
+        'Recepciones MP Vilkun'
+    ):
+ 
+  AUTO [55] Enviar Correo Jefe abastecimiento control de calidad aprobado | trigger=on_write | active=True
+  AUTO [89] enviar correo a | trigger=on_write | active=True
+      domain: [("quality_state", "=", "pass")]
+  AUTO [85] Asignar Referencia al Control de calidad | trigger=on_create | active=True
+      domain: [("quality_state", "=", "none")]
+  AUTO [121] Notificaci├│n de Aprobaci├│n de Recepci├│n | trigger=on_write | active=True
+      domain: [("quality_state", "=", "pass")]
+
+================================================================================
+DIAGNOSTICO COMPLETADO
+================================================================================
