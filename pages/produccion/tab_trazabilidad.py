@@ -11,7 +11,7 @@ from .shared import API_URL
 
 
 def render(username: str, password: str):
-    st.subheader("\ud83d\udd0d Trazabilidad de Pallets")
+    st.subheader("\U0001F50D Trazabilidad de Pallets")
     st.caption(
         "Ingresa un pallet y rastrea su cadena productiva hasta la recepcion "
         "de materia prima (guia de despacho y productor)."
@@ -25,7 +25,7 @@ def render(username: str, password: str):
         )
     with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
-        buscar = st.button("\ud83d\udd0d Trazar", type="primary", key="traz_btn")
+        buscar = st.button("\U0001F50D Trazar", type="primary", key="traz_btn")
 
     if not buscar and "traz_res" not in st.session_state:
         st.info("Ingresa un pallet y presiona **Trazar**.")
