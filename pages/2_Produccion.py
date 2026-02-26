@@ -21,7 +21,7 @@ from produccion import tab_detalle
 from produccion import tab_clasificacion
 from produccion import tab_pallets_por_sala
 from produccion import tab_etiquetas
-from produccion import tab_trazabilidad_pallet
+from produccion import tab_trazabilidad
 from produccion import tab_automatizacion_of
 
 # Configuración de página
@@ -121,7 +121,7 @@ if "etiquetas" in tabs_disponibles:
 
 if "trazabilidad" in tabs_disponibles:
     with tabs_ui[tab_index]:
-        tab_trazabilidad_pallet.render(username, password)
+        tab_trazabilidad.render(username, password)
     tab_index += 1
 
 if "automatizacion" in tabs_disponibles:
