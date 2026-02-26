@@ -17,17 +17,22 @@ from shared.odoo_client import OdooClient
 
 logger = logging.getLogger(__name__)
 
-MAX_DEPTH = 15
+MAX_DEPTH = 10
+MAX_FILAS = 200   # Límite de filas por pallet para no sobrecargar
 
 
 class TrazabilidadPalletService:
 
     def __init__(self, username: str, password: str):
         self.odoo = OdooClient(username=username, password=password)
+        self._fila_count = 0
 
     # ── API pública ──────────────────────────────────────────────
 
     def trazar_pallet(self, pallet_name: str) -> Dict[str, Any]:
+        self._fila_count = 0
+        truncado = False
+
         pkg = self._find_package(pallet_name)
         if not pkg:
             return {"error": f"No se encontró el pallet '{pallet_name}'", "filas": []}
@@ -44,6 +49,10 @@ class TrazabilidadPalletService:
 
         filas: List[Dict] = []
         for c_id, c_name in consumidos:
+            if self._fila_count >= MAX_FILAS:
+                truncado = True
+                break
+
             visited: set = set()
             paths = self._trazar_caminos(c_id, c_name, [self._short(c_name)], visited, 0)
 
@@ -54,20 +63,26 @@ class TrazabilidadPalletService:
                     "guia_despacho": "",
                     "productor": "",
                 })
+                self._fila_count += 1
             else:
                 for p in paths:
+                    if self._fila_count >= MAX_FILAS:
+                        truncado = True
+                        break
                     filas.append({
                         "pallet_origen": self._short(c_name),
                         "cadena": " \u2192 ".join(p["chain"]),
                         "guia_despacho": p["guia"],
                         "productor": p["productor"],
                     })
+                    self._fila_count += 1
 
         return {
             "error": None,
             "pack": pkg["name"],
             "pallets_consumidos": consumidos_str,
             "filas": filas,
+            "truncado": truncado,
         }
 
     # ── Recursión ────────────────────────────────────────────────

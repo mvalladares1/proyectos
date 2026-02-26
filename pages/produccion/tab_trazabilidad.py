@@ -1,6 +1,7 @@
 """
-Tab Trazabilidad de Pallets – multi-pallet.
-Permite trazar varios pallets a la vez.
+Tab Trazabilidad de Pallets – acumulativo.
+El usuario traza pallets uno a uno, se van acumulando en session_state,
+y cuando quiere genera el Excel final con todo.
 Excel con 2 hojas:
   1) Trazabilidad Completa  (cadena detallada)
   2) Guías y Productores    (resumen único guía + productor)
@@ -13,6 +14,8 @@ from typing import Dict, List
 import httpx
 from .shared import API_URL
 
+SESSION_KEY = "traz_acumulado"  # List[Dict] en session_state
+
 
 # ═════════════════════════════════════════════════════════════
 # Render principal
@@ -21,102 +24,119 @@ from .shared import API_URL
 def render(username: str, password: str):
     st.subheader("\U0001F50D Trazabilidad de Pallets")
     st.caption(
-        "Ingresa uno o más pallets (separados por coma, espacio o salto de línea) "
-        "y genera un Excel con toda la trazabilidad."
+        "Traza pallets uno a uno. Se van acumulando abajo. "
+        "Cuando termines, descarga el Excel con todo."
     )
 
-    pallet_text = st.text_area(
-        "Pallets a trazar",
-        placeholder="PACK0012345, PACK0012346\nPACK0012347",
-        height=100,
-        key="traz_input",
-        help="Puedes pegar varios pallets. Se aceptan separados por coma, espacio o línea.",
-    )
+    # Inicializar lista acumulada
+    if SESSION_KEY not in st.session_state:
+        st.session_state[SESSION_KEY] = []
 
-    buscar = st.button("\U0001F50D Trazar Todos", type="primary", key="traz_btn")
+    acumulado: List[Dict] = st.session_state[SESSION_KEY]
 
-    if not buscar and "traz_multi" not in st.session_state:
-        st.info("Ingresa uno o más pallets y presiona **Trazar Todos**.")
+    # ── Input ────────────────────────────────────────────────
+    col_in, col_btn = st.columns([3, 1])
+    with col_in:
+        pallet_name = st.text_input(
+            "Pallet a trazar",
+            placeholder="Ej: PACK0012345",
+            key="traz_input",
+        )
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        agregar = st.button("\U0001F50D Trazar y Agregar", type="primary", key="traz_btn")
+
+    # ── Trazar ───────────────────────────────────────────────
+    if agregar:
+        if not pallet_name or not pallet_name.strip():
+            st.warning("Ingresa un nombre de pallet.")
+        else:
+            nombre = pallet_name.strip().upper()
+            # Verificar si ya existe
+            ya_existe = any(r.get("pack", "").upper() == nombre for r in acumulado)
+            if ya_existe:
+                st.warning(f"**{nombre}** ya fue trazado. No se agrega de nuevo.")
+            else:
+                with st.spinner(f"Trazando **{nombre}**..."):
+                    try:
+                        r = httpx.get(
+                            f"{API_URL}/api/v1/produccion/trazabilidad",
+                            params={
+                                "pallet_name": nombre,
+                                "username": username,
+                                "password": password,
+                            },
+                            timeout=180.0,
+                        )
+                        r.raise_for_status()
+                        data = r.json()
+                        if data.get("error"):
+                            st.error(f"{nombre}: {data['error']}")
+                        else:
+                            acumulado.append(data)
+                            st.session_state[SESSION_KEY] = acumulado
+                            st.success(f"**{nombre}** agregado — {len(data.get('filas', []))} filas.")
+                    except httpx.TimeoutException:
+                        st.error(f"Timeout trazando {nombre}.")
+                    except httpx.HTTPStatusError as e:
+                        st.error(f"Error {e.response.status_code}: {e.response.text[:300]}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+    # ── Estado actual ────────────────────────────────────────
+    if not acumulado:
+        st.info("Aún no has trazado ningún pallet. Ingresa uno arriba y presiona **Trazar y Agregar**.")
         return
 
-    # ── Llamar API por cada pallet ───────────────────────────
-    if buscar:
-        nombres = _parsear_pallets(pallet_text)
-        if not nombres:
-            st.warning("Ingresa al menos un nombre de pallet.")
-            return
-
-        resultados: List[Dict] = []
-        errores: List[str] = []
-        progress = st.progress(0, text="Iniciando...")
-
-        for i, nombre in enumerate(nombres):
-            progress.progress(
-                (i) / len(nombres),
-                text=f"Trazando **{nombre}** ({i+1}/{len(nombres)})...",
-            )
-            try:
-                r = httpx.get(
-                    f"{API_URL}/api/v1/produccion/trazabilidad",
-                    params={
-                        "pallet_name": nombre,
-                        "username": username,
-                        "password": password,
-                    },
-                    timeout=180.0,
-                )
-                r.raise_for_status()
-                data = r.json()
-                if data.get("error"):
-                    errores.append(f"{nombre}: {data['error']}")
-                else:
-                    resultados.append(data)
-            except Exception as e:
-                errores.append(f"{nombre}: {e}")
-
-        progress.progress(1.0, text="Listo.")
-        st.session_state["traz_multi"] = resultados
-        st.session_state["traz_errores"] = errores
-
-    resultados = st.session_state.get("traz_multi", [])
-    errores = st.session_state.get("traz_errores", [])
-
-    if errores:
-        for err in errores:
-            st.warning(err)
-
-    if not resultados:
-        st.error("No se obtuvo trazabilidad de ningún pallet.")
-        return
+    st.divider()
 
     # ── Métricas globales ────────────────────────────────────
-    total_filas = sum(len(r.get("filas", [])) for r in resultados)
-    total_guias = set()
-    total_productores = set()
-    for r in resultados:
+    total_filas = sum(len(r.get("filas", [])) for r in acumulado)
+    all_guias = set()
+    all_productores = set()
+    for r in acumulado:
         for f in r.get("filas", []):
             g = f.get("guia_despacho", "")
             p = f.get("productor", "")
             if g:
-                total_guias.add(g)
+                all_guias.add(g)
             if p:
-                total_productores.add(p)
+                all_productores.add(p)
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Pallets Trazados", len(resultados))
+    c1.metric("Pallets Trazados", len(acumulado))
     c2.metric("Filas Totales", total_filas)
-    c3.metric("Guías Únicas", len(total_guias))
-    c4.metric("Productores Únicos", len(total_productores))
+    c3.metric("Guías Únicas", len(all_guias))
+    c4.metric("Productores Únicos", len(all_productores))
+
+    # ── Lista de packs acumulados con botón eliminar ─────────
+    st.markdown("#### Pallets acumulados")
+    for idx, res in enumerate(acumulado):
+        pack = res.get("pack", "")
+        n_filas = len(res.get("filas", []))
+        truncado = res.get("truncado", False)
+        label = f"**{pack}** — {n_filas} filas"
+        if truncado:
+            label += " (truncado)"
+
+        col_name, col_del = st.columns([5, 1])
+        with col_name:
+            st.markdown(label)
+        with col_del:
+            if st.button("\u274C", key=f"del_{idx}"):
+                acumulado.pop(idx)
+                st.session_state[SESSION_KEY] = acumulado
+                st.rerun()
 
     st.divider()
 
-    # ── Mostrar tabla por cada pack ──────────────────────────
-    for res in resultados:
+    # ── Detalle por pack ─────────────────────────────────────
+    for res in acumulado:
         pack = res.get("pack", "")
         pallets_consumidos = res.get("pallets_consumidos", "")
         filas = res.get("filas", [])
 
-        with st.expander(f"**{pack}** — {len(filas)} filas — Consumidos: {pallets_consumidos}", expanded=len(resultados) == 1):
+        with st.expander(f"**{pack}** — {len(filas)} filas — Consumidos: {pallets_consumidos}", expanded=False):
             if filas:
                 rows = []
                 for f in filas:
@@ -132,42 +152,29 @@ def render(username: str, password: str):
 
     st.divider()
 
-    # ── Descarga Excel ───────────────────────────────────────
-    st.markdown("### \U0001F4E5 Exportar Excel")
-    excel = _generar_excel_multi(resultados)
-    packs_str = "_".join(r.get("pack", "X") for r in resultados[:3])
-    if len(resultados) > 3:
-        packs_str += f"_y_{len(resultados)-3}_mas"
-    fname = f"Trazabilidad_{packs_str}_{datetime.now():%Y%m%d_%H%M}.xlsx"
-    st.download_button(
-        "\u2B07\uFE0F Descargar Excel (2 hojas)",
-        data=excel,
-        file_name=fname,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary",
-    )
+    # ── Acciones finales ─────────────────────────────────────
+    col_excel, col_limpiar = st.columns([3, 1])
 
+    with col_excel:
+        st.markdown("### \U0001F4E5 Generar Excel Final")
+        excel = _generar_excel_multi(acumulado)
+        packs_str = "_".join(r.get("pack", "X") for r in acumulado[:3])
+        if len(acumulado) > 3:
+            packs_str += f"_y_{len(acumulado)-3}_mas"
+        fname = f"Trazabilidad_{packs_str}_{datetime.now():%Y%m%d_%H%M}.xlsx"
+        st.download_button(
+            "\u2B07\uFE0F Descargar Excel (2 hojas)",
+            data=excel,
+            file_name=fname,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+        )
 
-# ═════════════════════════════════════════════════════════════
-# Helpers
-# ═════════════════════════════════════════════════════════════
-
-def _parsear_pallets(text: str) -> List[str]:
-    """Extrae nombres de pallets de texto libre."""
-    import re
-    if not text:
-        return []
-    # Reemplazar separadores comunes por espacio
-    cleaned = re.sub(r'[,;\n\r\t]+', ' ', text)
-    nombres = [n.strip().upper() for n in cleaned.split() if n.strip()]
-    # Deduplicar preservando orden
-    seen = set()
-    result = []
-    for n in nombres:
-        if n not in seen:
-            seen.add(n)
-            result.append(n)
-    return result
+    with col_limpiar:
+        st.markdown("### \U0001F5D1\uFE0F Limpiar")
+        if st.button("\U0001F5D1\uFE0F Limpiar Todo", key="traz_limpiar"):
+            st.session_state[SESSION_KEY] = []
+            st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════
