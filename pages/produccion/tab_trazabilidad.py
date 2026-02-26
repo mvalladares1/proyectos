@@ -1,8 +1,5 @@
 """
-Tab de Trazabilidad de Pallets
-Permite ingresar un nombre de pallet y trazar hacia atrás toda la cadena
-productiva hasta llegar a materia prima (recepciones).
-Genera un Excel descargable con toda la trazabilidad.
+Tab Trazabilidad de Pallets - formato tabla con cadenas de composicion.
 """
 import streamlit as st
 import pandas as pd
@@ -14,40 +11,34 @@ from .shared import API_URL
 
 
 def render(username: str, password: str):
-    """Renderiza el tab de Trazabilidad de Pallets."""
-
-    st.subheader("🔍 Trazabilidad de Pallets")
+    st.subheader("\U0001f50d Trazabilidad de Pallets")
     st.caption(
-        "Ingresa un pallet (PACK) y rastrea su cadena productiva hacia atrás "
-        "hasta la materia prima recepcionada (guía de despacho y proveedor)."
+        "Ingresa un pallet y rastrea su cadena productiva hasta la recepcion "
+        "de materia prima (guia de despacho y productor)."
     )
 
-    col_input, col_btn = st.columns([3, 1])
-    with col_input:
+    col_in, col_btn = st.columns([3, 1])
+    with col_in:
         pallet_name = st.text_input(
-            "Nombre del pallet",
-            placeholder="Ej: PACK0012345",
-            key="traz_pallet_input",
-            help="Ingresa el nombre exacto del pallet tal como aparece en Odoo"
+            "Nombre del pallet", placeholder="Ej: PACK0012345",
+            key="traz_in",
         )
     with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
-        buscar = st.button("🔍 Trazar", type="primary", key="traz_buscar")
+        buscar = st.button("\U0001f50d Trazar", type="primary", key="traz_btn")
 
-    if not buscar and 'traz_resultado' not in st.session_state:
-        st.info("💡 Ingresa un nombre de pallet y presiona **Trazar** para ver la cadena completa.")
+    if not buscar and "traz_res" not in st.session_state:
+        st.info("Ingresa un pallet y presiona **Trazar**.")
         return
 
     if buscar:
         if not pallet_name or not pallet_name.strip():
-            st.warning("⚠️ Debes ingresar un nombre de pallet.")
+            st.warning("Ingresa un nombre de pallet.")
             return
-
         pallet_name = pallet_name.strip().upper()
-
-        with st.spinner(f"🔎 Trazando pallet **{pallet_name}** hacia atrás..."):
+        with st.spinner(f"Trazando **{pallet_name}** ..."):
             try:
-                resp = httpx.get(
+                r = httpx.get(
                     f"{API_URL}/api/v1/produccion/trazabilidad",
                     params={
                         "pallet_name": pallet_name,
@@ -56,159 +47,99 @@ def render(username: str, password: str):
                     },
                     timeout=120.0,
                 )
-                resp.raise_for_status()
-                resultado = resp.json()
-                st.session_state['traz_resultado'] = resultado
+                r.raise_for_status()
+                st.session_state["traz_res"] = r.json()
             except httpx.TimeoutException:
-                st.error("⏱️ La consulta tardó demasiado. Intenta nuevamente.")
+                st.error("Timeout.")
                 return
             except httpx.HTTPStatusError as e:
-                st.error(f"❌ Error del servidor: {e.response.status_code} – {e.response.text[:300]}")
+                st.error(f"Error {e.response.status_code}: {e.response.text[:300]}")
                 return
             except Exception as e:
-                st.error(f"❌ Error de conexión: {e}")
+                st.error(f"Error: {e}")
                 return
 
-    resultado = st.session_state.get('traz_resultado')
-    if not resultado:
+    res = st.session_state.get("traz_res")
+    if not res:
+        return
+    if res.get("error"):
+        st.error(f"{res['error']}")
         return
 
-    if resultado.get('error'):
-        st.error(f"⚠️ {resultado['error']}")
-        return
+    pack = res.get("pack", "")
+    consumidos = res.get("pallets_consumidos", "")
+    cadenas = res.get("cadenas", [])
 
-    arbol = resultado.get('arbol', [])
-    mp_list = resultado.get('materia_prima', [])
-    niveles = resultado.get('niveles', 0)
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Pallet Origen", resultado.get('pallet_origen', ''))
-    c2.metric("Niveles de Trazabilidad", niveles)
-    c3.metric("Nodos en Cadena", len(arbol))
-    c4.metric("Pallets MP Encontrados", len(mp_list))
-
+    # --- Header info ---
+    st.markdown(f"**Pack:** {pack}")
+    st.markdown(f"**Pallets Consumidos:** {consumidos}")
     st.divider()
 
-    if arbol:
-        st.markdown("### 🌳 Cadena de Trazabilidad")
-        _render_arbol(arbol)
+    # --- Tabla principal ---
+    if cadenas:
+        rows = []
+        for c in cadenas:
+            rows.append({
+                "Pallet Origen": c.get("pallet_origen", ""),
+                "Cadena de Trazabilidad": c.get("cadena", ""),
+                "Guia Despacho": c.get("guia_despacho", ""),
+                "Productor": c.get("productor", ""),
+            })
+        df = pd.DataFrame(rows)
 
-    st.divider()
+        def _highlight(row):
+            if row["Cadena de Trazabilidad"] == "NO TIENE TRAZABILIDAD":
+                return ["color: red; font-style: italic"] * len(row)
+            return [""] * len(row)
 
-    if mp_list:
-        st.markdown("### 📦 Materia Prima (Recepciones)")
-        df_mp = pd.DataFrame(mp_list)
-        cols_rename = {
-            'pallet': 'Pallet',
-            'producto': 'Producto',
-            'lote': 'Lote',
-            'kg': 'Kg',
-            'recepcion': 'Recepción',
-            'guia_despacho': 'Guía Despacho',
-            'proveedor': 'Proveedor',
-            'fecha_recepcion': 'Fecha Recepción',
-        }
-        df_display = df_mp.rename(columns=cols_rename)
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        styled = df.style.apply(_highlight, axis=1)
+        st.dataframe(styled, use_container_width=True, hide_index=True)
     else:
-        st.warning("No se encontraron pallets de materia prima en la cadena.")
+        st.warning("No se encontraron cadenas de trazabilidad.")
 
     st.divider()
 
-    st.markdown("### 📥 Exportar a Excel")
-    excel_bytes = _generar_excel(resultado)
-    pallet_origen = resultado.get('pallet_origen', 'PALLET')
-    fecha_str = datetime.now().strftime('%Y%m%d_%H%M')
-    filename = f"Trazabilidad_{pallet_origen}_{fecha_str}.xlsx"
-
+    # --- Excel ---
+    st.markdown("### Exportar")
+    excel = _generar_excel(res)
+    fname = f"Trazabilidad_{pack}_{datetime.now():%Y%m%d_%H%M}.xlsx"
     st.download_button(
-        label="⬇️ Descargar Excel de Trazabilidad",
-        data=excel_bytes,
-        file_name=filename,
+        "Descargar Excel",
+        data=excel,
+        file_name=fname,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         type="primary",
     )
 
 
-def _render_arbol(arbol: List[Dict]):
-    """Renderiza el árbol de trazabilidad de forma visual."""
-    niveles = {}
-    for nodo in arbol:
-        nivel = nodo.get('nivel', 0)
-        if nivel not in niveles:
-            niveles[nivel] = []
-        niveles[nivel].append(nodo)
-
-    for nivel_num in sorted(niveles.keys()):
-        nodos = niveles[nivel_num]
-        tipo_label = "PT (Producto Terminado)" if nivel_num == 0 else "MP (Materia Prima)" if nodos[0].get('es_mp') else "Semi-elaborado"
-
-        with st.expander(f"{'↳ ' * nivel_num}Nivel {nivel_num} — {tipo_label} ({len(nodos)} pallets)", expanded=(nivel_num <= 1)):
-            rows = []
-            for n in nodos:
-                rows.append({
-                    'Pallet': n.get('pallet', ''),
-                    'Producto': n.get('producto', ''),
-                    'Lote': n.get('lote', ''),
-                    'Kg': n.get('kg', 0),
-                    'Orden': n.get('orden', ''),
-                    'Tipo': n.get('tipo_orden', ''),
-                    'Fecha': n.get('fecha', ''),
-                    'MP': '✅' if n.get('es_mp') else '',
-                })
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-
-def _generar_excel(resultado: Dict) -> bytes:
-    """Genera un archivo Excel con toda la trazabilidad."""
+def _generar_excel(res: Dict) -> bytes:
+    """Genera Excel con formato identico al screenshot del usuario."""
     output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pack = res.get("pack", "")
+        consumidos = res.get("pallets_consumidos", "")
+        cadenas = res.get("cadenas", [])
 
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        pallet_origen = resultado.get('pallet_origen', '')
+        rows = []
+        for c in cadenas:
+            rows.append({
+                "Pack": pack,
+                "Pallets Consumidos": consumidos,
+                "Pallet Origen": c.get("pallet_origen", ""),
+                "Cadena de Trazabilidad": c.get("cadena", ""),
+                "Guia Despacho": c.get("guia_despacho", ""),
+                "Productor": c.get("productor", ""),
+            })
 
-        resumen = {
-            'Campo': ['Pallet Consultado', 'Niveles de Trazabilidad', 'Total Nodos en Cadena', 'Pallets MP Encontrados', 'Fecha de Consulta'],
-            'Valor': [pallet_origen, resultado.get('niveles', 0), len(resultado.get('arbol', [])), len(resultado.get('materia_prima', [])), datetime.now().strftime('%d/%m/%Y %H:%M')],
-        }
-        pd.DataFrame(resumen).to_excel(writer, sheet_name='Resumen', index=False)
+        df = pd.DataFrame(rows) if rows else pd.DataFrame({"Info": ["Sin datos"]})
+        df.to_excel(writer, sheet_name="Trazabilidad", index=False)
 
-        arbol = resultado.get('arbol', [])
-        if arbol:
-            rows_arbol = []
-            for n in arbol:
-                rows_arbol.append({
-                    'Nivel': n.get('nivel', 0),
-                    'Pallet': n.get('pallet', ''),
-                    'Producto': n.get('producto', ''),
-                    'Lote': n.get('lote', ''),
-                    'Kg': n.get('kg', 0),
-                    'Orden': n.get('orden', ''),
-                    'Tipo Orden': n.get('tipo_orden', ''),
-                    'Fecha': n.get('fecha', ''),
-                    'Es MP': 'Sí' if n.get('es_mp') else 'No',
-                })
-            pd.DataFrame(rows_arbol).to_excel(writer, sheet_name='Cadena Completa', index=False)
-
-        mp_list = resultado.get('materia_prima', [])
-        if mp_list:
-            df_mp = pd.DataFrame(mp_list)
-            df_mp.columns = ['Pallet', 'Producto', 'Lote', 'Kg', 'Recepción', 'Guía Despacho', 'Proveedor', 'Fecha Recepción']
-            df_mp.to_excel(writer, sheet_name='Materia Prima', index=False)
-
-        for sheet_name in writer.sheets:
-            ws = writer.sheets[sheet_name]
-            for col in ws.columns:
-                max_len = 0
-                col_letter = col[0].column_letter
-                for cell in col:
-                    try:
-                        cell_len = len(str(cell.value or ''))
-                        if cell_len > max_len:
-                            max_len = cell_len
-                    except:
-                        pass
-                ws.column_dimensions[col_letter].width = min(max_len + 4, 50)
+        # Auto-width
+        ws = writer.sheets["Trazabilidad"]
+        for col in ws.columns:
+            letter = col[0].column_letter
+            max_len = max((len(str(c.value or "")) for c in col), default=10)
+            ws.column_dimensions[letter].width = min(max_len + 4, 70)
 
     output.seek(0)
     return output.getvalue()
