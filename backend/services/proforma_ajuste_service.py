@@ -247,20 +247,73 @@ def get_facturas_borrador(
                     pl_id = line["purchase_line_id"][0] if isinstance(line["purchase_line_id"], list) else line["purchase_line_id"]
                     purchase_line_ids_batch.append(pl_id)
             
-            # Batch: buscar fechas de OC en una sola llamada
+            # Batch: buscar fechas de OC Y picking_ids en una sola llamada
             nuevas_oc = [oc for oc in oc_nombres_batch if oc not in oc_fecha_cache]
+            oc_picking_ids_cache = {}  # oc_nombre -> [picking_ids]
             if nuevas_oc:
                 try:
                     ocs_data = client.search_read(
                         "purchase.order",
                         [("name", "in", list(nuevas_oc))],
-                        ["name", "date_order"]
+                        ["name", "date_order", "picking_ids"]
                     )
                     for oc in ocs_data:
                         if oc.get("date_order"):
                             oc_fecha_cache[oc["name"]] = oc["date_order"][:10]
+                        if oc.get("picking_ids"):
+                            oc_picking_ids_cache[oc["name"]] = oc["picking_ids"]
                 except:
                     pass
+            
+            # Batch: obtener guías de despacho de los pickings (excluyendo los que tienen devolución)
+            all_picking_ids = []
+            for picking_ids in oc_picking_ids_cache.values():
+                all_picking_ids.extend(picking_ids)
+            
+            picking_guia_cache = {}  # picking_id -> guia_despacho
+            pickings_con_devolucion = set()  # IDs de pickings con devolución
+            
+            if all_picking_ids:
+                try:
+                    # Obtener datos de los pickings
+                    pickings_data = client.read(
+                        "stock.picking",
+                        all_picking_ids,
+                        ["id", "name", "x_studio_gua_de_despacho"]
+                    )
+                    
+                    # Buscar devoluciones (pickings que referencian a estos en origin)
+                    picking_names = [p["name"] for p in pickings_data if p.get("name")]
+                    if picking_names:
+                        devoluciones = client.search_read(
+                            "stock.picking",
+                            [
+                                ("origin", "in", picking_names),
+                                ("picking_type_id", "in", [2, 3, 5])  # Tipos de devolución
+                            ],
+                            ["origin"]
+                        )
+                        for dev in devoluciones:
+                            if dev.get("origin") in picking_names:
+                                # Encontrar el picking_id del origin
+                                for p in pickings_data:
+                                    if p.get("name") == dev.get("origin"):
+                                        pickings_con_devolucion.add(p["id"])
+                    
+                    # Guardar en cache solo los pickings sin devolución
+                    for p in pickings_data:
+                        if p["id"] not in pickings_con_devolucion:
+                            picking_guia_cache[p["id"]] = p.get("x_studio_gua_de_despacho", "") or ""
+                except:
+                    pass
+            
+            # Mapear OC -> guía de despacho (tomar la primera guía válida)
+            oc_guia_cache = {}  # oc_nombre -> guia_despacho
+            for oc_nombre, picking_ids in oc_picking_ids_cache.items():
+                for pid in picking_ids:
+                    if pid in picking_guia_cache and picking_guia_cache[pid]:
+                        oc_guia_cache[oc_nombre] = picking_guia_cache[pid]
+                        break
             
             # Batch: buscar purchase_order_ids en una sola llamada
             po_id_map = {}  # purchase_line_id -> purchase_order_id
@@ -315,6 +368,12 @@ def get_facturas_borrador(
                     pl_id = line["purchase_line_id"][0] if isinstance(line["purchase_line_id"], list) else line["purchase_line_id"]
                     purchase_order_id = po_id_map.get(pl_id)
                 
+                # Obtener guía de despacho del cache (de pickings sin devolución)
+                guia_despacho = ""
+                if ":" in nombre_linea:
+                    oc_nombre_linea = nombre_linea.split(":")[0].strip()
+                    guia_despacho = oc_guia_cache.get(oc_nombre_linea, "")
+                
                 lineas.append({
                     "id": line["id"],
                     "nombre": nombre_linea,
@@ -327,7 +386,9 @@ def get_facturas_borrador(
                     "total_usd": line.get("price_total", 0) or 0 if es_usd else 0,
                     "subtotal_clp": clp_subtotal,
                     "tc_implicito": tc_linea,
-                    "purchase_order_id": purchase_order_id
+                    "purchase_order_id": purchase_order_id,
+                    "fecha_oc": fecha_oc,
+                    "guia_despacho": guia_despacho
                 })
         
         # Calcular totales
