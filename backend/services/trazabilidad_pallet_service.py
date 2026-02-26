@@ -1,4 +1,4 @@
-﻿"""
+"""
 Servicio de Trazabilidad de Pallets
 Traza un pallet hacia atras mostrando cadenas de composicion en formato tabla:
   Pallet Origen | Cadena de Trazabilidad         | Guia Despacho | Productor
