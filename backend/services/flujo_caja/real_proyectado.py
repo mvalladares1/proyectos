@@ -626,7 +626,7 @@ class RealProyectadoCalculator:
                 lineas_proyecciones = self.odoo.search_read(
                     'account.move.line',
                     [['move_id', 'in', moves_proyec_ids]],
-                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance', 'display_type'],
+                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance', 'display_type', 'tax_line_id'],
                     limit=50000
                 )
 
@@ -739,11 +739,21 @@ class RealProyectadoCalculator:
                 # Si IFRS3 está vacío, no se considera esa línea.
                 lineas_move = lineas_proyec_por_move.get(fp.get('id'), [])
                 ponderadores = defaultdict(float)  # (ifrs3, analitico) -> peso
+                total_balance_gasto = 0.0  # Balance acumulado de líneas de gasto (base imponible)
+                total_balance_iva = 0.0    # Balance acumulado de líneas de IVA
 
                 for linea in lineas_move:
                     # Excluir línea de contrapartida (payable/receivable) para no diluir pesos
                     if linea.get('display_type') == 'payment_term':
                         continue
+
+                    balance = abs(float(linea.get('balance') or 0.0))
+
+                    # Separar líneas de IVA de líneas de gasto
+                    es_linea_iva = bool(linea.get('tax_line_id'))
+                    if es_linea_iva:
+                        total_balance_iva += balance
+                        continue  # IVA se maneja aparte, no entra en ponderadores de gasto
 
                     account_data = linea.get('account_id')
                     account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
@@ -751,7 +761,7 @@ class RealProyectadoCalculator:
                     if not ifrs3:
                         continue
 
-                    balance = abs(float(linea.get('balance') or 0.0))
+                    total_balance_gasto += balance
                     peso_base = balance if balance > 0 else 1.0
 
                     analytic_distribution = linea.get('analytic_distribution')
@@ -784,11 +794,21 @@ class RealProyectadoCalculator:
                 if total_peso <= 0:
                     continue
 
+                # Calcular proporción base vs IVA del monto total
+                total_balance_factura = total_balance_gasto + total_balance_iva
+                if total_balance_factura > 0:
+                    monto_base = monto_proyectado * (total_balance_gasto / total_balance_factura)
+                    monto_iva = monto_proyectado * (total_balance_iva / total_balance_factura)
+                else:
+                    monto_base = monto_proyectado
+                    monto_iva = 0.0
+
                 estado = estados['PROYECTADAS_CONTABILIDAD']
 
+                # Distribuir la parte BASE entre categorías de gasto según ponderadores
                 for (categoria_ifrs3, nombre_analitico), peso in ponderadores.items():
                     proporcion = peso / total_peso
-                    monto_parcial = monto_proyectado * proporcion
+                    monto_parcial = monto_base * proporcion
 
                     proyectado_total += monto_parcial
                     proyectado_por_periodo[periodo_proyectado] += monto_parcial
@@ -818,6 +838,39 @@ class RealProyectadoCalculator:
                     analitico = categoria['proveedores'][nombre_analitico]
                     analitico['monto'] += monto_parcial
                     analitico['montos_por_mes'][periodo_proyectado] += monto_parcial
+
+                # Agregar IVA como categoría dedicada si existe
+                if monto_iva != 0:
+                    IVA_CATEGORIA = 'IVA Crédito Fiscal'
+                    IVA_ANALITICO = 'IVA'
+
+                    proyectado_total += monto_iva
+                    proyectado_por_periodo[periodo_proyectado] += monto_iva
+
+                    estado['monto'] += monto_iva
+                    estado['montos_por_mes'][periodo_proyectado] += monto_iva
+
+                    if IVA_CATEGORIA not in estado['categorias']:
+                        estado['categorias'][IVA_CATEGORIA] = {
+                            'nombre': IVA_CATEGORIA,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'proveedores': {}
+                        }
+
+                    cat_iva = estado['categorias'][IVA_CATEGORIA]
+                    cat_iva['monto'] += monto_iva
+                    cat_iva['montos_por_mes'][periodo_proyectado] += monto_iva
+
+                    if IVA_ANALITICO not in cat_iva['proveedores']:
+                        cat_iva['proveedores'][IVA_ANALITICO] = {
+                            'nombre': IVA_ANALITICO,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float)
+                        }
+
+                    cat_iva['proveedores'][IVA_ANALITICO]['monto'] += monto_iva
+                    cat_iva['proveedores'][IVA_ANALITICO]['montos_por_mes'][periodo_proyectado] += monto_iva
             
             # PASO 6: Convertir estructura a 4 NIVELES EXPANDIBLES
             # Nivel 2 (cuentas): ESTADOS (expandible)
