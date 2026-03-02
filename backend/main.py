@@ -39,12 +39,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-IN_PROGRESS_METRIC = Gauge(
-    "http_requests_inprogress", 
-    "Número de peticiones HTTP en curso",
-    ["app_name", "handler", "method"]
-)
-
 # --- CONFIGURACIÓN AVANZADA DE MÉTRICAS ---
 instrumentator = Instrumentator(
     should_group_status_codes=False,
@@ -54,28 +48,11 @@ instrumentator = Instrumentator(
 
 )
 
+instrumentator.add(metrics.default())
+
 # Ejecutamos la instrumentación
-instrumentator.instrument(app)
+instrumentator.instrument(app).expose(app)
 
-@app.middleware("http")
-async def track_inprogress(request, call_next):
-    handler = request.scope.get("path", "unknown")
-    method = request.method
-    
-    if handler == "/metrics":
-        return await call_next(request)
-        
-    IN_PROGRESS_METRIC.labels(app_name="rio_api", handler=handler, method=method).inc()
-    try:
-        response = await call_next(request)
-        return response
-    finally:
-        IN_PROGRESS_METRIC.labels(app_name="rio_api", handler=handler, method=method).dec()
-
-@app.get("/metrics")
-def metrics_endpoint():
-    from fastapi import Response
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # --- MIDDLEWARES ---
 app.add_middleware(
