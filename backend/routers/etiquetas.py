@@ -59,6 +59,48 @@ async def obtener_pallets_orden(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/prev_candidates")
+async def obtener_candidatos_previos(
+    package_id: int = Query(..., description="ID del package destino"),
+    product_name: Optional[str] = Query(None, description="Filtrar por nombre de producto"),
+    manejo: Optional[str] = Query(None, description="Filtrar por manejo (ej. Orgánico)"),
+    variedad: Optional[str] = Query(None, description="Filtrar por variedad"),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Devuelve paquetes candidatos que contribuyeron a formar el pallet dado.
+    """
+    try:
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+        return service.obtener_candidatos_previos(package_id=package_id, product_name=product_name, manejo=manejo, variedad=variedad)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/find_package")
+async def find_package_by_name(
+    package_name: str = Query(..., description="Nombre del package/pallet"),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo")
+):
+    """
+    Busca paquetes por nombre exacto o similar y devuelve una lista de matches con id y name.
+    """
+    try:
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+        # buscar exacto primero
+        res = service.odoo.search_read('stock.quant.package', [('name', '=', package_name)], ['id', 'name'], limit=5)
+        if not res:
+            # fallback ilike
+            res = service.odoo.search_read('stock.quant.package', [('name', 'ilike', package_name)], ['id', 'name'], limit=10)
+        return [{'id': r.get('id'), 'name': r.get('name')} for r in res]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/info_etiqueta/{package_id}")
 async def obtener_info_etiqueta(
     package_id: int,

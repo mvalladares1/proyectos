@@ -54,7 +54,193 @@ class EtiquetasPalletService:
         """
         if not nombre_producto:
             return None
-        
+
+    def obtener_candidatos_previos(self, package_id: int, product_name: Optional[str] = None, manejo: Optional[str] = None, variedad: Optional[str] = None, limit: int = 500) -> List[Dict]:
+        """
+        Dado un `package_id` (pallet destino), devuelve los paquetes ORIGEN
+        CONFIRMADOS que alimentaron directamente este pallet.
+
+        Relación directa confirmada:
+          - move_line.result_package_id = package_id  (nuestro pallet es DESTINO)
+          - move_line.package_id = X                   (X es ORIGEN confirmado)
+
+        Solo se devuelven paquetes que tienen la relación directa en la misma
+        línea de movimiento. No se buscan paquetes sueltos del mismo picking.
+
+        Lógica:
+          1) Buscar move_lines donde result_package_id = package_id
+          2) De esas MISMAS líneas extraer package_id (fuente directa)
+          3) Agrupar por package_id fuente, sumar cantidades
+          4) Batch-resolver nombres de paquetes y pickings
+          5) Filtrar opcionalmente por producto/manejo/variedad
+
+        Returns lista de candidatos ordenados por qty desc.
+        """
+        try:
+            # ── 1) move_lines donde este package fue DESTINO ─────────
+            #    y que tienen un package_id fuente (relación directa)
+            mls = self.odoo.search_read(
+                'stock.move.line',
+                [
+                    ('result_package_id', '=', package_id),
+                    ('qty_done', '>', 0),
+                ],
+                ['id', 'move_id', 'picking_id', 'package_id',
+                 'product_id', 'qty_done', 'lot_id', 'date'],
+                limit=limit,
+            )
+            if not mls:
+                return []
+
+            # ── 2) De esas MISMAS líneas, extraer paquete fuente ─────
+            candidates: Dict[int, dict] = {}
+            pkg_picking_map: Dict[int, set] = {}
+
+            for ml in mls:
+                # package_id = paquete FUENTE (de donde salió el producto)
+                src_pkg = ml.get('package_id')
+                if not src_pkg:
+                    # Sin paquete fuente = producto suelto → no candidato
+                    continue
+
+                src_id = src_pkg[0] if isinstance(src_pkg, (list, tuple)) else src_pkg
+                if src_id == package_id:
+                    # Mismo paquete (reempaque dentro del mismo) → ignorar
+                    continue
+
+                prod = ml.get('product_id')
+                prod_id = prod[0] if prod and isinstance(prod, (list, tuple)) else prod
+                prod_nm = prod[1] if prod and isinstance(prod, (list, tuple)) and len(prod) > 1 else str(prod_id or '')
+                qty = float(ml.get('qty_done', 0) or 0)
+                lot = ml.get('lot_id')
+                lot_name = lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else (lot or '')
+
+                # Picking
+                pk = ml.get('picking_id')
+                pk_id = pk[0] if pk and isinstance(pk, (list, tuple)) else pk
+
+                if src_id not in candidates:
+                    candidates[src_id] = {
+                        'package_id': src_id,
+                        'package_name': None,
+                        'barcode': None,
+                        'product_id': prod_id,
+                        'product_name': prod_nm,
+                        'qty_total': 0.0,
+                        'lot_name': lot_name,
+                        'last_date': ml.get('date'),
+                        'picking_names': [],
+                    }
+                    pkg_picking_map[src_id] = set()
+
+                candidates[src_id]['qty_total'] += qty
+                if pk_id:
+                    pkg_picking_map[src_id].add(pk_id)
+
+                d = ml.get('date')
+                if d and (not candidates[src_id]['last_date'] or str(d) > str(candidates[src_id]['last_date'])):
+                    candidates[src_id]['last_date'] = d
+
+            if not candidates:
+                return []
+
+            # ── 3) Batch: resolver nombres de paquetes ───────────────
+            all_pkg_ids = list(candidates.keys())
+            try:
+                pkg_infos = self.odoo.search_read(
+                    'stock.quant.package',
+                    [('id', 'in', all_pkg_ids)],
+                    ['id', 'name', 'barcode'],
+                    limit=len(all_pkg_ids) + 10,
+                )
+                pkg_name_map = {p['id']: p for p in pkg_infos}
+            except Exception:
+                pkg_name_map = {}
+
+            for pkg_id, cand in candidates.items():
+                info = pkg_name_map.get(pkg_id)
+                if info:
+                    cand['package_name'] = info.get('name')
+                    cand['barcode'] = info.get('barcode')
+                else:
+                    cand['package_name'] = str(pkg_id)
+
+            # ── 4) Batch: resolver nombres de pickings ───────────────
+            all_picking_ids = set()
+            for pids in pkg_picking_map.values():
+                all_picking_ids.update(pids)
+
+            picking_name_map: Dict[int, str] = {}
+            if all_picking_ids:
+                try:
+                    picks = self.odoo.search_read(
+                        'stock.picking',
+                        [('id', 'in', list(all_picking_ids))],
+                        ['id', 'name', 'picking_type_id'],
+                        limit=len(all_picking_ids) + 10,
+                    )
+                    for pk in picks:
+                        ptype = pk.get('picking_type_id')
+                        ptype_name = ptype[1] if isinstance(ptype, (list, tuple)) and len(ptype) > 1 else ''
+                        picking_name_map[pk['id']] = f"{pk.get('name', '')} ({ptype_name})" if ptype_name else pk.get('name', '')
+                except Exception:
+                    pass
+
+            for pkg_id, cand in candidates.items():
+                pids = pkg_picking_map.get(pkg_id, set())
+                cand['picking_names'] = [picking_name_map.get(pid, str(pid)) for pid in pids]
+
+            # ── 5) Filtrar por producto/manejo/variedad ──────────────
+            results = list(candidates.values())
+
+            if product_name or manejo or variedad:
+                prod_ids = list({r['product_id'] for r in results if r.get('product_id')})
+                prod_map: Dict[int, dict] = {}
+                if prod_ids:
+                    try:
+                        prods = self.odoo.search_read(
+                            'product.product',
+                            [('id', 'in', prod_ids)],
+                            ['id', 'name', 'default_code', 'x_manejo', 'x_variedad'],
+                            limit=500,
+                        )
+                        for p in prods:
+                            prod_map[p['id']] = p
+                    except Exception:
+                        pass
+
+                filtered = []
+                for r in results:
+                    pid = r.get('product_id')
+                    prod_rec = prod_map.get(pid)
+                    ok = True
+                    if product_name and prod_rec:
+                        if product_name.lower() not in (prod_rec.get('name') or '').lower():
+                            ok = False
+                    if manejo and prod_rec and ok:
+                        xm = str(prod_rec.get('x_manejo') or '')
+                        if manejo.lower() not in xm.lower():
+                            ok = False
+                    if variedad and prod_rec and ok:
+                        xv = str(prod_rec.get('x_variedad') or '')
+                        if variedad.lower() not in xv.lower():
+                            ok = False
+                    if ok:
+                        if prod_rec:
+                            r['product_name'] = prod_rec.get('name')
+                            r['x_manejo'] = prod_rec.get('x_manejo')
+                            r['x_variedad'] = prod_rec.get('x_variedad')
+                        filtered.append(r)
+                results = filtered
+
+            # Ordenar por cantidad descendente
+            results.sort(key=lambda x: x.get('qty_total', 0), reverse=True)
+            return results
+
+        except Exception as e:
+            logger.error(f"Error obteniendo candidatos previos para package {package_id}: {e}")
+            return []
+
         # Buscar patrones: número seguido de kg (con o sin espacio)
         # Ej: "10 kg", "10kg", "10 Kg", "10KG"
         patterns = [
