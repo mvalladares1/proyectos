@@ -56,7 +56,6 @@ instrumentator = Instrumentator(
 
 instrumentator.add(
     metrics.default(
-        metric_name="http_request_duration_seconds",
         should_include_handler=True,
         should_include_method=True,
         should_include_status=True
