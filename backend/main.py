@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from backend.config import settings
 from backend.routers import (
     auth,
@@ -34,6 +36,7 @@ from backend.routers import (
 
 logger = logging.getLogger(__name__)
 
+instrumentator = Instrumentator()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,6 +46,8 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Iniciando aplicación...")
     
+    instrumentator.instrument(app).expose(app)
+
     yield
     
     # Shutdown
