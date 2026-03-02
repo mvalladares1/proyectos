@@ -301,6 +301,9 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
         st.markdown(label)
         p = level_pkgs[0]
         st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F4E6 **`{p['pkg_name']}`**")
+        # Si es frontera (solo nivel 0) → mostrar botón para buscar orígenes
+        if is_frontier:
+            _render_frontier_group(level_pkgs, level_idx, tree, username, password)
         return
 
     # Agrupar nodos de este nivel por su padre
