@@ -60,4 +60,5 @@ services:
 
 networks:
   rio-network:
+    name: rio-network
     external: true
