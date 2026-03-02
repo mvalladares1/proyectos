@@ -39,12 +39,14 @@ app = FastAPI(
 )
 
 # --- CONFIGURACIÓN AVANZADA DE MÉTRICAS ---
-instrumentator = Instrumentator()
-
-instrumentator.add(metrics.request_inprogress())
-instrumentator.add(metrics.request_size())
-instrumentator.add(metrics.response_size())
-instrumentator.add(metrics.requests(should_include_handler=True))
+instrumentator = Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    should_respect_env_var=True,
+    should_instrument_requests_inprogress=True,
+    inprogress_name="http_requests_inprogress",
+    inprogress_labels=True,
+)
 
 # Ejecutamos la instrumentación
 instrumentator.instrument(app)
