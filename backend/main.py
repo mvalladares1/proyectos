@@ -52,15 +52,12 @@ instrumentator = Instrumentator(
     should_respect_env_var=True,
     should_instrument_requests_inprogress=True,
     
+    should_include_handler=True, 
+    should_include_method=True,
+    should_include_status=True,
 )
 
-instrumentator.add(
-    metrics.default(
-        include_handler=True,
-        include_method=True,
-        include_status=True
-    )
-)
+instrumentator.add(metrics.default())
 
 # Ejecutamos la instrumentación
 instrumentator.instrument(app)
