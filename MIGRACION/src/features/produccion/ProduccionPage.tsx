@@ -243,12 +243,11 @@ function ReporteriaTab() {
               </CardHeader>
               <CardContent>
                 <BarChart
-                  data={salas.map(s => ({ name: s.sala, value: s.kg_por_hora }))}
-                  dataKey="value"
-                  nameKey="name"
+                  data={salas.map(s => ({ sala: s.sala, kg_por_hora: s.kg_por_hora }))}
+                  xKey="sala"
+                  bars={[{ key: 'kg_por_hora', name: 'Kg/hora', color: '#3b82f6' }]}
                   height={280}
-                  color="#3b82f6"
-                  unit=" kg/h"
+                  yFormatter={v => `${formatNumber(v)} kg/h`}
                 />
               </CardContent>
             </Card>
@@ -258,7 +257,7 @@ function ReporteriaTab() {
           <Card>
             <CardHeader className="py-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">Órdenes de Trabajo ({mos.length})</CardTitle>
-              <ExportButton data={mos} filename={`reporteria_${fi}_${ff}`} />
+              <ExportButton data={mos as unknown as Record<string, unknown>[]} filename={`reporteria_${fi}_${ff}`} />
             </CardHeader>
             <CardContent>
               <DataTable columns={moColumns} data={mos} />

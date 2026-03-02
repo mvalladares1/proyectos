@@ -1,330 +1,347 @@
 """
-Tab de Trazabilidad: Análisis de compras, ventas y merma por tipo de fruta y manejo
+Tab Trazabilidad de Pallets – acumulativo.
+El usuario traza pallets uno a uno, se van acumulando en session_state,
+y cuando quiere genera el Excel final con todo.
+Excel con 2 hojas:
+  1) Trazabilidad Completa  (cadena detallada)
+  2) Guías y Productores    (resumen único guía + productor)
 """
 import streamlit as st
 import pandas as pd
+import io
 from datetime import datetime
-import plotly.express as px
-import plotly.graph_objects as go
+from typing import Dict, List
+import httpx
+from .shared import API_URL
+
+SESSION_KEY = "traz_acumulado"  # List[Dict] en session_state
+
+
+# ═════════════════════════════════════════════════════════════
+# Render principal
+# ═════════════════════════════════════════════════════════════
 
 def render(username: str, password: str):
-    """
-    Renderiza el tab de trazabilidad con análisis de:
-    - Compras por categoría de manejo y tipo de fruta
-    - Ventas por categoría de manejo y tipo de fruta
-    - Cálculo de merma
-    - Inventario teórico a fin de año
-    """
-    
-    st.subheader("📊 Trazabilidad de Inventario")
-    st.caption("Análisis de compras, ventas y merma por tipo de fruta y categoría de manejo")
-    
-    # Filtros principales
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        año_seleccionado = st.selectbox(
-            "Año",
-            options=[2024, 2025, 2026],
-            index=1  # 2025 por defecto
-        )
-    
-    with col2:
-        # Obtener tipos de fruta desde Odoo
-        tipos_fruta = ["Todos", "Arándano", "Frambuesa", "Frutilla", "Mix", "Mora"]
-        tipo_seleccionado = st.selectbox(
-            "Tipo de Fruta",
-            options=tipos_fruta
-        )
-    
-    with col3:
-        # Categorías de manejo
-        manejos = ["Todos", "Convencional", "Orgánico"]
-        manejo_seleccionado = st.selectbox(
-            "Categoría de Manejo",
-            options=manejos
-        )
-    
-    # Fecha de corte para análisis de merma
-    st.info("💡 **Análisis de Merma**: Se calculará sumando compras y ventas hasta fin de octubre para estimar merma anual")
-    
-    fecha_corte = st.date_input(
-        "Fecha de corte para análisis",
-        value=datetime(año_seleccionado, 10, 31),
-        min_value=datetime(año_seleccionado, 1, 1),
-        max_value=datetime(año_seleccionado, 12, 31)
-    )
-    
-    if st.button("🔍 Analizar", type="primary"):
-        with st.spinner("Consultando datos de Odoo..."):
-            # Aquí irá la lógica de consulta
-            st.info("Funcionalidad en desarrollo - Conectando con backend service")
-            
-            # Placeholder de datos de ejemplo
-            st.success("✅ Datos cargados correctamente")
-            
-            # Tabs para diferentes vistas
-            tab1, tab2, tab3, tab4 = st.tabs([
-                "📈 Resumen General",
-                "🛒 Compras",
-                "💰 Ventas",
-                "⚠️ Merma e Inventario"
-            ])
-            
-            with tab1:
-                render_resumen_general()
-            
-            with tab2:
-                render_compras()
-            
-            with tab3:
-                render_ventas()
-            
-            with tab4:
-                render_merma_inventario()
-
-
-def render_resumen_general():
-    """Resumen general con KPIs principales"""
-    st.subheader("📊 Resumen General")
-    
-    # KPIs en columnas
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "Total Comprado",
-            "1,234,567 kg",
-            "+15% vs año anterior"
-        )
-    
-    with col2:
-        st.metric(
-            "Total Vendido",
-            "1,100,000 kg",
-            "+12% vs año anterior"
-        )
-    
-    with col3:
-        st.metric(
-            "Merma Estimada",
-            "134,567 kg",
-            "10.9% del total"
-        )
-    
-    with col4:
-        st.metric(
-            "Inventario Teórico",
-            "234,567 kg",
-            "A fin de octubre"
-        )
-    
-    st.divider()
-    
-    # Gráfico de evolución mensual
-    st.subheader("Evolución Mensual")
-    
-    # Datos de ejemplo
-    meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-    compras = [100000, 120000, 150000, 180000, 200000, 220000, 180000, 160000, 140000, 120000, 100000, 80000]
-    ventas = [80000, 100000, 130000, 160000, 180000, 200000, 170000, 150000, 130000, 110000, 90000, 70000]
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=meses, y=compras, mode='lines+markers', name='Compras', line=dict(color='#2E86AB')))
-    fig.add_trace(go.Scatter(x=meses, y=ventas, mode='lines+markers', name='Ventas', line=dict(color='#A23B72')))
-    
-    fig.update_layout(
-        title="Compras vs Ventas Mensual",
-        xaxis_title="Mes",
-        yaxis_title="Cantidad (kg)",
-        hovermode='x unified',
-        height=400
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_compras():
-    """Vista detallada de compras"""
-    st.subheader("🛒 Análisis de Compras")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Gráfico por tipo de fruta
-        st.subheader("Por Tipo de Fruta")
-        data_tipos = {
-            'Tipo': ['Arándano', 'Frambuesa', 'Frutilla', 'Mix', 'Mora'],
-            'Cantidad': [500000, 300000, 200000, 150000, 84567]
-        }
-        df_tipos = pd.DataFrame(data_tipos)
-        
-        fig = px.pie(df_tipos, values='Cantidad', names='Tipo', title='Distribución por Tipo de Fruta')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Gráfico por manejo
-        st.subheader("Por Categoría de Manejo")
-        data_manejo = {
-            'Manejo': ['Convencional', 'Orgánico'],
-            'Cantidad': [800000, 434567]
-        }
-        df_manejo = pd.DataFrame(data_manejo)
-        
-        fig = px.pie(df_manejo, values='Cantidad', names='Manejo', title='Distribución por Manejo')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.divider()
-    
-    # Tabla detallada
-    st.subheader("Detalle de Compras")
-    
-    data_detalle = {
-        'Tipo Fruta': ['Arándano', 'Arándano', 'Frambuesa', 'Frambuesa', 'Frutilla'],
-        'Manejo': ['Convencional', 'Orgánico', 'Convencional', 'Orgánico', 'Convencional'],
-        'Cantidad (kg)': [300000, 200000, 180000, 120000, 200000],
-        'Valor Total': [1500000, 1200000, 900000, 720000, 800000],
-        'Precio Promedio': [5.0, 6.0, 5.0, 6.0, 4.0]
-    }
-    df_detalle = pd.DataFrame(data_detalle)
-    
-    st.dataframe(
-        df_detalle,
-        use_container_width=True,
-        hide_index=True
+    st.subheader("\U0001F50D Trazabilidad de Pallets")
+    st.caption(
+        "Traza pallets uno a uno. Se van acumulando abajo. "
+        "Cuando termines, descarga el Excel con todo."
     )
 
+    # Inicializar lista acumulada
+    if SESSION_KEY not in st.session_state:
+        st.session_state[SESSION_KEY] = []
 
-def render_ventas():
-    """Vista detallada de ventas"""
-    st.subheader("💰 Análisis de Ventas")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Gráfico por tipo de fruta
-        st.subheader("Por Tipo de Fruta")
-        data_tipos = {
-            'Tipo': ['Arándano', 'Frambuesa', 'Frutilla', 'Mix', 'Mora'],
-            'Cantidad': [450000, 270000, 180000, 130000, 70000]
-        }
-        df_tipos = pd.DataFrame(data_tipos)
-        
-        fig = px.pie(df_tipos, values='Cantidad', names='Tipo', title='Distribución por Tipo de Fruta')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Gráfico por manejo
-        st.subheader("Por Categoría de Manejo")
-        data_manejo = {
-            'Manejo': ['Convencional', 'Orgánico'],
-            'Cantidad': [720000, 380000]
-        }
-        df_manejo = pd.DataFrame(data_manejo)
-        
-        fig = px.pie(df_manejo, values='Cantidad', names='Manejo', title='Distribución por Manejo')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.divider()
-    
-    # Tabla detallada
-    st.subheader("Detalle de Ventas")
-    
-    data_detalle = {
-        'Tipo Fruta': ['Arándano', 'Arándano', 'Frambuesa', 'Frambuesa', 'Frutilla'],
-        'Manejo': ['Convencional', 'Orgánico', 'Convencional', 'Orgánico', 'Convencional'],
-        'Cantidad (kg)': [270000, 180000, 162000, 108000, 180000],
-        'Valor Total': [2700000, 2160000, 1620000, 1296000, 1440000],
-        'Precio Promedio': [10.0, 12.0, 10.0, 12.0, 8.0]
-    }
-    df_detalle = pd.DataFrame(data_detalle)
-    
-    st.dataframe(
-        df_detalle,
-        use_container_width=True,
-        hide_index=True
-    )
+    acumulado: List[Dict] = st.session_state[SESSION_KEY]
 
-
-def render_merma_inventario():
-    """Análisis de merma e inventario teórico"""
-    st.subheader("⚠️ Análisis de Merma e Inventario Teórico")
-    
-    st.info("""
-    **Metodología:**
-    - Se suman todas las compras hasta la fecha de corte (fin de octubre)
-    - Se suman todas las ventas hasta la fecha de corte
-    - Merma = Compras - Ventas - Inventario Real (si disponible)
-    - Inventario Teórico = Compras - Ventas (sin considerar merma histórica)
-    """)
-    
-    # Tabla de análisis
-    st.subheader("Análisis por Tipo de Fruta y Manejo")
-    
-    data_analisis = {
-        'Tipo Fruta': ['Arándano', 'Arándano', 'Frambuesa', 'Frambuesa', 'Frutilla'],
-        'Manejo': ['Conv.', 'Org.', 'Conv.', 'Org.', 'Conv.'],
-        'Compras (kg)': [300000, 200000, 180000, 120000, 200000],
-        'Ventas (kg)': [270000, 180000, 162000, 108000, 180000],
-        'Inventario Teórico (kg)': [30000, 20000, 18000, 12000, 20000],
-        'Merma Estimada (kg)': [3000, 2000, 1800, 1200, 2000],
-        '% Merma': ['10.0%', '10.0%', '10.0%', '10.0%', '10.0%']
-    }
-    df_analisis = pd.DataFrame(data_analisis)
-    
-    st.dataframe(
-        df_analisis,
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    st.divider()
-    
-    # Gráfico de merma
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Distribución de Merma")
-        fig = px.bar(
-            df_analisis,
-            x='Tipo Fruta',
-            y='Merma Estimada (kg)',
-            color='Manejo',
-            title='Merma por Tipo de Fruta y Manejo',
-            barmode='group'
+    # ── Input ────────────────────────────────────────────────
+    col_in, col_btn = st.columns([3, 1])
+    with col_in:
+        pallet_name = st.text_input(
+            "Pallet a trazar",
+            placeholder="Ej: PACK0012345",
+            key="traz_input",
         )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("Inventario Teórico")
-        fig = px.bar(
-            df_analisis,
-            x='Tipo Fruta',
-            y='Inventario Teórico (kg)',
-            color='Manejo',
-            title='Inventario Teórico a Fin de Octubre',
-            barmode='group'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Exportar resultados
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        agregar = st.button("\U0001F50D Trazar y Agregar", type="primary", key="traz_btn")
+
+    # ── Trazar ───────────────────────────────────────────────
+    if agregar:
+        if not pallet_name or not pallet_name.strip():
+            st.warning("Ingresa un nombre de pallet.")
+        else:
+            nombre = pallet_name.strip().upper()
+            # Verificar si ya existe
+            ya_existe = any(r.get("pack", "").upper() == nombre for r in acumulado)
+            if ya_existe:
+                st.warning(f"**{nombre}** ya fue trazado. No se agrega de nuevo.")
+            else:
+                with st.spinner(f"Trazando **{nombre}**..."):
+                    try:
+                        r = httpx.get(
+                            f"{API_URL}/api/v1/produccion/trazabilidad",
+                            params={
+                                "pallet_name": nombre,
+                                "username": username,
+                                "password": password,
+                            },
+                            timeout=180.0,
+                        )
+                        r.raise_for_status()
+                        data = r.json()
+                        if data.get("error"):
+                            st.error(f"{nombre}: {data['error']}")
+                        else:
+                            acumulado.append(data)
+                            st.session_state[SESSION_KEY] = acumulado
+                            st.success(f"**{nombre}** agregado — {len(data.get('filas', []))} filas.")
+                    except httpx.TimeoutException:
+                        st.error(f"Timeout trazando {nombre}.")
+                    except httpx.HTTPStatusError as e:
+                        st.error(f"Error {e.response.status_code}: {e.response.text[:300]}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+    # ── Estado actual ────────────────────────────────────────
+    if not acumulado:
+        st.info("Aún no has trazado ningún pallet. Ingresa uno arriba y presiona **Trazar y Agregar**.")
+        return
+
     st.divider()
-    st.subheader("📥 Exportar Resultados")
-    
-    col1, col2 = st.columns(2)
-    with col1:
+
+    # ── Métricas globales ────────────────────────────────────
+    total_filas = sum(len(r.get("filas", [])) for r in acumulado)
+    all_guias = set()
+    all_productores = set()
+    for r in acumulado:
+        for f in r.get("filas", []):
+            g = f.get("guia_despacho", "")
+            p = f.get("productor", "")
+            if g:
+                all_guias.add(g)
+            if p:
+                all_productores.add(p)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Pallets Trazados", len(acumulado))
+    c2.metric("Filas Totales", total_filas)
+    c3.metric("Guías Únicas", len(all_guias))
+    c4.metric("Productores Únicos", len(all_productores))
+
+    # ── Lista de packs acumulados con botón eliminar ─────────
+    st.markdown("#### Pallets acumulados")
+    for idx, res in enumerate(acumulado):
+        pack = res.get("pack", "")
+        n_filas = len(res.get("filas", []))
+        truncado = res.get("truncado", False)
+        label = f"**{pack}** — {n_filas} filas"
+        if truncado:
+            label += " (truncado)"
+
+        col_name, col_del = st.columns([5, 1])
+        with col_name:
+            st.markdown(label)
+        with col_del:
+            if st.button("\u274C", key=f"del_{idx}"):
+                acumulado.pop(idx)
+                st.session_state[SESSION_KEY] = acumulado
+                st.rerun()
+
+    st.divider()
+
+    # ── Detalle por pack ─────────────────────────────────────
+    for res in acumulado:
+        pack = res.get("pack", "")
+        pallets_consumidos = res.get("pallets_consumidos", "")
+        filas = res.get("filas", [])
+
+        with st.expander(f"**{pack}** — {len(filas)} filas — Consumidos: {pallets_consumidos}", expanded=False):
+            if filas:
+                rows = []
+                for f in filas:
+                    rows.append({
+                        "Pallet Origen": f.get("pallet_origen", ""),
+                        "Cadena de Trazabilidad": f.get("cadena", ""),
+                        "Guía Despacho": f.get("guia_despacho", ""),
+                        "Productor": f.get("productor", ""),
+                    })
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            else:
+                st.info("Sin datos.")
+
+    st.divider()
+
+    # ── Acciones finales ─────────────────────────────────────
+    col_excel, col_limpiar = st.columns([3, 1])
+
+    with col_excel:
+        st.markdown("### \U0001F4E5 Generar Excel Final")
+        excel = _generar_excel_multi(acumulado)
+        packs_str = "_".join(r.get("pack", "X") for r in acumulado[:3])
+        if len(acumulado) > 3:
+            packs_str += f"_y_{len(acumulado)-3}_mas"
+        fname = f"Trazabilidad_{packs_str}_{datetime.now():%Y%m%d_%H%M}.xlsx"
         st.download_button(
-            "📊 Descargar Excel",
-            data="",  # Aquí iría el Excel generado
-            file_name=f"trazabilidad_inventario_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            "\u2B07\uFE0F Descargar Excel (2 hojas)",
+            data=excel,
+            file_name=fname,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            disabled=True  # Por ahora deshabilitado
+            type="primary",
         )
-    
-    with col2:
-        st.download_button(
-            "📄 Descargar CSV",
-            data=df_analisis.to_csv(index=False),
-            file_name=f"trazabilidad_inventario_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
+
+    with col_limpiar:
+        st.markdown("### \U0001F5D1\uFE0F Limpiar")
+        if st.button("\U0001F5D1\uFE0F Limpiar Todo", key="traz_limpiar"):
+            st.session_state[SESSION_KEY] = []
+            st.rerun()
+
+
+# ═════════════════════════════════════════════════════════════
+# Generación Excel – 2 hojas
+# ═════════════════════════════════════════════════════════════
+
+def _generar_excel_multi(resultados: List[Dict]) -> bytes:
+    """
+    Genera Excel con 2 hojas:
+      1) Trazabilidad Completa – toda la info por pack
+      2) Guías y Productores  – resumen único de guías
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+
+    # ── Estilos compartidos ──────────────────────────────────
+    thin = Side(style="thin")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    hdr_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+    hdr_font = Font(color="FFFFFF", bold=True, size=11)
+    hdr2_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left_al = Alignment(vertical="center", wrap_text=True)
+    red_font = Font(color="CC0000", bold=True, italic=True)
+    green_font = Font(color="006100", bold=True)
+    pack_font = Font(bold=True, size=11)
+    sep_fill = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid")
+
+    def write_header(ws, headers, fill=None):
+        f = fill or hdr_fill
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=c, value=h)
+            cell.fill = f
+            cell.font = hdr_font
+            cell.alignment = center
+            cell.border = border
+
+    def set_widths(ws, widths):
+        for c, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(c)].width = w
+
+    # ══════════════════════════════════════════════════════════
+    # HOJA 1 – Trazabilidad Completa
+    # ══════════════════════════════════════════════════════════
+    ws1 = wb.active
+    ws1.title = "Trazabilidad Completa"
+
+    h1 = ["Pack", "Pallets Consumidos", "Pallet Origen",
+          "Cadena de Trazabilidad", "Guía Despacho", "Productor"]
+    write_header(ws1, h1)
+    set_widths(ws1, [20, 50, 16, 60, 18, 42])
+
+    row_idx = 2
+    for res in resultados:
+        pack = res.get("pack", "")
+        consumidos = res.get("pallets_consumidos", "")
+        filas = res.get("filas", [])
+
+        if not filas:
+            continue
+
+        start_row = row_idx
+        for f in filas:
+            ws1.cell(row=row_idx, column=1, value=pack).font = pack_font
+            ws1.cell(row=row_idx, column=2, value=consumidos)
+            ws1.cell(row=row_idx, column=3, value=f.get("pallet_origen", ""))
+            ws1.cell(row=row_idx, column=4, value=f.get("cadena", ""))
+            ws1.cell(row=row_idx, column=5, value=f.get("guia_despacho", ""))
+            ws1.cell(row=row_idx, column=6, value=f.get("productor", ""))
+
+            # Formato y bordes
+            for c in range(1, 7):
+                cell = ws1.cell(row=row_idx, column=c)
+                cell.border = border
+                cell.alignment = center if c <= 3 else left_al
+
+            # Colores condicionales
+            cadena_cell = ws1.cell(row=row_idx, column=4)
+            if "NO TIENE" in str(cadena_cell.value):
+                cadena_cell.font = red_font
+            guia_cell = ws1.cell(row=row_idx, column=5)
+            if guia_cell.value:
+                guia_cell.font = green_font
+
+            row_idx += 1
+
+        end_row = row_idx - 1
+
+        # Merge Pack y Pallets Consumidos para este bloque
+        if end_row > start_row:
+            ws1.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
+            ws1.merge_cells(start_row=start_row, start_column=2, end_row=end_row, end_column=2)
+        ws1.cell(row=start_row, column=1).alignment = center
+        ws1.cell(row=start_row, column=2).alignment = center
+
+        # Fila separadora entre packs
+        if res != resultados[-1]:
+            for c in range(1, 7):
+                cell = ws1.cell(row=row_idx, column=c)
+                cell.fill = sep_fill
+                cell.border = border
+            row_idx += 1
+
+    ws1.freeze_panes = "A2"
+
+    # ══════════════════════════════════════════════════════════
+    # HOJA 2 – Guías y Productores
+    # ══════════════════════════════════════════════════════════
+    ws2 = wb.create_sheet("Guías y Productores")
+
+    h2 = ["Pack", "Guía Despacho", "Productor"]
+    write_header(ws2, h2, fill=hdr2_fill)
+    set_widths(ws2, [20, 22, 48])
+
+    # Recolectar guías únicas por pack
+    guias_por_pack: Dict[str, List] = {}
+    for res in resultados:
+        pack = res.get("pack", "")
+        seen_guias: set = set()
+        entries: List = []
+        for f in res.get("filas", []):
+            guia = f.get("guia_despacho", "")
+            prod = f.get("productor", "")
+            key = (guia, prod)
+            if key not in seen_guias and (guia or prod):
+                seen_guias.add(key)
+                entries.append({"guia": guia, "prod": prod})
+        if entries:
+            guias_por_pack[pack] = entries
+
+    row2 = 2
+    for pack, entries in guias_por_pack.items():
+        start2 = row2
+        for entry in entries:
+            ws2.cell(row=row2, column=1, value=pack).font = pack_font
+            g_cell = ws2.cell(row=row2, column=2, value=entry["guia"])
+            g_cell.font = green_font if entry["guia"] else Font()
+            ws2.cell(row=row2, column=3, value=entry["prod"])
+
+            for c in range(1, 4):
+                cell = ws2.cell(row=row2, column=c)
+                cell.border = border
+                cell.alignment = center if c <= 2 else left_al
+
+            row2 += 1
+
+        end2 = row2 - 1
+        # Merge Pack
+        if end2 > start2:
+            ws2.merge_cells(start_row=start2, start_column=1, end_row=end2, end_column=1)
+        ws2.cell(row=start2, column=1).alignment = center
+
+        # Separador
+        if pack != list(guias_por_pack.keys())[-1]:
+            for c in range(1, 4):
+                cell = ws2.cell(row=row2, column=c)
+                cell.fill = sep_fill
+                cell.border = border
+            row2 += 1
+
+    ws2.freeze_panes = "A2"
+
+    # ── Guardar ──────────────────────────────────────────────
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()

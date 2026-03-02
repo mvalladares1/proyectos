@@ -626,7 +626,7 @@ class RealProyectadoCalculator:
                 lineas_proyecciones = self.odoo.search_read(
                     'account.move.line',
                     [['move_id', 'in', moves_proyec_ids]],
-                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance'],
+                    ['id', 'move_id', 'account_id', 'analytic_distribution', 'balance', 'display_type', 'tax_line_id'],
                     limit=50000
                 )
 
@@ -737,10 +737,20 @@ class RealProyectadoCalculator:
 
                 # Distribución por Cat IFRS 3 (Nivel 2) y Analítico (Nivel 3)
                 # Si IFRS3 está vacío, no se considera esa línea.
+                # ESCENARIO C: IVA se excluye de ponderadores pero el total con IVA
+                # se distribuye proporcionalmente entre categorías de gasto.
                 lineas_move = lineas_proyec_por_move.get(fp.get('id'), [])
                 ponderadores = defaultdict(float)  # (ifrs3, analitico) -> peso
 
                 for linea in lineas_move:
+                    # Excluir línea de contrapartida (payable/receivable) para no diluir pesos
+                    if linea.get('display_type') == 'payment_term':
+                        continue
+
+                    # Excluir líneas de IVA de los ponderadores de gasto
+                    if linea.get('tax_line_id'):
+                        continue
+
                     account_data = linea.get('account_id')
                     account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
                     ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
@@ -782,6 +792,7 @@ class RealProyectadoCalculator:
 
                 estado = estados['PROYECTADAS_CONTABILIDAD']
 
+                # Distribuir el TOTAL (base + IVA) entre categorías de gasto
                 for (categoria_ifrs3, nombre_analitico), peso in ponderadores.items():
                     proporcion = peso / total_peso
                     monto_parcial = monto_proyectado * proporcion
@@ -851,7 +862,7 @@ class RealProyectadoCalculator:
                     
                     for prov_nombre, prov_data in proveedores_ordenados:
                         prov_entry = {
-                            'nombre': f"↳ {prov_data['nombre']}",
+                            'nombre': prov_data['nombre'],
                             'monto': prov_data['monto'],
                             'montos_por_mes': dict(prov_data['montos_por_mes']),
                             'tipo': 'proveedor',
@@ -1358,7 +1369,7 @@ class RealProyectadoCalculator:
                     clientes_list = []
                     for cliente_name, cliente_data in sorted(categoria_data['clientes'].items(), key=lambda x: x[1]['monto'], reverse=True):
                         clientes_list.append({
-                            'nombre': f"↳ {cliente_data['nombre']}",
+                            'nombre': cliente_data['nombre'],
                             'monto': cliente_data['monto'],
                             'real': cliente_data['real'],
                             'proyectado': cliente_data['proyectado'],

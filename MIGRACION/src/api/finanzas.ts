@@ -7,6 +7,7 @@ import type {
   EERRMensualizadoData,
   CuentaContable,
   ComposicionDetalle,
+  FlujoCajaMensualData,
 } from '@/types/finanzas'
 
 interface FinanzasFilters {
@@ -166,6 +167,51 @@ export function useEERRDetalle(year: number, months: number[]) {
       })
       return data
     },
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
+// ─── Flujo de Caja V2 ────────────────────────────────────────────────────────
+
+export interface FlujoCajaV2Params {
+  fechaInicio: string
+  fechaFin: string
+  odooUser: string
+  odooKey: string
+  incluirProyecciones?: boolean
+  enabled?: boolean
+}
+
+async function getFlujoCajaV2(
+  params: FlujoCajaV2Params,
+  agrupacion: 'mensual' | 'semanal',
+): Promise<FlujoCajaMensualData> {
+  const { data } = await apiClient.get(`${BASE_FC}/${agrupacion}`, {
+    params: {
+      fecha_inicio: params.fechaInicio,
+      fecha_fin: params.fechaFin,
+      username: params.odooUser,
+      password: params.odooKey,
+      incluir_proyecciones: params.incluirProyecciones ?? false,
+    },
+  })
+  return data
+}
+
+export function useFlujoCajaMensual(params: FlujoCajaV2Params) {
+  return useQuery<FlujoCajaMensualData>({
+    queryKey: ['finanzas', 'flujo-caja-mensual', params],
+    queryFn: () => getFlujoCajaV2(params, 'mensual'),
+    enabled: (params.enabled ?? false) && !!params.odooUser && !!params.odooKey,
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
+export function useFlujoCajaSemanal(params: FlujoCajaV2Params) {
+  return useQuery<FlujoCajaMensualData>({
+    queryKey: ['finanzas', 'flujo-caja-semanal', params],
+    queryFn: () => getFlujoCajaV2(params, 'semanal'),
+    enabled: (params.enabled ?? false) && !!params.odooUser && !!params.odooKey,
     staleTime: 10 * 60 * 1000,
   })
 }

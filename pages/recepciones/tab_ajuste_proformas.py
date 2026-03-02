@@ -450,21 +450,52 @@ def _enviar_proformas_masivo(facturas_todas: list, facturas_seleccionadas: list,
     
     # Mapear seleccionadas a facturas completas usando el diccionario
     facturas_enviar = []
+    facturas_ya_enviadas = []
+    
     if factura_map:
         for sel in facturas_seleccionadas:
             if sel in factura_map:
                 f = factura_map[sel]
                 if f.get('proveedor_email'):
-                    facturas_enviar.append(f)
+                    # Verificar si ya fue enviada
+                    if f.get('enviada'):
+                        facturas_ya_enviadas.append(f)
+                    else:
+                        facturas_enviar.append(f)
     else:
         for sel in facturas_seleccionadas:
             for f in facturas_todas:
                 if f.get('id') and sel and str(f['id']) in sel and f.get('proveedor_email'):
-                    facturas_enviar.append(f)
+                    if f.get('enviada'):
+                        facturas_ya_enviadas.append(f)
+                    else:
+                        facturas_enviar.append(f)
                     break
     
+    # Mostrar advertencia si hay proformas ya enviadas
+    if facturas_ya_enviadas:
+        st.warning(f"⚠️ **{len(facturas_ya_enviadas)} proformas** ya fueron enviadas anteriormente y no se reenviarán:")
+        for f in facturas_ya_enviadas[:5]:
+            fecha_envio = f.get("fecha_envio", "")
+            if fecha_envio:
+                try:
+                    from datetime import datetime
+                    fecha_dt = datetime.fromisoformat(fecha_envio.replace('Z', '+00:00'))
+                    fecha_str = fecha_dt.strftime("%d/%m/%Y")
+                except:
+                    fecha_str = fecha_envio[:10] if len(fecha_envio) >= 10 else fecha_envio
+                st.caption(f"  - {f['nombre']} - {f['proveedor_nombre']} (enviada el {fecha_str})")
+            else:
+                st.caption(f"  - {f['nombre']} - {f['proveedor_nombre']}")
+        if len(facturas_ya_enviadas) > 5:
+            st.caption(f"  ... y {len(facturas_ya_enviadas) - 5} más")
+        st.info("💡 Si necesita reenviar alguna, descargue el PDF y envíelo manualmente.")
+    
     if not facturas_enviar:
-        st.error("❌ No hay proformas válidas para enviar (todos los proveedores sin email)")
+        if facturas_ya_enviadas:
+            st.error("❌ Todas las proformas seleccionadas ya fueron enviadas anteriormente")
+        else:
+            st.error("❌ No hay proformas válidas para enviar (todos los proveedores sin email)")
         return
     
     st.markdown("---")
@@ -634,15 +665,27 @@ def _agregar_estado_envio(facturas: list, username: str, password: str) -> list:
                 ('res_id', 'in', factura_ids),
                 ('body', 'ilike', 'Proforma enviada por correo electrónico')
             ]],
-            {'fields': ['res_id']}
+            {'fields': ['res_id', 'date'], 'order': 'date asc'}  # Obtener fecha del primer envío
         )
         
-        # Crear set de IDs de facturas que tienen envío
-        facturas_con_envio = {msg['res_id'] for msg in mensajes}
+        # Crear diccionario de IDs de facturas con su fecha de primer envío
+        facturas_con_envio = {}
+        for msg in mensajes:
+            res_id = msg['res_id']
+            fecha = msg.get('date', '')
+            # Solo guardar la primera fecha (el más antiguo)
+            if res_id not in facturas_con_envio:
+                facturas_con_envio[res_id] = fecha
         
-        # Agregar campo 'enviada' a cada factura
+        # Agregar campos 'enviada' y 'fecha_envio' a cada factura
         for factura in facturas:
-            factura['enviada'] = factura.get('id') in facturas_con_envio
+            fac_id = factura.get('id')
+            if fac_id in facturas_con_envio:
+                factura['enviada'] = True
+                factura['fecha_envio'] = facturas_con_envio[fac_id]
+            else:
+                factura['enviada'] = False
+                factura['fecha_envio'] = None
         
         return facturas
         
@@ -725,6 +768,9 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                 oc_nombre = desc.split(":")[0].strip()
                 fecha_oc = fechas_oc_map.get(oc_nombre, "-")
             
+            # Obtener guía de despacho del servicio (ya viene calculada)
+            guia_despacho = l.get("guia_despacho", "") or "-"
+            
             # Calcular precio unitario CLP
             p_unit_clp = l["subtotal_clp"] / l["cantidad"] if l["cantidad"] else 0
             
@@ -734,6 +780,7 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                 "_purchase_order_id": l.get("purchase_order_id"),
                 "Descripción": desc,
                 "Fecha OC": fecha_oc,
+                "Guía": guia_despacho,
                 "Cant. KG": l["cantidad"],
                 "Subtotal CLP": l["subtotal_clp"]
             }
@@ -761,7 +808,7 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
         
         # Mostrar headers de columnas - condicional según moneda
         if es_usd:
-            cols_header = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
+            cols_header = st.columns([0.7, 1.5, 0.7, 0.6, 0.7, 0.7, 0.7, 0.7, 0.8, 0.8, 0.5])
             with cols_header[0]:
                 st.markdown("**#**")
             with cols_header[1]:
@@ -769,22 +816,24 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             with cols_header[2]:
                 st.markdown("**Fecha OC**")
             with cols_header[3]:
-                st.markdown("**Cant. KG**")
+                st.markdown("**Guía**")
             with cols_header[4]:
-                st.markdown("**TC**")
+                st.markdown("**Cant. KG**")
             with cols_header[5]:
-                st.markdown("**P.Unit USD**")
+                st.markdown("**TC**")
             with cols_header[6]:
-                st.markdown("**P.Unit CLP**")
+                st.markdown("**P.Unit USD**")
             with cols_header[7]:
-                st.markdown("**Subtotal USD**")
+                st.markdown("**P.Unit CLP**")
             with cols_header[8]:
-                st.markdown("**Subtotal CLP**")
+                st.markdown("**Subtotal USD**")
             with cols_header[9]:
+                st.markdown("**Subtotal CLP**")
+            with cols_header[10]:
                 st.markdown("**🗑️**")
         else:
             # CLP: sin columnas USD ni TC
-            cols_header = st.columns([0.5, 2.0, 0.8, 0.8, 1.0, 1.0, 0.5])
+            cols_header = st.columns([0.5, 1.8, 0.7, 0.6, 0.7, 0.9, 0.9, 0.5])
             with cols_header[0]:
                 st.markdown("**#**")
             with cols_header[1]:
@@ -792,12 +841,14 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             with cols_header[2]:
                 st.markdown("**Fecha OC**")
             with cols_header[3]:
-                st.markdown("**Cant. KG**")
+                st.markdown("**Guía**")
             with cols_header[4]:
-                st.markdown("**P.Unit CLP**")
+                st.markdown("**Cant. KG**")
             with cols_header[5]:
-                st.markdown("**Subtotal CLP**")
+                st.markdown("**P.Unit CLP**")
             with cols_header[6]:
+                st.markdown("**Subtotal CLP**")
+            with cols_header[7]:
                 st.markdown("**🗑️**")
         
         st.markdown("---")
@@ -807,7 +858,7 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
             linea_id = row['_linea_id']
             
             if es_usd:
-                cols = st.columns([0.7, 1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.5])
+                cols = st.columns([0.7, 1.5, 0.7, 0.6, 0.7, 0.7, 0.7, 0.7, 0.8, 0.8, 0.5])
                 
                 with cols[0]:
                     st.write(f"**{idx+1}**")
@@ -822,23 +873,25 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                 with cols[2]:
                     st.write(row["Fecha OC"])
                 with cols[3]:
-                    st.write(row["Cant. KG"])
+                    st.write(row.get("Guía", "-"))
                 with cols[4]:
-                    st.write(row["Tipo Cambio"])
+                    st.write(row["Cant. KG"])
                 with cols[5]:
-                    st.write(row["P. Unitario USD"])
+                    st.write(row["Tipo Cambio"])
                 with cols[6]:
-                    st.write(row["P. Unitario CLP"])
+                    st.write(row["P. Unitario USD"])
                 with cols[7]:
-                    st.write(row["Subtotal USD"])
+                    st.write(row["P. Unitario CLP"])
                 with cols[8]:
-                    st.write(row["Subtotal CLP"])
+                    st.write(row["Subtotal USD"])
                 with cols[9]:
+                    st.write(row["Subtotal CLP"])
+                with cols[10]:
                     if st.button("🗑️", key=f"eliminar_{linea_id}", help="Eliminar línea de la factura en Odoo"):
                         _eliminar_linea(linea_id, factura, username, password)
             else:
                 # CLP: sin columnas USD ni TC
-                cols = st.columns([0.5, 2.0, 0.8, 0.8, 1.0, 1.0, 0.5])
+                cols = st.columns([0.5, 1.8, 0.7, 0.6, 0.7, 0.9, 0.9, 0.5])
                 
                 with cols[0]:
                     st.write(f"**{idx+1}**")
@@ -852,12 +905,14 @@ def _render_detalle_factura(factura: dict, username: str, password: str):
                 with cols[2]:
                     st.write(row["Fecha OC"])
                 with cols[3]:
-                    st.write(row["Cant. KG"])
+                    st.write(row.get("Guía", "-"))
                 with cols[4]:
-                    st.write(row["P. Unitario CLP"])
+                    st.write(row["Cant. KG"])
                 with cols[5]:
-                    st.write(row["Subtotal CLP"])
+                    st.write(row["P. Unitario CLP"])
                 with cols[6]:
+                    st.write(row["Subtotal CLP"])
+                with cols[7]:
                     if st.button("🗑️", key=f"eliminar_{linea_id}", help="Eliminar línea de la factura en Odoo"):
                         _eliminar_linea(linea_id, factura, username, password)
 
@@ -1376,11 +1431,11 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
     elements.append(info_table)
     elements.append(Spacer(1, 20))
     
-    # Tabla de líneas con fecha de OC - condicional según moneda
+    # Tabla de líneas con fecha de OC y guía - condicional según moneda
     if es_usd:
-        table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nUSD", "Tipo\nCambio", "P. Unitario\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
+        table_data = [["Descripción", "Fecha OC", "Guía", "Cant.\nKG", "P. Unitario\nUSD", "Tipo\nCambio", "P. Unitario\nCLP", "Subtotal\nUSD", "Subtotal\nCLP"]]
     else:
-        table_data = [["Descripción", "Fecha OC", "Cant.\nKG", "P. Unitario\nCLP", "Subtotal\nCLP"]]
+        table_data = [["Descripción", "Fecha OC", "Guía", "Cant.\nKG", "P. Unitario\nCLP", "Subtotal\nCLP"]]
     
     # OPTIMIZACIÓN: Obtener todas las fechas de OCs en una sola llamada
     from shared.odoo_client import OdooClient
@@ -1428,11 +1483,12 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
         subtotal_clp = linea['subtotal_clp']
         p_unit_clp = subtotal_clp / cant if cant else 0
         
-        # Extraer fecha de OC del mapa
+        # Extraer fecha de OC del mapa y guía de despacho
         fecha_oc = "-"
         if ":" in desc_completa:
             oc_nombre = desc_completa.split(":")[0].strip()
             fecha_oc = fechas_oc_map.get(oc_nombre, "-")
+        guia = linea.get('guia_despacho', '-') or '-'
         
         if es_usd:
             p_unit_usd = linea['precio_usd']
@@ -1442,6 +1498,7 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
             table_data.append([
                 desc_paragraph,
                 fecha_oc,
+                guia,
                 fmt_cl(cant, 2),
                 f"${fmt_cl(p_unit_usd, 2)}",
                 fmt_cl(tc_linea, 2),
@@ -1453,53 +1510,54 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
             table_data.append([
                 desc_paragraph,
                 fecha_oc,
+                guia,
                 fmt_cl(cant, 2),
                 f"${fmt_cl(p_unit_clp, 0)}",
                 f"${fmt_cl(subtotal_clp, 0)}"
             ])
     
     # Línea en blanco antes de totales
-    num_cols = 8 if es_usd else 5
+    num_cols = 9 if es_usd else 6
     table_data.append([""] * num_cols)
     
     # Totales - 3 filas
     if es_usd:
         table_data.append([
-            "", "", "", "", "", "Base Imponible:",
+            "", "", "", "", "", "", "Base Imponible:",
             f"${fmt_cl(factura['base_usd'], 2)}",
             f"${fmt_cl(factura['base_clp'], 0)}"
         ])
         table_data.append([
-            "", "", "", "", "", "IVA 19%:",
+            "", "", "", "", "", "", "IVA 19%:",
             f"${fmt_cl(factura['iva_usd'], 2)}",
             f"${fmt_cl(factura['iva_clp'], 0)}"
         ])
         table_data.append([
-            "", "", "", "", "", "TOTAL:",
+            "", "", "", "", "", "", "TOTAL:",
             f"${fmt_cl(factura['total_usd'], 2)}",
             f"${fmt_cl(factura['total_clp'], 0)} *"
         ])
     else:
         table_data.append([
-            "", "", "", "Base Imponible:",
+            "", "", "", "", "Base Imponible:",
             f"${fmt_cl(factura['base_clp'], 0)}"
         ])
         table_data.append([
-            "", "", "", "IVA 19%:",
+            "", "", "", "", "IVA 19%:",
             f"${fmt_cl(factura['iva_clp'], 0)}"
         ])
         table_data.append([
-            "", "", "", "TOTAL:",
+            "", "", "", "", "TOTAL:",
             f"${fmt_cl(factura['total_clp'], 0)} *"
         ])
     
-    # Anchos de columna ajustados según moneda
+    # Anchos de columna ajustados según moneda (con Guía)
     if es_usd:
-        col_widths = [2.5*inch, 0.75*inch, 0.6*inch, 0.75*inch, 0.6*inch, 0.85*inch, 0.85*inch, 1.0*inch]
-        totales_col_start = 5
+        col_widths = [2.3*inch, 0.65*inch, 0.45*inch, 0.55*inch, 0.7*inch, 0.55*inch, 0.75*inch, 0.8*inch, 1.0*inch]
+        totales_col_start = 6
     else:
-        col_widths = [3.5*inch, 0.9*inch, 0.8*inch, 1.2*inch, 1.2*inch]
-        totales_col_start = 3
+        col_widths = [3.2*inch, 0.8*inch, 0.5*inch, 0.75*inch, 1.1*inch, 1.1*inch]
+        totales_col_start = 4
     
     main_table = Table(table_data, colWidths=col_widths)
     main_table.setStyle(TableStyle([
@@ -1609,6 +1667,23 @@ def _generar_pdf_proforma(factura: dict, username: str = None, password: str = N
 
 def _enviar_proforma_individual(factura: dict, username: str, password: str):
     """Envía una proforma individual por correo."""
+    
+    # Verificar si ya fue enviada
+    if factura.get("enviada"):
+        fecha_envio = factura.get("fecha_envio", "")
+        if fecha_envio:
+            # Formatear fecha a formato legible
+            try:
+                from datetime import datetime
+                fecha_dt = datetime.fromisoformat(fecha_envio.replace('Z', '+00:00'))
+                fecha_str = fecha_dt.strftime("%d/%m/%Y a las %H:%M")
+            except:
+                fecha_str = fecha_envio[:16] if len(fecha_envio) >= 16 else fecha_envio
+            st.warning(f"⚠️ **Esta proforma ya fue enviada el {fecha_str}.**")
+        else:
+            st.warning("⚠️ **Esta proforma ya fue enviada anteriormente.**")
+        st.info("💡 Si necesita reenviarla, descargue el PDF y envíelo manualmente con las explicaciones correspondientes al proveedor.")
+        return
     
     email_destino = factura.get("proveedor_email", "")
     

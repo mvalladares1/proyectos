@@ -166,3 +166,70 @@ export function useToggleProcesoActivo() {
     },
   })
 }
+
+// ─── Revertir Consumo ODF ─────────────────────────────────────────────────────
+
+export interface ComponentePreview {
+  paquete: string
+  producto: string
+  lote: string
+  cantidad: number
+  ubicacion: string
+}
+
+export interface SubproductoPreview {
+  producto: string
+  cantidad_actual: number
+  ubicacion: string
+}
+
+export interface RevertirPreviewResult {
+  success: boolean
+  message: string
+  componentes_preview: ComponentePreview[]
+  subproductos_preview: SubproductoPreview[]
+  errores?: string[]
+}
+
+export interface ComponenteRevertido {
+  paquete: string
+  producto: string
+  lote: string
+  cantidad: number
+  ubicacion: string
+}
+
+export interface RevertirConsumoResult {
+  success: boolean
+  message: string
+  componentes_revertidos: ComponenteRevertido[]
+  subproductos_eliminados: SubproductoPreview[]
+  transferencias_creadas: Array<{ name: string; id: number }>
+  errores?: string[]
+}
+
+export function usePreviewRevertirConsumo() {
+  return useMutation({
+    mutationFn: async ({ odfName, odooUser, odooKey }: { odfName: string; odooUser: string; odooKey: string }) => {
+      const { data } = await apiClient.post<RevertirPreviewResult>(
+        '/automatizaciones/revertir-consumo-odf/preview',
+        { odf_name: odfName },
+        { params: { username: odooUser, password: odooKey } },
+      )
+      return data
+    },
+  })
+}
+
+export function useRevertirConsumo() {
+  return useMutation({
+    mutationFn: async ({ odfName, odooUser, odooKey }: { odfName: string; odooUser: string; odooKey: string }) => {
+      const { data } = await apiClient.post<RevertirConsumoResult>(
+        '/automatizaciones/revertir-consumo-odf',
+        { odf_name: odfName },
+        { params: { username: odooUser, password: odooKey } },
+      )
+      return data
+    },
+  })
+}
