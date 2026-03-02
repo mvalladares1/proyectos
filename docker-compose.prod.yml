@@ -35,11 +35,10 @@ services:
     container_name: rio-web-prod
     environment:
       - ENV=production
-      - API_URL=http://rio-api-prod:8000
+      - API_URL=http://127.0.0.1:8000
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_BASE_URL_PATH=/dashboards
-    networks:
-      - rio-network
+    network_mode: "host"
     depends_on:
       api-prod:
         condition: service_healthy
@@ -61,5 +60,4 @@ services:
 
 networks:
   rio-network:
-    name: rio-network
     external: true
