@@ -41,7 +41,7 @@ app = FastAPI(
 # --- CONFIGURACIÓN AVANZADA DE MÉTRICAS ---
 instrumentator = Instrumentator()
 
-instrumentator.add(metrics.inprogress())
+instrumentator.add(metrics.request_inprogress())
 instrumentator.add(metrics.request_size())
 instrumentator.add(metrics.response_size())
 instrumentator.add(metrics.requests(should_include_handler=True))
