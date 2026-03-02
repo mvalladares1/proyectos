@@ -7,49 +7,26 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from prometheus_fastapi_instrumentator import Instrumentator
+# IMPORTANTE: Importamos 'metrics' además de Instrumentator
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 
 from backend.config import settings
 from backend.routers import (
-    auth,
-    produccion,
-    bandejas,
-    stock,
-    containers,
-    demo,
-    estado_resultado,
-    presupuesto,
-    permissions,
-    recepcion,
-    rendimiento,
-    compras,
-    automatizaciones,
-    comercial,
-    flujo_caja,
-    reconciliacion,
-    odf_reconciliation,
-    aprobaciones_fletes,
-    etiquetas,
-    proformas
+    auth, produccion, bandejas, stock, containers, demo,
+    estado_resultado, presupuesto, permissions, recepcion,
+    rendimiento, compras, automatizaciones, comercial,
+    flujo_caja, reconciliacion, odf_reconciliation,
+    aprobaciones_fletes, etiquetas, proformas
 )
 
 logger = logging.getLogger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Gestiona el ciclo de vida de la aplicación.
-    """
-    # Startup
+    """Gestiona el ciclo de vida de la aplicación."""
     logger.info("Iniciando aplicación...")
-    
     yield
-    
-    # Shutdown
     logger.info("Cerrando aplicación...")
-
 
 # Crear aplicación
 app = FastAPI(
@@ -61,15 +38,24 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-instrumentator = Instrumentator().instrument(app)
+# --- CONFIGURACIÓN AVANZADA DE MÉTRICAS ---
+instrumentator = Instrumentator()
+
+instrumentator.add(metrics.inprogress())
+instrumentator.add(metrics.request_size())
+instrumentator.add(metrics.response_size())
+instrumentator.add(metrics.requests(should_include_handler=True))
+
+# Ejecutamos la instrumentación
+instrumentator.instrument(app)
 
 @app.get("/metrics")
-def metrics():
+def metrics_endpoint():
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     from fastapi import Response
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-# Configurar CORS
+# --- MIDDLEWARES ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -78,11 +64,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# GZip Compression para respuestas grandes (mejora transferencia de datos)
 from fastapi.middleware.gzip import GZipMiddleware
-app.add_middleware(GZipMiddleware, minimum_size=1000)  # Comprimir respuestas >1KB
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Registrar routers
+# --- RUTAS ---
 app.include_router(auth.router)
 app.include_router(produccion.router)
 app.include_router(bandejas.router)
@@ -104,78 +89,13 @@ app.include_router(aprobaciones_fletes.router)
 app.include_router(etiquetas.router)
 app.include_router(proformas.router)
 
-
 @app.get("/")
 async def root():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "message": "Rio Futuro Dashboards API",
-        "version": "1.0.0"
-    }
-
+    return {"status": "ok", "message": "Rio Futuro Dashboards API", "version": "1.0.0"}
 
 @app.get("/health")
 async def health_check():
-    """Health check para monitoreo"""
     return {"status": "healthy"}
-
-
-# ============ Traceability Cache Endpoints ============
-from backend.services.traceability.cache import get_cache
-
-
-@app.get("/api/v1/traceability/cache/status")
-async def cache_status():
-    """
-    Estado del caché de trazabilidad.
-    Retorna: is_loaded, last_refresh, record counts, etc.
-    """
-    cache = get_cache()
-    return cache.get_status()
-
-
-@app.post("/api/v1/traceability/cache/reload")
-async def cache_reload():
-    """
-    Fuerza recarga completa del caché (puede demorar ~5 minutos).
-    """
-    cache = get_cache()
-    asyncio.create_task(cache.load_all(force_reload=True))
-    return {"status": "ok", "message": "Cache reload iniciado en background"}
-
-
-@app.post("/api/v1/traceability/cache/refresh")
-async def cache_refresh():
-    """
-    Fuerza refresh incremental inmediato.
-    """
-    cache = get_cache()
-    await cache.refresh_incremental()
-    return {"status": "ok", "message": "Cache refreshed"}
-
-
-# ============ Legacy Cache Management Endpoints ============
-from backend.cache import get_cache
-
-
-@app.get("/api/v1/cache/stats")
-async def cache_stats():
-    """
-    Obtiene estadísticas del caché legacy (OdooCache).
-    Retorna: hits, misses, hit_rate (%), entries activas
-    """
-    return get_cache().get_stats()
-
-
-@app.post("/api/v1/cache/clear")
-async def cache_clear():
-    """
-    Limpia todo el caché legacy (OdooCache). Usar con precaución.
-    """
-    get_cache().clear()
-    return {"status": "ok", "message": "Cache cleared"}
-
 
 if __name__ == "__main__":
     import uvicorn
