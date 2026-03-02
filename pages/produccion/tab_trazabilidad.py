@@ -70,7 +70,6 @@ def _get_candidates(pkg_id: int, username: str, password: str,
     try:
         result = _api_get(f"{API_URL}/api/v1/etiquetas/prev_candidates", params)
         if isinstance(result, list):
-            # Compatibilidad con formato antiguo
             return {"candidates": result, "has_mo": False, "is_reception": False, "reception": None, "mo_name": None}
         return result or {"candidates": [], "has_mo": False, "is_reception": False, "reception": None, "mo_name": None}
     except Exception:
@@ -94,8 +93,14 @@ def _new_node(pkg_id: int, pkg_name: str, **extra) -> Dict:
     node = {
         "pkg_id": pkg_id,
         "pkg_name": pkg_name,
-        "candidates": None,  # None = no cargado, [] = sin orígenes
+        "candidates": None,    # None = no cargado, [] = sin orígenes
         "is_leaf": False,
+        "parent_pkg_id": None,  # ID del pkt padre que consumió a este
+        "parent_pkg_name": None,
+        "mo_name": None,        # OP que usó este pallet como insumo
+        "has_mo": False,
+        "is_reception": False,
+        "reception_info": None, # {picking_name, guia_despacho, proveedor, fecha}
     }
     node.update(extra)
     return node
@@ -110,21 +115,55 @@ def _all_known_pkg_ids(tree: Dict) -> set:
     return ids
 
 
-def _render_leaf(p: Dict):
+def _short(name: str) -> str:
+    """Acorta PACK0048229 → 048229 para cadenas compactas."""
+    if not name:
+        return ""
+    n = name.strip()
+    if n.upper().startswith("PACK"):
+        rest = n[4:].strip()
+        return rest if rest else n
+    return n
+
+
+def _build_chain_to_root(tree: Dict, leaf_node: Dict) -> List[str]:
+    """
+    Dada una hoja, recorre parent_pkg_id hacia arriba
+    y devuelve la cadena [root, ..., leaf] con nombres cortos.
+    """
+    # Build index: pkg_id → node
+    idx: Dict[int, Dict] = {}
+    for lvl in tree.get("levels", []):
+        for p in lvl:
+            idx[p["pkg_id"]] = p
+
+    chain = [_short(leaf_node["pkg_name"])]
+    cur = leaf_node
+    while cur.get("parent_pkg_id") and cur["parent_pkg_id"] in idx:
+        parent = idx[cur["parent_pkg_id"]]
+        chain.append(_short(parent["pkg_name"]))
+        cur = parent
+    chain.reverse()
+    return chain
+
+
+def _render_leaf(p: Dict, indent: int = 1):
     """Renderiza un paquete hoja (recepción o sin orígenes)."""
+    pad = "&nbsp;&nbsp;&nbsp;&nbsp;" * indent
     rec = p.get("reception_info")
     if rec:
-        guia = rec.get("guia_despacho", "")
-        prov = rec.get("proveedor", "")
-        pick = rec.get("picking_name", "")
+        guia = rec.get("guia_despacho", "") or "—"
+        prov = rec.get("proveedor", "") or "—"
+        pick = rec.get("picking_name", "") or ""
+        fecha = rec.get("fecha", "") or ""
         st.markdown(
-            f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — **RECEPCIÓN** "
-            f"| {pick} | Guía: {guia} | Proveedor: {prov}"
+            f"{pad}\U0001F7E2 **`{p['pkg_name']}`** — **RECEPCIÓN** "
+            f"| Picking: **{pick}** | Guía: **{guia}** | Proveedor: **{prov}** | Fecha: {fecha}"
         )
     elif p.get("is_reception"):
-        st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — recepción (sin detalle)")
+        st.markdown(f"{pad}\U0001F7E2 **`{p['pkg_name']}`** — recepción (sin detalle adicional)")
     else:
-        st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes")
+        st.markdown(f"{pad}\U0001F7E1 **`{p['pkg_name']}`** — sin orígenes conocidos")
 
 
 # ═════════════════════════════════════════════════════════════
@@ -135,7 +174,8 @@ def render(username: str, password: str):
     st.subheader("\U0001F50D Trazabilidad Interactiva de Pallets")
     st.caption(
         "Traza pallets paso a paso hacia atrás. En cada nivel el sistema "
-        "muestra los paquetes origen y tú eliges cuáles seguir trazando."
+        "muestra qué pallets fueron consumidos por cada destino, con la OP que los unió. "
+        "Selecciona cuáles seguir trazando hasta llegar a las recepciones."
     )
 
     # limpiar estado antiguo
@@ -157,7 +197,7 @@ def render(username: str, password: str):
     filters = tree.get("filters", {})
     col_hdr, col_reset = st.columns([4, 1])
     with col_hdr:
-        st.markdown(f"**Pallet raíz:** `{tree['root_name']}`")
+        st.markdown(f"### \U0001F3AF Pallet destino: `{tree['root_name']}`")
         parts = []
         if filters.get("product_name"):
             parts.append(f"**Producto:** {filters['product_name']}")
@@ -205,9 +245,11 @@ def _render_input_root(username: str, password: str):
     if not iniciar:
         st.info(
             "Ingresa un pallet destino para iniciar la trazabilidad paso a paso.\n\n"
-            "El sistema buscará los paquetes origen que lo conformaron. "
-            "En cada nivel podrás elegir cuáles seguir trazando hasta llegar "
-            "a la recepción."
+            "El sistema buscará los paquetes origen que lo conformaron "
+            "(a través de las órdenes de producción MRP). "
+            "En cada nivel verás qué pallets fueron consumidos por cuál pallet destino, "
+            "con la OP correspondiente, hasta llegar a las recepciones "
+            "con su guía de despacho y proveedor."
         )
         return
 
@@ -249,25 +291,77 @@ def _render_input_root(username: str, password: str):
 
 def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
                   tree: Dict, username: str, password: str):
-    """Renderiza un nivel del árbol de paquetes."""
+    """Renderiza un nivel del árbol de paquetes con relaciones claras."""
     filters = tree.get("filters", {})
     levels = tree["levels"]
-    n_pkgs = len(level_pkgs)
 
     # ── Título del nivel ─────────────────────────────────────
     if level_idx == 0:
-        label = "\U0001F3AF **Nivel 0** — Pallet Destino"
-    else:
-        label = f"\U0001F4E6 **Nivel {level_idx}** — {n_pkgs} paquete(s)"
-    st.markdown(label)
-
-    # ── Si NO es frontera → resumen compacto ─────────────────
-    if not is_frontier:
-        names = ", ".join(f"`{p['pkg_name']}`" for p in level_pkgs)
-        st.markdown(f"&nbsp;&nbsp;&nbsp; {names}")
+        label = "\U0001F3AF **Nivel 0** — Pallet Destino Final"
+        st.markdown(label)
+        p = level_pkgs[0]
+        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F4E6 **`{p['pkg_name']}`**")
         return
 
-    # ── FRONTERA: cargar candidatos y seleccionar ────────────
+    # Agrupar nodos de este nivel por su padre
+    by_parent: Dict[int, List[Dict]] = {}
+    orphans: List[Dict] = []
+    for p in level_pkgs:
+        pid = p.get("parent_pkg_id")
+        if pid:
+            by_parent.setdefault(pid, []).append(p)
+        else:
+            orphans.append(p)
+
+    # Índice de nodos del nivel anterior para obtener nombre de padre + OP
+    parent_idx: Dict[int, Dict] = {}
+    if level_idx > 0:
+        for pp in levels[level_idx - 1]:
+            parent_idx[pp["pkg_id"]] = pp
+
+    st.markdown(f"### \U0001F4E6 Nivel {level_idx}")
+
+    # ── Render agrupado por padre ────────────────────────────
+    for parent_id, children in by_parent.items():
+        parent_node = parent_idx.get(parent_id)
+        parent_name = parent_node["pkg_name"] if parent_node else f"ID {parent_id}"
+        mo_name = parent_node.get("mo_name") if parent_node else None
+        mo_label = f" — OP: **{mo_name}**" if mo_name else ""
+
+        st.markdown(
+            f"&nbsp;&nbsp;\U0001F53B **`{parent_name}`** consumió {len(children)} pallet(s){mo_label}:"
+        )
+
+        if not is_frontier:
+            # Nivel ya confirmado → resumen compacto
+            for ch in children:
+                is_leaf = ch.get("is_leaf")
+                if is_leaf:
+                    _render_leaf(ch, indent=2)
+                else:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\U0001F539 `{ch['pkg_name']}`")
+        else:
+            # FRONTERA → mostrar con detalle / selección
+            _render_frontier_group(children, level_idx, tree, username, password)
+
+    # Huérfanos (no deberían existir pero por robustez)
+    if orphans:
+        if not is_frontier:
+            for p in orphans:
+                if p.get("is_leaf"):
+                    _render_leaf(p, indent=1)
+                else:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F539 `{p['pkg_name']}`")
+        else:
+            _render_frontier_group(orphans, level_idx, tree, username, password)
+
+
+def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
+                           tree: Dict, username: str, password: str):
+    """Renderiza paquetes de la frontera: cargar candidatos y seleccionar."""
+    filters = tree.get("filters", {})
+    levels = tree["levels"]
+
     any_unloaded = any(
         p.get("candidates") is None and not p.get("is_leaf")
         for p in level_pkgs
@@ -277,23 +371,25 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
         for p in level_pkgs
     )
 
-    # Si todos son hojas → trazabilidad completa en este nivel
+    # Si todos son hojas → trazabilidad completa aquí
     if all_leaves:
         for p in level_pkgs:
-            _render_leaf(p)
+            _render_leaf(p, indent=2)
         return
 
-    # ── Botón para cargar candidatos de todos los paquetes ───
+    # ── Botón para cargar candidatos ─────────────────────────
     if any_unloaded:
+        # Reunir TODOS los paquetes de TODA la frontera (no solo este grupo)
+        all_frontier = levels[level_idx]
         unloaded_names = [
-            p["pkg_name"] for p in level_pkgs
+            p["pkg_name"] for p in all_frontier
             if p.get("candidates") is None and not p.get("is_leaf")
         ]
-        btn_label = f"\U0001F50D Buscar orígenes ({len(unloaded_names)} paquetes pendientes)"
+        btn_label = f"\U0001F50D Buscar orígenes de nivel {level_idx} ({len(unloaded_names)} pendientes)"
         if st.button(btn_label, key=f"load_all_{level_idx}", type="primary"):
             known_ids = _all_known_pkg_ids(tree)
-            with st.spinner("Buscando orígenes en Odoo..."):
-                for p in level_pkgs:
+            with st.spinner("Buscando orígenes por OP en Odoo..."):
+                for p in all_frontier:
                     if p.get("candidates") is None and not p.get("is_leaf"):
                         result = _get_candidates(
                             p["pkg_id"], username, password,
@@ -302,7 +398,6 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
                             variedad=filters.get("variedad"),
                         )
                         cands = result.get("candidates", [])
-                        # Filtrar candidatos que ya están en el árbol (evitar ciclos)
                         cands = [c for c in cands if c.get("package_id") not in known_ids]
                         p["candidates"] = cands
                         p["has_mo"] = result.get("has_mo", False)
@@ -317,19 +412,9 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
         # Mostrar estado de cada paquete
         for p in level_pkgs:
             if p.get("candidates") is None and not p.get("is_leaf"):
-                st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F535 `{p['pkg_name']}` — pendiente de buscar")
+                st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\U0001F535 `{p['pkg_name']}` — pendiente de buscar")
             elif p.get("is_leaf"):
-                rec = p.get("reception_info")
-                if rec:
-                    guia = rec.get("guia_despacho", "")
-                    prov = rec.get("proveedor", "")
-                    pick = rec.get("picking_name", "")
-                    st.markdown(
-                        f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — **RECEPCIÓN** "
-                        f"| {pick} | Guía: {guia} | Proveedor: {prov}"
-                    )
-                else:
-                    st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes (recepción/inicio)")
+                _render_leaf(p, indent=2)
         return
 
     # ── Candidatos ya cargados → mostrar para selección ──────
@@ -343,22 +428,26 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
             p["is_leaf"] = True
         st.session_state[TREE_KEY] = tree
         for p in level_pkgs:
-            _render_leaf(p)
+            _render_leaf(p, indent=2)
         return
 
-    # ── Mostrar candidatos agrupados por paquete fuente ──────
+    # ── Mostrar candidatos agrupados por paquete padre ───────
     all_selected: List[Dict] = []
     seen_pkg_ids: set = set()
 
-    for p_idx, p in enumerate(level_pkgs):
+    all_frontier = levels[level_idx]
+    for p_idx, p in enumerate(all_frontier):
         if p.get("is_leaf") or not p.get("candidates"):
             if p.get("is_leaf"):
-                _render_leaf(p)
+                _render_leaf(p, indent=2)
             continue
 
         cands = p["candidates"]
-        mo_label = f" (OP: {p.get('mo_name')})" if p.get("mo_name") else ""
-        st.markdown(f"&nbsp;&nbsp;&nbsp; **Orígenes de `{p['pkg_name']}`{mo_label}** — {len(cands)} candidato(s):")
+        mo_label = f" (OP: **{p.get('mo_name')}**)" if p.get("mo_name") else ""
+        st.markdown(
+            f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F53B Orígenes de **`{p['pkg_name']}`**{mo_label} "
+            f"— {len(cands)} candidato(s):"
+        )
 
         for c_idx, c in enumerate(cands):
             c_name = c.get("package_name") or str(c.get("package_id"))
@@ -367,7 +456,6 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
             c_prod = c.get("product_name", "")
             c_lot = c.get("lot_name", "")
             c_manejo = c.get("x_manejo") or ""
-            c_variedad = c.get("x_variedad") or ""
 
             cols = st.columns([0.4, 2, 2.5, 1, 1, 1])
             with cols[0]:
@@ -385,6 +473,10 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
                 st.caption(c_lot or "—")
 
             if checked and c_id and c_id not in seen_pkg_ids:
+                # Store parent info in the candidate for later node creation
+                c["_parent_pkg_id"] = p["pkg_id"]
+                c["_parent_pkg_name"] = p["pkg_name"]
+                c["_parent_mo_name"] = p.get("mo_name")
                 all_selected.append(c)
                 seen_pkg_ids.add(c_id)
 
@@ -407,6 +499,8 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
                     qty=s.get("qty_total", 0),
                     product_name=s.get("product_name", ""),
                     lot_name=s.get("lot_name", ""),
+                    parent_pkg_id=s.get("_parent_pkg_id"),
+                    parent_pkg_name=s.get("_parent_pkg_name"),
                 ))
             levels.append(new_level)
             st.session_state[TREE_KEY] = tree
@@ -421,23 +515,42 @@ def _render_summary_and_export(tree: Dict):
     """Métricas de resumen y botón de descarga Excel."""
     levels = tree["levels"]
     total_pkgs = sum(len(lvl) for lvl in levels)
-    leaf_count = sum(
-        1 for lvl in levels for p in lvl
-        if p.get("is_leaf") or (isinstance(p.get("candidates"), list) and len(p.get("candidates", [])) == 0)
-    )
-    pending = sum(
-        1 for lvl in levels for p in lvl
-        if p.get("candidates") is None and not p.get("is_leaf")
-    )
 
-    c1, c2, c3, c4 = st.columns(4)
+    leaf_count = 0
+    reception_count = 0
+    pending = 0
+    for lvl in levels:
+        for p in lvl:
+            if p.get("is_leaf") or (isinstance(p.get("candidates"), list) and len(p.get("candidates", [])) == 0):
+                leaf_count += 1
+                if p.get("reception_info"):
+                    reception_count += 1
+            if p.get("candidates") is None and not p.get("is_leaf"):
+                pending += 1
+
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Niveles", len(levels))
     c2.metric("Paquetes", total_pkgs)
-    c3.metric("Recepciones", leaf_count)
-    c4.metric("Pendientes", pending)
+    c3.metric("Hojas", leaf_count)
+    c4.metric("Recepciones", reception_count)
+    c5.metric("Pendientes", pending)
 
     if pending == 0 and leaf_count > 0:
-        st.success("\u2705 Trazabilidad completa — todos los caminos llegan a recepción.")
+        if reception_count == leaf_count:
+            st.success(
+                "\u2705 Trazabilidad completa — todos los caminos llegan a recepción "
+                "con guía de despacho y proveedor."
+            )
+        elif reception_count > 0:
+            st.info(
+                f"\u2139\uFE0F {reception_count} de {leaf_count} hojas son recepciones. "
+                f"Las restantes no tienen origen conocido."
+            )
+
+    # Árbol visual compacto
+    if len(levels) > 1:
+        with st.expander("\U0001F333 Ver árbol de trazabilidad completo", expanded=False):
+            _render_tree_text(tree)
 
     # Excel siempre disponible (puede estar parcial)
     excel = _generar_excel_arbol(tree)
@@ -451,15 +564,52 @@ def _render_summary_and_export(tree: Dict):
     )
 
 
+def _render_tree_text(tree: Dict):
+    """Muestra un resumen textual tipo árbol con cadenas y recepciones."""
+    levels = tree.get("levels", [])
+    if not levels:
+        return
+
+    # Recopilar las hojas y sus cadenas
+    leaves = []
+    for lvl in levels:
+        for p in lvl:
+            if p.get("is_leaf") or (isinstance(p.get("candidates"), list) and len(p.get("candidates", [])) == 0):
+                leaves.append(p)
+
+    if not leaves:
+        st.caption("No hay hojas aún. Sigue trazando niveles.")
+        return
+
+    root_name = tree.get("root_name", "?")
+    lines = [f"**`{root_name}`** (destino final)"]
+
+    # Construir cadenas de cada hoja al root
+    for leaf in leaves:
+        chain = _build_chain_to_root(tree, leaf)
+        chain_str = " → ".join(chain)
+        rec = leaf.get("reception_info")
+        if rec:
+            guia = rec.get("guia_despacho", "—")
+            prov = rec.get("proveedor", "—")
+            lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ {chain_str} | **Guía:** {guia} | **Proveedor:** {prov}")
+        else:
+            lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ {chain_str} | *(sin recepción)*")
+
+    st.markdown("\n\n".join(lines))
+
+
 # ═════════════════════════════════════════════════════════════
-# Generación Excel – 2 hojas
+# Generación Excel – 3 hojas
 # ═════════════════════════════════════════════════════════════
 
 def _generar_excel_arbol(tree: Dict) -> bytes:
     """
-    Genera Excel con 2 hojas:
-      1) Cadena de Trazabilidad – todos los paquetes nivel por nivel
-      2) Detalle Candidatos     – candidatos por nivel con marca de selección
+    Genera Excel con 3 hojas:
+      1) Trazabilidad    – formato igual al TrazabilidadPalletService:
+                           Pack | Pallets Consumidos | Pallet Origen | Cadena | Guía Despacho | Productor
+      2) Árbol Detallado – todos los paquetes nivel por nivel con parent, OP, tipo, recepción
+      3) Detalle Candidatos – candidatos por nivel con marca selección
     """
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
@@ -473,6 +623,7 @@ def _generar_excel_arbol(tree: Dict) -> bytes:
     hdr_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
     hdr_font = Font(color="FFFFFF", bold=True, size=11)
     hdr2_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
+    hdr3_fill = PatternFill(start_color="548235", end_color="548235", fill_type="solid")
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left_al = Alignment(vertical="center", wrap_text=True)
     root_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
@@ -494,18 +645,88 @@ def _generar_excel_arbol(tree: Dict) -> bytes:
 
     levels = tree.get("levels", [])
     filters = tree.get("filters", {})
+    root_name = tree.get("root_name", "?")
 
     # ══════════════════════════════════════════════════════════
-    # HOJA 1 – Cadena de Trazabilidad
+    # HOJA 1 – Trazabilidad (formato referencia)
+    #   Pack | Pallets Consumidos | Pallet Origen | Cadena de Trazabilidad | Guía Despacho | Productor
     # ══════════════════════════════════════════════════════════
     ws1 = wb.active
-    ws1.title = "Cadena de Trazabilidad"
+    ws1.title = "Trazabilidad"
 
-    headers1 = ["Nivel", "Paquete", "Producto", "Cantidad (kg)", "Lote", "Tipo"]
+    headers1 = [
+        "Pack (Destino)", "Pallets Consumidos",
+        "Pallet Origen", "Cadena de Trazabilidad",
+        "Guía Despacho", "Productor",
+    ]
     _write_header(ws1, headers1)
-    _set_widths(ws1, [8, 22, 45, 14, 22, 16])
+    _set_widths(ws1, [22, 45, 18, 55, 22, 35])
+
+    # Recopilar hojas y construir cadenas
+    leaves = []
+    for lvl in levels:
+        for p in lvl:
+            if p.get("is_leaf") or (isinstance(p.get("candidates"), list) and len(p.get("candidates", [])) == 0):
+                leaves.append(p)
+
+    # Pallets consumidos directos (nivel 1 si existe)
+    consumidos_str = ""
+    if len(levels) > 1:
+        consumidos_str = " - ".join(_short(p["pkg_name"]) for p in levels[1])
 
     row = 2
+    if leaves:
+        for leaf in leaves:
+            chain = _build_chain_to_root(tree, leaf)
+            chain_str = " → ".join(chain)
+            rec = leaf.get("reception_info")
+            guia = ""
+            productor = ""
+            if rec:
+                guia = rec.get("guia_despacho", "") or ""
+                productor = rec.get("proveedor", "") or ""
+
+            ws1.cell(row=row, column=1, value=root_name)
+            ws1.cell(row=row, column=2, value=consumidos_str)
+            ws1.cell(row=row, column=3, value=_short(leaf["pkg_name"]))
+            ws1.cell(row=row, column=4, value=chain_str)
+            ws1.cell(row=row, column=5, value=guia)
+            ws1.cell(row=row, column=6, value=productor)
+
+            for c in range(1, 7):
+                cell = ws1.cell(row=row, column=c)
+                cell.border = border
+                cell.alignment = left_al
+            # Color recepciones
+            if rec:
+                for c in range(1, 7):
+                    ws1.cell(row=row, column=c).fill = leaf_fill
+
+            row += 1
+    else:
+        # Sin hojas aún — poner al menos el root
+        ws1.cell(row=row, column=1, value=root_name)
+        ws1.cell(row=row, column=2, value="(trazabilidad pendiente)")
+        for c in range(1, 7):
+            ws1.cell(row=row, column=c).border = border
+            ws1.cell(row=row, column=c).alignment = left_al
+
+    ws1.freeze_panes = "A2"
+
+    # ══════════════════════════════════════════════════════════
+    # HOJA 2 – Árbol Detallado (todos los nodos nivel por nivel)
+    # ══════════════════════════════════════════════════════════
+    ws2 = wb.create_sheet("Árbol Detallado")
+
+    headers2 = [
+        "Nivel", "Paquete", "Padre (consumido por)", "OP",
+        "Producto", "Cantidad (kg)", "Lote", "Tipo",
+        "Guía Despacho", "Productor", "Picking Recepción", "Fecha Recepción",
+    ]
+    _write_header(ws2, headers2, fill=hdr2_fill)
+    _set_widths(ws2, [8, 22, 22, 18, 45, 14, 22, 14, 22, 35, 18, 14])
+
+    row2 = 2
     for level_idx, level_pkgs in enumerate(levels):
         for p in level_pkgs:
             is_leaf = p.get("is_leaf") or (
@@ -513,48 +734,63 @@ def _generar_excel_arbol(tree: Dict) -> bytes:
             )
             if level_idx == 0:
                 tipo = "Destino"
-            elif is_leaf:
+            elif is_leaf and p.get("reception_info"):
                 tipo = "Recepción"
+            elif is_leaf:
+                tipo = "Hoja (sin origen)"
             else:
                 tipo = "Intermedio"
 
-            ws1.cell(row=row, column=1, value=level_idx)
-            ws1.cell(row=row, column=2, value=p.get("pkg_name", "")).font = Font(bold=True)
+            rec = p.get("reception_info")
+            guia = rec.get("guia_despacho", "") if rec else ""
+            prov = rec.get("proveedor", "") if rec else ""
+            pick_name = rec.get("picking_name", "") if rec else ""
+            fecha_rec = rec.get("fecha", "") if rec else ""
+            parent_name = p.get("parent_pkg_name", "") or ""
+            mo_name = p.get("mo_name", "") or ""
+
+            ws2.cell(row=row2, column=1, value=level_idx)
+            ws2.cell(row=row2, column=2, value=p.get("pkg_name", "")).font = Font(bold=True)
+            ws2.cell(row=row2, column=3, value=parent_name)
+            ws2.cell(row=row2, column=4, value=mo_name)
             prod_name = p.get("product_name", "") or (filters.get("product_name") if level_idx == 0 else "")
-            ws1.cell(row=row, column=3, value=prod_name or "")
+            ws2.cell(row=row2, column=5, value=prod_name or "")
             qty = p.get("qty")
-            ws1.cell(row=row, column=4, value=f"{qty:.1f}" if qty else "")
-            ws1.cell(row=row, column=5, value=p.get("lot_name", ""))
-            ws1.cell(row=row, column=6, value=tipo)
+            ws2.cell(row=row2, column=6, value=f"{qty:.1f}" if qty else "")
+            ws2.cell(row=row2, column=7, value=p.get("lot_name", ""))
+            ws2.cell(row=row2, column=8, value=tipo)
+            ws2.cell(row=row2, column=9, value=guia)
+            ws2.cell(row=row2, column=10, value=prov)
+            ws2.cell(row=row2, column=11, value=pick_name)
+            ws2.cell(row=row2, column=12, value=fecha_rec)
 
-            for c in range(1, 7):
-                cell = ws1.cell(row=row, column=c)
+            for c in range(1, 13):
+                cell = ws2.cell(row=row2, column=c)
                 cell.border = border
-                cell.alignment = center if c in (1, 4, 6) else left_al
+                cell.alignment = center if c in (1, 6, 8) else left_al
 
-            # Color por tipo
             if level_idx == 0:
-                for c in range(1, 7):
-                    ws1.cell(row=row, column=c).fill = root_fill
-            elif is_leaf:
-                for c in range(1, 7):
-                    ws1.cell(row=row, column=c).fill = leaf_fill
+                for c in range(1, 13):
+                    ws2.cell(row=row2, column=c).fill = root_fill
+            elif is_leaf and rec:
+                for c in range(1, 13):
+                    ws2.cell(row=row2, column=c).fill = leaf_fill
 
-            row += 1
+            row2 += 1
 
-    ws1.freeze_panes = "A2"
+    ws2.freeze_panes = "A2"
 
     # ══════════════════════════════════════════════════════════
-    # HOJA 2 – Detalle Candidatos
+    # HOJA 3 – Detalle Candidatos
     # ══════════════════════════════════════════════════════════
-    ws2 = wb.create_sheet("Detalle Candidatos")
+    ws3 = wb.create_sheet("Detalle Candidatos")
 
-    headers2 = ["Nivel", "Paquete Destino", "Candidato Origen", "Producto",
+    headers3 = ["Nivel", "Paquete Destino", "Candidato Origen", "Producto",
                  "Cantidad (kg)", "Lote", "Seleccionado"]
-    _write_header(ws2, headers2, fill=hdr2_fill)
-    _set_widths(ws2, [8, 22, 22, 45, 14, 22, 14])
+    _write_header(ws3, headers3, fill=hdr3_fill)
+    _set_widths(ws3, [8, 22, 22, 45, 14, 22, 14])
 
-    row2 = 2
+    row3 = 2
     for level_idx, level_pkgs in enumerate(levels):
         # Nombres del nivel siguiente para saber cuáles se seleccionaron
         next_names: set = set()
@@ -567,27 +803,27 @@ def _generar_excel_arbol(tree: Dict) -> bytes:
                 c_name = c.get("package_name") or str(c.get("package_id"))
                 selected = "Sí" if c_name in next_names else "No"
 
-                ws2.cell(row=row2, column=1, value=level_idx)
-                ws2.cell(row=row2, column=2, value=p.get("pkg_name", ""))
-                ws2.cell(row=row2, column=3, value=c_name)
-                ws2.cell(row=row2, column=4, value=c.get("product_name", ""))
+                ws3.cell(row=row3, column=1, value=level_idx)
+                ws3.cell(row=row3, column=2, value=p.get("pkg_name", ""))
+                ws3.cell(row=row3, column=3, value=c_name)
+                ws3.cell(row=row3, column=4, value=c.get("product_name", ""))
                 qty = c.get("qty_total", 0)
-                ws2.cell(row=row2, column=5, value=f"{qty:.1f}" if qty else "")
-                ws2.cell(row=row2, column=6, value=c.get("lot_name", ""))
-                ws2.cell(row=row2, column=7, value=selected)
+                ws3.cell(row=row3, column=5, value=f"{qty:.1f}" if qty else "")
+                ws3.cell(row=row3, column=6, value=c.get("lot_name", ""))
+                ws3.cell(row=row3, column=7, value=selected)
 
                 for col in range(1, 8):
-                    cell = ws2.cell(row=row2, column=col)
+                    cell = ws3.cell(row=row3, column=col)
                     cell.border = border
                     cell.alignment = center if col in (1, 5, 7) else left_al
 
                 if selected == "Sí":
                     for col in range(1, 8):
-                        ws2.cell(row=row2, column=col).fill = sel_fill
+                        ws3.cell(row=row3, column=col).fill = sel_fill
 
-                row2 += 1
+                row3 += 1
 
-    ws2.freeze_panes = "A2"
+    ws3.freeze_panes = "A2"
 
     # ── Guardar ──────────────────────────────────────────────
     output = io.BytesIO()
