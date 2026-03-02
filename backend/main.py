@@ -36,7 +36,6 @@ from backend.routers import (
 
 logger = logging.getLogger(__name__)
 
-instrumentator = Instrumentator()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,8 +45,6 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Iniciando aplicación...")
     
-    instrumentator.instrument(app).expose(app)
-
     yield
     
     # Shutdown
@@ -63,6 +60,14 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
+instrumentator = Instrumentator().instrument(app)
+
+@app.get("/metrics")
+def metrics():
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi import Response
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # Configurar CORS
 app.add_middleware(
