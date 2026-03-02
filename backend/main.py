@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 # IMPORTANTE: Importamos 'metrics' además de Instrumentator
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
+from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 from backend.config import settings
 from backend.routers import (
@@ -38,22 +39,40 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+IN_PROGRESS_METRIC = Gauge(
+    "http_requests_inprogress", 
+    "Número de peticiones HTTP en curso",
+    ["app_name", "handler", "method"]
+)
+
 # --- CONFIGURACIÓN AVANZADA DE MÉTRICAS ---
 instrumentator = Instrumentator(
     should_group_status_codes=True,
     should_ignore_untemplated=True,
     should_respect_env_var=True,
     should_instrument_requests_inprogress=True,
-    inprogress_name="http_requests_inprogress",
-    inprogress_labels=True,
 )
 
 # Ejecutamos la instrumentación
 instrumentator.instrument(app)
 
+@app.middleware("http")
+async def track_inprogress(request, call_next):
+    handler = request.scope.get("path", "unknown")
+    method = request.method
+    
+    if handler == "/metrics":
+        return await call_next(request)
+        
+    IN_PROGRESS_METRIC.labels(app_name=settings.APP_NAME, handler=handler, method=method).inc()
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        IN_PROGRESS_METRIC.labels(app_name=settings.APP_NAME, handler=handler, method=method).dec()
+
 @app.get("/metrics")
 def metrics_endpoint():
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     from fastapi import Response
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
