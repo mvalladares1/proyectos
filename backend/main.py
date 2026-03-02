@@ -47,11 +47,18 @@ IN_PROGRESS_METRIC = Gauge(
 
 # --- CONFIGURACIÓN AVANZADA DE MÉTRICAS ---
 instrumentator = Instrumentator(
-    should_group_status_codes=True,
+    should_group_status_codes=False,
     should_ignore_untemplated=True,
     should_respect_env_var=True,
     should_instrument_requests_inprogress=True,
+    
 )
+
+instrumentator.add(metrics.request_duration_seconds(
+    should_include_handler=True, 
+    should_include_method=True,
+    should_include_status=True
+))
 
 # Ejecutamos la instrumentación
 instrumentator.instrument(app)
