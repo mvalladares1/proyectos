@@ -64,12 +64,12 @@ async def track_inprogress(request, call_next):
     if handler == "/metrics":
         return await call_next(request)
         
-    IN_PROGRESS_METRIC.labels(app_name=settings.APP_NAME, handler=handler, method=method).inc()
+    IN_PROGRESS_METRIC.labels(app_name="rio_api", handler=handler, method=method).inc()
     try:
         response = await call_next(request)
         return response
     finally:
-        IN_PROGRESS_METRIC.labels(app_name=settings.APP_NAME, handler=handler, method=method).dec()
+        IN_PROGRESS_METRIC.labels(app_name="rio_api", handler=handler, method=method).dec()
 
 @app.get("/metrics")
 def metrics_endpoint():
