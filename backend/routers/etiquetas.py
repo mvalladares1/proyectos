@@ -70,11 +70,36 @@ async def obtener_candidatos_previos(
 ):
     """
     Devuelve paquetes candidatos que contribuyeron a formar el pallet dado.
+    Incluye metadata: si tiene OP, si es recepción, info de recepción.
     """
     try:
         from backend.services.etiquetas_pallet_service import EtiquetasPalletService
         service = EtiquetasPalletService(username=username, password=password)
-        return service.obtener_candidatos_previos(package_id=package_id, product_name=product_name, manejo=manejo, variedad=variedad)
+
+        # Buscar OP
+        mo = service._find_mo_for_package(package_id)
+
+        # Buscar candidatos
+        candidates = service.obtener_candidatos_previos(
+            package_id=package_id,
+            product_name=product_name,
+            manejo=manejo,
+            variedad=variedad,
+        )
+
+        # Buscar recepción si no tiene candidatos
+        reception = None
+        if not candidates:
+            reception = service._buscar_recepcion_pkg(package_id)
+
+        return {
+            "package_id": package_id,
+            "has_mo": bool(mo),
+            "mo_name": mo.get("name", "") if mo else None,
+            "is_reception": bool(reception),
+            "reception": reception,
+            "candidates": candidates,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

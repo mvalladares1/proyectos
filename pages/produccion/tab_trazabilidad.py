@@ -55,8 +55,11 @@ def _find_package(name: str, username: str, password: str) -> Optional[Dict]:
 
 
 def _get_candidates(pkg_id: int, username: str, password: str,
-                    product_name=None, manejo=None, variedad=None) -> List[Dict]:
-    """Obtiene candidatos previos (paquetes origen) para un paquete destino."""
+                    product_name=None, manejo=None, variedad=None) -> Dict:
+    """
+    Obtiene candidatos previos (paquetes origen) para un paquete destino.
+    Retorna dict con: candidates, has_mo, mo_name, is_reception, reception.
+    """
     params: dict = {"package_id": pkg_id, "username": username, "password": password}
     if product_name:
         params["product_name"] = product_name
@@ -65,9 +68,13 @@ def _get_candidates(pkg_id: int, username: str, password: str,
     if variedad:
         params["variedad"] = variedad
     try:
-        return _api_get(f"{API_URL}/api/v1/etiquetas/prev_candidates", params) or []
+        result = _api_get(f"{API_URL}/api/v1/etiquetas/prev_candidates", params)
+        if isinstance(result, list):
+            # Compatibilidad con formato antiguo
+            return {"candidates": result, "has_mo": False, "is_reception": False, "reception": None, "mo_name": None}
+        return result or {"candidates": [], "has_mo": False, "is_reception": False, "reception": None, "mo_name": None}
     except Exception:
-        return []
+        return {"candidates": [], "has_mo": False, "is_reception": False, "reception": None, "mo_name": None}
 
 
 def _get_package_info(pkg_id: int, username: str, password: str) -> Dict:
@@ -101,6 +108,23 @@ def _all_known_pkg_ids(tree: Dict) -> set:
         for p in lvl:
             ids.add(p["pkg_id"])
     return ids
+
+
+def _render_leaf(p: Dict):
+    """Renderiza un paquete hoja (recepción o sin orígenes)."""
+    rec = p.get("reception_info")
+    if rec:
+        guia = rec.get("guia_despacho", "")
+        prov = rec.get("proveedor", "")
+        pick = rec.get("picking_name", "")
+        st.markdown(
+            f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — **RECEPCIÓN** "
+            f"| {pick} | Guía: {guia} | Proveedor: {prov}"
+        )
+    elif p.get("is_reception"):
+        st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — recepción (sin detalle)")
+    else:
+        st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes")
 
 
 # ═════════════════════════════════════════════════════════════
@@ -256,7 +280,7 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
     # Si todos son hojas → trazabilidad completa en este nivel
     if all_leaves:
         for p in level_pkgs:
-            st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes (recepción/inicio)")
+            _render_leaf(p)
         return
 
     # ── Botón para cargar candidatos de todos los paquetes ───
@@ -271,15 +295,20 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
             with st.spinner("Buscando orígenes en Odoo..."):
                 for p in level_pkgs:
                     if p.get("candidates") is None and not p.get("is_leaf"):
-                        cands = _get_candidates(
+                        result = _get_candidates(
                             p["pkg_id"], username, password,
                             product_name=filters.get("product_name"),
                             manejo=filters.get("manejo"),
                             variedad=filters.get("variedad"),
                         )
+                        cands = result.get("candidates", [])
                         # Filtrar candidatos que ya están en el árbol (evitar ciclos)
                         cands = [c for c in cands if c.get("package_id") not in known_ids]
                         p["candidates"] = cands
+                        p["has_mo"] = result.get("has_mo", False)
+                        p["mo_name"] = result.get("mo_name")
+                        p["is_reception"] = result.get("is_reception", False)
+                        p["reception_info"] = result.get("reception")
                         if not cands:
                             p["is_leaf"] = True
             st.session_state[TREE_KEY] = tree
@@ -290,7 +319,17 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
             if p.get("candidates") is None and not p.get("is_leaf"):
                 st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F535 `{p['pkg_name']}` — pendiente de buscar")
             elif p.get("is_leaf"):
-                st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes (recepción)")
+                rec = p.get("reception_info")
+                if rec:
+                    guia = rec.get("guia_despacho", "")
+                    prov = rec.get("proveedor", "")
+                    pick = rec.get("picking_name", "")
+                    st.markdown(
+                        f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — **RECEPCIÓN** "
+                        f"| {pick} | Guía: {guia} | Proveedor: {prov}"
+                    )
+                else:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes (recepción/inicio)")
         return
 
     # ── Candidatos ya cargados → mostrar para selección ──────
@@ -304,7 +343,7 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
             p["is_leaf"] = True
         st.session_state[TREE_KEY] = tree
         for p in level_pkgs:
-            st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes (recepción)")
+            _render_leaf(p)
         return
 
     # ── Mostrar candidatos agrupados por paquete fuente ──────
@@ -314,11 +353,12 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
     for p_idx, p in enumerate(level_pkgs):
         if p.get("is_leaf") or not p.get("candidates"):
             if p.get("is_leaf"):
-                st.markdown(f"&nbsp;&nbsp;&nbsp; \U0001F7E2 `{p['pkg_name']}` — sin orígenes (recepción)")
+                _render_leaf(p)
             continue
 
         cands = p["candidates"]
-        st.markdown(f"&nbsp;&nbsp;&nbsp; **Orígenes de `{p['pkg_name']}`** — {len(cands)} candidato(s):")
+        mo_label = f" (OP: {p.get('mo_name')})" if p.get("mo_name") else ""
+        st.markdown(f"&nbsp;&nbsp;&nbsp; **Orígenes de `{p['pkg_name']}`{mo_label}** — {len(cands)} candidato(s):")
 
         for c_idx, c in enumerate(cands):
             c_name = c.get("package_name") or str(c.get("package_id"))
