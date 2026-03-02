@@ -56,9 +56,9 @@ instrumentator = Instrumentator(
 
 instrumentator.add(
     metrics.default(
-        should_include_handler=True,
-        should_include_method=True,
-        should_include_status=True
+        include_handler=True,
+        include_method=True,
+        include_status=True
     )
 )
 
