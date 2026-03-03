@@ -417,3 +417,123 @@ async def get_categorias():
             {"codigo": "FX_EFFECT", "nombre": "Diferencias de tipo de cambio sobre efectivo"}
         ]
     }
+
+# ─── Configuración Global de Efectivo Inicial ─────────────────────────────────
+
+import os
+from pathlib import Path
+from datetime import datetime
+from pydantic import BaseModel
+
+# Ruta al archivo de configuración
+CONFIG_FILE = Path(__file__).parent.parent / "data" / "flujo_caja_config.json"
+
+
+class EfectivoInicialConfig(BaseModel):
+    valor: float
+    usar_personalizado: bool = True
+
+
+class EfectivoInicialResponse(BaseModel):
+    valor: Optional[float]
+    usar_personalizado: bool
+    actualizado_por: Optional[str]
+    actualizado_en: Optional[str]
+
+
+def _load_config() -> dict:
+    """Carga la configuración del archivo JSON."""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {
+        "efectivo_inicial": {
+            "valor": None,
+            "usar_personalizado": False,
+            "actualizado_por": None,
+            "actualizado_en": None
+        }
+    }
+
+
+def _save_config(config: dict):
+    """Guarda la configuración al archivo JSON."""
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+
+
+@router.get("/config/efectivo-inicial")
+async def get_efectivo_inicial_config():
+    """
+    Obtiene la configuración actual del efectivo inicial.
+    
+    Returns:
+        Configuración del efectivo inicial (valor, si usar personalizado, quién lo actualizó)
+    """
+    config = _load_config()
+    return config.get("efectivo_inicial", {
+        "valor": None,
+        "usar_personalizado": False,
+        "actualizado_por": None,
+        "actualizado_en": None
+    })
+
+
+@router.post("/config/efectivo-inicial")
+async def set_efectivo_inicial_config(
+    valor: float,
+    usar_personalizado: bool = True,
+    username: Optional[str] = None
+):
+    """
+    Establece la configuración del efectivo inicial.
+    
+    Este valor será usado globalmente por todos los usuarios cuando usar_personalizado=True.
+    Si usar_personalizado=False, se calculará automáticamente desde Odoo.
+    
+    Args:
+        valor: Valor del efectivo inicial en CLP
+        usar_personalizado: Si True, usa el valor personalizado. Si False, calcula desde Odoo.
+        username: Usuario que realiza el cambio (para auditoría)
+    
+    Returns:
+        Configuración actualizada
+    """
+    config = _load_config()
+    config["efectivo_inicial"] = {
+        "valor": valor,
+        "usar_personalizado": usar_personalizado,
+        "actualizado_por": username,
+        "actualizado_en": datetime.now().isoformat()
+    }
+    _save_config(config)
+    
+    logger.info(f"Efectivo inicial actualizado a ${valor:,.0f} por {username}")
+    
+    return config["efectivo_inicial"]
+
+
+@router.delete("/config/efectivo-inicial")
+async def reset_efectivo_inicial_config(username: Optional[str] = None):
+    """
+    Resetea la configuración del efectivo inicial para usar el valor calculado de Odoo.
+    
+    Args:
+        username: Usuario que realiza el cambio (para auditoría)
+    
+    Returns:
+        Configuración reseteada
+    """
+    config = _load_config()
+    config["efectivo_inicial"] = {
+        "valor": None,
+        "usar_personalizado": False,
+        "actualizado_por": username,
+        "actualizado_en": datetime.now().isoformat()
+    }
+    _save_config(config)
+    
+    logger.info(f"Efectivo inicial reseteado a cálculo automático por {username}")
+    
+    return config["efectivo_inicial"]

@@ -155,6 +155,43 @@ class FlujoCajaService:
             }
         }
     
+    # ==================== CONFIGURACIÓN EFECTIVO INICIAL ====================
+    
+    def _get_flujo_config_path(self) -> str:
+        """Retorna la ruta al archivo de configuración de flujo de caja."""
+        return os.path.join(
+            os.path.dirname(__file__), 
+            '..', 'data', 'flujo_caja_config.json'
+        )
+    
+    def _cargar_flujo_config(self) -> Dict:
+        """Carga la configuración del flujo de caja."""
+        path = self._get_flujo_config_path()
+        try:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[FlujoCaja] Error cargando config: {e}")
+        return {"efectivo_inicial": {"valor": None, "usar_personalizado": False}}
+    
+    def _get_efectivo_inicial_configurado(self) -> Optional[float]:
+        """
+        Retorna el efectivo inicial configurado si usar_personalizado=True.
+        Retorna None si se debe calcular desde Odoo.
+        """
+        config = self._cargar_flujo_config()
+        ef_config = config.get("efectivo_inicial", {})
+        if ef_config.get("usar_personalizado") and ef_config.get("valor") is not None:
+            return ef_config["valor"]
+        return None
+    
+    def _is_efectivo_inicial_personalizado(self) -> bool:
+        """Indica si se está usando un valor personalizado de efectivo inicial."""
+        config = self._cargar_flujo_config()
+        ef_config = config.get("efectivo_inicial", {})
+        return ef_config.get("usar_personalizado", False) and ef_config.get("valor") is not None
+    
     # ==================== CATÁLOGO ====================
     
     def get_catalogo_conceptos(self) -> List[Dict]:
@@ -426,11 +463,15 @@ class FlujoCajaService:
             resultado["error"] = "No se encontraron cuentas de efectivo configuradas"
             return resultado
         
-        # 3. Efectivo inicial
-        fecha_ini_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
-        fecha_anterior = (fecha_ini_dt - timedelta(days=1)).strftime('%Y-%m-%d')
-        efectivo_inicial = self.odoo_manager.get_saldo_efectivo(fecha_anterior, cuentas_efectivo_ids)
+        # 3. Efectivo inicial - usar configuración personalizada si está activa
+        efectivo_inicial = self._get_efectivo_inicial_configurado()
+        if efectivo_inicial is None:
+            # Calcular desde Odoo
+            fecha_ini_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            fecha_anterior = (fecha_ini_dt - timedelta(days=1)).strftime('%Y-%m-%d')
+            efectivo_inicial = self.odoo_manager.get_saldo_efectivo(fecha_anterior, cuentas_efectivo_ids)
         resultado["conciliacion"]["efectivo_inicial"] = round(efectivo_inicial, 0)
+        resultado["conciliacion"]["efectivo_inicial_personalizado"] = self._is_efectivo_inicial_personalizado()
         
         # 4. Obtener movimientos
         movimientos, asientos_ids = self.odoo_manager.get_movimientos_efectivo_periodo(
