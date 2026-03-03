@@ -924,7 +924,11 @@ class RealProyectadoCalculator:
         - REAL = Devoluciones de IVA recibidas (créditos en cuenta 11060108)
         - Solo cuando el partner es "Tesorería General de la República"
         - PROYECTADO = Facturas draft/posted con cuenta 11060108 desde fecha actual
+        
+        NOTA: Proceso complejo con múltiples consultas. Puede tardar algunos segundos.
         """
+        print(f"[RealProyectado] Calculando 1.2.6 IVA Exportador - Inicio (puede tardar algunos segundos)...")
+        
         cuenta_iva_id = self._get_cuenta_iva_id()
         
         if not cuenta_iva_id:
@@ -954,8 +958,7 @@ class RealProyectadoCalculator:
                     ['date', '>=', fecha_inicio],
                     ['date', '<=', fecha_fin]
                 ],
-                ['id', 'date', 'credit'],  # Solo campos necesarios para mejorar velocidad
-                limit=100  # Reducir límite, no debería haber muchas devoluciones IVA
+                ['id', 'date', 'credit']  # Solo campos necesarios para mejorar velocidad
             )
             
             real_total = 0.0
@@ -988,8 +991,7 @@ class RealProyectadoCalculator:
                 cuentas_data = self.odoo.search_read(
                     'account.account',
                     [['code', 'in', cuentas_codes]],
-                    ['id', 'code', 'x_studio_cat_ifrs_3'],
-                    limit=20
+                    ['id', 'code', 'x_studio_cat_ifrs_3']
                 )
                 
                 # Mapear account_id -> Cat IFRS 3
@@ -1020,8 +1022,7 @@ class RealProyectadoCalculator:
                             ['date', '>=', hoy],
                             ['date', '<=', fecha_fin]
                         ],
-                        ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'account_id'],
-                        limit=200  # Reducir límite para mejorar velocidad
+                        ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'account_id']
                     )
                     
                     proyectado_total = 0.0
@@ -1143,6 +1144,8 @@ class RealProyectadoCalculator:
                     'es_cuenta_iva': True,
                     'es_proyectados': True
                 })
+            
+            print(f"[RealProyectado] 1.2.6 IVA Exportador - Completado. Real: ${real_total:,.0f}, Proyectado: ${proyectado_total:,.0f}")
             
             return {
                 'real': real_total,
