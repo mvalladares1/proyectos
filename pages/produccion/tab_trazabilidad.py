@@ -1,11 +1,10 @@
-﻿"""
+"""
 Tab Trazabilidad de Pallets - trazado automatico completo.
 
-Flujo simplificado:
-  1) El usuario ingresa un pallet
-  2) Un clic -> el sistema traza TODO automaticamente hasta las recepciones
-  3) Muestra un arbol visual claro
-  4) Genera Excel limpio con la trazabilidad completa
+Soporta:
+  - Busqueda por Pallet o por Lote
+  - Trazabilidad hacia atras (-> Recepcion/Origen)
+  - Trazabilidad hacia adelante (-> Destino/Consumo/Despacho)
 """
 import streamlit as st
 import io
@@ -21,8 +20,9 @@ TREE_KEY = "traz_tree_v2"
 # API
 # =============================================================
 
-def _full_trace(package_name: str, username: str, password: str) -> Dict:
-    """Llama al endpoint que traza todo el arbol en un solo request."""
+def _full_trace(package_name: str, username: str, password: str,
+                direction: str = "backward") -> Dict:
+    """Llama al endpoint que traza un pallet en la direccion indicada."""
     r = httpx.get(
         f"{API_URL}/api/v1/etiquetas/full_trace",
         params={
@@ -30,8 +30,27 @@ def _full_trace(package_name: str, username: str, password: str) -> Dict:
             "username": username,
             "password": password,
             "max_levels": 12,
+            "direction": direction,
         },
         timeout=120.0,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def _trace_lot(lot_name: str, username: str, password: str,
+               direction: str = "backward") -> Dict:
+    """Llama al endpoint que traza un lote completo."""
+    r = httpx.get(
+        f"{API_URL}/api/v1/etiquetas/trace_lot",
+        params={
+            "lot_name": lot_name,
+            "username": username,
+            "password": password,
+            "max_levels": 12,
+            "direction": direction,
+        },
+        timeout=180.0,
     )
     r.raise_for_status()
     return r.json()
@@ -79,8 +98,8 @@ def _build_chain(node: Dict, idx: Dict[int, Dict]) -> List[str]:
 def render(username: str, password: str):
     st.subheader("\U0001f50d Trazabilidad de Pallets")
     st.caption(
-        "Ingresa un pallet y el sistema traza automaticamente toda la cadena "
-        "hasta las recepciones con guia de despacho y productor."
+        "Ingresa un pallet o un lote y el sistema traza automaticamente toda la cadena. "
+        "Puedes trazar hacia atras (hasta recepcion) o hacia adelante (hasta destino/despacho)."
     )
 
     # Estado
@@ -94,15 +113,42 @@ def render(username: str, password: str):
 
     data = st.session_state[TREE_KEY]
 
-    # Input
+    # -- Opciones de busqueda --
+    col_mode, col_dir = st.columns(2)
+    with col_mode:
+        modo = st.radio(
+            "Buscar por",
+            ["Pallet", "Lote"],
+            horizontal=True,
+            key="traz_modo",
+        )
+    with col_dir:
+        direccion = st.radio(
+            "Direccion",
+            ["\u2b05\ufe0f Hacia atras (\u2192 Recepcion)", "\u27a1\ufe0f Hacia adelante (\u2192 Destino)"],
+            horizontal=True,
+            key="traz_dir",
+        )
+
+    dir_value = "backward" if "atras" in direccion else "forward"
+
+    # -- Input --
     col_in, col_btn, col_rst = st.columns([3, 1.2, 0.8])
     with col_in:
-        pallet_name = st.text_input(
-            "Pallet",
-            placeholder="Ej: PACK0012345",
-            key="traz_input_v2",
-            label_visibility="collapsed",
-        )
+        if modo == "Pallet":
+            search_term = st.text_input(
+                "Pallet",
+                placeholder="Ej: PACK0012345",
+                key="traz_input_v2",
+                label_visibility="collapsed",
+            )
+        else:
+            search_term = st.text_input(
+                "Lote",
+                placeholder="Ej: LOT-2025-001 o nombre de lote",
+                key="traz_input_lote",
+                label_visibility="collapsed",
+            )
     with col_btn:
         trazar = st.button("\U0001f680 Trazar", type="primary", use_container_width=True)
     with col_rst:
@@ -110,21 +156,31 @@ def render(username: str, password: str):
             st.session_state[TREE_KEY] = None
             st.rerun()
 
-    # Trazar
+    # -- Trazar --
     if trazar:
-        if not pallet_name or not pallet_name.strip():
-            st.warning("Ingresa un nombre de pallet.")
+        if not search_term or not search_term.strip():
+            st.warning(f"Ingresa un nombre de {'pallet' if modo == 'Pallet' else 'lote'}.")
             return
 
-        nombre = pallet_name.strip().upper()
+        nombre = search_term.strip().upper()
+        dir_label = "hacia recepcion" if dir_value == "backward" else "hacia destino"
+
         try:
-            with st.spinner(f"Trazando **{nombre}** \u2014 buscando toda la cadena hasta recepcion..."):
-                result = _full_trace(nombre, username, password)
+            if modo == "Pallet":
+                with st.spinner(f"Trazando **{nombre}** {dir_label}..."):
+                    result = _full_trace(nombre, username, password, direction=dir_value)
+            else:
+                with st.spinner(f"Trazando lote **{nombre}** {dir_label}..."):
+                    result = _trace_lot(nombre, username, password, direction=dir_value)
+
             st.session_state[TREE_KEY] = result
             data = result
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                st.error(f"No se encontro el pallet **{nombre}** en Odoo.")
+                if modo == "Pallet":
+                    st.error(f"No se encontro el pallet **{nombre}** en Odoo.")
+                else:
+                    st.error(f"No se encontraron pallets para el lote **{nombre}**.")
             else:
                 st.error(f"Error del servidor: {e.response.text}")
             return
@@ -134,8 +190,8 @@ def render(username: str, password: str):
 
     if data is None:
         st.info(
-            "Ingresa un pallet y presiona **Trazar** para ver la cadena completa "
-            "de trazabilidad hasta las recepciones."
+            "Ingresa un pallet o lote y presiona **Trazar** para ver la cadena completa "
+            "de trazabilidad."
         )
         return
 
@@ -154,26 +210,57 @@ def _render_result(data: Dict):
     num_levels = data.get("levels", 0)
     leaf_count = data.get("leaf_count", 0)
     rec_count = data.get("reception_count", 0)
+    dispatch_count = data.get("dispatch_count", 0)
+    direction = data.get("direction", "backward")
+    lot_name = data.get("lot_name")
+    pallets_found = data.get("pallets_found")
 
     if not nodes:
-        st.warning("No se encontraron datos para este pallet.")
+        st.warning("No se encontraron datos.")
         return
 
     st.divider()
 
-    # Metricas
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Pallet", root_name)
-    c2.metric("Niveles", num_levels)
-    c3.metric("Recepciones", rec_count)
-    c4.metric("Total pallets", len(nodes))
+    # -- Info de direccion --
+    if direction == "forward":
+        st.markdown("**Direccion:** \u27a1\ufe0f Hacia adelante (Origen \u2192 Destino/Despacho)")
+    else:
+        st.markdown("**Direccion:** \u2b05\ufe0f Hacia atras (Destino \u2192 Recepcion/Origen)")
 
-    if rec_count > 0 and rec_count == leaf_count:
-        st.success("\u2705 Trazabilidad completa \u2014 todos los caminos llegan a recepcion.")
-    elif rec_count > 0:
-        st.info(f"\u2139\ufe0f {rec_count} de {leaf_count} hojas son recepciones.")
+    # -- Metricas --
+    if lot_name:
+        c0, c1, c2, c3, c4 = st.columns(5)
+        c0.metric("Lote", lot_name)
+        c1.metric("Pallets encontrados", pallets_found or 0)
+        c2.metric("Niveles", num_levels)
+        if direction == "forward":
+            c3.metric("Despachos", dispatch_count)
+        else:
+            c3.metric("Recepciones", rec_count)
+        c4.metric("Total nodos", len(nodes))
+    else:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Pallet", root_name)
+        c2.metric("Niveles", num_levels)
+        if direction == "forward":
+            c3.metric("Despachos", dispatch_count)
+        else:
+            c3.metric("Recepciones", rec_count)
+        c4.metric("Total pallets", len(nodes))
 
-    # Arbol visual
+    # -- Status messages --
+    if direction == "backward":
+        if rec_count > 0 and rec_count == leaf_count:
+            st.success("\u2705 Trazabilidad completa \u2014 todos los caminos llegan a recepcion.")
+        elif rec_count > 0:
+            st.info(f"\u2139\ufe0f {rec_count} de {leaf_count} hojas son recepciones.")
+    else:
+        if dispatch_count > 0:
+            st.success(f"\u2705 {dispatch_count} camino(s) llegan a despacho.")
+        elif leaf_count > 0:
+            st.info(f"\u2139\ufe0f {leaf_count} hojas encontradas (sin despacho asociado).")
+
+    # -- Arbol visual --
     st.markdown("### \U0001f333 Arbol de Trazabilidad")
 
     idx = {n["node_id"]: n for n in nodes}
@@ -181,30 +268,20 @@ def _render_result(data: Dict):
     root = next((n for n in nodes if n.get("parent_node_id") is None), None)
 
     if root:
-        _render_tree_node(root, idx, children_map, depth=0)
+        _render_tree_node(root, idx, children_map, depth=0, direction=direction)
 
-    # Tabla de recepciones
-    receptions = [n for n in nodes if n.get("reception_info")]
-    if receptions:
-        st.markdown("### \U0001f4cb Recepciones Encontradas")
-        rows = []
-        for n in receptions:
-            rec = n["reception_info"]
-            chain = _build_chain(n, idx)
-            rows.append({
-                "Pallet Origen": n["pkg_name"],
-                "Cadena": " \u2192 ".join(chain),
-                "Guia Despacho": rec.get("guia_despacho", "") or "\u2014",
-                "Productor": rec.get("proveedor", "") or "\u2014",
-                "Picking": rec.get("picking_name", "") or "\u2014",
-                "Fecha": rec.get("fecha", "") or "\u2014",
-            })
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+    # -- Tablas de resultados --
+    if direction == "backward":
+        _render_recepciones_table(nodes, idx)
+    else:
+        _render_despachos_table(nodes, idx)
 
-    # Excel
+    # -- Excel --
     st.divider()
     excel = _generar_excel(data)
-    fname = f"Trazabilidad_{root_name}_{datetime.now():%Y%m%d_%H%M}.xlsx"
+    dir_suffix = "adelante" if direction == "forward" else "atras"
+    base_name = root_name.replace(":", "").replace(" ", "_")
+    fname = f"Trazabilidad_{base_name}_{dir_suffix}_{datetime.now():%Y%m%d_%H%M}.xlsx"
     st.download_button(
         "\u2b07\ufe0f Descargar Excel",
         data=excel,
@@ -214,33 +291,113 @@ def _render_result(data: Dict):
     )
 
 
+def _render_recepciones_table(nodes: List[Dict], idx: Dict):
+    """Tabla de recepciones encontradas (backward)."""
+    receptions = [n for n in nodes if n.get("reception_info")]
+    if not receptions:
+        return
+    st.markdown("### \U0001f4cb Recepciones Encontradas")
+    rows = []
+    for n in receptions:
+        rec = n["reception_info"]
+        chain = _build_chain(n, idx)
+        rows.append({
+            "Pallet Origen": n["pkg_name"],
+            "Cadena": " \u2192 ".join(chain),
+            "Guia Despacho": rec.get("guia_despacho", "") or "\u2014",
+            "Productor": rec.get("proveedor", "") or "\u2014",
+            "Picking": rec.get("picking_name", "") or "\u2014",
+            "Fecha": rec.get("fecha", "") or "\u2014",
+        })
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _render_despachos_table(nodes: List[Dict], idx: Dict):
+    """Tabla de despachos encontrados (forward)."""
+    dispatches = [n for n in nodes if n.get("dispatch_info")]
+    if dispatches:
+        st.markdown("### \U0001f69a Despachos Encontrados")
+        rows = []
+        for n in dispatches:
+            disp = n["dispatch_info"]
+            chain = _build_chain(n, idx)
+            rows.append({
+                "Pallet Destino": n["pkg_name"],
+                "Cadena": " \u2192 ".join(chain),
+                "Cliente": disp.get("cliente", "") or "\u2014",
+                "Picking": disp.get("picking_name", "") or "\u2014",
+                "Origen": disp.get("origin", "") or "\u2014",
+                "Fecha": disp.get("fecha", "") or "\u2014",
+            })
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    # Mostrar tambien hojas sin despacho como destinos finales
+    leaves_no_dispatch = [n for n in nodes if n.get("is_leaf") and not n.get("dispatch_info") and n.get("level", 0) > 0]
+    if leaves_no_dispatch:
+        st.markdown("### \U0001f4e6 Destinos Finales (sin despacho)")
+        rows = []
+        for n in leaves_no_dispatch:
+            chain = _build_chain(n, idx)
+            rows.append({
+                "Pallet": n["pkg_name"],
+                "Cadena": " \u2192 ".join(chain),
+                "OP": n.get("mo_name", "") or "\u2014",
+                "Producto": n.get("product_name", "") or "\u2014",
+                "Cantidad (kg)": f"{n.get('qty', 0):.1f}" if n.get("qty") else "\u2014",
+            })
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
 # =============================================================
 # Arbol visual recursivo
 # =============================================================
 
-def _render_tree_node(node: Dict, idx: Dict, children_map: Dict, depth: int):
+def _render_tree_node(node: Dict, idx: Dict, children_map: Dict,
+                      depth: int, direction: str = "backward"):
     """Renderiza un nodo y sus hijos recursivamente como arbol con indentacion."""
     pad = "&nbsp;&nbsp;&nbsp;&nbsp;" * depth
     nid = node["node_id"]
     name = node["pkg_name"]
     rec = node.get("reception_info")
+    disp = node.get("dispatch_info")
     mo = node.get("mo_name")
     kids = children_map.get(nid, [])
 
     if depth == 0:
         # Raiz
-        st.markdown(f"\U0001f4e6 **`{name}`** (destino final)")
-    elif rec:
-        # Recepcion (hoja verde)
+        if name.startswith("LOTE:"):
+            st.markdown(f"\U0001f3f7\ufe0f **{name}**")
+        elif direction == "forward":
+            label = "(origen)" if rec else "(punto de partida)"
+            extra = ""
+            if rec:
+                guia = rec.get("guia_despacho", "") or ""
+                prov = rec.get("proveedor", "") or ""
+                if guia or prov:
+                    extra = f" \u2014 Guia: **{guia}** \u00b7 Productor: **{prov}**"
+            st.markdown(f"\U0001f4e6 **`{name}`** {label}{extra}")
+        else:
+            st.markdown(f"\U0001f4e6 **`{name}`** (destino final)")
+    elif rec and direction == "backward":
+        # Recepcion (hoja verde) en backward
         guia = rec.get("guia_despacho", "") or "\u2014"
         prov = rec.get("proveedor", "") or "\u2014"
         fecha = rec.get("fecha", "") or ""
         st.markdown(
             f"{pad}\U0001f7e2 **`{name}`** \u2014 Guia: **{guia}** \u00b7 Productor: **{prov}** \u00b7 {fecha}"
         )
+    elif disp and direction == "forward":
+        # Despacho (hoja azul) en forward
+        cliente = disp.get("cliente", "") or "\u2014"
+        fecha = disp.get("fecha", "") or ""
+        picking = disp.get("picking_name", "") or ""
+        st.markdown(
+            f"{pad}\U0001f535 **`{name}`** \u2014 Cliente: **{cliente}** \u00b7 {picking} \u00b7 {fecha}"
+        )
     elif node.get("is_leaf"):
-        # Hoja sin recepcion
-        st.markdown(f"{pad}\U0001f7e1 `{name}` \u2014 sin origen conocido")
+        # Hoja sin recepcion/despacho
+        sin_label = "sin origen" if direction == "backward" else "sin destino"
+        st.markdown(f"{pad}\U0001f7e1 `{name}` \u2014 {sin_label} conocido")
     else:
         # Nodo intermedio
         mo_label = f" *(OP: {mo})*" if mo else ""
@@ -248,18 +405,19 @@ def _render_tree_node(node: Dict, idx: Dict, children_map: Dict, depth: int):
 
     # Hijos
     for child in kids:
-        _render_tree_node(child, idx, children_map, depth + 1)
+        _render_tree_node(child, idx, children_map, depth + 1, direction=direction)
 
 
 # =============================================================
-# Excel - 2 hojas limpias
+# Excel -- 3 hojas
 # =============================================================
 
 def _generar_excel(data: Dict) -> bytes:
     """
-    Excel con 2 hojas:
-      1) Trazabilidad - una fila por recepcion con cadena completa
-      2) Arbol Completo - todos los nodos del arbol
+    Excel con 3 hojas:
+      1) Trazabilidad -- una fila por recepcion/despacho con cadena completa
+      2) Arbol Completo -- todos los nodos
+      3) Arbol Visual -- indentado
     """
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
@@ -267,6 +425,7 @@ def _generar_excel(data: Dict) -> bytes:
 
     nodes = data.get("nodes", [])
     root_name = data.get("root_name", "?")
+    direction = data.get("direction", "backward")
     idx = {n["node_id"]: n for n in nodes}
 
     wb = Workbook()
@@ -280,6 +439,7 @@ def _generar_excel(data: Dict) -> bytes:
     left_al = Alignment(vertical="center", wrap_text=True)
     rec_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
     root_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+    disp_fill = PatternFill(start_color="BDE0FE", end_color="BDE0FE", fill_type="solid")
     hdr2_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
 
     def _write_header(ws, headers, fill=None):
@@ -295,58 +455,86 @@ def _generar_excel(data: Dict) -> bytes:
             ws.column_dimensions[get_column_letter(c)].width = w
 
     # ===========================================================
-    # HOJA 1 - Trazabilidad (una fila por recepcion)
+    # HOJA 1 -- Trazabilidad
     # ===========================================================
     ws1 = wb.active
     ws1.title = "Trazabilidad"
 
-    headers1 = [
-        "Pack (Destino)", "Pallet Origen (Recepcion)",
-        "Cadena Completa", "Guia Despacho", "Productor",
-        "Picking", "Fecha Recepcion",
-    ]
-    _write_header(ws1, headers1)
-    _set_widths(ws1, [20, 20, 55, 20, 35, 20, 14])
+    if direction == "forward":
+        headers1 = [
+            "Pack (Origen)", "Pallet Destino",
+            "Cadena Completa", "Cliente", "Picking Despacho", "Fecha Despacho",
+        ]
+        _write_header(ws1, headers1)
+        _set_widths(ws1, [20, 20, 55, 35, 20, 14])
 
-    receptions = [n for n in nodes if n.get("reception_info")]
-    row = 2
-    for n in receptions:
-        rec = n["reception_info"]
-        chain = _build_chain(n, idx)
-        chain_str = " \u2192 ".join(chain)
+        dispatches = [n for n in nodes if n.get("dispatch_info")]
+        if not dispatches:
+            dispatches = [n for n in nodes if n.get("is_leaf") and n.get("level", 0) > 0]
 
-        ws1.cell(row=row, column=1, value=root_name)
-        ws1.cell(row=row, column=2, value=n["pkg_name"])
-        ws1.cell(row=row, column=3, value=chain_str)
-        ws1.cell(row=row, column=4, value=rec.get("guia_despacho", ""))
-        ws1.cell(row=row, column=5, value=rec.get("proveedor", ""))
-        ws1.cell(row=row, column=6, value=rec.get("picking_name", ""))
-        ws1.cell(row=row, column=7, value=rec.get("fecha", ""))
+        row = 2
+        for n in dispatches:
+            disp = n.get("dispatch_info") or {}
+            chain = _build_chain(n, idx)
+            chain_str = " \u2192 ".join(chain)
+            ws1.cell(row=row, column=1, value=root_name)
+            ws1.cell(row=row, column=2, value=n["pkg_name"])
+            ws1.cell(row=row, column=3, value=chain_str)
+            ws1.cell(row=row, column=4, value=disp.get("cliente", ""))
+            ws1.cell(row=row, column=5, value=disp.get("picking_name", ""))
+            ws1.cell(row=row, column=6, value=disp.get("fecha", ""))
+            for c in range(1, 7):
+                cell = ws1.cell(row=row, column=c)
+                cell.border = border
+                cell.alignment = left_al
+                cell.fill = disp_fill if disp else rec_fill
+            row += 1
+    else:
+        headers1 = [
+            "Pack (Destino)", "Pallet Origen (Recepcion)",
+            "Cadena Completa", "Guia Despacho", "Productor",
+            "Picking", "Fecha Recepcion",
+        ]
+        _write_header(ws1, headers1)
+        _set_widths(ws1, [20, 20, 55, 20, 35, 20, 14])
 
-        for c in range(1, 8):
-            cell = ws1.cell(row=row, column=c)
-            cell.border = border
-            cell.alignment = left_al
-            cell.fill = rec_fill
-        row += 1
+        receptions = [n for n in nodes if n.get("reception_info")]
+        row = 2
+        for n in receptions:
+            rec = n["reception_info"]
+            chain = _build_chain(n, idx)
+            chain_str = " \u2192 ".join(chain)
+            ws1.cell(row=row, column=1, value=root_name)
+            ws1.cell(row=row, column=2, value=n["pkg_name"])
+            ws1.cell(row=row, column=3, value=chain_str)
+            ws1.cell(row=row, column=4, value=rec.get("guia_despacho", ""))
+            ws1.cell(row=row, column=5, value=rec.get("proveedor", ""))
+            ws1.cell(row=row, column=6, value=rec.get("picking_name", ""))
+            ws1.cell(row=row, column=7, value=rec.get("fecha", ""))
+            for c in range(1, 8):
+                cell = ws1.cell(row=row, column=c)
+                cell.border = border
+                cell.alignment = left_al
+                cell.fill = rec_fill
+            row += 1
 
-    if not receptions:
-        ws1.cell(row=2, column=1, value=root_name)
-        ws1.cell(row=2, column=2, value="(sin recepciones encontradas)")
-        for c in range(1, 8):
-            ws1.cell(row=2, column=c).border = border
+        if not receptions:
+            ws1.cell(row=2, column=1, value=root_name)
+            ws1.cell(row=2, column=2, value="(sin recepciones encontradas)")
+            for c in range(1, 8):
+                ws1.cell(row=2, column=c).border = border
 
     ws1.freeze_panes = "A2"
 
     # ===========================================================
-    # HOJA 2 - Arbol Completo
+    # HOJA 2 -- Arbol Completo
     # ===========================================================
     ws2 = wb.create_sheet("Arbol Completo")
 
     headers2 = [
         "Nivel", "Pallet", "Padre", "OP",
         "Producto", "Cantidad (kg)", "Lote", "Tipo",
-        "Guia Despacho", "Productor", "Picking", "Fecha",
+        "Guia Despacho", "Productor/Cliente", "Picking", "Fecha",
     ]
     _write_header(ws2, headers2, fill=hdr2_fill)
     _set_widths(ws2, [8, 20, 20, 22, 45, 14, 20, 14, 20, 35, 20, 14])
@@ -357,12 +545,15 @@ def _generar_excel(data: Dict) -> bytes:
     for n in sorted_nodes:
         level = n.get("level", 0)
         rec = n.get("reception_info")
+        disp = n.get("dispatch_info")
         is_leaf = n.get("is_leaf", False)
 
         if level == 0:
-            tipo = "Destino"
+            tipo = "Origen" if direction == "forward" else "Destino"
         elif rec:
             tipo = "Recepcion"
+        elif disp:
+            tipo = "Despacho"
         elif is_leaf:
             tipo = "Hoja"
         else:
@@ -380,10 +571,20 @@ def _generar_excel(data: Dict) -> bytes:
         ws2.cell(row=row2, column=6, value=f"{qty:.1f}" if qty else "")
         ws2.cell(row=row2, column=7, value=n.get("lot_name", "") or "")
         ws2.cell(row=row2, column=8, value=tipo)
-        ws2.cell(row=row2, column=9, value=rec.get("guia_despacho", "") if rec else "")
-        ws2.cell(row=row2, column=10, value=rec.get("proveedor", "") if rec else "")
-        ws2.cell(row=row2, column=11, value=rec.get("picking_name", "") if rec else "")
-        ws2.cell(row=row2, column=12, value=rec.get("fecha", "") if rec else "")
+
+        if rec:
+            ws2.cell(row=row2, column=9, value=rec.get("guia_despacho", ""))
+            ws2.cell(row=row2, column=10, value=rec.get("proveedor", ""))
+            ws2.cell(row=row2, column=11, value=rec.get("picking_name", ""))
+            ws2.cell(row=row2, column=12, value=rec.get("fecha", ""))
+        elif disp:
+            ws2.cell(row=row2, column=9, value="")
+            ws2.cell(row=row2, column=10, value=disp.get("cliente", ""))
+            ws2.cell(row=row2, column=11, value=disp.get("picking_name", ""))
+            ws2.cell(row=row2, column=12, value=disp.get("fecha", ""))
+        else:
+            for c in range(9, 13):
+                ws2.cell(row=row2, column=c, value="")
 
         for c in range(1, 13):
             cell = ws2.cell(row=row2, column=c)
@@ -396,13 +597,16 @@ def _generar_excel(data: Dict) -> bytes:
         elif rec:
             for c in range(1, 13):
                 ws2.cell(row=row2, column=c).fill = rec_fill
+        elif disp:
+            for c in range(1, 13):
+                ws2.cell(row=row2, column=c).fill = disp_fill
 
         row2 += 1
 
     ws2.freeze_panes = "A2"
 
     # ===========================================================
-    # HOJA 3 - Arbol Visual (tree con indentacion)
+    # HOJA 3 -- Arbol Visual
     # ===========================================================
     ws3 = wb.create_sheet("Arbol Visual")
 
@@ -410,10 +614,11 @@ def _generar_excel(data: Dict) -> bytes:
     indent_font = Font(name="Consolas", size=11)
     indent_bold = Font(name="Consolas", size=11, bold=True)
     rec_font = Font(name="Consolas", size=11, color="006100", bold=True)
+    disp_font = Font(name="Consolas", size=11, color="1F4E79", bold=True)
     leaf_font = Font(name="Consolas", size=11, color="BF8F00")
     root_font = Font(name="Consolas", size=12, bold=True, color="1F4E79")
 
-    headers3 = ["Arbol de Pallets", "OP / Proceso", "Guia Despacho", "Productor", "Producto", "Cantidad (kg)"]
+    headers3 = ["Arbol de Pallets", "OP / Proceso", "Guia/Cliente", "Productor/Destino", "Producto", "Cantidad (kg)"]
     _write_header(ws3, headers3, fill=tree_hdr_fill)
     _set_widths(ws3, [65, 24, 18, 35, 45, 14])
 
@@ -427,30 +632,41 @@ def _generar_excel(data: Dict) -> bytes:
         tree_row[0] += 1
 
         rec_info = node.get("reception_info")
+        disp_info = node.get("dispatch_info")
         is_leaf = node.get("is_leaf", False)
         nid = node["node_id"]
         name = node["pkg_name"]
         mo = node.get("mo_name") or ""
         kids = children_map.get(nid, [])
 
-        # Build indented label
         if depth == 0:
-            prefix = "\u25c6 "  # ◆
-            label = f"{prefix}{name}  (DESTINO)"
+            if name.startswith("LOTE:"):
+                prefix = "\U0001f3f7 "
+                label = f"{prefix}{name}"
+            else:
+                prefix = "\u25c6 "
+                dir_label = "ORIGEN" if direction == "forward" else "DESTINO"
+                label = f"{prefix}{name}  ({dir_label})"
             font_choice = root_font
             fill_choice = root_fill
-        elif rec_info:
+        elif rec_info and direction == "backward":
             prefix = "    " * depth + "\u2514\u2500 \u2705 "
             label = f"{prefix}{name}  [RECEPCION]"
             font_choice = rec_font
             fill_choice = rec_fill
+        elif disp_info and direction == "forward":
+            prefix = "    " * depth + "\u2514\u2500 \U0001f69a "
+            label = f"{prefix}{name}  [DESPACHO]"
+            font_choice = disp_font
+            fill_choice = disp_fill
         elif is_leaf:
             prefix = "    " * depth + "\u2514\u2500 \u26a0 "
-            label = f"{prefix}{name}  [SIN ORIGEN]"
+            sin = "SIN ORIGEN" if direction == "backward" else "SIN DESTINO"
+            label = f"{prefix}{name}  [{sin}]"
             font_choice = leaf_font
             fill_choice = None
         else:
-            connector = "\u251c\u2500 " if True else "\u2514\u2500 "
+            connector = "\u251c\u2500 "
             prefix = "    " * depth + connector
             label = f"{prefix}{name}"
             font_choice = indent_bold
@@ -469,6 +685,9 @@ def _generar_excel(data: Dict) -> bytes:
         if rec_info:
             ws3.cell(row=r, column=3, value=rec_info.get("guia_despacho", "")).border = border
             ws3.cell(row=r, column=4, value=rec_info.get("proveedor", "")).border = border
+        elif disp_info:
+            ws3.cell(row=r, column=3, value=disp_info.get("cliente", "")).border = border
+            ws3.cell(row=r, column=4, value=disp_info.get("picking_name", "")).border = border
         else:
             ws3.cell(row=r, column=3).border = border
             ws3.cell(row=r, column=4).border = border
@@ -482,7 +701,6 @@ def _generar_excel(data: Dict) -> bytes:
         ws3.cell(row=r, column=6, value=f"{qty:.1f}" if qty else "").border = border
         ws3.cell(row=r, column=6).alignment = center
 
-        # Recurse children
         for child in kids:
             _write_tree_row(child, depth + 1)
 

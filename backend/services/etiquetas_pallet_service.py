@@ -593,24 +593,515 @@ class EtiquetasPalletService:
             'reception_count': rec_count,
         }
 
-        # Buscar patrones: número seguido de kg (con o sin espacio)
-        # Ej: "10 kg", "10kg", "10 Kg", "10KG"
-        patterns = [
-            r'(\d+(?:\.\d+)?)\s*kg',  # "10 kg" o "10kg"
-            r'(\d+(?:\.\d+)?)\s*KG',  # "10 KG" o "10KG"
-            r'(\d+(?:\.\d+)?)\s*Kg',  # "10 Kg"
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, nombre_producto, re.IGNORECASE)
-            if match:
-                try:
-                    return float(match.group(1))
-                except:
+    # ═══════════════════════════════════════════════════════════
+    # Trazabilidad FORWARD (de origen hacia destinos)
+    # ═══════════════════════════════════════════════════════════
+
+    def _find_destination_packages(self, pkg_id: int) -> List[Dict]:
+        """
+        Dado un package, encuentra los pallets DESTINO donde fue consumido.
+        Ruta: package_id (consumido) → stock.move.line → move_id
+              → production_id (OP que lo consumió) → result move_lines → result_package_id
+        También cubre transfers: package_id → result_package_id en la misma move_line.
+        """
+        # Buscar move_lines donde este pallet fue consumido (package_id = pkg_id)
+        smls = self.odoo.search_read(
+            'stock.move.line',
+            [
+                ('package_id', '=', pkg_id),
+                ('qty_done', '>', 0),
+            ],
+            ['move_id', 'result_package_id', 'product_id', 'qty_done', 'lot_id', 'date'],
+            limit=500,
+        )
+        if not smls:
+            return []
+
+        candidates: Dict[int, dict] = {}
+
+        # 1) Transfers directos: si result_package_id != package_id
+        for sml in smls:
+            rpkg = sml.get('result_package_id')
+            if not rpkg:
+                continue
+            rpkg_id = rpkg[0] if isinstance(rpkg, (list, tuple)) else rpkg
+            rpkg_name = rpkg[1] if isinstance(rpkg, (list, tuple)) and len(rpkg) > 1 else str(rpkg_id)
+            if rpkg_id == pkg_id:
+                continue  # mismo pallet, no es destino
+
+            prod = sml.get('product_id')
+            prod_nm = prod[1] if prod and isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
+            qty = float(sml.get('qty_done', 0) or 0)
+            lot = sml.get('lot_id')
+            lot_name = lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else ''
+
+            if rpkg_id not in candidates:
+                candidates[rpkg_id] = {
+                    'package_id': rpkg_id,
+                    'package_name': rpkg_name,
+                    'product_name': prod_nm,
+                    'qty_total': 0.0,
+                    'lot_name': lot_name,
+                    'last_date': sml.get('date'),
+                    'mo_name': '',
+                    'source_type': 'transfer',
+                }
+            candidates[rpkg_id]['qty_total'] += qty
+
+        # 2) Producción: buscar OP que consumió este pallet
+        move_ids = []
+        for sml in smls:
+            mid = sml.get('move_id')
+            if mid:
+                move_ids.append(mid[0] if isinstance(mid, (list, tuple)) else mid)
+
+        if move_ids:
+            # Buscar moves de consumo con raw_material_production_id
+            raw_moves = self.odoo.search_read(
+                'stock.move',
+                [('id', 'in', move_ids), ('raw_material_production_id', '!=', False)],
+                ['raw_material_production_id'],
+                limit=50,
+            )
+            mo_ids = set()
+            for rm in raw_moves:
+                rmpi = rm.get('raw_material_production_id')
+                if rmpi:
+                    mo_ids.add(rmpi[0] if isinstance(rmpi, (list, tuple)) else rmpi)
+
+            for mo_id in mo_ids:
+                # Buscar pallets resultado de esta OP
+                prod_moves = self.odoo.search_read(
+                    'stock.move',
+                    [('production_id', '=', mo_id), ('state', '=', 'done')],
+                    ['id'],
+                    limit=50,
+                )
+                if not prod_moves:
                     continue
-        
+
+                # Obtener nombre de la OP
+                mo_info = self.odoo.search_read(
+                    'mrp.production', [('id', '=', mo_id)],
+                    ['name'], limit=1,
+                )
+                mo_name = mo_info[0]['name'] if mo_info else ''
+
+                prod_move_ids = [m['id'] for m in prod_moves]
+                result_smls = self.odoo.search_read(
+                    'stock.move.line',
+                    [
+                        ('move_id', 'in', prod_move_ids),
+                        ('result_package_id', '!=', False),
+                        ('qty_done', '>', 0),
+                    ],
+                    ['result_package_id', 'product_id', 'qty_done', 'lot_id', 'date'],
+                    limit=500,
+                )
+
+                for rs in result_smls:
+                    rpkg = rs.get('result_package_id')
+                    if not rpkg:
+                        continue
+                    rpkg_id = rpkg[0] if isinstance(rpkg, (list, tuple)) else rpkg
+                    rpkg_name = rpkg[1] if isinstance(rpkg, (list, tuple)) and len(rpkg) > 1 else str(rpkg_id)
+                    if rpkg_id == pkg_id:
+                        continue
+
+                    prod = rs.get('product_id')
+                    prod_nm = prod[1] if prod and isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
+                    qty = float(rs.get('qty_done', 0) or 0)
+                    lot = rs.get('lot_id')
+                    lot_name = lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else ''
+
+                    if rpkg_id not in candidates:
+                        candidates[rpkg_id] = {
+                            'package_id': rpkg_id,
+                            'package_name': rpkg_name,
+                            'product_name': prod_nm,
+                            'qty_total': 0.0,
+                            'lot_name': lot_name,
+                            'last_date': rs.get('date'),
+                            'mo_name': mo_name,
+                            'source_type': 'production',
+                        }
+                    candidates[rpkg_id]['qty_total'] += qty
+                    if not candidates[rpkg_id]['mo_name']:
+                        candidates[rpkg_id]['mo_name'] = mo_name
+
+        results = list(candidates.values())
+        results.sort(key=lambda x: x.get('qty_total', 0), reverse=True)
+        return results
+
+    def _buscar_despacho_pkg(self, pkg_id: int) -> Optional[Dict]:
+        """Busca si un pallet salió en un picking de despacho/venta (forward leaf)."""
+        smls = self.odoo.search_read(
+            'stock.move.line',
+            [('package_id', '=', pkg_id), ('qty_done', '>', 0)],
+            ['picking_id'],
+            limit=10,
+        )
+        pick_ids = []
+        for sml in smls:
+            pick_id = sml.get('picking_id')
+            if pick_id:
+                pick_ids.append(pick_id[0] if isinstance(pick_id, (list, tuple)) else pick_id)
+
+        if not pick_ids:
+            return None
+
+        # Buscar pickings de salida (delivery orders) — picking_type_id para outgoing
+        picks = self.odoo.search_read(
+            'stock.picking',
+            [
+                ('id', 'in', pick_ids),
+                ('picking_type_id.code', '=', 'outgoing'),
+            ],
+            ['id', 'name', 'partner_id', 'date_done', 'origin'],
+            limit=1,
+        )
+        if picks:
+            p = picks[0]
+            partner = p.get('partner_id')
+            return {
+                'picking_name': p.get('name', ''),
+                'cliente': partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else '',
+                'fecha': str(p.get('date_done') or '')[:10],
+                'origin': p.get('origin', ''),
+            }
         return None
-    
+
+    def trazar_forward(self, package_id: int, max_levels: int = 10) -> Dict:
+        """
+        Traza un pallet HACIA ADELANTE: desde el origen hacia sus destinos.
+        Encuentra dónde fue consumido y qué pallets se produjeron a partir de él.
+
+        Returns: misma estructura que trazar_completo pero en dirección forward.
+        """
+        pkg_info = self.odoo.search_read(
+            'stock.quant.package', [('id', '=', package_id)],
+            ['name'], limit=1,
+        )
+        root_name = pkg_info[0]['name'] if pkg_info else f'ID-{package_id}'
+
+        node_counter = 0
+        all_nodes: List[Dict] = []
+        visited: set = set()
+
+        def _next_id():
+            nonlocal node_counter
+            node_counter += 1
+            return node_counter
+
+        def _trace_forward_level(queue: List[Dict], level: int):
+            if level > max_levels or not queue:
+                for n in queue:
+                    n['is_leaf'] = True
+                return
+
+            next_queue: List[Dict] = []
+            cache: Dict[int, Dict] = {}
+
+            for node in queue:
+                pid = node['pkg_id']
+
+                # Evitar ciclos
+                ancestors = set()
+                cur = node
+                while cur.get('_parent_ref'):
+                    ancestors.add(cur['_parent_ref']['pkg_id'])
+                    cur = cur['_parent_ref']
+                if pid in ancestors:
+                    node['is_leaf'] = True
+                    continue
+
+                if pid not in cache:
+                    dests = self._find_destination_packages(pid)
+                    despacho = None
+                    if not dests:
+                        despacho = self._buscar_despacho_pkg(pid)
+                    cache[pid] = {'dests': dests, 'despacho': despacho}
+
+                cached = cache[pid]
+
+                if not cached['dests']:
+                    node['is_leaf'] = True
+                    if cached['despacho']:
+                        node['dispatch_info'] = cached['despacho']
+                    # Buscar recepción también (nodo origen)
+                    if level == 0:
+                        rec = self._buscar_recepcion_pkg(pid)
+                        if rec:
+                            node['reception_info'] = rec
+                    continue
+
+                for c in cached['dests']:
+                    c_id = c.get('package_id')
+                    if not c_id:
+                        continue
+                    child = {
+                        'node_id': _next_id(),
+                        'pkg_id': c_id,
+                        'pkg_name': c.get('package_name', str(c_id)),
+                        'parent_node_id': node['node_id'],
+                        'mo_name': c.get('mo_name', ''),
+                        'level': level + 1,
+                        'is_leaf': False,
+                        'reception_info': None,
+                        'dispatch_info': None,
+                        'qty': c.get('qty_total', 0),
+                        'product_name': c.get('product_name', ''),
+                        'lot_name': c.get('lot_name', ''),
+                        '_parent_ref': node,
+                    }
+                    all_nodes.append(child)
+                    next_queue.append(child)
+
+            if next_queue:
+                _trace_forward_level(next_queue, level + 1)
+
+        # Nodo raíz — buscar si tiene recepción (puede ser el origen)
+        rec_info = self._buscar_recepcion_pkg(package_id)
+        root_node = {
+            'node_id': _next_id(),
+            'pkg_id': package_id,
+            'pkg_name': root_name,
+            'parent_node_id': None,
+            'mo_name': None,
+            'level': 0,
+            'is_leaf': False,
+            'reception_info': rec_info,
+            'dispatch_info': None,
+            'qty': None,
+            'product_name': '',
+            'lot_name': '',
+            '_parent_ref': None,
+        }
+        all_nodes.append(root_node)
+
+        _trace_forward_level([root_node], 0)
+
+        for n in all_nodes:
+            n.pop('_parent_ref', None)
+
+        max_level = max(n['level'] for n in all_nodes)
+        leaf_count = sum(1 for n in all_nodes if n['is_leaf'])
+        dispatch_count = sum(1 for n in all_nodes if n.get('dispatch_info'))
+        rec_count = sum(1 for n in all_nodes if n.get('reception_info'))
+
+        return {
+            'root_id': package_id,
+            'root_name': root_name,
+            'nodes': all_nodes,
+            'levels': max_level + 1,
+            'leaf_count': leaf_count,
+            'reception_count': rec_count,
+            'dispatch_count': dispatch_count,
+            'direction': 'forward',
+        }
+
+    # ═══════════════════════════════════════════════════════════
+    # Búsqueda de pallets por LOTE
+    # ═══════════════════════════════════════════════════════════
+
+    def buscar_pallets_por_lote(self, lot_name: str) -> List[Dict]:
+        """
+        Busca todos los pallets asociados a un lote de producción.
+        Retorna lista de {package_id, package_name, product_name, qty, lot_name}.
+        """
+        # Buscar el lote
+        lots = self.odoo.search_read(
+            'stock.lot',
+            [('name', 'ilike', lot_name.strip())],
+            ['id', 'name', 'product_id'],
+            limit=20,
+        )
+        if not lots:
+            return []
+
+        lot_ids = [l['id'] for l in lots]
+
+        # Buscar quants con esos lotes que estén en un paquete
+        quants = self.odoo.search_read(
+            'stock.quant',
+            [
+                ('lot_id', 'in', lot_ids),
+                ('package_id', '!=', False),
+                ('quantity', '>', 0),
+            ],
+            ['package_id', 'product_id', 'quantity', 'lot_id'],
+            limit=500,
+        )
+
+        # También buscar move_lines con esos lotes (para lotes ya consumidos)
+        move_lines = self.odoo.search_read(
+            'stock.move.line',
+            [
+                ('lot_id', 'in', lot_ids),
+                ('result_package_id', '!=', False),
+                ('qty_done', '>', 0),
+            ],
+            ['result_package_id', 'product_id', 'qty_done', 'lot_id'],
+            limit=1000,
+        )
+
+        pallets: Dict[int, dict] = {}
+
+        for q in quants:
+            pkg = q.get('package_id')
+            if not pkg:
+                continue
+            pkg_id = pkg[0] if isinstance(pkg, (list, tuple)) else pkg
+            pkg_name = pkg[1] if isinstance(pkg, (list, tuple)) and len(pkg) > 1 else str(pkg_id)
+            prod = q.get('product_id')
+            prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
+            lot = q.get('lot_id')
+            lot_nm = lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else ''
+
+            if pkg_id not in pallets:
+                pallets[pkg_id] = {
+                    'package_id': pkg_id,
+                    'package_name': pkg_name,
+                    'product_name': prod_name,
+                    'qty': 0,
+                    'lot_name': lot_nm,
+                    'source': 'quant',
+                }
+            pallets[pkg_id]['qty'] += float(q.get('quantity', 0))
+
+        for ml in move_lines:
+            rpkg = ml.get('result_package_id')
+            if not rpkg:
+                continue
+            pkg_id = rpkg[0] if isinstance(rpkg, (list, tuple)) else rpkg
+            pkg_name = rpkg[1] if isinstance(rpkg, (list, tuple)) and len(rpkg) > 1 else str(pkg_id)
+            prod = ml.get('product_id')
+            prod_name = prod[1] if isinstance(prod, (list, tuple)) and len(prod) > 1 else ''
+            lot = ml.get('lot_id')
+            lot_nm = lot[1] if isinstance(lot, (list, tuple)) and len(lot) > 1 else ''
+
+            if pkg_id not in pallets:
+                pallets[pkg_id] = {
+                    'package_id': pkg_id,
+                    'package_name': pkg_name,
+                    'product_name': prod_name,
+                    'qty': 0,
+                    'lot_name': lot_nm,
+                    'source': 'move_line',
+                }
+            pallets[pkg_id]['qty'] += float(ml.get('qty_done', 0))
+
+        results = list(pallets.values())
+        results.sort(key=lambda x: x.get('package_name', ''))
+        return results
+
+    def trazar_lote_completo(self, lot_name: str, direction: str = 'backward', max_levels: int = 10) -> Dict:
+        """
+        Traza todos los pallets de un lote en la dirección indicada.
+        Combina los resultados de cada pallet en un solo árbol con nodo raíz virtual (el lote).
+
+        Args:
+            lot_name: Nombre del lote
+            direction: 'backward' o 'forward'
+            max_levels: Máximo de niveles a trazar
+
+        Returns:
+            Estructura similar a trazar_completo pero con raíz virtual del lote.
+        """
+        pallets = self.buscar_pallets_por_lote(lot_name)
+        if not pallets:
+            return {
+                'root_id': None,
+                'root_name': f'Lote: {lot_name}',
+                'nodes': [],
+                'levels': 0,
+                'leaf_count': 0,
+                'reception_count': 0,
+                'dispatch_count': 0,
+                'direction': direction,
+                'lot_name': lot_name,
+                'pallets_found': 0,
+            }
+
+        # Crear nodo raíz virtual para el lote
+        all_nodes: List[Dict] = []
+        node_counter = 0
+
+        def _next_id():
+            nonlocal node_counter
+            node_counter += 1
+            return node_counter
+
+        lot_root = {
+            'node_id': _next_id(),
+            'pkg_id': None,
+            'pkg_name': f'LOTE: {lot_name}',
+            'parent_node_id': None,
+            'mo_name': None,
+            'level': 0,
+            'is_leaf': False,
+            'reception_info': None,
+            'dispatch_info': None,
+            'qty': None,
+            'product_name': pallets[0].get('product_name', '') if pallets else '',
+            'lot_name': lot_name,
+        }
+        all_nodes.append(lot_root)
+
+        total_rec = 0
+        total_dispatch = 0
+        max_depth = 0
+
+        for pallet in pallets:
+            pkg_id = pallet['package_id']
+            trace_fn = self.trazar_forward if direction == 'forward' else self.trazar_completo
+            sub_result = trace_fn(pkg_id, max_levels=max_levels)
+
+            sub_nodes = sub_result.get('nodes', [])
+            if not sub_nodes:
+                continue
+
+            # Remap node_ids para evitar colisiones
+            id_map = {}
+            for sn in sub_nodes:
+                old_id = sn['node_id']
+                new_id = _next_id()
+                id_map[old_id] = new_id
+                sn['node_id'] = new_id
+
+            # Remap parent_node_ids
+            for sn in sub_nodes:
+                if sn['parent_node_id'] is None:
+                    # Es raíz del sub-árbol → conectar al lote root
+                    sn['parent_node_id'] = lot_root['node_id']
+                    sn['level'] = 1
+                else:
+                    sn['parent_node_id'] = id_map.get(sn['parent_node_id'], sn['parent_node_id'])
+                    sn['level'] = sn['level'] + 1
+
+            all_nodes.extend(sub_nodes)
+            total_rec += sub_result.get('reception_count', 0)
+            total_dispatch += sub_result.get('dispatch_count', 0)
+            if sub_nodes:
+                sub_max = max(sn['level'] for sn in sub_nodes)
+                if sub_max > max_depth:
+                    max_depth = sub_max
+
+        leaf_count = sum(1 for n in all_nodes if n.get('is_leaf'))
+
+        return {
+            'root_id': None,
+            'root_name': f'Lote: {lot_name}',
+            'nodes': all_nodes,
+            'levels': max_depth + 1 if all_nodes else 0,
+            'leaf_count': leaf_count,
+            'reception_count': total_rec,
+            'dispatch_count': total_dispatch,
+            'direction': direction,
+            'lot_name': lot_name,
+            'pallets_found': len(pallets),
+        }
+
     def _calcular_cantidad_cajas(self, peso_total_kg: float, nombre_producto: str) -> int:
         """
         Calcula la cantidad de cajas basándose en el peso total y el peso por caja

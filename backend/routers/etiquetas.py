@@ -65,10 +65,12 @@ async def full_trace(
     username: str = Query(..., description="Usuario Odoo"),
     password: str = Query(..., description="API Key Odoo"),
     max_levels: int = Query(10, description="Máximo de niveles a trazar"),
+    direction: str = Query("backward", description="Dirección: backward (hacia recepción) o forward (hacia destino)"),
 ):
     """
-    Traza un pallet recursivamente hasta las recepciones en un solo llamado.
-    Devuelve el árbol completo con todos los nodos.
+    Traza un pallet recursivamente en un solo llamado.
+    direction='backward' → hacia recepciones (origen).
+    direction='forward'  → hacia destinos (consumo/despacho).
     """
     try:
         from backend.services.etiquetas_pallet_service import EtiquetasPalletService
@@ -88,10 +90,69 @@ async def full_trace(
             raise HTTPException(status_code=404, detail=f"Pallet '{package_name}' no encontrado")
 
         package_id = res[0]['id']
-        result = service.trazar_completo(package_id, max_levels=max_levels)
+
+        if direction == 'forward':
+            result = service.trazar_forward(package_id, max_levels=max_levels)
+        else:
+            result = service.trazar_completo(package_id, max_levels=max_levels)
+
         return result
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trace_lot")
+async def trace_lot(
+    lot_name: str = Query(..., description="Nombre del lote de producción"),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    max_levels: int = Query(10, description="Máximo de niveles a trazar"),
+    direction: str = Query("backward", description="Dirección: backward o forward"),
+):
+    """
+    Busca todos los pallets de un lote y los traza en la dirección indicada.
+    """
+    try:
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+        result = service.trazar_lote_completo(lot_name, direction=direction, max_levels=max_levels)
+        if not result.get('nodes'):
+            raise HTTPException(status_code=404, detail=f"No se encontraron pallets para el lote '{lot_name}'")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/search_lots")
+async def search_lots(
+    term: str = Query(..., description="Término de búsqueda de lote"),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+):
+    """
+    Busca lotes por nombre (autocompletado).
+    """
+    try:
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+        lots = service.odoo.search_read(
+            'stock.lot',
+            [('name', 'ilike', term.strip())],
+            ['id', 'name', 'product_id'],
+            limit=20,
+        )
+        return [
+            {
+                'id': l['id'],
+                'name': l['name'],
+                'product': l.get('product_id', [None, ''])[1] if isinstance(l.get('product_id'), (list, tuple)) else '',
+            }
+            for l in lots
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
