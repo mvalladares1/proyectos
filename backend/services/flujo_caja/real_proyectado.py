@@ -954,8 +954,8 @@ class RealProyectadoCalculator:
                     ['date', '>=', fecha_inicio],
                     ['date', '<=', fecha_fin]
                 ],
-                ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'ref'],
-                limit=500
+                ['id', 'date', 'credit'],  # Solo campos necesarios para mejorar velocidad
+                limit=100  # Reducir límite, no debería haber muchas devoluciones IVA
             )
             
             real_total = 0.0
@@ -981,106 +981,101 @@ class RealProyectadoCalculator:
             # 2. INGRESOS PROYECTADOS - Facturas draft diario Proyecciones Futuras
             # =====================================================
             
-            # 2.1 Buscar cuentas de préstamos
-            cuentas_prestamos_codes = ['21010101', '21010102', '21010103']
-            cuentas_prestamos = self.odoo.search_read(
-                'account.account',
-                [['code', 'in', cuentas_prestamos_codes]],
-                ['id', 'code', 'x_studio_cat_ifrs_3'],
-                limit=10
-            )
+            # 2.1 Buscar todas las cuentas necesarias en una sola consulta
+            cuentas_codes = ['11060108', '21010101', '21010102', '21010103']
             
-            # Mapear account_id -> Cat IFRS 3
-            cuenta_a_ifrs3 = {}
-            cuentas_prestamos_ids = []
-            for cuenta in cuentas_prestamos:
-                account_id = cuenta.get('id')
-                cuentas_prestamos_ids.append(account_id)
-                cat_ifrs = (cuenta.get('x_studio_cat_ifrs_3') or '').strip()
-                cuenta_a_ifrs3[account_id] = cat_ifrs if cat_ifrs else 'Sin Clasificar IFRS'
-            
-            # 2.2 Buscar cuenta IVA (11060108) para su Cat IFRS 3
-            cat_ifrs_iva = 'Sin Clasificar IFRS'
             try:
-                cuenta_iva_data = self.odoo.search_read(
+                cuentas_data = self.odoo.search_read(
                     'account.account',
-                    [['id', '=', cuenta_iva_id]],
-                    ['x_studio_cat_ifrs_3'],
-                    limit=1
+                    [['code', 'in', cuentas_codes]],
+                    ['id', 'code', 'x_studio_cat_ifrs_3'],
+                    limit=20
                 )
-                if cuenta_iva_data:
-                    cat_ifrs_iva = (cuenta_iva_data[0].get('x_studio_cat_ifrs_3') or '').strip()
-                    if not cat_ifrs_iva:
-                        cat_ifrs_iva = 'Sin Clasificar IFRS'
-            except Exception:
-                pass
-            
-            # Agregar cuenta IVA al mapeo
-            cuenta_a_ifrs3[cuenta_iva_id] = cat_ifrs_iva
-            todas_cuentas_ids = cuentas_prestamos_ids + [cuenta_iva_id]
-            
-            # 2.3 Buscar movimientos en diario Proyecciones Futuras (130)
-            # Facturas draft desde hoy con cuentas 11060108, 21010101-103
-            movimientos_proyectados = self.odoo.search_read(
-                'account.move.line',
-                [
-                    ['account_id', 'in', todas_cuentas_ids],
-                    ['journal_id', '=', self.DIARIO_PROYECCIONES_FUTURAS_ID],
-                    ['parent_state', 'in', ['draft']],
-                    ['date', '>=', hoy],
-                    ['date', '<=', fecha_fin]
-                ],
-                ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'ref', 'account_id'],
-                limit=500
-            )
-            
-            proyectado_total = 0.0
-            proyectado_por_mes = defaultdict(float)
-            documentos_proyectados_por_ifrs = defaultdict(list)
-            montos_proyectados_por_ifrs = defaultdict(lambda: defaultdict(float))
-            
-            for m in movimientos_proyectados:
-                fecha = m.get('date', '')
-                if not fecha:
-                    continue
+                
+                # Mapear account_id -> Cat IFRS 3
+                cuenta_a_ifrs3 = {}
+                todas_cuentas_ids = []
+                
+                for cuenta in cuentas_data:
+                    account_id = cuenta.get('id')
+                    todas_cuentas_ids.append(account_id)
+                    cat_ifrs = (cuenta.get('x_studio_cat_ifrs_3') or '').strip()
+                    cuenta_a_ifrs3[account_id] = cat_ifrs if cat_ifrs else 'Sin Clasificar IFRS'
+                
+                # Si no encontramos cuentas, retornar solo realizados
+                if not todas_cuentas_ids:
+                    print(f"[RealProyectado] No se encontraron cuentas para proyectados: {cuentas_codes}")
+                    proyectado_total = 0.0
+                    proyectado_por_mes = {}
+                    documentos_proyectados_por_ifrs = {}
+                    montos_proyectados_por_ifrs = {}
+                else:
+                    # 2.2 Buscar movimientos en diario Proyecciones Futuras (130)
+                    movimientos_proyectados = self.odoo.search_read(
+                        'account.move.line',
+                        [
+                            ['account_id', 'in', todas_cuentas_ids],
+                            ['journal_id', '=', self.DIARIO_PROYECCIONES_FUTURAS_ID],
+                            ['parent_state', 'in', ['draft']],
+                            ['date', '>=', hoy],
+                            ['date', '<=', fecha_fin]
+                        ],
+                        ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'account_id'],
+                        limit=200  # Reducir límite para mejorar velocidad
+                    )
                     
-                periodo = self._fecha_a_periodo(fecha, meses_lista)
-                account_id = m.get('account_id')
-                if isinstance(account_id, (list, tuple)):
-                    account_id = account_id[0]
-                
-                # Para proyectados, consideramos tanto créditos como débitos positivos
-                credit = m.get('credit', 0) or 0
-                debit = m.get('debit', 0) or 0
-                monto = credit if credit > 0 else debit
-                
-                if monto <= 0:
-                    continue
-                
-                # Obtener Cat IFRS 3 de esta cuenta
-                cat_ifrs_3 = cuenta_a_ifrs3.get(account_id, 'Sin Clasificar IFRS')
-                
-                proyectado_total += monto
-                proyectado_por_mes[periodo] += monto
-                montos_proyectados_por_ifrs[cat_ifrs_3][periodo] += monto
-                
-                # Obtener nombre del documento
-                move_data = m.get('move_id', [0, ''])
-                move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
-                ref = m.get('ref', '')
-                
-                documentos_proyectados_por_ifrs[cat_ifrs_3].append({
-                    'nombre': f"📝 {move_name} ({fecha})",
-                    'monto': monto,
-                    'real': 0,
-                    'proyectado': monto,
-                    'montos_por_mes': {periodo: monto},
-                    'real_por_mes': {},
-                    'proyectado_por_mes': {periodo: monto},
-                    'ref': ref,
-                    'fecha': fecha,
-                    'periodo': periodo
-                })
+                    proyectado_total = 0.0
+                    proyectado_por_mes = defaultdict(float)
+                    documentos_proyectados_por_ifrs = defaultdict(list)
+                    montos_proyectados_por_ifrs = defaultdict(lambda: defaultdict(float))
+                    
+                    for m in movimientos_proyectados:
+                        fecha = m.get('date', '')
+                        if not fecha:
+                            continue
+                            
+                        periodo = self._fecha_a_periodo(fecha, meses_lista)
+                        account_id = m.get('account_id')
+                        if isinstance(account_id, (list, tuple)):
+                            account_id = account_id[0]
+                        
+                        # Para proyectados, consideramos tanto créditos como débitos positivos
+                        credit = m.get('credit', 0) or 0
+                        debit = m.get('debit', 0) or 0
+                        monto = credit if credit > 0 else debit
+                        
+                        if monto <= 0:
+                            continue
+                        
+                        # Obtener Cat IFRS 3 de esta cuenta
+                        cat_ifrs_3 = cuenta_a_ifrs3.get(account_id, 'Sin Clasificar IFRS')
+                        
+                        proyectado_total += monto
+                        proyectado_por_mes[periodo] += monto
+                        montos_proyectados_por_ifrs[cat_ifrs_3][periodo] += monto
+                        
+                        # Obtener nombre del documento
+                        move_data = m.get('move_id', [0, ''])
+                        move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
+                        
+                        documentos_proyectados_por_ifrs[cat_ifrs_3].append({
+                            'nombre': f"📝 {move_name} ({fecha})",
+                            'monto': monto,
+                            'real': 0,
+                            'proyectado': monto,
+                            'montos_por_mes': {periodo: monto},
+                            'real_por_mes': {},
+                            'proyectado_por_mes': {periodo: monto},
+                            'fecha': fecha,
+                            'periodo': periodo
+                        })
+                        
+            except Exception as e:
+                print(f"[RealProyectado] Error en proyectados IVA: {e}")
+                proyectado_total = 0.0
+                proyectado_por_mes = {}
+                documentos_proyectados_por_ifrs = {}
+                montos_proyectados_por_ifrs = {}
             
             # =====================================================
             # 3. CONSTRUIR ESTRUCTURA JERÁRQUICA
