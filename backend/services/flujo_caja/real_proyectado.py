@@ -913,16 +913,17 @@ class RealProyectadoCalculator:
     
     def calcular_iva_exportador(self, fecha_inicio: str, fecha_fin: str, meses_lista: List[str] = None) -> Dict:
         """
-        Calcula REAL y PROYECTADO para 1.2.6 - IVA Exportador.
+        Calcula REAL y PROYECTADO para 1.2.6 - IVA Exportador / Otras entradas (salidas) de efectivo.
         
         ESTRUCTURA JERÁRQUICA:
-        - Nivel 2: Tipo de movimiento (Devoluciones recibidas por mes)
-        - Nivel 3: Por documento/fecha
+        - Nivel 2: "Ingresos Realizados" (devoluciones ya recibidas de Tesorería)
+        - Nivel 2: "Ingresos Proyectados" (facturas draft con cuenta 11060108 desde hoy)
+        - Nivel 3: Documentos individuales (realizados) o Cat 3 IFRS (proyectados)
         
         LÓGICA:
         - REAL = Devoluciones de IVA recibidas (créditos en cuenta 11060108)
         - Solo cuando el partner es "Tesorería General de la República"
-        - PROYECTADO = 0 por ahora (podría ser solicitudes pendientes)
+        - PROYECTADO = Facturas draft/posted con cuenta 11060108 desde fecha actual
         """
         cuenta_iva_id = self._get_cuenta_iva_id()
         
@@ -938,8 +939,13 @@ class RealProyectadoCalculator:
             }
         
         try:
-            # Buscar movimientos de la cuenta con el partner específico
-            movimientos = self.odoo.search_read(
+            # Fecha actual para separar realizados vs proyectados
+            hoy = datetime.now().strftime('%Y-%m-%d')
+            
+            # =====================================================
+            # 1. INGRESOS REALIZADOS - Devoluciones recibidas de Tesorería
+            # =====================================================
+            movimientos_reales = self.odoo.search_read(
                 'account.move.line',
                 [
                     ['account_id', '=', cuenta_iva_id],
@@ -954,14 +960,9 @@ class RealProyectadoCalculator:
             
             real_total = 0.0
             real_por_mes = defaultdict(float)
+            documentos_realizados = []
             
-            # Estructura jerárquica para devoluciones
-            devoluciones_por_mes = defaultdict(lambda: {
-                'monto': 0.0,
-                'documentos': []
-            })
-            
-            for m in movimientos:
+            for m in movimientos_reales:
                 fecha = m.get('date', '')
                 if not fecha:
                     continue
@@ -982,68 +983,176 @@ class RealProyectadoCalculator:
                 move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
                 ref = m.get('ref', '')
                 
-                devoluciones_por_mes[periodo]['monto'] += credit
-                devoluciones_por_mes[periodo]['documentos'].append({
-                    'name': move_name,
+                documentos_realizados.append({
+                    'nombre': f"📄 {move_name} ({fecha})",
+                    'monto': credit,
+                    'real': credit,
+                    'proyectado': 0,
+                    'montos_por_mes': {periodo: credit},
+                    'real_por_mes': {periodo: credit},
+                    'proyectado_por_mes': {},
                     'ref': ref,
-                    'credit': credit,
-                    'fecha': fecha
+                    'fecha': fecha,
+                    'periodo': periodo
                 })
             
-            # Construir estructura de cuentas (por mes de devolución)
-            cuentas_resultado = []
+            # =====================================================
+            # 2. INGRESOS PROYECTADOS - Facturas draft con cuenta 11060108
+            # =====================================================
+            # Buscar líneas de facturas draft o posted pero NO pagadas desde hoy en adelante
+            movimientos_proyectados = self.odoo.search_read(
+                'account.move.line',
+                [
+                    ['account_id', '=', cuenta_iva_id],
+                    ['parent_state', 'in', ['draft', 'posted']],
+                    ['date', '>=', hoy],
+                    ['date', '<=', fecha_fin],
+                    # Excluir las de Tesorería que ya cobramos (están en realizados)
+                    '|',
+                    ['partner_id', '!=', self.PARTNER_TESORERIA_ID],
+                    ['parent_state', '=', 'draft']
+                ],
+                ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'ref', 'account_id'],
+                limit=500
+            )
             
-            # Acumular montos por período para el concepto principal
+            # Obtener Cat IFRS 3 de la cuenta
+            cat_ifrs_3 = ''
+            try:
+                cuenta_data = self.odoo.search_read(
+                    'account.account',
+                    [['id', '=', cuenta_iva_id]],
+                    ['x_studio_cat_ifrs_3'],
+                    limit=1
+                )
+                if cuenta_data:
+                    cat_ifrs_3 = (cuenta_data[0].get('x_studio_cat_ifrs_3') or '').strip()
+            except Exception:
+                pass
+            
+            cat_ifrs_3 = cat_ifrs_3 or 'Sin Clasificar IFRS'
+            
+            proyectado_total = 0.0
+            proyectado_por_mes = defaultdict(float)
+            documentos_proyectados_por_ifrs = defaultdict(list)
+            montos_proyectados_por_ifrs = defaultdict(lambda: defaultdict(float))
+            
+            for m in movimientos_proyectados:
+                fecha = m.get('date', '')
+                if not fecha:
+                    continue
+                    
+                periodo = self._fecha_a_periodo(fecha, meses_lista)
+                
+                # Para proyectados, consideramos tanto créditos como débitos positivos
+                credit = m.get('credit', 0) or 0
+                debit = m.get('debit', 0) or 0
+                monto = credit if credit > 0 else debit
+                
+                if monto <= 0:
+                    continue
+                
+                proyectado_total += monto
+                proyectado_por_mes[periodo] += monto
+                montos_proyectados_por_ifrs[cat_ifrs_3][periodo] += monto
+                
+                # Obtener nombre del documento
+                move_data = m.get('move_id', [0, ''])
+                move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
+                ref = m.get('ref', '')
+                
+                documentos_proyectados_por_ifrs[cat_ifrs_3].append({
+                    'nombre': f"📝 {move_name} ({fecha})",
+                    'monto': monto,
+                    'real': 0,
+                    'proyectado': monto,
+                    'montos_por_mes': {periodo: monto},
+                    'real_por_mes': {},
+                    'proyectado_por_mes': {periodo: monto},
+                    'ref': ref,
+                    'fecha': fecha,
+                    'periodo': periodo
+                })
+            
+            # =====================================================
+            # 3. CONSTRUIR ESTRUCTURA JERÁRQUICA
+            # =====================================================
+            cuentas_resultado = []
             total_por_mes = defaultdict(float)
             
-            for periodo, data in sorted(devoluciones_por_mes.items()):
-                # Acumular para el total del concepto
-                total_por_mes[periodo] += data['monto']
+            # -- NIVEL 2: INGRESOS REALIZADOS --
+            if documentos_realizados:
+                ingresos_realizados_montos = defaultdict(float)
+                for doc in documentos_realizados:
+                    for periodo, monto in doc.get('montos_por_mes', {}).items():
+                        ingresos_realizados_montos[periodo] += monto
+                        total_por_mes[periodo] += monto
                 
-                # Formatear nombre del período
-                try:
-                    if 'W' in periodo:
-                        nombre_periodo = f"Semana {periodo}"
-                    else:
-                        fecha_mes = datetime.strptime(f"{periodo}-01", '%Y-%m-%d')
-                        nombre_periodo = fecha_mes.strftime('%B %Y').title()
-                except:
-                    nombre_periodo = periodo
+                cuentas_resultado.append({
+                    'codigo': 'ingresos_realizados',
+                    'nombre': '✅ Ingresos Realizados',
+                    'monto': real_total,
+                    'real': real_total,
+                    'proyectado': 0,
+                    'montos_por_mes': dict(ingresos_realizados_montos),
+                    'real_por_mes': dict(ingresos_realizados_montos),
+                    'proyectado_por_mes': {},
+                    'etiquetas': documentos_realizados,
+                    'es_cuenta_iva': True,
+                    'es_realizados': True
+                })
+            
+            # -- NIVEL 2: INGRESOS PROYECTADOS --
+            if documentos_proyectados_por_ifrs:
+                ingresos_proyectados_montos = defaultdict(float)
+                etiquetas_proyectados = []
                 
-                etiquetas_list = []
-                for doc in data['documentos']:
-                    etiquetas_list.append({
-                        'nombre': f"📄 {doc['name']} ({doc['fecha']})",
-                        'monto': doc['credit'],
-                        'real': doc['credit'],
-                        'proyectado': 0,
-                        'montos_por_mes': {periodo: doc['credit']},
-                        'ref': doc['ref']
+                for ifrs_cat, documentos in documentos_proyectados_por_ifrs.items():
+                    # Nivel 3: Agrupar por Cat IFRS 3
+                    cat_monto_total = sum(d['monto'] for d in documentos)
+                    cat_montos_mes = dict(montos_proyectados_por_ifrs[ifrs_cat])
+                    
+                    for periodo, monto in cat_montos_mes.items():
+                        ingresos_proyectados_montos[periodo] += monto
+                        total_por_mes[periodo] += monto
+                    
+                    # Agregar categoría IFRS como etiqueta nivel 3
+                    etiquetas_proyectados.append({
+                        'nombre': f"📁 {ifrs_cat}",
+                        'monto': cat_monto_total,
+                        'real': 0,
+                        'proyectado': cat_monto_total,
+                        'montos_por_mes': cat_montos_mes,
+                        'real_por_mes': {},
+                        'proyectado_por_mes': cat_montos_mes,
+                        'etiquetas': documentos,  # Nivel 4: documentos individuales
+                        'es_categoria_ifrs': True
                     })
                 
                 cuentas_resultado.append({
-                    'codigo': f'iva_{periodo}',
-                    'nombre': f"💰 Devoluciones {nombre_periodo}",
-                    'monto': data['monto'],
-                    'real': data['monto'],
-                    'proyectado': 0,
-                    'montos_por_mes': {periodo: data['monto']},
-                    'real_por_mes': {periodo: data['monto']},
-                    'proyectado_por_mes': {},
-                    'etiquetas': etiquetas_list,
-                    'es_cuenta_iva': True
+                    'codigo': 'ingresos_proyectados',
+                    'nombre': '📊 Ingresos Proyectados',
+                    'monto': proyectado_total,
+                    'real': 0,
+                    'proyectado': proyectado_total,
+                    'montos_por_mes': dict(ingresos_proyectados_montos),
+                    'real_por_mes': {},
+                    'proyectado_por_mes': dict(ingresos_proyectados_montos),
+                    'etiquetas': etiquetas_proyectados,
+                    'es_cuenta_iva': True,
+                    'es_proyectados': True
                 })
             
             return {
-                'real': real_total,  # Positivo porque es entrada
-                'proyectado': 0.0,  # Por ahora vacío
+                'real': real_total,
+                'proyectado': proyectado_total,
                 'ppto': 0.0,
                 'real_por_mes': dict(real_por_mes),
-                'proyectado_por_mes': {},
-                'montos_por_mes': dict(total_por_mes),  # Sumatoria para columnas mensuales
-                'total': real_total,
+                'proyectado_por_mes': dict(proyectado_por_mes),
+                'montos_por_mes': dict(total_por_mes),
+                'total': real_total + proyectado_total,
                 'cuentas': cuentas_resultado,
-                'movimientos_count': len(movimientos)
+                'movimientos_count': len(movimientos_reales) + len(movimientos_proyectados)
             }
             
         except Exception as e:
