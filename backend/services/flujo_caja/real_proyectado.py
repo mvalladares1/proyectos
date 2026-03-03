@@ -1086,12 +1086,12 @@ class RealProyectadoCalculator:
             
             # -- NIVEL 2: INGRESOS REALIZADOS --
             if real_total > 0:
-                # Consolidar montos por período sin mostrar documentos individuales
+                # Consolidar montos por período
                 for periodo, monto in real_por_mes.items():
                     total_por_mes[periodo] += monto
                 
-                cuentas_resultado.append({
-                    'codigo': 'ingresos_realizados',
+                # Crear sub-nivel con detalle de devoluciones
+                sub_nivel_devoluciones = {
                     'nombre': '✅ Devoluciones IVA recibidas de Tesorería',
                     'monto': real_total,
                     'real': real_total,
@@ -1099,7 +1099,19 @@ class RealProyectadoCalculator:
                     'montos_por_mes': dict(real_por_mes),
                     'real_por_mes': dict(real_por_mes),
                     'proyectado_por_mes': {},
-                    'etiquetas': [],  # NO mostrar documentos individuales
+                    'etiquetas': []  # Sin documentos individuales
+                }
+                
+                cuentas_resultado.append({
+                    'codigo': 'ingresos_realizados',
+                    'nombre': '✅ Ingresos Realizados',
+                    'monto': real_total,
+                    'real': real_total,
+                    'proyectado': 0,
+                    'montos_por_mes': dict(real_por_mes),
+                    'real_por_mes': dict(real_por_mes),
+                    'proyectado_por_mes': {},
+                    'etiquetas': [sub_nivel_devoluciones],  # Nivel 3
                     'es_cuenta_iva': True,
                     'es_realizados': True
                 })
