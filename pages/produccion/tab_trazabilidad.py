@@ -267,8 +267,11 @@ def _render_result(data: Dict):
     children_map = _build_children_map(nodes)
     root = next((n for n in nodes if n.get("parent_node_id") is None), None)
 
+    # Set para rastrear recepciones/despachos ya mostrados (guia+productor / cliente+picking)
+    seen_set: set = set()
+
     if root:
-        _render_tree_node(root, idx, children_map, depth=0, direction=direction)
+        _render_tree_node(root, idx, children_map, depth=0, direction=direction, seen=seen_set)
 
     # -- Tablas de resultados --
     if direction == "backward":
@@ -292,43 +295,63 @@ def _render_result(data: Dict):
 
 
 def _render_recepciones_table(nodes: List[Dict], idx: Dict):
-    """Tabla de recepciones encontradas (backward)."""
+    """Tabla de recepciones encontradas (backward), deduplicada por guia+productor."""
     receptions = [n for n in nodes if n.get("reception_info")]
     if not receptions:
         return
     st.markdown("### \U0001f4cb Recepciones Encontradas")
-    rows = []
+    seen: Dict[tuple, dict] = {}  # (guia, productor) -> row dict
+    ordered_keys: List[tuple] = []
     for n in receptions:
         rec = n["reception_info"]
+        guia = rec.get("guia_despacho", "") or "\u2014"
+        prov = rec.get("proveedor", "") or "\u2014"
+        key = (guia, prov)
         chain = _build_chain(n, idx)
-        rows.append({
-            "Pallet Origen": n["pkg_name"],
-            "Cadena": " \u2192 ".join(chain),
-            "Guia Despacho": rec.get("guia_despacho", "") or "\u2014",
-            "Productor": rec.get("proveedor", "") or "\u2014",
-            "Picking": rec.get("picking_name", "") or "\u2014",
-            "Fecha": rec.get("fecha", "") or "\u2014",
-        })
+        if key in seen:
+            # Agregar el pallet a la fila existente
+            prev = seen[key]
+            prev["Pallet Origen"] += f", {n['pkg_name']}"
+        else:
+            seen[key] = {
+                "Pallet Origen": n["pkg_name"],
+                "Cadena": " \u2192 ".join(chain),
+                "Guia Despacho": guia,
+                "Productor": prov,
+                "Picking": rec.get("picking_name", "") or "\u2014",
+                "Fecha": rec.get("fecha", "") or "\u2014",
+            }
+            ordered_keys.append(key)
+    rows = [seen[k] for k in ordered_keys]
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
 
 def _render_despachos_table(nodes: List[Dict], idx: Dict):
-    """Tabla de despachos encontrados (forward)."""
+    """Tabla de despachos encontrados (forward), deduplicada por cliente+picking."""
     dispatches = [n for n in nodes if n.get("dispatch_info")]
     if dispatches:
         st.markdown("### \U0001f69a Despachos Encontrados")
-        rows = []
+        seen: Dict[tuple, dict] = {}
+        ordered_keys: List[tuple] = []
         for n in dispatches:
             disp = n["dispatch_info"]
+            cliente = disp.get("cliente", "") or "\u2014"
+            picking = disp.get("picking_name", "") or "\u2014"
+            key = (cliente, picking)
             chain = _build_chain(n, idx)
-            rows.append({
-                "Pallet Destino": n["pkg_name"],
-                "Cadena": " \u2192 ".join(chain),
-                "Cliente": disp.get("cliente", "") or "\u2014",
-                "Picking": disp.get("picking_name", "") or "\u2014",
-                "Origen": disp.get("origin", "") or "\u2014",
-                "Fecha": disp.get("fecha", "") or "\u2014",
-            })
+            if key in seen:
+                seen[key]["Pallet Destino"] += f", {n['pkg_name']}"
+            else:
+                seen[key] = {
+                    "Pallet Destino": n["pkg_name"],
+                    "Cadena": " \u2192 ".join(chain),
+                    "Cliente": cliente,
+                    "Picking": picking,
+                    "Origen": disp.get("origin", "") or "\u2014",
+                    "Fecha": disp.get("fecha", "") or "\u2014",
+                }
+                ordered_keys.append(key)
+        rows = [seen[k] for k in ordered_keys]
         st.dataframe(rows, use_container_width=True, hide_index=True)
 
     # Mostrar tambien hojas sin despacho como destinos finales
@@ -353,8 +376,12 @@ def _render_despachos_table(nodes: List[Dict], idx: Dict):
 # =============================================================
 
 def _render_tree_node(node: Dict, idx: Dict, children_map: Dict,
-                      depth: int, direction: str = "backward"):
-    """Renderiza un nodo y sus hijos recursivamente como arbol con indentacion."""
+                      depth: int, direction: str = "backward",
+                      seen: set = None):
+    """Renderiza un nodo y sus hijos recursivamente como arbol con indentacion.
+    Deduplica recepciones/despachos con misma guia+productor o cliente+picking."""
+    if seen is None:
+        seen = set()
     pad = "&nbsp;&nbsp;&nbsp;&nbsp;" * depth
     nid = node["node_id"]
     name = node["pkg_name"]
@@ -379,21 +406,34 @@ def _render_tree_node(node: Dict, idx: Dict, children_map: Dict,
         else:
             st.markdown(f"\U0001f4e6 **`{name}`** (destino final)")
     elif rec and direction == "backward":
-        # Recepcion (hoja verde) en backward
         guia = rec.get("guia_despacho", "") or "\u2014"
         prov = rec.get("proveedor", "") or "\u2014"
         fecha = rec.get("fecha", "") or ""
-        st.markdown(
-            f"{pad}\U0001f7e2 **`{name}`** \u2014 Guia: **{guia}** \u00b7 Productor: **{prov}** \u00b7 {fecha}"
-        )
+        dedup_key = (guia, prov)
+        if dedup_key in seen:
+            # Ya se mostro esta guia+productor, solo poner referencia corta
+            st.markdown(
+                f"{pad}\U0001f7e2 `{name}` \u2014 *(Guia {guia} \u00b7 {prov} \u2014 ver arriba)*"
+            )
+        else:
+            seen.add(dedup_key)
+            st.markdown(
+                f"{pad}\U0001f7e2 **`{name}`** \u2014 Guia: **{guia}** \u00b7 Productor: **{prov}** \u00b7 {fecha}"
+            )
     elif disp and direction == "forward":
-        # Despacho (hoja azul) en forward
         cliente = disp.get("cliente", "") or "\u2014"
         fecha = disp.get("fecha", "") or ""
         picking = disp.get("picking_name", "") or ""
-        st.markdown(
-            f"{pad}\U0001f535 **`{name}`** \u2014 Cliente: **{cliente}** \u00b7 {picking} \u00b7 {fecha}"
-        )
+        dedup_key = (cliente, picking)
+        if dedup_key in seen:
+            st.markdown(
+                f"{pad}\U0001f535 `{name}` \u2014 *(Cliente {cliente} \u00b7 {picking} \u2014 ver arriba)*"
+            )
+        else:
+            seen.add(dedup_key)
+            st.markdown(
+                f"{pad}\U0001f535 **`{name}`** \u2014 Cliente: **{cliente}** \u00b7 {picking} \u00b7 {fecha}"
+            )
     elif node.get("is_leaf"):
         # Hoja sin recepcion/despacho
         sin_label = "sin origen" if direction == "backward" else "sin destino"
@@ -405,7 +445,7 @@ def _render_tree_node(node: Dict, idx: Dict, children_map: Dict,
 
     # Hijos
     for child in kids:
-        _render_tree_node(child, idx, children_map, depth + 1, direction=direction)
+        _render_tree_node(child, idx, children_map, depth + 1, direction=direction, seen=seen)
 
 
 # =============================================================
@@ -499,13 +539,30 @@ def _generar_excel(data: Dict) -> bytes:
         _set_widths(ws1, [20, 20, 55, 20, 35, 20, 14])
 
         receptions = [n for n in nodes if n.get("reception_info")]
-        row = 2
+        # Deduplicar por (guia, productor)
+        seen_excel: dict = {}  # (guia, prov) -> {pallets: [], first_node}
+        excel_order: list = []
         for n in receptions:
             rec = n["reception_info"]
+            guia = rec.get("guia_despacho", "")
+            prov = rec.get("proveedor", "")
+            key = (guia, prov)
+            if key in seen_excel:
+                seen_excel[key]["pallets"].append(n["pkg_name"])
+            else:
+                seen_excel[key] = {"pallets": [n["pkg_name"]], "node": n, "rec": rec}
+                excel_order.append(key)
+
+        row = 2
+        for key in excel_order:
+            entry = seen_excel[key]
+            rec = entry["rec"]
+            n = entry["node"]
+            pallets_str = ", ".join(entry["pallets"])
             chain = _build_chain(n, idx)
             chain_str = " \u2192 ".join(chain)
             ws1.cell(row=row, column=1, value=root_name)
-            ws1.cell(row=row, column=2, value=n["pkg_name"])
+            ws1.cell(row=row, column=2, value=pallets_str)
             ws1.cell(row=row, column=3, value=chain_str)
             ws1.cell(row=row, column=4, value=rec.get("guia_despacho", ""))
             ws1.cell(row=row, column=5, value=rec.get("proveedor", ""))
