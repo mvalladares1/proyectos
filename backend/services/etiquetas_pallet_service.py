@@ -1084,16 +1084,21 @@ class EtiquetasPalletService:
                 else:
                     pallet_info['fecha_inicio_fmt'] = ''
                 
-                # Usar la fecha del proceso para elaboración y vencimiento (ambas iguales)
+                # Fecha de elaboración y vencimiento (+2 años)
                 if fecha_elab:
                     try:
                         if isinstance(fecha_elab, str):
                             fecha_dt = datetime.fromisoformat(fecha_elab.replace('Z', '+00:00'))
                         else:
                             fecha_dt = fecha_elab
-                        fecha_fmt = fecha_dt.strftime('%d.%m.%Y')
-                        pallet_info['fecha_vencimiento'] = fecha_fmt
-                        pallet_info['fecha_elaboracion_fmt'] = fecha_fmt
+                        pallet_info['fecha_elaboracion_fmt'] = fecha_dt.strftime('%d.%m.%Y')
+                        # Fecha de vencimiento = fecha elaboración + 2 años
+                        try:
+                            fecha_venc_dt = fecha_dt.replace(year=fecha_dt.year + 2)
+                        except ValueError:
+                            # Manejo de 29 de febrero: si la fecha es 29/02, usar 28/02 + 2 años
+                            fecha_venc_dt = fecha_dt.replace(month=2, day=28, year=fecha_dt.year + 2)
+                        pallet_info['fecha_vencimiento'] = fecha_venc_dt.strftime('%d.%m.%Y')
                     except:
                         pallet_info['fecha_vencimiento'] = ''
                         pallet_info['fecha_elaboracion_fmt'] = ''
@@ -1168,16 +1173,26 @@ class EtiquetasPalletService:
             if fecha_elab:
                 try:
                     fecha_dt = datetime.fromisoformat(fecha_elab.replace('Z', '+00:00'))
-                    fecha_fmt = fecha_dt.strftime('%d.%m.%Y')
-                    # Usar la misma fecha para elaboración y vencimiento
-                    fecha_elaboracion_fmt = fecha_fmt
-                    fecha_vencimiento_fmt = fecha_fmt
+                    fecha_elaboracion_fmt = fecha_dt.strftime('%d.%m.%Y')
+                    # Fecha de vencimiento = fecha elaboración + 2 años
+                    try:
+                        fecha_venc_dt = fecha_dt.replace(year=fecha_dt.year + 2)
+                    except ValueError:
+                        # Manejo de 29 de febrero
+                        fecha_venc_dt = fecha_dt.replace(month=2, day=28, year=fecha_dt.year + 2)
+                    fecha_vencimiento_fmt = fecha_venc_dt.strftime('%d.%m.%Y')
                 except:
                     fecha_elaboracion_fmt = ''
                     fecha_vencimiento_fmt = ''
             else:
-                fecha_elaboracion_fmt = datetime.now().strftime('%d.%m.%Y')
-                fecha_vencimiento_fmt = datetime.now().strftime('%d.%m.%Y')
+                now = datetime.now()
+                fecha_elaboracion_fmt = now.strftime('%d.%m.%Y')
+                # Vencimiento = hoy + 2 años
+                try:
+                    fecha_venc_dt = now.replace(year=now.year + 2)
+                except ValueError:
+                    fecha_venc_dt = now.replace(month=2, day=28, year=now.year + 2)
+                fecha_vencimiento_fmt = fecha_venc_dt.strftime('%d.%m.%Y')
             
             # Nombre del lote
             lote_name = lot_id[1] if isinstance(lot_id, (list, tuple)) and lot_id else ''
