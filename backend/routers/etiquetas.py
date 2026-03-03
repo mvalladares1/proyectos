@@ -59,6 +59,43 @@ async def obtener_pallets_orden(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/full_trace")
+async def full_trace(
+    package_name: str = Query(..., description="Nombre del pallet (ej: PACK0012345)"),
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    max_levels: int = Query(10, description="Máximo de niveles a trazar"),
+):
+    """
+    Traza un pallet recursivamente hasta las recepciones en un solo llamado.
+    Devuelve el árbol completo con todos los nodos.
+    """
+    try:
+        from backend.services.etiquetas_pallet_service import EtiquetasPalletService
+        service = EtiquetasPalletService(username=username, password=password)
+
+        # Buscar el package por nombre
+        res = service.odoo.search_read(
+            'stock.quant.package', [('name', '=', package_name.strip().upper())],
+            ['id', 'name'], limit=1,
+        )
+        if not res:
+            res = service.odoo.search_read(
+                'stock.quant.package', [('name', 'ilike', package_name.strip())],
+                ['id', 'name'], limit=1,
+            )
+        if not res:
+            raise HTTPException(status_code=404, detail=f"Pallet '{package_name}' no encontrado")
+
+        package_id = res[0]['id']
+        result = service.trazar_completo(package_id, max_levels=max_levels)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/prev_candidates")
 async def obtener_candidatos_previos(
     package_id: int = Query(..., description="ID del package destino"),

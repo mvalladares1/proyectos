@@ -109,45 +109,49 @@ class EtiquetasPalletService:
         """
         Encuentra la OP (mrp.production) que produjo un pallet.
         Ruta: result_package_id → stock.move.line → stock.move → production_id → mrp.production
+        Optimizado: hace batch de move_ids en una sola query.
         """
         sml = self.odoo.search_read(
             'stock.move.line',
             [('result_package_id', '=', pkg_id)],
             ['move_id'],
-            limit=5,
+            limit=10,
         )
         if not sml:
             return None
 
-        # Buscar en los moves cuál tiene production_id
+        # Batch: obtener todos los move_ids de una vez
+        move_ids = []
         for s in sml:
-            move_id = s.get('move_id')
-            if not move_id:
-                continue
-            mid = move_id[0] if isinstance(move_id, (list, tuple)) else move_id
+            mid = s.get('move_id')
+            if mid:
+                move_ids.append(mid[0] if isinstance(mid, (list, tuple)) else mid)
 
-            move = self.odoo.search_read(
-                'stock.move',
-                [('id', '=', mid)],
-                ['production_id'],
-                limit=1,
-            )
-            if not move:
-                continue
-            prod_id_val = move[0].get('production_id')
-            if not prod_id_val:
-                continue
-            mo_id = prod_id_val[0] if isinstance(prod_id_val, (list, tuple)) else prod_id_val
+        if not move_ids:
+            return None
 
-            mos = self.odoo.search_read(
-                'mrp.production',
-                [('id', '=', mo_id)],
-                ['id', 'name', 'product_id'],
-                limit=1,
-            )
-            if mos:
-                return mos[0]
-        return None
+        # Una sola query para todos los moves
+        moves = self.odoo.search_read(
+            'stock.move',
+            [('id', 'in', move_ids), ('production_id', '!=', False)],
+            ['production_id'],
+            limit=1,
+        )
+        if not moves:
+            return None
+
+        prod_id_val = moves[0].get('production_id')
+        if not prod_id_val:
+            return None
+        mo_id = prod_id_val[0] if isinstance(prod_id_val, (list, tuple)) else prod_id_val
+
+        mos = self.odoo.search_read(
+            'mrp.production',
+            [('id', '=', mo_id)],
+            ['id', 'name', 'product_id'],
+            limit=1,
+        )
+        return mos[0] if mos else None
 
     def _get_consumed_packages(self, mo: Dict, dest_package_id: int) -> List[Dict]:
         """
@@ -396,37 +400,198 @@ class EtiquetasPalletService:
         return results
 
     def _buscar_recepcion_pkg(self, pkg_id: int) -> Optional[Dict]:
-        """Busca si un pallet llegó en un picking de recepción."""
+        """Busca si un pallet llegó en un picking de recepción. Optimizado con batch."""
         smls = self.odoo.search_read(
             'stock.move.line',
             [('result_package_id', '=', pkg_id)],
             ['picking_id'],
-            limit=5,
+            limit=10,
         )
+        pick_ids = []
         for sml in smls:
             pick_id = sml.get('picking_id')
-            if not pick_id:
-                continue
-            pid = pick_id[0] if isinstance(pick_id, (list, tuple)) else pick_id
-            picks = self.odoo.search_read(
-                'stock.picking',
-                [
-                    ('id', '=', pid),
-                    ('picking_type_id', 'in', [1, 217, 164]),
-                ],
-                ['id', 'name', 'x_studio_gua_de_despacho', 'partner_id', 'date_done'],
-                limit=1,
-            )
-            if picks:
-                p = picks[0]
-                partner = p.get('partner_id')
-                return {
-                    'picking_name': p.get('name', ''),
-                    'guia_despacho': p.get('x_studio_gua_de_despacho') or '',
-                    'proveedor': partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else '',
-                    'fecha': str(p.get('date_done') or '')[:10],
-                }
+            if pick_id:
+                pick_ids.append(pick_id[0] if isinstance(pick_id, (list, tuple)) else pick_id)
+
+        if not pick_ids:
+            return None
+
+        # Una sola query con todos los picking_ids
+        picks = self.odoo.search_read(
+            'stock.picking',
+            [
+                ('id', 'in', pick_ids),
+                ('picking_type_id', 'in', [1, 217, 164]),
+            ],
+            ['id', 'name', 'x_studio_gua_de_despacho', 'partner_id', 'date_done'],
+            limit=1,
+        )
+        if picks:
+            p = picks[0]
+            partner = p.get('partner_id')
+            return {
+                'picking_name': p.get('name', ''),
+                'guia_despacho': p.get('x_studio_gua_de_despacho') or '',
+                'proveedor': partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else '',
+                'fecha': str(p.get('date_done') or '')[:10],
+            }
         return None
+
+    # ═══════════════════════════════════════════════════════════
+    # Trazabilidad completa recursiva (un solo llamado)
+    # ═══════════════════════════════════════════════════════════
+
+    def trazar_completo(self, package_id: int, max_levels: int = 10) -> Dict:
+        """
+        Traza un pallet recursivamente hasta las recepciones en un solo llamado.
+        Devuelve el árbol completo con todos los nodos y niveles.
+
+        Returns:
+            {
+                root_id, root_name,
+                nodes: [{ node_id, pkg_id, pkg_name, parent_node_id,
+                          mo_name, level, is_leaf, reception_info,
+                          qty, product_name, lot_name }],
+                levels: int,
+                reception_count: int,
+                leaf_count: int,
+            }
+        """
+        # Obtener nombre del pallet raíz
+        pkg_info = self.odoo.search_read(
+            'stock.quant.package', [('id', '=', package_id)],
+            ['name'], limit=1,
+        )
+        root_name = pkg_info[0]['name'] if pkg_info else f'ID-{package_id}'
+
+        node_counter = 0
+        all_nodes: List[Dict] = []
+        visited: set = set()  # pkg_ids ya procesados por ancestro, para ciclos
+
+        def _next_id():
+            nonlocal node_counter
+            node_counter += 1
+            return node_counter
+
+        def _trace_level(queue: List[Dict], level: int):
+            """Procesa una cola de nodos pendientes en un nivel dado."""
+            if level > max_levels or not queue:
+                # Marcar como hojas si excedimos max_levels
+                for n in queue:
+                    n['is_leaf'] = True
+                return
+
+            next_queue: List[Dict] = []
+
+            # Cache de resultados por pkg_id para no repetir queries
+            cache: Dict[int, Dict] = {}
+
+            for node in queue:
+                pid = node['pkg_id']
+
+                # Evitar ciclo: si este pkg_id ya está en los ancestros de este nodo
+                ancestors = set()
+                cur = node
+                while cur.get('_parent_ref'):
+                    ancestors.add(cur['_parent_ref']['pkg_id'])
+                    cur = cur['_parent_ref']
+                if pid in ancestors:
+                    node['is_leaf'] = True
+                    continue
+
+                # Buscar candidatos (con cache)
+                if pid not in cache:
+                    mo = self._find_mo_for_package(pid)
+                    if mo:
+                        cands = self._get_consumed_packages(mo, pid)
+                        mo_name = mo.get('name', '')
+                    else:
+                        direct = self._get_direct_source_packages(pid)
+                        if direct:
+                            cands = direct
+                            mo_name = ''
+                        else:
+                            cands = []
+                            mo_name = ''
+
+                    rec = None
+                    if not cands:
+                        rec = self._buscar_recepcion_pkg(pid)
+
+                    cache[pid] = {'cands': cands, 'mo_name': mo_name, 'rec': rec}
+
+                cached = cache[pid]
+                node['mo_name'] = cached['mo_name']
+
+                if not cached['cands']:
+                    node['is_leaf'] = True
+                    if cached['rec']:
+                        node['reception_info'] = cached['rec']
+                    continue
+
+                # Crear nodos hijos
+                for c in cached['cands']:
+                    c_id = c.get('package_id')
+                    if not c_id:
+                        continue
+                    child = {
+                        'node_id': _next_id(),
+                        'pkg_id': c_id,
+                        'pkg_name': c.get('package_name', str(c_id)),
+                        'parent_node_id': node['node_id'],
+                        'mo_name': cached['mo_name'],
+                        'level': level + 1,
+                        'is_leaf': False,
+                        'reception_info': None,
+                        'qty': c.get('qty_total', 0),
+                        'product_name': c.get('product_name', ''),
+                        'lot_name': c.get('lot_name', ''),
+                        '_parent_ref': node,  # referencia temporal para ancestros
+                    }
+                    all_nodes.append(child)
+                    next_queue.append(child)
+
+            # Recursar al siguiente nivel
+            if next_queue:
+                _trace_level(next_queue, level + 1)
+
+        # ── Nodo raíz ──
+        root_node = {
+            'node_id': _next_id(),
+            'pkg_id': package_id,
+            'pkg_name': root_name,
+            'parent_node_id': None,
+            'mo_name': None,
+            'level': 0,
+            'is_leaf': False,
+            'reception_info': None,
+            'qty': None,
+            'product_name': '',
+            'lot_name': '',
+            '_parent_ref': None,
+        }
+        all_nodes.append(root_node)
+
+        # ── Trazar recursivamente ──
+        _trace_level([root_node], 0)
+
+        # Limpiar _parent_ref (no serializable)
+        for n in all_nodes:
+            n.pop('_parent_ref', None)
+
+        # Métricas
+        max_level = max(n['level'] for n in all_nodes)
+        leaf_count = sum(1 for n in all_nodes if n['is_leaf'])
+        rec_count = sum(1 for n in all_nodes if n.get('reception_info'))
+
+        return {
+            'root_id': package_id,
+            'root_name': root_name,
+            'nodes': all_nodes,
+            'levels': max_level + 1,
+            'leaf_count': leaf_count,
+            'reception_count': rec_count,
+        }
 
         # Buscar patrones: número seguido de kg (con o sin espacio)
         # Ej: "10 kg", "10kg", "10 Kg", "10KG"
