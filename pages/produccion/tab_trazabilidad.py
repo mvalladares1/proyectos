@@ -401,6 +401,96 @@ def _generar_excel(data: Dict) -> bytes:
 
     ws2.freeze_panes = "A2"
 
+    # ===========================================================
+    # HOJA 3 - Arbol Visual (tree con indentacion)
+    # ===========================================================
+    ws3 = wb.create_sheet("Arbol Visual")
+
+    tree_hdr_fill = PatternFill(start_color="375623", end_color="375623", fill_type="solid")
+    indent_font = Font(name="Consolas", size=11)
+    indent_bold = Font(name="Consolas", size=11, bold=True)
+    rec_font = Font(name="Consolas", size=11, color="006100", bold=True)
+    leaf_font = Font(name="Consolas", size=11, color="BF8F00")
+    root_font = Font(name="Consolas", size=12, bold=True, color="1F4E79")
+
+    headers3 = ["Arbol de Pallets", "OP / Proceso", "Guia Despacho", "Productor", "Producto", "Cantidad (kg)"]
+    _write_header(ws3, headers3, fill=tree_hdr_fill)
+    _set_widths(ws3, [65, 24, 18, 35, 45, 14])
+
+    children_map = _build_children_map(nodes)
+    root_node = next((n for n in nodes if n.get("parent_node_id") is None), None)
+
+    tree_row = [2]  # mutable counter
+
+    def _write_tree_row(node, depth):
+        r = tree_row[0]
+        tree_row[0] += 1
+
+        rec_info = node.get("reception_info")
+        is_leaf = node.get("is_leaf", False)
+        nid = node["node_id"]
+        name = node["pkg_name"]
+        mo = node.get("mo_name") or ""
+        kids = children_map.get(nid, [])
+
+        # Build indented label
+        if depth == 0:
+            prefix = "\u25c6 "  # ◆
+            label = f"{prefix}{name}  (DESTINO)"
+            font_choice = root_font
+            fill_choice = root_fill
+        elif rec_info:
+            prefix = "    " * depth + "\u2514\u2500 \u2705 "
+            label = f"{prefix}{name}  [RECEPCION]"
+            font_choice = rec_font
+            fill_choice = rec_fill
+        elif is_leaf:
+            prefix = "    " * depth + "\u2514\u2500 \u26a0 "
+            label = f"{prefix}{name}  [SIN ORIGEN]"
+            font_choice = leaf_font
+            fill_choice = None
+        else:
+            connector = "\u251c\u2500 " if True else "\u2514\u2500 "
+            prefix = "    " * depth + connector
+            label = f"{prefix}{name}"
+            font_choice = indent_bold
+            fill_choice = None
+
+        cell_tree = ws3.cell(row=r, column=1, value=label)
+        cell_tree.font = font_choice
+        cell_tree.alignment = Alignment(vertical="center")
+        cell_tree.border = border
+        if fill_choice:
+            cell_tree.fill = fill_choice
+
+        ws3.cell(row=r, column=2, value=mo).border = border
+        ws3.cell(row=r, column=2).alignment = left_al
+
+        if rec_info:
+            ws3.cell(row=r, column=3, value=rec_info.get("guia_despacho", "")).border = border
+            ws3.cell(row=r, column=4, value=rec_info.get("proveedor", "")).border = border
+        else:
+            ws3.cell(row=r, column=3).border = border
+            ws3.cell(row=r, column=4).border = border
+        ws3.cell(row=r, column=3).alignment = center
+        ws3.cell(row=r, column=4).alignment = left_al
+
+        ws3.cell(row=r, column=5, value=node.get("product_name", "") or "").border = border
+        ws3.cell(row=r, column=5).alignment = left_al
+
+        qty = node.get("qty")
+        ws3.cell(row=r, column=6, value=f"{qty:.1f}" if qty else "").border = border
+        ws3.cell(row=r, column=6).alignment = center
+
+        # Recurse children
+        for child in kids:
+            _write_tree_row(child, depth + 1)
+
+    if root_node:
+        _write_tree_row(root_node, 0)
+
+    ws3.freeze_panes = "A2"
+
     # Guardar
     output = io.BytesIO()
     wb.save(output)
