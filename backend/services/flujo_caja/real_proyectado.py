@@ -960,7 +960,6 @@ class RealProyectadoCalculator:
             
             real_total = 0.0
             real_por_mes = defaultdict(float)
-            documentos_realizados = []
             
             for m in movimientos_reales:
                 fecha = m.get('date', '')
@@ -977,60 +976,63 @@ class RealProyectadoCalculator:
                 
                 real_total += credit
                 real_por_mes[periodo] += credit
-                
-                # Obtener nombre del documento
-                move_data = m.get('move_id', [0, ''])
-                move_name = move_data[1] if isinstance(move_data, (list, tuple)) and len(move_data) > 1 else m.get('name', 'Sin nombre')
-                ref = m.get('ref', '')
-                
-                documentos_realizados.append({
-                    'nombre': f"📄 {move_name} ({fecha})",
-                    'monto': credit,
-                    'real': credit,
-                    'proyectado': 0,
-                    'montos_por_mes': {periodo: credit},
-                    'real_por_mes': {periodo: credit},
-                    'proyectado_por_mes': {},
-                    'ref': ref,
-                    'fecha': fecha,
-                    'periodo': periodo
-                })
             
             # =====================================================
-            # 2. INGRESOS PROYECTADOS - Facturas draft con cuenta 11060108
+            # 2. INGRESOS PROYECTADOS - Facturas draft diario Proyecciones Futuras
             # =====================================================
-            # Buscar líneas de facturas draft o posted pero NO pagadas desde hoy en adelante
-            movimientos_proyectados = self.odoo.search_read(
-                'account.move.line',
-                [
-                    ['account_id', '=', cuenta_iva_id],
-                    ['parent_state', 'in', ['draft', 'posted']],
-                    ['date', '>=', hoy],
-                    ['date', '<=', fecha_fin],
-                    # Excluir las de Tesorería que ya cobramos (están en realizados)
-                    '|',
-                    ['partner_id', '!=', self.PARTNER_TESORERIA_ID],
-                    ['parent_state', '=', 'draft']
-                ],
-                ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'ref', 'account_id'],
-                limit=500
+            
+            # 2.1 Buscar cuentas de préstamos
+            cuentas_prestamos_codes = ['21010101', '21010102', '21010103']
+            cuentas_prestamos = self.odoo.search_read(
+                'account.account',
+                [['code', 'in', cuentas_prestamos_codes]],
+                ['id', 'code', 'x_studio_cat_ifrs_3'],
+                limit=10
             )
             
-            # Obtener Cat IFRS 3 de la cuenta
-            cat_ifrs_3 = ''
+            # Mapear account_id -> Cat IFRS 3
+            cuenta_a_ifrs3 = {}
+            cuentas_prestamos_ids = []
+            for cuenta in cuentas_prestamos:
+                account_id = cuenta.get('id')
+                cuentas_prestamos_ids.append(account_id)
+                cat_ifrs = (cuenta.get('x_studio_cat_ifrs_3') or '').strip()
+                cuenta_a_ifrs3[account_id] = cat_ifrs if cat_ifrs else 'Sin Clasificar IFRS'
+            
+            # 2.2 Buscar cuenta IVA (11060108) para su Cat IFRS 3
+            cat_ifrs_iva = 'Sin Clasificar IFRS'
             try:
-                cuenta_data = self.odoo.search_read(
+                cuenta_iva_data = self.odoo.search_read(
                     'account.account',
                     [['id', '=', cuenta_iva_id]],
                     ['x_studio_cat_ifrs_3'],
                     limit=1
                 )
-                if cuenta_data:
-                    cat_ifrs_3 = (cuenta_data[0].get('x_studio_cat_ifrs_3') or '').strip()
+                if cuenta_iva_data:
+                    cat_ifrs_iva = (cuenta_iva_data[0].get('x_studio_cat_ifrs_3') or '').strip()
+                    if not cat_ifrs_iva:
+                        cat_ifrs_iva = 'Sin Clasificar IFRS'
             except Exception:
                 pass
             
-            cat_ifrs_3 = cat_ifrs_3 or 'Sin Clasificar IFRS'
+            # Agregar cuenta IVA al mapeo
+            cuenta_a_ifrs3[cuenta_iva_id] = cat_ifrs_iva
+            todas_cuentas_ids = cuentas_prestamos_ids + [cuenta_iva_id]
+            
+            # 2.3 Buscar movimientos en diario Proyecciones Futuras (130)
+            # Facturas draft desde hoy con cuentas 11060108, 21010101-103
+            movimientos_proyectados = self.odoo.search_read(
+                'account.move.line',
+                [
+                    ['account_id', 'in', todas_cuentas_ids],
+                    ['journal_id', '=', self.DIARIO_PROYECCIONES_FUTURAS_ID],
+                    ['parent_state', 'in', ['draft']],
+                    ['date', '>=', hoy],
+                    ['date', '<=', fecha_fin]
+                ],
+                ['id', 'move_id', 'date', 'name', 'credit', 'debit', 'ref', 'account_id'],
+                limit=500
+            )
             
             proyectado_total = 0.0
             proyectado_por_mes = defaultdict(float)
@@ -1043,6 +1045,9 @@ class RealProyectadoCalculator:
                     continue
                     
                 periodo = self._fecha_a_periodo(fecha, meses_lista)
+                account_id = m.get('account_id')
+                if isinstance(account_id, (list, tuple)):
+                    account_id = account_id[0]
                 
                 # Para proyectados, consideramos tanto créditos como débitos positivos
                 credit = m.get('credit', 0) or 0
@@ -1051,6 +1056,9 @@ class RealProyectadoCalculator:
                 
                 if monto <= 0:
                     continue
+                
+                # Obtener Cat IFRS 3 de esta cuenta
+                cat_ifrs_3 = cuenta_a_ifrs3.get(account_id, 'Sin Clasificar IFRS')
                 
                 proyectado_total += monto
                 proyectado_por_mes[periodo] += monto
@@ -1081,23 +1089,21 @@ class RealProyectadoCalculator:
             total_por_mes = defaultdict(float)
             
             # -- NIVEL 2: INGRESOS REALIZADOS --
-            if documentos_realizados:
-                ingresos_realizados_montos = defaultdict(float)
-                for doc in documentos_realizados:
-                    for periodo, monto in doc.get('montos_por_mes', {}).items():
-                        ingresos_realizados_montos[periodo] += monto
-                        total_por_mes[periodo] += monto
+            if real_total > 0:
+                # Consolidar montos por período sin mostrar documentos individuales
+                for periodo, monto in real_por_mes.items():
+                    total_por_mes[periodo] += monto
                 
                 cuentas_resultado.append({
                     'codigo': 'ingresos_realizados',
-                    'nombre': '✅ Ingresos Realizados',
+                    'nombre': '✅ Devoluciones IVA recibidas de Tesorería',
                     'monto': real_total,
                     'real': real_total,
                     'proyectado': 0,
-                    'montos_por_mes': dict(ingresos_realizados_montos),
-                    'real_por_mes': dict(ingresos_realizados_montos),
+                    'montos_por_mes': dict(real_por_mes),
+                    'real_por_mes': dict(real_por_mes),
                     'proyectado_por_mes': {},
-                    'etiquetas': documentos_realizados,
+                    'etiquetas': [],  # NO mostrar documentos individuales
                     'es_cuenta_iva': True,
                     'es_realizados': True
                 })
