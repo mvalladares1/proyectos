@@ -91,11 +91,13 @@ def _get_package_info(pkg_id: int, username: str, password: str) -> Dict:
 def _new_node(pkg_id: int, pkg_name: str, **extra) -> Dict:
     """Crea un nodo de paquete en el árbol de trazabilidad."""
     node = {
+        "node_id": None,       # ID único dentro del árbol (int auto-incremental)
         "pkg_id": pkg_id,
         "pkg_name": pkg_name,
         "candidates": None,    # None = no cargado, [] = sin orígenes
         "is_leaf": False,
-        "parent_pkg_id": None,  # ID del pkt padre que consumió a este
+        "parent_node_id": None, # node_id del padre en el árbol
+        "parent_pkg_id": None,  # ID del pkt padre (informativo)
         "parent_pkg_name": None,
         "mo_name": None,        # OP que usó este pallet como insumo
         "has_mo": False,
@@ -106,13 +108,22 @@ def _new_node(pkg_id: int, pkg_name: str, **extra) -> Dict:
     return node
 
 
-def _all_known_pkg_ids(tree: Dict) -> set:
-    """Devuelve el set de todos los pkg_id ya presentes en el árbol (para evitar ciclos)."""
-    ids = set()
+def _get_ancestor_ids(tree: Dict, node: Dict) -> set:
+    """Devuelve el set de pkg_ids ancestros de un nodo específico (para detección de ciclos)."""
+    idx: Dict[int, Dict] = {}
     for lvl in tree.get("levels", []):
         for p in lvl:
-            ids.add(p["pkg_id"])
-    return ids
+            nid = p.get("node_id")
+            if nid is not None:
+                idx[nid] = p
+
+    ancestors = set()
+    cur = node
+    while cur.get("parent_node_id") and cur["parent_node_id"] in idx:
+        parent = idx[cur["parent_node_id"]]
+        ancestors.add(parent["pkg_id"])
+        cur = parent
+    return ancestors
 
 
 def _short(name: str) -> str:
@@ -128,19 +139,21 @@ def _short(name: str) -> str:
 
 def _build_chain_to_root(tree: Dict, leaf_node: Dict) -> List[str]:
     """
-    Dada una hoja, recorre parent_pkg_id hacia arriba
+    Dada una hoja, recorre parent_node_id hacia arriba
     y devuelve la cadena [root, ..., leaf] con nombres cortos.
     """
-    # Build index: pkg_id → node
+    # Build index: node_id → node
     idx: Dict[int, Dict] = {}
     for lvl in tree.get("levels", []):
         for p in lvl:
-            idx[p["pkg_id"]] = p
+            nid = p.get("node_id")
+            if nid is not None:
+                idx[nid] = p
 
     chain = [_short(leaf_node["pkg_name"])]
     cur = leaf_node
-    while cur.get("parent_pkg_id") and cur["parent_pkg_id"] in idx:
-        parent = idx[cur["parent_pkg_id"]]
+    while cur.get("parent_node_id") and cur["parent_node_id"] in idx:
+        parent = idx[cur["parent_node_id"]]
         chain.append(_short(parent["pkg_name"]))
         cur = parent
     chain.reverse()
@@ -187,6 +200,23 @@ def render(username: str, password: str):
         st.session_state[TREE_KEY] = None
 
     tree = st.session_state[TREE_KEY]
+
+    # ── Migrar árboles legacy sin node_id ────────────────────
+    if tree is not None and "next_node_id" not in tree:
+        nid = 1
+        pkg_to_node: Dict[int, int] = {}
+        for lvl in tree.get("levels", []):
+            for p in lvl:
+                p["node_id"] = nid
+                pkg_to_node[p["pkg_id"]] = nid
+                nid += 1
+        tree["next_node_id"] = nid
+        for lvl in tree.get("levels", []):
+            for p in lvl:
+                ppid = p.get("parent_pkg_id")
+                if ppid and ppid in pkg_to_node:
+                    p["parent_node_id"] = pkg_to_node[ppid]
+        st.session_state[TREE_KEY] = tree
 
     # ── Fase 1: Ingresar pallet raíz ────────────────────────
     if tree is None:
@@ -272,13 +302,14 @@ def _render_input_root(username: str, password: str):
     tree = {
         "root_name": nombre,
         "root_id": pkg["id"],
+        "next_node_id": 2,
         "filters": {
             "product_name": info.get("product_name") or info.get("nombre_producto"),
             "manejo": info.get("manejo"),
             "variedad": info.get("variedad"),
         },
         "levels": [
-            [_new_node(pkg["id"], nombre)]
+            [_new_node(pkg["id"], nombre, node_id=1)]
         ],
     }
     st.session_state[TREE_KEY] = tree
@@ -303,24 +334,26 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
         st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F4E6 **`{p['pkg_name']}`**")
         # Si es frontera (solo nivel 0) → mostrar botón para buscar orígenes
         if is_frontier:
-            _render_frontier_group(level_pkgs, level_idx, tree, username, password)
+            _render_frontier_controls(level_pkgs, level_idx, tree, username, password)
         return
 
-    # Agrupar nodos de este nivel por su padre
+    # Agrupar nodos de este nivel por su padre (parent_node_id)
     by_parent: Dict[int, List[Dict]] = {}
     orphans: List[Dict] = []
     for p in level_pkgs:
-        pid = p.get("parent_pkg_id")
+        pid = p.get("parent_node_id")
         if pid:
             by_parent.setdefault(pid, []).append(p)
         else:
             orphans.append(p)
 
-    # Índice de nodos del nivel anterior para obtener nombre de padre + OP
+    # Índice de nodos del nivel anterior por node_id
     parent_idx: Dict[int, Dict] = {}
     if level_idx > 0:
         for pp in levels[level_idx - 1]:
-            parent_idx[pp["pkg_id"]] = pp
+            nid = pp.get("node_id")
+            if nid is not None:
+                parent_idx[nid] = pp
 
     st.markdown(f"### \U0001F4E6 Nivel {level_idx}")
 
@@ -344,8 +377,14 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
                 else:
                     st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\U0001F539 `{ch['pkg_name']}`")
         else:
-            # FRONTERA → mostrar con detalle / selección
-            _render_frontier_group(children, level_idx, tree, username, password)
+            # FRONTERA → solo mostrar estado de cada paquete del grupo
+            for ch in children:
+                if ch.get("is_leaf"):
+                    _render_leaf(ch, indent=2)
+                elif ch.get("candidates") is None:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\U0001F535 `{ch['pkg_name']}` — pendiente")
+                else:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\U0001F539 `{ch['pkg_name']}`")
 
     # Huérfanos (no deberían existir pero por robustez)
     if orphans:
@@ -356,12 +395,23 @@ def _render_level(level_idx: int, level_pkgs: List[Dict], is_frontier: bool,
                 else:
                     st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F539 `{p['pkg_name']}`")
         else:
-            _render_frontier_group(orphans, level_idx, tree, username, password)
+            for p in orphans:
+                if p.get("is_leaf"):
+                    _render_leaf(p, indent=1)
+                elif p.get("candidates") is None:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F535 `{p['pkg_name']}` — pendiente")
+                else:
+                    st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;\U0001F539 `{p['pkg_name']}`")
+
+    # ── FRONTERA: botón único para cargar y seleccionar ──────
+    if is_frontier:
+        _render_frontier_controls(level_pkgs, level_idx, tree, username, password)
 
 
-def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
-                           tree: Dict, username: str, password: str):
-    """Renderiza paquetes de la frontera: cargar candidatos y seleccionar."""
+def _render_frontier_controls(level_pkgs: List[Dict], level_idx: int,
+                              tree: Dict, username: str, password: str):
+    """Renderiza controles de la frontera: botón cargar + selección de candidatos.
+    Se llama UNA VEZ por nivel para evitar keys duplicados."""
     filters = tree.get("filters", {})
     levels = tree["levels"]
 
@@ -374,34 +424,38 @@ def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
         for p in level_pkgs
     )
 
-    # Si todos son hojas → trazabilidad completa aquí
+    # Si todos son hojas → nada que hacer (ya se renderizaron arriba)
     if all_leaves:
-        for p in level_pkgs:
-            _render_leaf(p, indent=2)
         return
 
     # ── Botón para cargar candidatos ─────────────────────────
     if any_unloaded:
-        # Reunir TODOS los paquetes de TODA la frontera (no solo este grupo)
-        all_frontier = levels[level_idx]
         unloaded_names = [
-            p["pkg_name"] for p in all_frontier
+            p["pkg_name"] for p in level_pkgs
             if p.get("candidates") is None and not p.get("is_leaf")
         ]
         btn_label = f"\U0001F50D Buscar orígenes de nivel {level_idx} ({len(unloaded_names)} pendientes)"
         if st.button(btn_label, key=f"load_all_{level_idx}", type="primary"):
-            known_ids = _all_known_pkg_ids(tree)
             with st.spinner("Buscando orígenes por OP en Odoo..."):
-                for p in all_frontier:
+                _cand_cache: Dict[int, Dict] = {}  # cache por pkg_id (evita llamadas duplicadas)
+                for p in level_pkgs:
                     if p.get("candidates") is None and not p.get("is_leaf"):
-                        result = _get_candidates(
-                            p["pkg_id"], username, password,
-                            product_name=filters.get("product_name"),
-                            manejo=filters.get("manejo"),
-                            variedad=filters.get("variedad"),
-                        )
+                        pid = p["pkg_id"]
+                        if pid in _cand_cache:
+                            result = _cand_cache[pid]
+                        else:
+                            result = _get_candidates(
+                                pid, username, password,
+                                product_name=filters.get("product_name"),
+                                manejo=filters.get("manejo"),
+                                variedad=filters.get("variedad"),
+                            )
+                            _cand_cache[pid] = result
                         cands = result.get("candidates", [])
-                        cands = [c for c in cands if c.get("package_id") not in known_ids]
+                        # Solo excluir ancestros directos para evitar ciclos
+                        ancestors = _get_ancestor_ids(tree, p)
+                        ancestors.add(p["pkg_id"])
+                        cands = [c for c in cands if c.get("package_id") not in ancestors]
                         p["candidates"] = cands
                         p["has_mo"] = result.get("has_mo", False)
                         p["mo_name"] = result.get("mo_name")
@@ -411,17 +465,9 @@ def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
                             p["is_leaf"] = True
             st.session_state[TREE_KEY] = tree
             st.rerun()
-
-        # Mostrar estado de cada paquete
-        for p in level_pkgs:
-            if p.get("candidates") is None and not p.get("is_leaf"):
-                st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\U0001F535 `{p['pkg_name']}` — pendiente de buscar")
-            elif p.get("is_leaf"):
-                _render_leaf(p, indent=2)
         return
 
-    # ── Candidatos ya cargados → mostrar para selección ──────
-    # Re-check all_leaves
+    # ── Candidatos ya cargados → re-check hojas ─────────────
     all_leaves = all(
         p.get("is_leaf") or (isinstance(p.get("candidates"), list) and len(p["candidates"]) == 0)
         for p in level_pkgs
@@ -430,16 +476,12 @@ def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
         for p in level_pkgs:
             p["is_leaf"] = True
         st.session_state[TREE_KEY] = tree
-        for p in level_pkgs:
-            _render_leaf(p, indent=2)
         return
 
     # ── Mostrar candidatos agrupados por paquete padre ───────
     all_selected: List[Dict] = []
-    seen_pkg_ids: set = set()
 
-    all_frontier = levels[level_idx]
-    for p_idx, p in enumerate(all_frontier):
+    for p_idx, p in enumerate(level_pkgs):
         if p.get("is_leaf") or not p.get("candidates"):
             if p.get("is_leaf"):
                 _render_leaf(p, indent=2)
@@ -462,7 +504,7 @@ def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
 
             cols = st.columns([0.4, 2, 2.5, 1, 1, 1])
             with cols[0]:
-                key = f"chk_{level_idx}_{p['pkg_id']}_{c_idx}"
+                key = f"chk_{level_idx}_{p.get('node_id', p['pkg_id'])}_{c_idx}"
                 checked = st.checkbox("", key=key, value=True, label_visibility="collapsed")
             with cols[1]:
                 st.markdown(f"**{c_name}**")
@@ -475,13 +517,15 @@ def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
             with cols[5]:
                 st.caption(c_lot or "—")
 
-            if checked and c_id and c_id not in seen_pkg_ids:
-                # Store parent info in the candidate for later node creation
-                c["_parent_pkg_id"] = p["pkg_id"]
-                c["_parent_pkg_name"] = p["pkg_name"]
-                c["_parent_mo_name"] = p.get("mo_name")
-                all_selected.append(c)
-                seen_pkg_ids.add(c_id)
+            if checked and c_id:
+                # Cada par padre-candidato es independiente (permite duplicados cross-padre)
+                all_selected.append({
+                    **c,
+                    "_parent_node_id": p.get("node_id"),
+                    "_parent_pkg_id": p["pkg_id"],
+                    "_parent_pkg_name": p["pkg_name"],
+                    "_parent_mo_name": p.get("mo_name"),
+                })
 
     # ── Botón confirmar selección ────────────────────────────
     st.markdown("---")
@@ -497,11 +541,15 @@ def _render_frontier_group(level_pkgs: List[Dict], level_idx: int,
             for s in all_selected:
                 s_name = s.get("package_name") or str(s.get("package_id"))
                 s_id = s.get("package_id")
+                nid = tree.get("next_node_id", 1)
+                tree["next_node_id"] = nid + 1
                 new_level.append(_new_node(
                     s_id, s_name,
+                    node_id=nid,
                     qty=s.get("qty_total", 0),
                     product_name=s.get("product_name", ""),
                     lot_name=s.get("lot_name", ""),
+                    parent_node_id=s.get("_parent_node_id"),
                     parent_pkg_id=s.get("_parent_pkg_id"),
                     parent_pkg_name=s.get("_parent_pkg_name"),
                 ))

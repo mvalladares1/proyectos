@@ -151,7 +151,15 @@ class EtiquetasPalletService:
 
     def _get_consumed_packages(self, mo: Dict, dest_package_id: int) -> List[Dict]:
         """
-        Dado una OP, obtiene todos los pallets consumidos como materia prima.
+        Dado una OP, obtiene los pallets consumidos como materia prima
+        que corresponden al result_package `dest_package_id`.
+
+        Cuando la OP produce UN SOLO pallet resultado → devuelve todos los consumidos.
+        Cuando produce MÚLTIPLES resultados (ej. congelado produce PACK####-C por cada PACK####):
+          1. Si las líneas de consumo tienen result_package_id → filtra directamente
+          2. Si no, usa coincidencia de nombre (PACK0002622-C ← PACK0002622)
+          3. Los consumidos que no corresponden a OTRO resultado se incluyen como compartidos
+
         Ruta: raw_material_production_id → stock.move → move_lines → package_id
         """
         mo_id = mo['id']
@@ -171,20 +179,24 @@ class EtiquetasPalletService:
 
         move_ids = [m['id'] for m in moves]
 
-        # De esos movimientos, obtener las move_lines con package_id (fuente)
+        # Obtener move_lines con package_id (fuente) Y result_package_id si existe
         smls = self.odoo.search_read(
             'stock.move.line',
             [
                 ('move_id', 'in', move_ids),
                 ('package_id', '!=', False),
             ],
-            ['package_id', 'product_id', 'qty_done', 'lot_id', 'date'],
+            ['package_id', 'result_package_id', 'product_id', 'qty_done', 'lot_id', 'date'],
         )
 
         if not smls:
             return []
 
-        # Agrupar por package fuente
+        # ── Verificar si las líneas de consumo tienen result_package_id ──
+        # Si sí → podemos filtrar directamente
+        has_result_link = any(s.get('result_package_id') for s in smls)
+
+        # Agrupar por package fuente, opcionalmente filtrando por result_package_id
         candidates: Dict[int, dict] = {}
         for s in smls:
             pkg = s.get('package_id')
@@ -194,6 +206,14 @@ class EtiquetasPalletService:
             pkg_name = pkg[1] if isinstance(pkg, (list, tuple)) and len(pkg) > 1 else str(pkg_id)
             if pkg_id == dest_package_id:
                 continue
+
+            # Si hay link directo result_package_id en consumo, filtrar
+            if has_result_link:
+                rpkg = s.get('result_package_id')
+                if rpkg:
+                    rpkg_id = rpkg[0] if isinstance(rpkg, (list, tuple)) else rpkg
+                    if rpkg_id != dest_package_id:
+                        continue  # Esta línea de consumo fue para OTRO resultado
 
             prod = s.get('product_id')
             prod_id = prod[0] if prod and isinstance(prod, (list, tuple)) else prod
@@ -220,8 +240,101 @@ class EtiquetasPalletService:
                 candidates[pkg_id]['last_date'] = d
 
         results = list(candidates.values())
+
+        # ── Si no hubo filtro por result_package_id, intentar por nombre ──
+        if not has_result_link and results:
+            results = self._narrow_consumed_by_result(results, dest_package_id, mo_id)
+
         results.sort(key=lambda x: x.get('qty_total', 0), reverse=True)
         return results
+
+    def _narrow_consumed_by_result(self, candidates: List[Dict],
+                                   dest_package_id: int, mo_id: int) -> List[Dict]:
+        """
+        Cuando una OP produjo MÚLTIPLES result_package_ids, filtra los
+        candidatos consumidos para mostrar solo los que corresponden
+        a `dest_package_id` (por coincidencia de nombre) y los compartidos.
+
+        Ejemplo: OP congelado produce PACK0002622-C y PACK0002339-C.
+          - Para PACK0002622-C → devuelve PACK0002622 (match) + compartidos
+          - Excluye PACK0002339 porque ese corresponde a PACK0002339-C
+        """
+        # Buscar cuántos result_package_ids produjo esta OP
+        prod_moves = self.odoo.search_read(
+            'stock.move',
+            [('production_id', '=', mo_id), ('state', '=', 'done')],
+            ['id'],
+        )
+        if not prod_moves:
+            return candidates
+
+        prod_move_ids = [m['id'] for m in prod_moves]
+        result_smls = self.odoo.search_read(
+            'stock.move.line',
+            [('move_id', 'in', prod_move_ids), ('result_package_id', '!=', False)],
+            ['result_package_id'],
+        )
+
+        result_pkgs: Dict[int, str] = {}  # id → name
+        for rs in result_smls:
+            rpkg = rs.get('result_package_id')
+            if rpkg:
+                rid = rpkg[0] if isinstance(rpkg, (list, tuple)) else rpkg
+                rname = rpkg[1] if isinstance(rpkg, (list, tuple)) and len(rpkg) > 1 else ''
+                result_pkgs[rid] = rname
+
+        # Si solo 1 resultado → devolver todo (no hay ambigüedad)
+        if len(result_pkgs) <= 1:
+            return candidates
+
+        # Obtener nombre base del pallet destino
+        dest_name = result_pkgs.get(dest_package_id, '')
+        if not dest_name:
+            pkg = self.odoo.search_read(
+                'stock.quant.package', [('id', '=', dest_package_id)],
+                ['name'], limit=1,
+            )
+            dest_name = pkg[0]['name'] if pkg else ''
+
+        dest_base = self._strip_pallet_suffix(dest_name)
+
+        # Mapear nombres base de TODOS los resultados
+        other_result_bases: set = set()
+        for rid, rname in result_pkgs.items():
+            if rid != dest_package_id:
+                other_result_bases.add(self._strip_pallet_suffix(rname))
+
+        # Clasificar cada candidato consumido
+        matched: List[Dict] = []    # coincide con nuestro resultado
+        shared: List[Dict] = []     # no coincide con ninguno → compartido
+        for c in candidates:
+            c_base = self._strip_pallet_suffix(c['package_name'])
+            if c_base == dest_base:
+                matched.append(c)
+            elif c_base in other_result_bases:
+                pass  # coincide con OTRO resultado → excluir
+            else:
+                shared.append(c)
+
+        if matched:
+            return matched + shared
+
+        # Sin matches por nombre → devolver todo (fallback seguro)
+        return candidates
+
+    @staticmethod
+    def _strip_pallet_suffix(name: str) -> str:
+        """
+        Quita sufijos tipo -C, -A, -B, -IQF, etc. de un nombre de pallet.
+        PACK0002622-C → PACK0002622
+        """
+        if not name:
+            return ''
+        n = name.strip().upper()
+        m = re.match(r'^(PACK\d+)(-[A-Za-z0-9]+)?$', n)
+        if m:
+            return m.group(1)
+        return n
 
     def _get_direct_source_packages(self, package_id: int) -> List[Dict]:
         """
