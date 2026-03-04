@@ -48,14 +48,41 @@ class OdooClient:
         if not all([self.url, self.db, self.username, self.password]):
             raise ValueError("Faltan credenciales de Odoo. Verificar .env o parámetros.")
         
-        # Conectar
-        self.common = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/common')
+        # Conectar — con timeout de 30 segundos para evitar cuelgues
+        _timeout = 30
+        _transport_common = xmlrpc.client.SafeTransport() if self.url.startswith('https') else xmlrpc.client.Transport()
+        _transport_common.timeout = _timeout
+        _transport_models = xmlrpc.client.SafeTransport() if self.url.startswith('https') else xmlrpc.client.Transport()
+        _transport_models.timeout = _timeout
+
+        # Monkey-patch make_connection para inyectar timeout
+        _orig_make_common = _transport_common.make_connection
+        def _make_conn_common(host):
+            conn = _orig_make_common(host)
+            conn.timeout = _timeout
+            return conn
+        _transport_common.make_connection = _make_conn_common
+
+        _orig_make_models = _transport_models.make_connection
+        def _make_conn_models(host):
+            conn = _orig_make_models(host)
+            conn.timeout = _timeout
+            return conn
+        _transport_models.make_connection = _make_conn_models
+
+        self.common = xmlrpc.client.ServerProxy(
+            f'{self.url}/xmlrpc/2/common',
+            transport=_transport_common,
+        )
         self.uid = self.common.authenticate(self.db, self.username, self.password, {})
         
         if not self.uid:
             raise Exception("Error de autenticación con Odoo")
         
-        self.models = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/object')
+        self.models = xmlrpc.client.ServerProxy(
+            f'{self.url}/xmlrpc/2/object',
+            transport=_transport_models,
+        )
     
     def search(self, model: str, domain: List, limit: int = None, order: str = None) -> List[int]:
         """

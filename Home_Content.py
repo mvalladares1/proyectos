@@ -112,7 +112,7 @@ if not is_authenticated:
                         response = httpx.post(
                             f"{API_URL}/api/v1/auth/login",
                             json={"username": email, "password": api_token},
-                            timeout=15.0
+                            timeout=45.0
                         )
                         
                         if response.status_code == 200:
@@ -146,6 +146,8 @@ if not is_authenticated:
                             st.error(f"❌ Error de autenticación: {response.json().get('detail', 'Credenciales inválidas')}")
                     except httpx.ConnectError:
                         st.error("❌ No se puede conectar al servidor API.")
+                    except httpx.TimeoutException:
+                        st.error("❌ Timeout: El servidor Odoo está tardando mucho en responder. Intenta de nuevo en unos momentos.")
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
                 else:
@@ -174,6 +176,20 @@ else:
         cerrar_sesion()
         st.rerun()
     
+    # ── Permission helper (mirrors Home.py logic) ──
+    is_admin = st.session_state.get('is_admin', False)
+    restricted_dashboards = st.session_state.get('restricted_dashboards', {})
+
+    def tiene_acceso(dashboard_key: str) -> bool:
+        if is_admin:
+            return True
+        if dashboard_key not in restricted_dashboards:
+            return True
+        usuarios_permitidos = restricted_dashboards.get(dashboard_key, [])
+        if not usuarios_permitidos:
+            return True
+        return username in usuarios_permitidos
+
     st.markdown("---")
     st.subheader("📊 Selecciona un Dashboard")
     st.info("👈 Usa el menú lateral para navegar a los diferentes dashboards, o haz clic en las tarjetas de abajo.")
@@ -183,18 +199,19 @@ else:
     
     cols = st.columns(3)
     dashboards_op = [
-        ("📥", "Recepciones", "KPIs de Kg, costos y calidad por productor", "pages/1_Recepciones.py"),
-        ("🏭", "Producción", "Órdenes de fabricación y rendimientos", "pages/2_Produccion.py"),
-        ("�", "Reconciliación", "Gestión de SO Asociada y Campos KG en ODFs", "pages/12_Reconciliacion_Produccion.py"),
-        ("📊", "Bandejas", "Control de bandejas por proveedor", "pages/3_Bandejas.py"),
-        ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py"),
-        ("🚢", "Pedidos de Venta", "Pedidos y avance de producción", "pages/5_Pedidos_Venta.py"),
-        ("🔍", "Trazabilidad", "Trazabilidad inversa PT → MP y generación de diagramas", "pages/7_Rendimiento.py"),
-        ("🤝", "Relación Comercial", "Análisis comercial y relaciones con clientes", "pages/11_Relacion_Comercial.py"),
-        ("🦾", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py"),
+        ("📥", "Recepciones", "KPIs de Kg, costos y calidad por productor", "pages/1_Recepciones.py", "recepciones"),
+        ("🏭", "Producción", "Órdenes de fabricación y rendimientos", "pages/2_Produccion.py", "produccion"),
+        ("🔄", "Reconciliación", "Gestión de SO Asociada y Campos KG en ODFs", "pages/12_Reconciliacion_Produccion.py", "reconciliacion"),
+        ("📊", "Bandejas", "Control de bandejas por proveedor", "pages/3_Bandejas.py", "bandejas"),
+        ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py", "stock"),
+        ("🚢", "Pedidos de Venta", "Pedidos y avance de producción", "pages/5_Pedidos_Venta.py", "pedidos_venta"),
+        ("🔍", "Trazabilidad", "Trazabilidad inversa PT → MP y generación de diagramas", "pages/7_Rendimiento.py", "rendimiento"),
+        ("🤝", "Relación Comercial", "Análisis comercial y relaciones con clientes", "pages/11_Relacion_Comercial.py", "relacion_comercial"),
+        ("🦾", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py", "automatizaciones"),
     ]
+    dashboards_op = [d for d in dashboards_op if tiene_acceso(d[4])]
     
-    for i, (icon, title, desc, page) in enumerate(dashboards_op):
+    for i, (icon, title, desc, page, _key) in enumerate(dashboards_op):
         with cols[i % 3]:
             st.markdown(f"""
             <div class="dashboard-card card-operaciones">
@@ -203,43 +220,53 @@ else:
             </div>
             """, unsafe_allow_html=True)
             if st.button(f"Abrir {title}", key=f"btn_{title}", use_container_width=True):
-                st.switch_page(page)
+                try:
+                    st.switch_page(page)
+                except Exception:
+                    st.error(f"No se pudo abrir {title}. Verifica tus permisos o recarga la página.")
     
     st.markdown('<div class="section-header">💰 Finanzas</div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("""
-        <div class="dashboard-card card-finanzas">
-            <div class="card-title">💰 Finanzas</div>
-            <div class="card-desc">Estado de Resultado vs Presupuesto</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Abrir Finanzas", key="btn_finanzas", use_container_width=True):
-            st.switch_page("pages/6_Finanzas.py")
-    
-    with col2:
-        st.markdown("""
-        <div class="dashboard-card card-finanzas">
-            <div class="card-title">🛒 Compras</div>
-            <div class="card-desc">OC, Aprobaciones y Líneas de Crédito</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Abrir Compras", key="btn_compras", use_container_width=True):
-            st.switch_page("pages/8_Compras.py")
+    dashboards_fin = [
+        ("💰", "Finanzas", "Estado de Resultado vs Presupuesto", "pages/6_Finanzas.py", "finanzas"),
+        ("🛒", "Compras", "OC, Aprobaciones y Líneas de Crédito", "pages/8_Compras.py", "compras"),
+    ]
+    dashboards_fin = [d for d in dashboards_fin if tiene_acceso(d[4])]
+    cols_fin = st.columns(3)
+    for i, (icon, title, desc, page, _key) in enumerate(dashboards_fin):
+        with cols_fin[i % 3]:
+            st.markdown(f"""
+            <div class="dashboard-card card-finanzas">
+                <div class="card-title">{icon} {title}</div>
+                <div class="card-desc">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"Abrir {title}", key=f"btn_{title}", use_container_width=True):
+                try:
+                    st.switch_page(page)
+                except Exception:
+                    st.error(f"No se pudo abrir {title}. Verifica tus permisos o recarga la página.")
     
     st.markdown('<div class="section-header">⚙️ Administración</div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("""
-        <div class="dashboard-card card-admin">
-            <div class="card-title">⚙️ Permisos</div>
-            <div class="card-desc">Gestión de accesos por usuario</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Abrir Permisos", key="btn_permisos", use_container_width=True):
-            st.switch_page("pages/9_Permisos.py")
+    dashboards_admin = [
+        ("⚙️", "Permisos", "Gestión de accesos por usuario", "pages/9_Permisos.py", "permisos"),
+    ]
+    dashboards_admin = [d for d in dashboards_admin if tiene_acceso(d[4])]
+    cols_admin = st.columns(3)
+    for i, (icon, title, desc, page, _key) in enumerate(dashboards_admin):
+        with cols_admin[i % 3]:
+            st.markdown(f"""
+            <div class="dashboard-card card-admin">
+                <div class="card-title">{icon} {title}</div>
+                <div class="card-desc">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"Abrir {title}", key=f"btn_{title}", use_container_width=True):
+                try:
+                    st.switch_page(page)
+                except Exception:
+                    st.error(f"No se pudo abrir {title}. Verifica tus permisos o recarga la página.")
     
     # Información del sistema
     st.markdown("---")

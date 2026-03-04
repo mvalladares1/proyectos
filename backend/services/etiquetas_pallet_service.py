@@ -445,18 +445,11 @@ class EtiquetasPalletService:
         """
         Traza un pallet recursivamente hasta las recepciones en un solo llamado.
         Devuelve el árbol completo con todos los nodos y niveles.
-
-        Returns:
-            {
-                root_id, root_name,
-                nodes: [{ node_id, pkg_id, pkg_name, parent_node_id,
-                          mo_name, level, is_leaf, reception_info,
-                          qty, product_name, lot_name }],
-                levels: int,
-                reception_count: int,
-                leaf_count: int,
-            }
         """
+        import time as _time
+        _t0 = _time.time()
+        logger.info(f"[trazar_completo] Inicio pkg={package_id} max_levels={max_levels}")
+
         # Obtener nombre del pallet raíz
         pkg_info = self.odoo.search_read(
             'stock.quant.package', [('id', '=', package_id)],
@@ -466,12 +459,15 @@ class EtiquetasPalletService:
 
         node_counter = 0
         all_nodes: List[Dict] = []
-        visited: set = set()  # pkg_ids ya procesados por ancestro, para ciclos
+        visited: set = set()  # pkg_ids ya completamente trazados
 
         def _next_id():
             nonlocal node_counter
             node_counter += 1
             return node_counter
+
+        # Cache GLOBAL compartido entre todos los niveles
+        global_cache: Dict[int, Dict] = {}
 
         def _trace_level(queue: List[Dict], level: int):
             """Procesa una cola de nodos pendientes en un nivel dado."""
@@ -481,13 +477,25 @@ class EtiquetasPalletService:
                     n['is_leaf'] = True
                 return
 
-            next_queue: List[Dict] = []
+            # Seguridad: limitar tamaño total del árbol
+            if len(all_nodes) > 500:
+                logger.warning(f"[trazar_completo] Árbol excede 500 nodos, cortando en nivel {level}")
+                for n in queue:
+                    n['is_leaf'] = True
+                return
 
-            # Cache de resultados por pkg_id para no repetir queries
-            cache: Dict[int, Dict] = {}
+            next_queue: List[Dict] = []
 
             for node in queue:
                 pid = node['pkg_id']
+
+                # Evitar re-trazar un pallet que ya fue explorado en otra rama
+                if pid in visited:
+                    node['is_leaf'] = True
+                    # Copiar reception_info del cache si existe
+                    if pid in global_cache and global_cache[pid].get('rec'):
+                        node['reception_info'] = global_cache[pid]['rec']
+                    continue
 
                 # Evitar ciclo: si este pkg_id ya está en los ancestros de este nodo
                 ancestors = set()
@@ -499,8 +507,10 @@ class EtiquetasPalletService:
                     node['is_leaf'] = True
                     continue
 
-                # Buscar candidatos (con cache)
-                if pid not in cache:
+                visited.add(pid)
+
+                # Buscar candidatos (con cache global)
+                if pid not in global_cache:
                     mo = self._find_mo_for_package(pid)
                     if mo:
                         cands = self._get_consumed_packages(mo, pid)
@@ -518,9 +528,9 @@ class EtiquetasPalletService:
                     if not cands:
                         rec = self._buscar_recepcion_pkg(pid)
 
-                    cache[pid] = {'cands': cands, 'mo_name': mo_name, 'rec': rec}
+                    global_cache[pid] = {'cands': cands, 'mo_name': mo_name, 'rec': rec}
 
-                cached = cache[pid]
+                cached = global_cache[pid]
                 node['mo_name'] = cached['mo_name']
 
                 if not cached['cands']:
@@ -583,6 +593,9 @@ class EtiquetasPalletService:
         max_level = max(n['level'] for n in all_nodes)
         leaf_count = sum(1 for n in all_nodes if n['is_leaf'])
         rec_count = sum(1 for n in all_nodes if n.get('reception_info'))
+
+        _elapsed = _time.time() - _t0
+        logger.info(f"[trazar_completo] Fin pkg={package_id} — {len(all_nodes)} nodos, {max_level+1} niveles, {rec_count} recepciones, {_elapsed:.2f}s")
 
         return {
             'root_id': package_id,
@@ -775,9 +788,11 @@ class EtiquetasPalletService:
         """
         Traza un pallet HACIA ADELANTE: desde el origen hacia sus destinos.
         Encuentra dónde fue consumido y qué pallets se produjeron a partir de él.
-
-        Returns: misma estructura que trazar_completo pero en dirección forward.
         """
+        import time as _time
+        _t0 = _time.time()
+        logger.info(f"[trazar_forward] Inicio pkg={package_id} max_levels={max_levels}")
+
         pkg_info = self.odoo.search_read(
             'stock.quant.package', [('id', '=', package_id)],
             ['name'], limit=1,
@@ -786,12 +801,15 @@ class EtiquetasPalletService:
 
         node_counter = 0
         all_nodes: List[Dict] = []
-        visited: set = set()
+        visited: set = set()  # pkg_ids ya completamente trazados
 
         def _next_id():
             nonlocal node_counter
             node_counter += 1
             return node_counter
+
+        # Cache GLOBAL compartido entre todos los niveles
+        global_cache: Dict[int, Dict] = {}
 
         def _trace_forward_level(queue: List[Dict], level: int):
             if level > max_levels or not queue:
@@ -799,11 +817,24 @@ class EtiquetasPalletService:
                     n['is_leaf'] = True
                 return
 
+            # Seguridad: limitar tamaño total del árbol
+            if len(all_nodes) > 500:
+                logger.warning(f"[trazar_forward] Árbol excede 500 nodos, cortando en nivel {level}")
+                for n in queue:
+                    n['is_leaf'] = True
+                return
+
             next_queue: List[Dict] = []
-            cache: Dict[int, Dict] = {}
 
             for node in queue:
                 pid = node['pkg_id']
+
+                # Evitar re-trazar un pallet que ya fue explorado en otra rama
+                if pid in visited:
+                    node['is_leaf'] = True
+                    if pid in global_cache and global_cache[pid].get('despacho'):
+                        node['dispatch_info'] = global_cache[pid]['despacho']
+                    continue
 
                 # Evitar ciclos
                 ancestors = set()
@@ -815,14 +846,16 @@ class EtiquetasPalletService:
                     node['is_leaf'] = True
                     continue
 
-                if pid not in cache:
+                visited.add(pid)
+
+                if pid not in global_cache:
                     dests = self._find_destination_packages(pid)
                     despacho = None
                     if not dests:
                         despacho = self._buscar_despacho_pkg(pid)
-                    cache[pid] = {'dests': dests, 'despacho': despacho}
+                    global_cache[pid] = {'dests': dests, 'despacho': despacho}
 
-                cached = cache[pid]
+                cached = global_cache[pid]
 
                 if not cached['dests']:
                     node['is_leaf'] = True
@@ -888,6 +921,9 @@ class EtiquetasPalletService:
         leaf_count = sum(1 for n in all_nodes if n['is_leaf'])
         dispatch_count = sum(1 for n in all_nodes if n.get('dispatch_info'))
         rec_count = sum(1 for n in all_nodes if n.get('reception_info'))
+
+        _elapsed = _time.time() - _t0
+        logger.info(f"[trazar_forward] Fin pkg={package_id} — {len(all_nodes)} nodos, {max_level+1} niveles, {dispatch_count} despachos, {_elapsed:.2f}s")
 
         return {
             'root_id': package_id,
@@ -999,15 +1035,11 @@ class EtiquetasPalletService:
         """
         Traza todos los pallets de un lote en la dirección indicada.
         Combina los resultados de cada pallet en un solo árbol con nodo raíz virtual (el lote).
-
-        Args:
-            lot_name: Nombre del lote
-            direction: 'backward' o 'forward'
-            max_levels: Máximo de niveles a trazar
-
-        Returns:
-            Estructura similar a trazar_completo pero con raíz virtual del lote.
         """
+        import time as _time
+        _t0 = _time.time()
+        logger.info(f"[trazar_lote_completo] Inicio lote={lot_name} direction={direction}")
+
         pallets = self.buscar_pallets_por_lote(lot_name)
         if not pallets:
             return {
@@ -1022,6 +1054,14 @@ class EtiquetasPalletService:
                 'lot_name': lot_name,
                 'pallets_found': 0,
             }
+
+        # Limitar cantidad de pallets a trazar para evitar tiempos excesivos
+        MAX_PALLETS = 20
+        if len(pallets) > MAX_PALLETS:
+            logger.warning(f"[trazar_lote_completo] Lote {lot_name} tiene {len(pallets)} pallets, limitando a {MAX_PALLETS}")
+            pallets = pallets[:MAX_PALLETS]
+
+        logger.info(f"[trazar_lote_completo] Trazando {len(pallets)} pallets para lote {lot_name}")
 
         # Crear nodo raíz virtual para el lote
         all_nodes: List[Dict] = []
@@ -1052,10 +1092,12 @@ class EtiquetasPalletService:
         total_dispatch = 0
         max_depth = 0
 
-        for pallet in pallets:
+        for idx, pallet in enumerate(pallets):
             pkg_id = pallet['package_id']
+            _tp = _time.time()
             trace_fn = self.trazar_forward if direction == 'forward' else self.trazar_completo
             sub_result = trace_fn(pkg_id, max_levels=max_levels)
+            logger.info(f"[trazar_lote_completo] Pallet {idx+1}/{len(pallets)} pkg={pkg_id} — {_time.time()-_tp:.2f}s")
 
             sub_nodes = sub_result.get('nodes', [])
             if not sub_nodes:
@@ -1088,6 +1130,9 @@ class EtiquetasPalletService:
                     max_depth = sub_max
 
         leaf_count = sum(1 for n in all_nodes if n.get('is_leaf'))
+
+        _elapsed = _time.time() - _t0
+        logger.info(f"[trazar_lote_completo] Fin lote={lot_name} — {len(all_nodes)} nodos, {len(pallets)} pallets, {_elapsed:.2f}s")
 
         return {
             'root_id': None,
