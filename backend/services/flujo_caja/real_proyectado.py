@@ -137,8 +137,8 @@ class RealProyectadoCalculator:
                 [
                     ['move_type', 'in', ['in_invoice', 'in_refund']],
                     ['journal_id', '=', 2],  # Facturas de Proveedores
-                    ['date', '>=', fecha_inicio],
-                    ['date', '<=', fecha_fin],
+                    ['invoice_date', '>=', fecha_inicio],
+                    ['invoice_date', '<=', fecha_fin],
                     ['state', '=', 'posted'],
                     ['payment_state', '!=', 'reversed']
                 ],
