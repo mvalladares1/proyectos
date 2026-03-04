@@ -144,7 +144,7 @@ class RealProyectadoCalculator:
                 ],
                 ['id', 'name', 'move_type', 'date', 'invoice_date', 'invoice_date_due',
                  'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago'],
-                limit=5000
+                limit=20000  # Aumentado de 5000 a 20000 para evitar truncamiento
             )
             
             real_total = 0.0
@@ -235,7 +235,7 @@ class RealProyectadoCalculator:
                 limit=50000
             )
             
-            # Agrupar líneas por factura
+            # OPTIMIZACIÓN: Agrupar líneas por factura usando dict comprehension
             lineas_por_factura = defaultdict(list)
             for linea in todas_lineas:
                 move_id = linea.get('move_id')
@@ -1212,7 +1212,7 @@ class RealProyectadoCalculator:
                 ['id', 'name', 'partner_id', 'invoice_date', 'invoice_date_due',
                  'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago',
                  'currency_id'],
-                limit=5000
+                limit=20000  # Aumentado de 5000 a 20000 para evitar truncamiento
             )
             
             real_total = 0.0

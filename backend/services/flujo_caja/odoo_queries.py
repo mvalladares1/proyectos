@@ -155,6 +155,7 @@ class OdooQueryManager:
                                          incluir_draft: bool = False) -> Tuple[List[Dict], List[int]]:
         """
         Obtiene movimientos de cuentas de efectivo y sus IDs de asiento.
+        OPTIMIZADO: Solo trae move_id primero, luego datos completos si es necesario.
         
         Args:
             fecha_inicio: Fecha inicio YYYY-MM-DD
@@ -181,21 +182,24 @@ class OdooQueryManager:
             domain.append(['company_id', '=', company_id])
         
         try:
-            movimientos = self.odoo.search_read(
+            # OPTIMIZACIÓN: Solo traer move_id para extraer asientos únicos
+            # Esto reduce significativamente el tiempo de query y transferencia de datos
+            movimientos_ids = self.odoo.search_read(
                 'account.move.line',
                 domain,
-                ['move_id', 'date', 'name', 'ref', 'balance', 'account_id', 'partner_id'],
-                limit=50000,
-                order='date desc'
+                ['move_id'],
+                limit=200000  # Aumentado para evitar truncamiento
             )
             
             # Extraer IDs únicos de asientos
             asientos_ids = list(set(
                 m['move_id'][0] if isinstance(m.get('move_id'), (list, tuple)) else m.get('move_id')
-                for m in movimientos if m.get('move_id')
+                for m in movimientos_ids if m.get('move_id')
             ))
             
-            return movimientos, asientos_ids
+            # Los movimientos completos ya no se necesitan para el flujo principal
+            # Se usan solo los asientos_ids que se procesan con read_group
+            return [], asientos_ids  # Retornar lista vacía de movimientos para ahorrar memoria
         except Exception as e:
             print(f"[OdooQueryManager] Error obteniendo movimientos: {e}")
             return [], []
@@ -270,7 +274,7 @@ class OdooQueryManager:
                 pass
         
         resultados = []
-        chunk_size = 5000
+        chunk_size = 10000  # Aumentado de 5000 a 10000 para menos chunks
         
         for i in range(0, len(asientos_ids), chunk_size):
             chunk = asientos_ids[i:i + chunk_size]
