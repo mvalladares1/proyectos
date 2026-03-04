@@ -131,13 +131,18 @@ class RealProyectadoCalculator:
         - Nivel 3: Por proveedor
         """
         try:
+            # PASO 0.5: Ampliar fecha_inicio hacia atrás para capturar facturas pendientes 
+            # que se proyectan al periodo (ej: factura de enero con pago estimado en marzo)
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            fecha_inicio_ampliada = (fecha_inicio_dt - timedelta(days=120)).strftime('%Y-%m-%d')
+            
             # PASO 1: Buscar facturas de proveedor desde diario específico
             facturas = self.odoo.search_read(
                 'account.move',
                 [
                     ['move_type', 'in', ['in_invoice', 'in_refund']],
                     ['journal_id', '=', 2],  # Facturas de Proveedores
-                    ['invoice_date', '>=', fecha_inicio],
+                    ['invoice_date', '>=', fecha_inicio_ampliada],  # Ampliado 120 días atrás
                     ['invoice_date', '<=', fecha_fin],
                     ['state', '=', 'posted'],
                     ['payment_state', '!=', 'reversed']
@@ -1199,13 +1204,18 @@ class RealProyectadoCalculator:
         - PROYECTADO = Monto pendiente de cobro (amount_residual)
         """
         try:
+            # PASO 0.5: Ampliar fecha_inicio hacia atrás para capturar facturas pendientes 
+            # que se proyectan al periodo
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            fecha_inicio_ampliada = (fecha_inicio_dt - timedelta(days=120)).strftime('%Y-%m-%d')
+            
             # Buscar facturas de cliente en el período
             facturas = self.odoo.search_read(
                 'account.move',
                 [
                     ['move_type', '=', 'out_invoice'],
                     ['state', '=', 'posted'],
-                    ['invoice_date', '>=', fecha_inicio],
+                    ['invoice_date', '>=', fecha_inicio_ampliada],  # Ampliado 120 días atrás
                     ['invoice_date', '<=', fecha_fin],
                     ['payment_state', '!=', 'reversed']  # Excluir facturas revertidas completamente
                 ],
