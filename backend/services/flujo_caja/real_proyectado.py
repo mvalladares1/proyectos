@@ -148,7 +148,8 @@ class RealProyectadoCalculator:
                     ['payment_state', '!=', 'reversed']
                 ],
                 ['id', 'name', 'move_type', 'date', 'invoice_date', 'invoice_date_due',
-                 'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago'],
+                 'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago',
+                 'currency_id'],  # Agregado para convertir USD/UF a CLP
                 limit=20000  # Aumentado de 5000 a 20000 para evitar truncamiento
             )
             
@@ -268,6 +269,18 @@ class RealProyectadoCalculator:
                 move_type = f.get('move_type', '')
                 partner_data = f.get('partner_id', [0, 'Sin proveedor'])
                 partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
+                
+                # Convertir moneda si es necesario (USD o UF -> CLP)
+                currency_data = f.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_uf_to_clp(amount_residual)
                 
                 # Signo: N/C invierten el signo (devuelven dinero)
                 signo = -1 if move_type == 'in_refund' else 1
@@ -566,10 +579,15 @@ class RealProyectadoCalculator:
                     continue
 
                 amount_total = float(oc.get('amount_total') or 0.0)
+                # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = oc.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
-                if currency_name and 'USD' in str(currency_name).upper():
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
 
                 monto_proyectado = -amount_total
                 if monto_proyectado == 0:
@@ -727,11 +745,15 @@ class RealProyectadoCalculator:
                 amount_total = float(fp.get('amount_total') or 0.0)
                 move_type = fp.get('move_type', 'in_invoice')
                 
-                # Convertir moneda si es necesario
+                # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = fp.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
-                if currency_name and 'USD' in str(currency_name).upper():
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
 
                 # N/C en módulo contabilidad invierten signo
                 signo = -1 if move_type == 'in_refund' else 1
@@ -1311,12 +1333,17 @@ class RealProyectadoCalculator:
                 payment_state = f.get('payment_state', 'not_paid')
                 move_type = f.get('move_type', 'out_invoice')
                 
-                # Convertir moneda USD a CLP si es necesario
+                # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = f.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
-                if currency_name and 'USD' in str(currency_name).upper():
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
-                    amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_uf_to_clp(amount_residual)
                 
                 # Determinar período proyectado basado en fecha estimada de pago
                 fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
