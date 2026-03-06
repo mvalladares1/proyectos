@@ -185,6 +185,83 @@ for m in movs_grandes:
     print(f"  {m['name']}: {m['amount_total']:>20,.0f} {curr_name} | Residual: {m.get('amount_residual', 0):>15,.0f} | "
           f"Estado: {m['state']} | Tipo: {m['move_type']} | Diario: {journal_name}")
 
+# NUEVO: Buscar TODAS las facturas NO PAGADAS de este proveedor (residual > 0)
+print("\n" + "="*80)
+print(f"FACTURAS NO PAGADAS (residual > 0) DE NEWEN")
+print("="*80)
+
+facturas_pendientes = models.execute_kw(DB, uid, PASSWORD,
+    'account.move', 'search_read',
+    [[
+        ('partner_id', '=', partner_id),
+        ('move_type', 'in', ['in_invoice', 'in_refund']),
+        ('state', '=', 'posted'),
+        ('amount_residual', '>', 0)
+    ]],
+    {
+        'fields': [
+            'id', 'name', 'move_type', 'amount_total', 'amount_residual',
+            'invoice_date', 'invoice_date_due', 'payment_state', 'currency_id',
+            'x_studio_fecha_estimada_de_pago', 'journal_id'
+        ],
+        'order': 'invoice_date_due'
+    }
+)
+
+print(f"Facturas pendientes: {len(facturas_pendientes)}")
+total_pendiente = 0
+for f in facturas_pendientes:
+    curr = f.get('currency_id')
+    curr_name = curr[1] if isinstance(curr, (list, tuple)) and len(curr) > 1 else 'CLP'
+    journal = f.get('journal_id')
+    journal_name = journal[1] if isinstance(journal, (list, tuple)) and len(journal) > 1 else 'N/A'
+    fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
+    fecha_venc = f.get('invoice_date_due')
+    
+    print(f"  {f['name']}: Total: {f['amount_total']:>15,.0f} | Residual: {f.get('amount_residual', 0):>15,.0f} {curr_name:5} | "
+          f"Tipo: {f['move_type']:12} | Venc: {fecha_venc} | FechaEst: {fecha_estimada} | Diario: {journal_name}")
+    total_pendiente += f.get('amount_residual', 0)
+
+print(f"\nTotal pendiente NEWEN: {total_pendiente:,.0f}")
+
+# Calcular qué caería en S10 según la lógica del código
+print("\n" + "="*80)
+print("SIMULANDO LÓGICA DEL CÓDIGO PARA S10")
+print("="*80)
+
+# S10 = 2-8 marzo 2026
+s10_inicio = datetime(2026, 3, 2).date()
+s10_fin = datetime(2026, 3, 8).date()
+
+total_s10_proyectado = 0
+for f in facturas_pendientes:
+    fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')
+    fecha_venc = f.get('invoice_date_due')
+    
+    # Prioridad: x_studio_fecha_estimada_de_pago > invoice_date_due
+    fecha_usar = fecha_estimada if fecha_estimada else fecha_venc
+    if not fecha_usar:
+        continue
+    
+    try:
+        fecha_dt = datetime.strptime(str(fecha_usar)[:10], '%Y-%m-%d').date()
+    except:
+        continue
+    
+    if s10_inicio <= fecha_dt <= s10_fin:
+        residual = f.get('amount_residual', 0)
+        tipo = f.get('move_type')
+        signo = -1 if tipo == 'in_invoice' else 1  # Facturas proveedor son salidas (negativas)
+        monto_final = signo * residual
+        
+        curr = f.get('currency_id')
+        curr_name = curr[1] if isinstance(curr, (list, tuple)) and len(curr) > 1 else 'CLP'
+        
+        print(f"  {f['name']}: Residual={residual:,.0f} | Tipo={tipo} | SignoFinal={monto_final:,.0f} {curr_name} | Fecha={fecha_usar}")
+        total_s10_proyectado += monto_final
+
+print(f"\nTotal S10 proyectado desde facturas pendientes: {total_s10_proyectado:,.0f}")
+
 # Buscar OCs con montos muy grandes
 print("\n" + "="*80)
 print("BUSCANDO OCs CON MONTOS > 1.000.000.000 (cualquier proveedor)")
