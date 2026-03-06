@@ -633,7 +633,8 @@ class RealProyectadoCalculator:
                     ['move_type', 'in', ['in_invoice', 'in_refund']]
                 ],
                 ['id', 'name', 'partner_id', 'amount_total', 'date', 'invoice_date',
-                 'invoice_date_due', 'state', 'currency_id', 'move_type'],
+                 'invoice_date_due', 'state', 'currency_id', 'move_type',
+                 'x_studio_fecha_estimada_de_pago'],  # Campo personalizado para fecha de pago
                 limit=10000
             )
 
@@ -717,16 +718,24 @@ class RealProyectadoCalculator:
                 except Exception:
                     continue
 
-                # Usar invoice_date_due si existe, sino usar fecha_base
+                # PRIORIDAD: x_studio_fecha_estimada_de_pago > invoice_date_due > fecha_base
+                fecha_estimada = fp.get('x_studio_fecha_estimada_de_pago')
                 fecha_vencimiento = fp.get('invoice_date_due')
-                if fecha_vencimiento:
+                
+                if fecha_estimada:
+                    fecha_proyectada = str(fecha_estimada)[:10]
+                    try:
+                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                    except Exception:
+                        fecha_proyectada_dt = fecha_base_dt
+                elif fecha_vencimiento:
                     fecha_proyectada = str(fecha_vencimiento)[:10]
                     try:
                         fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
                     except Exception:
                         fecha_proyectada_dt = fecha_base_dt
                 else:
-                    # Sin fecha de vencimiento, usar fecha base directamente
+                    # Sin fecha estimada ni vencimiento, usar fecha base directamente
                     fecha_proyectada_dt = fecha_base_dt
                 
                 fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
