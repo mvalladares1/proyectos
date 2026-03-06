@@ -552,20 +552,26 @@ class RealProyectadoCalculator:
                 if invoice_ids:
                     continue
 
-                # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a fecha actual
+                # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a date_planned
                 fecha_pago = oc.get('x_studio_fecha_de')
                 if fecha_pago:
                     fecha_proyectada = str(fecha_pago)[:10]
                     try:
                         fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
                     except Exception:
-                        # Si fecha inválida, usar fecha actual
-                        fecha_proyectada_dt = datetime.now().date()
-                        fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
-                else:
-                    # Sin fecha de pago: usar fecha actual como fallback
-                    fecha_proyectada_dt = datetime.now().date()
-                    fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
+                        fecha_pago = None  # Fecha inválida, intentar con date_planned
+                
+                if not fecha_pago:
+                    # Fallback: usar date_planned
+                    date_planned = oc.get('date_planned')
+                    if date_planned:
+                        fecha_proyectada = str(date_planned)[:10]
+                        try:
+                            fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                        except Exception:
+                            continue  # Si ambas fechas inválidas, omitir OC
+                    else:
+                        continue  # Sin fecha válida, omitir OC
 
                 if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
                     continue
