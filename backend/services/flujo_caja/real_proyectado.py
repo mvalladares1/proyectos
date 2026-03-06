@@ -714,8 +714,22 @@ class RealProyectadoCalculator:
                 except Exception:
                     nombre_analitico_por_id = {}
 
-            # Obtener ID de cuenta 11060108 para excluirla de PROYECTADAS_CONTABILIDAD
-            cuenta_iva_excluir_id = self._get_cuenta_iva_id()
+            # Obtener IDs de cuentas a excluir de PROYECTADAS_CONTABILIDAD
+            cuenta_iva_excluir_id = self._get_cuenta_iva_id()  # 11060108
+            cuentas_excluir_proyec_contab = {cuenta_iva_excluir_id} if cuenta_iva_excluir_id else set()
+            
+            # Agregar 62010101 a la exclusión
+            try:
+                cuenta_62010101 = self.odoo.search_read(
+                    'account.account',
+                    [['code', '=', '62010101']],
+                    ['id'],
+                    limit=1
+                )
+                if cuenta_62010101:
+                    cuentas_excluir_proyec_contab.add(cuenta_62010101[0]['id'])
+            except Exception:
+                pass
 
             for fp in facturas_proyecciones:
                 fecha_base = str(fp.get('date') or fp.get('invoice_date') or '')[:10]
@@ -795,8 +809,9 @@ class RealProyectadoCalculator:
                     account_data = linea.get('account_id')
                     account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
                     
-                    # Excluir cuenta 11060108 de PROYECTADAS_CONTABILIDAD (se procesa en 1.2.6)
-                    if cuenta_iva_excluir_id and account_id == cuenta_iva_excluir_id:
+                    # Excluir cuentas específicas de PROYECTADAS_CONTABILIDAD
+                    # 11060108 se procesa en 1.2.6, 62010101 excluida por solicitud
+                    if account_id in cuentas_excluir_proyec_contab:
                         continue
 
                     ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
