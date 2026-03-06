@@ -63,12 +63,6 @@ CUENTAS_EXCLUIR_FLUJO = [
     "62010101",  # Excluir del flujo
 ]
 
-# Cuentas que deben aparecer en "Facturas Proyectadas (Módulo Contabilidad)"
-# independiente de qué diario provengan
-CUENTAS_DESTINO_PROYECTADAS_CONTAB = [
-    "11060108",  # Redirigir a Proyectadas Contabilidad
-]
-
 # Categorías técnicas especiales
 CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
 CATEGORIA_PENDIENTE = "PENDIENTE"   # Sin clasificar (va a 1.2.6 + lista pendientes)

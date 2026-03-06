@@ -714,6 +714,9 @@ class RealProyectadoCalculator:
                 except Exception:
                     nombre_analitico_por_id = {}
 
+            # Obtener ID de cuenta 11060108 para excluirla de PROYECTADAS_CONTABILIDAD
+            cuenta_iva_excluir_id = self._get_cuenta_iva_id()
+
             for fp in facturas_proyecciones:
                 fecha_base = str(fp.get('date') or fp.get('invoice_date') or '')[:10]
                 if not fecha_base:
@@ -791,6 +794,11 @@ class RealProyectadoCalculator:
 
                     account_data = linea.get('account_id')
                     account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                    
+                    # Excluir cuenta 11060108 de PROYECTADAS_CONTABILIDAD (se procesa en 1.2.6)
+                    if cuenta_iva_excluir_id and account_id == cuenta_iva_excluir_id:
+                        continue
+
                     ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
                     if not ifrs3:
                         continue
