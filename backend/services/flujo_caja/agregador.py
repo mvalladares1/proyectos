@@ -85,6 +85,10 @@ class AgregadorFlujo:
             # Clasificar cuenta
             concepto_id, es_pendiente = self.clasificador(codigo_cuenta)
             
+            # Si concepto_id es None, la cuenta debe excluirse del flujo
+            if concepto_id is None:
+                continue
+            
             # Invertir signo para cuentas de ingreso (41) y costo (51)
             # En contabilidad: ingresos son crÃ©ditos (negativos), pero en flujo de efectivo
             # representan entradas de dinero (positivos)

@@ -471,7 +471,8 @@ class RealProyectadoCalculator:
             campos_oc = [
                 'id', 'name', 'partner_id', 'amount_total', 'date_order',
                 'date_planned', 'date_approve', 'payment_term_id',
-                'invoice_ids', 'invoice_status', 'currency_id'
+                'invoice_ids', 'invoice_status', 'currency_id',
+                'x_studio_fecha_de'  # Campo personalizado: Fecha de Pago
             ]
 
             ocs_compra = []
@@ -551,25 +552,20 @@ class RealProyectadoCalculator:
                 if invoice_ids:
                     continue
 
-                fecha_base = str(oc.get('date_approve') or '')[:10]
-                if not fecha_base:
-                    continue
-
-                try:
-                    fecha_base_dt = datetime.strptime(fecha_base, '%Y-%m-%d').date()
-                except Exception:
-                    continue
-
-                pt_data = oc.get('payment_term_id')
-                pt_id = pt_data[0] if isinstance(pt_data, (list, tuple)) and len(pt_data) > 0 else pt_data
-                dias_plazo = payment_term_days.get(pt_id, 0)
-
-                if dias_plazo and dias_plazo > 0:
-                    fecha_proyectada_dt = fecha_base_dt + timedelta(days=dias_plazo)
+                # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a fecha actual
+                fecha_pago = oc.get('x_studio_fecha_de')
+                if fecha_pago:
+                    fecha_proyectada = str(fecha_pago)[:10]
+                    try:
+                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                    except Exception:
+                        # Si fecha inválida, usar fecha actual
+                        fecha_proyectada_dt = datetime.now().date()
+                        fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
                 else:
-                    fecha_proyectada_dt = fecha_base_dt
-
-                fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
+                    # Sin fecha de pago: usar fecha actual como fallback
+                    fecha_proyectada_dt = datetime.now().date()
+                    fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
 
                 if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
                     continue
