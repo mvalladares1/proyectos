@@ -82,6 +82,109 @@ for oc in ocs:
 print("-"*120)
 print(f"\nTOTAL OCs sin factura (purchase/done): {total_sin_factura:,.0f}")
 
+# Buscar facturas de proveedor (in_invoice, in_refund)
+print("\n" + "="*80)
+print(f"BUSCANDO FACTURAS DE PROVEEDOR PARA PARTNER ID={partner_id}")
+print("="*80)
+
+facturas = models.execute_kw(DB, uid, PASSWORD,
+    'account.move', 'search_read',
+    [[
+        ('partner_id', '=', partner_id),
+        ('move_type', 'in', ['in_invoice', 'in_refund']),
+        ('state', '=', 'posted')
+    ]],
+    {
+        'fields': [
+            'id', 'name', 'move_type', 'amount_total', 'amount_residual',
+            'invoice_date', 'invoice_date_due', 'payment_state', 'currency_id',
+            'x_studio_fecha_estimada_de_pago', 'journal_id'
+        ],
+        'order': 'amount_total desc',
+        'limit': 30
+    }
+)
+
+print(f"\nFacturas encontradas: {len(facturas)}")
+print("Facturas con montos más altos:")
+for f in facturas[:20]:
+    curr = f.get('currency_id')
+    curr_name = curr[1] if isinstance(curr, (list, tuple)) and len(curr) > 1 else 'CLP'
+    journal = f.get('journal_id')
+    journal_name = journal[1] if isinstance(journal, (list, tuple)) and len(journal) > 1 else 'N/A'
+    
+    print(f"  {f['name']}: {f['amount_total']:>20,.0f} {curr_name:5} | Residual: {f.get('amount_residual', 0):>15,.0f} | "
+          f"Tipo: {f['move_type']:12} | Venc: {f.get('invoice_date_due')} | FechaEst: {f.get('x_studio_fecha_estimada_de_pago')} | Diario: {journal_name}")
+
+# Buscar en diario "Proyecciones Futuras"
+print("\n" + "="*80)
+print("BUSCANDO JOURNAL 'PROYECCIONES FUTURAS'")
+print("="*80)
+
+journals = models.execute_kw(DB, uid, PASSWORD,
+    'account.journal', 'search_read',
+    [[('name', 'ilike', 'proyecc')]],
+    {'fields': ['id', 'name', 'code']}
+)
+print(f"Journals encontrados: {journals}")
+
+if journals:
+    journal_id = journals[0]['id']
+    
+    # Buscar movimientos de este journal para NEWEN
+    movimientos = models.execute_kw(DB, uid, PASSWORD,
+        'account.move', 'search_read',
+        [[
+            ('journal_id', '=', journal_id),
+            ('partner_id', '=', partner_id)
+        ]],
+        {
+            'fields': [
+                'id', 'name', 'move_type', 'amount_total', 'invoice_date', 'invoice_date_due',
+                'state', 'currency_id', 'x_studio_fecha_estimada_de_pago'
+            ],
+            'order': 'amount_total desc',
+            'limit': 30
+        }
+    )
+    
+    print(f"\nMovimientos de NEWEN en Proyecciones Futuras: {len(movimientos)}")
+    for m in movimientos:
+        curr = m.get('currency_id')
+        curr_name = curr[1] if isinstance(curr, (list, tuple)) and len(curr) > 1 else 'CLP'
+        print(f"  {m['name']}: {m['amount_total']:>20,.0f} {curr_name} | Estado: {m['state']} | "
+              f"Venc: {m.get('invoice_date_due')} | FechaEst: {m.get('x_studio_fecha_estimada_de_pago')}")
+
+# Buscar movimientos de cualquier tipo con montos muy grandes para NEWEN
+print("\n" + "="*80)
+print(f"BUSCANDO TODOS LOS account.move > 500.000.000 PARA NEWEN")
+print("="*80)
+
+movs_grandes = models.execute_kw(DB, uid, PASSWORD,
+    'account.move', 'search_read',
+    [[
+        ('partner_id', '=', partner_id),
+        ('amount_total', '>', 500000000)
+    ]],
+    {
+        'fields': [
+            'id', 'name', 'move_type', 'amount_total', 'amount_residual',
+            'invoice_date', 'invoice_date_due', 'state', 'currency_id',
+            'journal_id', 'x_studio_fecha_estimada_de_pago'
+        ],
+        'order': 'amount_total desc'
+    }
+)
+
+print(f"\nMovimientos > 500M para NEWEN: {len(movs_grandes)}")
+for m in movs_grandes:
+    curr = m.get('currency_id')
+    curr_name = curr[1] if isinstance(curr, (list, tuple)) and len(curr) > 1 else 'CLP'
+    journal = m.get('journal_id')
+    journal_name = journal[1] if isinstance(journal, (list, tuple)) and len(journal) > 1 else 'N/A'
+    print(f"  {m['name']}: {m['amount_total']:>20,.0f} {curr_name} | Residual: {m.get('amount_residual', 0):>15,.0f} | "
+          f"Estado: {m['state']} | Tipo: {m['move_type']} | Diario: {journal_name}")
+
 # Buscar OCs con montos muy grandes
 print("\n" + "="*80)
 print("BUSCANDO OCs CON MONTOS > 1.000.000.000 (cualquier proveedor)")
