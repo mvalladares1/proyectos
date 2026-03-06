@@ -65,8 +65,13 @@ if cuentas:
     )
     
     print(f'\nMOVIMIENTOS EN 2026: {len(movimientos_2026)}')
+    for m in movimientos_2026:
+        partner = m.get('partner_id')
+        partner_name = partner[1][:30] if isinstance(partner, (list, tuple)) and len(partner) > 1 else 'N/A'
+        print(f"  {m['date']} | D:{m['debit']:>12,.0f} C:{m['credit']:>12,.0f} | {partner_name}")
+    
     total_debit = sum(m.get('debit', 0) for m in movimientos_2026)
     total_credit = sum(m.get('credit', 0) for m in movimientos_2026)
-    print(f'  Total Debitos: {total_debit:,.0f}')
+    print(f'\n  Total Debitos: {total_debit:,.0f}')
     print(f'  Total Creditos: {total_credit:,.0f}')
     print(f'  Balance neto: {total_debit - total_credit:,.0f}')
