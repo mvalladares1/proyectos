@@ -952,6 +952,11 @@ class RealProyectadoCalculator:
                     ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
                     if not ifrs3:
                         continue
+                    
+                    # Excluir IFRS3 que van a 1.2.6 (Otras entradas/salidas de efectivo)
+                    # No deben duplicarse en PROYECTADAS_CONTABILIDAD
+                    if ifrs3.upper() in ('OTROS PASIVOS FINANCIEROS CORRIENTES',):
+                        continue
 
                     balance = abs(float(linea.get('balance') or 0.0))
                     peso_base = balance if balance > 0 else 1.0
